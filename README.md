@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/sqlbuild-logo.png" alt="SQLBuild" width="400">
+  <img src=".github/sqlbuild-logo.png" alt="SQLBuild" width="560">
 </p>
 
 <p align="center">
