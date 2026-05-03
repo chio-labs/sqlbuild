@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild.adapter.shared.models import LifeCycleEvent
+from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.planner.types import MaterializationType
@@ -85,13 +87,15 @@ def format_build_output(
         )
 
         if verbose:
-            statements: tuple[str, ...] = _resolve_verbose_statements(
+            event: LifeCycleEvent
+            for event in _resolve_verbose_events(
                 model_result=model_result,
                 plan_entry=plan_entry,
-            )
-            statement: str
-            for statement in statements:
-                lines.extend(_format_sql_block(statement))
+            ):
+                if event.kind == LifeCycleEventKind.SQL:
+                    lines.extend(_format_sql_block(event.content))
+                elif event.kind == LifeCycleEventKind.LOG:
+                    lines.extend(_format_log_block(event.content))
 
         test_result: SqlTestExecutionResult | None = test_results_by_model.get(
             model_result.model_name
@@ -208,14 +212,20 @@ def _format_display_sql(sql: str) -> str:
     return f"{stripped};"
 
 
-def _resolve_verbose_statements(
+def _resolve_verbose_events(
     *, model_result: ModelExecutionResult, plan_entry: ModelPlanEntry | None
-) -> tuple[str, ...]:
-    if model_result.executed_statements:
-        return model_result.executed_statements
+) -> tuple[LifeCycleEvent, ...]:
+    if model_result.lifecycle_events:
+        return model_result.lifecycle_events
     if plan_entry is not None:
-        return (plan_entry.logical_ddl,)
+        return (LifeCycleEvent(kind=LifeCycleEventKind.SQL, content=plan_entry.logical_ddl),)
     return ()
+
+
+def _format_log_block(message: str) -> list[str]:
+    """Format a log message with indent for verbose output."""
+
+    return ["", f"    -- {message}", ""]
 
 
 def _format_sub_line(*, sub_type: str, name: str, status: str, use_color: bool) -> str:

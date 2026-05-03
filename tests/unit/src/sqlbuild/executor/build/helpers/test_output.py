@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.adapter.shared.models import LifeCycleEvent
+from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.compiler.planner.types import (
@@ -451,9 +453,15 @@ TEST_CASES: list[BuildOutputTestCase] = [
                     model_name="orders",
                     status=ExecutionStatus.SUCCESS,
                     duration_ms=100,
-                    executed_statements=(
-                        "DROP TABLE IF EXISTS main.orders__staging",
-                        "CREATE OR REPLACE TABLE main.orders__staging AS SELECT 1",
+                    lifecycle_events=(
+                        LifeCycleEvent(
+                            kind=LifeCycleEventKind.SQL,
+                            content="DROP TABLE IF EXISTS main.orders__staging",
+                        ),
+                        LifeCycleEvent(
+                            kind=LifeCycleEventKind.SQL,
+                            content="CREATE OR REPLACE TABLE main.orders__staging AS SELECT 1",
+                        ),
                     ),
                     audit_results=(
                         build_audit_result(

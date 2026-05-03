@@ -115,7 +115,7 @@ def execute_microbatch_entry(
                     *tuple(warnings),
                     "microbatch range is empty; no batches to process",
                 ),
-                executed_statements=statement_recorder.snapshot(),
+                lifecycle_events=statement_recorder.snapshot(),
             )
 
     if microbatch_range is None:
@@ -154,7 +154,7 @@ def execute_microbatch_entry(
             promoted_relation=target_qualified,
             audit_results=tuple(audit_results),
             warning_messages=(*tuple(warnings), "no batches to process"),
-            executed_statements=statement_recorder.snapshot(),
+            lifecycle_events=statement_recorder.snapshot(),
         )
 
     if is_full_refresh:
@@ -416,7 +416,7 @@ def execute_microbatch_entry(
         promoted_relation=target_qualified,
         audit_results=tuple(audit_results),
         warning_messages=tuple(warnings),
-        executed_statements=statement_recorder.snapshot(),
+        lifecycle_events=statement_recorder.snapshot(),
     )
 
 

@@ -285,7 +285,7 @@ def execute_incremental_entry(
         promoted_relation=target_qualified,
         audit_results=tuple(audit_results),
         warning_messages=tuple(warnings),
-        executed_statements=statement_recorder.snapshot(),
+        lifecycle_events=statement_recorder.snapshot(),
     )
 
 

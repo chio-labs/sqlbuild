@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from sqlbuild.adapter.shared.models import LifeCycleEvent
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 
@@ -29,5 +30,5 @@ class ModelExecutionResult:
     duration_ms: int | None = None
     audit_results: tuple[AuditExecutionResult, ...] = field(default_factory=tuple)
     warning_messages: tuple[str, ...] = field(default_factory=tuple)
-    executed_statements: tuple[str, ...] = field(default_factory=tuple)
+    lifecycle_events: tuple[LifeCycleEvent, ...] = field(default_factory=tuple)
     error_message: str | None = None

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.adapter.shared.models import LifeCycleEvent
+from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditRunScope,
@@ -123,9 +125,16 @@ def build_runtime_target_execution_result() -> BuildExecutionResult:
             ModelExecutionResult(
                 model_name="orders",
                 status=ExecutionStatus.SUCCESS,
-                executed_statements=(
-                    "DROP TABLE IF EXISTS analytics.orders__staging",
-                    "CREATE OR REPLACE TABLE analytics.orders__staging AS SELECT 1 AS order_id",
+                lifecycle_events=(
+                    LifeCycleEvent(
+                        kind=LifeCycleEventKind.SQL,
+                        content="DROP TABLE IF EXISTS analytics.orders__staging",
+                    ),
+                    LifeCycleEvent(
+                        kind=LifeCycleEventKind.SQL,
+                        content="CREATE OR REPLACE TABLE analytics.orders__staging "
+                        "AS SELECT 1 AS order_id",
+                    ),
                 ),
             ),
         ),

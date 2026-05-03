@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.shared.models import LifeCycleEvent, StatementRecorder
+from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from tests.unit.src.sqlbuild.executor.shared.helpers._test_types import (
     StatementRecorderTestCase,
 )
@@ -16,7 +17,10 @@ from tests.unit.src.sqlbuild.executor.shared.helpers._test_types import (
         StatementRecorderTestCase(
             description="records individual and grouped statements in order",
             statements=("CREATE TABLE x AS SELECT 1", "DROP TABLE y"),
-            expected_snapshot=("CREATE TABLE x AS SELECT 1", "DROP TABLE y"),
+            expected_snapshot=(
+                LifeCycleEvent(kind=LifeCycleEventKind.SQL, content="CREATE TABLE x AS SELECT 1"),
+                LifeCycleEvent(kind=LifeCycleEventKind.SQL, content="DROP TABLE y"),
+            ),
         )
     ],
     ids=["records individual and grouped statements in order"],
@@ -28,6 +32,6 @@ def test_given_recorded_statements_when_snapshotting_then_returns_expected_tuple
 
     recorder.record(test_case.statements[0])
     recorder.record_many(test_case.statements[1:])
-    result: tuple[str, ...] = recorder.snapshot()
+    result: tuple[LifeCycleEvent, ...] = recorder.snapshot()
 
     assert result == test_case.expected_snapshot

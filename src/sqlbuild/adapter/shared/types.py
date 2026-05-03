@@ -18,3 +18,8 @@ class PromotionStrategy(StrEnum):
     ATOMIC_SWAP = "atomic_swap"
     ATOMIC_REPLACE = "atomic_replace"
     CREATE_NEW = "create_new"
+
+
+class LifeCycleEventKind(StrEnum):
+    SQL = "sql"
+    LOG = "log"

@@ -30,6 +30,6 @@ def build_failed_result(
         promoted_relation=promoted_relation,
         audit_results=tuple(audit_results),
         warning_messages=tuple(warnings),
-        executed_statements=statement_recorder.snapshot(),
+        lifecycle_events=statement_recorder.snapshot(),
         error_message=error,
     )

@@ -224,7 +224,7 @@ def execute_custom_entry(
         promoted_relation=result.relation,
         audit_results=tuple(audit_results),
         warning_messages=tuple(warnings),
-        executed_statements=statement_recorder.snapshot(),
+        lifecycle_events=statement_recorder.snapshot(),
     )
 
 

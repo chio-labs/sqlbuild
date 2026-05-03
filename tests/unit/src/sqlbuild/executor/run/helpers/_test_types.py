@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from sqlbuild.adapter.shared.models import LifeCycleEvent
+
 
 @dataclass(frozen=True)
 class BuildQualifiedNameTestCase:
@@ -17,4 +19,4 @@ class BuildFailedResultTestCase:
     warning_messages: tuple[str, ...]
     expected_model_name: str
     expected_error_message: str
-    expected_executed_statements: tuple[str, ...]
+    expected_lifecycle_events: tuple[LifeCycleEvent, ...]

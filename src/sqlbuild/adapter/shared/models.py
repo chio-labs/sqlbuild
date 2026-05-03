@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlbuild.adapter.shared.types import CursorKind
+from sqlbuild.adapter.shared.types import CursorKind, LifeCycleEventKind
 
 
 @dataclass(frozen=True)
@@ -58,17 +58,30 @@ class RowDiffResult:
     right_only_count: int = 0
 
 
+@dataclass(frozen=True)
+class LifeCycleEvent:
+    """One recorded event from a model's runtime lifecycle."""
+
+    kind: LifeCycleEventKind
+    content: str
+
+
 @dataclass
 class StatementRecorder:
-    """Mutable recorder for runtime lifecycle SQL statements."""
+    """Mutable recorder for runtime lifecycle events."""
 
-    statements: list[str] = field(default_factory=list)
+    events: list[LifeCycleEvent] = field(default_factory=list)
 
     def record(self, statement: str) -> None:
-        self.statements.append(statement)
+        self.events.append(LifeCycleEvent(kind=LifeCycleEventKind.SQL, content=statement))
 
     def record_many(self, statements: Iterable[str]) -> None:
-        self.statements.extend(statements)
+        statement: str
+        for statement in statements:
+            self.events.append(LifeCycleEvent(kind=LifeCycleEventKind.SQL, content=statement))
 
-    def snapshot(self) -> tuple[str, ...]:
-        return tuple(self.statements)
+    def log(self, message: str) -> None:
+        self.events.append(LifeCycleEvent(kind=LifeCycleEventKind.LOG, content=message))
+
+    def snapshot(self) -> tuple[LifeCycleEvent, ...]:
+        return tuple(self.events)

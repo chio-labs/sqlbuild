@@ -124,8 +124,8 @@ def test_given_partition_tracked_materialization_when_first_run_then_builds_all_
 
     fragment: str
     for fragment in test_case.expected_statement_fragments:
-        assert any(fragment in stmt for stmt in result.executed_statements), (
-            f"expected '{fragment}' in executed_statements"
+        assert any(fragment in event.content for event in result.lifecycle_events), (
+            f"expected '{fragment}' in lifecycle_events"
         )
 
 

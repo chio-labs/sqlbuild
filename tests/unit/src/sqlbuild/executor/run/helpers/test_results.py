@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.shared.models import LifeCycleEvent, StatementRecorder
+from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from sqlbuild.executor.run.helpers.results import build_failed_result
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
@@ -26,9 +27,15 @@ from tests.unit.src.sqlbuild.executor.run.helpers.helpers import build_result_mo
             warning_messages=("fingerprint write failed",),
             expected_model_name="orders",
             expected_error_message="materialization failed",
-            expected_executed_statements=(
-                "DROP TABLE IF EXISTS analytics.orders__staging",
-                "CREATE TABLE analytics.orders__staging AS SELECT 1 AS id",
+            expected_lifecycle_events=(
+                LifeCycleEvent(
+                    kind=LifeCycleEventKind.SQL,
+                    content="DROP TABLE IF EXISTS analytics.orders__staging",
+                ),
+                LifeCycleEvent(
+                    kind=LifeCycleEventKind.SQL,
+                    content="CREATE TABLE analytics.orders__staging AS SELECT 1 AS id",
+                ),
             ),
         )
     ],
@@ -54,5 +61,5 @@ def test_given_statement_recorder_when_building_failed_result_then_snapshots_sta
     assert result.status == ExecutionStatus.FAILED
     assert result.failed_phase == ExecutionPhase.STAGING
     assert result.error_message == test_case.expected_error_message
-    assert result.executed_statements == test_case.expected_executed_statements
+    assert result.lifecycle_events == test_case.expected_lifecycle_events
     assert result.warning_messages == test_case.warning_messages

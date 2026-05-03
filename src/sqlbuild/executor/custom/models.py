@@ -44,6 +44,10 @@ class MaterializationContext:
         self.statement_recorder.record(sql)
         return self.adapter.execute(self.connection, sql)
 
+    def log(self, message: str) -> None:
+        """Record a log message for verbose output."""
+        self.statement_recorder.log(message)
+
 
 @dataclass(frozen=True)
 class MaterializationResult:

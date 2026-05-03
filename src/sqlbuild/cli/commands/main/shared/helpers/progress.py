@@ -6,6 +6,8 @@ import sys
 import time
 from dataclasses import dataclass
 
+from sqlbuild.adapter.shared.models import LifeCycleEvent
+from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from sqlbuild.cli.commands.main.shared.helpers.colors import (
     colorize_completion,
     colorize_status,
@@ -98,6 +100,12 @@ class BuildProgressCallbacks:
             sys.stdout.write(f"{styled}\n")
         sys.stdout.write("\n")
 
+    def _write_log_block(self, message: str) -> None:
+        """Write a log message with indent and dim styling."""
+
+        styled: str = dim(f"    -- {message}") if self._use_color else f"    -- {message}"
+        sys.stdout.write(f"\n{styled}\n")
+
     def on_node_start(self, name: str, materialization_type: str) -> None:
         self._current_node_name = name
         self._current_node_type = materialization_type
@@ -185,12 +193,15 @@ class BuildProgressCallbacks:
         sys.stdout.write(line)
 
         if self._verbose:
-            statement: str
-            for statement in _resolve_verbose_statements(
+            event: LifeCycleEvent
+            for event in _resolve_verbose_events(
                 model_result=model_result,
                 plan_entry=plan_entry,
             ):
-                self._write_sql_block(statement)
+                if event.kind == LifeCycleEventKind.SQL:
+                    self._write_sql_block(event.content)
+                elif event.kind == LifeCycleEventKind.LOG:
+                    self._write_log_block(event.content)
 
         sub_pad: str = " " * (self._prefix_width + _SUB_INDENT)
         sub_nw: int = self._name_width - _SUB_INDENT
@@ -515,13 +526,13 @@ def _phase_label(phase: str, *, has_delta_audits: bool, batch_count: int) -> str
     return "audit (f)"
 
 
-def _resolve_verbose_statements(
+def _resolve_verbose_events(
     *, model_result: ModelExecutionResult, plan_entry: ModelPlanEntry | None
-) -> tuple[str, ...]:
-    if model_result.executed_statements:
-        return model_result.executed_statements
+) -> tuple[LifeCycleEvent, ...]:
+    if model_result.lifecycle_events:
+        return model_result.lifecycle_events
     if plan_entry is not None:
-        return (plan_entry.logical_ddl,)
+        return (LifeCycleEvent(kind=LifeCycleEventKind.SQL, content=plan_entry.logical_ddl),)
     return ()
 
 
