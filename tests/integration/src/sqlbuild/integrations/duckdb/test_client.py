@@ -560,22 +560,61 @@ def test_given_existing_table_when_appending_then_row_count_increases(
     assert count == test_case.expected_row_count
 
 
+DELETE_INSERT_TEST_CASES: list[DeleteInsertTestCase] = [
+    DeleteInsertTestCase(
+        description="delete inserts by unique key",
+        setup_sql=(
+            "CREATE TABLE di_target (id INTEGER, val VARCHAR)",
+            "INSERT INTO di_target VALUES (1, 'old'), (2, 'keep')",
+        ),
+        sql="SELECT * FROM (VALUES (1, 'new')) AS t(id, val)",
+        unique_key="id",
+        expected_row_count=2,
+        expected_updated_value="new",
+    ),
+    DeleteInsertTestCase(
+        description="removes duplicate target rows when source is deduplicated",
+        setup_sql=(
+            "CREATE TABLE di_target (id INTEGER, val VARCHAR)",
+            "INSERT INTO di_target VALUES (1, 'dup_a'), (1, 'dup_b'), (2, 'keep')",
+        ),
+        sql="SELECT * FROM (VALUES (1, 'fixed')) AS t(id, val)",
+        unique_key="id",
+        expected_row_count=2,
+        expected_updated_value="fixed",
+    ),
+]
+
+MERGE_TEST_CASES: list[MergeTestCase] = [
+    MergeTestCase(
+        description="inserts new rows and updates existing via merge",
+        setup_sql=(
+            "CREATE TABLE merge_target (id INTEGER, name VARCHAR)",
+            "INSERT INTO merge_target VALUES (1, 'alice'), (2, 'bob')",
+        ),
+        source_sql="SELECT * FROM (VALUES (2, 'robert'), (3, 'charlie')) AS t(id, name)",
+        unique_key="id",
+        expected_row_count=3,
+        expected_values=((1, "alice"), (2, "robert"), (3, "charlie")),
+    ),
+    MergeTestCase(
+        description="preserves duplicate target rows that upsert cannot remove",
+        setup_sql=(
+            "CREATE TABLE merge_target (id INTEGER, name VARCHAR)",
+            "INSERT INTO merge_target VALUES (1, 'dup_a'), (1, 'dup_b'), (2, 'bob')",
+        ),
+        source_sql="SELECT * FROM (VALUES (1, 'fixed')) AS t(id, name)",
+        unique_key="id",
+        expected_row_count=3,
+        expected_values=((1, "fixed"), (1, "fixed"), (2, "bob")),
+    ),
+]
+
+
 @pytest.mark.parametrize(
     "test_case",
-    [
-        DeleteInsertTestCase(
-            description="delete inserts by unique key",
-            setup_sql=(
-                "CREATE TABLE di_target (id INTEGER, val VARCHAR)",
-                "INSERT INTO di_target VALUES (1, 'old'), (2, 'keep')",
-            ),
-            sql="SELECT * FROM (VALUES (1, 'new')) AS t(id, val)",
-            unique_key="id",
-            expected_row_count=2,
-            expected_updated_value="new",
-        ),
-    ],
-    ids=["delete inserts by unique key"],
+    DELETE_INSERT_TEST_CASES,
+    ids=[case.description for case in DELETE_INSERT_TEST_CASES],
 )
 def test_given_target_when_delete_inserting_then_matching_rows_replaced(
     test_case: DeleteInsertTestCase,
@@ -600,20 +639,8 @@ def test_given_target_when_delete_inserting_then_matching_rows_replaced(
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        MergeTestCase(
-            description="inserts new rows and updates existing via merge",
-            setup_sql=(
-                "CREATE TABLE merge_target (id INTEGER, name VARCHAR)",
-                "INSERT INTO merge_target VALUES (1, 'alice'), (2, 'bob')",
-            ),
-            source_sql=("SELECT * FROM (VALUES (2, 'robert'), (3, 'charlie')) AS t(id, name)"),
-            unique_key="id",
-            expected_row_count=3,
-            expected_values=((1, "alice"), (2, "robert"), (3, "charlie")),
-        ),
-    ],
-    ids=["inserts new rows and updates existing via merge"],
+    MERGE_TEST_CASES,
+    ids=[case.description for case in MERGE_TEST_CASES],
 )
 def test_given_target_and_source_when_merging_then_upserts_correctly(
     test_case: MergeTestCase,
@@ -631,7 +658,7 @@ def test_given_target_and_source_when_merging_then_upserts_correctly(
     )
     count: int = adapter.count_rows(connection, relation="merge_target")
     rows: list[tuple[Any, ...]] = connection.execute(
-        "SELECT id, name FROM merge_target ORDER BY id"
+        "SELECT id, name FROM merge_target ORDER BY id, name"
     ).fetchall()
 
     assert count == test_case.expected_row_count
