@@ -7,6 +7,7 @@ from pathlib import Path
 from sqlbuild.cli.commands.main.compile.helpers.target_writer import write_target
 from sqlbuild.cli.commands.main.compile.models import WrittenTarget
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
+from sqlbuild.cli.commands.main.shared.helpers.json_output import format_compile_json
 from sqlbuild.compiler.discovery.main import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main import run_compile_pipeline
@@ -18,6 +19,7 @@ def run_compile(
     project_dir: Path | None,
     no_sql_validation: bool = False,
     defer_to: str | None = None,
+    json_output: bool = False,
 ) -> int:
     """Execute the compile command."""
 
@@ -38,6 +40,11 @@ def run_compile(
         plan_output=plan_output,
         manifest=pipeline_result.manifest,
     )
+
+    if json_output:
+        print(format_compile_json(plan_output))
+        return 0
+
     _print_summary(written=written, plan_output=plan_output)
     return 0
 

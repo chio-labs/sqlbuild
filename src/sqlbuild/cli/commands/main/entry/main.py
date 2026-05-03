@@ -27,6 +27,7 @@ def _build_parser() -> argparse.ArgumentParser:
     compile_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.COMPILE)
     compile_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     compile_parser.add_argument("--defer-to", default=None)
+    compile_parser.add_argument("--json", action="store_true", default=False)
     run_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.RUN)
     run_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     run_parser.add_argument("--defer-to", default=None)
@@ -34,6 +35,7 @@ def _build_parser() -> argparse.ArgumentParser:
     plan_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PLAN)
     plan_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     plan_parser.add_argument("--defer-to", default=None)
+    plan_parser.add_argument("--json", action="store_true", default=False)
     add_cursor_override_args(plan_parser)
     build_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.BUILD)
     build_parser.add_argument("--no-sql-validation", action="store_true", default=False)
@@ -81,7 +83,9 @@ def _main_with_dependencies(
     try:
         project_dir: Path | None = None if args.project_dir is None else Path(args.project_dir)
         if args.command == CliCommand.COMPILE:
-            return handlers.run_compile(project_dir, args.no_sql_validation, args.defer_to)
+            return handlers.run_compile(
+                project_dir, args.no_sql_validation, args.defer_to, args.json
+            )
         if args.command == CliCommand.PLAN:
             cursor_overrides: CursorOverrides = CursorOverrides(
                 start_ts=args.start_cursor_ts,
@@ -90,7 +94,7 @@ def _main_with_dependencies(
                 end_int=args.end_cursor_int,
             )
             return handlers.run_plan(
-                project_dir, args.no_sql_validation, args.defer_to, cursor_overrides
+                project_dir, args.no_sql_validation, args.defer_to, cursor_overrides, args.json
             )
         return 0
     except CliUserError as error:

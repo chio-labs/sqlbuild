@@ -6,6 +6,7 @@ from pathlib import Path
 
 from sqlbuild.cli.commands.main.plan.helpers.formatter import format_plan
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
+from sqlbuild.cli.commands.main.shared.helpers.json_output import format_plan_json
 from sqlbuild.compiler.discovery.main import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main import run_compile_pipeline
@@ -18,6 +19,7 @@ def run_plan(
     no_sql_validation: bool = False,
     defer_to: str | None = None,
     cursor_overrides: CursorOverrides | None = None,
+    json_output: bool = False,
 ) -> int:
     """Execute the plan command."""
 
@@ -34,5 +36,10 @@ def run_plan(
     )
 
     plan_output: PlanOutput = pipeline_result.plan_output
+
+    if json_output:
+        print(format_plan_json(plan_output))
+        return 0
+
     print(format_plan(plan_output))
     return 0

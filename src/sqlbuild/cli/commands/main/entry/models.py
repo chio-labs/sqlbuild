@@ -17,6 +17,7 @@ class CliNamespace:
     project_dir: str | None = None
     no_sql_validation: bool = False
     defer_to: str | None = None
+    json: bool = False
     start_cursor_ts: str | None = None
     end_cursor_ts: str | None = None
     start_cursor_int: str | None = None
@@ -27,5 +28,5 @@ class CliNamespace:
 class CliEntrypointHandlers:
     """Injected command handlers for the CLI entrypoint."""
 
-    run_compile: Callable[[Path | None, bool, str | None], int]
-    run_plan: Callable[[Path | None, bool, str | None, CursorOverrides | None], int]
+    run_compile: Callable[[Path | None, bool, str | None, bool], int]
+    run_plan: Callable[[Path | None, bool, str | None, CursorOverrides | None, bool], int]
