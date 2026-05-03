@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models import CompiledRelationTarget
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
@@ -28,7 +28,6 @@ from sqlbuild.executor.run.helpers.view import (
     execute_view_entry as execute_view_entry,
 )
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.shared.classes.statement_recorder import StatementRecorder
 from sqlbuild.executor.shared.helpers.naming import build_qualified_name
 from sqlbuild.executor.shared.types import (
     ExecutionPhase,
@@ -152,14 +151,18 @@ def _staged_lifecycle(
     """Staged table lifecycle: CTAS staging, type enforce, audit, promote."""
 
     try:
-        statement_recorder.record_many(
-            adapter.render_drop(target=staging_qualified, if_exists=True)
+        adapter.drop(
+            connection,
+            target=staging_qualified,
+            if_exists=True,
+            statement_recorder=statement_recorder,
         )
-        statement_recorder.record_many(
-            adapter.render_create_table_as(target=staging_qualified, sql=entry.resolved_sql)
+        adapter.create_table_as(
+            connection,
+            target=staging_qualified,
+            sql=entry.resolved_sql,
+            statement_recorder=statement_recorder,
         )
-        adapter.drop(connection, target=staging_qualified, if_exists=True)
-        adapter.create_table_as(connection, target=staging_qualified, sql=entry.resolved_sql)
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -173,7 +176,7 @@ def _staged_lifecycle(
 
     if entry.type_enforcement and declared_columns:
         try:
-            type_enforcement_statements: tuple[str, ...] = enforce_types_staged(
+            enforce_types_staged(
                 adapter=adapter,
                 connection=connection,
                 staging_qualified=staging_qualified,
@@ -181,8 +184,8 @@ def _staged_lifecycle(
                 staging_schema=target_schema,
                 staging_table=staging_table,
                 declared_columns=declared_columns,
+                statement_recorder=statement_recorder,
             )
-            statement_recorder.record_many(type_enforcement_statements)
         except Exception as exc:
             return build_failed_result(
                 entry=entry,
@@ -231,19 +234,25 @@ def _staged_lifecycle(
             name=target_table,
         )
         if existing:
-            statement_recorder.record_many(
-                adapter.render_swap(left=target_qualified, right=staging_qualified)
+            adapter.swap(
+                connection,
+                left=target_qualified,
+                right=staging_qualified,
+                statement_recorder=statement_recorder,
             )
-            statement_recorder.record_many(
-                adapter.render_drop(target=staging_qualified, if_exists=True)
+            adapter.drop(
+                connection,
+                target=staging_qualified,
+                if_exists=True,
+                statement_recorder=statement_recorder,
             )
-            adapter.swap(connection, left=target_qualified, right=staging_qualified)
-            adapter.drop(connection, target=staging_qualified, if_exists=True)
         else:
-            statement_recorder.record_many(
-                adapter.render_rename(source=staging_qualified, target=target_qualified)
+            adapter.rename(
+                connection,
+                source=staging_qualified,
+                target=target_qualified,
+                statement_recorder=statement_recorder,
             )
-            adapter.rename(connection, source=staging_qualified, target=target_qualified)
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -327,10 +336,12 @@ def _direct_lifecycle(
         )
 
     try:
-        statement_recorder.record_many(
-            adapter.render_create_table_as(target=target_qualified, sql=entry.resolved_sql)
+        adapter.create_table_as(
+            connection,
+            target=target_qualified,
+            sql=entry.resolved_sql,
+            statement_recorder=statement_recorder,
         )
-        adapter.create_table_as(connection, target=target_qualified, sql=entry.resolved_sql)
     except Exception as exc:
         return build_failed_result(
             entry=entry,

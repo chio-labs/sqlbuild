@@ -6,7 +6,7 @@ from abc import abstractmethod
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 
 
 class MaterializationMixin:
@@ -20,27 +20,56 @@ class MaterializationMixin:
         target: str,
         sql: str,
         config: dict[str, Any] | None = None,
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
         """Create or replace a table from a SELECT statement."""
         ...
 
     @abstractmethod
-    def create_view_as(self, connection: Any, *, target: str, sql: str) -> None:
+    def create_view_as(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        sql: str,
+        statement_recorder: StatementRecorder | None = None,
+    ) -> None:
         """Create or replace a view from a SELECT statement."""
         ...
 
     @abstractmethod
-    def drop(self, connection: Any, *, target: str, if_exists: bool = True) -> None:
+    def drop(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        if_exists: bool = True,
+        statement_recorder: StatementRecorder | None = None,
+    ) -> None:
         """Drop a relation from the warehouse."""
         ...
 
     @abstractmethod
-    def rename(self, connection: Any, *, source: str, target: str) -> None:
+    def rename(
+        self,
+        connection: Any,
+        *,
+        source: str,
+        target: str,
+        statement_recorder: StatementRecorder | None = None,
+    ) -> None:
         """Rename a relation."""
         ...
 
     @abstractmethod
-    def swap(self, connection: Any, *, left: str, right: str) -> None:
+    def swap(
+        self,
+        connection: Any,
+        *,
+        left: str,
+        right: str,
+        statement_recorder: StatementRecorder | None = None,
+    ) -> None:
         """Swap two relations atomically where supported."""
         ...
 
@@ -52,6 +81,7 @@ class MaterializationMixin:
         source: str,
         target: str,
         hard_copy: bool = False,
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
         """Clone a relation using zero-copy where supported."""
         ...
@@ -66,6 +96,7 @@ class MaterializationMixin:
         columns: tuple[ColumnInfo, ...],
         replace: bool = True,
         infer_types: bool = False,
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
         """Load a seed CSV file into a warehouse table."""
         ...
@@ -78,6 +109,7 @@ class MaterializationMixin:
         target: str,
         sql: str,
         columns: tuple[str, ...] | None = None,
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
         """Insert rows from a SELECT statement into an existing table."""
         ...
@@ -91,6 +123,7 @@ class MaterializationMixin:
         sql: str,
         unique_key: str | tuple[str, ...],
         columns: tuple[str, ...] | None = None,
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
         """Delete matching rows then insert from a SELECT statement."""
         ...
@@ -106,6 +139,7 @@ class MaterializationMixin:
         cursor_start: str,
         cursor_end: str,
         columns: tuple[str, ...] | None = None,
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
         """Delete rows by cursor range then insert from a SELECT statement."""
         ...
@@ -118,6 +152,7 @@ class MaterializationMixin:
         target: str,
         sql: str,
         unique_key: str | tuple[str, ...],
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
         """Upsert rows from a SELECT statement using MERGE or equivalent."""
         ...
@@ -129,6 +164,7 @@ class MaterializationMixin:
         *,
         target: str,
         columns: tuple[ColumnInfo, ...],
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
         """Add columns to an existing table."""
         ...
@@ -140,6 +176,7 @@ class MaterializationMixin:
         *,
         target: str,
         column_names: tuple[str, ...],
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
         """Drop columns from an existing table."""
         ...
@@ -151,6 +188,7 @@ class MaterializationMixin:
         *,
         target: str,
         columns: tuple[ColumnInfo, ...],
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
         """Alter column types on an existing table."""
         ...

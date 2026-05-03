@@ -148,3 +148,14 @@ class CountRowsTestCase:
     start_cursor: CursorValue | None = None
     end_cursor: CursorValue | None = None
     expected_count: int = 0
+
+
+@dataclass(frozen=True)
+class RecorderWriteTestCase:
+    description: str
+    setup_sql: tuple[str, ...]
+    operation: str
+    target: str
+    sql: str
+    expected_recorded_statements: tuple[str, ...]
+    unique_key: str | tuple[str, ...] | None = None

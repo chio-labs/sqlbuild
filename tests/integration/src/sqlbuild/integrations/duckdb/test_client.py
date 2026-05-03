@@ -10,6 +10,7 @@ from sqlbuild.adapter.shared.models import (
     CursorValue,
     RowDiffResult,
     SchemaDiffResult,
+    StatementRecorder,
 )
 from sqlbuild.adapter.shared.types import CursorKind
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
@@ -27,6 +28,7 @@ from tests.integration.src.sqlbuild.integrations.duckdb._test_types import (
     LoadSeedTestCase,
     MaterializeTestCase,
     MergeTestCase,
+    RecorderWriteTestCase,
     RelationExistsTestCase,
     RenameTestCase,
     SwapTestCase,
@@ -392,6 +394,90 @@ def test_given_sql_when_creating_table_as_then_table_is_writable(
     count: int = adapter.count_rows(connection, relation="result")
 
     assert count == test_case.expected_row_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RecorderWriteTestCase(
+            description="create_table_as records rendered statement before execution",
+            setup_sql=(),
+            operation="create_table_as",
+            target="recorded_table",
+            sql="SELECT * FROM (VALUES (1), (2)) AS t(id)",
+            expected_recorded_statements=(
+                "CREATE OR REPLACE TABLE recorded_table AS SELECT * FROM "
+                "(VALUES (1), (2)) AS t(id)",
+            ),
+        )
+    ],
+    ids=["create_table_as records rendered statement before execution"],
+)
+def test_given_statement_recorder_when_creating_table_then_records_expected_sql(
+    test_case: RecorderWriteTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    statement: str
+    for statement in test_case.setup_sql:
+        connection.execute(statement)
+
+    recorder: StatementRecorder = StatementRecorder()
+
+    adapter.create_table_as(
+        connection,
+        target=test_case.target,
+        sql=test_case.sql,
+        statement_recorder=recorder,
+    )
+
+    assert recorder.snapshot() == test_case.expected_recorded_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RecorderWriteTestCase(
+            description="delete_insert records delete and insert statements before execution",
+            setup_sql=(
+                "CREATE TABLE recorded_delete_insert (id INTEGER, val VARCHAR)",
+                "INSERT INTO recorded_delete_insert VALUES (1, 'old'), (2, 'keep')",
+            ),
+            operation="delete_insert",
+            target="recorded_delete_insert",
+            sql="SELECT * FROM (VALUES (1, 'new')) AS t(id, val)",
+            expected_recorded_statements=(
+                "DELETE FROM recorded_delete_insert WHERE EXISTS "
+                "(SELECT 1 FROM (SELECT * FROM (VALUES (1, 'new')) AS t(id, val)) "
+                "AS __source WHERE recorded_delete_insert.id = __source.id)",
+                "INSERT INTO recorded_delete_insert SELECT * FROM "
+                "(VALUES (1, 'new')) AS t(id, val)",
+            ),
+            unique_key="id",
+        )
+    ],
+    ids=["delete_insert records delete and insert statements before execution"],
+)
+def test_given_statement_recorder_when_delete_inserting_then_records_expected_sql(
+    test_case: RecorderWriteTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    statement: str
+    for statement in test_case.setup_sql:
+        connection.execute(statement)
+
+    recorder: StatementRecorder = StatementRecorder()
+
+    adapter.delete_insert(
+        connection,
+        target=test_case.target,
+        sql=test_case.sql,
+        unique_key=test_case.unique_key or "id",
+        statement_recorder=recorder,
+    )
+
+    assert recorder.snapshot() == test_case.expected_recorded_statements
 
 
 @pytest.mark.parametrize(

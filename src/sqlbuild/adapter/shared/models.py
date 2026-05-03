@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -55,3 +56,19 @@ class RowDiffResult:
     unequal_count: int = 0
     left_only_count: int = 0
     right_only_count: int = 0
+
+
+@dataclass
+class StatementRecorder:
+    """Mutable recorder for runtime lifecycle SQL statements."""
+
+    statements: list[str] = field(default_factory=list)
+
+    def record(self, statement: str) -> None:
+        self.statements.append(statement)
+
+    def record_many(self, statements: Iterable[str]) -> None:
+        self.statements.extend(statements)
+
+    def snapshot(self) -> tuple[str, ...]:
+        return tuple(self.statements)

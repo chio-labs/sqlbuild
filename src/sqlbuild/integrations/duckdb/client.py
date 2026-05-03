@@ -12,6 +12,7 @@ from sqlbuild.adapter.shared.models import (
     RelationInfo,
     RowDiffResult,
     SchemaDiffResult,
+    StatementRecorder,
 )
 from sqlbuild.integrations.duckdb.helpers.sql import (
     build_attach_sql,
@@ -212,19 +213,43 @@ class DuckDbAdapter(BaseAdapter):
         target: str,
         sql: str,
         config: dict[str, Any] | None = None,
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
+        statements: tuple[str, ...] = self.render_create_table_as(target=target, sql=sql)
+        if statement_recorder is not None:
+            statement_recorder.record_many(statements)
         stmt: str
-        for stmt in self.render_create_table_as(target=target, sql=sql):
+        for stmt in statements:
             connection.execute(stmt)
 
-    def create_view_as(self, connection: Any, *, target: str, sql: str) -> None:
+    def create_view_as(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        sql: str,
+        statement_recorder: StatementRecorder | None = None,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_create_view_as(target=target, sql=sql)
+        if statement_recorder is not None:
+            statement_recorder.record_many(statements)
         stmt: str
-        for stmt in self.render_create_view_as(target=target, sql=sql):
+        for stmt in statements:
             connection.execute(stmt)
 
-    def drop(self, connection: Any, *, target: str, if_exists: bool = True) -> None:
+    def drop(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        if_exists: bool = True,
+        statement_recorder: StatementRecorder | None = None,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_drop(target=target, if_exists=if_exists)
+        if statement_recorder is not None:
+            statement_recorder.record_many(statements)
         stmt: str
-        for stmt in self.render_drop(target=target, if_exists=if_exists):
+        for stmt in statements:
             connection.execute(stmt)
 
     def render_rename(self, *, source: str, target: str) -> tuple[str, ...]:
@@ -239,14 +264,34 @@ class DuckDbAdapter(BaseAdapter):
             *self.render_rename(source=staging, target=right),
         )
 
-    def rename(self, connection: Any, *, source: str, target: str) -> None:
+    def rename(
+        self,
+        connection: Any,
+        *,
+        source: str,
+        target: str,
+        statement_recorder: StatementRecorder | None = None,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_rename(source=source, target=target)
+        if statement_recorder is not None:
+            statement_recorder.record_many(statements)
         stmt: str
-        for stmt in self.render_rename(source=source, target=target):
+        for stmt in statements:
             connection.execute(stmt)
 
-    def swap(self, connection: Any, *, left: str, right: str) -> None:
+    def swap(
+        self,
+        connection: Any,
+        *,
+        left: str,
+        right: str,
+        statement_recorder: StatementRecorder | None = None,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_swap(left=left, right=right)
+        if statement_recorder is not None:
+            statement_recorder.record_many(statements)
         stmt: str
-        for stmt in self.render_swap(left=left, right=right):
+        for stmt in statements:
             connection.execute(stmt)
 
     def clone(
@@ -256,8 +301,14 @@ class DuckDbAdapter(BaseAdapter):
         source: str,
         target: str,
         hard_copy: bool = False,
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
-        self.create_table_as(connection, target=target, sql=f"SELECT * FROM {source}")
+        self.create_table_as(
+            connection,
+            target=target,
+            sql=f"SELECT * FROM {source}",
+            statement_recorder=statement_recorder,
+        )
 
     def load_seed(
         self,
@@ -268,22 +319,36 @@ class DuckDbAdapter(BaseAdapter):
         columns: tuple[ColumnInfo, ...],
         replace: bool = True,
         infer_types: bool = False,
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
         """Load a seed CSV into a DuckDB table using read_csv."""
 
         if replace:
-            self.drop(connection, target=target, if_exists=True)
+            self.drop(
+                connection,
+                target=target,
+                if_exists=True,
+                statement_recorder=statement_recorder,
+            )
         if infer_types:
-            connection.execute(
+            stmt: str = (
                 f"CREATE TABLE {target} AS SELECT * FROM read_csv('{file_path}', auto_detect=true)"
             )
+            if statement_recorder is not None:
+                statement_recorder.record(stmt)
+            connection.execute(stmt)
             return
         column_defs: str = ", ".join(f"{col.name} {col.type}" for col in columns)
         type_map: str = ", ".join(f"'{col.name}': '{col.type}'" for col in columns)
-        connection.execute(f"CREATE TABLE {target} ({column_defs})")
-        connection.execute(
-            f"INSERT INTO {target} SELECT * FROM read_csv('{file_path}', columns={{{type_map}}})"
+        statements: tuple[str, ...] = (
+            f"CREATE TABLE {target} ({column_defs})",
+            f"INSERT INTO {target} SELECT * FROM read_csv('{file_path}', columns={{{type_map}}})",
         )
+        if statement_recorder is not None:
+            statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            connection.execute(stmt)
 
     def append(
         self,
@@ -292,9 +357,13 @@ class DuckDbAdapter(BaseAdapter):
         target: str,
         sql: str,
         columns: tuple[str, ...] | None = None,
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
+        statements: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
+        if statement_recorder is not None:
+            statement_recorder.record_many(statements)
         stmt: str
-        for stmt in self.render_append(target=target, sql=sql, columns=columns):
+        for stmt in statements:
             connection.execute(stmt)
 
     def delete_insert(
@@ -305,12 +374,16 @@ class DuckDbAdapter(BaseAdapter):
         sql: str,
         unique_key: str | tuple[str, ...],
         columns: tuple[str, ...] | None = None,
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        stmt: str
-        for stmt in self.render_delete_insert(
+        statements: tuple[str, ...] = self.render_delete_insert(
             target=target, sql=sql, unique_key=keys, columns=columns
-        ):
+        )
+        if statement_recorder is not None:
+            statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
             connection.execute(stmt)
 
     def delete_insert_cursor(
@@ -323,16 +396,20 @@ class DuckDbAdapter(BaseAdapter):
         cursor_start: str,
         cursor_end: str,
         columns: tuple[str, ...] | None = None,
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
-        stmt: str
-        for stmt in self.render_delete_insert_cursor(
+        statements: tuple[str, ...] = self.render_delete_insert_cursor(
             target=target,
             sql=sql,
             cursor_column=cursor_column,
             cursor_start=cursor_start,
             cursor_end=cursor_end,
             columns=columns,
-        ):
+        )
+        if statement_recorder is not None:
+            statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
             connection.execute(stmt)
 
     def merge(
@@ -342,13 +419,17 @@ class DuckDbAdapter(BaseAdapter):
         target: str,
         sql: str,
         unique_key: str | tuple[str, ...],
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         source_columns: tuple[str, ...] = tuple(query_column_names(connection, sql))
-        stmt: str
-        for stmt in self.render_merge(
+        statements: tuple[str, ...] = self.render_merge(
             target=target, sql=sql, unique_key=keys, source_columns=source_columns
-        ):
+        )
+        if statement_recorder is not None:
+            statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
             connection.execute(stmt)
 
     def render_merge(
@@ -394,9 +475,13 @@ class DuckDbAdapter(BaseAdapter):
         *,
         target: str,
         columns: tuple[ColumnInfo, ...],
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
+        statements: tuple[str, ...] = self.render_add_columns(target=target, columns=columns)
+        if statement_recorder is not None:
+            statement_recorder.record_many(statements)
         stmt: str
-        for stmt in self.render_add_columns(target=target, columns=columns):
+        for stmt in statements:
             connection.execute(stmt)
 
     def drop_columns(
@@ -405,9 +490,15 @@ class DuckDbAdapter(BaseAdapter):
         *,
         target: str,
         column_names: tuple[str, ...],
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
+        statements: tuple[str, ...] = self.render_drop_columns(
+            target=target, column_names=column_names
+        )
+        if statement_recorder is not None:
+            statement_recorder.record_many(statements)
         stmt: str
-        for stmt in self.render_drop_columns(target=target, column_names=column_names):
+        for stmt in statements:
             connection.execute(stmt)
 
     def alter_column_types(
@@ -416,9 +507,13 @@ class DuckDbAdapter(BaseAdapter):
         *,
         target: str,
         columns: tuple[ColumnInfo, ...],
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
+        statements: tuple[str, ...] = self.render_alter_column_types(target=target, columns=columns)
+        if statement_recorder is not None:
+            statement_recorder.record_many(statements)
         stmt: str
-        for stmt in self.render_alter_column_types(target=target, columns=columns):
+        for stmt in statements:
             connection.execute(stmt)
 
     def diff_schema(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.executor.shared.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.shared.models import StatementRecorder
 from tests.unit.src.sqlbuild.executor.shared.helpers._test_types import (
     StatementRecorderTestCase,
 )

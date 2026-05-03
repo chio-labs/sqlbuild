@@ -7,7 +7,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models import CompiledRelationTarget
 from sqlbuild.compiler.planner.constants import (
@@ -32,7 +32,6 @@ from sqlbuild.executor.run.helpers.incremental import (
 from sqlbuild.executor.run.helpers.results import build_failed_result
 from sqlbuild.executor.run.helpers.type_enforcement import enforce_types_staged
 from sqlbuild.executor.run.models import BatchWindow, ModelExecutionResult
-from sqlbuild.executor.shared.classes.statement_recorder import StatementRecorder
 from sqlbuild.executor.shared.helpers.naming import build_qualified_name
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.spec.models.source import SourceEntry
@@ -160,10 +159,12 @@ def execute_microbatch_entry(
 
     if is_full_refresh:
         try:
-            statement_recorder.record_many(
-                adapter.render_drop(target=target_qualified, if_exists=True)
+            adapter.drop(
+                connection,
+                target=target_qualified,
+                if_exists=True,
+                statement_recorder=statement_recorder,
             )
-            adapter.drop(connection, target=target_qualified, if_exists=True)
         except Exception as exc:
             return build_failed_result(
                 entry=entry,
@@ -185,14 +186,18 @@ def execute_microbatch_entry(
         )
 
         try:
-            statement_recorder.record_many(
-                adapter.render_drop(target=delta_qualified, if_exists=True)
+            adapter.drop(
+                connection,
+                target=delta_qualified,
+                if_exists=True,
+                statement_recorder=statement_recorder,
             )
-            statement_recorder.record_many(
-                adapter.render_create_table_as(target=delta_qualified, sql=batch_sql)
+            adapter.create_table_as(
+                connection,
+                target=delta_qualified,
+                sql=batch_sql,
+                statement_recorder=statement_recorder,
             )
-            adapter.drop(connection, target=delta_qualified, if_exists=True)
-            adapter.create_table_as(connection, target=delta_qualified, sql=batch_sql)
         except Exception as exc:
             return build_failed_result(
                 entry=entry,
@@ -218,7 +223,7 @@ def execute_microbatch_entry(
                     schema=target_schema,
                     name=target_table,
                 )
-                schema_change_statements: tuple[str, ...] = _apply_schema_change(
+                _apply_schema_change(
                     adapter=adapter,
                     connection=connection,
                     target_qualified=target_qualified,
@@ -226,8 +231,8 @@ def execute_microbatch_entry(
                     delta_columns=delta_columns,
                     on_schema_change=entry.on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE,
                     warnings=warnings,
+                    statement_recorder=statement_recorder,
                 )
-                statement_recorder.record_many(schema_change_statements)
             except Exception as exc:
                 return build_failed_result(
                     entry=entry,
@@ -242,7 +247,7 @@ def execute_microbatch_entry(
 
         if entry.type_enforcement and declared_columns:
             try:
-                type_enforcement_statements: tuple[str, ...] = enforce_types_staged(
+                enforce_types_staged(
                     adapter=adapter,
                     connection=connection,
                     staging_qualified=delta_qualified,
@@ -250,8 +255,8 @@ def execute_microbatch_entry(
                     staging_schema=target_schema,
                     staging_table=delta_table,
                     declared_columns=declared_columns,
+                    statement_recorder=statement_recorder,
                 )
-                statement_recorder.record_many(type_enforcement_statements)
             except Exception as exc:
                 return build_failed_result(
                     entry=entry,
@@ -312,19 +317,14 @@ def execute_microbatch_entry(
             )
             _validate_cursor_output_columns(entry=entry, delta_columns=delta_columns_for_dml)
             if is_full_refresh and completed_batches == 0:
-                statement_recorder.record_many(
-                    adapter.render_create_table_as(
-                        target=target_qualified,
-                        sql=f"SELECT * FROM {delta_qualified}",
-                    )
-                )
                 adapter.create_table_as(
                     connection,
                     target=target_qualified,
                     sql=f"SELECT * FROM {delta_qualified}",
+                    statement_recorder=statement_recorder,
                 )
             else:
-                dml_statements: tuple[str, ...] = _execute_dml(
+                _execute_dml(
                     adapter=adapter,
                     connection=connection,
                     target_qualified=target_qualified,
@@ -334,8 +334,8 @@ def execute_microbatch_entry(
                     entry=entry,
                     cursor_start=batch.start,
                     cursor_end=batch.end,
+                    statement_recorder=statement_recorder,
                 )
-                statement_recorder.record_many(dml_statements)
         except Exception as exc:
             return build_failed_result(
                 entry=entry,
@@ -347,8 +347,12 @@ def execute_microbatch_entry(
                 statement_recorder=statement_recorder,
             )
 
-        statement_recorder.record_many(adapter.render_drop(target=delta_qualified, if_exists=True))
-        adapter.drop(connection, target=delta_qualified, if_exists=True)
+        adapter.drop(
+            connection,
+            target=delta_qualified,
+            if_exists=True,
+            statement_recorder=statement_recorder,
+        )
         completed_batches += 1
 
     final_audit_error: bool = False

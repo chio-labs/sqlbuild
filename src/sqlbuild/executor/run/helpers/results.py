@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.shared.classes.statement_recorder import StatementRecorder
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 
 

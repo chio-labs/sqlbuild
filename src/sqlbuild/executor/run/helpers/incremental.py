@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models import CompiledRelationTarget
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
@@ -17,7 +17,6 @@ from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.results import build_failed_result
 from sqlbuild.executor.run.helpers.type_enforcement import enforce_types_staged
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.shared.classes.statement_recorder import StatementRecorder
 from sqlbuild.executor.shared.helpers.naming import build_qualified_name
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.spec.models.source import SourceEntry
@@ -73,12 +72,18 @@ def execute_incremental_entry(
         )
 
     try:
-        statement_recorder.record_many(adapter.render_drop(target=delta_qualified, if_exists=True))
-        statement_recorder.record_many(
-            adapter.render_create_table_as(target=delta_qualified, sql=entry.resolved_sql)
+        adapter.drop(
+            connection,
+            target=delta_qualified,
+            if_exists=True,
+            statement_recorder=statement_recorder,
         )
-        adapter.drop(connection, target=delta_qualified, if_exists=True)
-        adapter.create_table_as(connection, target=delta_qualified, sql=entry.resolved_sql)
+        adapter.create_table_as(
+            connection,
+            target=delta_qualified,
+            sql=entry.resolved_sql,
+            statement_recorder=statement_recorder,
+        )
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -103,7 +108,7 @@ def execute_incremental_entry(
             schema=target_schema,
             name=target_table,
         )
-        schema_change_statements: tuple[str, ...] = _apply_schema_change(
+        _apply_schema_change(
             adapter=adapter,
             connection=connection,
             target_qualified=target_qualified,
@@ -111,8 +116,8 @@ def execute_incremental_entry(
             delta_columns=delta_columns,
             on_schema_change=entry.on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE,
             warnings=warnings,
+            statement_recorder=statement_recorder,
         )
-        statement_recorder.record_many(schema_change_statements)
         target_columns = adapter.get_columns(
             connection,
             database=target_database,
@@ -132,7 +137,7 @@ def execute_incremental_entry(
 
     if entry.type_enforcement and declared_columns:
         try:
-            type_enforcement_statements: tuple[str, ...] = enforce_types_staged(
+            enforce_types_staged(
                 adapter=adapter,
                 connection=connection,
                 staging_qualified=delta_qualified,
@@ -140,8 +145,8 @@ def execute_incremental_entry(
                 staging_schema=target_schema,
                 staging_table=delta_table,
                 declared_columns=declared_columns,
+                statement_recorder=statement_recorder,
             )
-            statement_recorder.record_many(type_enforcement_statements)
         except Exception as exc:
             return build_failed_result(
                 entry=entry,
@@ -187,7 +192,7 @@ def execute_incremental_entry(
     cursor_end: str | None = entry.cursor_bounds.end if entry.cursor_bounds else None
 
     try:
-        dml_statements: tuple[str, ...] = _execute_dml(
+        _execute_dml(
             adapter=adapter,
             connection=connection,
             target_qualified=target_qualified,
@@ -197,8 +202,8 @@ def execute_incremental_entry(
             entry=entry,
             cursor_start=cursor_start,
             cursor_end=cursor_end,
+            statement_recorder=statement_recorder,
         )
-        statement_recorder.record_many(dml_statements)
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -267,8 +272,12 @@ def execute_incremental_entry(
         warnings=warnings,
     )
 
-    statement_recorder.record_many(adapter.render_drop(target=delta_qualified, if_exists=True))
-    adapter.drop(connection, target=delta_qualified, if_exists=True)
+    adapter.drop(
+        connection,
+        target=delta_qualified,
+        if_exists=True,
+        statement_recorder=statement_recorder,
+    )
 
     return ModelExecutionResult(
         model_name=entry.name,
@@ -289,7 +298,8 @@ def _apply_schema_change(
     delta_columns: tuple[ColumnInfo, ...],
     on_schema_change: OnSchemaChange,
     warnings: list[str],
-) -> tuple[str, ...]:
+    statement_recorder: StatementRecorder,
+) -> None:
     """Inspect runtime schema diff and apply on_schema_change policy."""
 
     target_map: dict[str, str] = {col.name.lower(): col.type for col in target_columns}
@@ -315,7 +325,7 @@ def _apply_schema_change(
     has_diff: bool = bool(added or removed or type_changed)
 
     if not has_diff:
-        return ()
+        return
 
     if on_schema_change == OnSchemaChange.FAIL:
         diff_parts: list[str] = []
@@ -344,52 +354,48 @@ def _apply_schema_change(
                 f"schema change ignored: type changes detected: "
                 f"{', '.join(c.name for c in type_changed)}"
             )
-        return ()
+        return
 
     if on_schema_change == OnSchemaChange.APPEND_NEW_COLUMNS:
-        statements: list[str] = []
         if added:
-            statements.extend(
-                adapter.render_add_columns(target=target_qualified, columns=tuple(added))
+            adapter.add_columns(
+                connection,
+                target=target_qualified,
+                columns=tuple(added),
+                statement_recorder=statement_recorder,
             )
-            adapter.add_columns(connection, target=target_qualified, columns=tuple(added))
         if type_changed:
             raise ValueError(
                 f"append_new_columns does not support type changes: "
                 f"{', '.join(c.name for c in type_changed)}"
             )
-        return tuple(statements)
+        return
 
     if on_schema_change == OnSchemaChange.SYNC_ALL_COLUMNS:
-        statements = []
         if added:
-            statements.extend(
-                adapter.render_add_columns(target=target_qualified, columns=tuple(added))
+            adapter.add_columns(
+                connection,
+                target=target_qualified,
+                columns=tuple(added),
+                statement_recorder=statement_recorder,
             )
-            adapter.add_columns(connection, target=target_qualified, columns=tuple(added))
         if removed:
-            statements.extend(
-                adapter.render_drop_columns(target=target_qualified, column_names=tuple(removed))
-            )
             adapter.drop_columns(
                 connection,
                 target=target_qualified,
                 column_names=tuple(removed),
+                statement_recorder=statement_recorder,
             )
         if type_changed:
-            statements.extend(
-                adapter.render_alter_column_types(
-                    target=target_qualified, columns=tuple(type_changed)
-                )
-            )
             adapter.alter_column_types(
                 connection,
                 target=target_qualified,
                 columns=tuple(type_changed),
+                statement_recorder=statement_recorder,
             )
-        return tuple(statements)
+        return
 
-    return ()
+    return
 
 
 def _execute_dml(
@@ -403,7 +409,8 @@ def _execute_dml(
     entry: ModelPlanEntry,
     cursor_start: str | None = None,
     cursor_end: str | None = None,
-) -> tuple[str, ...]:
+    statement_recorder: StatementRecorder,
+) -> None:
     """Execute the incremental DML strategy from delta into target."""
 
     strategy: str | None = entry.incremental_strategy
@@ -420,18 +427,14 @@ def _execute_dml(
     dml_sql: str = f"SELECT {projection} FROM {delta_qualified}"
 
     if strategy == IncrementalStrategy.APPEND:
-        statements: tuple[str, ...] = adapter.render_append(
-            target=target_qualified,
-            sql=dml_sql,
-            columns=dml_columns,
-        )
         adapter.append(
             connection,
             target=target_qualified,
             sql=dml_sql,
             columns=dml_columns,
+            statement_recorder=statement_recorder,
         )
-        return statements
+        return
 
     if strategy == IncrementalStrategy.DELETE_INSERT:
         cursor_column: str | None = entry.cursor_column
@@ -442,14 +445,6 @@ def _execute_dml(
                     f"cursor_start and cursor_end but got "
                     f"cursor_start={cursor_start}, cursor_end={cursor_end}"
                 )
-            statements = adapter.render_delete_insert_cursor(
-                target=target_qualified,
-                sql=dml_sql,
-                cursor_column=cursor_column,
-                cursor_start=cursor_start,
-                cursor_end=cursor_end,
-                columns=dml_columns,
-            )
             adapter.delete_insert_cursor(
                 connection,
                 target=target_qualified,
@@ -458,38 +453,29 @@ def _execute_dml(
                 cursor_start=cursor_start,
                 cursor_end=cursor_end,
                 columns=dml_columns,
+                statement_recorder=statement_recorder,
             )
         else:
-            statements = adapter.render_delete_insert(
-                target=target_qualified,
-                sql=dml_sql,
-                unique_key=unique_key,
-                columns=dml_columns,
-            )
             adapter.delete_insert(
                 connection,
                 target=target_qualified,
                 sql=dml_sql,
                 unique_key=unique_key,
                 columns=dml_columns,
+                statement_recorder=statement_recorder,
             )
-        return statements
+        return
 
     if strategy == IncrementalStrategy.MERGE:
         merge_projection: str = ", ".join(intersection_names)
         merge_sql: str = f"SELECT {merge_projection} FROM {delta_qualified}"
-        statements = adapter.render_merge(
-            target=target_qualified,
-            sql=merge_sql,
-            unique_key=unique_key,
-            source_columns=intersection_names,
-        )
         adapter.merge(
             connection,
             target=target_qualified,
             sql=merge_sql,
             unique_key=unique_key,
+            statement_recorder=statement_recorder,
         )
-        return statements
+        return
 
     raise ValueError(f"unsupported incremental strategy: {strategy}")

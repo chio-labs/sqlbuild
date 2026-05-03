@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models import CompiledRelationTarget
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
@@ -14,7 +15,6 @@ from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.results import build_failed_result
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.shared.classes.statement_recorder import StatementRecorder
 from sqlbuild.executor.shared.helpers.naming import build_qualified_name
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.spec.models.source import SourceEntry
@@ -63,10 +63,12 @@ def execute_view_entry(
         )
 
     try:
-        statement_recorder.record_many(
-            adapter.render_create_view_as(target=target_qualified, sql=entry.resolved_sql)
+        adapter.create_view_as(
+            connection,
+            target=target_qualified,
+            sql=entry.resolved_sql,
+            statement_recorder=statement_recorder,
         )
-        adapter.create_view_as(connection, target=target_qualified, sql=entry.resolved_sql)
     except Exception as exc:
         return build_failed_result(
             entry=entry,

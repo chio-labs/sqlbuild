@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.executor.run.helpers.results import build_failed_result
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.shared.classes.statement_recorder import StatementRecorder
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
     BuildFailedResultTestCase,

@@ -11,6 +11,7 @@ from sqlbuild.adapter.shared.models import (
     RelationInfo,
     RowDiffResult,
     SchemaDiffResult,
+    StatementRecorder,
 )
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 
@@ -211,29 +212,73 @@ class BaseAdapter(StrictAdapter):
         target: str,
         sql: str,
         config: dict[str, Any] | None = None,
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
+        statements: tuple[str, ...] = self.render_create_table_as(target=target, sql=sql)
+        if statement_recorder is not None:
+            statement_recorder.record_many(statements)
         stmt: str
-        for stmt in self.render_create_table_as(target=target, sql=sql):
+        for stmt in statements:
             connection.execute(stmt)
 
-    def create_view_as(self, connection: Any, *, target: str, sql: str) -> None:
+    def create_view_as(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        sql: str,
+        statement_recorder: StatementRecorder | None = None,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_create_view_as(target=target, sql=sql)
+        if statement_recorder is not None:
+            statement_recorder.record_many(statements)
         stmt: str
-        for stmt in self.render_create_view_as(target=target, sql=sql):
+        for stmt in statements:
             connection.execute(stmt)
 
-    def drop(self, connection: Any, *, target: str, if_exists: bool = True) -> None:
+    def drop(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        if_exists: bool = True,
+        statement_recorder: StatementRecorder | None = None,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_drop(target=target, if_exists=if_exists)
+        if statement_recorder is not None:
+            statement_recorder.record_many(statements)
         stmt: str
-        for stmt in self.render_drop(target=target, if_exists=if_exists):
+        for stmt in statements:
             connection.execute(stmt)
 
-    def rename(self, connection: Any, *, source: str, target: str) -> None:
+    def rename(
+        self,
+        connection: Any,
+        *,
+        source: str,
+        target: str,
+        statement_recorder: StatementRecorder | None = None,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_rename(source=source, target=target)
+        if statement_recorder is not None:
+            statement_recorder.record_many(statements)
         stmt: str
-        for stmt in self.render_rename(source=source, target=target):
+        for stmt in statements:
             connection.execute(stmt)
 
-    def swap(self, connection: Any, *, left: str, right: str) -> None:
+    def swap(
+        self,
+        connection: Any,
+        *,
+        left: str,
+        right: str,
+        statement_recorder: StatementRecorder | None = None,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_swap(left=left, right=right)
+        if statement_recorder is not None:
+            statement_recorder.record_many(statements)
         stmt: str
-        for stmt in self.render_swap(left=left, right=right):
+        for stmt in statements:
             connection.execute(stmt)
 
     def clone(
@@ -243,8 +288,14 @@ class BaseAdapter(StrictAdapter):
         source: str,
         target: str,
         hard_copy: bool = False,
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
-        self.create_table_as(connection, target=target, sql=f"SELECT * FROM {source}")
+        self.create_table_as(
+            connection,
+            target=target,
+            sql=f"SELECT * FROM {source}",
+            statement_recorder=statement_recorder,
+        )
 
     def load_seed(
         self,
@@ -255,6 +306,7 @@ class BaseAdapter(StrictAdapter):
         columns: tuple[ColumnInfo, ...],
         replace: bool = True,
         infer_types: bool = False,
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
         raise NotImplementedError("load_seed requires an engine-specific implementation")
 
@@ -265,9 +317,13 @@ class BaseAdapter(StrictAdapter):
         target: str,
         sql: str,
         columns: tuple[str, ...] | None = None,
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
+        statements: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
+        if statement_recorder is not None:
+            statement_recorder.record_many(statements)
         stmt: str
-        for stmt in self.render_append(target=target, sql=sql, columns=columns):
+        for stmt in statements:
             connection.execute(stmt)
 
     def delete_insert(
@@ -278,12 +334,16 @@ class BaseAdapter(StrictAdapter):
         sql: str,
         unique_key: str | tuple[str, ...],
         columns: tuple[str, ...] | None = None,
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        stmt: str
-        for stmt in self.render_delete_insert(
+        statements: tuple[str, ...] = self.render_delete_insert(
             target=target, sql=sql, unique_key=keys, columns=columns
-        ):
+        )
+        if statement_recorder is not None:
+            statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
             connection.execute(stmt)
 
     def delete_insert_cursor(
@@ -296,16 +356,20 @@ class BaseAdapter(StrictAdapter):
         cursor_start: str,
         cursor_end: str,
         columns: tuple[str, ...] | None = None,
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
-        stmt: str
-        for stmt in self.render_delete_insert_cursor(
+        statements: tuple[str, ...] = self.render_delete_insert_cursor(
             target=target,
             sql=sql,
             cursor_column=cursor_column,
             cursor_start=cursor_start,
             cursor_end=cursor_end,
             columns=columns,
-        ):
+        )
+        if statement_recorder is not None:
+            statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
             connection.execute(stmt)
 
     def merge(
@@ -315,6 +379,7 @@ class BaseAdapter(StrictAdapter):
         target: str,
         sql: str,
         unique_key: str | tuple[str, ...],
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
         raise NotImplementedError("merge requires an engine-specific implementation")
 
@@ -324,6 +389,7 @@ class BaseAdapter(StrictAdapter):
         *,
         target: str,
         columns: tuple[ColumnInfo, ...],
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
         raise NotImplementedError("add_columns requires an engine-specific implementation")
 
@@ -333,6 +399,7 @@ class BaseAdapter(StrictAdapter):
         *,
         target: str,
         column_names: tuple[str, ...],
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
         raise NotImplementedError("drop_columns requires an engine-specific implementation")
 
@@ -342,6 +409,7 @@ class BaseAdapter(StrictAdapter):
         *,
         target: str,
         columns: tuple[ColumnInfo, ...],
+        statement_recorder: StatementRecorder | None = None,
     ) -> None:
         raise NotImplementedError("alter_column_types requires an engine-specific implementation")
 
