@@ -13,6 +13,7 @@ class LoadProjectConfigTestCase:
     expected_max_concurrency: int
     expected_materialized: str
     expected_row_diff_exclude_columns: tuple[str, ...]
+    expected_row_diff_tolerances: dict[str, object]
     expected_path_default_schema: str
     expected_vars: dict[str, str]
     expected_dev_connection: dict[str, object]

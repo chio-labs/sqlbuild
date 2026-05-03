@@ -5,7 +5,12 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import Any
 
-from sqlbuild.adapter.shared.models import CursorValue, RowDiffResult, SchemaDiffResult
+from sqlbuild.adapter.shared.models import (
+    CursorValue,
+    RowDiffResult,
+    RowDiffTolerances,
+    SchemaDiffResult,
+)
 
 
 class DiffMixin:
@@ -31,6 +36,7 @@ class DiffMixin:
         right: str,
         unique_key: str | tuple[str, ...],
         excluded_columns: tuple[str, ...] = (),
+        tolerances: RowDiffTolerances | None = None,
         cursor_column: str | None = None,
         start_cursor: CursorValue | None = None,
         end_cursor: CursorValue | None = None,

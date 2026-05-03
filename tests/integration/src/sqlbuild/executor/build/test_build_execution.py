@@ -122,6 +122,27 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         ),
     ),
     BuildExecutionTestCase(
+        description="environment schema is auto-created during build",
+        project_files={
+            "sqlbuild_project.yml": (
+                "name: demo\n"
+                "adapter: duckdb\n"
+                "connection:\n"
+                "  database: ':memory:'\n"
+                "default_environment: dev\n"
+                "environments:\n"
+                "  dev:\n"
+                "    schema: dev_schema\n"
+            ),
+            "sqlbuild_local.yml": "environment: dev\n",
+            "models/orders.sql": "MODEL (materialized: table);\n\nSELECT 1 AS id, 'alice' AS name",
+        },
+        expected_status=BuildStatus.SUCCESS,
+        expected_success_count=1,
+        expected_model_statuses=(("orders", ExecutionStatus.SUCCESS),),
+        expected_query_results=(("SELECT id, name FROM dev_schema.orders", ((1, "alice"),)),),
+    ),
+    BuildExecutionTestCase(
         description="run_audits false skips all audits but tables still built",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,

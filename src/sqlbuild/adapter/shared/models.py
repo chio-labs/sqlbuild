@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import Decimal
 
 from sqlbuild.adapter.shared.types import CursorKind, LifeCycleEventKind
 
@@ -50,14 +51,42 @@ class SchemaDiffResult:
 
 
 @dataclass(frozen=True)
+class RowDiffColumnResult:
+    """Per-column row-level comparison summary."""
+
+    name: str
+    mismatched_count: int = 0
+    tolerance: RowDiffTolerance | None = None
+
+
+@dataclass(frozen=True)
 class RowDiffResult:
     """Row-level comparison between two relations."""
 
+    left_count: int = 0
+    right_count: int = 0
     joined_count: int = 0
     equal_count: int = 0
     unequal_count: int = 0
     left_only_count: int = 0
     right_only_count: int = 0
+    column_results: tuple[RowDiffColumnResult, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class RowDiffTolerance:
+    """Numeric tolerance for row-level diff comparisons."""
+
+    absolute: Decimal | None = None
+    relative: Decimal | None = None
+
+
+@dataclass(frozen=True)
+class RowDiffTolerances:
+    """Resolved row-level diff tolerance rules."""
+
+    by_type: dict[str, RowDiffTolerance] = field(default_factory=dict)
+    by_column: dict[str, RowDiffTolerance] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

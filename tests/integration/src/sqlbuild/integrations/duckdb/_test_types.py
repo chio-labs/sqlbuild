@@ -1,6 +1,12 @@
 from dataclasses import dataclass, field
 
-from sqlbuild.adapter.shared.models import ColumnInfo, CursorValue, RowDiffResult, SchemaDiffResult
+from sqlbuild.adapter.shared.models import (
+    ColumnInfo,
+    CursorValue,
+    RowDiffResult,
+    RowDiffTolerances,
+    SchemaDiffResult,
+)
 
 
 @dataclass(frozen=True)
@@ -133,10 +139,21 @@ class DiffRowsTestCase:
     right_sql: str
     unique_key: str | tuple[str, ...]
     excluded_columns: tuple[str, ...] = field(default_factory=tuple)
+    tolerances: RowDiffTolerances | None = None
     cursor_column: str | None = None
     start_cursor: CursorValue | None = None
     end_cursor: CursorValue | None = None
     expected_result: RowDiffResult = field(default_factory=RowDiffResult)
+
+
+@dataclass(frozen=True)
+class DiffRowsErrorTestCase:
+    description: str
+    left_sql: str
+    right_sql: str
+    unique_key: str | tuple[str, ...]
+    expected_error_fragment: str
+    tolerances: RowDiffTolerances | None = None
 
 
 @dataclass(frozen=True)

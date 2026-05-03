@@ -79,7 +79,14 @@ def _build_parser() -> argparse.ArgumentParser:
     clone_parser.add_argument("--hard-copy", action="store_true", default=False)
     add_select_args(clone_parser)
 
-    subparsers.add_parser(CliCommand.DIFF)
+    diff_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DIFF)
+    diff_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    diff_parser.add_argument("--from", dest="from_environment", required=True)
+    diff_parser.add_argument("--to", dest="to_environment", required=True)
+    diff_parser.add_argument("--full", action="store_true", default=False)
+    diff_parser.add_argument("--schema-only", action="store_true", default=False)
+    diff_parser.add_argument("--bounded", default=None)
+    add_select_args(diff_parser)
     subparsers.add_parser(CliCommand.CLEAN)
     janitor_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.JANITOR)
     janitor_parser.add_argument("--auto-approve", action="store_true", default=False)
@@ -95,6 +102,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.build import run_build
     from sqlbuild.cli.commands.main.clone import run_clone
     from sqlbuild.cli.commands.main.compile import run_compile
+    from sqlbuild.cli.commands.main.diff import run_diff
     from sqlbuild.cli.commands.main.janitor import run_janitor
     from sqlbuild.cli.commands.main.plan import run_plan
     from sqlbuild.cli.commands.main.run import run_run
@@ -110,6 +118,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_audit=run_audit,
         run_seed=run_seed,
         run_clone=run_clone,
+        run_diff=run_diff,
         run_janitor=run_janitor,
     )
     return _main_with_dependencies(argv=argv, handlers=handlers)
@@ -241,6 +250,21 @@ def _main_with_dependencies(
                 args.from_environment,
                 args.to_environment,
                 args.hard_copy,
+                tuple(args.select),
+                tuple(args.exclude),
+            )
+        if args.command == CliCommand.DIFF:
+            if args.from_environment is None or args.to_environment is None:
+                raise CliUserError("diff requires --from and --to")
+            return handlers.run_diff(
+                project_dir,
+                args.no_color,
+                args.no_sql_validation,
+                args.from_environment,
+                args.to_environment,
+                args.full,
+                args.schema_only,
+                args.bounded,
                 tuple(args.select),
                 tuple(args.exclude),
             )

@@ -156,6 +156,74 @@ def test_given_clone_command_arguments_when_running_with_dependencies_then_it_di
     "test_case",
     [
         MainTestCase(
+            description="dispatches diff command through injected handler",
+            argv=["diff", "--from", "prod", "--to", "dev", "--full", "--select", "orders"],
+            expected_exit_code=6,
+        )
+    ],
+    ids=["dispatches diff command through injected handler"],
+)
+def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[
+        tuple[
+            Path | None,
+            bool,
+            bool,
+            str,
+            str,
+            bool,
+            bool,
+            str | None,
+            tuple[str, ...],
+            tuple[str, ...],
+        ]
+    ] = []
+
+    def run_diff(
+        project_dir: Path | None,
+        no_color: bool,
+        no_sql_validation: bool,
+        from_environment: str,
+        to_environment: str,
+        full: bool,
+        schema_only: bool,
+        bounded: str | None,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+    ) -> int:
+        received_args.append(
+            (
+                project_dir,
+                no_color,
+                no_sql_validation,
+                from_environment,
+                to_environment,
+                full,
+                schema_only,
+                bounded,
+                select,
+                exclude,
+            )
+        )
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_diff=run_diff),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [
+        (None, False, False, "prod", "dev", True, False, None, ("orders",), ())
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
             description="dispatches janitor command through injected handler",
             argv=["--no-color", "janitor", "--auto-approve", "--retention-days", "0"],
             expected_exit_code=9,

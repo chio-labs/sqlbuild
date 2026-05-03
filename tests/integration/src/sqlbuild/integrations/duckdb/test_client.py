@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -9,7 +10,10 @@ import pytest
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
     CursorValue,
+    RowDiffColumnResult,
     RowDiffResult,
+    RowDiffTolerance,
+    RowDiffTolerances,
     SchemaDiffResult,
     StatementRecorder,
 )
@@ -20,6 +24,7 @@ from tests.integration.src.sqlbuild.integrations.duckdb._test_types import (
     ConnectTestCase,
     CountRowsTestCase,
     DeleteInsertTestCase,
+    DiffRowsErrorTestCase,
     DiffRowsTestCase,
     DiffSchemaTestCase,
     DropTestCase,
@@ -105,11 +110,14 @@ DIFF_ROWS_TEST_CASES: list[DiffRowsTestCase] = [
         ),
         unique_key="id",
         expected_result=RowDiffResult(
+            left_count=3,
+            right_count=3,
             joined_count=4,
             equal_count=1,
             unequal_count=1,
             left_only_count=1,
             right_only_count=1,
+            column_results=(RowDiffColumnResult(name="val", mismatched_count=1),),
         ),
     ),
     DiffRowsTestCase(
@@ -124,12 +132,229 @@ DIFF_ROWS_TEST_CASES: list[DiffRowsTestCase] = [
         unique_key="id",
         excluded_columns=("extra",),
         expected_result=RowDiffResult(
+            left_count=1,
+            right_count=1,
             joined_count=1,
             equal_count=1,
             unequal_count=0,
             left_only_count=0,
             right_only_count=0,
+            column_results=(RowDiffColumnResult(name="val", mismatched_count=0),),
         ),
+    ),
+    DiffRowsTestCase(
+        description="allows absolute tolerance for numeric columns",
+        left_sql="CREATE TABLE left_t AS SELECT * FROM (VALUES (1, 100.00)) AS t(id, amount)",
+        right_sql="CREATE TABLE right_t AS SELECT * FROM (VALUES (1, 100.005)) AS t(id, amount)",
+        unique_key="id",
+        tolerances=RowDiffTolerances(
+            by_column={"amount": RowDiffTolerance(absolute=Decimal("0.01"))},
+        ),
+        expected_result=RowDiffResult(
+            left_count=1,
+            right_count=1,
+            joined_count=1,
+            equal_count=1,
+            unequal_count=0,
+            left_only_count=0,
+            right_only_count=0,
+            column_results=(
+                RowDiffColumnResult(
+                    name="amount",
+                    mismatched_count=0,
+                    tolerance=RowDiffTolerance(absolute=Decimal("0.01")),
+                ),
+            ),
+        ),
+    ),
+    DiffRowsTestCase(
+        description="allows relative tolerance for float columns",
+        left_sql=(
+            "CREATE TABLE left_t AS SELECT * FROM "
+            "(VALUES (1, CAST(1000000.0 AS DOUBLE))) AS t(id, metric)"
+        ),
+        right_sql=(
+            "CREATE TABLE right_t AS SELECT * FROM "
+            "(VALUES (1, CAST(1000050.0 AS DOUBLE))) AS t(id, metric)"
+        ),
+        unique_key="id",
+        tolerances=RowDiffTolerances(
+            by_type={"float": RowDiffTolerance(relative=Decimal("0.0001"))},
+        ),
+        expected_result=RowDiffResult(
+            left_count=1,
+            right_count=1,
+            joined_count=1,
+            equal_count=1,
+            unequal_count=0,
+            left_only_count=0,
+            right_only_count=0,
+            column_results=(
+                RowDiffColumnResult(
+                    name="metric",
+                    mismatched_count=0,
+                    tolerance=RowDiffTolerance(relative=Decimal("0.0001")),
+                ),
+            ),
+        ),
+    ),
+    DiffRowsTestCase(
+        description="reports numeric difference outside tolerance",
+        left_sql="CREATE TABLE left_t AS SELECT * FROM (VALUES (1, 100.00)) AS t(id, amount)",
+        right_sql="CREATE TABLE right_t AS SELECT * FROM (VALUES (1, 100.02)) AS t(id, amount)",
+        unique_key="id",
+        tolerances=RowDiffTolerances(
+            by_column={"amount": RowDiffTolerance(absolute=Decimal("0.01"))},
+        ),
+        expected_result=RowDiffResult(
+            left_count=1,
+            right_count=1,
+            joined_count=1,
+            equal_count=0,
+            unequal_count=1,
+            left_only_count=0,
+            right_only_count=0,
+            column_results=(
+                RowDiffColumnResult(
+                    name="amount",
+                    mismatched_count=1,
+                    tolerance=RowDiffTolerance(absolute=Decimal("0.01")),
+                ),
+            ),
+        ),
+    ),
+    DiffRowsTestCase(
+        description="uses larger of absolute and relative tolerance",
+        left_sql=(
+            "CREATE TABLE left_t AS SELECT * FROM "
+            "(VALUES (1, CAST(1000000.0 AS DOUBLE))) AS t(id, metric)"
+        ),
+        right_sql=(
+            "CREATE TABLE right_t AS SELECT * FROM "
+            "(VALUES (1, CAST(1000050.0 AS DOUBLE))) AS t(id, metric)"
+        ),
+        unique_key="id",
+        tolerances=RowDiffTolerances(
+            by_column={
+                "metric": RowDiffTolerance(
+                    absolute=Decimal("0.01"),
+                    relative=Decimal("0.0001"),
+                )
+            },
+        ),
+        expected_result=RowDiffResult(
+            left_count=1,
+            right_count=1,
+            joined_count=1,
+            equal_count=1,
+            unequal_count=0,
+            left_only_count=0,
+            right_only_count=0,
+            column_results=(
+                RowDiffColumnResult(
+                    name="metric",
+                    mismatched_count=0,
+                    tolerance=RowDiffTolerance(
+                        absolute=Decimal("0.01"),
+                        relative=Decimal("0.0001"),
+                    ),
+                ),
+            ),
+        ),
+    ),
+    DiffRowsTestCase(
+        description="keeps null versus value different with tolerance",
+        left_sql=(
+            "CREATE TABLE left_t AS SELECT * FROM "
+            "(VALUES (1, CAST(NULL AS DOUBLE))) AS t(id, amount)"
+        ),
+        right_sql="CREATE TABLE right_t AS SELECT * FROM (VALUES (1, 100.00)) AS t(id, amount)",
+        unique_key="id",
+        tolerances=RowDiffTolerances(
+            by_column={"amount": RowDiffTolerance(absolute=Decimal("1000"))},
+        ),
+        expected_result=RowDiffResult(
+            left_count=1,
+            right_count=1,
+            joined_count=1,
+            equal_count=0,
+            unequal_count=1,
+            left_only_count=0,
+            right_only_count=0,
+            column_results=(
+                RowDiffColumnResult(
+                    name="amount",
+                    mismatched_count=1,
+                    tolerance=RowDiffTolerance(absolute=Decimal("1000")),
+                ),
+            ),
+        ),
+    ),
+]
+
+DIFF_ROWS_ERROR_TEST_CASES: list[DiffRowsErrorTestCase] = [
+    DiffRowsErrorTestCase(
+        description="rejects tolerance for non numeric column",
+        left_sql="CREATE TABLE left_t AS SELECT * FROM (VALUES (1, 'a')) AS t(id, status)",
+        right_sql="CREATE TABLE right_t AS SELECT * FROM (VALUES (1, 'b')) AS t(id, status)",
+        unique_key="id",
+        tolerances=RowDiffTolerances(
+            by_column={"status": RowDiffTolerance(absolute=Decimal("1"))},
+        ),
+        expected_error_fragment="row diff tolerance for non-numeric column 'status' is invalid",
+    ),
+    DiffRowsErrorTestCase(
+        description="rejects empty tolerance",
+        left_sql="CREATE TABLE left_t AS SELECT * FROM (VALUES (1, 100.0)) AS t(id, amount)",
+        right_sql="CREATE TABLE right_t AS SELECT * FROM (VALUES (1, 100.0)) AS t(id, amount)",
+        unique_key="id",
+        tolerances=RowDiffTolerances(by_column={"amount": RowDiffTolerance()}),
+        expected_error_fragment="must define absolute or relative",
+    ),
+    DiffRowsErrorTestCase(
+        description="rejects null left unique key",
+        left_sql=(
+            "CREATE TABLE left_t AS SELECT * FROM "
+            "(VALUES (CAST(NULL AS INTEGER), 'a')) AS t(id, status)"
+        ),
+        right_sql="CREATE TABLE right_t AS SELECT * FROM (VALUES (1, 'a')) AS t(id, status)",
+        unique_key="id",
+        expected_error_fragment="left relation contains null unique_key values",
+    ),
+    DiffRowsErrorTestCase(
+        description="rejects duplicate right unique key",
+        left_sql="CREATE TABLE left_t AS SELECT * FROM (VALUES (1, 'a')) AS t(id, status)",
+        right_sql=(
+            "CREATE TABLE right_t AS SELECT * FROM (VALUES (1, 'a'), (1, 'b')) AS t(id, status)"
+        ),
+        unique_key="id",
+        expected_error_fragment="right relation contains duplicate unique_key values",
+    ),
+    DiffRowsErrorTestCase(
+        description="rejects null composite unique key component",
+        left_sql=(
+            "CREATE TABLE left_t AS SELECT * FROM "
+            "(VALUES (1, CAST(NULL AS INTEGER), 'a')) AS t(id, line_number, status)"
+        ),
+        right_sql=(
+            "CREATE TABLE right_t AS SELECT * FROM "
+            "(VALUES (1, 1, 'a')) AS t(id, line_number, status)"
+        ),
+        unique_key=("id", "line_number"),
+        expected_error_fragment="left relation contains null unique_key values",
+    ),
+    DiffRowsErrorTestCase(
+        description="rejects duplicate composite unique key",
+        left_sql=(
+            "CREATE TABLE left_t AS SELECT * FROM "
+            "(VALUES (1, 1, 'a'), (1, 1, 'b')) AS t(id, line_number, status)"
+        ),
+        right_sql=(
+            "CREATE TABLE right_t AS SELECT * FROM "
+            "(VALUES (1, 1, 'a')) AS t(id, line_number, status)"
+        ),
+        unique_key=("id", "line_number"),
+        expected_error_fragment="left relation contains duplicate unique_key values",
     ),
 ]
 
@@ -867,12 +1092,36 @@ def test_given_two_tables_when_diffing_rows_then_returns_expected_counts(
         right="right_t",
         unique_key=test_case.unique_key,
         excluded_columns=test_case.excluded_columns,
+        tolerances=test_case.tolerances,
         cursor_column=test_case.cursor_column,
         start_cursor=test_case.start_cursor,
         end_cursor=test_case.end_cursor,
     )
 
     assert result == test_case.expected_result
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    DIFF_ROWS_ERROR_TEST_CASES,
+    ids=[case.description for case in DIFF_ROWS_ERROR_TEST_CASES],
+)
+def test_given_invalid_tolerance_when_diffing_rows_then_raises_clear_error(
+    test_case: DiffRowsErrorTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    connection.execute(test_case.left_sql)
+    connection.execute(test_case.right_sql)
+
+    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+        adapter.diff_rows(
+            connection,
+            left="left_t",
+            right="right_t",
+            unique_key=test_case.unique_key,
+            tolerances=test_case.tolerances,
+        )
 
 
 @pytest.mark.parametrize(

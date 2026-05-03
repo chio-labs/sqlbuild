@@ -33,6 +33,9 @@ class CliNamespace:
     debug: bool = False
     auto_approve: bool = False
     retention_days: int | None = None
+    bounded: str | None = None
+    full: bool = False
+    schema_only: bool = False
     select: list[str] = field(default_factory=list)
     exclude: list[str] = field(default_factory=list)
 
@@ -97,6 +100,21 @@ class CliEntrypointHandlers:
     run_seed: Callable[[Path | None, bool, tuple[str, ...], tuple[str, ...]], int]
     run_clone: Callable[
         [Path | None, bool, bool, str, str, bool, tuple[str, ...], tuple[str, ...]],
+        int,
+    ]
+    run_diff: Callable[
+        [
+            Path | None,
+            bool,
+            bool,
+            str,
+            str,
+            bool,
+            bool,
+            str | None,
+            tuple[str, ...],
+            tuple[str, ...],
+        ],
         int,
     ]
     run_janitor: Callable[[Path | None, bool, bool, int | None], int]

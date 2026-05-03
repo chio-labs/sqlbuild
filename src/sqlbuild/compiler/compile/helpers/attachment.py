@@ -1144,10 +1144,14 @@ def build_layered_model_values(
 
 
 def _merge_with_tag_union(base: dict[str, object], overlay: dict[str, object]) -> None:
-    """Merge overlay into base, unioning 'tags' instead of replacing."""
+    """Merge overlay into base, preserving special config merge semantics."""
 
     overlay_tags: object | None = overlay.get("tags")
     base_tags: object | None = base.get("tags")
+    overlay_row_diff_exclude_columns: object | None = overlay.get("row_diff_exclude_columns")
+    base_row_diff_exclude_columns: object | None = base.get("row_diff_exclude_columns")
+    overlay_row_diff_tolerances: object | None = overlay.get("row_diff_tolerances")
+    base_row_diff_tolerances: object | None = base.get("row_diff_tolerances")
     base.update(overlay)
     if overlay_tags is not None and base_tags is not None:
         merged: list[str] = list(_as_string_list(base_tags))
@@ -1156,6 +1160,56 @@ def _merge_with_tag_union(base: dict[str, object], overlay: dict[str, object]) -
             if tag not in merged:
                 merged.append(tag)
         base["tags"] = merged
+    if overlay_row_diff_exclude_columns is not None and base_row_diff_exclude_columns is not None:
+        base["row_diff_exclude_columns"] = tuple(
+            _merge_string_sequence(
+                base_row_diff_exclude_columns,
+                overlay_row_diff_exclude_columns,
+            )
+        )
+    if overlay_row_diff_tolerances is not None and base_row_diff_tolerances is not None:
+        base["row_diff_tolerances"] = _merge_row_diff_tolerances_mapping(
+            base_row_diff_tolerances,
+            overlay_row_diff_tolerances,
+        )
+
+
+def _merge_string_sequence(base: object, overlay: object) -> list[str]:
+    """Merge string sequence-like values while preserving first occurrence order."""
+
+    merged: list[str] = list(_as_string_list(base))
+    value: str
+    for value in _as_string_list(overlay):
+        if value not in merged:
+            merged.append(value)
+    return merged
+
+
+def _merge_row_diff_tolerances_mapping(base: object, overlay: object) -> object:
+    """Deep merge row diff tolerance mappings by section and rule key."""
+
+    if not isinstance(base, dict) or not isinstance(overlay, dict):
+        return overlay
+
+    base_mapping: dict[str, object] = cast(dict[str, object], base)
+    overlay_mapping: dict[str, object] = cast(dict[str, object], overlay)
+    merged: dict[str, object] = dict(base_mapping)
+    section: str
+    for section in ("by_type", "by_column"):
+        base_section: object | None = base_mapping.get(section)
+        overlay_section: object | None = overlay_mapping.get(section)
+        if overlay_section is None:
+            continue
+        if isinstance(base_section, dict) and isinstance(overlay_section, dict):
+            merged[section] = {**base_section, **overlay_section}
+        else:
+            merged[section] = overlay_section
+    key: object
+    value: object
+    for key, value in overlay_mapping.items():
+        if isinstance(key, str) and key not in {"by_type", "by_column"}:
+            merged[key] = value
+    return merged
 
 
 def _as_string_list(value: object) -> list[str]:
@@ -1436,6 +1490,8 @@ def project_defaults_to_mapping(defaults: DefaultsConfig) -> dict[str, object]:
         values["schema_change_backfill"] = defaults.schema_change_backfill
     if defaults.row_diff_exclude_columns:
         values["row_diff_exclude_columns"] = defaults.row_diff_exclude_columns
+    if defaults.row_diff_tolerances:
+        values["row_diff_tolerances"] = defaults.row_diff_tolerances
     if defaults.tags:
         values["tags"] = list(defaults.tags)
     return values

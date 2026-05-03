@@ -51,6 +51,7 @@ class DefaultsConfig:
     query_change_backfill: str | None = None
     schema_change_backfill: dict[str, str] = field(default_factory=dict)
     row_diff_exclude_columns: tuple[str, ...] = field(default_factory=tuple)
+    row_diff_tolerances: dict[str, object] = field(default_factory=dict)
     tags: tuple[str, ...] = field(default_factory=tuple)
 
 

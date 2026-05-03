@@ -169,6 +169,10 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
         payload=mapping.get("schema_change_backfill"),
         file_path=file_path,
     )
+    row_diff_tolerances: dict[str, object] = _optional_mapping(
+        payload=mapping,
+        key="row_diff_tolerances",
+    )
     return DefaultsConfig(
         materialized=_optional_str(payload=mapping, key="materialized"),
         database=_optional_str(payload=mapping, key="database"),
@@ -180,6 +184,7 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
         query_change_backfill=_optional_str(payload=mapping, key="query_change_backfill"),
         schema_change_backfill=schema_change_backfill,
         row_diff_exclude_columns=row_diff_exclude_columns,
+        row_diff_tolerances=row_diff_tolerances,
         tags=tags,
     )
 

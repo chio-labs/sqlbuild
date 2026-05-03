@@ -11,6 +11,7 @@ from sqlbuild.adapter.shared.models import (
     CursorValue,
     RelationInfo,
     RowDiffResult,
+    RowDiffTolerances,
     SchemaDiffResult,
     StatementRecorder,
 )
@@ -298,6 +299,7 @@ class FakeJanitorAdapter(BaseAdapter):
         right: str,
         unique_key: str | tuple[str, ...],
         excluded_columns: tuple[str, ...] = (),
+        tolerances: RowDiffTolerances | None = None,
         cursor_column: str | None = None,
         start_cursor: CursorValue | None = None,
         end_cursor: CursorValue | None = None,

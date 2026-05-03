@@ -27,6 +27,12 @@ def execute_seed(
         name=seed_entry.target.name,
     )
     try:
+        adapter.ensure_schema(
+            connection,
+            database=seed_entry.target.database,
+            schema=seed_entry.target.schema,
+            statement_recorder=statement_recorder,
+        )
         adapter.load_seed(
             connection,
             target=target_qualified,

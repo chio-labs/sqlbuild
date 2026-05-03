@@ -10,6 +10,7 @@ from sqlbuild.adapter.shared.models import (
     CursorValue,
     RelationInfo,
     RowDiffResult,
+    RowDiffTolerances,
     SchemaDiffResult,
     StatementRecorder,
 )
@@ -110,6 +111,31 @@ class BaseAdapter(StrictAdapter):
                 result[table_name] = []
             result[table_name].append(ColumnInfo(name=row[1], type=row[2]))
         return {k: tuple(v) for k, v in result.items()}
+
+    def render_create_schema(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> tuple[str, ...]:
+        target: str = f"{database}.{schema}" if database is not None else schema
+        return (f"CREATE SCHEMA IF NOT EXISTS {target}",)
+
+    def ensure_schema(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schema: str | None,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        if schema is None:
+            return
+        statements: tuple[str, ...] = self.render_create_schema(database=database, schema=schema)
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            connection.execute(stmt)
 
     def render_create_table_as(self, *, target: str, sql: str) -> tuple[str, ...]:
         return (f"CREATE OR REPLACE TABLE {target} AS {sql}",)
@@ -444,6 +470,7 @@ class BaseAdapter(StrictAdapter):
         right: str,
         unique_key: str | tuple[str, ...],
         excluded_columns: tuple[str, ...] = (),
+        tolerances: RowDiffTolerances | None = None,
         cursor_column: str | None = None,
         start_cursor: CursorValue | None = None,
         end_cursor: CursorValue | None = None,

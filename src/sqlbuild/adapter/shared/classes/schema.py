@@ -56,3 +56,15 @@ class SchemaMixin:
     ) -> bool:
         """Return whether the named relation exists in the warehouse."""
         ...
+
+    @abstractmethod
+    def ensure_schema(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schema: str | None,
+        statement_recorder: Any,
+    ) -> None:
+        """Ensure the target schema exists before relation materialization."""
+        ...

@@ -1,0 +1,1 @@
+"""Diff command helper package."""

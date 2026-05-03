@@ -55,6 +55,13 @@ def execute_custom_entry(
     audit_results: list[AuditExecutionResult] = []
     statement_recorder: StatementRecorder = StatementRecorder()
 
+    adapter.ensure_schema(
+        connection,
+        database=target_database,
+        schema=target_schema,
+        statement_recorder=statement_recorder,
+    )
+
     try:
         with diagnostics_context(sqlbuild_phase="pre_hook", sqlbuild_action_name="run"):
             execute_hooks(

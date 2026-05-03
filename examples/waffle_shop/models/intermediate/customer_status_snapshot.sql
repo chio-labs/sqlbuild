@@ -5,6 +5,11 @@ MODEL (
   cursor: "last_ordered_at",
   cursor_type: timestamp,
   cursor_grain: second,
+  row_diff_exclude_columns: ["latest_order_status"],
+  row_diff_tolerances:
+    by_column:
+      total_revenue_cents:
+        absolute: 1
   cursor_inputs: {
     fact_orders: "ordered_at"
   },

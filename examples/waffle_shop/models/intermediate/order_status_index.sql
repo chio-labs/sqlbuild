@@ -1,6 +1,7 @@
 MODEL (
   materialized: incremental,
   incremental_strategy: delete_insert,
+  unique_key: ["order_id"],
   cursor: "order_id",
   cursor_type: integer,
   on_schema_change: append_new_columns,

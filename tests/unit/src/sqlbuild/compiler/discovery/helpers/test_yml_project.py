@@ -247,6 +247,14 @@ defaults:
   materialized: table
   row_diff_exclude_columns:
     - loaded_at
+  row_diff_tolerances:
+    by_type:
+      float:
+        relative: 0.0001
+        absolute: 0.000001
+    by_column:
+      revenue:
+        absolute: 0.01
 
 path_defaults:
   models/staging:
@@ -281,6 +289,14 @@ janitor:
             expected_max_concurrency=8,
             expected_materialized="table",
             expected_row_diff_exclude_columns=("loaded_at",),
+            expected_row_diff_tolerances={
+                "by_type": {
+                    "float": {"relative": 0.0001, "absolute": 0.000001},
+                },
+                "by_column": {
+                    "revenue": {"absolute": 0.01},
+                },
+            },
             expected_path_default_schema="staging",
             expected_vars={"user": "kevin"},
             expected_dev_connection={"warehouse": "dev_wh"},
@@ -312,6 +328,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.settings.max_concurrency == test_case.expected_max_concurrency
     assert config.defaults.materialized == test_case.expected_materialized
     assert config.defaults.row_diff_exclude_columns == test_case.expected_row_diff_exclude_columns
+    assert config.defaults.row_diff_tolerances == test_case.expected_row_diff_tolerances
     assert (
         config.path_defaults["models/staging"]["schema"] == test_case.expected_path_default_schema
     )

@@ -106,6 +106,12 @@ def execute_table_entry(
         resolved_sql = substitute_cursor_sentinels(sql=entry.resolved_sql, bounds=runtime_bounds)
 
     try:
+        adapter.ensure_schema(
+            connection,
+            database=target_database,
+            schema=target_schema,
+            statement_recorder=statement_recorder,
+        )
         statement_recorder.record_many(render_hooks(hooks=entry.pre_hook, phase_label="pre_hook"))
         with diagnostics_context(sqlbuild_phase="pre_hook", sqlbuild_action_name="run"):
             execute_hooks(

@@ -1,0 +1,1 @@
+"""Diff executor entrypoint package."""

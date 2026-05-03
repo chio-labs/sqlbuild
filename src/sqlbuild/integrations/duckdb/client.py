@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +12,10 @@ from sqlbuild.adapter.shared.models import (
     ColumnInfo,
     CursorValue,
     RelationInfo,
+    RowDiffColumnResult,
     RowDiffResult,
+    RowDiffTolerance,
+    RowDiffTolerances,
     SchemaDiffResult,
     StatementRecorder,
 )
@@ -569,6 +573,7 @@ class DuckDbAdapter(BaseAdapter):
         right: str,
         unique_key: str | tuple[str, ...],
         excluded_columns: tuple[str, ...] = (),
+        tolerances: RowDiffTolerances | None = None,
         cursor_column: str | None = None,
         start_cursor: CursorValue | None = None,
         end_cursor: CursorValue | None = None,
@@ -582,6 +587,7 @@ class DuckDbAdapter(BaseAdapter):
             for col in left_columns
             if col.name not in keys and col.name not in excluded_columns
         )
+        left_columns_by_name: dict[str, ColumnInfo] = {col.name: col for col in left_columns}
         cursor_filter: str = build_cursor_filter(
             cursor_column=cursor_column,
             start_cursor=start_cursor,
@@ -592,17 +598,55 @@ class DuckDbAdapter(BaseAdapter):
         if cursor_filter:
             left_cte += f" WHERE {cursor_filter}"
             right_cte += f" WHERE {cursor_filter}"
+        self._validate_duckdb_row_diff_keys(
+            connection,
+            relation_sql=left_cte,
+            relation_label="left",
+            keys=keys,
+        )
+        self._validate_duckdb_row_diff_keys(
+            connection,
+            relation_sql=right_cte,
+            relation_label="right",
+            keys=keys,
+        )
 
         join_condition: str = " AND ".join(f"__left.{k} = __right.{k}" for k in keys)
+        column_equal_expressions: dict[str, str] = {
+            col: self._build_duckdb_row_equal_expression(
+                column=col,
+                column_info=left_columns_by_name[col],
+                tolerances=tolerances,
+            )
+            for col in compare_columns
+        }
+        column_tolerances: dict[str, RowDiffTolerance | None] = {
+            col: self._resolve_duckdb_tolerance(
+                column=col,
+                column_type=left_columns_by_name[col].type,
+                tolerances=tolerances,
+            )
+            for col in compare_columns
+        }
         equal_condition: str = "TRUE"
         if compare_columns:
-            equal_condition = " AND ".join(
-                f"__left.{col} IS NOT DISTINCT FROM __right.{col}" for col in compare_columns
-            )
+            equal_condition = " AND ".join(column_equal_expressions.values())
+        column_count_sql_parts: list[str] = [
+            f"COUNT(CASE WHEN __left.{keys[0]} IS NOT NULL "
+            f"AND __right.{keys[0]} IS NOT NULL "
+            f"AND NOT ({column_equal_expressions[col]}) THEN 1 END) "
+            f"AS __{col}_mismatch_count"
+            for col in compare_columns
+        ]
+        column_count_sql: str = ""
+        if column_count_sql_parts:
+            column_count_sql = ", " + ", ".join(column_count_sql_parts)
 
         diff_sql: str = (
             f"WITH __left AS ({left_cte}), __right AS ({right_cte}) "
             f"SELECT "
+            f"COUNT(CASE WHEN __left.{keys[0]} IS NOT NULL THEN 1 END) AS left_count, "
+            f"COUNT(CASE WHEN __right.{keys[0]} IS NOT NULL THEN 1 END) AS right_count, "
             f"COUNT(*) AS joined, "
             f"COUNT(CASE WHEN __left.{keys[0]} IS NOT NULL "
             f"AND __right.{keys[0]} IS NOT NULL AND ({equal_condition}) "
@@ -611,16 +655,28 @@ class DuckDbAdapter(BaseAdapter):
             f"AND __right.{keys[0]} IS NOT NULL AND NOT ({equal_condition}) "
             f"THEN 1 END) AS unequal, "
             f"COUNT(CASE WHEN __right.{keys[0]} IS NULL THEN 1 END) AS left_only, "
-            f"COUNT(CASE WHEN __left.{keys[0]} IS NULL THEN 1 END) AS right_only "
+            f"COUNT(CASE WHEN __left.{keys[0]} IS NULL THEN 1 END) AS right_only"
+            f"{column_count_sql} "
             f"FROM __left FULL OUTER JOIN __right ON {join_condition}"
         )
         row: tuple[Any, ...] = self.execute(connection, diff_sql).fetchone()
+        column_results: tuple[RowDiffColumnResult, ...] = tuple(
+            RowDiffColumnResult(
+                name=col,
+                mismatched_count=int(row[index]),
+                tolerance=column_tolerances[col],
+            )
+            for index, col in enumerate(compare_columns, start=7)
+        )
         return RowDiffResult(
-            joined_count=int(row[0]),
-            equal_count=int(row[1]),
-            unequal_count=int(row[2]),
-            left_only_count=int(row[3]),
-            right_only_count=int(row[4]),
+            left_count=int(row[0]),
+            right_count=int(row[1]),
+            joined_count=int(row[2]),
+            equal_count=int(row[3]),
+            unequal_count=int(row[4]),
+            left_only_count=int(row[5]),
+            right_only_count=int(row[6]),
+            column_results=column_results,
         )
 
     def count_rows(
@@ -642,3 +698,118 @@ class DuckDbAdapter(BaseAdapter):
             query += f" WHERE {cursor_filter}"
         result: Any = self.execute(connection, query).fetchone()
         return int(result[0])
+
+    def _validate_duckdb_row_diff_keys(
+        self,
+        connection: Any,
+        *,
+        relation_sql: str,
+        relation_label: str,
+        keys: tuple[str, ...],
+    ) -> None:
+        if not keys:
+            raise ValueError("row diff requires at least one unique_key column")
+        null_condition: str = " OR ".join(f"{key} IS NULL" for key in keys)
+        null_count_sql: str = (
+            f"SELECT COUNT(*) FROM ({relation_sql}) AS __key_check WHERE {null_condition}"
+        )
+        null_row: tuple[Any, ...] = self.execute(connection, null_count_sql).fetchone()
+        if int(null_row[0]) > 0:
+            raise ValueError(f"row diff {relation_label} relation contains null unique_key values")
+
+        key_list: str = ", ".join(keys)
+        duplicate_count_sql: str = (
+            f"SELECT COUNT(*) FROM ("
+            f"SELECT {key_list} FROM ({relation_sql}) AS __key_check "
+            f"GROUP BY {key_list} HAVING COUNT(*) > 1"
+            f") AS __duplicates"
+        )
+        duplicate_row: tuple[Any, ...] = self.execute(connection, duplicate_count_sql).fetchone()
+        if int(duplicate_row[0]) > 0:
+            raise ValueError(
+                f"row diff {relation_label} relation contains duplicate unique_key values"
+            )
+
+    @staticmethod
+    def _build_duckdb_row_equal_expression(
+        *,
+        column: str,
+        column_info: ColumnInfo,
+        tolerances: RowDiffTolerances | None,
+    ) -> str:
+        tolerance: RowDiffTolerance | None = DuckDbAdapter._resolve_duckdb_tolerance(
+            column=column,
+            column_type=column_info.type,
+            tolerances=tolerances,
+        )
+        left_expression: str = f"__left.{column}"
+        right_expression: str = f"__right.{column}"
+        if tolerance is None:
+            return f"{left_expression} IS NOT DISTINCT FROM {right_expression}"
+        threshold_parts: list[str] = []
+        if tolerance.absolute is not None:
+            threshold_parts.append(DuckDbAdapter._format_decimal_sql(tolerance.absolute))
+        if tolerance.relative is not None:
+            threshold_parts.append(
+                f"{DuckDbAdapter._format_decimal_sql(tolerance.relative)} * "
+                f"GREATEST(ABS({left_expression}), ABS({right_expression}))"
+            )
+        threshold_sql: str = threshold_parts[0]
+        if len(threshold_parts) > 1:
+            threshold_sql = f"GREATEST({', '.join(threshold_parts)})"
+        return (
+            f"(({left_expression} IS NULL AND {right_expression} IS NULL) OR "
+            f"({left_expression} IS NOT NULL AND {right_expression} IS NOT NULL AND "
+            f"ABS({left_expression} - {right_expression}) <= {threshold_sql}))"
+        )
+
+    @staticmethod
+    def _resolve_duckdb_tolerance(
+        *,
+        column: str,
+        column_type: str,
+        tolerances: RowDiffTolerances | None,
+    ) -> RowDiffTolerance | None:
+        if tolerances is None:
+            return None
+        column_tolerance: RowDiffTolerance | None = tolerances.by_column.get(column)
+        if column_tolerance is not None:
+            if DuckDbAdapter._normalize_duckdb_numeric_type(column_type) is None:
+                raise ValueError(f"row diff tolerance for non-numeric column '{column}' is invalid")
+            DuckDbAdapter._validate_duckdb_tolerance(
+                column=column,
+                tolerance=column_tolerance,
+            )
+            return column_tolerance
+        normalized_type: str | None = DuckDbAdapter._normalize_duckdb_numeric_type(column_type)
+        if normalized_type is None:
+            return None
+        type_tolerance: RowDiffTolerance | None = tolerances.by_type.get(normalized_type)
+        if type_tolerance is not None:
+            DuckDbAdapter._validate_duckdb_tolerance(
+                column=column,
+                tolerance=type_tolerance,
+            )
+        return type_tolerance
+
+    @staticmethod
+    def _validate_duckdb_tolerance(*, column: str, tolerance: RowDiffTolerance) -> None:
+        if tolerance.absolute is None and tolerance.relative is None:
+            raise ValueError(
+                f"row diff tolerance for column '{column}' must define absolute or relative"
+            )
+
+    @staticmethod
+    def _normalize_duckdb_numeric_type(column_type: str) -> str | None:
+        normalized: str = column_type.upper()
+        if any(token in normalized for token in ("DOUBLE", "FLOAT", "REAL")):
+            return "float"
+        if any(token in normalized for token in ("DECIMAL", "NUMERIC")):
+            return "decimal"
+        if "INT" in normalized:
+            return "integer"
+        return None
+
+    @staticmethod
+    def _format_decimal_sql(value: Decimal) -> str:
+        return format(value, "f")
