@@ -8,7 +8,12 @@ from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.colors import colorize_status, supports_color
+from sqlbuild.cli.commands.main.shared.helpers.colors import (
+    bold,
+    colorize_status,
+    green_bold,
+    supports_color,
+)
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_connection_config
 from sqlbuild.compiler.discovery.main import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -47,7 +52,10 @@ def run_test(
     )
 
     use_color: bool = not no_color and supports_color()
-    sys.stdout.write("sqb test\n\n")
+    test_count: int = len(pipeline_result.plan_output.test_entries)
+    header: str = f"Test ({test_count} selected)"
+    styled_header: str = green_bold(header) if use_color else header
+    sys.stdout.write(f"\n{styled_header}\n")
     sys.stdout.flush()
 
     on_complete: Callable[[SqlTestExecutionResult], None] = _build_on_complete(use_color=use_color)
@@ -67,12 +75,23 @@ def run_test(
 
 
 def _build_on_complete(*, use_color: bool) -> Callable[[SqlTestExecutionResult], None]:
+    current_group: list[str] = [""]
+
     def _on_complete(result: SqlTestExecutionResult) -> None:
+        model_name: str = ""
+        if result.step_results:
+            model_name = result.step_results[0].model_name
+        group_name: str = model_name or "(unknown)"
+        if group_name != current_group[0]:
+            current_group[0] = group_name
+            group_header: str = bold(group_name) if use_color else group_name
+            sys.stdout.write(f"\n{group_header}\n")
+
         status_text: str = "PASS" if result.outcome == SqlTestOutcome.PASS else "FAIL"
         status: str = colorize_status(status_text, use_color=use_color)
-        sys.stdout.write(f"  {result.test_name:<50} {status}\n")
+        sys.stdout.write(f"    {'test':<10}{result.test_name:<40} {status}\n")
         if result.error_message is not None:
-            sys.stdout.write(f"    {result.error_message}\n")
+            sys.stdout.write(f"{'':>14}{result.error_message}\n")
         sys.stdout.flush()
 
     return _on_complete

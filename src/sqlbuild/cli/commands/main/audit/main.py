@@ -8,7 +8,12 @@ from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.colors import colorize_status, supports_color
+from sqlbuild.cli.commands.main.shared.helpers.colors import (
+    bold,
+    colorize_status,
+    green_bold,
+    supports_color,
+)
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_connection_config
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.discovery.main import discover_project_inputs
@@ -49,7 +54,10 @@ def run_audit(
     )
 
     use_color: bool = not no_color and supports_color()
-    sys.stdout.write("sqb audit\n\n")
+    audit_count: int = len(pipeline_result.plan_output.audit_entries)
+    header: str = f"Audit ({audit_count} selected)"
+    styled_header: str = green_bold(header) if use_color else header
+    sys.stdout.write(f"\n{styled_header}\n")
     sys.stdout.flush()
 
     on_complete: Callable[[AuditExecutionResult], None] = _build_on_complete(use_color=use_color)
@@ -72,7 +80,15 @@ def run_audit(
 
 
 def _build_on_complete(*, use_color: bool) -> Callable[[AuditExecutionResult], None]:
+    current_group: list[str] = [""]
+
     def _on_complete(result: AuditExecutionResult) -> None:
+        group_name: str = result.attached_target_name or "(unattached)"
+        if group_name != current_group[0]:
+            current_group[0] = group_name
+            group_header: str = bold(group_name) if use_color else group_name
+            sys.stdout.write(f"\n{group_header}\n")
+
         status_text: str
         if result.outcome == AuditOutcome.PASS:
             status_text = "PASS"
@@ -88,7 +104,7 @@ def _build_on_complete(*, use_color: bool) -> Callable[[AuditExecutionResult], N
         if result.outcome != AuditOutcome.PASS and result.row_count > 0:
             row_label: str = "row" if result.row_count == 1 else "rows"
             detail = f"  {result.row_count} {row_label}"
-        sys.stdout.write(f"  {audit_name:<50} {status}{detail}\n")
+        sys.stdout.write(f"    {'audit':<10}{audit_name:<40} {status}{detail}\n")
         sys.stdout.flush()
 
     return _on_complete
