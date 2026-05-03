@@ -680,9 +680,10 @@ def check_helpers_subpackage_shape(repo_root: Path, file_path: Path) -> list[Vio
             path=file_path,
             line=None,
             message=(
-                "helper subpackages must use role-oriented files like models.py, "
-                "types.py, constants.py, exceptions.py, or nested helpers/ packages "
-                "instead of ad hoc modules"
+                "helper subpackages must use role-oriented files like main.py, "
+                "models.py, types.py, constants.py, or exceptions.py; either flatten "
+                "to a single module under helpers/ or restructure as a package with "
+                "main.py for orchestration and its own helpers/ for focused modules"
             ),
         )
     ]
@@ -921,6 +922,99 @@ def check_shared_package_imports(
                     )
 
     return violations
+
+
+def check_cross_package_internal_imports(
+    repo_root: Path,
+    file_path: Path,
+    module: ast.Module,
+) -> list[Violation]:
+    """Block imports that reach into another domain package's internal structure."""
+
+    relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
+    if len(relative_parts) < 4 or relative_parts[:2] != ("src", "sqlbuild"):
+        return []
+    top_level_domain: str = relative_parts[2]
+    if top_level_domain in {"spec", "adapter"}:
+        return []
+
+    current_domain_parts: tuple[str, ...] = relative_parts[2:]
+    current_domain: str = current_domain_parts[0]
+    current_subdomain: str | None = (
+        current_domain_parts[1] if len(current_domain_parts) > 2 else None
+    )
+
+    violations: list[Violation] = []
+    _DEEP_INTERNAL_SEGMENTS: frozenset[str] = frozenset({"shared", "helpers", "classes"})
+    _PUBLIC_MODULES: frozenset[str] = frozenset(
+        {"models", "types", "constants", "exceptions", "__init__"}
+    )
+
+    for node in ast.walk(module):
+        if not isinstance(node, ast.ImportFrom) or node.module is None:
+            continue
+        imported_parts: tuple[str, ...] = tuple(node.module.split("."))
+        if len(imported_parts) < 3 or imported_parts[0] != "sqlbuild":
+            continue
+
+        imported_domain: str = imported_parts[1]
+        if imported_domain == current_domain:
+            if len(imported_parts) < 4:
+                continue
+            imported_subdomain: str = imported_parts[2]
+            if current_subdomain is not None and imported_subdomain == current_subdomain:
+                continue
+            if imported_subdomain == "shared":
+                continue
+            if len(imported_parts) >= 4 and imported_parts[3] in _PUBLIC_MODULES:
+                continue
+            if len(imported_parts) == 3:
+                continue
+            if _has_deep_internal_segment(imported_parts[3:], _DEEP_INTERNAL_SEGMENTS):
+                violations.append(
+                    Violation(
+                        code="SC033",
+                        path=file_path,
+                        line=node.lineno,
+                        message=(
+                            f"cross-package import reaches into internal structure of "
+                            f"'{'.'.join(imported_parts[:3])}'; import from its public "
+                            f"surface (models, types, constants, exceptions) or promote "
+                            f"shared code to the common shared/ boundary"
+                        ),
+                    )
+                )
+            continue
+
+        if imported_domain in {"spec", "adapter"}:
+            continue
+
+        if len(imported_parts) >= 4:
+            target_module: str = imported_parts[2]
+            if target_module in _PUBLIC_MODULES:
+                continue
+            if _has_deep_internal_segment(imported_parts[2:], _DEEP_INTERNAL_SEGMENTS):
+                violations.append(
+                    Violation(
+                        code="SC033",
+                        path=file_path,
+                        line=node.lineno,
+                        message=(
+                            f"cross-package import reaches into internal structure of "
+                            f"'{'.'.join(imported_parts[:2])}'; import from its public "
+                            f"surface (models, types, constants, exceptions) or promote "
+                            f"shared code to the common shared/ boundary"
+                        ),
+                    )
+                )
+
+    return violations
+
+
+def _has_deep_internal_segment(parts: tuple[str, ...], internal_segments: frozenset[str]) -> bool:
+    """Check whether any segment in the import path is a deep internal boundary."""
+
+    return any(seg in internal_segments for seg in parts)
 
 
 def check_main_module_shape(file_path: Path, module: ast.Module) -> list[Violation]:

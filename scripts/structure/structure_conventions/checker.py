@@ -18,6 +18,7 @@ from scripts.structure.structure_conventions.rules import (
     check_client_module_shape,
     check_constants_module,
     check_constants_outside_constants,
+    check_cross_package_internal_imports,
     check_dev_tooling_location,
     check_exception_declarations_outside_exceptions,
     check_helpers_module_name,
@@ -90,6 +91,7 @@ def check_paths(paths: list[Path], repo_root: Path | None = None) -> list[Violat
         )
         violations.extend(check_no_sibling_package_imports(actual_repo_root, file_path, module))
         violations.extend(check_shared_package_imports(actual_repo_root, file_path, module))
+        violations.extend(check_cross_package_internal_imports(actual_repo_root, file_path, module))
 
     return sorted(
         violations, key=lambda violation: (str(violation.path), violation.line or 0, violation.code)

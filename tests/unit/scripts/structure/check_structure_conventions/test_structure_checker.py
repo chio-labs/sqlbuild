@@ -667,7 +667,7 @@ TEST_CASES: list[CheckPathsTestCase] = [
             ).strip()
             + "\n",
         },
-        expected_violation_codes=("SC011",),
+        expected_violation_codes=("SC011", "SC033"),
     ),
     CheckPathsTestCase(
         description="allows sibling models import",
@@ -739,7 +739,7 @@ TEST_CASES: list[CheckPathsTestCase] = [
             ).strip()
             + "\n",
         },
-        expected_violation_codes=("SC013",),
+        expected_violation_codes=("SC013", "SC033"),
     ),
     CheckPathsTestCase(
         description="allows parent shared import from subpackage",
