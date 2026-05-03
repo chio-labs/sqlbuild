@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import difflib
+import re
 from collections import Counter
 
 from sqlbuild.cli.commands.main.shared.helpers.colors import (
@@ -42,6 +43,8 @@ _REASON_GROUP_LABELS: dict[PlanReason, str] = {
     PlanReason.FIRST_RUN: "First run",
 }
 
+_ANSI_ESCAPE_PATTERN: re.Pattern[str] = re.compile(r"\033\[[0-9;]*m")
+
 _SCHEMA_CHANGE_SYMBOLS: dict[SchemaChangeKind, str] = {
     SchemaChangeKind.COLUMN_ADDED: "+",
     SchemaChangeKind.COLUMN_REMOVED: "-",
@@ -49,14 +52,15 @@ _SCHEMA_CHANGE_SYMBOLS: dict[SchemaChangeKind, str] = {
 }
 
 
-def format_plan(plan: PlanOutput, *, full_refresh: bool = False) -> str:
+def format_plan(plan: PlanOutput, *, full_refresh: bool = False, use_color: bool = True) -> str:
     """Format plan output grouped by reason with inline detail."""
 
     lines: list[str] = []
 
     if full_refresh:
         _format_full_refresh(lines, plan)
-        return "\n".join(lines)
+        result: str = "\n".join(lines)
+        return result if use_color else _strip_ansi(result)
 
     active: list[ModelPlanEntry] = [e for e in plan.model_entries if e.action != PlanAction.SKIP]
     selected_count: int = len(plan.model_entries) + len(plan.seed_entries)
@@ -95,7 +99,8 @@ def format_plan(plan: PlanOutput, *, full_refresh: bool = False) -> str:
     _format_seeds(lines, plan)
     _format_warnings(lines, plan)
 
-    return "\n".join(lines)
+    output: str = "\n".join(lines)
+    return output if use_color else _strip_ansi(output)
 
 
 def _format_full_refresh(lines: list[str], plan: PlanOutput) -> None:
@@ -435,3 +440,9 @@ def _format_query_diff(previous: str, current: str) -> list[str]:
         else:
             result.append(formatted)
     return result
+
+
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences from text."""
+
+    return _ANSI_ESCAPE_PATTERN.sub("", text)

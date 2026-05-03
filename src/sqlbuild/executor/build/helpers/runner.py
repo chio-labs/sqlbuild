@@ -40,11 +40,16 @@ def run_build_with_output(
     target: str | None = None,
     concurrency: int = 1,
     no_color: bool = False,
+    plan_text: str | None = None,
 ) -> BuildExecutionResult:
     """Execute a build plan with live progress output to stdout."""
 
     use_color: bool = not no_color and supports_color()
     is_tty: bool = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+
+    if plan_text is not None:
+        sys.stdout.write(plan_text + "\n\n")
+        sys.stdout.flush()
 
     model_entry_map: dict[str, ModelPlanEntry] = {entry.name: entry for entry in plan.model_entries}
     test_results_by_model: dict[str, SqlTestExecutionResult] = {}
