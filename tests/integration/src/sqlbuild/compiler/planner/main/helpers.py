@@ -86,7 +86,7 @@ def build_project_from_test_case(
     return CompiledProject(
         run_id="test_run",
         effective_environment_name=None,
-        effective_connection={},
+        effective_connection=test_case.effective_connection,
         effective_vars={},
         models=tuple(models),
         seeds=tuple(seeds),

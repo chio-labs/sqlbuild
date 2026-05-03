@@ -5,8 +5,8 @@ from typing import Any
 import pytest
 
 from sqlbuild.compiler.planner.main import build_execution_plan
-from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
-from sqlbuild.compiler.planner.types import PlanAction, PlanReason
+from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput, PlanWarning
+from sqlbuild.compiler.planner.types import PlanAction, PlanReason, WarningSeverity
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     BuildExecutionPlanTestCase,
@@ -167,3 +167,62 @@ def test_given_project_when_building_plan_then_produces_expected_output(
 
     expected_count: int = test_case.expected_model_count or len(test_case.expected_action)
     assert len(plan.model_entries) == expected_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildExecutionPlanTestCase(
+            description="cursor type mismatch with warehouse column produces warning",
+            setup_sql=("CREATE TABLE staging.events AS SELECT 1 AS event_id, 100 AS event_time",),
+            model_targets={"events": "staging"},
+            model_configs={
+                "events": {
+                    "materialized": "incremental",
+                    "incremental_strategy": "delete_insert",
+                    "cursor": "event_time",
+                    "cursor_type": "timestamp",
+                    "unique_key": "event_id",
+                },
+            },
+            model_queries={"events": "SELECT 1 AS event_id, 100 AS event_time"},
+            full_refresh=False,
+            expected_action={"events": PlanAction.INCREMENTAL_DELETE_INSERT},
+            expected_reason={"events": PlanReason.NORMAL_INCREMENTAL},
+            expected_warning_count=1,
+            expected_warning_severity=WarningSeverity.WARNING,
+            expected_warning_fragment="appears to be integer",
+        ),
+    ],
+    ids=["cursor type mismatch with warehouse column produces warning"],
+)
+def test_given_cursor_type_mismatch_when_building_plan_then_produces_warning(
+    test_case: BuildExecutionPlanTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    sql: str
+    for sql in test_case.setup_sql:
+        connection.execute(sql)
+
+    project: Any = build_project_from_test_case(test_case)
+
+    plan: PlanOutput = build_execution_plan(
+        project=project,
+        adapter=adapter,
+        connection=connection,
+        full_refresh=test_case.full_refresh,
+    )
+
+    entry_map: dict[str, ModelPlanEntry] = {e.name: e for e in plan.model_entries}
+
+    model_name: str
+    expected_action: PlanAction
+    for model_name, expected_action in test_case.expected_action.items():
+        assert entry_map[model_name].action == expected_action
+
+    assert len(plan.warnings) == test_case.expected_warning_count
+    warning: PlanWarning = plan.warnings[0]
+    assert warning.severity == test_case.expected_warning_severity
+    assert test_case.expected_warning_fragment is not None
+    assert test_case.expected_warning_fragment in warning.message

@@ -15,6 +15,9 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.helpers.changes.main import detect_model_changes
+from sqlbuild.compiler.planner.helpers.cursor_type_check import (
+    check_cursor_type_consistency,
+)
 from sqlbuild.compiler.planner.helpers.resolve.helpers.cursor import (
     compute_cursor_bounds,
 )
@@ -139,6 +142,16 @@ def plan_model(
     post_hook: object = model.config.values.get("post_hook")
     cursor_column: str | None = _get_config_str(model, "cursor")
     cursor_type: str | None = _get_config_str(model, "cursor_type")
+
+    cursor_type_warning: PlanWarning | None = check_cursor_type_consistency(
+        model_name=model.name,
+        cursor_column=cursor_column,
+        cursor_type=cursor_type,
+        warehouse_columns=warehouse_columns,
+        sqlglot_enabled=sqlglot_enabled,
+    )
+    if cursor_type_warning is not None:
+        warnings = (*warnings, cursor_type_warning)
 
     fingerprint: Fingerprint | None = snapshot.fingerprints.get(model.name)
     previous_query_sql: str | None = fingerprint.query_sql if fingerprint is not None else None

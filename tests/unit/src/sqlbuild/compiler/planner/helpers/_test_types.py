@@ -244,3 +244,15 @@ class CursorOverridesValidationTestCase:
     end_int: str | None = None
     expected_valid: bool = True
     expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
+class CursorTypeCheckTestCase:
+    description: str
+    cursor_column: str | None
+    cursor_type: str | None
+    warehouse_columns: tuple[tuple[str, str], ...]
+    sqlglot_enabled: bool
+    expected_warning: bool
+    expected_severity: WarningSeverity | None = None
+    expected_message_fragment: str | None = None
