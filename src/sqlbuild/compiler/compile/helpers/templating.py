@@ -8,6 +8,7 @@ from collections.abc import Callable, Mapping
 
 from sqlbuild.compiler.compile.constants import TEMPLATE_PATTERN
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.types import TemplateNamespace
 
 
 def expand_effective_vars(raw_values: dict[str, str]) -> dict[str, str]:
@@ -136,9 +137,9 @@ def expand_template_string(
         namespace: str
         name: str
         namespace, name = token.split(":", 1)
-        if namespace == "ENV":
+        if namespace == TemplateNamespace.ENV:
             return _lookup_environment_variable(name=name, context_label=context_label)
-        if namespace == "CTX":
+        if namespace == TemplateNamespace.CTX:
             if not allow_context:
                 if preserve_context_tokens:
                     return match.group(0)
@@ -177,7 +178,7 @@ def _lookup_context_value(
 ) -> str:
     if name not in context_values:
         if preserve_unknown_context:
-            return f"${{CTX:{name}}}"
+            return f"${{{TemplateNamespace.CTX}:{name}}}"
         raise CompileInputError(f"{context_label} references unknown CTX key '{name}'")
     context_value: str | None = context_values.get(name)
     if context_value is None:

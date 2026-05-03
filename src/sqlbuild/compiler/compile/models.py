@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, SqlReferenceKind
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
@@ -43,8 +44,11 @@ class LoadedMacro:
 class CompileSqlReference:
     """One logical SQL reference discovered from compiled SQL text."""
 
-    ref_kind: str
+    ref_kind: SqlReferenceKind | str
     ref_name: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "ref_kind", SqlReferenceKind(self.ref_kind))
 
 
 @dataclass(frozen=True)
@@ -115,9 +119,17 @@ class CompileAuditInput:
     audit_block: DiscoveredAuditBlock
     sql_body: str
     references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
-    attached_target_kind: str | None = None
+    attached_target_kind: AttachedAuditTargetKind | str | None = None
     attached_target_name: str | None = None
     attached_column_name: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.attached_target_kind is not None:
+            object.__setattr__(
+                self,
+                "attached_target_kind",
+                AttachedAuditTargetKind(self.attached_target_kind),
+            )
 
 
 @dataclass(frozen=True)

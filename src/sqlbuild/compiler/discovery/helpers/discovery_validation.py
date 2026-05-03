@@ -11,7 +11,9 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
+    DiscoveredSqlModelFile,
 )
+from sqlbuild.compiler.shared.constants import SEED_FILE_SUFFIX
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -19,13 +21,33 @@ from sqlbuild.spec.models.source import SourceEntry
 def validate_discovered_inputs(discovered_inputs: DiscoveredProjectInputs) -> None:
     """Validate cross-file conflicts across discovered project inputs."""
 
+    _validate_unique_model_file_names(discovered_inputs.model_files)
     _validate_unique_source_names(discovered_inputs.source_files)
     _validate_unique_schema_model_names(discovered_inputs.schema_files)
     _validate_unique_schema_seed_names(discovered_inputs.schema_files)
+    _validate_unique_logical_relation_names(
+        model_files=discovered_inputs.model_files,
+        source_files=discovered_inputs.source_files,
+        schema_files=discovered_inputs.schema_files,
+    )
     _validate_declared_seed_files(
         schema_files=discovered_inputs.schema_files,
         seed_files=discovered_inputs.seed_files,
     )
+
+
+def _validate_unique_model_file_names(model_files: tuple[DiscoveredSqlModelFile, ...]) -> None:
+    seen_names: dict[str, str] = {}
+    model_file: DiscoveredSqlModelFile
+    for model_file in model_files:
+        model_name: str = model_file.file_path.stem
+        existing_path: str | None = seen_names.get(model_name)
+        if existing_path is not None:
+            raise DiscoveryConflictError(
+                f"Duplicate model file name found for '{model_name}' in "
+                f"{existing_path} and {model_file.relative_path}"
+            )
+        seen_names[model_name] = str(model_file.relative_path)
 
 
 def _validate_unique_source_names(source_files: tuple[DiscoveredSourceFile, ...]) -> None:
@@ -73,6 +95,52 @@ def _validate_unique_schema_seed_names(schema_files: tuple[DiscoveredSchemaFile,
             seen_names[seed_entry.name] = str(schema_file.relative_path)
 
 
+def _validate_unique_logical_relation_names(
+    *,
+    model_files: tuple[DiscoveredSqlModelFile, ...],
+    source_files: tuple[DiscoveredSourceFile, ...],
+    schema_files: tuple[DiscoveredSchemaFile, ...],
+) -> None:
+    seen_names: dict[str, tuple[str, str]] = {}
+    model_file: DiscoveredSqlModelFile
+    for model_file in model_files:
+        seen_names[model_file.file_path.stem] = ("model", str(model_file.relative_path))
+
+    source_file: DiscoveredSourceFile
+    for source_file in source_files:
+        source_entry: SourceEntry
+        for source_entry in source_file.source_entries:
+            _validate_logical_relation_name_is_available(
+                seen_names=seen_names,
+                name=source_entry.name,
+                kind="source",
+                path=str(source_file.relative_path),
+            )
+
+    schema_file: DiscoveredSchemaFile
+    for schema_file in schema_files:
+        seed_entry: SchemaSeedEntry
+        for seed_entry in schema_file.seed_entries:
+            _validate_logical_relation_name_is_available(
+                seen_names=seen_names,
+                name=seed_entry.name,
+                kind="seed",
+                path=str(schema_file.relative_path),
+            )
+
+
+def _validate_logical_relation_name_is_available(
+    *, seen_names: dict[str, tuple[str, str]], name: str, kind: str, path: str
+) -> None:
+    existing_entry: tuple[str, str] | None = seen_names.get(name)
+    if existing_entry is not None:
+        raise DiscoveryConflictError(
+            f"Logical relation name '{name}' is declared as both {existing_entry[0]} "
+            f"in {existing_entry[1]} and {kind} in {path}"
+        )
+    seen_names[name] = (kind, path)
+
+
 def _validate_declared_seed_files(
     *,
     schema_files: tuple[DiscoveredSchemaFile, ...],
@@ -92,7 +160,8 @@ def _validate_declared_seed_files(
         matching_seed_files: tuple[DiscoveredSeedFile, ...] = tuple(
             seed_file
             for seed_file in seed_files
-            if seed_file.file_path.suffix == ".csv" and seed_file.file_path.stem == seed_entry.name
+            if seed_file.file_path.suffix == SEED_FILE_SUFFIX
+            and seed_file.file_path.stem == seed_entry.name
         )
         if not matching_seed_files:
             raise SeedDiscoveryError(

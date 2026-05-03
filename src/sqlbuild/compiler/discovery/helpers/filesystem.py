@@ -20,6 +20,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlModelFile,
     DiscoveredSqlTestFile,
 )
+from sqlbuild.compiler.shared.constants import SCHEMA_FILE_NAME, YAML_FILE_SUFFIXES
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -58,9 +59,9 @@ def discover_schema_files(*, project_dir: Path) -> tuple[DiscoveredSchemaFile, .
     seeds_root: Path = project_dir / "seeds"
 
     if models_root.is_dir():
-        schema_paths.extend(sorted(models_root.rglob("schema.yml")))
-    if seeds_root.is_dir() and (seeds_root / "schema.yml").exists():
-        schema_paths.append(seeds_root / "schema.yml")
+        schema_paths.extend(sorted(models_root.rglob(SCHEMA_FILE_NAME)))
+    if seeds_root.is_dir() and (seeds_root / SCHEMA_FILE_NAME).exists():
+        schema_paths.append(seeds_root / SCHEMA_FILE_NAME)
 
     deduped_paths: tuple[Path, ...] = tuple(dict.fromkeys(schema_paths))
     discovered_schema_files: list[DiscoveredSchemaFile] = []
@@ -90,7 +91,7 @@ def discover_source_files(*, project_dir: Path) -> tuple[DiscoveredSourceFile, .
         return ()
 
     yaml_paths: tuple[Path, ...] = tuple(
-        sorted(path for path in sources_root.iterdir() if path.suffix in {".yml", ".yaml"})
+        sorted(path for path in sources_root.iterdir() if path.suffix in YAML_FILE_SUFFIXES)
     )
     discovered_source_files: list[DiscoveredSourceFile] = []
     file_path: Path
@@ -121,7 +122,7 @@ def discover_seed_files(*, project_dir: Path) -> tuple[DiscoveredSeedFile, ...]:
             relative_path=file_path.relative_to(project_dir),
         )
         for file_path in sorted(seeds_root.rglob("*"))
-        if file_path.is_file() and file_path.name != "schema.yml"
+        if file_path.is_file() and file_path.name != SCHEMA_FILE_NAME
     )
 
 

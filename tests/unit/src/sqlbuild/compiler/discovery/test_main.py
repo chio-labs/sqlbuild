@@ -231,6 +231,50 @@ seeds:
         expected_error_fragment="Duplicate schema.yml seed declaration found for 'country_codes'",
     ),
     DiscoverProjectInputsErrorTestCase(
+        description="raises on duplicate model file names across directories",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            "models/marts/orders.sql": "MODEL ();\n\nselect 1\n",
+        },
+        expected_error_fragment="Duplicate model file name found for 'orders'",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when model and source names collide",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            "sources/raw.yml": """
+sources:
+  - name: orders
+    table: orders
+""".strip()
+            + "\n",
+        },
+        expected_error_fragment="Logical relation name 'orders' is declared as both model",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when source and seed names collide",
+        repo_files=base_repo_files()
+        | {
+            "sources/raw.yml": """
+sources:
+  - name: country_codes
+    table: country_codes
+""".strip()
+            + "\n",
+            "seeds/schema.yml": """
+seeds:
+  - name: country_codes
+    columns:
+      - name: country_code
+        type: VARCHAR
+""".strip()
+            + "\n",
+        },
+        expected_error_fragment="Logical relation name 'country_codes' is declared as both source",
+    ),
+    DiscoverProjectInputsErrorTestCase(
         description="raises when a declared seed has no matching csv file",
         repo_files=base_repo_files()
         | {

@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+from sqlbuild.compiler.compile.constants import (
+    DBT_REF_CALL_NAME,
+    REF_CALL_NAME,
+    SOURCE_CALL_NAME,
+)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileSqlReference
+from sqlbuild.compiler.compile.types import SqlReferenceKind
 
 
 def extract_sql_references(sql: str) -> tuple[CompileSqlReference, ...]:
@@ -40,13 +46,13 @@ def extract_sql_references(sql: str) -> tuple[CompileSqlReference, ...]:
 
 
 def _parse_reference_at(*, sql: str, start: int) -> tuple[CompileSqlReference, int] | None:
-    ref_kind: str | None = None
-    if sql.startswith("__dbt_ref(", start):
-        ref_kind = "dbt_ref"
-    elif sql.startswith("__source(", start):
-        ref_kind = "source"
-    elif sql.startswith("__ref(", start):
-        ref_kind = "ref"
+    ref_kind: SqlReferenceKind | None = None
+    if sql.startswith(f"{DBT_REF_CALL_NAME}(", start):
+        ref_kind = SqlReferenceKind.DBT_REF
+    elif sql.startswith(f"{SOURCE_CALL_NAME}(", start):
+        ref_kind = SqlReferenceKind.SOURCE
+    elif sql.startswith(f"{REF_CALL_NAME}(", start):
+        ref_kind = SqlReferenceKind.REF
     if ref_kind is None:
         return None
 
@@ -65,12 +71,13 @@ def _parse_reference_at(*, sql: str, start: int) -> tuple[CompileSqlReference, i
     )
 
 
-def ref_prefix(ref_kind: str) -> str:
-    if ref_kind == "dbt_ref":
-        return "__dbt_ref"
-    if ref_kind == "source":
-        return "__source"
-    return "__ref"
+def ref_prefix(ref_kind: SqlReferenceKind | str) -> str:
+    normalized_ref_kind: SqlReferenceKind = SqlReferenceKind(ref_kind)
+    if normalized_ref_kind == SqlReferenceKind.DBT_REF:
+        return DBT_REF_CALL_NAME
+    if normalized_ref_kind == SqlReferenceKind.SOURCE:
+        return SOURCE_CALL_NAME
+    return REF_CALL_NAME
 
 
 def _find_matching_paren(*, sql: str, open_paren_index: int) -> int:
@@ -133,7 +140,7 @@ def _split_top_level_arguments(raw_arguments: str) -> tuple[str, ...]:
     return tuple(arguments)
 
 
-def _parse_reference_name(*, raw_value: str, ref_kind: str) -> str:
+def _parse_reference_name(*, raw_value: str, ref_kind: SqlReferenceKind) -> str:
     stripped_value: str = raw_value.strip()
     if (
         len(stripped_value) >= 2

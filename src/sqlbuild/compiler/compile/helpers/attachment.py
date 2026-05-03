@@ -8,9 +8,12 @@ from typing import cast
 from uuid import uuid4
 
 from sqlbuild.compiler.compile.constants import (
+    AUDIT_DIRECTORY_NAME,
+    GENERIC_AUDIT_DIRECTORY_NAME,
     GENERIC_AUDIT_QUOTED_PARAMETER_PATTERN,
     GENERIC_AUDIT_RAW_PARAMETER_PATTERN,
     MACRO_CALL_PATTERN,
+    PRESERVE_ENVIRONMENT_VALUE,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.helpers.macros import (
@@ -34,6 +37,11 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlTestInput,
     LoadedMacro,
 )
+from sqlbuild.compiler.compile.types import (
+    AttachedAuditTargetKind,
+    CompileContextKey,
+    SqlReferenceKind,
+)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
@@ -45,6 +53,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
+from sqlbuild.compiler.shared.constants import SCHEMA_FILE_NAME, SEED_FILE_SUFFIX
 from sqlbuild.spec.models.project import (
     DefaultsConfig,
     EnvironmentConfig,
@@ -169,7 +178,7 @@ def build_seed_inputs(discovered_inputs: DiscoveredProjectInputs) -> tuple[Compi
     seed_inputs: list[CompileSeedInput] = []
     seed_file: DiscoveredSeedFile
     for seed_file in discovered_inputs.seed_files:
-        if seed_file.file_path.suffix != ".csv":
+        if seed_file.file_path.suffix != SEED_FILE_SUFFIX:
             continue
 
         seed_name: str = seed_file.file_path.stem
@@ -179,7 +188,7 @@ def build_seed_inputs(discovered_inputs: DiscoveredProjectInputs) -> tuple[Compi
         if schema_match is None:
             raise CompileInputError(
                 f"Seed file {seed_file.relative_path} has no matching seed declaration in "
-                "schema.yml"
+                f"{SCHEMA_FILE_NAME}"
             )
 
         seed_inputs.append(
@@ -388,7 +397,7 @@ def build_model_attached_audit_inputs(
                 owner_file=schema_file.relative_path,
                 generic_audit_definitions=generic_audit_definitions,
                 implicit_arguments={"model": model_input.model_file.file_path.stem},
-                attached_target_kind="model",
+                attached_target_kind=AttachedAuditTargetKind.MODEL,
                 attached_target_name=model_input.model_file.file_path.stem,
                 attached_column_name=None,
                 loaded_macros=loaded_macros,
@@ -408,7 +417,7 @@ def build_model_attached_audit_inputs(
                         "model": model_input.model_file.file_path.stem,
                         "column": column_entry.name,
                     },
-                    attached_target_kind="model",
+                    attached_target_kind=AttachedAuditTargetKind.MODEL,
                     attached_target_name=model_input.model_file.file_path.stem,
                     attached_column_name=column_entry.name,
                     loaded_macros=loaded_macros,
@@ -438,7 +447,7 @@ def build_source_attached_audit_inputs(
                 owner_file=source_input.source_file.relative_path,
                 generic_audit_definitions=generic_audit_definitions,
                 implicit_arguments={"source": source_input.source_entry.name},
-                attached_target_kind="source",
+                attached_target_kind=AttachedAuditTargetKind.SOURCE,
                 attached_target_name=source_input.source_entry.name,
                 attached_column_name=None,
                 loaded_macros=loaded_macros,
@@ -458,7 +467,7 @@ def build_source_attached_audit_inputs(
                         "source": source_input.source_entry.name,
                         "column": column_entry.name,
                     },
-                    attached_target_kind="source",
+                    attached_target_kind=AttachedAuditTargetKind.SOURCE,
                     attached_target_name=source_input.source_entry.name,
                     attached_column_name=column_entry.name,
                     loaded_macros=loaded_macros,
@@ -553,7 +562,10 @@ def index_generic_audit_definitions(
 def is_generic_audit_file(audit_file: DiscoveredAuditFile) -> bool:
     """Return whether a discovered audit file is a generic definition."""
 
-    return audit_file.relative_path.parts[:2] == ("audits", "generic")
+    return audit_file.relative_path.parts[:2] == (
+        AUDIT_DIRECTORY_NAME,
+        GENERIC_AUDIT_DIRECTORY_NAME,
+    )
 
 
 def merge_audit_arguments(
@@ -687,17 +699,23 @@ def validate_model_references(
 
     reference: CompileSqlReference
     for reference in references:
-        if reference.ref_kind == "ref" and reference.ref_name not in known_model_names:
+        if (
+            reference.ref_kind == SqlReferenceKind.REF
+            and reference.ref_name not in known_model_names
+        ):
             raise CompileInputError(
                 f"Model file {model_file.relative_path} references unknown model "
                 f"'{reference.ref_name}'"
             )
-        if reference.ref_kind == "source" and reference.ref_name not in known_source_names:
+        if (
+            reference.ref_kind == SqlReferenceKind.SOURCE
+            and reference.ref_name not in known_source_names
+        ):
             raise CompileInputError(
                 f"Model file {model_file.relative_path} references unknown source "
                 f"'{reference.ref_name}'"
             )
-        if reference.ref_kind == "dbt_ref" and not has_dbt_manifest:
+        if reference.ref_kind == SqlReferenceKind.DBT_REF and not has_dbt_manifest:
             raise CompileInputError(
                 f"Model file {model_file.relative_path} uses __dbt_ref('{reference.ref_name}') "
                 "but no dbt manifest.json was discovered"
@@ -715,17 +733,23 @@ def validate_audit_references(
 
     reference: CompileSqlReference
     for reference in references:
-        if reference.ref_kind == "dbt_ref":
+        if reference.ref_kind == SqlReferenceKind.DBT_REF:
             raise CompileInputError(
                 f"Audit file {audit_file.relative_path} may not use "
                 f"__dbt_ref('{reference.ref_name}') right now"
             )
-        if reference.ref_kind == "ref" and reference.ref_name not in known_model_names:
+        if (
+            reference.ref_kind == SqlReferenceKind.REF
+            and reference.ref_name not in known_model_names
+        ):
             raise CompileInputError(
                 f"Audit file {audit_file.relative_path} references unknown model "
                 f"'{reference.ref_name}'"
             )
-        if reference.ref_kind == "source" and reference.ref_name not in known_source_names:
+        if (
+            reference.ref_kind == SqlReferenceKind.SOURCE
+            and reference.ref_name not in known_source_names
+        ):
             raise CompileInputError(
                 f"Audit file {audit_file.relative_path} references unknown source "
                 f"'{reference.ref_name}'"
@@ -1056,10 +1080,10 @@ def build_model_context_values(
             effective_environment_name=effective_environment_name,
             run_id=run_id,
         ),
-        "model.name": model_name,
-        "model.database": logical_database,
-        "model.schema": logical_schema,
-        "model.alias": logical_alias,
+        CompileContextKey.MODEL_NAME: model_name,
+        CompileContextKey.MODEL_DATABASE: logical_database,
+        CompileContextKey.MODEL_SCHEMA: logical_schema,
+        CompileContextKey.MODEL_ALIAS: logical_alias,
     }
     if not include_target_values:
         return context_values
@@ -1072,10 +1096,10 @@ def build_model_context_values(
         target_qualified = f"{target_database}.{target_schema}.{target_table}"
     elif target_schema is not None:
         target_qualified = f"{target_schema}.{target_table}"
-    context_values["target.database"] = target_database
-    context_values["target.schema"] = target_schema
-    context_values["target.table"] = target_table
-    context_values["target.qualified"] = target_qualified
+    context_values[CompileContextKey.TARGET_DATABASE] = target_database
+    context_values[CompileContextKey.TARGET_SCHEMA] = target_schema
+    context_values[CompileContextKey.TARGET_TABLE] = target_table
+    context_values[CompileContextKey.TARGET_QUALIFIED] = target_qualified
     return context_values
 
 
@@ -1085,8 +1109,8 @@ def build_run_context_values(
     """Build the compile-time CTX values known before resource-specific resolution."""
 
     return {
-        "run.id": run_id,
-        "run.environment": effective_environment_name,
+        CompileContextKey.RUN_ID: run_id,
+        CompileContextKey.RUN_ENVIRONMENT: effective_environment_name,
     }
 
 
@@ -1102,7 +1126,10 @@ def apply_environment_database_schema_overrides(
     if environment_config is None:
         return
 
-    if environment_config.database is not None and environment_config.database != "preserve":
+    if (
+        environment_config.database is not None
+        and environment_config.database != PRESERVE_ENVIRONMENT_VALUE
+    ):
         values["database"] = expand_template_data(
             environment_config.database,
             variables=effective_vars,
@@ -1112,7 +1139,10 @@ def apply_environment_database_schema_overrides(
             preserve_context_tokens=False,
             preserve_unknown_context=False,
         )
-    if environment_config.schema is not None and environment_config.schema != "preserve":
+    if (
+        environment_config.schema is not None
+        and environment_config.schema != PRESERVE_ENVIRONMENT_VALUE
+    ):
         values["schema"] = expand_template_data(
             environment_config.schema,
             variables=effective_vars,
