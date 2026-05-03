@@ -7,15 +7,17 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-@dataclass(frozen=True)
-class CliContext:
-    """Minimal CLI context placeholder."""
+@dataclass
+class CliNamespace:
+    """Typed namespace for all CLI arguments across all commands."""
 
+    command: str | None = None
     project_dir: str | None = None
+    no_sql_validation: bool = False
 
 
 @dataclass(frozen=True)
 class CliEntrypointHandlers:
     """Injected command handlers for the CLI entrypoint."""
 
-    run_compile: Callable[[Path | None], int]
+    run_compile: Callable[[Path | None, bool], int]

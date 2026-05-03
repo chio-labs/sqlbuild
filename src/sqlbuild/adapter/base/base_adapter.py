@@ -222,6 +222,14 @@ class BaseAdapter(StrictAdapter):
         result: Any = cursor.fetchone()
         return int(result[0])
 
+    def default_schema(self) -> str | None:
+        """Return None — most adapters require explicit schema configuration."""
+        return None
+
+    def default_database(self) -> str | None:
+        """Return None — most adapters require explicit database configuration."""
+        return None
+
     def star_exclude_keyword(self) -> str:
         """Return the SQL keyword for SELECT * EXCLUDE/EXCEPT syntax."""
         return "EXCLUDE"

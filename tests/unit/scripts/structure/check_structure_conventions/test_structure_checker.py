@@ -617,7 +617,7 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=(),
     ),
     CheckPathsTestCase(
-        description="reports sibling main import",
+        description="allows sibling public main import",
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/example/discovery/__init__.py": '"""Discovery."""\n',
@@ -640,7 +640,34 @@ TEST_CASES: list[CheckPathsTestCase] = [
             ).strip()
             + "\n",
         },
-        expected_violation_codes=("SC011",),
+        expected_violation_codes=(),
+    ),
+    CheckPathsTestCase(
+        description="allows sibling main package public entry import",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/discovery/__init__.py": '"""Discovery."""\n',
+            "src/sqlbuild/example/discovery/main.py": dedent(
+                """
+                from sqlbuild.example.refs.main.parse import parse_ref
+
+
+                def discover_name() -> str:
+                    return parse_ref()
+                """
+            ).strip()
+            + "\n",
+            "src/sqlbuild/example/refs/__init__.py": '"""Refs."""\n',
+            "src/sqlbuild/example/refs/main/__init__.py": '"""Ref entries."""\n',
+            "src/sqlbuild/example/refs/main/parse.py": dedent(
+                """
+                def parse_ref() -> str:
+                    return "demo"
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=(),
     ),
     CheckPathsTestCase(
         description="reports sibling subpackage internal import",

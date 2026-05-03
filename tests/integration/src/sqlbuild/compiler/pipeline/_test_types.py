@@ -1,0 +1,21 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+
+@dataclass(frozen=True)
+class ExpectedModelEntry:
+    description: str
+    expected_resolved_sql_fragment: str
+    expected_logical_ddl_fragment: str
+    expected_manifest_compiled_code_fragment: str
+
+
+@dataclass(frozen=True)
+class RunCompilePipelineIntegrationTestCase:
+    description: str
+    project_files: dict[str, str]
+    expected_models: dict[str, ExpectedModelEntry] = field(default_factory=dict)
+    expected_model_count: int = 0
+    expected_seed_count: int = 0
+    expected_manifest_node_count: int = 0

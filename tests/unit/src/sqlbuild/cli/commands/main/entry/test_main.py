@@ -80,10 +80,43 @@ def test_given_compile_command_arguments_when_running_with_dependencies_then_it_
 ) -> None:
     exit_code: int = _main_with_dependencies(
         argv=test_case.argv,
-        handlers=CliEntrypointHandlers(run_compile=lambda project_dir: 7),
+        handlers=CliEntrypointHandlers(
+            run_compile=lambda project_dir, no_sql_validation: test_case.expected_exit_code
+        ),
     )
 
     assert exit_code == test_case.expected_exit_code
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="passes no sql validation flag to compile handler",
+            argv=["compile", "--no-sql-validation"],
+            expected_exit_code=3,
+            expected_project_dir=None,
+            expected_no_sql_validation=True,
+        )
+    ],
+    ids=["passes no sql validation flag to compile handler"],
+)
+def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_flag(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[tuple[Path | None, bool]] = []
+
+    def run_compile(project_dir: Path | None, no_sql_validation: bool) -> int:
+        received_args.append((project_dir, no_sql_validation))
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=CliEntrypointHandlers(run_compile=run_compile),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [(test_case.expected_project_dir, test_case.expected_no_sql_validation)]
 
 
 @pytest.mark.parametrize(
@@ -95,7 +128,8 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
     test_case: MainErrorRenderingTestCase,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    def run_compile(project_dir: Path | None) -> int:
+    def run_compile(project_dir: Path | None, no_sql_validation: bool) -> int:
+        del no_sql_validation
         assert project_dir is not None
         raise test_case.error_factory(project_dir)
 

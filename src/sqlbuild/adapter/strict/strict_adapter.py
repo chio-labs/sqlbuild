@@ -25,6 +25,16 @@ class StrictAdapter(
     """
 
     @abstractmethod
+    def default_schema(self) -> str | None:
+        """Return the adapter's default schema name, or None if schema is required."""
+        ...
+
+    @abstractmethod
+    def default_database(self) -> str | None:
+        """Return the adapter's default database name, or None if database is required."""
+        ...
+
+    @abstractmethod
     def star_exclude_keyword(self) -> str:
         """Return the SQL keyword for SELECT * EXCLUDE/EXCEPT syntax."""
         ...

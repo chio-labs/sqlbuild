@@ -1,0 +1,52 @@
+"""CLI compile command entry point."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from sqlbuild.cli.commands.main.compile.helpers.target_writer import write_target
+from sqlbuild.cli.commands.main.compile.models import WrittenTarget
+from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
+from sqlbuild.compiler.discovery.main import discover_project_inputs
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.pipeline.main import run_compile_pipeline
+from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.planner.models import PlanOutput
+
+
+def run_compile(project_dir: Path | None, no_sql_validation: bool = False) -> int:
+    """Execute the compile command."""
+
+    effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
+    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
+        project_dir=effective_project_dir
+    )
+    pipeline_result: CompilePipelineResult = run_compile_pipeline(
+        discovered_inputs=discovered_inputs,
+        adapter=resolve_adapter(discovered_inputs.project_config.adapter),
+        no_sql_validation=no_sql_validation,
+    )
+
+    plan_output: PlanOutput = pipeline_result.plan_output
+    written: WrittenTarget = write_target(
+        target_dir=effective_project_dir / "target",
+        plan_output=plan_output,
+        manifest=pipeline_result.manifest,
+    )
+    _print_summary(written=written, plan_output=plan_output)
+    return 0
+
+
+def _print_summary(*, written: WrittenTarget, plan_output: PlanOutput) -> None:
+    """Print compile output summary."""
+
+    print(written.summary_line())
+    print()
+    print(f"{'target/compiled/':20s} resolved SQL")
+    print(f"{'target/run/':20s} executable DDL")
+    print("target/manifest.json")
+
+    if len(plan_output.model_entries) == 1:
+        print()
+        print(f"-- {plan_output.model_entries[0].name} --")
+        print(plan_output.model_entries[0].resolved_sql)

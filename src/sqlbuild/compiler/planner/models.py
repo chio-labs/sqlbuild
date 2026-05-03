@@ -193,3 +193,9 @@ class PlanOutput:
     test_entries: tuple[SqlTestPlanEntry, ...] = field(default_factory=tuple)
     selected_keys: frozenset[CompiledObjectKey] = field(default_factory=frozenset)
     warnings: tuple[PlanWarning, ...] = field(default_factory=tuple)
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = field(
+        default_factory=dict
+    )
+    downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = field(
+        default_factory=dict
+    )

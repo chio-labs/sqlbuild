@@ -881,6 +881,8 @@ def check_no_sibling_package_imports(
             continue
 
         sibling_name = imported_parts[len(parent_package_parts)]
+        if current_subpackage_name == "main" and sibling_name == "helpers":
+            continue
         if sibling_name in {"shared", current_subpackage_name}:
             continue
         if (
@@ -919,6 +921,8 @@ def check_no_sibling_package_imports(
                 continue
 
             sibling_name = imported_parts[len(parent_package_parts)]
+            if current_subpackage_name == "main" and sibling_name == "helpers":
+                continue
             if sibling_name in {"shared", current_subpackage_name}:
                 continue
 
@@ -1007,7 +1011,7 @@ def check_cross_package_internal_imports(
     violations: list[Violation] = []
     _DEEP_INTERNAL_SEGMENTS: frozenset[str] = frozenset({"shared", "helpers", "classes"})
     _PUBLIC_MODULES: frozenset[str] = frozenset(
-        {"models", "types", "constants", "exceptions", "__init__"}
+        {"models", "types", "constants", "exceptions", "__init__", "main"}
     )
 
     for node in ast.walk(module):
@@ -1302,6 +1306,14 @@ def _is_allowed_sibling_public_surface(
         and len(imported_parts) == len(parent_package_parts) + 1
         and imported_parts[-1] == "main"
     ):
+        return True
+    if (
+        parent_package_parts[-1] != "main"
+        and len(imported_parts) == len(parent_package_parts) + 2
+        and imported_parts[-1] == "main"
+    ):
+        return True
+    if len(imported_parts) == len(parent_package_parts) + 3 and imported_parts[-2] == "main":
         return True
     if len(imported_parts) != len(parent_package_parts) + 2:
         return False

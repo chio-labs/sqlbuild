@@ -205,6 +205,8 @@ def build_execution_plan(
         test_entries=tuple(test_entries),
         selected_keys=selected_keys,
         warnings=tuple(all_warnings),
+        upstream_deps=upstream_deps,
+        downstream_deps=downstream_deps,
     )
 
 

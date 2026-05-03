@@ -11,6 +11,8 @@ class MainTestCase:
     description: str
     argv: list[str]
     expected_exit_code: int
+    expected_project_dir: Path | None = None
+    expected_no_sql_validation: bool = False
 
 
 @dataclass(frozen=True)

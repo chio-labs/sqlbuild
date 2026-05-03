@@ -1,0 +1,1 @@
+"""Compile public entry modules."""

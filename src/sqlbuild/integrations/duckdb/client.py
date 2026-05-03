@@ -24,6 +24,10 @@ from sqlbuild.integrations.duckdb.helpers.sql import (
 class DuckDbAdapter(BaseAdapter):
     """First-class DuckDB adapter with full method coverage."""
 
+    def default_schema(self) -> str:
+        """DuckDB uses 'main' as its default schema."""
+        return "main"
+
     def connect(self, config: dict[str, Any]) -> Any:
         """Open a DuckDB connection from the resolved connection config."""
 

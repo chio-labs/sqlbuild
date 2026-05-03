@@ -13,7 +13,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSourceFile,
     DiscoveredSqlModelFile,
 )
-from sqlbuild.compiler.shared.constants import SEED_FILE_SUFFIX
+from sqlbuild.compiler.shared.constants import RESERVED_MODEL_NAMES, SEED_FILE_SUFFIX
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -41,6 +41,11 @@ def _validate_unique_model_file_names(model_files: tuple[DiscoveredSqlModelFile,
     model_file: DiscoveredSqlModelFile
     for model_file in model_files:
         model_name: str = model_file.file_path.stem
+        if model_name in RESERVED_MODEL_NAMES:
+            raise DiscoveryConflictError(
+                f"Model name '{model_name}' in {model_file.relative_path} is reserved "
+                "by SQLBuild for compiled output structure"
+            )
         existing_path: str | None = seen_names.get(model_name)
         if existing_path is not None:
             raise DiscoveryConflictError(
