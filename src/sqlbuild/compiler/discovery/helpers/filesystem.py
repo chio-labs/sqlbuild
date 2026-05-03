@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.compiler.discovery.helpers.model_sql import parse_model_sql
+from sqlbuild.compiler.discovery.helpers.sql_audits import parse_sql_audit_file
 from sqlbuild.compiler.discovery.helpers.sql_tests import parse_sql_test_file
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAdapterFile,
@@ -134,14 +135,19 @@ def discover_audit_files(*, project_dir: Path) -> tuple[DiscoveredAuditFile, ...
     if not audits_root.is_dir():
         return ()
 
-    return tuple(
-        DiscoveredAuditFile(
-            file_path=file_path,
-            relative_path=file_path.relative_to(project_dir),
-            contents=file_path.read_text(encoding="utf-8"),
+    discovered_audit_files: list[DiscoveredAuditFile] = []
+    file_path: Path
+    for file_path in sorted(audits_root.rglob("*.sql")):
+        contents: str = file_path.read_text(encoding="utf-8")
+        discovered_audit_files.append(
+            DiscoveredAuditFile(
+                file_path=file_path,
+                relative_path=file_path.relative_to(project_dir),
+                contents=contents,
+                blocks=parse_sql_audit_file(contents, file_path),
+            )
         )
-        for file_path in sorted(audits_root.rglob("*.sql"))
-    )
+    return tuple(discovered_audit_files)
 
 
 def discover_macro_files(*, project_dir: Path) -> tuple[DiscoveredMacroFile, ...]:

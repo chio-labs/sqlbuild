@@ -15,3 +15,7 @@ class ModelSqlParseError(DiscoveryError):
 
 class SqlTestParseError(DiscoveryError):
     """Raised when an authored SQL-native test file has an invalid shape."""
+
+
+class SqlAuditParseError(DiscoveryError):
+    """Raised when an authored SQL audit file has an invalid shape."""

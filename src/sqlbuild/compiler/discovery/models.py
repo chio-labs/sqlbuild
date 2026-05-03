@@ -72,6 +72,17 @@ class DiscoveredAuditFile:
     file_path: Path
     relative_path: Path
     contents: str
+    blocks: tuple[DiscoveredAuditBlock, ...]
+
+
+@dataclass(frozen=True)
+class DiscoveredAuditBlock:
+    """One raw AUDIT(...) block discovered from a SQL audit file."""
+
+    audit_index: int
+    header_values: dict[str, object]
+    sql_body: str
+    name: str | None = None
 
 
 @dataclass(frozen=True)

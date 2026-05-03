@@ -16,6 +16,9 @@ class DiscoverProjectInputsTestCase:
     expected_test_block_names: tuple[str | None, ...]
     expected_test_block_sql_bodies: tuple[str, ...]
     expected_audit_paths: tuple[str, ...]
+    expected_audit_block_indexes: tuple[int, ...]
+    expected_audit_block_names: tuple[str | None, ...]
+    expected_audit_block_sql_bodies: tuple[str, ...]
     expected_macro_paths: tuple[str, ...]
     expected_manifest_path: str | None
     expected_adapter_path: str | None

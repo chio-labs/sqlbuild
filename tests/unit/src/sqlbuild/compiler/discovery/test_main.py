@@ -44,6 +44,9 @@ from tests.unit.src.sqlbuild.compiler.discovery._test_types import (
             expected_test_block_names=(None,),
             expected_test_block_sql_bodies=("SELECT 1",),
             expected_audit_paths=("audits/generic/not_null.sql",),
+            expected_audit_block_indexes=(1,),
+            expected_audit_block_names=(None,),
+            expected_audit_block_sql_bodies=("SELECT 1",),
             expected_macro_paths=("macros/name_helpers.py",),
             expected_manifest_path="target/manifest.json",
             expected_adapter_path="adapter.py",
@@ -102,6 +105,18 @@ def test_given_project_repo_slice_when_discovering_inputs_then_it_returns_expect
     assert (
         tuple(str(audit_file.relative_path) for audit_file in discovered_inputs.audit_files)
         == test_case.expected_audit_paths
+    )
+    assert (
+        tuple(block.audit_index for block in discovered_inputs.audit_files[0].blocks)
+        == test_case.expected_audit_block_indexes
+    )
+    assert (
+        tuple(block.name for block in discovered_inputs.audit_files[0].blocks)
+        == test_case.expected_audit_block_names
+    )
+    assert (
+        tuple(block.sql_body for block in discovered_inputs.audit_files[0].blocks)
+        == test_case.expected_audit_block_sql_bodies
     )
     assert (
         tuple(str(macro_file.relative_path) for macro_file in discovered_inputs.macro_files)

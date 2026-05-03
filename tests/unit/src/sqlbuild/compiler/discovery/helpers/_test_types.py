@@ -56,3 +56,19 @@ class ParseSqlTestFileErrorTestCase:
     description: str
     contents: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ParseSqlAuditFileTestCase:
+    description: str
+    contents: str
+    expected_names: tuple[str | None, ...]
+    expected_sql_bodies: tuple[str, ...]
+    expected_audit_indexes: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class ParseSqlAuditFileErrorTestCase:
+    description: str
+    contents: str
+    expected_error_fragment: str
