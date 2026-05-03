@@ -5,18 +5,32 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.helpers.warehouse_snapshot import gather_warehouse_snapshot
-from sqlbuild.compiler.planner.models import WarehouseSnapshot
+from sqlbuild.compiler.planner.models import ModelCursorSnapshot, WarehouseSnapshot
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.compiler.planner.helpers._test_types import (
+    GatherCursorSnapshotTestCase,
     GatherEmptySnapshotTestCase,
     GatherWarehouseSnapshotTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.planner.helpers.helpers import (
+    _IncrementalModelSpec,
     build_project_with_targets,
+)
+
+_INCREMENTAL_MODEL: _IncrementalModelSpec = _IncrementalModelSpec(
+    name="fact_orders",
+    schema="staging",
+    cursor="event_time",
+    ref_names=("raw_orders",),
+)
+
+_SELECTED_KEY: CompiledObjectKey = CompiledObjectKey(
+    resource_type=CompiledResourceType.MODEL, name="fact_orders"
 )
 
 GATHER_SNAPSHOT_TEST_CASES: list[GatherWarehouseSnapshotTestCase] = [
@@ -131,3 +145,132 @@ def test_given_no_target_schemas_when_gathering_snapshot_then_returns_empty(
     assert len(snapshot.existing_relations) == test_case.expected_relation_count
     assert len(snapshot.existing_columns) == test_case.expected_column_count
     assert len(snapshot.fingerprints) == test_case.expected_fingerprint_count
+
+
+CURSOR_SNAPSHOT_TEST_CASES: list[GatherCursorSnapshotTestCase] = [
+    GatherCursorSnapshotTestCase(
+        description="gathers cursor bounds for incremental model with existing target",
+        setup_sql=(
+            "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
+            "INSERT INTO staging.raw_orders VALUES (1, '2024-01-01'), (2, '2024-02-01')",
+            "CREATE TABLE staging.fact_orders (order_id INTEGER, event_time TIMESTAMP)",
+            "INSERT INTO staging.fact_orders VALUES (1, '2024-01-15')",
+        ),
+        selected_keys=frozenset({_SELECTED_KEY}),
+        full_refresh=False,
+        start_cursor_override=None,
+        end_cursor_override=None,
+        expected_cursor_model_names=frozenset({"fact_orders"}),
+        expected_cursor_snapshots={
+            "fact_orders": ModelCursorSnapshot(
+                target_max="2024-01-15 00:00:00",
+                upstream_mins=("2024-01-01 00:00:00",),
+                upstream_maxes=("2024-02-01 00:00:00",),
+            ),
+        },
+        expected_progress_calls=1,
+    ),
+    GatherCursorSnapshotTestCase(
+        description="gathers cursor bounds for first run with no target table",
+        setup_sql=(
+            "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
+            "INSERT INTO staging.raw_orders VALUES (1, '2024-01-01'), (2, '2024-02-01')",
+        ),
+        selected_keys=frozenset({_SELECTED_KEY}),
+        full_refresh=False,
+        start_cursor_override=None,
+        end_cursor_override=None,
+        expected_cursor_model_names=frozenset({"fact_orders"}),
+        expected_cursor_snapshots={
+            "fact_orders": ModelCursorSnapshot(
+                target_max=None,
+                upstream_mins=("2024-01-01 00:00:00",),
+                upstream_maxes=("2024-02-01 00:00:00",),
+            ),
+        },
+        expected_progress_calls=1,
+    ),
+    GatherCursorSnapshotTestCase(
+        description="skips cursor gathering when full refresh is true",
+        setup_sql=(
+            "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
+            "INSERT INTO staging.raw_orders VALUES (1, '2024-01-01')",
+        ),
+        selected_keys=frozenset({_SELECTED_KEY}),
+        full_refresh=True,
+        start_cursor_override=None,
+        end_cursor_override=None,
+        expected_cursor_model_names=frozenset(),
+        expected_progress_calls=0,
+    ),
+    GatherCursorSnapshotTestCase(
+        description="skips cursor gathering when both overrides are provided",
+        setup_sql=(
+            "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
+            "INSERT INTO staging.raw_orders VALUES (1, '2024-01-01')",
+        ),
+        selected_keys=frozenset({_SELECTED_KEY}),
+        full_refresh=False,
+        start_cursor_override="2024-01-01",
+        end_cursor_override="2024-02-01",
+        expected_cursor_model_names=frozenset(),
+        expected_progress_calls=0,
+    ),
+    GatherCursorSnapshotTestCase(
+        description="skips unselected incremental models",
+        setup_sql=(
+            "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
+            "INSERT INTO staging.raw_orders VALUES (1, '2024-01-01')",
+        ),
+        selected_keys=frozenset(),
+        full_refresh=False,
+        start_cursor_override=None,
+        end_cursor_override=None,
+        expected_cursor_model_names=frozenset(),
+        expected_progress_calls=0,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    CURSOR_SNAPSHOT_TEST_CASES,
+    ids=[case.description for case in CURSOR_SNAPSHOT_TEST_CASES],
+)
+def test_given_incremental_models_when_gathering_cursor_snapshots_then_returns_expected(
+    test_case: GatherCursorSnapshotTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+    execute: Any,
+) -> None:
+    statement: str
+    for statement in test_case.setup_sql:
+        connection.execute(statement)
+
+    progress_calls: list[str] = []
+
+    def _track_progress(message: str) -> None:
+        progress_calls.append(message)
+
+    project: CompiledProject = build_project_with_targets(
+        model_targets={"raw_orders": "staging"},
+        incremental_models=(_INCREMENTAL_MODEL,),
+    )
+    snapshot: WarehouseSnapshot = gather_warehouse_snapshot(
+        project=project,
+        adapter=adapter,
+        connection=connection,
+        execute=execute,
+        selected_keys=test_case.selected_keys,
+        full_refresh=test_case.full_refresh,
+        start_cursor_override=test_case.start_cursor_override,
+        end_cursor_override=test_case.end_cursor_override,
+        on_progress=_track_progress,
+    )
+
+    assert frozenset(snapshot.cursor_snapshots.keys()) == test_case.expected_cursor_model_names
+    model_name: str
+    expected_snap: ModelCursorSnapshot
+    for model_name, expected_snap in test_case.expected_cursor_snapshots.items():
+        assert snapshot.cursor_snapshots[model_name] == expected_snap
+    assert len(progress_calls) == test_case.expected_progress_calls

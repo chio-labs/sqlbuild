@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
+
 from sqlbuild.adapter.shared.classes.connection import ConnectionMixin
 from sqlbuild.adapter.shared.classes.diff import DiffMixin
 from sqlbuild.adapter.shared.classes.materialization import MaterializationMixin
@@ -21,3 +23,8 @@ class StrictAdapter(
     run_in_transaction, supports_transactions) are inherited but may be
     overridden.
     """
+
+    @abstractmethod
+    def star_exclude_keyword(self) -> str:
+        """Return the SQL keyword for SELECT * EXCLUDE/EXCEPT syntax."""
+        ...

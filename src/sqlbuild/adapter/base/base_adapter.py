@@ -222,6 +222,10 @@ class BaseAdapter(StrictAdapter):
         result: Any = cursor.fetchone()
         return int(result[0])
 
+    def star_exclude_keyword(self) -> str:
+        """Return the SQL keyword for SELECT * EXCLUDE/EXCEPT syntax."""
+        return "EXCLUDE"
+
 
 def _build_schemas_filter(schemas: tuple[str, ...] | None) -> str:
     """Build an AND clause filtering to the given schemas."""

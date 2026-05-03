@@ -473,6 +473,66 @@ def check_model_declarations_outside_models(file_path: Path, module: ast.Module)
     return violations
 
 
+def check_private_definition_ordering(file_path: Path, module: ast.Module) -> list[Violation]:
+    """Reject private dataclasses and constants that appear after function definitions."""
+
+    violations: list[Violation] = []
+    first_function_line: int | None = None
+    node: ast.stmt
+    for node in module.body:
+        if (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and first_function_line is None
+        ):
+            first_function_line = node.lineno
+        if first_function_line is None:
+            continue
+        if (
+            isinstance(node, ast.ClassDef)
+            and node.name.startswith("_")
+            and _is_dataclass_class(node)
+        ):
+            violations.append(
+                Violation(
+                    code="SC034",
+                    path=file_path,
+                    line=node.lineno,
+                    message=(
+                        "private dataclass definitions must appear before "
+                        "function definitions at module level"
+                    ),
+                )
+            )
+        private_target: str | None = _private_assignment_target(node)
+        if private_target is not None:
+            violations.append(
+                Violation(
+                    code="SC034",
+                    path=file_path,
+                    line=node.lineno,
+                    message=(
+                        "private constant definitions must appear before "
+                        "function definitions at module level"
+                    ),
+                )
+            )
+    return violations
+
+
+def _private_assignment_target(node: ast.stmt) -> str | None:
+    """Return the target name if node is a private module-level assignment, else None."""
+
+    if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+        if node.target.id.startswith("_"):
+            return node.target.id
+    if isinstance(node, ast.Assign):
+        target: ast.expr
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id.startswith("_"):
+                return target.id
+    return None
+
+
 def check_type_declarations_outside_types(file_path: Path, module: ast.Module) -> list[Violation]:
     """Reject type-layer declarations outside types.py."""
 
@@ -1127,6 +1187,8 @@ def _is_allowed_type_class(node: ast.ClassDef) -> bool:
 
 
 def _is_allowed_model_class(node: ast.ClassDef) -> bool:
+    if node.name.startswith("_"):
+        return False
     return _is_dataclass_class(node) or _inherits_from_base_names(node, MODEL_CLASS_BASE_NAMES)
 
 

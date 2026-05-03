@@ -359,6 +359,7 @@ def _check_top_level_test_module_shape(file_path: Path, module: ast.Module) -> l
         return []
 
     violations: list[Violation] = []
+    first_test_function_line: int | None = None
 
     for node in module.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and not node.name.startswith(
@@ -376,8 +377,38 @@ def _check_top_level_test_module_shape(file_path: Path, module: ast.Module) -> l
                     ),
                 )
             )
+        if (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name.startswith("test_")
+            and first_test_function_line is None
+        ):
+            first_test_function_line = node.lineno
+        if first_test_function_line is not None and _is_private_assignment(node):
+            violations.append(
+                Violation(
+                    code="TC037",
+                    path=file_path,
+                    line=node.lineno,
+                    message=(
+                        "private constant definitions must appear before "
+                        "test function definitions at module level"
+                    ),
+                )
+            )
 
     return violations
+
+
+def _is_private_assignment(node: ast.stmt) -> bool:
+    """Return whether a node is a private module-level assignment."""
+
+    if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+        return node.target.id.startswith("_")
+    if isinstance(node, ast.Assign):
+        return any(
+            isinstance(target, ast.Name) and target.id.startswith("_") for target in node.targets
+        )
+    return False
 
 
 def _check_test_function(

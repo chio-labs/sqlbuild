@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from sqlbuild.compiler.compile.models import (
@@ -10,17 +11,36 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompiledRelationTarget,
     CompiledSeed,
+    CompiledSource,
     CompileModelConfig,
+    CompileSqlReference,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredSchemaFile, DiscoveredSeedFile
+from sqlbuild.compiler.compile.types import CompiledResourceType, SqlReferenceKind
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredSchemaFile,
+    DiscoveredSeedFile,
+    DiscoveredSourceFile,
+)
 from sqlbuild.spec.models.schema import SchemaSeedEntry
+from sqlbuild.spec.models.source import SourceEntry
+
+
+@dataclass(frozen=True)
+class _IncrementalModelSpec:
+    """Spec for building a test incremental model with cursor config."""
+
+    name: str
+    schema: str
+    cursor: str
+    ref_names: tuple[str, ...]
 
 
 def build_project_with_targets(
     *,
     model_targets: dict[str, str | None] | None = None,
     seed_targets: dict[str, str | None] | None = None,
+    incremental_models: tuple[_IncrementalModelSpec, ...] = (),
+    source_names: tuple[tuple[str, str, str], ...] = (),
 ) -> CompiledProject:
     """Build a minimal CompiledProject with explicit target schemas."""
 
@@ -42,6 +62,36 @@ def build_project_with_targets(
                     name=model_name,
                     qualified_name=(f"{target_schema}.{model_name}" if target_schema else None),
                 ),
+            )
+        )
+
+    spec: _IncrementalModelSpec
+    for spec in incremental_models:
+        references: tuple[CompileSqlReference, ...] = tuple(
+            CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name=ref_name)
+            for ref_name in spec.ref_names
+        )
+        models.append(
+            CompiledModel(
+                key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=spec.name),
+                deps=(),
+                name=spec.name,
+                relative_path=Path(f"models/{spec.name}.sql"),
+                query_sql=f"SELECT * FROM {spec.name}",
+                config=CompileModelConfig(
+                    values={
+                        "materialized": "incremental",
+                        "cursor": spec.cursor,
+                        "incremental_strategy": "delete_insert",
+                    }
+                ),
+                target=CompiledRelationTarget(
+                    database=None,
+                    schema=spec.schema,
+                    name=spec.name,
+                    qualified_name=f"{spec.schema}.{spec.name}",
+                ),
+                references=references,
             )
         )
 
@@ -74,12 +124,34 @@ def build_project_with_targets(
             )
         )
 
+    sources: list[CompiledSource] = []
+    source_spec: tuple[str, str, str]
+    for source_spec in source_names:
+        sources.append(
+            CompiledSource(
+                key=CompiledObjectKey(
+                    resource_type=CompiledResourceType.SOURCE, name=source_spec[0]
+                ),
+                deps=(),
+                name=source_spec[0],
+                source_entry=SourceEntry(
+                    name=source_spec[0], schema=source_spec[1], table=source_spec[2]
+                ),
+                source_file=DiscoveredSourceFile(
+                    file_path=Path("sources/sources.yml"),
+                    relative_path=Path("sources/sources.yml"),
+                    contents="",
+                    source_entries=(),
+                ),
+            )
+        )
+
     return CompiledProject(
         run_id="test_run",
         effective_environment_name=None,
         effective_connection={},
         effective_vars={},
         models=tuple(models),
-        sources=(),
+        sources=tuple(sources),
         seeds=tuple(seeds),
     )

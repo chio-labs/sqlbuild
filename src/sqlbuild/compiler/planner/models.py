@@ -35,12 +35,30 @@ class ParsedSelector:
 
 
 @dataclass(frozen=True)
+class ModelCursorSnapshot:
+    """Cursor MIN/MAX values gathered from warehouse for one incremental model."""
+
+    target_max: str | None
+    upstream_mins: tuple[str, ...]
+    upstream_maxes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CursorBounds:
+    """Effective cursor start and end values for one incremental model."""
+
+    start: str
+    end: str
+
+
+@dataclass(frozen=True)
 class WarehouseSnapshot:
     """Frozen point-in-time picture of warehouse state for planning."""
 
     existing_relations: dict[str, RelationInfo] = field(default_factory=dict)
     existing_columns: dict[str, tuple[ColumnInfo, ...]] = field(default_factory=dict)
     fingerprints: dict[str, Fingerprint] = field(default_factory=dict)
+    cursor_snapshots: dict[str, ModelCursorSnapshot] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

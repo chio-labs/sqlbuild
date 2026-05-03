@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.planner.models import ModelCursorSnapshot
 
 
 @dataclass(frozen=True)
@@ -21,3 +23,16 @@ class GatherEmptySnapshotTestCase:
     expected_relation_count: int
     expected_column_count: int
     expected_fingerprint_count: int
+
+
+@dataclass(frozen=True)
+class GatherCursorSnapshotTestCase:
+    description: str
+    setup_sql: tuple[str, ...]
+    selected_keys: frozenset[CompiledObjectKey] | None
+    full_refresh: bool
+    start_cursor_override: str | None
+    end_cursor_override: str | None
+    expected_cursor_model_names: frozenset[str]
+    expected_cursor_snapshots: dict[str, ModelCursorSnapshot] = field(default_factory=dict)
+    expected_progress_calls: int = 0

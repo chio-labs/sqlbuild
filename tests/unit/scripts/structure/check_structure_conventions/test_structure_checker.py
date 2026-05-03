@@ -849,6 +849,50 @@ TEST_CASES: list[CheckPathsTestCase] = [
         },
         expected_violation_codes=("SC025",),
     ),
+    CheckPathsTestCase(
+        description="reports private dataclass after function definition",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/helpers/build.py": dedent(
+                """
+                from __future__ import annotations
+
+                from dataclasses import dataclass
+
+
+                def do_work() -> str:
+                    return "done"
+
+
+                @dataclass(frozen=True)
+                class _InternalState:
+                    value: str
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("SC034",),
+    ),
+    CheckPathsTestCase(
+        description="reports private constant after function definition",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/helpers/build.py": dedent(
+                """
+                from __future__ import annotations
+
+
+                def do_work() -> str:
+                    return "done"
+
+
+                _INTERNAL_VALUE: int = 42
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("SC034",),
+    ),
 ]
 
 

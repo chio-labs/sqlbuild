@@ -35,6 +35,7 @@ from scripts.structure.structure_conventions.rules import (
     check_nested_runtime_package_direct_subpackages,
     check_no_relative_imports,
     check_no_sibling_package_imports,
+    check_private_definition_ordering,
     check_shared_package_imports,
     check_shared_package_structure,
     check_top_level_domain_direct_modules,
@@ -78,6 +79,7 @@ def check_paths(paths: list[Path], repo_root: Path | None = None) -> list[Violat
         violations.extend(check_models_module(file_path, module))
         violations.extend(check_constants_module(file_path, module))
         violations.extend(check_model_declarations_outside_models(file_path, module))
+        violations.extend(check_private_definition_ordering(file_path, module))
         violations.extend(check_type_declarations_outside_types(file_path, module))
         violations.extend(check_exception_declarations_outside_exceptions(file_path, module))
         violations.extend(check_constants_outside_constants(file_path, module))
