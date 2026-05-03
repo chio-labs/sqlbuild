@@ -7,7 +7,13 @@ from pathlib import Path
 from typing import cast
 from uuid import uuid4
 
+from sqlbuild.compiler.compile.constants import MACRO_CALL_PATTERN
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.helpers.macros import (
+    LoadedMacro,
+    expand_sql_macros,
+    load_project_macros,
+)
 from sqlbuild.compiler.compile.helpers.templating import (
     expand_effective_vars,
     expand_template_data,
@@ -45,6 +51,7 @@ def build_model_inputs(
 ) -> tuple[CompileModelInput, ...]:
     """Attach schema metadata to discovered model files."""
 
+    loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     model_inputs: list[CompileModelInput] = []
     model_file: DiscoveredSqlModelFile
     for model_file in discovered_inputs.model_files:
@@ -63,6 +70,19 @@ def build_model_inputs(
             effective_environment_name=effective_environment_name,
             run_id=run_id,
         )
+        expanded_query_sql: str = expand_sql_macros(
+            sql=model_file.query_sql,
+            file_path=model_file.file_path,
+            loaded_macros=loaded_macros,
+        )
+        expanded_config: CompileModelConfig = CompileModelConfig(
+            values=expand_model_hook_macros(
+                values=effective_config.values,
+                file_path=model_file.file_path,
+                loaded_macros=loaded_macros,
+            ),
+            matched_path_default=effective_config.matched_path_default,
+        )
         schema_match: tuple[SchemaModelEntry, DiscoveredSchemaFile] | None = (
             find_schema_model_match(
                 model_file=model_file,
@@ -70,7 +90,13 @@ def build_model_inputs(
             )
         )
         if schema_match is None:
-            model_inputs.append(CompileModelInput(model_file=model_file, config=effective_config))
+            model_inputs.append(
+                CompileModelInput(
+                    model_file=model_file,
+                    config=expanded_config,
+                    query_sql=expanded_query_sql,
+                )
+            )
             continue
 
         schema_entry: SchemaModelEntry = schema_match[0]
@@ -78,7 +104,8 @@ def build_model_inputs(
         model_inputs.append(
             CompileModelInput(
                 model_file=model_file,
-                config=effective_config,
+                config=expanded_config,
+                query_sql=expanded_query_sql,
                 schema_entry=schema_entry,
                 schema_file=schema_file,
             )
@@ -265,9 +292,89 @@ def build_model_config(
         effective_environment_name=effective_environment_name,
         run_id=run_id,
     )
+    validate_model_config_has_no_macros(values=target_resolved_values)
     return CompileModelConfig(
         values=target_resolved_values, matched_path_default=matched_path_default
     )
+
+
+def expand_model_hook_macros(
+    *,
+    values: dict[str, object],
+    file_path: Path,
+    loaded_macros: dict[str, LoadedMacro],
+) -> dict[str, object]:
+    """Expand macros only within executable hook SQL strings."""
+
+    expanded_values: dict[str, object] = dict(values)
+    hook_key: str
+    for hook_key in ("pre_hook", "post_hook"):
+        raw_hook_value: object | None = expanded_values.get(hook_key)
+        if raw_hook_value is None:
+            continue
+        expanded_values[hook_key] = expand_sql_macros_in_value(
+            value=raw_hook_value,
+            file_path=file_path,
+            loaded_macros=loaded_macros,
+        )
+    return expanded_values
+
+
+def expand_sql_macros_in_value(
+    *, value: object, file_path: Path, loaded_macros: dict[str, LoadedMacro]
+) -> object:
+    """Recursively expand macros inside supported SQL hook container shapes."""
+
+    if isinstance(value, str):
+        return expand_sql_macros(sql=value, file_path=file_path, loaded_macros=loaded_macros)
+    if isinstance(value, list):
+        return [
+            expand_sql_macros_in_value(
+                value=item,
+                file_path=file_path,
+                loaded_macros=loaded_macros,
+            )
+            for item in value
+        ]
+    if isinstance(value, tuple):
+        return tuple(
+            expand_sql_macros_in_value(
+                value=item,
+                file_path=file_path,
+                loaded_macros=loaded_macros,
+            )
+            for item in value
+        )
+    return value
+
+
+def validate_model_config_has_no_macros(*, values: dict[str, object]) -> None:
+    """Reject macro calls in declarative model config while allowing hook SQL strings."""
+
+    validate_no_macros_in_config_value(value=values, path=())
+
+
+def validate_no_macros_in_config_value(*, value: object, path: tuple[str, ...]) -> None:
+    """Recursively reject macro calls outside hook fields."""
+
+    if path and path[0] in {"pre_hook", "post_hook"}:
+        return
+    if isinstance(value, str):
+        if MACRO_CALL_PATTERN.search(value) is not None:
+            field_path: str = ".".join(path) if path else "<root>"
+            raise CompileInputError(f"model config field '{field_path}' does not allow macros")
+        return
+    if isinstance(value, dict):
+        key: object
+        item_value: object
+        for key, item_value in value.items():
+            if isinstance(key, str):
+                validate_no_macros_in_config_value(value=item_value, path=(*path, key))
+        return
+    if isinstance(value, list | tuple):
+        item: object
+        for item in value:
+            validate_no_macros_in_config_value(value=item, path=path)
 
 
 def build_layered_model_values(

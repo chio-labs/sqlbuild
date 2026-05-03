@@ -109,6 +109,7 @@ sources:
             {"materialized": "incremental", "schema": "nested", "batch_size": "30m"},
             {"materialized": "view", "schema": "staging", "batch_size": "1h"},
         ),
+        expected_model_query_sqls=("select 1", "select 1"),
         expected_model_path_defaults=("models/staging/nested", "models/staging"),
         expected_seed_names=("country_codes",),
         expected_source_names=("raw_orders",),
@@ -130,6 +131,7 @@ sources:
         run_id=None,
         expected_model_schema_names=(None,),
         expected_model_config_values=({},),
+        expected_model_query_sqls=("select 1",),
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
@@ -181,6 +183,7 @@ vars:
         run_id=None,
         expected_model_schema_names=(None,),
         expected_model_config_values=({},),
+        expected_model_query_sqls=("select 1",),
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
@@ -228,6 +231,7 @@ environment: dev
         run_id=None,
         expected_model_schema_names=(None,),
         expected_model_config_values=({},),
+        expected_model_query_sqls=("select 1",),
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
@@ -262,6 +266,7 @@ vars:
         run_id=None,
         expected_model_schema_names=(None,),
         expected_model_config_values=({},),
+        expected_model_query_sqls=("select 1",),
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
@@ -299,6 +304,7 @@ environments:
         run_id=None,
         expected_model_schema_names=(None,),
         expected_model_config_values=({},),
+        expected_model_query_sqls=("select 1",),
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
@@ -336,6 +342,7 @@ vars:
         run_id=None,
         expected_model_schema_names=(None,),
         expected_model_config_values=({},),
+        expected_model_query_sqls=("select 1",),
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
@@ -370,6 +377,7 @@ environments:
         run_id=None,
         expected_model_schema_names=(None,),
         expected_model_config_values=({},),
+        expected_model_query_sqls=("select 1",),
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
@@ -406,6 +414,7 @@ vars:
         run_id=None,
         expected_model_schema_names=(None,),
         expected_model_config_values=({},),
+        expected_model_query_sqls=("select 1",),
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
@@ -466,6 +475,7 @@ defaults:
                 "row_diff_exclude_columns": ("loaded_at", "run_id"),
             },
         ),
+        expected_model_query_sqls=("select 1",),
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
@@ -542,6 +552,7 @@ select 1
                 },
             },
         ),
+        expected_model_query_sqls=("select 1",),
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
@@ -598,6 +609,7 @@ select 1
                 },
             },
         ),
+        expected_model_query_sqls=("select 1",),
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
@@ -646,6 +658,7 @@ environments:
                 "alias": "analytics_team_prod_orders",
             },
         ),
+        expected_model_query_sqls=("select 1",),
         expected_model_path_defaults=("models/staging",),
         expected_seed_names=(),
         expected_source_names=(),
@@ -658,6 +671,61 @@ environments:
         },
     ),
     BuildCompileInputsTestCase(
+        description="expands macros in model query and hook sql strings",
+        repo_files=base_repo_files()
+        | {
+            "macros/common.py": """
+def project_columns() -> str:
+    return "order_id, customer_id"
+
+def grant_target(target_name: str) -> str:
+    return f"GRANT SELECT ON {target_name} TO analyst_role"
+""".strip()
+            + "\n",
+            "sqlbuild_project.yml": """
+name: demo
+adapter: duckdb
+default_environment: dev
+
+defaults:
+  schema: marts
+
+environments:
+  dev:
+    database: analytics
+""".strip()
+            + "\n",
+            "models/staging/orders.sql": """
+MODEL (
+  alias: orders_dev,
+  post_hook: ["@grant_target('${CTX:target.qualified}')"]
+);
+
+select @project_columns() from raw_orders
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        cli_vars=None,
+        run_id="run_123",
+        expected_model_schema_names=(None,),
+        expected_model_config_values=(
+            {
+                "schema": "marts",
+                "alias": "orders_dev",
+                "database": "analytics",
+                "post_hook": ["GRANT SELECT ON analytics.marts.orders_dev TO analyst_role"],
+            },
+        ),
+        expected_model_path_defaults=(None,),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_effective_environment_name="dev",
+        expected_effective_connection={},
+        expected_effective_vars={},
+        expected_model_query_sqls=("select order_id, customer_id from raw_orders",),
+    ),
+    BuildCompileInputsTestCase(
         description="generates clickstate style run ids when none are provided",
         repo_files=base_repo_files() | {"models/staging/orders.sql": "MODEL ();\n\nselect 1\n"},
         selected_environment=None,
@@ -665,6 +733,7 @@ environments:
         run_id=None,
         expected_model_schema_names=(None,),
         expected_model_config_values=({},),
+        expected_model_query_sqls=("select 1",),
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
@@ -712,6 +781,10 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
         == test_case.expected_model_config_values
     )
     assert (
+        tuple(model_input.query_sql for model_input in compile_inputs.model_inputs)
+        == test_case.expected_model_query_sqls
+    )
+    assert (
         tuple(
             model_input.config.matched_path_default for model_input in compile_inputs.model_inputs
         )
@@ -738,6 +811,28 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
 
 
 COMPILE_ERROR_TEST_CASES: list[BuildCompileInputsErrorTestCase] = [
+    BuildCompileInputsErrorTestCase(
+        description="raises when model config field contains a macro call",
+        repo_files=base_repo_files()
+        | {
+            "macros/common.py": """
+def dynamic_schema() -> str:
+    return "marts"
+""".strip()
+            + "\n",
+            "models/staging/orders.sql": """
+MODEL (
+  schema: "@dynamic_schema()",
+);
+
+select 1
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="model config field 'schema' does not allow macros",
+    ),
     BuildCompileInputsErrorTestCase(
         description=(
             "raises when a schema model declaration is outside its effective directory scope"

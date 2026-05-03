@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
@@ -25,11 +27,21 @@ class CompileModelConfig:
 
 
 @dataclass(frozen=True)
+class LoadedMacro:
+    """One loaded project macro available for compile-time SQL expansion."""
+
+    name: str
+    file_path: Path
+    function: Callable[..., object]
+
+
+@dataclass(frozen=True)
 class CompileModelInput:
     """One discovered model file with its attached schema metadata, if any."""
 
     model_file: DiscoveredSqlModelFile
     config: CompileModelConfig = field(default_factory=CompileModelConfig)
+    query_sql: str = ""
     schema_entry: SchemaModelEntry | None = None
     schema_file: DiscoveredSchemaFile | None = None
 

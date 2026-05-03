@@ -16,6 +16,7 @@ class BuildCompileInputsTestCase:
     expected_effective_environment_name: str | None
     expected_effective_connection: dict[str, object]
     expected_effective_vars: dict[str, str]
+    expected_model_query_sqls: tuple[str, ...] = field(default_factory=tuple)
     environment_variables: dict[str, str] = field(default_factory=dict)
 
 
