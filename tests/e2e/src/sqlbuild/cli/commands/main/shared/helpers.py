@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
 from shutil import copytree
 from typing import Any
@@ -27,6 +28,24 @@ def prepare_waffle_shop(tmp_path: Path) -> Path:
     seed_sql: str = (project_dir / "seed_raw_data.sql").read_text(encoding="utf-8")
     connection.execute(seed_sql)
     connection.close()
+
+    return project_dir
+
+
+def prepare_inline_project(
+    *, tmp_path: Path, project_name: str, repo_files: Mapping[str, str]
+) -> Path:
+    """Write an inline-authored project to tmp dir and return its root path."""
+
+    project_dir: Path = tmp_path / project_name
+    project_dir.mkdir(parents=True, exist_ok=True)
+
+    relative_path: str
+    contents: str
+    for relative_path, contents in repo_files.items():
+        file_path: Path = project_dir / relative_path
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(contents, encoding="utf-8")
 
     return project_dir
 

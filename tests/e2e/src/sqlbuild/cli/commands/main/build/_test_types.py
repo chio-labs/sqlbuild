@@ -21,3 +21,16 @@ class BuildE2ETestCase:
     expected_daily_order_partitioned_data: tuple[tuple[object, ...], ...] = field(
         default_factory=tuple
     )
+
+
+@dataclass(frozen=True)
+class ModelBackedCursorBuildE2ETestCase:
+    """Test case for model-backed cursor build e2e regression coverage."""
+
+    description: str
+    repo_files: dict[str, str]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_table_names: tuple[str, ...]
+    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
+    expected_absent_runtime_fragments: tuple[str, ...] = field(default_factory=tuple)

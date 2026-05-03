@@ -8,9 +8,14 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models import CompiledRelationTarget
-from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
+from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorBounds, ModelPlanEntry
 from sqlbuild.executor.auditing.main import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.run.helpers.cursor_bounds import (
+    has_model_backed_cursor_inputs,
+    resolve_runtime_cursor_bounds,
+    substitute_cursor_sentinels,
+)
 from sqlbuild.executor.run.helpers.custom import (
     execute_custom_entry as execute_custom_entry,
 )
@@ -67,6 +72,36 @@ def execute_table_entry(
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
     statement_recorder: StatementRecorder = StatementRecorder()
+    runtime_owned_cursor_bounds: bool = has_model_backed_cursor_inputs(entry.cursor_input_relations)
+    resolved_sql: str = entry.resolved_sql
+
+    if runtime_owned_cursor_bounds:
+        if entry.cursor_column is None:
+            return build_failed_result(
+                entry=entry,
+                phase=ExecutionPhase.STAGING,
+                error="runtime-owned cursor resolution requires cursor_column",
+                warnings=warnings,
+                audit_results=audit_results,
+                statement_recorder=statement_recorder,
+            )
+        runtime_bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
+            adapter=adapter,
+            connection=connection,
+            target_relation=target_qualified,
+            cursor_column=entry.cursor_column,
+            cursor_input_relations=entry.cursor_input_relations,
+        )
+        if runtime_bounds is None:
+            return build_failed_result(
+                entry=entry,
+                phase=ExecutionPhase.STAGING,
+                error=f"runtime cursor bounds could not be resolved for '{entry.name}'",
+                warnings=warnings,
+                audit_results=audit_results,
+                statement_recorder=statement_recorder,
+            )
+        resolved_sql = substitute_cursor_sentinels(sql=entry.resolved_sql, bounds=runtime_bounds)
 
     try:
         statement_recorder.record_many(render_hooks(hooks=entry.pre_hook, phase_label="pre_hook"))
@@ -108,6 +143,7 @@ def execute_table_entry(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            resolved_sql=resolved_sql,
         )
 
     return _direct_lifecycle(
@@ -125,6 +161,7 @@ def execute_table_entry(
         warnings=warnings,
         audit_results=audit_results,
         statement_recorder=statement_recorder,
+        resolved_sql=resolved_sql,
     )
 
 
@@ -149,6 +186,7 @@ def _staged_lifecycle(
     warnings: list[str],
     audit_results: list[AuditExecutionResult],
     statement_recorder: StatementRecorder,
+    resolved_sql: str,
 ) -> ModelExecutionResult:
     """Staged table lifecycle: CTAS staging, type enforce, audit, promote."""
 
@@ -165,7 +203,7 @@ def _staged_lifecycle(
             adapter.create_table_as(
                 connection,
                 target=staging_qualified,
-                sql=entry.resolved_sql,
+                sql=resolved_sql,
                 statement_recorder=statement_recorder,
             )
     except Exception as exc:
@@ -330,6 +368,7 @@ def _direct_lifecycle(
     warnings: list[str],
     audit_results: list[AuditExecutionResult],
     statement_recorder: StatementRecorder,
+    resolved_sql: str,
 ) -> ModelExecutionResult:
     """Direct table lifecycle: CTAS target, audit after, no staging."""
 
@@ -352,7 +391,7 @@ def _direct_lifecycle(
             adapter.create_table_as(
                 connection,
                 target=target_qualified,
-                sql=entry.resolved_sql,
+                sql=resolved_sql,
                 statement_recorder=statement_recorder,
             )
     except Exception as exc:
