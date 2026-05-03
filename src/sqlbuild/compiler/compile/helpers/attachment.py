@@ -5,7 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompileModelInput, CompileSeedInput, CompileSourceInput
+from sqlbuild.compiler.compile.models import (
+    CompileModelConfig,
+    CompileModelInput,
+    CompileSeedInput,
+    CompileSourceInput,
+)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSchemaFile,
@@ -13,6 +18,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSourceFile,
     DiscoveredSqlModelFile,
 )
+from sqlbuild.spec.models.project import DefaultsConfig
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -23,6 +29,16 @@ def build_model_inputs(discovered_inputs: DiscoveredProjectInputs) -> tuple[Comp
     model_inputs: list[CompileModelInput] = []
     model_file: DiscoveredSqlModelFile
     for model_file in discovered_inputs.model_files:
+        matched_path_default: str | None = find_matching_path_default(
+            model_file=model_file,
+            path_defaults=discovered_inputs.project_config.path_defaults,
+        )
+        effective_config: CompileModelConfig = build_model_config(
+            defaults=discovered_inputs.project_config.defaults,
+            path_defaults=discovered_inputs.project_config.path_defaults,
+            matched_path_default=matched_path_default,
+            model_header_values=model_file.header_values,
+        )
         schema_match: tuple[SchemaModelEntry, DiscoveredSchemaFile] | None = (
             find_schema_model_match(
                 model_file=model_file,
@@ -30,7 +46,7 @@ def build_model_inputs(discovered_inputs: DiscoveredProjectInputs) -> tuple[Comp
             )
         )
         if schema_match is None:
-            model_inputs.append(CompileModelInput(model_file=model_file))
+            model_inputs.append(CompileModelInput(model_file=model_file, config=effective_config))
             continue
 
         schema_entry: SchemaModelEntry = schema_match[0]
@@ -38,6 +54,7 @@ def build_model_inputs(discovered_inputs: DiscoveredProjectInputs) -> tuple[Comp
         model_inputs.append(
             CompileModelInput(
                 model_file=model_file,
+                config=effective_config,
                 schema_entry=schema_entry,
                 schema_file=schema_file,
             )
@@ -104,6 +121,71 @@ def build_source_inputs(
                 )
             )
     return tuple(source_inputs)
+
+
+def build_model_config(
+    *,
+    defaults: DefaultsConfig,
+    path_defaults: dict[str, dict[str, object]],
+    matched_path_default: str | None,
+    model_header_values: dict[str, object],
+) -> CompileModelConfig:
+    """Build the pre-semantic effective model config layers."""
+
+    values: dict[str, object] = project_defaults_to_mapping(defaults)
+    if matched_path_default is not None:
+        values.update(path_defaults[matched_path_default])
+    values.update(model_header_values)
+    return CompileModelConfig(values=values, matched_path_default=matched_path_default)
+
+
+def find_matching_path_default(
+    *,
+    model_file: DiscoveredSqlModelFile,
+    path_defaults: dict[str, dict[str, object]],
+) -> str | None:
+    """Return the nearest matching path_defaults key for a model file."""
+
+    relative_path: Path = model_file.relative_path
+    best_match: str | None = None
+    best_length: int = -1
+
+    path_key: str
+    for path_key in path_defaults:
+        path_key_parts: tuple[str, ...] = Path(path_key).parts
+        if relative_path.parts[: len(path_key_parts)] != path_key_parts:
+            continue
+        if len(path_key_parts) > best_length:
+            best_match = path_key
+            best_length = len(path_key_parts)
+    return best_match
+
+
+def project_defaults_to_mapping(defaults: DefaultsConfig) -> dict[str, object]:
+    """Convert project defaults into a sparse mapping for pre-semantic overlay."""
+
+    values: dict[str, object] = {}
+    if defaults.materialized is not None:
+        values["materialized"] = defaults.materialized
+    if defaults.database is not None:
+        values["database"] = defaults.database
+    if defaults.schema is not None:
+        values["schema"] = defaults.schema
+    if defaults.incremental_strategy is not None:
+        values["incremental_strategy"] = defaults.incremental_strategy
+    if defaults.incremental_mode is not None:
+        values["incremental_mode"] = defaults.incremental_mode
+    if defaults.lookback is not None:
+        values["lookback"] = defaults.lookback
+    if defaults.batch_size is not None:
+        values["batch_size"] = defaults.batch_size
+    if defaults.query_change_backfill is not None:
+        values["query_change_backfill"] = defaults.query_change_backfill
+    if defaults.schema_change_backfill:
+        values["schema_change_backfill"] = defaults.schema_change_backfill
+    if defaults.row_diff_exclude_columns:
+        values["row_diff_exclude_columns"] = defaults.row_diff_exclude_columns
+    return values
 
 
 def find_schema_model_match(

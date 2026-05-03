@@ -22,7 +22,33 @@ TEST_CASES: list[BuildCompileInputsTestCase] = [
         description="attaches schema metadata to matching models and seeds and normalizes sources",
         repo_files=base_repo_files()
         | {
+            "sqlbuild_project.yml": """
+name: demo
+adapter: duckdb
+
+defaults:
+  materialized: table
+  schema: analytics
+  batch_size: 1h
+
+path_defaults:
+  models/staging:
+    materialized: view
+    schema: staging
+  models/staging/nested:
+    schema: nested
+""".strip()
+            + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            "models/staging/nested/orders_enriched.sql": """
+MODEL (
+  materialized: incremental,
+  batch_size: 30m,
+);
+
+select 1
+""".strip()
+            + "\n",
             "models/staging/schema.yml": """
 models:
   - name: orders
@@ -50,7 +76,12 @@ sources:
 """.strip()
             + "\n",
         },
-        expected_model_schema_names=("orders",),
+        expected_model_schema_names=(None, "orders"),
+        expected_model_config_values=(
+            {"materialized": "incremental", "schema": "nested", "batch_size": "30m"},
+            {"materialized": "view", "schema": "staging", "batch_size": "1h"},
+        ),
+        expected_model_path_defaults=("models/staging/nested", "models/staging"),
         expected_seed_names=("country_codes",),
         expected_source_names=("raw_orders",),
     ),
@@ -58,6 +89,8 @@ sources:
         description="allows models with no matching schema metadata",
         repo_files=base_repo_files() | {"models/staging/orders.sql": "MODEL ();\n\nselect 1\n"},
         expected_model_schema_names=(None,),
+        expected_model_config_values=({},),
+        expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
     ),
@@ -84,6 +117,16 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
             for model_input in compile_inputs.model_inputs
         )
         == test_case.expected_model_schema_names
+    )
+    assert (
+        tuple(model_input.config.values for model_input in compile_inputs.model_inputs)
+        == test_case.expected_model_config_values
+    )
+    assert (
+        tuple(
+            model_input.config.matched_path_default for model_input in compile_inputs.model_inputs
+        )
+        == test_case.expected_model_path_defaults
     )
     assert (
         tuple(seed_input.schema_entry.name for seed_input in compile_inputs.seed_inputs)

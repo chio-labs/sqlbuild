@@ -17,10 +17,19 @@ from sqlbuild.spec.models.source import SourceEntry
 
 
 @dataclass(frozen=True)
+class CompileModelConfig:
+    """Pre-semantic effective config layers attached to a model input."""
+
+    values: dict[str, object] = field(default_factory=dict)
+    matched_path_default: str | None = None
+
+
+@dataclass(frozen=True)
 class CompileModelInput:
     """One discovered model file with its attached schema metadata, if any."""
 
     model_file: DiscoveredSqlModelFile
+    config: CompileModelConfig = field(default_factory=CompileModelConfig)
     schema_entry: SchemaModelEntry | None = None
     schema_file: DiscoveredSchemaFile | None = None
 
