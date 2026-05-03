@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -7,7 +8,6 @@ import pytest
 from sqlbuild.compiler.discovery.main import discover_project_inputs
 from tests.unit.src.sqlbuild.compiler.discovery._test_helpers import (
     base_repo_files,
-    write_repo_files,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._test_types import (
     DiscoverProjectInputsErrorTestCase,
@@ -67,6 +67,7 @@ sources:
 def test_given_project_repo_slice_when_discovering_inputs_then_it_returns_expected_raw_inventory(
     test_case: DiscoverProjectInputsTestCase,
     tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
     write_repo_files(tmp_path, test_case.repo_files)
 
@@ -336,6 +337,7 @@ seeds:
 def test_given_discovery_conflicts_when_discovering_inputs_then_it_raises_clear_errors(
     test_case: DiscoverProjectInputsErrorTestCase,
     tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
     write_repo_files(tmp_path, test_case.repo_files)
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,6 @@ from sqlbuild.compiler.discovery.main import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.unit.src.sqlbuild.compiler.compile._test_helpers import (
     base_repo_files,
-    write_repo_files,
 )
 from tests.unit.src.sqlbuild.compiler.compile._test_types import (
     BuildCompileInputsErrorTestCase,
@@ -1055,6 +1055,7 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
     test_case: BuildCompileInputsTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
     environment_name: str
     environment_value: str
@@ -1688,6 +1689,7 @@ def test_given_attachment_conflicts_when_building_compile_inputs_then_it_raises_
     test_case: BuildCompileInputsErrorTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
     environment_name: str
     environment_value: str

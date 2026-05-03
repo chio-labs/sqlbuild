@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from textwrap import dedent
 
@@ -11,7 +12,6 @@ from scripts.type_annotations.check_type_annotation_conventions import main
 from tests.unit.scripts.type_annotations.check_type_annotation_conventions._test_helpers import (
     collect_violation_codes,
     compliant_repo_files,
-    write_repo_files,
 )
 from tests.unit.scripts.type_annotations.check_type_annotation_conventions._test_types import (
     CheckCliMainTestCase,
@@ -50,6 +50,7 @@ TEST_CASES: list[CheckPathsTestCase] = [
 def test_given_repo_slice_when_checking_type_annotations_then_it_reports_expected_codes(
     test_case: CheckPathsTestCase,
     tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
     """Type checker should report the expected violation codes."""
 
@@ -92,16 +93,12 @@ TYPE_ANNOTATION_CLI_TEST_CASES: list[CheckCliMainTestCase] = [
 def test_given_repo_slice_when_running_type_annotation_cli_then_it_returns_expected_exit_code(
     test_case: CheckCliMainTestCase,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
     """Type checker CLI should return the expected exit code."""
 
     write_repo_files(tmp_path, test_case.repo_files)
 
-    previous_cwd: Path = Path.cwd()
-    try:
-        import os
-
-        os.chdir(tmp_path)
-        assert main(list(test_case.cli_paths)) == test_case.expected_exit_code
-    finally:
-        os.chdir(previous_cwd)
+    monkeypatch.chdir(tmp_path)
+    assert main(list(test_case.cli_paths)) == test_case.expected_exit_code

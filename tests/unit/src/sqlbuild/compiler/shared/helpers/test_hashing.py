@@ -234,16 +234,16 @@ def test_given_two_queries_when_computing_ast_hashes_then_stability_matches_expe
     "test_case",
     [
         ComputeAstHashTestCase(
-            description="returns a hash for valid sql",
+            description="returns expected hash for valid sql",
             query_sql="SELECT id FROM orders",
-            expected_is_not_none=True,
+            expected_hash="5b5272870e591c96a399663ffecae8b4317de7611d81428af05344b41ddff0e1",
         ),
     ],
-    ids=["returns a hash for valid sql"],
+    ids=["returns expected hash for valid sql"],
 )
-def test_given_valid_sql_when_computing_ast_hash_then_returns_hash(
+def test_given_valid_sql_when_computing_ast_hash_then_returns_expected_hash(
     test_case: ComputeAstHashTestCase,
 ) -> None:
     result: str | None = compute_ast_hash(test_case.query_sql)
 
-    assert (result is not None) == test_case.expected_is_not_none
+    assert result == test_case.expected_hash

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -19,7 +20,6 @@ from sqlbuild.compiler.discovery.main import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.unit.src.sqlbuild.compiler.compile._test_helpers import (
     base_repo_files,
-    write_repo_files,
 )
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     AssembleCompiledProjectTestCase,
@@ -108,6 +108,7 @@ SELECT 1
 def test_given_compile_inputs_when_assembling_compiled_project_then_returns_expected_resources(
     test_case: AssembleCompiledProjectTestCase,
     tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
     write_repo_files(tmp_path, test_case.repo_files)
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)

@@ -52,4 +52,4 @@ class ComputeAstHashStabilityTestCase:
 class ComputeAstHashTestCase:
     description: str
     query_sql: str
-    expected_is_not_none: bool
+    expected_hash: str

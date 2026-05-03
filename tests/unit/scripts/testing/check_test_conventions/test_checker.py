@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from textwrap import dedent
 
@@ -14,7 +15,6 @@ from tests.unit.scripts.testing.check_test_conventions.helpers import (
     base_repo_files,
     collect_violation_codes,
     compliant_repo_files,
-    write_repo_files,
 )
 
 TEST_CASES: list[CheckPathsTestCase] = [
@@ -548,6 +548,7 @@ TEST_CASES: list[CheckPathsTestCase] = [
 def test_given_repo_slice_when_checking_paths_then_returns_expected_violation_codes(
     test_case: CheckPathsTestCase,
     tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
     write_repo_files(tmp_path, test_case.repo_files)
 
@@ -570,6 +571,7 @@ def test_given_repo_slice_when_checking_paths_then_returns_expected_violation_co
 def test_given_repo_slice_when_running_cli_main_then_returns_expected_exit_code(
     test_case: CheckCliMainTestCase,
     tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
     write_repo_files(tmp_path, test_case.repo_files)
 

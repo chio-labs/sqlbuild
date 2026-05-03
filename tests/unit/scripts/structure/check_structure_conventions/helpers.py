@@ -69,13 +69,6 @@ def compliant_repo_files() -> dict[str, str]:
     }
 
 
-def write_repo_files(repo_root: Path, repo_files: dict[str, str]) -> None:
-    for relative_path, content in repo_files.items():
-        file_path: Path = repo_root / relative_path
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        file_path.write_text(content, encoding="utf-8")
-
-
 def collect_violation_codes(repo_root: Path) -> tuple[str, ...]:
     violations: list[Violation] = check_paths(
         [repo_root / "src", repo_root / "scripts"], repo_root=repo_root
