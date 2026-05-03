@@ -21,6 +21,7 @@ from sqlbuild.compiler.compile.helpers.macros import (
     load_project_macros,
 )
 from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
+from sqlbuild.compiler.compile.helpers.sqlglot_validation import validate_sql_syntax
 from sqlbuild.compiler.compile.helpers.templating import (
     expand_effective_vars,
     expand_template_data,
@@ -112,6 +113,15 @@ def build_model_inputs(
             file_path=model_file.file_path,
             loaded_macros=loaded_macros,
         )
+        if _is_sql_validation_enabled(
+            project_setting=discovered_inputs.project_config.settings.sql_validation,
+            model_config=effective_config,
+        ):
+            validate_sql_syntax(
+                query_sql=expanded_query_sql,
+                model_name=model_file.file_path.stem,
+                file_path=model_file.file_path,
+            )
         references: tuple[CompileSqlReference, ...] = extract_sql_references(expanded_query_sql)
         validate_model_references(
             references=references,
@@ -1270,3 +1280,15 @@ def validate_declared_schema_models_are_attached(
                     f"{schema_file.relative_path} "
                     "does not match any discovered model file in that directory scope"
                 )
+
+
+def _is_sql_validation_enabled(*, project_setting: bool, model_config: CompileModelConfig) -> bool:
+    """Resolve whether SQL validation is active for a model.
+
+    Per-model override in MODEL header takes precedence over project setting.
+    """
+
+    raw: object | None = model_config.values.get("sql_validation")
+    if isinstance(raw, bool):
+        return raw
+    return project_setting

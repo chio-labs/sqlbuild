@@ -97,3 +97,11 @@ class InferColumnsTestCase:
     description: str
     query_sql: str
     expected_columns: tuple[InferredColumn, ...] | None
+
+
+@dataclass(frozen=True)
+class ValidateSqlSyntaxTestCase:
+    description: str
+    query_sql: str
+    expected_valid: bool
+    expected_error_fragment: str | None = None
