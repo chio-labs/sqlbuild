@@ -1,0 +1,12 @@
+sources:
+  - name: raw_customers
+    schema: main
+    table: raw_customers
+
+  - name: raw_orders
+    schema: main
+    table: raw_orders
+
+  - name: raw_payments
+    schema: main
+    table: raw_payments

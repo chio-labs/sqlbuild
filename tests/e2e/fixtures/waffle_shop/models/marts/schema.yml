@@ -1,0 +1,46 @@
+models:
+  - name: dim_customers
+    description: Customer dimension with lifetime metrics.
+    columns:
+      - name: customer_id
+        audits:
+          - not_null
+          - unique
+
+  - name: fact_orders
+    description: Order fact table with waffle and payment details.
+    columns:
+      - name: order_id
+        audits:
+          - not_null
+
+  - name: daily_revenue
+    description: Daily revenue aggregation.
+    audits:
+      - expression_is_true:
+          name: revenue is non-negative
+          expression: "total_revenue_cents >= 0"
+
+  - name: daily_order_partitioned
+    description: Partition-tracked daily order summary using custom materialization.
+    columns:
+      - name: order_date
+        audits:
+          - not_null
+    audits:
+      - expression_is_true:
+          name: waffles ordered is positive
+          expression: "waffles_ordered > 0"
+
+  - name: hourly_order_activity
+    description: Hourly order activity aggregated via microbatch incremental.
+    columns:
+      - name: activity_hour
+        audits:
+          - not_null:
+              run_scope: delta_and_final
+    audits:
+      - expression_is_true:
+          name: orders placed is non-negative
+          expression: "orders_placed >= 0"
+          run_scope: delta_and_final

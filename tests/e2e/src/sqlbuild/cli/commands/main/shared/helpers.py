@@ -7,8 +7,8 @@ from pathlib import Path
 from shutil import copytree
 from typing import Any
 
-WAFFLE_SHOP_DIR: Path = Path("examples/waffle_shop")
 REPO_ROOT: Path = Path(__file__).resolve().parents[8]
+WAFFLE_SHOP_DIR: Path = REPO_ROOT / "tests" / "e2e" / "fixtures" / "waffle_shop"
 
 
 def prepare_waffle_shop(tmp_path: Path) -> Path:
