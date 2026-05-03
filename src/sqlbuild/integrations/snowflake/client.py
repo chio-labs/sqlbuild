@@ -4,11 +4,17 @@ from __future__ import annotations
 
 import csv
 import logging
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
+from sqlbuild.adapter.shared.models import (
+    ColumnInfo,
+    RowDiffTolerance,
+    RowDiffTolerances,
+    StatementRecorder,
+)
 from sqlbuild.shared.helpers.diagnostics_logging import log_sql
 
 
@@ -365,6 +371,118 @@ class SnowflakeAdapter(BaseAdapter):
         statement: str
         for statement in statements:
             self.execute(connection, statement)
+
+    def validate_row_diff_keys(
+        self,
+        connection: Any,
+        *,
+        relation_sql: str,
+        relation_label: str,
+        keys: tuple[str, ...],
+    ) -> None:
+        if not keys:
+            raise ValueError("row diff requires at least one unique_key column")
+        null_condition: str = " OR ".join(f"{key} IS NULL" for key in keys)
+        null_count_sql: str = (
+            f"SELECT COUNT(*) FROM ({relation_sql}) AS __key_check WHERE {null_condition}"
+        )
+        null_row: tuple[Any, ...] = self.execute(connection, null_count_sql).fetchone()
+        if int(null_row[0]) > 0:
+            raise ValueError(f"row diff {relation_label} relation contains null unique_key values")
+
+        key_list: str = ", ".join(keys)
+        duplicate_count_sql: str = (
+            f"SELECT COUNT(*) FROM ("
+            f"SELECT {key_list} FROM ({relation_sql}) AS __key_check "
+            f"GROUP BY {key_list} HAVING COUNT(*) > 1"
+            f") AS __duplicates"
+        )
+        duplicate_row: tuple[Any, ...] = self.execute(connection, duplicate_count_sql).fetchone()
+        if int(duplicate_row[0]) > 0:
+            raise ValueError(
+                f"row diff {relation_label} relation contains duplicate unique_key values"
+            )
+
+    def build_row_diff_equal_expression(
+        self,
+        *,
+        column: str,
+        column_info: ColumnInfo,
+        tolerances: RowDiffTolerances | None,
+    ) -> str:
+        tolerance: RowDiffTolerance | None = self.resolve_row_diff_tolerance(
+            column=column,
+            column_type=column_info.type,
+            tolerances=tolerances,
+        )
+        left_expression: str = f"__left.{column}"
+        right_expression: str = f"__right.{column}"
+        if tolerance is None:
+            return f"{left_expression} IS NOT DISTINCT FROM {right_expression}"
+        threshold_parts: list[str] = []
+        if tolerance.absolute is not None:
+            threshold_parts.append(self.format_row_diff_decimal_sql(tolerance.absolute))
+        if tolerance.relative is not None:
+            threshold_parts.append(
+                f"{self.format_row_diff_decimal_sql(tolerance.relative)} * "
+                f"GREATEST(ABS({left_expression}), ABS({right_expression}))"
+            )
+        threshold_sql: str = threshold_parts[0]
+        if len(threshold_parts) > 1:
+            threshold_sql = f"GREATEST({', '.join(threshold_parts)})"
+        return (
+            f"(({left_expression} IS NULL AND {right_expression} IS NULL) OR "
+            f"({left_expression} IS NOT NULL AND {right_expression} IS NOT NULL AND "
+            f"ABS({left_expression} - {right_expression}) <= {threshold_sql}))"
+        )
+
+    def resolve_row_diff_tolerance(
+        self,
+        *,
+        column: str,
+        column_type: str,
+        tolerances: RowDiffTolerances | None,
+    ) -> RowDiffTolerance | None:
+        if tolerances is None:
+            return None
+        column_tolerance: RowDiffTolerance | None = tolerances.by_column.get(column)
+        if column_tolerance is not None:
+            if self.normalize_row_diff_numeric_type(column_type) is None:
+                raise ValueError(f"row diff tolerance for non-numeric column '{column}' is invalid")
+            self.validate_row_diff_tolerance(
+                column=column,
+                tolerance=column_tolerance,
+            )
+            return column_tolerance
+        normalized_type: str | None = self.normalize_row_diff_numeric_type(column_type)
+        if normalized_type is None:
+            return None
+        type_tolerance: RowDiffTolerance | None = tolerances.by_type.get(normalized_type)
+        if type_tolerance is not None:
+            self.validate_row_diff_tolerance(
+                column=column,
+                tolerance=type_tolerance,
+            )
+        return type_tolerance
+
+    def validate_row_diff_tolerance(self, *, column: str, tolerance: RowDiffTolerance) -> None:
+        if tolerance.absolute is None and tolerance.relative is None:
+            raise ValueError(
+                f"row diff tolerance for column '{column}' must define absolute or relative"
+            )
+
+    def normalize_row_diff_numeric_type(self, column_type: str) -> str | None:
+        normalized: str = column_type.upper()
+        if any(token in normalized for token in ("DOUBLE", "FLOAT", "REAL")):
+            return "float"
+        if any(token in normalized for token in ("DECIMAL", "NUMERIC", "NUMBER")):
+            return "decimal"
+        if "INT" in normalized:
+            return "integer"
+        return None
+
+    def format_row_diff_decimal_sql(self, value: Decimal) -> str:
+        return format(value, "f")
 
     def _initialize_session(
         self,

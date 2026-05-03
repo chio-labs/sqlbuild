@@ -613,13 +613,13 @@ class DuckDbAdapter(BaseAdapter):
         if cursor_filter:
             left_cte += f" WHERE {cursor_filter}"
             right_cte += f" WHERE {cursor_filter}"
-        self._validate_duckdb_row_diff_keys(
+        self.validate_row_diff_keys(
             connection,
             relation_sql=left_cte,
             relation_label="left",
             keys=keys,
         )
-        self._validate_duckdb_row_diff_keys(
+        self.validate_row_diff_keys(
             connection,
             relation_sql=right_cte,
             relation_label="right",
@@ -628,7 +628,7 @@ class DuckDbAdapter(BaseAdapter):
 
         join_condition: str = " AND ".join(f"__left.{k} = __right.{k}" for k in keys)
         column_equal_expressions: dict[str, str] = {
-            col: self._build_duckdb_row_equal_expression(
+            col: self.build_row_diff_equal_expression(
                 column=col,
                 column_info=left_columns_by_name[col],
                 tolerances=tolerances,
@@ -636,7 +636,7 @@ class DuckDbAdapter(BaseAdapter):
             for col in compare_columns
         }
         column_tolerances: dict[str, RowDiffTolerance | None] = {
-            col: self._resolve_duckdb_tolerance(
+            col: self.resolve_row_diff_tolerance(
                 column=col,
                 column_type=left_columns_by_name[col].type,
                 tolerances=tolerances,
@@ -746,20 +746,20 @@ class DuckDbAdapter(BaseAdapter):
         if cursor_filter:
             left_cte += f" WHERE {cursor_filter}"
             right_cte += f" WHERE {cursor_filter}"
-        self._validate_duckdb_row_diff_keys(
+        self.validate_row_diff_keys(
             connection,
             relation_sql=left_cte,
             relation_label="left",
             keys=keys,
         )
-        self._validate_duckdb_row_diff_keys(
+        self.validate_row_diff_keys(
             connection,
             relation_sql=right_cte,
             relation_label="right",
             keys=keys,
         )
         column_equal_expressions: dict[str, str] = {
-            col: self._build_duckdb_row_equal_expression(
+            col: self.build_row_diff_equal_expression(
                 column=col,
                 column_info=left_columns_by_name[col],
                 tolerances=tolerances,
@@ -844,13 +844,13 @@ class DuckDbAdapter(BaseAdapter):
         if cursor_filter:
             left_cte += f" WHERE {cursor_filter}"
             right_cte += f" WHERE {cursor_filter}"
-        self._validate_duckdb_row_diff_keys(
+        self.validate_row_diff_keys(
             connection,
             relation_sql=left_cte,
             relation_label="left",
             keys=keys,
         )
-        self._validate_duckdb_row_diff_keys(
+        self.validate_row_diff_keys(
             connection,
             relation_sql=right_cte,
             relation_label="right",
@@ -876,7 +876,7 @@ class DuckDbAdapter(BaseAdapter):
         rows: list[tuple[Any, ...]] = self.execute(connection, sample_sql).fetchall()
         return tuple(tuple((key, row[index]) for index, key in enumerate(keys)) for row in rows)
 
-    def _validate_duckdb_row_diff_keys(
+    def validate_row_diff_keys(
         self,
         connection: Any,
         *,
@@ -907,14 +907,14 @@ class DuckDbAdapter(BaseAdapter):
                 f"row diff {relation_label} relation contains duplicate unique_key values"
             )
 
-    @staticmethod
-    def _build_duckdb_row_equal_expression(
+    def build_row_diff_equal_expression(
+        self,
         *,
         column: str,
         column_info: ColumnInfo,
         tolerances: RowDiffTolerances | None,
     ) -> str:
-        tolerance: RowDiffTolerance | None = DuckDbAdapter._resolve_duckdb_tolerance(
+        tolerance: RowDiffTolerance | None = self.resolve_row_diff_tolerance(
             column=column,
             column_type=column_info.type,
             tolerances=tolerances,
@@ -925,10 +925,10 @@ class DuckDbAdapter(BaseAdapter):
             return f"{left_expression} IS NOT DISTINCT FROM {right_expression}"
         threshold_parts: list[str] = []
         if tolerance.absolute is not None:
-            threshold_parts.append(DuckDbAdapter._format_decimal_sql(tolerance.absolute))
+            threshold_parts.append(self.format_row_diff_decimal_sql(tolerance.absolute))
         if tolerance.relative is not None:
             threshold_parts.append(
-                f"{DuckDbAdapter._format_decimal_sql(tolerance.relative)} * "
+                f"{self.format_row_diff_decimal_sql(tolerance.relative)} * "
                 f"GREATEST(ABS({left_expression}), ABS({right_expression}))"
             )
         threshold_sql: str = threshold_parts[0]
@@ -940,8 +940,8 @@ class DuckDbAdapter(BaseAdapter):
             f"ABS({left_expression} - {right_expression}) <= {threshold_sql}))"
         )
 
-    @staticmethod
-    def _resolve_duckdb_tolerance(
+    def resolve_row_diff_tolerance(
+        self,
         *,
         column: str,
         column_type: str,
@@ -951,33 +951,31 @@ class DuckDbAdapter(BaseAdapter):
             return None
         column_tolerance: RowDiffTolerance | None = tolerances.by_column.get(column)
         if column_tolerance is not None:
-            if DuckDbAdapter._normalize_duckdb_numeric_type(column_type) is None:
+            if self.normalize_row_diff_numeric_type(column_type) is None:
                 raise ValueError(f"row diff tolerance for non-numeric column '{column}' is invalid")
-            DuckDbAdapter._validate_duckdb_tolerance(
+            self.validate_row_diff_tolerance(
                 column=column,
                 tolerance=column_tolerance,
             )
             return column_tolerance
-        normalized_type: str | None = DuckDbAdapter._normalize_duckdb_numeric_type(column_type)
+        normalized_type: str | None = self.normalize_row_diff_numeric_type(column_type)
         if normalized_type is None:
             return None
         type_tolerance: RowDiffTolerance | None = tolerances.by_type.get(normalized_type)
         if type_tolerance is not None:
-            DuckDbAdapter._validate_duckdb_tolerance(
+            self.validate_row_diff_tolerance(
                 column=column,
                 tolerance=type_tolerance,
             )
         return type_tolerance
 
-    @staticmethod
-    def _validate_duckdb_tolerance(*, column: str, tolerance: RowDiffTolerance) -> None:
+    def validate_row_diff_tolerance(self, *, column: str, tolerance: RowDiffTolerance) -> None:
         if tolerance.absolute is None and tolerance.relative is None:
             raise ValueError(
                 f"row diff tolerance for column '{column}' must define absolute or relative"
             )
 
-    @staticmethod
-    def _normalize_duckdb_numeric_type(column_type: str) -> str | None:
+    def normalize_row_diff_numeric_type(self, column_type: str) -> str | None:
         normalized: str = column_type.upper()
         if any(token in normalized for token in ("DOUBLE", "FLOAT", "REAL")):
             return "float"
@@ -987,6 +985,5 @@ class DuckDbAdapter(BaseAdapter):
             return "integer"
         return None
 
-    @staticmethod
-    def _format_decimal_sql(value: Decimal) -> str:
+    def format_row_diff_decimal_sql(self, value: Decimal) -> str:
         return format(value, "f")
