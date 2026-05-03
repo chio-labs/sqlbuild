@@ -5,7 +5,11 @@ from __future__ import annotations
 import re
 
 from sqlbuild.compiler.planner.models import BackfillResult, SchemaFinding
-from sqlbuild.compiler.planner.types import BackfillAction, SchemaChangeKind
+from sqlbuild.compiler.planner.types import (
+    BackfillAction,
+    SchemaChangeBackfillKey,
+    SchemaChangeKind,
+)
 
 _BOUNDED_PATTERN: re.Pattern[str] = re.compile(r"^bounded\((.+)\)$")
 
@@ -64,11 +68,11 @@ def _resolve_backfill_value(raw: str | None) -> BackfillResult:
     return BackfillResult(action=BackfillAction.WARN_ONLY)
 
 
-def _finding_to_policy_key(finding: SchemaFinding) -> str | None:
+def _finding_to_policy_key(finding: SchemaFinding) -> SchemaChangeBackfillKey | None:
     """Map a schema finding kind to the corresponding policy config key."""
 
     if finding.kind == SchemaChangeKind.COLUMN_ADDED:
-        return "add_column"
+        return SchemaChangeBackfillKey.ADD_COLUMN
     if finding.kind == SchemaChangeKind.COLUMN_TYPE_CHANGED:
-        return "type_change"
+        return SchemaChangeBackfillKey.TYPE_CHANGE
     return None

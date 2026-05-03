@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompileSqlReference
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompileSqlReference, InferredColumn
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 
 
@@ -90,3 +90,10 @@ class AssembleCompiledProjectTestCase:
     expected_test_scope_deps: tuple[tuple[CompiledObjectKey, ...], ...]
     expected_test_expected_model_names: tuple[tuple[str, ...], ...]
     expected_audit_attached_target_kinds: tuple[AttachedAuditTargetKind | None, ...] = ()
+
+
+@dataclass(frozen=True)
+class InferColumnsTestCase:
+    description: str
+    query_sql: str
+    expected_columns: tuple[InferredColumn, ...] | None

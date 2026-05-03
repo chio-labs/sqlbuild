@@ -7,6 +7,7 @@ from sqlbuild.compiler.compile.helpers.deps import (
     model_build_deps,
     sql_test_scope_deps,
 )
+from sqlbuild.compiler.compile.helpers.sqlglot_columns import infer_columns_with_sqlglot
 from sqlbuild.compiler.compile.models import (
     CompileAuditInput,
     CompiledAudit,
@@ -22,6 +23,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSeedInput,
     CompileSourceInput,
     CompileSqlTestInput,
+    InferredColumn,
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledResourceType
 
@@ -29,12 +31,16 @@ from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledRes
 def assemble_compiled_project(inputs: CompileProjectInputs) -> CompiledProject:
     """Convert attached compile inputs into the planner-ready project view."""
 
+    sqlglot_enabled: bool = inputs.project_config.settings.sqlglot
     return CompiledProject(
         run_id=inputs.run_id,
         effective_environment_name=inputs.effective_environment_name,
         effective_connection=inputs.effective_connection,
         effective_vars=inputs.effective_vars,
-        models=tuple(_assemble_compiled_model(model_input) for model_input in inputs.model_inputs),
+        models=tuple(
+            _assemble_compiled_model(model_input, sqlglot_enabled=sqlglot_enabled)
+            for model_input in inputs.model_inputs
+        ),
         sources=tuple(
             _assemble_compiled_source(source_input) for source_input in inputs.source_inputs
         ),
@@ -46,8 +52,13 @@ def assemble_compiled_project(inputs: CompileProjectInputs) -> CompiledProject:
     )
 
 
-def _assemble_compiled_model(model_input: CompileModelInput) -> CompiledModel:
+def _assemble_compiled_model(
+    model_input: CompileModelInput, *, sqlglot_enabled: bool
+) -> CompiledModel:
     model_name: str = model_input.model_file.file_path.stem
+    inferred_columns: tuple[InferredColumn, ...] | None = None
+    if sqlglot_enabled:
+        inferred_columns = infer_columns_with_sqlglot(query_sql=model_input.query_sql)
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=model_name),
         deps=model_build_deps(references=model_input.references),
@@ -58,6 +69,7 @@ def _assemble_compiled_model(model_input: CompileModelInput) -> CompiledModel:
         target=_build_model_relation_target(model_input=model_input, model_name=model_name),
         references=model_input.references,
         schema_entry=model_input.schema_entry,
+        inferred_columns=inferred_columns,
     )
 
 

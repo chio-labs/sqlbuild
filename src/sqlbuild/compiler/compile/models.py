@@ -28,6 +28,14 @@ from sqlbuild.spec.models.source import SourceEntry
 
 
 @dataclass(frozen=True)
+class InferredColumn:
+    """One output column inferred from query SQL via sqlglot parsing."""
+
+    name: str
+    type: str | None = None
+
+
+@dataclass(frozen=True)
 class CompileModelConfig:
     """Pre-semantic effective config layers attached to a model input."""
 
@@ -189,6 +197,7 @@ class CompiledModel:
     target: CompiledRelationTarget
     references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
     schema_entry: SchemaModelEntry | None = None
+    inferred_columns: tuple[InferredColumn, ...] | None = None
 
 
 @dataclass(frozen=True)

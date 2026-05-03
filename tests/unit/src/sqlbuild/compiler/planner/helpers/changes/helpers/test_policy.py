@@ -7,7 +7,7 @@ from sqlbuild.compiler.planner.helpers.changes.helpers.policy import (
     resolve_schema_change_backfill,
 )
 from sqlbuild.compiler.planner.models import BackfillResult, SchemaFinding
-from sqlbuild.compiler.planner.types import BackfillAction, SchemaChangeKind
+from sqlbuild.compiler.planner.types import BackfillAction, SchemaChangeKind, SchemaColumnSource
 from tests.unit.src.sqlbuild.compiler.planner.helpers.changes.helpers._test_types import (
     ResolveBackfillTestCase,
     ResolveSchemaBackfillTestCase,
@@ -44,6 +44,7 @@ RESOLVE_SCHEMA_BACKFILL_TEST_CASES: list[ResolveSchemaBackfillTestCase] = [
             SchemaFinding(
                 kind=SchemaChangeKind.COLUMN_ADDED,
                 column_name="status",
+                source=SchemaColumnSource.YML,
                 expected_type="VARCHAR",
             ),
         ),
@@ -56,11 +57,13 @@ RESOLVE_SCHEMA_BACKFILL_TEST_CASES: list[ResolveSchemaBackfillTestCase] = [
             SchemaFinding(
                 kind=SchemaChangeKind.COLUMN_ADDED,
                 column_name="status",
+                source=SchemaColumnSource.YML,
                 expected_type="VARCHAR",
             ),
             SchemaFinding(
                 kind=SchemaChangeKind.COLUMN_TYPE_CHANGED,
                 column_name="id",
+                source=SchemaColumnSource.YML,
                 expected_type="BIGINT",
                 actual_type="INTEGER",
             ),
@@ -74,6 +77,7 @@ RESOLVE_SCHEMA_BACKFILL_TEST_CASES: list[ResolveSchemaBackfillTestCase] = [
             SchemaFinding(
                 kind=SchemaChangeKind.COLUMN_ADDED,
                 column_name="status",
+                source=SchemaColumnSource.YML,
                 expected_type="VARCHAR",
             ),
         ),

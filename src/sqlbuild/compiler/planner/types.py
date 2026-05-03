@@ -37,3 +37,13 @@ class SchemaChangeKind(StrEnum):
     COLUMN_ADDED = "column_added"
     COLUMN_REMOVED = "column_removed"
     COLUMN_TYPE_CHANGED = "column_type_changed"
+
+
+class SchemaChangeBackfillKey(StrEnum):
+    ADD_COLUMN = "add_column"
+    TYPE_CHANGE = "type_change"
+
+
+class SchemaColumnSource(StrEnum):
+    YML = "yml"
+    SQLGLOT = "sqlglot"

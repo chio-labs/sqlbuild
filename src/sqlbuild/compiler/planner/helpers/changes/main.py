@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.shared.models import ColumnInfo
-from sqlbuild.compiler.compile.models import CompiledModel
+from sqlbuild.compiler.compile.models import CompiledModel, InferredColumn
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.helpers.changes.helpers.policy import (
     pick_more_aggressive,
@@ -74,10 +74,15 @@ def detect_model_changes(
     schema_findings: tuple[SchemaFinding, ...] = ()
     schema_backfill: BackfillResult = BackfillResult(action=BackfillAction.WARN_ONLY)
     warehouse_columns: tuple[ColumnInfo, ...] | None = snapshot.existing_columns.get(model_name)
-    expected_columns: tuple[ColumnInfo, ...] = _build_expected_columns(model)
-    if warehouse_columns is not None and expected_columns:
+    yml_columns: tuple[ColumnInfo, ...] = _build_yml_columns(model)
+    inferred_columns: tuple[InferredColumn, ...] | None = model.inferred_columns
+    has_expected: bool = bool(yml_columns) or (
+        inferred_columns is not None and bool(inferred_columns)
+    )
+    if warehouse_columns is not None and has_expected:
         schema_findings = detect_schema_changes(
-            expected_columns=expected_columns,
+            yml_columns=yml_columns,
+            inferred_columns=inferred_columns,
             warehouse_columns=warehouse_columns,
         )
         if schema_findings:
@@ -106,7 +111,7 @@ def detect_model_changes(
     )
 
 
-def _build_expected_columns(model: CompiledModel) -> tuple[ColumnInfo, ...]:
+def _build_yml_columns(model: CompiledModel) -> tuple[ColumnInfo, ...]:
     """Build expected columns from schema.yml declarations."""
 
     if model.schema_entry is None:

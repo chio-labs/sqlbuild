@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.planner.models import BackfillResult, SchemaFinding
 
 
@@ -18,7 +19,8 @@ class DetectQueryChangeTestCase:
 @dataclass(frozen=True)
 class DetectSchemaChangesTestCase:
     description: str
-    expected_columns: tuple[ColumnInfo, ...]
+    yml_columns: tuple[ColumnInfo, ...]
+    inferred_columns: tuple[InferredColumn, ...] | None
     warehouse_columns: tuple[ColumnInfo, ...]
     expected_findings: tuple[SchemaFinding, ...]
 

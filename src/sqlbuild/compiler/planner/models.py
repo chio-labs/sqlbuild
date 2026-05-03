@@ -10,6 +10,7 @@ from sqlbuild.compiler.planner.types import (
     BackfillAction,
     ChangeKind,
     SchemaChangeKind,
+    SchemaColumnSource,
     SelectorKind,
 )
 
@@ -39,6 +40,7 @@ class SchemaFinding:
 
     kind: SchemaChangeKind
     column_name: str
+    source: SchemaColumnSource
     expected_type: str | None = None
     actual_type: str | None = None
 
