@@ -47,3 +47,111 @@ class QueryChangeTrackingBuildE2ETestCase:
     expected_exit_code: int
     expected_fingerprint_models: tuple[str, ...]
     expected_unchanged_models: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CliFailureBuildE2ETestCase:
+    """Test case for expected CLI validation/build failures."""
+
+    description: str
+    repo_files: dict[str, str]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stderr_fragments: tuple[str, ...]
+    expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class QueryPropagationBuildE2ETestCase:
+    """Test case for query-change propagation behavior across repeated CLI runs."""
+
+    description: str
+    repo_files: dict[str, str]
+    initial_build_command: tuple[str, ...]
+    plan_command: tuple[str, ...]
+    mutation_file: str
+    before_text: str
+    after_text: str
+    expected_exit_code: int
+    expected_reasons: dict[str, str]
+
+
+@dataclass(frozen=True)
+class SelectorSurfaceBuildE2ETestCase:
+    """Test case for selector surface CLI behavior."""
+
+    description: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_fragments: tuple[str, ...]
+    expected_stream: str
+    pre_commands: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class RuntimeArtifactPreservationBuildE2ETestCase:
+    """Test case for runtime artifact preservation behavior."""
+
+    description: str
+    initial_command: tuple[str, ...]
+    rerun_command: tuple[str, ...]
+    expected_runtime_paths: tuple[str, ...]
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class LifecycleCommandsBuildE2ETestCase:
+    """Test case for core lifecycle command behavior."""
+
+    description: str
+    expected_exit_code: int
+    expected_fresh_plan_fragments: tuple[str, ...]
+    expected_test_fragment: str
+    expected_audit_fragment: str
+    expected_run_fragment: str
+    expected_rerun_reasons: dict[str, str]
+    expected_full_refresh_fragment: str
+
+
+@dataclass(frozen=True)
+class SchemaBackfillBuildE2ETestCase:
+    """Test case for schema/backfill mutation behavior."""
+
+    description: str
+    mutate_model_file: str
+    model_before_text: str
+    model_after_text: str
+    mutate_schema_file: str
+    schema_before_text: str
+    schema_after_text: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_reason: str
+    expected_backfill_action: str | None = None
+    expected_backfill_duration: str | None = None
+    expected_warning_entries: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class MixedTimestampGrainBuildE2ETestCase:
+    """Test case for mixed timestamp grain replay behavior."""
+
+    description: str
+    repo_files: dict[str, str]
+    initial_command: tuple[str, ...]
+    rerun_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_window_fragment: str
+    expected_row_count: int
+
+
+@dataclass(frozen=True)
+class AuditFailureBuildE2ETestCase:
+    """Test case for audit failure CLI behavior."""
+
+    description: str
+    repo_files: dict[str, str]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_failure_fragment: str
+    expected_retained_relation_fragment: str

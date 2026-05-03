@@ -20,7 +20,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
         AuditE2ETestCase(
             description="audit runs all audits against built relations and all pass",
             expected_exit_code=0,
-            expected_stdout_fragment="PASS=18",
+            expected_stdout_fragment="PASS=26",
         ),
     ],
     ids=["audit runs all audits against built relations and all pass"],

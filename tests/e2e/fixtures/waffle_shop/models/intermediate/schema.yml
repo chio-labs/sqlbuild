@@ -1,0 +1,16 @@
+models:
+  - name: order_status_index
+    description: Integer-cursor incremental projection over fact orders.
+    columns:
+      - name: order_id
+        audits:
+          - not_null
+          - unique
+
+  - name: customer_status_snapshot
+    description: Merge-based customer snapshot with timestamp cursor and explicit backfill policies.
+    columns:
+      - name: customer_id
+        audits:
+          - not_null
+          - unique
