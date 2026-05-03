@@ -211,7 +211,10 @@ def execute_incremental_entry(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.AUDIT,
-            error="pre-DML delta audit failed with error severity",
+            error=(
+                f"delta audit for '{entry.name}' failed before target update "
+                "with severity level: error"
+            ),
             staging_relation=delta_qualified,
             warnings=warnings,
             audit_results=audit_results,
@@ -267,7 +270,10 @@ def execute_incremental_entry(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.AUDIT,
-            error="post-DML final audit failed with error severity; target was already updated",
+            error=(
+                f"final audit for '{entry.name}' failed after target update "
+                "with severity level: error"
+            ),
             staging_relation=delta_qualified,
             promoted_relation=target_qualified,
             warnings=warnings,

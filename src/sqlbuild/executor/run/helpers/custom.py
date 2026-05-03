@@ -174,7 +174,10 @@ def execute_custom_entry(
             return build_failed_result(
                 entry=entry,
                 phase=ExecutionPhase.AUDIT,
-                error="post-materialization audit failed with error severity",
+                error=(
+                    f"final audit for '{entry.name}' failed after materialization "
+                    "with severity level: error"
+                ),
                 promoted_relation=result.relation,
                 warnings=warnings,
                 audit_results=audit_results,

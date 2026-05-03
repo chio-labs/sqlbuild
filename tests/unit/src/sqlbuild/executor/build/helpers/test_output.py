@@ -355,7 +355,10 @@ TEST_CASES: list[BuildOutputTestCase] = [
                     status=ExecutionStatus.FAILED,
                     failed_phase=ExecutionPhase.AUDIT,
                     duration_ms=200,
-                    error_message="pre-promotion audit failed",
+                    error_message=(
+                        "final audit for 'orders' failed before replacing target table "
+                        "with severity level: error"
+                    ),
                     staging_relation="main.orders__staging",
                 ),
             ),
@@ -364,8 +367,8 @@ TEST_CASES: list[BuildOutputTestCase] = [
         expected_output_fragments=(
             "Failures:",
             "orders  (audit)",
-            "pre-promotion audit failed",
-            "staging retained as main.orders__staging",
+            "final audit for 'orders' failed before replacing target table",
+            "staging table kept for inspection: main.orders__staging",
         ),
     ),
     BuildOutputTestCase(

@@ -353,7 +353,7 @@ def _format_failure_details(result: BuildExecutionResult) -> list[str]:
         if model_result.error_message is not None:
             lines.append(f"    {model_result.error_message}")
         if model_result.staging_relation is not None:
-            lines.append(f"    staging retained as {model_result.staging_relation}")
+            lines.append(f"    {_inspection_relation_message(model_result.staging_relation)}")
         lines.append("")
 
     test_result: SqlTestExecutionResult
@@ -402,6 +402,12 @@ def _format_warning_details(result: BuildExecutionResult) -> list[str]:
             lines.append("")
 
     return lines
+
+
+def _inspection_relation_message(relation_name: str) -> str:
+    if relation_name.endswith("__delta"):
+        return f"delta table kept for inspection: {relation_name}"
+    return f"staging table kept for inspection: {relation_name}"
 
 
 def _count_top_level_nodes(result: BuildExecutionResult) -> int:

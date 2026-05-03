@@ -103,7 +103,10 @@ def execute_view_entry(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.AUDIT,
-            error="view audit failed with error severity; view was already created",
+            error=(
+                f"final audit for '{entry.name}' failed after view creation "
+                "with severity level: error"
+            ),
             promoted_relation=target_qualified,
             warnings=warnings,
             audit_results=audit_results,

@@ -265,7 +265,10 @@ def _staged_lifecycle(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.AUDIT,
-            error="pre-promotion audit failed with error severity",
+            error=(
+                f"final audit for '{entry.name}' failed before replacing target table "
+                "with severity level: error"
+            ),
             staging_relation=staging_qualified,
             warnings=warnings,
             audit_results=audit_results,
@@ -425,7 +428,10 @@ def _direct_lifecycle(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.AUDIT,
-            error="post-promotion audit failed with error severity; target was already updated",
+            error=(
+                f"final audit for '{entry.name}' failed after target table was replaced "
+                "with severity level: error"
+            ),
             promoted_relation=target_qualified,
             warnings=warnings,
             audit_results=audit_results,
