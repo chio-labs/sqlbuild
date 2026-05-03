@@ -58,6 +58,7 @@ class CompileProjectInputs:
     project_config: ProjectConfig
     local_config: LocalConfig
     discovered_inputs: DiscoveredProjectInputs
+    run_id: str = ""
     effective_environment_name: str | None = None
     effective_environment: EnvironmentConfig | None = None
     effective_connection: dict[str, object] = field(default_factory=dict)

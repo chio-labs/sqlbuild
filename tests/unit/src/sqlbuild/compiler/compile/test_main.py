@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -102,6 +103,7 @@ sources:
         },
         selected_environment=None,
         cli_vars={"shared": "cli", "cli_only": "present"},
+        run_id=None,
         expected_model_schema_names=(None, "orders"),
         expected_model_config_values=(
             {"materialized": "incremental", "schema": "nested", "batch_size": "30m"},
@@ -125,6 +127,7 @@ sources:
         repo_files=base_repo_files() | {"models/staging/orders.sql": "MODEL ();\n\nselect 1\n"},
         selected_environment=None,
         cli_vars={},
+        run_id=None,
         expected_model_schema_names=(None,),
         expected_model_config_values=({},),
         expected_model_path_defaults=(None,),
@@ -175,6 +178,7 @@ vars:
         },
         selected_environment="prod",
         cli_vars={},
+        run_id=None,
         expected_model_schema_names=(None,),
         expected_model_config_values=({},),
         expected_model_path_defaults=(None,),
@@ -221,6 +225,7 @@ environment: dev
         },
         selected_environment=None,
         cli_vars=None,
+        run_id=None,
         expected_model_schema_names=(None,),
         expected_model_config_values=({},),
         expected_model_path_defaults=(None,),
@@ -254,6 +259,7 @@ vars:
         },
         selected_environment=None,
         cli_vars={"cli_only": "present"},
+        run_id=None,
         expected_model_schema_names=(None,),
         expected_model_config_values=({},),
         expected_model_path_defaults=(None,),
@@ -290,6 +296,7 @@ environments:
         },
         selected_environment=None,
         cli_vars=None,
+        run_id=None,
         expected_model_schema_names=(None,),
         expected_model_config_values=({},),
         expected_model_path_defaults=(None,),
@@ -326,6 +333,7 @@ vars:
         },
         selected_environment=None,
         cli_vars={"cli_only": "present"},
+        run_id=None,
         expected_model_schema_names=(None,),
         expected_model_config_values=({},),
         expected_model_path_defaults=(None,),
@@ -359,6 +367,7 @@ environments:
         },
         selected_environment=None,
         cli_vars=None,
+        run_id=None,
         expected_model_schema_names=(None,),
         expected_model_config_values=({},),
         expected_model_path_defaults=(None,),
@@ -394,6 +403,7 @@ vars:
         },
         selected_environment=None,
         cli_vars={"shared": "cli", "cli_only": "present"},
+        run_id=None,
         expected_model_schema_names=(None,),
         expected_model_config_values=({},),
         expected_model_path_defaults=(None,),
@@ -437,6 +447,7 @@ defaults:
         },
         selected_environment=None,
         cli_vars=None,
+        run_id=None,
         expected_model_schema_names=(None,),
         expected_model_config_values=(
             {
@@ -488,16 +499,21 @@ defaults:
 
 environments:
   dev:
-    database: "dev_${CTX:database}"
-    schema: "dev_${ENV:USER}_${CTX:schema}"
+    database: "dev_${CTX:model.database}"
+    schema: "dev_${ENV:USER}_${CTX:model.schema}"
 """.strip()
             + "\n",
             "models/staging/orders.sql": """
 MODEL (
-  alias: "${schema_prefix}_orders",
-  config: {
+  alias: "${CTX:model.name}_${CTX:run.environment}",
+  config:
     cluster_by: ["${schema_prefix}_day"]
-  },
+    run_label: "${CTX:run.id}"
+    logical_alias: "${CTX:model.alias}"
+    target_table: "${CTX:target.table}"
+    target_schema: "${CTX:target.schema}"
+    target_database: "${CTX:target.database}"
+    target_qualified: "${CTX:target.qualified}"
 );
 
 select 1
@@ -506,6 +522,7 @@ select 1
         },
         selected_environment=None,
         cli_vars=None,
+        run_id="run_123",
         expected_model_schema_names=(None,),
         expected_model_config_values=(
             {
@@ -513,8 +530,16 @@ select 1
                 "schema": "dev_kevin_marts",
                 "query_change_backfill": "bounded(30d)",
                 "row_diff_exclude_columns": ("analytics_kevin_loaded_at",),
-                "alias": "analytics_kevin_orders",
-                "config": {"cluster_by": ["analytics_kevin_day"]},
+                "alias": "orders_dev",
+                "config": {
+                    "cluster_by": ["analytics_kevin_day"],
+                    "run_label": "run_123",
+                    "logical_alias": "orders_dev",
+                    "target_table": "orders_dev",
+                    "target_schema": "dev_kevin_marts",
+                    "target_database": "dev_analytics_kevin",
+                    "target_qualified": "dev_analytics_kevin.dev_kevin_marts.orders_dev",
+                },
             },
         ),
         expected_model_path_defaults=(None,),
@@ -563,6 +588,7 @@ environments:
         },
         selected_environment=None,
         cli_vars=None,
+        run_id=None,
         expected_model_schema_names=(None,),
         expected_model_config_values=(
             {
@@ -581,6 +607,21 @@ environments:
             "stage_one": "analytics_team",
             "stage_two": "analytics_team_prod",
         },
+    ),
+    BuildCompileInputsTestCase(
+        description="generates clickstate style run ids when none are provided",
+        repo_files=base_repo_files() | {"models/staging/orders.sql": "MODEL ();\n\nselect 1\n"},
+        selected_environment=None,
+        cli_vars=None,
+        run_id=None,
+        expected_model_schema_names=(None,),
+        expected_model_config_values=({},),
+        expected_model_path_defaults=(None,),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_effective_environment_name=None,
+        expected_effective_connection={},
+        expected_effective_vars={},
     ),
 ]
 
@@ -607,6 +648,7 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
         discovered_inputs,
         selected_environment=test_case.selected_environment,
         cli_vars=test_case.cli_vars,
+        run_id=test_case.run_id,
     )
 
     assert (
@@ -639,6 +681,11 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
     )
     assert compile_inputs.effective_connection == test_case.expected_effective_connection
     assert compile_inputs.effective_vars == test_case.expected_effective_vars
+    assert (
+        compile_inputs.run_id == test_case.run_id
+        if test_case.run_id is not None
+        else re.fullmatch(r"\d{8}T\d{6}Z_[0-9a-f]{6}", compile_inputs.run_id) is not None
+    )
 
 
 COMPILE_ERROR_TEST_CASES: list[BuildCompileInputsErrorTestCase] = [
@@ -656,6 +703,7 @@ models:
             + "\n",
         },
         selected_environment=None,
+        run_id=None,
         expected_error_fragment="does not match any discovered model file in that directory scope",
     ),
     BuildCompileInputsErrorTestCase(
@@ -665,12 +713,14 @@ models:
             "seeds/extra_seed.csv": "country_code\nUS\n",
         },
         selected_environment=None,
+        run_id=None,
         expected_error_fragment="has no matching seed declaration in schema.yml",
     ),
     BuildCompileInputsErrorTestCase(
         description="raises when the selected environment does not exist",
         repo_files=base_repo_files() | {"models/staging/orders.sql": "MODEL ();\n\nselect 1\n"},
         selected_environment="missing",
+        run_id=None,
         expected_error_fragment="Unknown environment 'missing'",
     ),
     BuildCompileInputsErrorTestCase(
@@ -684,6 +734,7 @@ environment: missing
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
         selected_environment=None,
+        run_id=None,
         expected_error_fragment="Unknown environment 'missing'",
     ),
     BuildCompileInputsErrorTestCase(
@@ -699,6 +750,7 @@ default_environment: missing
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
         selected_environment=None,
+        run_id=None,
         expected_error_fragment="Unknown environment 'missing'",
     ),
     BuildCompileInputsErrorTestCase(
@@ -716,6 +768,7 @@ vars:
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
         selected_environment=None,
+        run_id=None,
         expected_error_fragment="effective vars references unknown variable 'missing'",
     ),
     BuildCompileInputsErrorTestCase(
@@ -733,12 +786,13 @@ connection:
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
         selected_environment=None,
+        run_id=None,
         expected_error_fragment=(
             "effective connection references missing ENV variable 'SQLBUILD_DB_PATH'"
         ),
     ),
     BuildCompileInputsErrorTestCase(
-        description="raises when model config uses disallowed ctx templates",
+        description="raises when model config uses unknown ctx keys",
         repo_files=base_repo_files()
         | {
             "sqlbuild_project.yml": """
@@ -748,7 +802,7 @@ adapter: duckdb
             + "\n",
             "models/staging/orders.sql": """
 MODEL (
-  schema: "${CTX:schema}",
+  schema: "${CTX:this}",
 );
 
 select 1
@@ -756,7 +810,8 @@ select 1
             + "\n",
         },
         selected_environment=None,
-        expected_error_fragment="model config does not allow CTX templates",
+        run_id=None,
+        expected_error_fragment="model config references unknown CTX key 'this'",
     ),
     BuildCompileInputsErrorTestCase(
         description="raises when environment override references an unknown ctx key",
@@ -772,13 +827,14 @@ defaults:
 
 environments:
   dev:
-    schema: "dev_${CTX:this}"
+    schema: "dev_${CTX:target.missing}"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
         selected_environment=None,
-        expected_error_fragment="environment schema references unknown CTX key 'this'",
+        run_id=None,
+        expected_error_fragment="environment schema references unknown CTX key 'target.missing'",
     ),
     BuildCompileInputsErrorTestCase(
         description="raises when environment database override references unavailable ctx value",
@@ -791,14 +847,15 @@ default_environment: dev
 
 environments:
   dev:
-    database: "dev_${CTX:database}"
+    database: "dev_${CTX:model.database}"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
         selected_environment=None,
+        run_id=None,
         expected_error_fragment=(
-            "environment database references CTX key 'database' but no value is available"
+            "environment database references CTX key 'model.database' but no value is available"
         ),
     ),
     BuildCompileInputsErrorTestCase(
@@ -817,6 +874,7 @@ vars:
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
         selected_environment=None,
+        run_id=None,
         expected_error_fragment=(
             "effective vars contain a cyclic reference: first -> second -> first"
         ),
@@ -839,6 +897,7 @@ defaults:
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
         selected_environment=None,
+        run_id=None,
         expected_error_fragment="model config references unsupported template namespace 'SQLBUILD'",
     ),
     BuildCompileInputsErrorTestCase(
@@ -856,6 +915,7 @@ connection:
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
         selected_environment=None,
+        run_id=None,
         expected_error_fragment="effective connection does not allow CTX templates",
     ),
 ]
@@ -884,4 +944,5 @@ def test_given_attachment_conflicts_when_building_compile_inputs_then_it_raises_
         build_compile_inputs(
             discovered_inputs,
             selected_environment=test_case.selected_environment,
+            run_id=test_case.run_id,
         )

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
+from uuid import uuid4
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.helpers.templating import (
@@ -38,6 +40,8 @@ def build_model_inputs(
     *,
     effective_vars: dict[str, str],
     environment_config: EnvironmentConfig | None,
+    effective_environment_name: str | None,
+    run_id: str,
 ) -> tuple[CompileModelInput, ...]:
     """Attach schema metadata to discovered model files."""
 
@@ -55,6 +59,9 @@ def build_model_inputs(
             model_header_values=model_file.header_values,
             effective_vars=effective_vars,
             environment_config=environment_config,
+            model_name=model_file.file_path.stem,
+            effective_environment_name=effective_environment_name,
+            run_id=run_id,
         )
         schema_match: tuple[SchemaModelEntry, DiscoveredSchemaFile] | None = (
             find_schema_model_match(
@@ -179,7 +186,8 @@ def build_effective_connection(
             context_values={},
             context_label="effective connection",
             allow_context=False,
-            allowed_context_keys=tuple(),
+            preserve_context_tokens=False,
+            preserve_unknown_context=False,
         ),
     )
 
@@ -209,6 +217,9 @@ def build_model_config(
     model_header_values: dict[str, object],
     effective_vars: dict[str, str],
     environment_config: EnvironmentConfig | None,
+    model_name: str,
+    effective_environment_name: str | None,
+    run_id: str,
 ) -> CompileModelConfig:
     """Build the pre-semantic effective model config layers."""
 
@@ -224,15 +235,120 @@ def build_model_config(
             context_values={},
             context_label="model config",
             allow_context=False,
-            allowed_context_keys=tuple(),
+            preserve_context_tokens=True,
+            preserve_unknown_context=False,
+        ),
+    )
+    model_context_values: dict[str, str | None] = build_model_context_values(
+        values=expanded_values,
+        model_name=model_name,
+        effective_environment_name=effective_environment_name,
+        run_id=run_id,
+        include_target_values=False,
+    )
+    expanded_values = cast(
+        dict[str, object],
+        expand_template_data(
+            expanded_values,
+            variables={},
+            context_values=model_context_values,
+            context_label="model config",
+            allow_context=True,
+            preserve_context_tokens=False,
+            preserve_unknown_context=True,
+        ),
+    )
+    expanded_values = cast(
+        dict[str, object],
+        expand_template_data(
+            expanded_values,
+            variables={},
+            context_values=build_model_context_values(
+                values=expanded_values,
+                model_name=model_name,
+                effective_environment_name=effective_environment_name,
+                run_id=run_id,
+                include_target_values=False,
+            ),
+            context_label="model config",
+            allow_context=True,
+            preserve_context_tokens=False,
+            preserve_unknown_context=True,
         ),
     )
     apply_environment_database_schema_overrides(
         values=expanded_values,
         effective_vars=effective_vars,
         environment_config=environment_config,
+        model_context_values=build_model_context_values(
+            values=expanded_values,
+            model_name=model_name,
+            effective_environment_name=effective_environment_name,
+            run_id=run_id,
+            include_target_values=False,
+        ),
+    )
+    expanded_values = cast(
+        dict[str, object],
+        expand_template_data(
+            expanded_values,
+            variables={},
+            context_values=build_model_context_values(
+                values=expanded_values,
+                model_name=model_name,
+                effective_environment_name=effective_environment_name,
+                run_id=run_id,
+                include_target_values=True,
+            ),
+            context_label="model config",
+            allow_context=True,
+            preserve_context_tokens=False,
+            preserve_unknown_context=False,
+        ),
     )
     return CompileModelConfig(values=expanded_values, matched_path_default=matched_path_default)
+
+
+def build_model_context_values(
+    *,
+    values: dict[str, object],
+    model_name: str,
+    effective_environment_name: str | None,
+    run_id: str,
+    include_target_values: bool,
+) -> dict[str, str | None]:
+    """Build the currently available model-scoped CTX values."""
+
+    raw_database: object | None = values.get("database")
+    raw_schema: object | None = values.get("schema")
+    raw_alias: object | None = values.get("alias")
+    logical_database: str | None = None if not isinstance(raw_database, str) else raw_database
+    logical_schema: str | None = None if not isinstance(raw_schema, str) else raw_schema
+    logical_alias: str = model_name if not isinstance(raw_alias, str) else raw_alias
+    context_values: dict[str, str | None] = {
+        "run.id": run_id,
+        "run.environment": effective_environment_name,
+        "model.name": model_name,
+        "model.database": logical_database,
+        "model.schema": logical_schema,
+        "model.alias": logical_alias,
+    }
+    if not include_target_values:
+        return context_values
+
+    target_database: str | None = logical_database
+    target_schema: str | None = logical_schema
+    target_table: str = logical_alias
+    target_qualified: str | None = None
+    if target_database is not None and target_schema is not None:
+        target_qualified = f"{target_database}.{target_schema}.{target_table}"
+    elif target_schema is not None:
+        target_qualified = f"{target_schema}.{target_table}"
+    context_values["target.database"] = target_database
+    context_values["target.schema"] = target_schema
+    context_values["target.table"] = target_table
+    context_values["target.qualified"] = target_qualified
+    return context_values
 
 
 def apply_environment_database_schema_overrides(
@@ -240,39 +356,43 @@ def apply_environment_database_schema_overrides(
     values: dict[str, object],
     effective_vars: dict[str, str],
     environment_config: EnvironmentConfig | None,
+    model_context_values: dict[str, str | None],
 ) -> None:
     """Apply environment database/schema overrides using the logical config as CTX."""
 
     if environment_config is None:
         return
 
-    raw_database: object | None = values.get("database")
-    raw_schema: object | None = values.get("schema")
-    logical_database: str | None = None if not isinstance(raw_database, str) else raw_database
-    logical_schema: str | None = None if not isinstance(raw_schema, str) else raw_schema
-    context_values: dict[str, str | None] = {
-        "database": logical_database,
-        "schema": logical_schema,
-    }
-
     if environment_config.database is not None and environment_config.database != "preserve":
         values["database"] = expand_template_data(
             environment_config.database,
             variables=effective_vars,
-            context_values=context_values,
+            context_values=model_context_values,
             context_label="environment database",
             allow_context=True,
-            allowed_context_keys=("database", "schema"),
+            preserve_context_tokens=False,
+            preserve_unknown_context=False,
         )
     if environment_config.schema is not None and environment_config.schema != "preserve":
         values["schema"] = expand_template_data(
             environment_config.schema,
             variables=effective_vars,
-            context_values=context_values,
+            context_values=model_context_values,
             context_label="environment schema",
             allow_context=True,
-            allowed_context_keys=("database", "schema"),
+            preserve_context_tokens=False,
+            preserve_unknown_context=False,
         )
+
+
+def resolve_run_id(*, selected_run_id: str | None) -> str:
+    """Resolve a stable compile invocation id."""
+
+    if selected_run_id is not None:
+        return selected_run_id
+    timestamp_prefix: str = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    unique_suffix: str = uuid4().hex[:6]
+    return f"{timestamp_prefix}_{unique_suffix}"
 
 
 def find_matching_path_default(

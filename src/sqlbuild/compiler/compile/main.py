@@ -9,6 +9,7 @@ from sqlbuild.compiler.compile.helpers.attachment import (
     build_seed_inputs,
     build_source_inputs,
     resolve_environment_name,
+    resolve_run_id,
 )
 from sqlbuild.compiler.compile.models import (
     CompileModelInput,
@@ -25,6 +26,7 @@ def build_compile_inputs(
     *,
     selected_environment: str | None = None,
     cli_vars: dict[str, str] | None = None,
+    run_id: str | None = None,
 ) -> CompileProjectInputs:
     """Attach discovered metadata into the first compile input snapshot."""
 
@@ -45,11 +47,14 @@ def build_compile_inputs(
         environment_config=effective_environment,
         cli_vars={} if cli_vars is None else cli_vars,
     )
+    resolved_run_id: str = resolve_run_id(selected_run_id=run_id)
 
     model_inputs: tuple[CompileModelInput, ...] = build_model_inputs(
         discovered_inputs,
         effective_vars=effective_vars,
         environment_config=effective_environment,
+        effective_environment_name=effective_environment_name,
+        run_id=resolved_run_id,
     )
     seed_inputs: tuple[CompileSeedInput, ...] = build_seed_inputs(discovered_inputs)
     source_inputs: tuple[CompileSourceInput, ...] = build_source_inputs(discovered_inputs)
@@ -57,6 +62,7 @@ def build_compile_inputs(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
         discovered_inputs=discovered_inputs,
+        run_id=resolved_run_id,
         effective_environment_name=effective_environment_name,
         effective_environment=effective_environment,
         effective_connection=build_effective_connection(

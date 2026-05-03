@@ -33,7 +33,8 @@ def expand_effective_vars(raw_values: dict[str, str]) -> dict[str, str]:
             context_values={},
             context_label="effective vars",
             allow_context=False,
-            allowed_context_keys=tuple(),
+            preserve_context_tokens=False,
+            preserve_unknown_context=False,
         )
         resolving_keys.pop()
         resolved_values[key] = resolved_value
@@ -52,7 +53,8 @@ def expand_template_data(
     context_values: dict[str, str | None],
     context_label: str,
     allow_context: bool,
-    allowed_context_keys: tuple[str, ...],
+    preserve_context_tokens: bool,
+    preserve_unknown_context: bool,
 ) -> object:
     """Recursively expand template strings inside supported Python container values."""
 
@@ -68,7 +70,8 @@ def expand_template_data(
             context_values=context_values,
             context_label=context_label,
             allow_context=allow_context,
-            allowed_context_keys=allowed_context_keys,
+            preserve_context_tokens=preserve_context_tokens,
+            preserve_unknown_context=preserve_unknown_context,
         )
     if isinstance(value, dict):
         return {
@@ -78,7 +81,8 @@ def expand_template_data(
                 context_values=context_values,
                 context_label=context_label,
                 allow_context=allow_context,
-                allowed_context_keys=allowed_context_keys,
+                preserve_context_tokens=preserve_context_tokens,
+                preserve_unknown_context=preserve_unknown_context,
             )
             for key, item_value in value.items()
         }
@@ -90,7 +94,8 @@ def expand_template_data(
                 context_values=context_values,
                 context_label=context_label,
                 allow_context=allow_context,
-                allowed_context_keys=allowed_context_keys,
+                preserve_context_tokens=preserve_context_tokens,
+                preserve_unknown_context=preserve_unknown_context,
             )
             for item in value
         ]
@@ -102,7 +107,8 @@ def expand_template_data(
                 context_values=context_values,
                 context_label=context_label,
                 allow_context=allow_context,
-                allowed_context_keys=allowed_context_keys,
+                preserve_context_tokens=preserve_context_tokens,
+                preserve_unknown_context=preserve_unknown_context,
             )
             for item in value
         )
@@ -117,7 +123,8 @@ def expand_template_string(
     context_values: dict[str, str | None],
     context_label: str,
     allow_context: bool,
-    allowed_context_keys: tuple[str, ...],
+    preserve_context_tokens: bool,
+    preserve_unknown_context: bool,
 ) -> str:
     """Expand `${...}` templates within a single string value."""
 
@@ -132,12 +139,15 @@ def expand_template_string(
         if namespace == "ENV":
             return _lookup_environment_variable(name=name, context_label=context_label)
         if namespace == "CTX":
+            if not allow_context:
+                if preserve_context_tokens:
+                    return match.group(0)
+                raise CompileInputError(f"{context_label} does not allow CTX templates")
             return _lookup_context_value(
                 name=name,
                 context_values=context_values,
                 context_label=context_label,
-                allow_context=allow_context,
-                allowed_context_keys=allowed_context_keys,
+                preserve_unknown_context=preserve_unknown_context,
             )
         raise CompileInputError(
             f"{context_label} references unsupported template namespace '{namespace}'"
@@ -163,12 +173,11 @@ def _lookup_context_value(
     name: str,
     context_values: Mapping[str, str | None],
     context_label: str,
-    allow_context: bool,
-    allowed_context_keys: tuple[str, ...],
+    preserve_unknown_context: bool,
 ) -> str:
-    if not allow_context:
-        raise CompileInputError(f"{context_label} does not allow CTX templates")
-    if name not in allowed_context_keys:
+    if name not in context_values:
+        if preserve_unknown_context:
+            return f"${{CTX:{name}}}"
         raise CompileInputError(f"{context_label} references unknown CTX key '{name}'")
     context_value: str | None = context_values.get(name)
     if context_value is None:

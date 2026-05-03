@@ -7,6 +7,7 @@ class BuildCompileInputsTestCase:
     repo_files: dict[str, str]
     selected_environment: str | None
     cli_vars: dict[str, str] | None
+    run_id: str | None
     expected_model_schema_names: tuple[str | None, ...]
     expected_model_config_values: tuple[dict[str, object], ...]
     expected_model_path_defaults: tuple[str | None, ...]
@@ -23,5 +24,6 @@ class BuildCompileInputsErrorTestCase:
     description: str
     repo_files: dict[str, str]
     selected_environment: str | None
+    run_id: str | None
     expected_error_fragment: str
     environment_variables: dict[str, str] = field(default_factory=dict)
