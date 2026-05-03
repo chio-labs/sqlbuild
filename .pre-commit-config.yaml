@@ -1,0 +1,60 @@
+default_stages: [pre-commit]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: local
+    hooks:
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format
+        language: system
+        types_or: [python, pyi]
+
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --fix
+        language: system
+        types_or: [python, pyi]
+
+      - id: check-test-conventions
+        name: check test conventions
+        entry: uv run check-test-conventions tests
+        language: system
+        pass_filenames: false
+
+      - id: check-structure-conventions
+        name: check structure conventions
+        entry: uv run check-structure-conventions src/sqlbuild scripts
+        language: system
+        pass_filenames: false
+
+      - id: check-type-annotation-conventions
+        name: check type annotation conventions
+        entry: uv run check-type-annotation-conventions src tests
+        language: system
+        pass_filenames: false
+
+      - id: ty-check
+        name: ty check
+        entry: bash -c 'uv run ty check src tests'
+        language: system
+        pass_filenames: false
+
+      - id: pytest
+        name: pytest
+        entry: bash -c 'uv run pytest tests/unit -vv'
+        language: system
+        pass_filenames: false
+
+      - id: conventional-commit
+        name: conventional commit message
+        entry: uv run cz check --commit-msg-file
+        language: system
+        stages: [commit-msg]
