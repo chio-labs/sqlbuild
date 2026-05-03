@@ -1725,6 +1725,30 @@ connection:
         expected_error_fragment="SQL syntax error in model 'broken'",
     ),
     BuildCompileInputsErrorTestCase(
+        description="raises when pre_hook sql has invalid syntax",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/broken.sql": (
+                'MODEL (pre_hook: "THIS IS NOT VALID SQL");\n\nSELECT 1 AS id\n'
+            ),
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="SQL syntax error in pre_hook for model 'broken'",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when post_hook sql has invalid syntax",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/broken.sql": (
+                'MODEL (post_hook: "THIS IS NOT VALID SQL");\n\nSELECT 1 AS id\n'
+            ),
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="SQL syntax error in post_hook for model 'broken'",
+    ),
+    BuildCompileInputsErrorTestCase(
         description="raises when model header tags is a string instead of list",
         repo_files=base_repo_files()
         | {

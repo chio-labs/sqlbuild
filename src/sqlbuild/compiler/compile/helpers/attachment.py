@@ -31,7 +31,10 @@ from sqlbuild.compiler.compile.helpers.sql_vars import (
     substitute_sql_vars,
     validate_var_macro_collision,
 )
-from sqlbuild.compiler.compile.helpers.sqlglot_validation import validate_sql_syntax
+from sqlbuild.compiler.compile.helpers.sqlglot_validation import (
+    validate_hook_sql_syntax,
+    validate_sql_syntax,
+)
 from sqlbuild.compiler.compile.helpers.templating import (
     expand_effective_vars,
     expand_template_data,
@@ -178,6 +181,19 @@ def build_model_inputs(
             ),
             matched_path_default=effective_config.matched_path_default,
         )
+        if not no_sql_validation and _is_sql_validation_enabled(
+            project_setting=discovered_inputs.project_config.settings.sql_validation,
+            model_config=effective_config,
+        ):
+            hook_name: str
+            for hook_name in ("pre_hook", "post_hook"):
+                validate_hook_sql_syntax(
+                    value=expanded_config.values.get(hook_name),
+                    hook_name=hook_name,
+                    model_name=model_file.file_path.stem,
+                    file_path=model_file.file_path,
+                    placeholders=sql_validation_placeholders,
+                )
         schema_match: tuple[SchemaModelEntry, DiscoveredSchemaFile] | None = (
             find_schema_model_match(
                 model_file=model_file,
