@@ -19,3 +19,9 @@ class AuditAttachmentKind(StrEnum):
     SOURCE = "source"
     MODEL = "model"
     END = "end"
+
+
+class AuditOutcome(StrEnum):
+    PASS = "pass"
+    WARN = "warn"
+    ERROR = "error"
