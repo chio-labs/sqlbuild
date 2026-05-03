@@ -72,6 +72,7 @@ MODEL (
   incremental_strategy: delete_insert,
   cursor: event_time,
   cursor_type: timestamp,
+  cursor_grain: second,
   incremental_mode: microbatch,
   batch_size: 30m,
 );
@@ -117,6 +118,7 @@ sources:
                 "incremental_strategy": "delete_insert",
                 "cursor": "event_time",
                 "cursor_type": "timestamp",
+                "cursor_grain": "second",
                 "incremental_mode": "microbatch",
                 "batch_size": "30m",
             },
@@ -487,6 +489,7 @@ defaults:
                 'MODEL (\n  unique_key: "order_id",'
                 "\n  cursor: event_time,"
                 "\n  cursor_type: timestamp,"
+                "\n  cursor_grain: second,"
                 "\n);\n\nselect 1\n"
             ),
         },
@@ -504,6 +507,7 @@ defaults:
                 "unique_key": "order_id",
                 "cursor": "event_time",
                 "cursor_type": "timestamp",
+                "cursor_grain": "second",
                 "lookback": "1d",
                 "batch_size": "1h",
                 "query_change_backfill": "bounded(30d)",

@@ -89,6 +89,7 @@ def build_execution_plan(
         upstream_deps
     )
     all_keys: dict[str, CompiledObjectKey] = _build_all_keys(project)
+    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
     tag_index: dict[str, frozenset[CompiledObjectKey]] = build_tag_index(project)
     path_idx: dict[CompiledObjectKey, str] = build_path_index(project)
 
@@ -181,6 +182,7 @@ def build_execution_plan(
             snapshot=snapshot,
             adapter=adapter,
             model_targets=model_targets,
+            models_by_name=models_by_name,
             seed_targets=seed_targets,
             source_map=source_map,
             source_warehouse_columns=source_warehouse_columns,
@@ -217,6 +219,7 @@ def build_execution_plan(
                 incremental_mode=entry.incremental_mode,
                 cursor_column=entry.cursor_column,
                 cursor_type=entry.cursor_type,
+                cursor_grain=entry.cursor_grain,
                 cursor_bounds=entry.cursor_bounds,
                 type_enforcement=entry.type_enforcement,
                 pre_hook=entry.pre_hook,

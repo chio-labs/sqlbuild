@@ -90,6 +90,8 @@ def execute_incremental_entry(
                 connection=connection,
                 target_relation=target_qualified,
                 cursor_column=entry.cursor_column,
+                cursor_type=entry.cursor_type,
+                cursor_grain=entry.cursor_grain,
                 cursor_input_relations=entry.cursor_input_relations,
             )
             if runtime_cursor_bounds is None:

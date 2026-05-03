@@ -20,6 +20,8 @@ class IncrementalSuccessTestCase:
     unique_key: tuple[str, ...] = field(default_factory=tuple)
     on_schema_change: OnSchemaChange | None = None
     cursor_column: str | None = None
+    cursor_type: str | None = None
+    cursor_grain: str | None = None
     cursor_start: str | None = None
     cursor_end: str | None = None
     cursor_input_relations: tuple[tuple[str, str], ...] = field(default_factory=tuple)
@@ -55,6 +57,8 @@ class IncrementalFailureTestCase:
     unique_key: tuple[str, ...] = field(default_factory=tuple)
     on_schema_change: OnSchemaChange | None = None
     cursor_column: str | None = None
+    cursor_type: str | None = None
+    cursor_grain: str | None = None
     cursor_start: str | None = None
     cursor_end: str | None = None
     cursor_input_relations: tuple[tuple[str, str], ...] = field(default_factory=tuple)

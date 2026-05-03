@@ -106,7 +106,7 @@ FAILURE_TEST_CASES: list[ViewFailureTestCase] = [
         audit_sql='SELECT id FROM __ref("dim_view") WHERE id IS NULL',
         audit_severity="error",
         expected_failed_phase=ExecutionPhase.AUDIT,
-        expected_error_fragment="view was already created",
+        expected_error_fragment="final audit for 'dim_view' failed after view creation",
         expected_promoted_relation="test_schema.dim_customers",
         expected_audit_count=1,
     ),

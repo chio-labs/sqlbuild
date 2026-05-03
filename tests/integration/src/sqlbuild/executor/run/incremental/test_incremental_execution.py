@@ -44,6 +44,7 @@ SUCCESS_TEST_CASES: list[IncrementalSuccessTestCase] = [
         target_name="order_status_index",
         incremental_strategy="delete_insert",
         cursor_column="order_id",
+        cursor_type="integer",
         cursor_input_relations=(("main.fact_orders", "order_id"),),
         cursor_inputs_model_backed=True,
         expected_row_count=2,

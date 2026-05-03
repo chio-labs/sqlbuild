@@ -22,6 +22,7 @@ class MicrobatchSuccessTestCase:
     microbatch_end: str
     expected_row_count: int
     expected_status: ExecutionStatus = ExecutionStatus.SUCCESS
+    cursor_grain: str | None = None
     use_plan_microbatch_range: bool = True
     cursor_input_relations: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     cursor_inputs_model_backed: bool = False
@@ -60,6 +61,7 @@ class MicrobatchFailureTestCase:
     microbatch_start: str
     microbatch_end: str
     expected_failed_phase: ExecutionPhase
+    cursor_grain: str | None = None
     use_plan_microbatch_range: bool = True
     cursor_input_relations: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     cursor_inputs_model_backed: bool = False

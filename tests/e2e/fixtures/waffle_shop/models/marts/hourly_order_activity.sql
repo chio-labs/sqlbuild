@@ -3,6 +3,7 @@ MODEL (
   incremental_strategy: delete_insert,
   cursor: "activity_hour",
   cursor_type: timestamp,
+  cursor_grain: hour,
   cursor_inputs: {
     fact_orders: "ordered_at"
   },

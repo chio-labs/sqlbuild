@@ -21,11 +21,17 @@ from sqlbuild.compiler.planner.models import (
     CursorInputRelation,
     ModelPlanEntry,
 )
-from sqlbuild.compiler.planner.types import CursorType, IncrementalStrategy, OnSchemaChange
+from sqlbuild.compiler.planner.types import (
+    CursorGrain,
+    CursorType,
+    IncrementalStrategy,
+    OnSchemaChange,
+)
 from sqlbuild.executor.auditing.main import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.helpers.cursor_bounds import (
     has_model_backed_cursor_inputs,
+    resolve_effective_timestamp_grain,
     resolve_runtime_cursor_bounds,
 )
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
@@ -43,7 +49,9 @@ from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context, log
 from sqlbuild.spec.models.source import SourceEntry
 
 _DEFAULT_ON_SCHEMA_CHANGE: OnSchemaChange = OnSchemaChange.APPEND_NEW_COLUMNS
-_DURATION_PATTERN_STR: str = r"^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$"
+_DURATION_PATTERN_STR: str = (
+    r"^(?:(\d+)y)?(?:(\d+)mo)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$"
+)
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 
 
@@ -114,6 +122,8 @@ def execute_microbatch_entry(
                 connection=connection,
                 target_relation=target_qualified,
                 cursor_column=entry.cursor_column,
+                cursor_type=entry.cursor_type,
+                cursor_grain=entry.cursor_grain,
                 cursor_input_relations=entry.cursor_input_relations,
             )
         except Exception as exc:
@@ -176,10 +186,23 @@ def execute_microbatch_entry(
             statement_recorder=statement_recorder,
         )
 
+    effective_batch_size: str = batch_size
+    if runtime_owned_cursor_bounds:
+        effective_timestamp_grain: str | None = resolve_effective_timestamp_grain(
+            cursor_type=cursor_type,
+            downstream_grain=entry.cursor_grain,
+            cursor_input_relations=entry.cursor_input_relations,
+        )
+        if effective_timestamp_grain is not None:
+            effective_batch_size = _coarsen_timestamp_batch_size(
+                batch_size=batch_size,
+                effective_grain=effective_timestamp_grain,
+            )
+
     batches: tuple[BatchWindow, ...] = compute_batch_windows(
         start=microbatch_range.start,
         end=microbatch_range.end,
-        batch_size=batch_size,
+        batch_size=effective_batch_size,
         cursor_type=cursor_type,
     )
 
@@ -608,12 +631,13 @@ def _compute_timestamp_batches(
     match: re.Match[str] | None = pattern.match(batch_size)
     if match is None:
         return ()
-    days: int = int(match.group(1) or 0)
-    hours: int = int(match.group(2) or 0)
-    minutes: int = int(match.group(3) or 0)
-    seconds: int = int(match.group(4) or 0)
-    delta: timedelta = timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
-    if delta.total_seconds() == 0:
+    years: int = int(match.group(1) or 0)
+    months: int = int(match.group(2) or 0)
+    days: int = int(match.group(3) or 0)
+    hours: int = int(match.group(4) or 0)
+    minutes: int = int(match.group(5) or 0)
+    seconds: int = int(match.group(6) or 0)
+    if years == months == days == hours == minutes == seconds == 0:
         return ()
 
     try:
@@ -629,7 +653,16 @@ def _compute_timestamp_batches(
     index: int = 0
     current: datetime = start_dt
     while current < end_dt:
-        batch_end: datetime = min(current + delta, end_dt)
+        batch_end_candidate: datetime = _add_timestamp_interval(
+            current=current,
+            years=years,
+            months=months,
+            days=days,
+            hours=hours,
+            minutes=minutes,
+            seconds=seconds,
+        )
+        batch_end: datetime = min(batch_end_candidate, end_dt)
         windows.append(
             BatchWindow(
                 start=current.isoformat(),
@@ -677,3 +710,60 @@ def _compute_integer_batches(
         index += 1
 
     return tuple(windows)
+
+
+def _coarsen_timestamp_batch_size(*, batch_size: str, effective_grain: str) -> str:
+    grain_sizes: dict[str, tuple[int, str]] = {
+        CursorGrain.SECOND: (0, "1s"),
+        CursorGrain.MINUTE: (1, "1m"),
+        CursorGrain.HOUR: (2, "1h"),
+        CursorGrain.DAY: (3, "1d"),
+        CursorGrain.MONTH: (4, "1mo"),
+        CursorGrain.YEAR: (5, "1y"),
+    }
+    parsed_order: int | None = _timestamp_batch_size_order(batch_size)
+    if parsed_order is None:
+        return batch_size
+    effective_order: int = grain_sizes[effective_grain][0]
+    if parsed_order >= effective_order:
+        return batch_size
+    return grain_sizes[effective_grain][1]
+
+
+def _timestamp_batch_size_order(batch_size: str) -> int | None:
+    if batch_size.endswith("y") and not batch_size.endswith("dy"):
+        return 5
+    if batch_size.endswith("mo"):
+        return 4
+    if batch_size.endswith("d"):
+        return 3
+    if batch_size.endswith("h"):
+        return 2
+    if batch_size.endswith("m"):
+        return 1
+    if batch_size.endswith("s"):
+        return 0
+    return None
+
+
+def _add_timestamp_interval(
+    *,
+    current: datetime,
+    years: int,
+    months: int,
+    days: int,
+    hours: int,
+    minutes: int,
+    seconds: int,
+) -> datetime:
+    result: datetime = current
+    if years:
+        result = result.replace(year=result.year + years)
+    if months:
+        total_month: int = (result.month - 1) + months
+        year: int = result.year + (total_month // 12)
+        month: int = (total_month % 12) + 1
+        result = result.replace(year=year, month=month)
+    if days or hours or minutes or seconds:
+        result = result + timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
+    return result

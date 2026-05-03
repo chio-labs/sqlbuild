@@ -69,6 +69,7 @@ def plan_model(
     snapshot: WarehouseSnapshot,
     adapter: BaseAdapter,
     model_targets: dict[str, CompiledRelationTarget],
+    models_by_name: dict[str, CompiledModel],
     seed_targets: dict[str, CompiledRelationTarget],
     source_map: dict[str, SourceEntry],
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
@@ -139,9 +140,11 @@ def plan_model(
     post_hook: object = model.config.values.get("post_hook")
     cursor_column: str | None = _get_config_str(model, "cursor")
     cursor_type: str | None = _get_config_str(model, "cursor_type")
+    cursor_grain: str | None = _get_config_str(model, "cursor_grain")
     cursor_input_relations: tuple[CursorInputRelation, ...] = _build_cursor_input_relations(
         model=model,
         model_targets=model_targets,
+        models_by_name=models_by_name,
         seed_targets=seed_targets,
         source_map=source_map,
         cursor_column=cursor_column,
@@ -229,6 +232,7 @@ def plan_model(
         incremental_mode=incremental_mode,
         cursor_column=cursor_column,
         cursor_type=cursor_type,
+        cursor_grain=cursor_grain,
         cursor_bounds=cursor_bounds,
         cursor_input_relations=cursor_input_relations,
         batch_size=batch_size,
@@ -592,6 +596,7 @@ def _build_cursor_input_relations(
     *,
     model: CompiledModel,
     model_targets: dict[str, CompiledRelationTarget],
+    models_by_name: dict[str, CompiledModel],
     seed_targets: dict[str, CompiledRelationTarget],
     source_map: dict[str, SourceEntry],
     cursor_column: str | None,
@@ -620,6 +625,10 @@ def _build_cursor_input_relations(
                 CursorInputRelation(
                     relation=relation,
                     cursor_column=input_cursor_column,
+                    cursor_grain=_resolve_cursor_input_grain(
+                        ref=ref,
+                        models_by_name=models_by_name,
+                    ),
                     is_model_backed=(
                         ref.ref_kind == SqlReferenceKind.REF and ref.ref_name in model_targets
                     ),
@@ -669,6 +678,21 @@ def _resolve_cursor_input_relation(
         parts.append(table_name)
         return ".".join(parts)
     return None
+
+
+def _resolve_cursor_input_grain(
+    *,
+    ref: CompileSqlReference,
+    models_by_name: dict[str, CompiledModel],
+) -> str | None:
+    """Resolve timestamp grain metadata for a model-backed cursor input relation."""
+
+    if ref.ref_kind != SqlReferenceKind.REF:
+        return None
+    upstream_model: CompiledModel | None = models_by_name.get(ref.ref_name)
+    if upstream_model is None:
+        return None
+    return _get_config_str(upstream_model, "cursor_grain")
 
 
 def _get_cursor_inputs(model: CompiledModel, cursor_column: str) -> dict[str, str]:

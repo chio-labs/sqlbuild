@@ -3,6 +3,7 @@ MODEL (
   incremental_strategy: delete_insert,
   cursor: "activity_day",
   cursor_type: timestamp,
+  cursor_grain: day,
   cursor_inputs: {
     hourly_order_activity: "activity_hour"
   },

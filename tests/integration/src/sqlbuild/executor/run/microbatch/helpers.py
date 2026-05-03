@@ -96,6 +96,7 @@ def build_microbatch_plan_entry(
         incremental_mode=IncrementalMode.MICROBATCH,
         cursor_column=test_case.cursor_column,
         cursor_type=test_case.cursor_type,
+        cursor_grain=test_case.cursor_grain,
         cursor_bounds=CursorBounds(start=MICROBATCH_START_SENTINEL, end=MICROBATCH_END_SENTINEL),
         cursor_input_relations=cursor_input_relations,
         batch_size=test_case.batch_size,

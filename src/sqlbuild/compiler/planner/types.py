@@ -87,6 +87,15 @@ class CursorType(StrEnum):
     INTEGER = "integer"
 
 
+class CursorGrain(StrEnum):
+    SECOND = "second"
+    MINUTE = "minute"
+    HOUR = "hour"
+    DAY = "day"
+    MONTH = "month"
+    YEAR = "year"
+
+
 class MaterializationType(StrEnum):
     VIEW = "view"
     TABLE = "table"

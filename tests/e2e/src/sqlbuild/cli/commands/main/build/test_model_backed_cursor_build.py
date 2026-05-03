@@ -127,6 +127,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                       incremental_strategy: delete_insert,
                       cursor: "activity_hour",
                       cursor_type: timestamp,
+                      cursor_grain: hour,
                       cursor_inputs: {
                         fact_orders: "ordered_at"
                       },

@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileModelConfig
 from sqlbuild.compiler.planner.types import (
+    CursorGrain,
     CursorType,
     IncrementalMode,
     IncrementalStrategy,
@@ -13,6 +14,7 @@ from sqlbuild.compiler.planner.types import (
 
 _VALID_STRATEGIES: frozenset[str] = frozenset(s.value for s in IncrementalStrategy)
 _VALID_CURSOR_TYPES: frozenset[str] = frozenset(ct.value for ct in CursorType)
+_VALID_CURSOR_GRAINS: frozenset[str] = frozenset(cg.value for cg in CursorGrain)
 _VALID_INCREMENTAL_MODES: frozenset[str] = frozenset(m.value for m in IncrementalMode)
 _BUILTIN_MATERIALIZATION_TYPES: frozenset[str] = frozenset(
     (MaterializationType.VIEW, MaterializationType.TABLE, MaterializationType.INCREMENTAL)
@@ -26,6 +28,7 @@ _CUSTOM_MATERIALIZATION_DISALLOWED_KEYS: tuple[str, ...] = (
     "batch_size",
     "cursor",
     "cursor_type",
+    "cursor_grain",
     "cursor_inputs",
     "lookback",
     "query_change_backfill",
@@ -59,7 +62,7 @@ def validate_incremental_config(
     batch_size: object | None = config.values.get("batch_size")
     batch_concurrency: object | None = config.values.get("batch_concurrency")
     cursor_inputs: object | None = config.values.get("cursor_inputs")
-
+    cursor_grain: str | None = _str(config, "cursor_grain")
     if strategy is None:
         raise CompileInputError(
             f"model '{model_name}': incremental materialization requires incremental_strategy"
@@ -80,7 +83,20 @@ def validate_incremental_config(
             f"model '{model_name}': unknown cursor_type '{cursor_type}'; "
             f"valid values: {', '.join(sorted(_VALID_CURSOR_TYPES))}"
         )
-
+    if cursor_grain is not None and cursor_type != CursorType.TIMESTAMP:
+        raise CompileInputError(
+            f"model '{model_name}': cursor_grain is only valid with cursor_type=timestamp"
+        )
+    if cursor_grain is not None and cursor_grain not in _VALID_CURSOR_GRAINS:
+        raise CompileInputError(
+            f"model '{model_name}': unknown cursor_grain '{cursor_grain}'; "
+            f"valid values: {', '.join(sorted(_VALID_CURSOR_GRAINS))}"
+        )
+    if cursor is not None and cursor_type == CursorType.TIMESTAMP and cursor_grain is None:
+        raise CompileInputError(
+            f"model '{model_name}': cursor_type=timestamp requires cursor_grain "
+            f"(valid values: {', '.join(sorted(_VALID_CURSOR_GRAINS))})"
+        )
     if strategy == IncrementalStrategy.APPEND and cursor is not None:
         raise CompileInputError(f"model '{model_name}': cursor is not allowed with append strategy")
 
