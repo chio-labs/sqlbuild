@@ -38,3 +38,13 @@ class ResolveProjectConnectionConfigTestCase:
     description: str
     project_dir_name: str
     expected_connection: dict[str, object]
+    expected_warning_fragment: str = ""
+
+
+@dataclass(frozen=True)
+class ResolveConnectionConfigWarningTestCase:
+    description: str
+    raw_config: dict[str, object]
+    adapter_name: str
+    expected_connection: dict[str, object]
+    expected_warning: str

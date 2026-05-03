@@ -11,6 +11,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
+    QueryResult,
     RowDiffTolerance,
     RowDiffTolerances,
     StatementRecorder,
@@ -70,6 +71,31 @@ class SnowflakeAdapter(BaseAdapter):
 
         log_sql(logger=logging.getLogger("sqlbuild.adapter.snowflake"), sql=sql)
         return connection.execute(sql)
+
+    def query(self, connection: Any, sql: str, *, limit: int | None) -> QueryResult:
+        """Execute SQL and return normalized rows for ad hoc query output."""
+
+        cursor: Any = self.execute(connection, sql)
+        try:
+            description: Any | None = getattr(cursor, "description", None)
+            if description is None:
+                return QueryResult()
+            columns: tuple[str, ...] = tuple(str(column[0]) for column in description)
+            if limit is None:
+                return QueryResult(
+                    columns=columns,
+                    rows=tuple(tuple(row) for row in cursor.fetchall()),
+                )
+            fetched_rows: list[tuple[object, ...]] = [
+                tuple(row) for row in cursor.fetchmany(limit + 1)
+            ]
+            return QueryResult(
+                columns=columns,
+                rows=tuple(fetched_rows[:limit]),
+                truncated=len(fetched_rows) > limit,
+            )
+        finally:
+            cursor.close()
 
     def relation_exists(
         self,
