@@ -145,6 +145,32 @@ class SubstituteSqlVarsErrorTestCase:
 
 
 @dataclass(frozen=True)
+class ExpandTemplateDataTestCase:
+    description: str
+    value: object
+    variables: dict[str, str]
+    context_values: dict[str, str | None]
+    context_label: str
+    allow_context: bool
+    preserve_context_tokens: bool
+    preserve_unknown_context: bool
+    expected_value: object
+
+
+@dataclass(frozen=True)
+class ExpandTemplateDataErrorTestCase:
+    description: str
+    value: object
+    variables: dict[str, str]
+    context_values: dict[str, str | None]
+    context_label: str
+    allow_context: bool
+    preserve_context_tokens: bool
+    preserve_unknown_context: bool
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class VarMacroCollisionTestCase:
     description: str
     var_names: tuple[str, ...]

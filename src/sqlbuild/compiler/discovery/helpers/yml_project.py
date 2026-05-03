@@ -180,7 +180,7 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
         schema=_optional_str(payload=mapping, key="schema"),
         incremental_strategy=_optional_str(payload=mapping, key="incremental_strategy"),
         incremental_mode=_optional_str(payload=mapping, key="incremental_mode"),
-        append_cursor_inclusive=_optional_optional_bool(
+        append_cursor_inclusive=_optional_templated_bool(
             mapping=mapping,
             key="append_cursor_inclusive",
         ),
@@ -323,11 +323,11 @@ def _optional_bool(*, mapping: dict[str, object], key: str, default: bool) -> bo
     return value
 
 
-def _optional_optional_bool(*, mapping: dict[str, object], key: str) -> bool | None:
+def _optional_templated_bool(*, mapping: dict[str, object], key: str) -> object | None:
     value: object | None = mapping.get(key)
     if value is None:
         return None
-    if not isinstance(value, bool):
+    if not isinstance(value, bool | str):
         raise ProjectConfigError(f"Expected '{key}' to be a boolean when provided")
     return value
 

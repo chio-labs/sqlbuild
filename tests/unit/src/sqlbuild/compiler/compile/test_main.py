@@ -797,6 +797,62 @@ select 1
         expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
+        description="expands helper functions in config interpolation",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.yml": """
+name: demo
+adapter: duckdb
+
+defaults:
+  materialized: incremental
+  incremental_strategy: append
+  database: "${if(ENV:CI, 'ci_db', 'dev_db')}"
+  schema: "${coalesce(ENV:CUSTOM_SCHEMA, 'fallback_schema')}"
+  append_cursor_inclusive: "${if(eq(ENV:APPEND_INCLUSIVE, '0'), false, true)}"
+""".strip()
+            + "\n",
+            "models/staging/orders.sql": """
+MODEL (
+  cursor event_time,
+  cursor_type timestamp,
+  cursor_grain second,
+  alias '${if(eq(CTX:run.id, "run_123"), "orders_dev", "orders_prod")}',
+);
+
+select 1
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        cli_vars=None,
+        run_id="run_123",
+        expected_model_schema_names=(None,),
+        expected_model_config_values=(
+            {
+                "materialized": "incremental",
+                "incremental_strategy": "append",
+                "database": "ci_db",
+                "schema": "fallback_schema",
+                "append_cursor_inclusive": False,
+                "cursor": "event_time",
+                "cursor_type": "timestamp",
+                "cursor_grain": "second",
+                "alias": "orders_dev",
+            },
+        ),
+        expected_model_query_sqls=("select 1",),
+        expected_model_path_defaults=(None,),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_effective_environment_name=None,
+        expected_effective_connection={},
+        expected_effective_vars={},
+        environment_variables={"CI": "1", "APPEND_INCLUSIVE": "0"},
+        expected_model_references=((),),
+        expected_audit_references=(),
+    ),
+    BuildCompileInputsTestCase(
         description="supports multi hop var expansion and preserve environment overrides",
         repo_files=base_repo_files()
         | {
