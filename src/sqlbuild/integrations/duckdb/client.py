@@ -171,7 +171,8 @@ class DuckDbAdapter(BaseAdapter):
         connection.execute(f"DROP TABLE{exists_clause} {target}")
 
     def rename(self, connection: Any, *, source: str, target: str) -> None:
-        connection.execute(f"ALTER TABLE {source} RENAME TO {target}")
+        unqualified_target: str = target.rsplit(".", 1)[-1]
+        connection.execute(f"ALTER TABLE {source} RENAME TO {unqualified_target}")
 
     def swap(self, connection: Any, *, left: str, right: str) -> None:
         staging: str = f"{left}__swap_staging"

@@ -234,6 +234,12 @@ class BaseAdapter(StrictAdapter):
         """Return the SQL keyword for SELECT * EXCLUDE/EXCEPT syntax."""
         return "EXCLUDE"
 
+    def default_table_promotion_mode(self) -> str:
+        """Return staged as the generic default promotion mode."""
+        from sqlbuild.executor.shared.types import TablePromotionMode
+
+        return TablePromotionMode.STAGED
+
 
 def _build_schemas_filter(schemas: tuple[str, ...] | None) -> str:
     """Build an AND clause filtering to the given schemas."""

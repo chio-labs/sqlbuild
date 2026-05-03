@@ -38,3 +38,8 @@ class StrictAdapter(
     def star_exclude_keyword(self) -> str:
         """Return the SQL keyword for SELECT * EXCLUDE/EXCEPT syntax."""
         ...
+
+    @abstractmethod
+    def default_table_promotion_mode(self) -> str:
+        """Return the adapter default table promotion mode."""
+        ...
