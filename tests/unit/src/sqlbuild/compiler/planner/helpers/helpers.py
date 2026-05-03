@@ -20,9 +20,17 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSeedFile,
     DiscoveredSourceFile,
 )
-from sqlbuild.compiler.planner.models import WarehouseSnapshot
+from sqlbuild.compiler.planner.models import (
+    BackfillResult,
+    ChangeDetectionResult,
+    WarehouseSnapshot,
+)
 from sqlbuild.spec.models.schema import SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
+from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
+    BuildModelWarningsTestCase,
+    ResolveModelPlanActionTestCase,
+)
 
 
 def model_key(name: str) -> CompiledObjectKey:
@@ -134,6 +142,69 @@ def build_snapshot_from_relation_names(relation_names: tuple[str, ...]) -> Wareh
         for name in relation_names
     }
     return WarehouseSnapshot(existing_relations=existing_relations)
+
+
+def _resolve_dep_key(name: str, source_names: set[str], seed_names: set[str]) -> CompiledObjectKey:
+    """Resolve a dependency name to the correct key type."""
+
+    if name in source_names:
+        return source_key(name)
+    if name in seed_names:
+        return seed_key(name)
+    return model_key(name)
+
+
+def build_strategy_model(test_case: ResolveModelPlanActionTestCase) -> CompiledModel:
+    """Build a CompiledModel from an action resolution test case."""
+
+    config_values: dict[str, object] = {"materialized": test_case.materialized}
+    if test_case.incremental_strategy is not None:
+        config_values["incremental_strategy"] = test_case.incremental_strategy
+    return CompiledModel(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="test_model"),
+        deps=(),
+        name="test_model",
+        relative_path=Path("models/test_model.sql"),
+        query_sql="SELECT 1",
+        config=CompileModelConfig(values=config_values),
+        target=CompiledRelationTarget(
+            database=None,
+            schema="staging",
+            name="test_model",
+            qualified_name="staging.test_model",
+        ),
+    )
+
+
+def build_strategy_change_result(
+    test_case: ResolveModelPlanActionTestCase,
+) -> ChangeDetectionResult:
+    """Build a ChangeDetectionResult from an action resolution test case."""
+
+    return ChangeDetectionResult(
+        model_name="test_model",
+        change_kind=test_case.change_kind,
+        query_changed=test_case.query_changed,
+        schema_findings=test_case.schema_findings,
+        backfill=BackfillResult(
+            action=test_case.backfill_action,
+            duration=test_case.backfill_duration,
+        ),
+    )
+
+
+def build_warnings_change_result(
+    test_case: BuildModelWarningsTestCase,
+) -> ChangeDetectionResult:
+    """Build a ChangeDetectionResult from a warnings test case."""
+
+    return ChangeDetectionResult(
+        model_name=test_case.model_name,
+        change_kind=test_case.change_kind,
+        query_changed=test_case.query_changed,
+        schema_findings=test_case.schema_findings,
+        backfill=BackfillResult(action=test_case.backfill_action),
+    )
 
 
 def _resolve_dep_key(name: str, source_names: set[str], seed_names: set[str]) -> CompiledObjectKey:

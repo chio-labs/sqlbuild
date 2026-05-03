@@ -1,7 +1,21 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models import CompiledObjectKey
-from sqlbuild.compiler.planner.models import MissingUpstream, ParsedSelector
+from sqlbuild.compiler.planner.models import (
+    MissingUpstream,
+    ParsedSelector,
+    SchemaAction,
+    SchemaFinding,
+)
+from sqlbuild.compiler.planner.types import (
+    BackfillAction,
+    ChangeKind,
+    OnSchemaChange,
+    PlanAction,
+    PlanReason,
+    WarningSeverity,
+)
 
 
 @dataclass(frozen=True)
@@ -105,3 +119,52 @@ class CheckBuildabilityTestCase:
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
     existing_relation_names: tuple[str, ...]
     expected_missing: tuple[MissingUpstream, ...]
+
+
+@dataclass(frozen=True)
+class ResolveModelPlanActionTestCase:
+    description: str
+    materialized: str
+    incremental_strategy: str | None
+    change_kind: ChangeKind
+    query_changed: bool
+    backfill_action: BackfillAction
+    full_refresh: bool
+    expected_action: PlanAction
+    expected_reason: PlanReason
+    schema_findings: tuple[SchemaFinding, ...] = field(default_factory=tuple)
+    backfill_duration: str | None = None
+
+
+@dataclass(frozen=True)
+class ResolveSchemaActionsTestCase:
+    description: str
+    schema_findings: tuple[SchemaFinding, ...]
+    on_schema_change: OnSchemaChange | None
+    expected_actions: tuple[SchemaAction, ...]
+
+
+@dataclass(frozen=True)
+class BuildLogicalDdlTestCase:
+    description: str
+    action: PlanAction
+    resolved_sql: str
+    qualified_name: str
+    unique_key: tuple[str, ...]
+    warehouse_columns: tuple[ColumnInfo, ...]
+    expected_ddl_fragment: str
+
+
+@dataclass(frozen=True)
+class BuildModelWarningsTestCase:
+    description: str
+    model_name: str
+    change_kind: ChangeKind
+    query_changed: bool
+    backfill_action: BackfillAction
+    schema_findings: tuple[SchemaFinding, ...]
+    schema_actions: tuple[SchemaAction, ...]
+    on_schema_change: OnSchemaChange | None
+    type_enforcement: bool
+    expected_severity: WarningSeverity | None
+    expected_warning_count: int

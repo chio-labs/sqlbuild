@@ -47,3 +47,41 @@ class SchemaChangeBackfillKey(StrEnum):
 class SchemaColumnSource(StrEnum):
     YML = "yml"
     SQLGLOT = "sqlglot"
+
+
+class PlanAction(StrEnum):
+    CREATE_VIEW = "create_view"
+    CREATE_TABLE = "create_table"
+    INCREMENTAL_APPEND = "incremental_append"
+    INCREMENTAL_DELETE_INSERT = "incremental_delete_insert"
+    INCREMENTAL_MERGE = "incremental_merge"
+    LOAD_SEED = "load_seed"
+    SKIP = "skip"
+
+
+class PlanReason(StrEnum):
+    FIRST_RUN = "first_run"
+    FULL_REFRESH = "full_refresh"
+    QUERY_CHANGED = "query_changed"
+    SCHEMA_CHANGED = "schema_changed"
+    NORMAL_INCREMENTAL = "normal_incremental"
+    NO_CHANGE = "no_change"
+
+
+class MaterializationType(StrEnum):
+    VIEW = "view"
+    TABLE = "table"
+    INCREMENTAL = "incremental"
+    SEED = "seed"
+
+
+class SchemaActionKind(StrEnum):
+    ADD_COLUMN = "add_column"
+    DROP_COLUMN = "drop_column"
+    ALTER_COLUMN_TYPE = "alter_column_type"
+
+
+class WarningSeverity(StrEnum):
+    ERROR = "error"
+    WARNING = "warning"
+    INFO = "info"
