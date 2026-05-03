@@ -43,7 +43,7 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
             ).strip()
             + "\n",
         },
-        command=("build", "--no-color"),
+        command=("--no-color", "build"),
         expected_exit_code=1,
         expected_stderr_fragments=(
             "SQL syntax error in pre_hook for model 'orders'",
@@ -126,7 +126,7 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
             ).strip()
             + "\n",
         },
-        command=("build", "--no-color"),
+        command=("--no-color", "build"),
         expected_exit_code=1,
         expected_stderr_fragments=(
             "cursor_inputs references unknown input 'missing_relation'",
@@ -164,7 +164,7 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
             ).strip()
             + "\n",
         },
-        command=("build", "--no-color"),
+        command=("--no-color", "build"),
         expected_exit_code=1,
         expected_stderr_fragments=(
             "SQL syntax error in source expression 'raw_orders'",

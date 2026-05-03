@@ -167,8 +167,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 ).strip()
                 + "\n",
             },
-            initial_command=("build", "--no-color"),
-            rerun_command=("build", "--debug", "--select", "hourly_activity_with_daily_context"),
+            initial_command=("--no-color", "build"),
+            rerun_command=("--debug", "build", "--select", "hourly_activity_with_daily_context"),
             expected_exit_code=0,
             expected_window_fragment="window=2026-04-04T00:00:00..2026-04-05T00:00:00",
             expected_row_count=1,

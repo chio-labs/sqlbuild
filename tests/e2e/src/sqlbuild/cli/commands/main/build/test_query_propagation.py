@@ -124,7 +124,7 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
             ).strip()
             + "\n",
         },
-        initial_build_command=("build", "--no-color"),
+        initial_build_command=("--no-color", "build"),
         plan_command=("plan", "--json"),
         mutation_file="models/marts/hourly_order_activity.sql",
         before_text="SUM(line_total_cents) AS revenue_cents",
@@ -242,7 +242,7 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
             ).strip()
             + "\n",
         },
-        initial_build_command=("build", "--no-color"),
+        initial_build_command=("--no-color", "build"),
         plan_command=("plan", "--json"),
         mutation_file="models/marts/hourly_order_activity.sql",
         before_text="SUM(line_total_cents) AS revenue_cents",

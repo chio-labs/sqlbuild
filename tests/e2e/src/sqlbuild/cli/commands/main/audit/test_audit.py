@@ -31,10 +31,10 @@ def test_given_waffle_shop_project_when_running_audit_then_all_audits_pass(
 ) -> None:
     project_dir: Path = prepare_waffle_shop(tmp_path)
 
-    run_sqb(command=("build", "--no-color"), project_dir=project_dir)
+    run_sqb(command=("--no-color", "build"), project_dir=project_dir)
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("audit", "--no-color"), project_dir=project_dir
+        command=("--no-color", "audit"), project_dir=project_dir
     )
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr

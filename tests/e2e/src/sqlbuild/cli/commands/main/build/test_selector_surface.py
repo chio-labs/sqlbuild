@@ -18,15 +18,15 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
 TEST_CASES: list[SelectorSurfaceBuildE2ETestCase] = [
     SelectorSurfaceBuildE2ETestCase(
         description="slash path selector works on build",
-        command=("build", "--no-color", "--select", "/marts"),
+        command=("--no-color", "build", "--select", "/marts"),
         expected_exit_code=0,
         expected_fragments=("Plan ready (7 selected)", "hourly_activity_with_daily_context"),
         expected_stream="stdout",
-        pre_commands=(("build", "--no-color"),),
+        pre_commands=(("--no-color", "build"),),
     ),
     SelectorSurfaceBuildE2ETestCase(
         description="path selector endpoint expansion works on build",
-        command=("build", "--no-color", "--select", "+fact_orders~daily_activity_rollup+"),
+        command=("--no-color", "build", "--select", "+fact_orders~daily_activity_rollup+"),
         expected_exit_code=0,
         expected_fragments=(
             "Plan ready (7 selected)",
@@ -39,18 +39,18 @@ TEST_CASES: list[SelectorSurfaceBuildE2ETestCase] = [
             "hourly_activity_with_daily_context",
         ),
         expected_stream="stdout",
-        pre_commands=(("build", "--no-color"),),
+        pre_commands=(("--no-color", "build"),),
     ),
     SelectorSurfaceBuildE2ETestCase(
         description="malformed path selector with internal plus fails clearly",
-        command=("plan", "--no-color", "--select", "+fact_orders~+daily_activity_rollup"),
+        command=("--no-color", "plan", "--select", "+fact_orders~+daily_activity_rollup"),
         expected_exit_code=1,
         expected_fragments=("contains '+' in an unsupported position",),
         expected_stream="stderr",
     ),
     SelectorSurfaceBuildE2ETestCase(
         description="malformed path selector missing rhs fails clearly",
-        command=("plan", "--no-color", "--select", "fact_orders~"),
+        command=("--no-color", "plan", "--select", "fact_orders~"),
         expected_exit_code=1,
         expected_fragments=("requires names on both sides of '~'",),
         expected_stream="stderr",

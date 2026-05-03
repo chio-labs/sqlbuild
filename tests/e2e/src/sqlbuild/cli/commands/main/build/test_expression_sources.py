@@ -74,7 +74,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 ).strip()
                 + "\n",
             },
-            command=("build", "--no-color"),
+            command=("--no-color", "build"),
             expected_exit_code=0,
             expected_table_names=("fact_orders",),
             expected_query_results=(

@@ -14,6 +14,8 @@ class MainTestCase:
     expected_project_dir: Path | None = None
     expected_no_sql_validation: bool = False
     expected_full_refresh: bool = False
+    expected_no_color: bool = False
+    expected_debug: bool = False
 
 
 @dataclass(frozen=True)

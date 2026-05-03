@@ -43,7 +43,7 @@ def test_given_waffle_shop_when_running_core_lifecycle_commands_then_outputs_are
     project_dir: Path = prepare_waffle_shop(tmp_path)
 
     fresh_plan: subprocess.CompletedProcess[str] = run_sqb(
-        command=("plan", "--no-color"),
+        command=("--no-color", "plan"),
         project_dir=project_dir,
     )
     assert fresh_plan.returncode == test_case.expected_exit_code, (
@@ -54,7 +54,7 @@ def test_given_waffle_shop_when_running_core_lifecycle_commands_then_outputs_are
         assert fragment in fresh_plan.stdout
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("build", "--no-color"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
     assert build_result.returncode == test_case.expected_exit_code, (
@@ -63,7 +63,7 @@ def test_given_waffle_shop_when_running_core_lifecycle_commands_then_outputs_are
     assert "PASS=" in build_result.stdout
 
     test_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("test", "--no-color"),
+        command=("--no-color", "test"),
         project_dir=project_dir,
     )
     assert test_result.returncode == test_case.expected_exit_code, (
@@ -72,7 +72,7 @@ def test_given_waffle_shop_when_running_core_lifecycle_commands_then_outputs_are
     assert test_case.expected_test_fragment in test_result.stdout
 
     audit_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("audit", "--no-color"),
+        command=("--no-color", "audit"),
         project_dir=project_dir,
     )
     assert audit_result.returncode == test_case.expected_exit_code, (
@@ -81,7 +81,7 @@ def test_given_waffle_shop_when_running_core_lifecycle_commands_then_outputs_are
     assert test_case.expected_audit_fragment in audit_result.stdout
 
     run_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("run", "--no-color"),
+        command=("--no-color", "run"),
         project_dir=project_dir,
     )
     assert run_result.returncode == test_case.expected_exit_code, (
@@ -107,7 +107,7 @@ def test_given_waffle_shop_when_running_core_lifecycle_commands_then_outputs_are
     )
 
     rerun_build: subprocess.CompletedProcess[str] = run_sqb(
-        command=("build", "--no-color"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
     assert rerun_build.returncode == test_case.expected_exit_code, (
@@ -116,7 +116,7 @@ def test_given_waffle_shop_when_running_core_lifecycle_commands_then_outputs_are
     assert test_case.expected_run_fragment in rerun_build.stdout
 
     full_refresh_build: subprocess.CompletedProcess[str] = run_sqb(
-        command=("build", "--full-refresh", "--no-color"),
+        command=("--no-color", "build", "--full-refresh"),
         project_dir=project_dir,
     )
     assert full_refresh_build.returncode == test_case.expected_exit_code, (

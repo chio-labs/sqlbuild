@@ -32,7 +32,7 @@ def test_given_waffle_shop_project_when_running_test_then_all_tests_pass(
     project_dir: Path = prepare_waffle_shop(tmp_path)
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("test", "--no-color"), project_dir=project_dir
+        command=("--no-color", "test"), project_dir=project_dir
     )
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr

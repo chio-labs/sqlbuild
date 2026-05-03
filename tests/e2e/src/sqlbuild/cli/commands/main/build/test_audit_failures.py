@@ -89,7 +89,7 @@ TEST_CASES: list[AuditFailureBuildE2ETestCase] = [
             ).strip()
             + "\n",
         },
-        command=("build", "--no-color", "--select", "orders"),
+        command=("--no-color", "build", "--select", "orders"),
         expected_exit_code=1,
         expected_failure_fragment=(
             "delta audit for 'orders' failed before target update with severity level: error"
@@ -168,7 +168,7 @@ TEST_CASES: list[AuditFailureBuildE2ETestCase] = [
             ).strip()
             + "\n",
         },
-        command=("build", "--no-color", "--select", "orders"),
+        command=("--no-color", "build", "--select", "orders"),
         expected_exit_code=1,
         expected_failure_fragment=(
             "final audit for 'orders' failed after target update with severity level: error"

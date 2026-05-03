@@ -17,7 +17,6 @@ def add_cursor_override_args(parser: argparse.ArgumentParser) -> None:
 def add_execution_args(parser: argparse.ArgumentParser) -> None:
     """Add execution control flags shared by build and run commands."""
 
-    parser.add_argument("--no-color", action="store_true", default=False)
     parser.add_argument("--fail-fast", action="store_true", default=False)
     parser.add_argument("--full-refresh", action="store_true", default=False)
     parser.add_argument("--concurrency", type=int, default=None)

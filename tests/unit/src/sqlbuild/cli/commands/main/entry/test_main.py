@@ -44,6 +44,19 @@ ERROR_RENDERING_TEST_CASES: list[MainErrorRenderingTestCase] = [
     ),
 ]
 
+COMMAND_LOCAL_GLOBAL_FLAG_ERROR_TEST_CASES: list[MainTestCase] = [
+    MainTestCase(
+        description="returns parser error for command local debug",
+        argv=["build", "--debug"],
+        expected_exit_code=2,
+    ),
+    MainTestCase(
+        description="returns parser error for command local no color",
+        argv=["plan", "--no-color"],
+        expected_exit_code=2,
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -130,18 +143,20 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
     "test_case",
     [
         MainTestCase(
-            description="passes full refresh flag to build handler",
-            argv=["build", "--full-refresh"],
+            description="passes global debug and no color plus full refresh to build handler",
+            argv=["--debug", "--no-color", "build", "--full-refresh"],
             expected_exit_code=5,
             expected_full_refresh=True,
+            expected_no_color=True,
+            expected_debug=True,
         )
     ],
-    ids=["passes full refresh flag to build handler"],
+    ids=["passes global debug and no color plus full refresh to build handler"],
 )
 def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[bool, bool]] = []
+    received_args: list[tuple[bool, bool, bool, bool]] = []
 
     def run_build(
         project_dir: Path | None,
@@ -161,13 +176,11 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         del no_sql_validation
         del defer_to
         del cursor_overrides
-        del no_color
         del concurrency
         del select
         del exclude
         del verbose
-        del debug
-        received_args.append((fail_fast, full_refresh))
+        received_args.append((no_color, fail_fast, full_refresh, debug))
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -176,7 +189,14 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
     )
 
     assert exit_code == test_case.expected_exit_code
-    assert received_args == [(False, test_case.expected_full_refresh)]
+    assert received_args == [
+        (
+            test_case.expected_no_color,
+            False,
+            test_case.expected_full_refresh,
+            test_case.expected_debug,
+        )
+    ]
 
 
 @pytest.mark.parametrize(
@@ -237,12 +257,13 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
     "test_case",
     [
         MainTestCase(
-            description="passes plan select exclude and no color flags to plan handler",
-            argv=["plan", "--no-color", "--select", "orders", "--exclude", "customers"],
+            description="passes global no color to plan handler",
+            argv=["--no-color", "plan", "--select", "orders", "--exclude", "customers"],
             expected_exit_code=4,
+            expected_no_color=True,
         )
     ],
-    ids=["passes plan select exclude and no color flags to plan handler"],
+    ids=["passes global no color to plan handler"],
 )
 def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
     test_case: MainTestCase,
@@ -294,7 +315,26 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
 
     assert exit_code == test_case.expected_exit_code
     assert len(received_args) == 1
-    assert received_args[0][4:] == (False, False, True, ("orders",), ("customers",))
+    assert received_args[0][4:] == (
+        False,
+        False,
+        test_case.expected_no_color,
+        ("orders",),
+        ("customers",),
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    COMMAND_LOCAL_GLOBAL_FLAG_ERROR_TEST_CASES,
+    ids=[case.description for case in COMMAND_LOCAL_GLOBAL_FLAG_ERROR_TEST_CASES],
+)
+def test_given_command_local_global_flags_when_running_main_then_it_returns_parser_error(
+    test_case: MainTestCase,
+) -> None:
+    exit_code: int = main(test_case.argv)
+
+    assert exit_code == test_case.expected_exit_code
 
 
 @pytest.mark.parametrize(

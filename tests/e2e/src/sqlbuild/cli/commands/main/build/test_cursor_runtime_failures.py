@@ -60,7 +60,7 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
             ).strip()
             + "\n",
         },
-        command=("build", "--no-color", "--select", "+customer_status_snapshot"),
+        command=("--no-color", "build", "--select", "+customer_status_snapshot"),
         expected_exit_code=1,
         expected_stderr_fragments=(),
         expected_stdout_fragments=("missing_column",),
@@ -97,7 +97,7 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
             ).strip()
             + "\n",
         },
-        command=("build", "--no-color", "--select", "customer_status_snapshot"),
+        command=("--no-color", "build", "--select", "customer_status_snapshot"),
         expected_exit_code=1,
         expected_stderr_fragments=("references unknown model 'missing_orders'",),
     ),

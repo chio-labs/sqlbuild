@@ -108,7 +108,7 @@ def test_given_schema_backfill_mutation_when_planning_then_expected_metadata_is_
     project_dir: Path = prepare_waffle_shop(tmp_path)
 
     initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("build", "--no-color"), project_dir=project_dir
+        command=("--no-color", "build"), project_dir=project_dir
     )
     assert initial_build_result.returncode == test_case.expected_exit_code, (
         initial_build_result.stdout + initial_build_result.stderr

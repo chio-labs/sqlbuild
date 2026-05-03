@@ -49,7 +49,7 @@ def test_given_waffle_shop_project_when_running_run_then_warehouse_state_matches
     db_path: Path = project_dir / "waffle_shop.duckdb"
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("run", "--no-color"), project_dir=project_dir
+        command=("--no-color", "run"), project_dir=project_dir
     )
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr

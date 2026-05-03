@@ -94,7 +94,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 ).strip()
                 + "\n",
             },
-            build_command=("build", "--no-color"),
+            build_command=("--no-color", "build"),
             plan_command=("plan", "--json"),
             expected_exit_code=0,
             expected_fingerprint_models=("fact_orders", "stg_orders"),

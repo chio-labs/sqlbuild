@@ -15,14 +15,14 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_waff
 TEST_CASES: list[PlanCommandBuildE2ETestCase] = [
     PlanCommandBuildE2ETestCase(
         description="plan select no-color scopes to marts",
-        command=("plan", "--no-color", "--select", "path:marts"),
+        command=("--no-color", "plan", "--select", "path:marts"),
         expected_exit_code=0,
         expected_fragments=("Plan ready (7 selected)", "Normal (7)"),
         expected_stream="stdout",
     ),
     PlanCommandBuildE2ETestCase(
         description="plan exclude removes marts branch from selected scope",
-        command=("plan", "--no-color", "--select", "/marts", "--exclude", "hourly_order_activity"),
+        command=("--no-color", "plan", "--select", "/marts", "--exclude", "hourly_order_activity"),
         expected_exit_code=0,
         expected_fragments=("Plan ready (6 selected)",),
         expected_stream="stdout",
@@ -41,7 +41,7 @@ def test_given_plan_command_variants_when_running_cli_then_scope_behavior_matche
 ) -> None:
     project_dir: Path = prepare_waffle_shop(tmp_path)
     initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("build", "--no-color"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
     assert initial_build_result.returncode == 0, (

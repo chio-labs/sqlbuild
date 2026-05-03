@@ -27,6 +27,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
     parser: argparse.ArgumentParser = argparse.ArgumentParser(prog="sqb")
     parser.add_argument("--project-dir", default=None)
+    parser.add_argument("--no-color", action="store_true", default=False)
+    parser.add_argument("--debug", action="store_true", default=False)
 
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser] = parser.add_subparsers(
         dest="command"
@@ -35,22 +37,18 @@ def _build_parser() -> argparse.ArgumentParser:
     compile_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     compile_parser.add_argument("--defer-to", default=None)
     compile_parser.add_argument("--json", action="store_true", default=False)
-    compile_parser.add_argument("--debug", action="store_true", default=False)
 
     plan_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PLAN)
     plan_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     plan_parser.add_argument("--defer-to", default=None)
     plan_parser.add_argument("--json", action="store_true", default=False)
     plan_parser.add_argument("--full-refresh", action="store_true", default=False)
-    plan_parser.add_argument("--no-color", action="store_true", default=False)
-    plan_parser.add_argument("--debug", action="store_true", default=False)
     add_cursor_override_args(plan_parser)
     add_select_args(plan_parser)
 
     build_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.BUILD)
     build_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     build_parser.add_argument("--defer-to", default=None)
-    build_parser.add_argument("--debug", action="store_true", default=False)
     add_cursor_override_args(build_parser)
     add_execution_args(build_parser)
     add_select_args(build_parser)
@@ -58,27 +56,20 @@ def _build_parser() -> argparse.ArgumentParser:
     run_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.RUN)
     run_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     run_parser.add_argument("--defer-to", default=None)
-    run_parser.add_argument("--debug", action="store_true", default=False)
     add_cursor_override_args(run_parser)
     add_execution_args(run_parser)
     add_select_args(run_parser)
 
     test_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.TEST)
     test_parser.add_argument("--no-sql-validation", action="store_true", default=False)
-    test_parser.add_argument("--no-color", action="store_true", default=False)
-    test_parser.add_argument("--debug", action="store_true", default=False)
     add_select_args(test_parser)
 
     audit_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.AUDIT)
     audit_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     audit_parser.add_argument("--defer-to", default=None)
-    audit_parser.add_argument("--no-color", action="store_true", default=False)
-    audit_parser.add_argument("--debug", action="store_true", default=False)
     add_select_args(audit_parser)
 
     seed_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.SEED)
-    seed_parser.add_argument("--no-color", action="store_true", default=False)
-    seed_parser.add_argument("--debug", action="store_true", default=False)
     add_select_args(seed_parser)
 
     subparsers.add_parser(CliCommand.CLONE)

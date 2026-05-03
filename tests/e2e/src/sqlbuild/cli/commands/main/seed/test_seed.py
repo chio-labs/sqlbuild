@@ -44,7 +44,7 @@ def test_given_waffle_shop_project_when_running_seed_then_seed_data_matches_expe
     db_path: Path = project_dir / "waffle_shop.duckdb"
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("seed", "--no-color"), project_dir=project_dir
+        command=("--no-color", "seed"), project_dir=project_dir
     )
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
