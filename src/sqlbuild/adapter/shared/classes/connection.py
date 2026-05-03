@@ -7,6 +7,8 @@ from abc import abstractmethod
 from collections.abc import Generator
 from typing import Any
 
+from sqlbuild.adapter.shared.models import QueryResult
+
 
 class ConnectionMixin:
     """Manages adapter connection lifecycle and transaction control."""
@@ -19,6 +21,11 @@ class ConnectionMixin:
     @abstractmethod
     def execute(self, connection: Any, sql: str) -> Any:
         """Execute a SQL statement and return the result."""
+        ...
+
+    @abstractmethod
+    def query(self, connection: Any, sql: str, *, limit: int | None) -> QueryResult:
+        """Execute SQL and normalize row-returning results for CLI display."""
         ...
 
     @abstractmethod

@@ -36,6 +36,11 @@ class CliNamespace:
     bounded: str | None = None
     max_column_examples: int | None = None
     max_row_only_examples: int | None = None
+    query_sql: str | None = None
+    query_file: str | None = None
+    query_format: str = "long"
+    query_limit: int | None = 20
+    query_no_limit: bool = False
     full: bool = False
     schema_only: bool = False
     select: list[str] = field(default_factory=list)
@@ -122,4 +127,5 @@ class CliEntrypointHandlers:
         ],
         int,
     ]
+    run_query: Callable[[Path | None, str | None, str | None, str, int | None], int]
     run_janitor: Callable[[Path | None, bool, bool, int | None], int]

@@ -10,6 +10,7 @@ import pytest
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
     CursorValue,
+    QueryResult,
     RowDiffColumnResult,
     RowDiffResult,
     RowDiffTolerance,
@@ -34,6 +35,7 @@ from tests.integration.src.sqlbuild.integrations.duckdb._test_types import (
     LoadSeedTestCase,
     MaterializeTestCase,
     MergeTestCase,
+    QueryTestCase,
     RecorderWriteTestCase,
     RelationExistsTestCase,
     RenameTestCase,
@@ -51,6 +53,25 @@ CONNECT_TEST_CASES: list[ConnectTestCase] = [
         description="connects with explicit memory database",
         config={"database": ":memory:"},
         expected_connects=True,
+    ),
+]
+
+QUERY_TEST_CASES: list[QueryTestCase] = [
+    QueryTestCase(
+        description="returns rows and marks limit truncation",
+        sql="SELECT * FROM (VALUES (1, 'alice'), (2, 'bob')) AS t(id, name) ORDER BY id",
+        limit=1,
+        expected_result=QueryResult(
+            columns=("id", "name"),
+            rows=((1, "alice"),),
+            truncated=True,
+        ),
+    ),
+    QueryTestCase(
+        description="returns all rows without limit",
+        sql="SELECT * FROM (VALUES (1), (2)) AS t(id) ORDER BY id",
+        limit=None,
+        expected_result=QueryResult(columns=("id",), rows=((1,), (2,))),
     ),
 ]
 
@@ -440,6 +461,21 @@ def test_given_config_with_settings_when_connecting_then_applies_settings(
 
     assert str(result[0]) == test_case.expected_setting_value
     adapter.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    QUERY_TEST_CASES,
+    ids=[case.description for case in QUERY_TEST_CASES],
+)
+def test_given_sql_when_querying_then_returns_normalized_query_result(
+    test_case: QueryTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    result: QueryResult = adapter.query(connection, test_case.sql, limit=test_case.limit)
+
+    assert result == test_case.expected_result
 
 
 @pytest.mark.parametrize(

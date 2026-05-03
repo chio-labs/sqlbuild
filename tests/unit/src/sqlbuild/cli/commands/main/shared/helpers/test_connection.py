@@ -4,10 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
+from sqlbuild.adapter.shared.types import BuiltinAdapter
+from sqlbuild.cli.commands.main.shared.helpers.connection import (
+    resolve_connection_config,
+    resolve_project_connection_config,
+)
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.models.project import EnvironmentConfig, LocalConfig, ProjectConfig
 from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import (
+    ResolveConnectionConfigWarningTestCase,
     ResolveProjectConnectionConfigTestCase,
 )
 
@@ -23,6 +28,11 @@ from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import
                 "warehouse": "dev_wh",
                 "role": "local_role",
             },
+            expected_warning_fragment=(
+                "Warning: DuckDB adapter is active, but connection contains "
+                "Snowflake-like keys: role, warehouse. If this is a Snowflake local config, "
+                "add top-level `adapter: snowflake` to sqlbuild_local.yml."
+            ),
         )
     ],
     ids=["uses project environment and local connection precedence"],
@@ -30,6 +40,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import
 def test_given_project_inputs_when_resolving_connection_then_uses_effective_connection(
     test_case: ResolveProjectConnectionConfigTestCase,
     tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     project_dir: Path = tmp_path / test_case.project_dir_name
     project_dir.mkdir()
@@ -61,3 +72,38 @@ def test_given_project_inputs_when_resolving_connection_then_uses_effective_conn
         )
         for key, value in test_case.expected_connection.items()
     }
+    captured_err: str = capsys.readouterr().err
+    assert test_case.expected_warning_fragment in captured_err
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ResolveConnectionConfigWarningTestCase(
+            description="does not warn when snowflake adapter has snowflake keys",
+            raw_config={"database": "SQB_DB", "warehouse": "SQB_WH", "role": "SQB_ROLE"},
+            adapter_name=BuiltinAdapter.SNOWFLAKE,
+            expected_connection={
+                "database": "SQB_DB",
+                "warehouse": "SQB_WH",
+                "role": "SQB_ROLE",
+            },
+            expected_warning="",
+        )
+    ],
+    ids=["does not warn when snowflake adapter has snowflake keys"],
+)
+def test_given_adapter_connection_when_resolving_then_emits_expected_warning(
+    test_case: ResolveConnectionConfigWarningTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    connection: dict[str, object] = resolve_connection_config(
+        raw_config=test_case.raw_config,
+        project_dir=tmp_path,
+        adapter_name=test_case.adapter_name,
+    )
+
+    captured_err: str = capsys.readouterr().err
+    assert connection == test_case.expected_connection
+    assert captured_err == test_case.expected_warning
