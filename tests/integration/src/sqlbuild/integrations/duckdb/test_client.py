@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import duckdb
 import pytest
 
 from sqlbuild.adapter.shared.models import (
@@ -32,6 +33,7 @@ from tests.integration.src.sqlbuild.integrations.duckdb._test_types import (
     RelationExistsTestCase,
     RenameTestCase,
     SwapTestCase,
+    TransactionalAtomicityTestCase,
 )
 
 CONNECT_TEST_CASES: list[ConnectTestCase] = [
@@ -894,3 +896,132 @@ def test_given_table_when_counting_rows_then_returns_expected_count(
     )
 
     assert count == test_case.expected_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TransactionalAtomicityTestCase(
+            description="delete_insert rolls back delete when insert fails",
+            setup_sql=(
+                "CREATE TABLE atomic_di (id INTEGER NOT NULL, val VARCHAR NOT NULL)",
+                "INSERT INTO atomic_di VALUES (1, 'keep'), (2, 'keep')",
+            ),
+            target="atomic_di",
+            source_sql="SELECT * FROM (VALUES (1, NULL)) AS t(id, val)",
+            unique_key="id",
+            verify_sql="SELECT id, val FROM atomic_di ORDER BY id",
+            expected_rows_after_failure=((1, "keep"), (2, "keep")),
+        ),
+    ],
+    ids=["delete_insert rolls back delete when insert fails"],
+)
+def test_given_failing_insert_when_delete_inserting_then_original_rows_preserved(
+    test_case: TransactionalAtomicityTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    statement: str
+    for statement in test_case.setup_sql:
+        connection.execute(statement)
+
+    with pytest.raises(duckdb.ConstraintException):
+        adapter.delete_insert(
+            connection,
+            target=test_case.target,
+            sql=test_case.source_sql,
+            unique_key=test_case.unique_key,
+            statement_recorder=StatementRecorder(),
+        )
+
+    actual: tuple[tuple[object, ...], ...] = tuple(
+        connection.execute(test_case.verify_sql).fetchall()
+    )
+    assert actual == test_case.expected_rows_after_failure
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TransactionalAtomicityTestCase(
+            description="delete_insert_cursor rolls back on NOT NULL failure",
+            setup_sql=(
+                "CREATE TABLE atomic_dic "
+                "(id INTEGER NOT NULL, val VARCHAR NOT NULL, cursor_ts VARCHAR NOT NULL)",
+                "INSERT INTO atomic_dic VALUES "
+                "(1, 'keep', '2024-01-01'), (2, 'keep', '2024-01-02')",
+            ),
+            target="atomic_dic",
+            source_sql="SELECT * FROM (VALUES (1, NULL, '2024-01-01')) AS t(id, val, cursor_ts)",
+            unique_key="id",
+            verify_sql="SELECT id, val FROM atomic_dic ORDER BY id",
+            expected_rows_after_failure=((1, "keep"), (2, "keep")),
+        ),
+    ],
+    ids=["delete_insert_cursor rolls back on NOT NULL failure"],
+)
+def test_given_failing_insert_when_delete_insert_cursor_then_original_rows_preserved(
+    test_case: TransactionalAtomicityTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    statement: str
+    for statement in test_case.setup_sql:
+        connection.execute(statement)
+
+    with pytest.raises(duckdb.ConstraintException):
+        adapter.delete_insert_cursor(
+            connection,
+            target=test_case.target,
+            sql=test_case.source_sql,
+            cursor_column="cursor_ts",
+            cursor_start="2024-01-01",
+            cursor_end="2024-01-03",
+            statement_recorder=StatementRecorder(),
+        )
+
+    actual: tuple[tuple[object, ...], ...] = tuple(
+        connection.execute(test_case.verify_sql).fetchall()
+    )
+    assert actual == test_case.expected_rows_after_failure
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TransactionalAtomicityTestCase(
+            description="swap rolls back partial renames on failure",
+            setup_sql=(
+                "CREATE TABLE swap_left (val VARCHAR)",
+                "INSERT INTO swap_left VALUES ('left')",
+            ),
+            target="swap_left",
+            source_sql="",
+            unique_key="",
+            verify_sql="SELECT val FROM swap_left",
+            expected_rows_after_failure=(("left",),),
+        ),
+    ],
+    ids=["swap rolls back partial renames on failure"],
+)
+def test_given_missing_right_table_when_swapping_then_left_table_preserved(
+    test_case: TransactionalAtomicityTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    statement: str
+    for statement in test_case.setup_sql:
+        connection.execute(statement)
+
+    with pytest.raises(duckdb.CatalogException):
+        adapter.swap(
+            connection,
+            left="swap_left",
+            right="swap_nonexistent",
+            statement_recorder=StatementRecorder(),
+        )
+
+    actual: tuple[tuple[object, ...], ...] = tuple(
+        connection.execute(test_case.verify_sql).fetchall()
+    )
+    assert actual == test_case.expected_rows_after_failure

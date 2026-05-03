@@ -285,15 +285,10 @@ class DuckDbAdapter(BaseAdapter):
     ) -> None:
         statements: tuple[str, ...] = self.render_swap(left=left, right=right)
         statement_recorder.record_many(statements)
-        self.begin(connection)
-        try:
+        with self.transaction(connection):
             stmt: str
             for stmt in statements:
                 connection.execute(stmt)
-            self.commit(connection)
-        except BaseException:
-            self.rollback(connection)
-            raise
 
     def clone(
         self,
@@ -379,15 +374,10 @@ class DuckDbAdapter(BaseAdapter):
             target=target, sql=sql, unique_key=keys, columns=columns
         )
         statement_recorder.record_many(statements)
-        self.begin(connection)
-        try:
+        with self.transaction(connection):
             stmt: str
             for stmt in statements:
                 connection.execute(stmt)
-            self.commit(connection)
-        except BaseException:
-            self.rollback(connection)
-            raise
 
     def delete_insert_cursor(
         self,
@@ -410,15 +400,10 @@ class DuckDbAdapter(BaseAdapter):
             columns=columns,
         )
         statement_recorder.record_many(statements)
-        self.begin(connection)
-        try:
+        with self.transaction(connection):
             stmt: str
             for stmt in statements:
                 connection.execute(stmt)
-            self.commit(connection)
-        except BaseException:
-            self.rollback(connection)
-            raise
 
     def merge(
         self,

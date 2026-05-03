@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
 from abc import abstractmethod
-from collections.abc import Callable
+from collections.abc import Generator
 from typing import Any
 
 
@@ -37,16 +38,19 @@ class ConnectionMixin:
         """Roll back the current transaction."""
         self.execute(connection, "ROLLBACK")
 
-    def run_in_transaction(self, connection: Any, fn: Callable[[], Any]) -> Any:
-        """Execute fn inside a begin/commit/rollback boundary."""
+    @contextlib.contextmanager
+    def transaction(self, connection: Any) -> Generator[None]:
+        """Context manager for a begin/commit/rollback boundary."""
+        if not self.supports_transactions():
+            yield
+            return
         self.begin(connection)
         try:
-            result: Any = fn()
+            yield
             self.commit(connection)
         except BaseException:
             self.rollback(connection)
             raise
-        return result
 
     def supports_transactions(self) -> bool:
         """Return whether this adapter supports explicit transactions."""

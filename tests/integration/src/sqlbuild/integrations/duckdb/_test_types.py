@@ -159,3 +159,14 @@ class RecorderWriteTestCase:
     sql: str
     expected_recorded_statements: tuple[str, ...]
     unique_key: str | tuple[str, ...] | None = None
+
+
+@dataclass(frozen=True)
+class TransactionalAtomicityTestCase:
+    description: str
+    setup_sql: tuple[str, ...]
+    target: str
+    source_sql: str
+    unique_key: str | tuple[str, ...]
+    expected_rows_after_failure: tuple[tuple[object, ...], ...]
+    verify_sql: str
