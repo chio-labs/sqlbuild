@@ -143,13 +143,11 @@ def check_nested_runtime_package_direct_modules(
     relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
     if len(relative_parts) < 5 or relative_parts[:2] != ("src", "sqlbuild"):
         return []
-    if file_path.name == "main.py":
-        if relative_parts[:3] == ("src", "sqlbuild", "integrations"):
-            return []
-        if "shared" in relative_parts[2:-1]:
-            return []
-        if "main" in relative_parts[2:-1]:
-            return []
+    if file_path.name == "main.py" and (
+        relative_parts[:3] == ("src", "sqlbuild", "integrations")
+        or "shared" in relative_parts[2:-1]
+    ):
+        return []
     if _is_direct_child_of_main_package(relative_parts):
         return []
     if any(
@@ -233,33 +231,6 @@ def check_nested_runtime_package_direct_subpackages(
                 "support boundaries like helpers/, shared/, classes/, or main/; move "
                 "feature buckets under helpers/ or flatten them into role files"
             ),
-        )
-    ]
-
-
-def check_main_command_package_entry_surface(repo_root: Path, file_path: Path) -> list[Violation]:
-    """Require packages directly under main/ to expose their entry via main.py."""
-
-    relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
-    if len(relative_parts) < 7 or relative_parts[:2] != ("src", "sqlbuild"):
-        return []
-    if file_path.name != "__init__.py":
-        return []
-    if file_path.parent.parent.name != "main":
-        return []
-    if file_path.parent.parent.parent.name != "main":
-        return []
-    if file_path.parent.name == "shared":
-        return []
-    if (file_path.parent / "main.py").exists():
-        return []
-
-    return [
-        Violation(
-            code="SC028",
-            path=file_path,
-            line=1,
-            message=("packages directly under main/ must expose their public entry from main.py"),
         )
     ]
 
@@ -648,23 +619,35 @@ def check_constants_outside_constants(file_path: Path, module: ast.Module) -> li
     return violations
 
 
-def check_helpers_package_structure(repo_root: Path, file_path: Path) -> list[Violation]:
-    """Reject orchestration entrypoints inside helpers/ packages."""
+def check_helpers_package_shape(repo_root: Path, file_path: Path) -> list[Violation]:
+    """Keep helpers/ shallow and free of generic entrypoints."""
 
     relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
     if "helpers" not in relative_parts[:-1]:
         return []
-    if file_path.name != "main.py":
+
+    helpers_index = relative_parts.index("helpers")
+    if len(relative_parts) == helpers_index + 2 and file_path.name != "main.py":
         return []
-    if not _is_direct_child_of_helpers_root(file_path):
+    if len(relative_parts) == helpers_index + 3 and file_path.name != "main.py":
         return []
+
+    code: str = "SC010" if len(relative_parts) == helpers_index + 2 else "SC022"
+    message: str = (
+        "helpers/ must not contain main.py; keep orchestration outside helper packages"
+        if code == "SC010"
+        else (
+            "helper subpackages must stay shallow and use direct role-oriented files; "
+            "main.py and nested subpackages are not allowed under scoped helpers"
+        )
+    )
 
     return [
         Violation(
-            code="SC010",
+            code=code,
             path=file_path,
             line=None,
-            message="helpers/ must not contain main.py; keep orchestration outside helper packages",
+            message=message,
         )
     ]
 
@@ -713,33 +696,6 @@ def check_integrations_package_structure(repo_root: Path, file_path: Path) -> li
             message=(
                 "integrations/ packages must use client.py instead of main.py for primary client "
                 "entrypoints"
-            ),
-        )
-    ]
-
-
-def check_helpers_subpackage_shape(repo_root: Path, file_path: Path) -> list[Violation]:
-    """Keep scoped helper packages shallow and free of generic entrypoints."""
-
-    relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
-    if "helpers" not in relative_parts[:-1]:
-        return []
-
-    helpers_index = relative_parts.index("helpers")
-    if len(relative_parts) <= helpers_index + 2:
-        return []
-
-    if len(relative_parts) == helpers_index + 3 and file_path.name != "main.py":
-        return []
-
-    return [
-        Violation(
-            code="SC022",
-            path=file_path,
-            line=None,
-            message=(
-                "helper subpackages must stay shallow and use direct role-oriented files; "
-                "main.py and nested subpackages are not allowed under scoped helpers"
             ),
         )
     ]
@@ -1077,10 +1033,10 @@ def _has_deep_internal_segment(parts: tuple[str, ...], internal_segments: frozen
     return any(seg in internal_segments for seg in parts)
 
 
-def check_main_module_shape(file_path: Path, module: ast.Module) -> list[Violation]:
-    """Enforce main entry modules as focused single-entry surfaces."""
+def check_entry_module_shape(file_path: Path, module: ast.Module) -> list[Violation]:
+    """Enforce entry modules as focused single-entry surfaces."""
 
-    if not _is_main_entry_module(file_path):
+    if not _is_entry_module(file_path):
         return []
 
     public_function_nodes = [
@@ -1102,7 +1058,7 @@ def check_main_module_shape(file_path: Path, module: ast.Module) -> list[Violati
                 code="SC019",
                 path=file_path,
                 line=1,
-                message=("main entry modules must define exactly one public top-level function"),
+                message=("entry modules must define exactly one public top-level function"),
             )
         )
 
@@ -1113,7 +1069,7 @@ def check_main_module_shape(file_path: Path, module: ast.Module) -> list[Violati
                 path=file_path,
                 line=private_function_nodes[2].lineno,
                 message=(
-                    "main entry modules must define at most two private top-level functions; "
+                    "entry modules must define at most two private top-level functions; "
                     "extract additional behavior to sibling modules under main/ or helpers/ "
                     "support code"
                 ),
@@ -1130,7 +1086,7 @@ def check_main_module_shape(file_path: Path, module: ast.Module) -> list[Violati
                 code="SC020",
                 path=file_path,
                 line=getattr(node, "lineno", 1),
-                message="main entry modules must contain only imports and top-level functions",
+                message="entry modules must contain only imports and top-level functions",
             )
         )
 
@@ -1154,12 +1110,10 @@ def _non_docstring_body(module: ast.Module) -> list[ast.stmt]:
     return list(module.body)
 
 
-def _is_main_entry_module(file_path: Path) -> bool:
-    if file_path.name == "main.py":
-        return True
+def _is_entry_module(file_path: Path) -> bool:
     return (
         file_path.suffix == ".py"
-        and file_path.name != "__init__.py"
+        and file_path.name not in {"__init__.py", "main.py"}
         and file_path.parent.name == "main"
     )
 
@@ -1261,7 +1215,11 @@ def _is_within_role_package(file_path: Path, role_directory_name: str) -> bool:
 
 
 def _is_direct_child_of_main_package(relative_parts: tuple[str, ...]) -> bool:
-    return len(relative_parts) >= 2 and relative_parts[-2] == "main"
+    return (
+        len(relative_parts) >= 2
+        and relative_parts[-2] == "main"
+        and relative_parts[-1] != "main.py"
+    )
 
 
 def _subpackage_parts(repo_root: Path, file_path: Path) -> tuple[str, ...]:
@@ -1298,24 +1256,16 @@ def _is_allowed_sibling_public_surface(
     imported_parts: tuple[str, ...],
 ) -> bool:
     if (
-        parent_package_parts[-2:] == ("main", "entry")
-        and len(imported_parts) == len(parent_package_parts) + 1
-        and imported_parts[-1] == "main"
+        len(imported_parts) == len(parent_package_parts) + 2
+        and imported_parts[len(parent_package_parts)] == "main"
+        and imported_parts[-1] != "main"
     ):
-        return True
-    if (
-        parent_package_parts[-1] != "main"
-        and len(imported_parts) == len(parent_package_parts) + 2
-        and imported_parts[-1] == "main"
-    ):
-        return True
-    if len(imported_parts) == len(parent_package_parts) + 3 and imported_parts[-2] == "main":
         return True
     if len(imported_parts) != len(parent_package_parts) + 2:
         return False
 
     public_module_name: str = imported_parts[-1]
-    if public_module_name in {"models", "types"}:
+    if public_module_name in {"models", "types", "constants", "exceptions"}:
         return True
     if "adapter" in parent_package_parts:
         return True

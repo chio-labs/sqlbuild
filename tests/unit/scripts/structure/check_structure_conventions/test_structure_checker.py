@@ -290,6 +290,21 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=(),
     ),
     CheckPathsTestCase(
+        description="reports generic main.py inside main entry package",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/__init__.py": '"""Main entry modules."""\n',
+            "src/sqlbuild/example/widget/main/main.py": dedent(
+                """
+                def run_widget() -> str:
+                    return "demo"
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("SC027",),
+    ),
+    CheckPathsTestCase(
         description="allows imports from parent shared package",
         repo_files=compliant_repo_files()
         | {
@@ -367,7 +382,7 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC019",),
     ),
     CheckPathsTestCase(
-        description="reports sibling entry internal helper import under main",
+        description="allows entry module import from same package helpers",
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/example/widget/main/__init__.py": '"""Main entry modules."""\n',

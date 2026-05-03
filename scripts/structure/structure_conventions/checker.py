@@ -20,15 +20,13 @@ from scripts.structure.structure_conventions.rules import (
     check_constants_outside_constants,
     check_cross_package_internal_imports,
     check_dev_tooling_location,
+    check_entry_module_shape,
     check_exception_declarations_outside_exceptions,
     check_helpers_module_name,
-    check_helpers_package_structure,
-    check_helpers_subpackage_shape,
+    check_helpers_package_shape,
     check_init_module,
     check_integrations_package_structure,
-    check_main_command_package_entry_surface,
     check_main_entry_name_collisions,
-    check_main_module_shape,
     check_model_declarations_outside_models,
     check_models_module,
     check_nested_runtime_package_direct_modules,
@@ -72,8 +70,7 @@ def check_paths(paths: list[Path], repo_root: Path | None = None) -> list[Violat
         violations.extend(check_helpers_module_name(file_path))
         violations.extend(check_classes_module_name(file_path))
         violations.extend(check_init_module(file_path, module))
-        violations.extend(check_main_module_shape(file_path, module))
-        violations.extend(check_main_command_package_entry_surface(actual_repo_root, file_path))
+        violations.extend(check_entry_module_shape(file_path, module))
         violations.extend(check_main_entry_name_collisions(actual_repo_root, file_path))
         violations.extend(check_types_module(file_path, module))
         violations.extend(check_models_module(file_path, module))
@@ -83,8 +80,7 @@ def check_paths(paths: list[Path], repo_root: Path | None = None) -> list[Violat
         violations.extend(check_type_declarations_outside_types(file_path, module))
         violations.extend(check_exception_declarations_outside_exceptions(file_path, module))
         violations.extend(check_constants_outside_constants(file_path, module))
-        violations.extend(check_helpers_package_structure(actual_repo_root, file_path))
-        violations.extend(check_helpers_subpackage_shape(actual_repo_root, file_path))
+        violations.extend(check_helpers_package_shape(actual_repo_root, file_path))
         violations.extend(check_shared_package_structure(actual_repo_root, file_path))
         violations.extend(check_integrations_package_structure(actual_repo_root, file_path))
         violations.extend(check_client_module_shape(actual_repo_root, file_path, module))
