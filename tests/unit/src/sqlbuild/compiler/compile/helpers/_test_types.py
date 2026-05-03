@@ -15,3 +15,20 @@ class ExpandSqlMacrosErrorTestCase:
     macro_file_contents: str
     sql: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ExtractSqlTestCtesTestCase:
+    description: str
+    sql: str
+    expected_authored_cte_names: tuple[str, ...]
+    expected_mock_model_names: tuple[str, ...]
+    expected_mock_source_names: tuple[str, ...]
+    expected_expected_model_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ExtractSqlTestCtesErrorTestCase:
+    description: str
+    sql: str
+    expected_error_fragment: str

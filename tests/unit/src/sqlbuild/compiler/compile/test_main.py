@@ -733,7 +733,14 @@ select @project_columns() from __source("raw_orders")
             "tests/unit/orders.sql": """
 TEST ();
 
-SELECT @project_columns() FROM raw_orders
+WITH
+__source__raw_orders AS (
+  SELECT @project_columns() FROM raw_orders
+),
+__expected__orders AS (
+  SELECT @project_columns()
+)
+SELECT 1
 """.strip()
             + "\n",
             "audits/orders.sql": """
@@ -764,7 +771,22 @@ sources:
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=("raw_orders",),
-        expected_test_sql_bodies=("SELECT order_id, customer_id FROM raw_orders",),
+        expected_test_sql_bodies=(
+            """
+WITH
+__source__raw_orders AS (
+  SELECT order_id, customer_id FROM raw_orders
+),
+__expected__orders AS (
+  SELECT order_id, customer_id
+)
+SELECT 1
+""".strip(),
+        ),
+        expected_test_authored_cte_names=(("__source__raw_orders",),),
+        expected_test_mock_model_names=((),),
+        expected_test_mock_source_names=(("raw_orders",),),
+        expected_test_expected_model_names=(("orders",),),
         expected_audit_sql_bodies=('SELECT order_id, customer_id FROM __source("raw_orders")',),
         expected_effective_environment_name="dev",
         expected_effective_connection={},
@@ -786,11 +808,25 @@ def project_columns() -> str:
             "tests/unit/orders.sql": """
 TEST (name: "first");
 
-SELECT @project_columns() FROM raw_orders;
+WITH
+__ref__orders AS (
+  SELECT @project_columns() FROM raw_orders
+),
+__expected__orders AS (
+  SELECT @project_columns()
+)
+SELECT 1;
 
 TEST (name: "second");
 
-SELECT @project_columns() FROM raw_customers
+WITH
+__ref__orders AS (
+  SELECT @project_columns() FROM raw_customers
+),
+__expected__orders AS (
+  SELECT @project_columns()
+)
+SELECT 1
 """.strip()
             + "\n",
             "audits/orders.sql": """
@@ -817,9 +853,34 @@ SELECT @project_columns() FROM raw_customers
         expected_effective_connection={},
         expected_effective_vars={},
         expected_test_sql_bodies=(
-            "SELECT order_id FROM raw_orders;",
-            "SELECT order_id FROM raw_customers",
+            """
+WITH
+__ref__orders AS (
+  SELECT order_id FROM raw_orders
+),
+__expected__orders AS (
+  SELECT order_id
+)
+SELECT 1;
+""".strip(),
+            """
+WITH
+__ref__orders AS (
+  SELECT order_id FROM raw_customers
+),
+__expected__orders AS (
+  SELECT order_id
+)
+SELECT 1
+""".strip(),
         ),
+        expected_test_authored_cte_names=(
+            ("__ref__orders",),
+            ("__ref__orders",),
+        ),
+        expected_test_mock_model_names=(("orders",), ("orders",)),
+        expected_test_mock_source_names=((), ()),
+        expected_test_expected_model_names=(("orders",), ("orders",)),
         expected_audit_sql_bodies=(
             "SELECT order_id FROM raw_orders;",
             "SELECT order_id FROM raw_customers",
@@ -1015,6 +1076,25 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
         == test_case.expected_test_sql_bodies
     )
     assert (
+        tuple(
+            tuple(cte.name for cte in test_input.authored_ctes)
+            for test_input in compile_inputs.test_inputs
+        )
+        == test_case.expected_test_authored_cte_names
+    )
+    assert (
+        tuple(test_input.mock_model_names for test_input in compile_inputs.test_inputs)
+        == test_case.expected_test_mock_model_names
+    )
+    assert (
+        tuple(test_input.mock_source_names for test_input in compile_inputs.test_inputs)
+        == test_case.expected_test_mock_source_names
+    )
+    assert (
+        tuple(test_input.expected_model_names for test_input in compile_inputs.test_inputs)
+        == test_case.expected_test_expected_model_names
+    )
+    assert (
         tuple(audit_input.sql_body for audit_input in compile_inputs.audit_inputs)
         == test_case.expected_audit_sql_bodies
     )
@@ -1145,6 +1225,131 @@ SELECT @missing_macro()
         selected_environment=None,
         run_id=None,
         expected_error_fragment="Unknown macro '@missing_macro'",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when a compiled test body lacks top level test ctes",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            "tests/unit/orders.sql": """
+TEST ();
+
+SELECT 1
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="must declare mock CTEs and one __expected__<model>",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when a compiled test body lacks ceremonial select one",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            "sources/raw.yml": """
+sources:
+  - name: raw_orders
+""".strip()
+            + "\n",
+            "tests/unit/orders.sql": """
+TEST ();
+
+WITH
+__source__raw_orders AS (
+  SELECT 1 AS order_id
+),
+__expected__orders AS (
+  SELECT 1 AS order_id
+)
+SELECT order_id FROM __expected__orders
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="must end with a ceremonial top-level `SELECT 1`",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when a compiled test body references an unknown source mock",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            "tests/unit/orders.sql": """
+TEST ();
+
+WITH
+__source__missing_source AS (
+  SELECT 1 AS order_id
+),
+__expected__orders AS (
+  SELECT 1 AS order_id
+)
+SELECT 1
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="mocks unknown source 'missing_source'",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when a compiled test body references an unknown expected model",
+        repo_files=base_repo_files()
+        | {
+            "sources/raw.yml": """
+sources:
+  - name: raw_orders
+""".strip()
+            + "\n",
+            "tests/unit/orders.sql": """
+TEST ();
+
+WITH
+__source__raw_orders AS (
+  SELECT 1 AS order_id
+),
+__expected__missing_model AS (
+  SELECT 1 AS order_id
+)
+SELECT 1
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="expects unknown model 'missing_model'",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when a compiled test body uses a reserved helper cte name",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            "sources/raw.yml": """
+sources:
+  - name: raw_orders
+""".strip()
+            + "\n",
+            "tests/unit/orders.sql": """
+TEST ();
+
+WITH
+__actual AS (
+  SELECT 1 AS order_id
+),
+__source__raw_orders AS (
+  SELECT * FROM __actual
+),
+__expected__orders AS (
+  SELECT 1 AS order_id
+)
+SELECT 1
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="uses reserved helper CTE name '__actual'",
     ),
     BuildCompileInputsErrorTestCase(
         description="raises when a compiled audit body references an unknown macro",

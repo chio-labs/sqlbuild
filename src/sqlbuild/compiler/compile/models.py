@@ -48,6 +48,24 @@ class CompileSqlReference:
 
 
 @dataclass(frozen=True)
+class CompileSqlTestCte:
+    """One top-level SQL-native test CTE extracted after macro expansion."""
+
+    name: str
+    sql_body: str
+
+
+@dataclass(frozen=True)
+class CompileSqlTestCtes:
+    """Extracted top-level SQL-native test CTE semantics."""
+
+    authored_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
+    mock_model_names: tuple[str, ...] = field(default_factory=tuple)
+    mock_source_names: tuple[str, ...] = field(default_factory=tuple)
+    expected_model_names: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class CompileModelInput:
     """One discovered model file with its attached schema metadata, if any."""
 
@@ -83,6 +101,10 @@ class CompileSqlTestInput:
     test_file: DiscoveredSqlTestFile
     test_block: DiscoveredSqlTestBlock
     sql_body: str
+    authored_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
+    mock_model_names: tuple[str, ...] = field(default_factory=tuple)
+    mock_source_names: tuple[str, ...] = field(default_factory=tuple)
+    expected_model_names: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

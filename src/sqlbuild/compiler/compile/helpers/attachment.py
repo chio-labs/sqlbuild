@@ -22,6 +22,7 @@ from sqlbuild.compiler.compile.helpers.templating import (
     expand_effective_vars,
     expand_template_data,
 )
+from sqlbuild.compiler.compile.helpers.tests import extract_sql_test_ctes
 from sqlbuild.compiler.compile.models import (
     CompileAuditInput,
     CompileModelConfig,
@@ -29,6 +30,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSeedInput,
     CompileSourceInput,
     CompileSqlReference,
+    CompileSqlTestCtes,
     CompileSqlTestInput,
     LoadedMacro,
 )
@@ -216,23 +218,77 @@ def build_test_inputs(
     """Build compile-time test inputs from discovered SQL-native test blocks."""
 
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
+    known_model_names: set[str] = {
+        discovered_model_file.file_path.stem
+        for discovered_model_file in discovered_inputs.model_files
+    }
+    known_source_names: set[str] = {
+        source_entry.name
+        for source_file in discovered_inputs.source_files
+        for source_entry in source_file.source_entries
+    }
     test_inputs: list[CompileSqlTestInput] = []
     test_file: DiscoveredSqlTestFile
     for test_file in discovered_inputs.test_files:
         test_block: DiscoveredSqlTestBlock
         for test_block in test_file.blocks:
+            expanded_sql_body: str = expand_sql_macros(
+                sql=test_block.sql_body,
+                file_path=test_file.file_path,
+                loaded_macros=loaded_macros,
+            )
+            test_ctes: CompileSqlTestCtes = extract_sql_test_ctes(
+                sql=expanded_sql_body,
+                file_label=str(test_file.relative_path),
+            )
+            validate_test_ctes(
+                test_ctes=test_ctes,
+                test_file=test_file,
+                known_model_names=known_model_names,
+                known_source_names=known_source_names,
+            )
             test_inputs.append(
                 CompileSqlTestInput(
                     test_file=test_file,
                     test_block=test_block,
-                    sql_body=expand_sql_macros(
-                        sql=test_block.sql_body,
-                        file_path=test_file.file_path,
-                        loaded_macros=loaded_macros,
-                    ),
+                    sql_body=expanded_sql_body,
+                    authored_ctes=test_ctes.authored_ctes,
+                    mock_model_names=test_ctes.mock_model_names,
+                    mock_source_names=test_ctes.mock_source_names,
+                    expected_model_names=test_ctes.expected_model_names,
                 )
             )
     return tuple(test_inputs)
+
+
+def validate_test_ctes(
+    *,
+    test_ctes: CompileSqlTestCtes,
+    test_file: DiscoveredSqlTestFile,
+    known_model_names: set[str],
+    known_source_names: set[str],
+) -> None:
+    """Validate SQL-native test CTE targets against discovered inputs."""
+
+    mock_model_name: str
+    for mock_model_name in test_ctes.mock_model_names:
+        if mock_model_name not in known_model_names:
+            raise CompileInputError(
+                f"SQL test file {test_file.relative_path} mocks unknown model '{mock_model_name}'"
+            )
+    mock_source_name: str
+    for mock_source_name in test_ctes.mock_source_names:
+        if mock_source_name not in known_source_names:
+            raise CompileInputError(
+                f"SQL test file {test_file.relative_path} mocks unknown source '{mock_source_name}'"
+            )
+    expected_model_name: str
+    for expected_model_name in test_ctes.expected_model_names:
+        if expected_model_name not in known_model_names:
+            raise CompileInputError(
+                f"SQL test file {test_file.relative_path} expects unknown model "
+                f"'{expected_model_name}'"
+            )
 
 
 def build_audit_inputs(

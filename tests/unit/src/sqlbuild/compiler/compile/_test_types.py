@@ -18,6 +18,10 @@ class BuildCompileInputsTestCase:
     expected_effective_vars: dict[str, str]
     expected_model_query_sqls: tuple[str, ...] = field(default_factory=tuple)
     expected_test_sql_bodies: tuple[str, ...] = field(default_factory=tuple)
+    expected_test_authored_cte_names: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
+    expected_test_mock_model_names: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
+    expected_test_mock_source_names: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
+    expected_test_expected_model_names: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     expected_audit_sql_bodies: tuple[str, ...] = field(default_factory=tuple)
     expected_model_references: tuple[tuple[tuple[str, str], ...], ...] = field(
         default_factory=tuple
