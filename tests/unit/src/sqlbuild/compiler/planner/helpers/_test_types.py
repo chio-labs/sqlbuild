@@ -120,6 +120,7 @@ class CheckBuildabilityTestCase:
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
     existing_relation_names: tuple[str, ...]
     expected_missing: tuple[MissingUpstream, ...]
+    deferred_relation_names: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -186,3 +187,14 @@ class PlanAuditTestCase:
     model_targets: dict[str, str]
     source_map_entries: dict[str, tuple[str | None, str, str | None]]
     expected_sql_fragment: str
+
+
+@dataclass(frozen=True)
+class ApplyDeferredTargetsTestCase:
+    description: str
+    model_target_names: tuple[str, ...]
+    seed_target_names: tuple[str, ...]
+    deferred_target_names: tuple[str, ...]
+    selected_key_names: tuple[str, ...]
+    expected_model_qualified_names: dict[str, str | None]
+    expected_seed_qualified_names: dict[str, str | None]

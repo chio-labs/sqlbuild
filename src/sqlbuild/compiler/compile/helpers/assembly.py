@@ -174,4 +174,6 @@ def _build_model_relation_target(
         schema=schema,
         name=name,
         qualified_name=qualified_name,
+        logical_schema=model_input.config.logical_schema,
+        logical_database=model_input.config.logical_database,
     )

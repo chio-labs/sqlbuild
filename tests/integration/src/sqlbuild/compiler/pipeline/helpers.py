@@ -19,6 +19,9 @@ def run_compile_pipeline_for_project(
     *,
     project_dir: Path,
     adapter: BaseAdapter,
+    defer_to: str | None = None,
+    select: tuple[str, ...] = (),
+    exclude: tuple[str, ...] = (),
 ) -> CompilePipelineResult:
     """Discover a project and run the real compile pipeline."""
 
@@ -27,6 +30,9 @@ def run_compile_pipeline_for_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         no_sql_validation=True,
+        defer_to=defer_to,
+        select=select,
+        exclude=exclude,
     )
 
 

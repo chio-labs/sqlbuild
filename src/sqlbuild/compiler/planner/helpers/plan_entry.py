@@ -331,6 +331,28 @@ def _compute_plan_cursor_bounds(
     )
 
 
+def scope_overlaps(
+    scope_deps: tuple[CompiledObjectKey, ...],
+    selected_keys: frozenset[CompiledObjectKey],
+) -> bool:
+    """Check if any scope dependency is in the selected keys."""
+
+    dep: CompiledObjectKey
+    for dep in scope_deps:
+        if dep in selected_keys:
+            return True
+    return False
+
+
+def is_settings_flag(project: CompiledProject, key: str, *, default: bool) -> bool:
+    """Check a boolean setting from project effective connection."""
+
+    raw: object | None = project.effective_connection.get(key)
+    if isinstance(raw, bool):
+        return raw
+    return default
+
+
 def _get_config_str(model: CompiledModel, key: str) -> str | None:
     """Extract a string config value from model config."""
 

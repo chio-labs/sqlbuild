@@ -871,6 +871,12 @@ def build_model_config(
         effective_environment_name=effective_environment_name,
         run_id=run_id,
     )
+    raw_logical_schema: object | None = model_resolved_values.get("schema")
+    raw_logical_database: object | None = model_resolved_values.get("database")
+    logical_schema: str | None = raw_logical_schema if isinstance(raw_logical_schema, str) else None
+    logical_database: str | None = (
+        raw_logical_database if isinstance(raw_logical_database, str) else None
+    )
     apply_environment_database_schema_overrides(
         values=model_resolved_values,
         effective_vars=effective_vars,
@@ -891,7 +897,10 @@ def build_model_config(
     )
     validate_model_config_has_no_macros(values=target_resolved_values)
     return CompileModelConfig(
-        values=target_resolved_values, matched_path_default=matched_path_default
+        values=target_resolved_values,
+        matched_path_default=matched_path_default,
+        logical_schema=logical_schema,
+        logical_database=logical_database,
     )
 
 

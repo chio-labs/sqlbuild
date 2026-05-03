@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.planner.helpers.buildability import check_buildability
 from sqlbuild.compiler.planner.models import MissingUpstream, WarehouseSnapshot
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
@@ -96,6 +97,31 @@ CHECK_BUILDABILITY_TEST_CASES: list[CheckBuildabilityTestCase] = [
         existing_relation_names=(),
         expected_missing=(),
     ),
+    CheckBuildabilityTestCase(
+        description="deferred relation satisfies missing upstream",
+        selected_keys=frozenset({model_key("b")}),
+        upstream_deps={
+            model_key("b"): (model_key("a"),),
+        },
+        existing_relation_names=(),
+        deferred_relation_names=("a",),
+        expected_missing=(),
+    ),
+    CheckBuildabilityTestCase(
+        description="deferred relation does not satisfy unrelated upstream",
+        selected_keys=frozenset({model_key("b")}),
+        upstream_deps={
+            model_key("b"): (model_key("a"),),
+        },
+        existing_relation_names=(),
+        deferred_relation_names=("c",),
+        expected_missing=(
+            MissingUpstream(
+                key=model_key("a"),
+                required_by=(model_key("b"),),
+            ),
+        ),
+    ),
 ]
 
 
@@ -110,11 +136,16 @@ def test_given_scope_and_snapshot_when_checking_buildability_then_returns_expect
     snapshot: WarehouseSnapshot = build_snapshot_from_relation_names(
         test_case.existing_relation_names
     )
+    deferred_relations: dict[str, RelationInfo] = {
+        name: RelationInfo(database=None, schema="prod", name=name, relation_type="BASE TABLE")
+        for name in test_case.deferred_relation_names
+    }
 
     result: tuple[MissingUpstream, ...] = check_buildability(
         selected_keys=test_case.selected_keys,
         upstream_deps=test_case.upstream_deps,
         snapshot=snapshot,
+        deferred_relations=deferred_relations or None,
     )
 
     assert result == test_case.expected_missing

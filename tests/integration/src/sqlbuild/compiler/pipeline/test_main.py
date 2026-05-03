@@ -10,6 +10,7 @@ from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
+    DeferToIntegrationTestCase,
     ExpectedModelEntry,
     RunCompilePipelineIntegrationTestCase,
 )
@@ -198,3 +199,69 @@ def test_given_project_files_when_running_compile_pipeline_then_produces_valid_o
         assert expected.expected_manifest_compiled_code_fragment in compiled_code
 
     validate_manifest_against_dbt_schema(result.manifest)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DeferToIntegrationTestCase(
+            description="defer-to resolves unselected ref to deferred environment schema",
+            project_files={
+                "sqlbuild_project.yml": (
+                    "name: demo\n"
+                    "adapter: duckdb\n"
+                    "default_environment: dev\n"
+                    "connection:\n"
+                    "  database: ':memory:'\n"
+                    "environments:\n"
+                    "  dev:\n"
+                    "    schema: dev_schema\n"
+                    "  prod:\n"
+                    "    schema: prod_schema\n"
+                ),
+                "models/stg_orders.sql": ("MODEL (materialized: table);\n\nSELECT 1 AS order_id"),
+                "models/fact_orders.sql": (
+                    'MODEL (materialized: table);\n\nSELECT order_id FROM __ref("stg_orders")'
+                ),
+            },
+            defer_to="prod",
+            select=("fact_orders",),
+            expected_model_count=1,
+            expected_resolved_sql_fragments={
+                "fact_orders": "prod_schema.stg_orders",
+            },
+        ),
+    ],
+    ids=["defer-to resolves unselected ref to deferred environment schema"],
+)
+def test_given_project_with_defer_to_when_compiling_then_resolves_refs_to_deferred_env(
+    test_case: DeferToIntegrationTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    db_path: str = str(tmp_path / "test.duckdb")
+    project_files: dict[str, str] = {
+        k: v.replace(":memory:", db_path) for k, v in test_case.project_files.items()
+    }
+    write_repo_files(tmp_path, project_files)
+
+    import duckdb
+
+    conn: duckdb.DuckDBPyConnection = duckdb.connect(db_path)
+    conn.execute("CREATE SCHEMA IF NOT EXISTS prod_schema")
+    conn.execute("CREATE TABLE prod_schema.stg_orders (order_id INTEGER)")
+    conn.close()
+
+    result: CompilePipelineResult = run_compile_pipeline_for_project(
+        project_dir=tmp_path,
+        adapter=DuckDbAdapter(),
+        defer_to=test_case.defer_to,
+        select=test_case.select,
+    )
+
+    assert len(result.plan_output.model_entries) == test_case.expected_model_count
+    entry_map: dict[str, ModelPlanEntry] = {e.name: e for e in result.plan_output.model_entries}
+    model_name: str
+    expected_fragment: str
+    for model_name, expected_fragment in test_case.expected_resolved_sql_fragments.items():
+        assert expected_fragment in entry_map[model_name].resolved_sql

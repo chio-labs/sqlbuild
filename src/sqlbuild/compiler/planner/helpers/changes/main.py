@@ -5,6 +5,10 @@ from __future__ import annotations
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models import CompiledModel, InferredColumn
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.planner.helpers.changes.helpers.config import (
+    get_config_dict,
+    get_config_str,
+)
 from sqlbuild.compiler.planner.helpers.changes.helpers.policy import (
     pick_more_aggressive,
     resolve_query_change_backfill,
@@ -68,7 +72,7 @@ def detect_model_changes(
             sqlglot_enabled=sqlglot_enabled,
         )
         if query_changed:
-            raw_policy: str | None = _get_config_str(model, "query_change_backfill")
+            raw_policy: str | None = get_config_str(model, "query_change_backfill")
             query_backfill = resolve_query_change_backfill(query_change_backfill=raw_policy)
 
     schema_findings: tuple[SchemaFinding, ...] = ()
@@ -88,7 +92,7 @@ def detect_model_changes(
             type_enforcement=type_enforcement,
         )
         if schema_findings:
-            raw_schema_policy: dict[str, str] = _get_config_dict(model, "schema_change_backfill")
+            raw_schema_policy: dict[str, str] = get_config_dict(model, "schema_change_backfill")
             schema_backfill = resolve_schema_change_backfill(
                 schema_change_backfill=raw_schema_policy,
                 findings=schema_findings,
@@ -131,19 +135,3 @@ def _build_yml_columns(model: CompiledModel) -> tuple[ColumnInfo, ...]:
         for col in model.schema_entry.columns
         if col.type is not None
     )
-
-
-def _get_config_str(model: CompiledModel, key: str) -> str | None:
-    """Extract a string config value from model config."""
-
-    raw: object | None = model.config.values.get(key)
-    return raw if isinstance(raw, str) else None
-
-
-def _get_config_dict(model: CompiledModel, key: str) -> dict[str, str]:
-    """Extract a dict config value from model config."""
-
-    raw: object | None = model.config.values.get(key)
-    if not isinstance(raw, dict):
-        return {}
-    return {k: v for k, v in raw.items() if isinstance(k, str) and isinstance(v, str)}

@@ -41,6 +41,8 @@ class CompileModelConfig:
 
     values: dict[str, object] = field(default_factory=dict)
     matched_path_default: str | None = None
+    logical_schema: str | None = None
+    logical_database: str | None = None
 
 
 @dataclass(frozen=True)
@@ -184,6 +186,8 @@ class CompiledRelationTarget:
     schema: str | None
     name: str
     qualified_name: str | None
+    logical_schema: str | None = None
+    logical_database: str | None = None
 
 
 @dataclass(frozen=True)

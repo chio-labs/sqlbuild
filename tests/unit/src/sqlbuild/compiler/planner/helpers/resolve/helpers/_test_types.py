@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.planner.models import CursorBounds, ModelCursorSnapshot
@@ -36,3 +36,14 @@ class RefResolutionTestCase:
     description: str
     query_sql: str
     expected_sql: str
+
+
+@dataclass(frozen=True)
+class ApplyDeferredTargetsTestCase:
+    description: str
+    model_target_qualified: dict[str, str | None]
+    seed_target_qualified: dict[str, str | None]
+    deferred_qualified: dict[str, str | None]
+    selected_names: tuple[str, ...]
+    expected_model_qualified: dict[str, str | None]
+    expected_seed_qualified: dict[str, str | None] = field(default_factory=dict)

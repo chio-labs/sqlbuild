@@ -48,6 +48,8 @@ def _resolve_target(
         schema=schema,
         name=target.name,
         qualified_name=qualified_name,
+        logical_schema=target.logical_schema,
+        logical_database=target.logical_database,
     )
 
 

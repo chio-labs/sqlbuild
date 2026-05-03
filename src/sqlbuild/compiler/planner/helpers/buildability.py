@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.planner.models import MissingUpstream, WarehouseSnapshot
 
@@ -11,6 +12,7 @@ def check_buildability(
     selected_keys: frozenset[CompiledObjectKey],
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     snapshot: WarehouseSnapshot,
+    deferred_relations: dict[str, RelationInfo] | None = None,
 ) -> tuple[MissingUpstream, ...]:
     """Validate that all upstream deps for selected keys exist in scope or warehouse.
 
@@ -27,6 +29,8 @@ def check_buildability(
             if dep_key in selected_keys:
                 continue
             if dep_key.name in snapshot.existing_relations:
+                continue
+            if deferred_relations is not None and dep_key.name in deferred_relations:
                 continue
             missing_map.setdefault(dep_key, []).append(selected_key)
 

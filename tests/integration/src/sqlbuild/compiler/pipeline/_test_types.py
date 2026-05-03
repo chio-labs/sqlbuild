@@ -19,3 +19,13 @@ class RunCompilePipelineIntegrationTestCase:
     expected_model_count: int = 0
     expected_seed_count: int = 0
     expected_manifest_node_count: int = 0
+
+
+@dataclass(frozen=True)
+class DeferToIntegrationTestCase:
+    description: str
+    project_files: dict[str, str]
+    defer_to: str
+    select: tuple[str, ...]
+    expected_model_count: int
+    expected_resolved_sql_fragments: dict[str, str] = field(default_factory=dict)

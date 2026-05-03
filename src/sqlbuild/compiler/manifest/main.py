@@ -13,6 +13,10 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
 )
 from sqlbuild.compiler.manifest.constants import DBT_MANIFEST_SCHEMA_VERSION
+from sqlbuild.compiler.manifest.helpers.graph_maps import (
+    build_child_map,
+    build_parent_map,
+)
 from sqlbuild.compiler.manifest.helpers.macros import build_macro_node
 from sqlbuild.compiler.manifest.helpers.model_nodes import build_model_node
 from sqlbuild.compiler.manifest.helpers.seeds import build_seed_node
@@ -100,12 +104,12 @@ def build_manifest(
             project_name=project_name,
         )
 
-    parent_map: dict[str, list[str]] = _build_parent_map(
+    parent_map: dict[str, list[str]] = build_parent_map(
         upstream_deps=upstream_deps,
         project_name=project_name,
         project=project,
     )
-    child_map: dict[str, list[str]] = _build_child_map(
+    child_map: dict[str, list[str]] = build_child_map(
         downstream_deps=downstream_deps,
         project_name=project_name,
         project=project,
@@ -155,50 +159,3 @@ def _build_metadata(
         "send_anonymous_usage_stats": False,
         "adapter_type": adapter_type,
     }
-
-
-def _build_unique_id(key: CompiledObjectKey, project_name: str, project: CompiledProject) -> str:
-    """Build a dbt-style unique_id from a CompiledObjectKey."""
-
-    source_names: frozenset[str] = frozenset(s.name for s in project.sources)
-    seed_names: frozenset[str] = frozenset(s.name for s in project.seeds)
-
-    if key.name in source_names:
-        return f"source.{project_name}.{key.name}"
-    if key.name in seed_names:
-        return f"seed.{project_name}.{key.name}"
-    return f"model.{project_name}.{key.name}"
-
-
-def _build_parent_map(
-    *,
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    project_name: str,
-    project: CompiledProject,
-) -> dict[str, list[str]]:
-    """Build the parent_map (node -> first-order parents)."""
-
-    result: dict[str, list[str]] = {}
-    key: CompiledObjectKey
-    parents: tuple[CompiledObjectKey, ...]
-    for key, parents in upstream_deps.items():
-        node_id: str = _build_unique_id(key, project_name, project)
-        result[node_id] = [_build_unique_id(parent, project_name, project) for parent in parents]
-    return result
-
-
-def _build_child_map(
-    *,
-    downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    project_name: str,
-    project: CompiledProject,
-) -> dict[str, list[str]]:
-    """Build the child_map (node -> first-order children)."""
-
-    result: dict[str, list[str]] = {}
-    key: CompiledObjectKey
-    children: tuple[CompiledObjectKey, ...]
-    for key, children in downstream_deps.items():
-        node_id: str = _build_unique_id(key, project_name, project)
-        result[node_id] = [_build_unique_id(child, project_name, project) for child in children]
-    return result

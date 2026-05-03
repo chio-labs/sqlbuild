@@ -14,10 +14,11 @@ class CliNamespace:
     command: str | None = None
     project_dir: str | None = None
     no_sql_validation: bool = False
+    defer_to: str | None = None
 
 
 @dataclass(frozen=True)
 class CliEntrypointHandlers:
     """Injected command handlers for the CLI entrypoint."""
 
-    run_compile: Callable[[Path | None, bool], int]
+    run_compile: Callable[[Path | None, bool, str | None], int]

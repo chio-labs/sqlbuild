@@ -7,6 +7,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledRelationTarget,
 )
+from sqlbuild.compiler.planner.helpers.resolve.helpers.config import get_config_str
 from sqlbuild.compiler.planner.helpers.resolve.helpers.cursor import compute_cursor_bounds
 from sqlbuild.compiler.planner.helpers.resolve.helpers.refs import (
     resolve_dbt_ref_references,
@@ -85,8 +86,8 @@ def _compute_model_cursor_bounds(
 ) -> CursorBounds | None:
     """Compute cursor bounds for a model if it is incremental with a cursor."""
 
-    materialized: str | None = _get_config_str(model, "materialized")
-    cursor_column: str | None = _get_config_str(model, "cursor")
+    materialized: str | None = get_config_str(model, "materialized")
+    cursor_column: str | None = get_config_str(model, "cursor")
 
     if materialized != "incremental" or cursor_column is None:
         return None
@@ -98,8 +99,8 @@ def _compute_model_cursor_bounds(
     if cursor_snapshot is None:
         return None
 
-    lookback: str | None = _get_config_str(model, "lookback")
-    incremental_mode: str | None = _get_config_str(model, "incremental_mode")
+    lookback: str | None = get_config_str(model, "lookback")
+    incremental_mode: str | None = get_config_str(model, "incremental_mode")
     is_microbatch: bool = incremental_mode == "microbatch"
 
     backfill_duration: str | None = None
@@ -119,7 +120,7 @@ def _compute_model_cursor_bounds(
 def _get_cursor_inputs(model: CompiledModel) -> dict[str, str]:
     """Resolve cursor column mapping per upstream ref."""
 
-    cursor_column: str | None = _get_config_str(model, "cursor")
+    cursor_column: str | None = get_config_str(model, "cursor")
     if cursor_column is None:
         return {}
 
@@ -128,10 +129,3 @@ def _get_cursor_inputs(model: CompiledModel) -> dict[str, str]:
         return {k: v for k, v in raw.items() if isinstance(k, str) and isinstance(v, str)}
 
     return {ref.ref_name: cursor_column for ref in model.references}
-
-
-def _get_config_str(model: CompiledModel, key: str) -> str | None:
-    """Extract a string config value from model config."""
-
-    raw: object | None = model.config.values.get(key)
-    return raw if isinstance(raw, str) else None

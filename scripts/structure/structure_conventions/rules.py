@@ -1110,14 +1110,14 @@ def check_main_module_shape(file_path: Path, module: ast.Module) -> list[Violati
             )
         )
 
-    if len(private_function_nodes) > 4:
+    if len(private_function_nodes) > 2:
         violations.append(
             Violation(
                 code="SC026",
                 path=file_path,
-                line=private_function_nodes[4].lineno,
+                line=private_function_nodes[2].lineno,
                 message=(
-                    "main entry modules must define at most four private top-level functions; "
+                    "main entry modules must define at most two private top-level functions; "
                     "extract additional behavior to sibling modules under main/ or helpers/ "
                     "support code"
                 ),

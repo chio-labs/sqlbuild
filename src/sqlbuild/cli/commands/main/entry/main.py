@@ -24,10 +24,13 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     compile_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.COMPILE)
     compile_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    compile_parser.add_argument("--defer-to", default=None)
     run_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.RUN)
     run_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    run_parser.add_argument("--defer-to", default=None)
     build_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.BUILD)
     build_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    build_parser.add_argument("--defer-to", default=None)
     subparsers.add_parser(CliCommand.TEST)
     subparsers.add_parser(CliCommand.AUDIT)
     subparsers.add_parser(CliCommand.SEED)
@@ -67,7 +70,7 @@ def _main_with_dependencies(
     try:
         project_dir: Path | None = None if args.project_dir is None else Path(args.project_dir)
         if args.command == CliCommand.COMPILE:
-            return handlers.run_compile(project_dir, args.no_sql_validation)
+            return handlers.run_compile(project_dir, args.no_sql_validation, args.defer_to)
         return 0
     except CliUserError as error:
         print(str(error), file=sys.stderr)
@@ -75,9 +78,3 @@ def _main_with_dependencies(
     except (DiscoveryError, ValueError) as error:
         print(str(error), file=sys.stderr)
         return 1
-
-
-def _run_compile_placeholder(project_dir: Path | None, no_sql_validation: bool) -> int:
-    del project_dir
-    del no_sql_validation
-    return 0

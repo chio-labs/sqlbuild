@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import re
 
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledRelationTarget, CompiledSeed
+from sqlbuild.compiler.compile.models import (
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledRelationTarget,
+    CompiledSeed,
+)
 from sqlbuild.compiler.planner.models import CursorBounds
 
 _REF_PATTERN: re.Pattern[str] = re.compile(r'__ref\("([^"]+)"\)')
@@ -83,3 +88,24 @@ def build_seed_targets(
     """Build a lookup of seed name to compiled relation target."""
 
     return {seed.name: seed.target for seed in seeds}
+
+
+def apply_deferred_targets(
+    *,
+    model_targets: dict[str, CompiledRelationTarget],
+    seed_targets: dict[str, CompiledRelationTarget],
+    deferred_targets: dict[str, CompiledRelationTarget],
+    selected_keys: frozenset[CompiledObjectKey],
+) -> None:
+    """Replace non-selected model/seed targets with deferred environment targets."""
+
+    selected_names: frozenset[str] = frozenset(k.name for k in selected_keys)
+    name: str
+    deferred_target: CompiledRelationTarget
+    for name, deferred_target in deferred_targets.items():
+        if name in selected_names:
+            continue
+        if name in model_targets:
+            model_targets[name] = deferred_target
+        if name in seed_targets:
+            seed_targets[name] = deferred_target

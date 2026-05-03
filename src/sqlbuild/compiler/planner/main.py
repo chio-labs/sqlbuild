@@ -6,7 +6,7 @@ from collections.abc import Callable
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledModel,
@@ -29,9 +29,12 @@ from sqlbuild.compiler.planner.helpers.plan_entry import (
     build_path_index,
     build_tag_index,
     gather_source_columns,
+    is_settings_flag,
     plan_model,
+    scope_overlaps,
 )
 from sqlbuild.compiler.planner.helpers.resolve.helpers.refs import (
+    apply_deferred_targets,
     build_model_targets,
     build_seed_targets,
 )
@@ -64,6 +67,8 @@ def build_execution_plan(
     start_cursor_override: str | None = None,
     end_cursor_override: str | None = None,
     on_progress: Callable[[str], None] | None = None,
+    deferred_targets: dict[str, CompiledRelationTarget] | None = None,
+    deferred_relations: dict[str, RelationInfo] | None = None,
 ) -> PlanOutput:
     """Build a complete execution plan from compiled project and warehouse state."""
 
@@ -100,12 +105,14 @@ def build_execution_plan(
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
         on_progress=on_progress,
+        deferred_targets=deferred_targets,
     )
 
     missing: tuple[MissingUpstream, ...] = check_buildability(
         selected_keys=selected_keys,
         upstream_deps=upstream_deps,
         snapshot=snapshot,
+        deferred_relations=deferred_relations,
     )
     if missing:
         names: str = ", ".join(m.key.name for m in missing[:5])
@@ -115,6 +122,13 @@ def build_execution_plan(
 
     model_targets: dict[str, CompiledRelationTarget] = build_model_targets(project.models)
     seed_targets: dict[str, CompiledRelationTarget] = build_seed_targets(project.seeds)
+    if deferred_targets is not None:
+        apply_deferred_targets(
+            model_targets=model_targets,
+            seed_targets=seed_targets,
+            deferred_targets=deferred_targets,
+            selected_keys=selected_keys,
+        )
     source_map: dict[str, SourceEntry] = {
         s.source_entry.name: s.source_entry for s in project.sources
     }
@@ -123,8 +137,8 @@ def build_execution_plan(
         project=project, adapter=adapter, connection=connection
     )
 
-    sqlglot_enabled: bool = _is_settings_flag(project, "sqlglot", default=False)
-    query_change_tracking: bool = _is_settings_flag(project, "query_change_tracking", default=True)
+    sqlglot_enabled: bool = is_settings_flag(project, "sqlglot", default=False)
+    query_change_tracking: bool = is_settings_flag(project, "query_change_tracking", default=True)
 
     model_entries: list[ModelPlanEntry] = []
     all_warnings: list[PlanWarning] = []
@@ -168,7 +182,7 @@ def build_execution_plan(
     audit_entries: list[AuditPlanEntry] = []
     audit: CompiledAudit
     for audit in project.audits:
-        if not _scope_overlaps(audit.scope_deps, selected_keys):
+        if not scope_overlaps(audit.scope_deps, selected_keys):
             continue
         audit_entries.append(
             plan_audit(
@@ -182,7 +196,7 @@ def build_execution_plan(
     test_entries: list[SqlTestPlanEntry] = []
     sql_test: CompiledSqlTest
     for sql_test in project.sql_tests:
-        if not _scope_overlaps(sql_test.scope_deps, selected_keys):
+        if not scope_overlaps(sql_test.scope_deps, selected_keys):
             continue
         test_entry: SqlTestPlanEntry
         test_warnings: tuple[PlanWarning, ...]
@@ -234,25 +248,3 @@ def _find_model(project: CompiledProject, name: str) -> CompiledModel | None:
         if model.name == name:
             return model
     return None
-
-
-def _scope_overlaps(
-    scope_deps: tuple[CompiledObjectKey, ...],
-    selected_keys: frozenset[CompiledObjectKey],
-) -> bool:
-    """Check if any scope dependency is in the selected keys."""
-
-    dep: CompiledObjectKey
-    for dep in scope_deps:
-        if dep in selected_keys:
-            return True
-    return False
-
-
-def _is_settings_flag(project: CompiledProject, key: str, *, default: bool) -> bool:
-    """Check a boolean setting from project effective connection."""
-
-    raw: object | None = project.effective_connection.get(key)
-    if isinstance(raw, bool):
-        return raw
-    return default

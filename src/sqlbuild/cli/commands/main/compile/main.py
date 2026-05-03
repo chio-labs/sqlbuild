@@ -14,7 +14,11 @@ from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import PlanOutput
 
 
-def run_compile(project_dir: Path | None, no_sql_validation: bool = False) -> int:
+def run_compile(
+    project_dir: Path | None,
+    no_sql_validation: bool = False,
+    defer_to: str | None = None,
+) -> int:
     """Execute the compile command."""
 
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
@@ -25,6 +29,7 @@ def run_compile(project_dir: Path | None, no_sql_validation: bool = False) -> in
         discovered_inputs=discovered_inputs,
         adapter=resolve_adapter(discovered_inputs.project_config.adapter),
         no_sql_validation=no_sql_validation,
+        defer_to=defer_to,
     )
 
     plan_output: PlanOutput = pipeline_result.plan_output

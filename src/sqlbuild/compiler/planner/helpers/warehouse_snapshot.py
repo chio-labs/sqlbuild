@@ -12,6 +12,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
+    CompiledRelationTarget,
     CompiledSeed,
     CompiledSource,
     CompileSqlReference,
@@ -68,6 +69,7 @@ def gather_warehouse_snapshot(
     start_cursor_override: str | None = None,
     end_cursor_override: str | None = None,
     on_progress: Callable[[str], None] | None = None,
+    deferred_targets: dict[str, CompiledRelationTarget] | None = None,
 ) -> WarehouseSnapshot:
     """Gather relations, columns, and fingerprints for all target schemas."""
 
@@ -98,6 +100,7 @@ def gather_warehouse_snapshot(
             existing_relations=relations,
             selected_keys=selected_keys,
             on_progress=on_progress,
+            deferred_targets=deferred_targets,
         )
 
     return WarehouseSnapshot(
@@ -200,6 +203,7 @@ def _gather_cursor_snapshots(
     existing_relations: dict[str, RelationInfo],
     selected_keys: frozenset[CompiledObjectKey] | None,
     on_progress: Callable[[str], None] | None,
+    deferred_targets: dict[str, CompiledRelationTarget] | None = None,
 ) -> dict[str, ModelCursorSnapshot]:
     """Gather cursor MIN/MAX values for selected incremental models."""
 
@@ -212,6 +216,7 @@ def _gather_cursor_snapshots(
         source_map=source_map,
         existing_relations=existing_relations,
         selected_keys=selected_keys,
+        deferred_targets=deferred_targets,
     )
     if not cursor_models:
         return {}
@@ -234,6 +239,7 @@ def _collect_cursor_models(
     source_map: dict[str, CompiledSource],
     existing_relations: dict[str, RelationInfo],
     selected_keys: frozenset[CompiledObjectKey] | None,
+    deferred_targets: dict[str, CompiledRelationTarget] | None = None,
 ) -> list[_CursorModelInfo]:
     """Identify selected incremental models and pre-resolve their cursor metadata."""
 
@@ -267,7 +273,10 @@ def _collect_cursor_models(
             if upstream_cursor_col is None:
                 continue
             upstream_relation: str | None = _resolve_upstream_qualified_name(
-                ref=ref, model_map=model_map, source_map=source_map
+                ref=ref,
+                model_map=model_map,
+                source_map=source_map,
+                deferred_targets=deferred_targets,
             )
             if upstream_relation is None:
                 continue
@@ -451,10 +460,13 @@ def _resolve_upstream_qualified_name(
     ref: CompileSqlReference,
     model_map: dict[str, CompiledModel],
     source_map: dict[str, CompiledSource],
+    deferred_targets: dict[str, CompiledRelationTarget] | None = None,
 ) -> str | None:
     """Resolve a reference to a qualified relation name for cursor reads."""
 
     if ref.ref_kind == SqlReferenceKind.REF:
+        if deferred_targets is not None and ref.ref_name in deferred_targets:
+            return deferred_targets[ref.ref_name].qualified_name
         upstream_model: CompiledModel | None = model_map.get(ref.ref_name)
         if upstream_model is not None:
             return upstream_model.target.qualified_name
