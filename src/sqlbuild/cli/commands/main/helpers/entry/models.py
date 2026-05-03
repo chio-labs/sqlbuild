@@ -34,6 +34,8 @@ class CliNamespace:
     auto_approve: bool = False
     retention_days: int | None = None
     bounded: str | None = None
+    max_column_examples: int | None = None
+    max_row_only_examples: int | None = None
     full: bool = False
     schema_only: bool = False
     select: list[str] = field(default_factory=list)
@@ -112,8 +114,11 @@ class CliEntrypointHandlers:
             bool,
             bool,
             str | None,
+            int | None,
+            int | None,
             tuple[str, ...],
             tuple[str, ...],
+            bool,
         ],
         int,
     ]

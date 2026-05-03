@@ -86,6 +86,9 @@ def _build_parser() -> argparse.ArgumentParser:
     diff_parser.add_argument("--full", action="store_true", default=False)
     diff_parser.add_argument("--schema-only", action="store_true", default=False)
     diff_parser.add_argument("--bounded", default=None)
+    diff_parser.add_argument("--verbose", "-v", action="store_true", default=False)
+    diff_parser.add_argument("--max-column-examples", type=int, default=None)
+    diff_parser.add_argument("--max-row-only-examples", type=int, default=None)
     add_select_args(diff_parser)
     subparsers.add_parser(CliCommand.CLEAN)
     janitor_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.JANITOR)
@@ -265,8 +268,11 @@ def _main_with_dependencies(
                 args.full,
                 args.schema_only,
                 args.bounded,
+                args.max_column_examples,
+                args.max_row_only_examples,
                 tuple(args.select),
                 tuple(args.exclude),
+                args.verbose,
             )
         if args.command == CliCommand.JANITOR:
             return handlers.run_janitor(

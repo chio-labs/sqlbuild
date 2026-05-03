@@ -10,6 +10,7 @@ from sqlbuild.adapter.shared.models import (
     CursorValue,
     RelationInfo,
     RowDiffResult,
+    RowDiffSampleRow,
     RowDiffTolerances,
     SchemaDiffResult,
     StatementRecorder,
@@ -494,6 +495,39 @@ class BaseAdapter(StrictAdapter):
         cursor: Any = connection.execute(f"SELECT COUNT(*) FROM {relation}{where_clause}")
         result: Any = cursor.fetchone()
         return int(result[0])
+
+    def sample_unequal_rows(
+        self,
+        connection: Any,
+        *,
+        left: str,
+        right: str,
+        unique_key: str | tuple[str, ...],
+        excluded_columns: tuple[str, ...] = (),
+        tolerances: RowDiffTolerances | None = None,
+        cursor_column: str | None = None,
+        start_cursor: CursorValue | None = None,
+        end_cursor: CursorValue | None = None,
+        limit: int = 20,
+    ) -> tuple[RowDiffSampleRow, ...]:
+        raise NotImplementedError("sample_unequal_rows requires an engine-specific implementation")
+
+    def sample_side_only_rows(
+        self,
+        connection: Any,
+        *,
+        left: str,
+        right: str,
+        unique_key: str | tuple[str, ...],
+        side: str,
+        cursor_column: str | None = None,
+        start_cursor: CursorValue | None = None,
+        end_cursor: CursorValue | None = None,
+        limit: int = 20,
+    ) -> tuple[tuple[tuple[str, object], ...], ...]:
+        raise NotImplementedError(
+            "sample_side_only_rows requires an engine-specific implementation"
+        )
 
     def default_schema(self) -> str | None:
         """Return None — most adapters require explicit schema configuration."""

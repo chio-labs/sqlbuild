@@ -82,6 +82,23 @@ class RowDiffTolerance:
 
 
 @dataclass(frozen=True)
+class RowDiffSampleCell:
+    """One sampled left/right value pair for a changed column."""
+
+    name: str
+    left_value: object
+    right_value: object
+
+
+@dataclass(frozen=True)
+class RowDiffSampleRow:
+    """One sampled unequal row for verbose diff output."""
+
+    key_values: tuple[tuple[str, object], ...] = field(default_factory=tuple)
+    changed_cells: tuple[RowDiffSampleCell, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class RowDiffTolerances:
     """Resolved row-level diff tolerance rules."""
 

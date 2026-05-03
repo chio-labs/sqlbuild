@@ -9,7 +9,13 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from sqlbuild.adapter.shared.models import RowDiffColumnResult, RowDiffResult, SchemaDiffResult
+from sqlbuild.adapter.shared.models import (
+    RowDiffColumnResult,
+    RowDiffResult,
+    RowDiffSampleCell,
+    RowDiffSampleRow,
+    SchemaDiffResult,
+)
 from sqlbuild.executor.diff.models import DiffExecutionResult, ModelDiffResult
 
 _WIDTH: int = 110
@@ -23,6 +29,9 @@ def render_diff_output(
     to_label: str,
     mode_label: str,
     use_color: bool,
+    verbose: bool,
+    max_column_examples: int,
+    max_row_only_examples: int,
 ) -> str:
     """Render a concise Rich terminal summary for a diff result."""
 
@@ -52,6 +61,9 @@ def render_diff_output(
                     from_label=from_label,
                     to_label=to_label,
                     mode_label=mode_label,
+                    verbose=verbose,
+                    max_column_examples=max_column_examples,
+                    max_row_only_examples=max_row_only_examples,
                 )
     return capture.get().rstrip()
 
@@ -83,6 +95,9 @@ def _render_model_result(
     from_label: str,
     to_label: str,
     mode_label: str,
+    verbose: bool,
+    max_column_examples: int,
+    max_row_only_examples: int,
 ) -> None:
     console.print(
         _render_overview(
@@ -105,8 +120,43 @@ def _render_model_result(
         _print_section(
             console=console,
             title="Changed Columns",
-            content=_render_changed_columns(model_result),
+            content=_render_changed_columns(
+                model_result,
+                verbose=verbose,
+                max_column_examples=max_column_examples,
+            ),
         )
+        if verbose and model_result.unequal_row_samples:
+            example_content: RenderableType | None = _render_examples(
+                model_result,
+                max_column_examples=max_column_examples,
+            )
+            if example_content is not None:
+                _print_section(
+                    console=console,
+                    title="Examples",
+                    content=example_content,
+                )
+        if model_result.left_only_key_samples:
+            _print_section(
+                console=console,
+                title=f"{from_label} only",
+                content=_render_side_only_samples(
+                    side_label=from_label,
+                    key_samples=model_result.left_only_key_samples,
+                    max_row_only_examples=max_row_only_examples,
+                ),
+            )
+        if model_result.right_only_key_samples:
+            _print_section(
+                console=console,
+                title=f"{to_label} only",
+                content=_render_side_only_samples(
+                    side_label=to_label,
+                    key_samples=model_result.right_only_key_samples,
+                    max_row_only_examples=max_row_only_examples,
+                ),
+            )
 
 
 def _render_overview(*, model_result: ModelDiffResult, mode_label: str) -> RenderableType:
@@ -169,7 +219,7 @@ def _render_schema_summary(model_result: ModelDiffResult) -> RenderableType:
         and not schema_result.removed_columns
         and not schema_result.type_changed_columns
     ):
-        return Group("schema differences: 0", Text("No schema differences.", style="italic"))
+        return Text("No schema differences.", style="italic")
     lines: list[str] = [f"schema differences: {schema_diff_count:,}"]
     if schema_result.added_columns:
         lines.append(f"added columns: {len(schema_result.added_columns):,}")
@@ -306,7 +356,12 @@ def _render_joined_annotation(rows: RowDiffResult, joined_count: int) -> Rendera
     return Group(*lines)
 
 
-def _render_changed_columns(model_result: ModelDiffResult) -> RenderableType:
+def _render_changed_columns(
+    model_result: ModelDiffResult,
+    *,
+    verbose: bool,
+    max_column_examples: int,
+) -> RenderableType:
     row_result: RowDiffResult | None = model_result.row_result
     if row_result is None:
         return Text("Schema-only diff; row comparison skipped.", style="italic")
@@ -341,6 +396,21 @@ def _render_changed_columns(model_result: ModelDiffResult) -> RenderableType:
             Text(f"and {len(mismatched_columns) - len(visible_columns):,} more", style="dim"),
             Text("", style="dim"),
         )
+    if not verbose:
+        example_content: RenderableType | None = _render_examples(
+            model_result,
+            max_column_examples=max_column_examples,
+            visible_column_names=tuple(column.name for column in visible_columns),
+        )
+        if example_content is not None:
+            return Group(
+                table,
+                "",
+                example_content,
+                "",
+                Text("Use --verbose to show more example row changes.", style="dim"),
+            )
+        return table
     return table
 
 
@@ -352,3 +422,66 @@ def _format_percentage(numerator: int | float, denominator: int | float) -> str:
     if denominator == 0:
         return "0.00%"
     return f"{(numerator / denominator):.2%}"
+
+
+def _render_examples(
+    model_result: ModelDiffResult,
+    *,
+    max_column_examples: int,
+    visible_column_names: tuple[str, ...] | None = None,
+) -> RenderableType | None:
+    blocks: list[RenderableType] = []
+    grouped_examples: dict[str, list[str]] = {}
+    sample_row: RowDiffSampleRow
+    for sample_row in model_result.unequal_row_samples:
+        key_label: str = ", ".join(f"{key}={value}" for key, value in sample_row.key_values)
+        cell: RowDiffSampleCell
+        for cell in sample_row.changed_cells:
+            grouped_examples.setdefault(cell.name, []).append(
+                f"{key_label} | {cell.left_value} -> {cell.right_value}"
+            )
+    column_name: str
+    for column_name in sorted(grouped_examples):
+        if visible_column_names is not None and column_name not in visible_column_names:
+            continue
+        blocks.append(Text(column_name, style="bold cyan"))
+        all_examples: list[str] = grouped_examples[column_name]
+        visible_examples: list[str] = all_examples[:max_column_examples]
+        example: str
+        for example in visible_examples:
+            blocks.append(f"  - {example}")
+        if len(all_examples) > len(visible_examples):
+            blocks.append(
+                Text(
+                    f"  showing {len(visible_examples):,} of {len(all_examples):,} examples",
+                    style="dim",
+                )
+            )
+        blocks.append("")
+    return Group(*blocks[:-1]) if blocks else None
+
+
+def _render_side_only_samples(
+    *,
+    side_label: str,
+    key_samples: tuple[tuple[tuple[str, object], ...], ...],
+    max_row_only_examples: int,
+) -> RenderableType:
+    blocks: list[RenderableType] = []
+    visible_samples: tuple[tuple[tuple[str, object], ...], ...] = key_samples[
+        :max_row_only_examples
+    ]
+    sample: tuple[tuple[str, object], ...]
+    for sample in visible_samples:
+        blocks.append("  - " + " | ".join(f"{key}={value}" for key, value in sample))
+    if len(key_samples) > len(visible_samples):
+        truncation_message: str = (
+            f"  showing {len(visible_samples):,} of {len(key_samples):,} {side_label} only rows"
+        )
+        blocks.append(
+            Text(
+                truncation_message,
+                style="dim",
+            )
+        )
+    return Group(*blocks) if blocks else Text("No side-only samples collected.", style="italic")

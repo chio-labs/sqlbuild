@@ -26,6 +26,9 @@ def execute_diff(
     selected_names: tuple[str, ...],
     schema_only: bool,
     bounded: str | None = None,
+    collect_samples: bool = False,
+    max_column_examples: int = 20,
+    max_row_only_examples: int = 20,
 ) -> DiffExecutionResult:
     """Execute schema and optional row diffs for selected model names."""
 
@@ -45,15 +48,22 @@ def execute_diff(
 
         left_relation: str = qualified_name(left_model)
         right_relation: str = qualified_name(right_model)
+        unique_key: tuple[str, ...] = ()
+        if _model_has_unique_key(right_model):
+            unique_key = get_unique_key(right_model)
         schema_result: SchemaDiffResult = adapter.diff_schema(
             connection,
             left=left_relation,
             right=right_relation,
         )
         row_result: RowDiffResult | None = None
+        unequal_row_samples: tuple[Any, ...] = ()
+        left_only_key_samples: tuple[tuple[tuple[str, object], ...], ...] = ()
+        right_only_key_samples: tuple[tuple[tuple[str, object], ...], ...] = ()
         bounded_fallback: bool = False
         if not schema_only:
-            unique_key: tuple[str, ...] = get_unique_key(right_model)
+            if not unique_key:
+                unique_key = get_unique_key(right_model)
             excluded_columns: tuple[str, ...] = get_row_diff_exclude_columns(right_model)
             intersection: tuple[str, ...] = tuple(
                 key for key in unique_key if key in excluded_columns
@@ -84,16 +94,68 @@ def execute_diff(
                 start_cursor=start_cursor,
                 end_cursor=end_cursor,
             )
+            if collect_samples and row_result.unequal_count > 0:
+                unequal_row_samples = adapter.sample_unequal_rows(
+                    connection,
+                    left=left_relation,
+                    right=right_relation,
+                    unique_key=unique_key,
+                    excluded_columns=excluded_columns,
+                    tolerances=parse_row_diff_tolerances(
+                        right_model.config.values.get("row_diff_tolerances"),
+                        label=f"model '{name}' row_diff_tolerances",
+                    ),
+                    cursor_column=cursor_column,
+                    start_cursor=start_cursor,
+                    end_cursor=end_cursor,
+                    limit=max_column_examples * 5,
+                )
+            if collect_samples and row_result.left_only_count > 0:
+                left_only_key_samples = adapter.sample_side_only_rows(
+                    connection,
+                    left=left_relation,
+                    right=right_relation,
+                    unique_key=unique_key,
+                    side="left",
+                    cursor_column=cursor_column,
+                    start_cursor=start_cursor,
+                    end_cursor=end_cursor,
+                    limit=max_row_only_examples,
+                )
+            if collect_samples and row_result.right_only_count > 0:
+                right_only_key_samples = adapter.sample_side_only_rows(
+                    connection,
+                    left=left_relation,
+                    right=right_relation,
+                    unique_key=unique_key,
+                    side="right",
+                    cursor_column=cursor_column,
+                    start_cursor=start_cursor,
+                    end_cursor=end_cursor,
+                    limit=max_row_only_examples,
+                )
         results.append(
             ModelDiffResult(
                 name=name,
                 left_relation=left_relation,
                 right_relation=right_relation,
-                unique_key=unique_key if not schema_only else (),
+                unique_key=unique_key,
                 schema_result=schema_result,
                 row_result=row_result,
+                unequal_row_samples=tuple(unequal_row_samples),
+                left_only_key_samples=left_only_key_samples,
+                right_only_key_samples=right_only_key_samples,
                 bounded_fallback=bounded_fallback,
                 excluded_columns=excluded_columns if not schema_only else (),
             )
         )
     return DiffExecutionResult(model_results=tuple(results))
+
+
+def _model_has_unique_key(model: Any) -> bool:
+    raw: object | None = model.config.values.get("unique_key")
+    if isinstance(raw, str):
+        return bool(raw)
+    if isinstance(raw, list | tuple):
+        return any(isinstance(item, str) and item for item in raw)
+    return False

@@ -8,6 +8,8 @@ from sqlbuild.adapter.shared.models import (
     ColumnInfo,
     RowDiffColumnResult,
     RowDiffResult,
+    RowDiffSampleCell,
+    RowDiffSampleRow,
     RowDiffTolerance,
     SchemaDiffResult,
 )
@@ -45,6 +47,20 @@ TEST_CASES: list[RenderDiffOutputTestCase] = [
                             RowDiffColumnResult(name="line_total_cents", mismatched_count=1),
                         ),
                     ),
+                    unequal_row_samples=(
+                        RowDiffSampleRow(
+                            key_values=(("order_id", 1),),
+                            changed_cells=(
+                                RowDiffSampleCell(
+                                    name="amount_cents",
+                                    left_value=100,
+                                    right_value=105,
+                                ),
+                            ),
+                        ),
+                    ),
+                    left_only_key_samples=((("order_id", 11),),),
+                    right_only_key_samples=((("order_id", 12),),),
                     excluded_columns=("status",),
                 ),
             )
@@ -52,6 +68,9 @@ TEST_CASES: list[RenderDiffOutputTestCase] = [
         from_label="prod",
         to_label="dev",
         mode_label="full",
+        verbose=False,
+        max_column_examples=3,
+        max_row_only_examples=3,
         expected_fragments=(
             "SQLBuild Diff Summary",
             "prod vs dev",
@@ -59,7 +78,7 @@ TEST_CASES: list[RenderDiffOutputTestCase] = [
             "orders_snapshot",
             "order_id",
             "Comparison",
-            "schema differences: 0",
+            "No schema differences.",
             "Excluded",
             "status",
             "prod only",
@@ -69,6 +88,9 @@ TEST_CASES: list[RenderDiffOutputTestCase] = [
             "amount_cents",
             "payment_method",
             "and 1 more",
+            "order_id=1 | 100 -> 105",
+            "prod only",
+            "order_id=11",
         ),
     ),
     RenderDiffOutputTestCase(
@@ -95,11 +117,11 @@ TEST_CASES: list[RenderDiffOutputTestCase] = [
                     row_result=RowDiffResult(
                         left_count=3,
                         right_count=3,
-                        joined_count=3,
-                        equal_count=3,
+                        joined_count=1,
+                        equal_count=1,
                         unequal_count=0,
-                        left_only_count=0,
-                        right_only_count=0,
+                        left_only_count=1,
+                        right_only_count=1,
                         column_results=(
                             RowDiffColumnResult(
                                 name="amount_cents",
@@ -108,6 +130,20 @@ TEST_CASES: list[RenderDiffOutputTestCase] = [
                             ),
                         ),
                     ),
+                    unequal_row_samples=(
+                        RowDiffSampleRow(
+                            key_values=(("order_id", 1),),
+                            changed_cells=(
+                                RowDiffSampleCell(
+                                    name="amount_cents",
+                                    left_value=100,
+                                    right_value=101,
+                                ),
+                            ),
+                        ),
+                    ),
+                    left_only_key_samples=((("order_id", 11),),),
+                    right_only_key_samples=((("order_id", 12),),),
                     bounded_fallback=True,
                 ),
             )
@@ -115,6 +151,9 @@ TEST_CASES: list[RenderDiffOutputTestCase] = [
         from_label="prod",
         to_label="dev",
         mode_label="bounded 30d",
+        verbose=True,
+        max_column_examples=10,
+        max_row_only_examples=10,
         expected_fragments=(
             "schema differences: 1",
             "added columns: 1",
@@ -123,6 +162,12 @@ TEST_CASES: list[RenderDiffOutputTestCase] = [
             "Fallback",
             "no cursor configured; used full row diff",
             "No changed columns.",
+            "Examples",
+            "order_id=1 | 100 -> 101",
+            "prod only",
+            "order_id=11",
+            "dev only",
+            "order_id=12",
         ),
     ),
 ]
@@ -142,6 +187,9 @@ def test_given_diff_execution_result_when_rendering_then_output_matches_expected
         to_label=test_case.to_label,
         mode_label=test_case.mode_label,
         use_color=False,
+        verbose=test_case.verbose,
+        max_column_examples=test_case.max_column_examples,
+        max_row_only_examples=test_case.max_row_only_examples,
     )
 
     fragment: str

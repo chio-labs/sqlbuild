@@ -107,6 +107,21 @@ def prepare_diff_project(tmp_path: Path) -> Path:
                 """
             ).strip()
             + "\n",
+            "models/intermediate/orders_sparse.sql": dedent(
+                """
+                MODEL (
+                  materialized: table,
+                  unique_key: ["order_id"]
+                );
+
+                SELECT
+                  order_id,
+                  customer_id
+                FROM __ref("stg_orders")
+                WHERE order_id <= 2
+                """
+            ).strip()
+            + "\n",
             "models/marts/daily_revenue.sql": dedent(
                 """
                 MODEL (materialized: table);

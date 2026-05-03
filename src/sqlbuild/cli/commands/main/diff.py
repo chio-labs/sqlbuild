@@ -29,8 +29,11 @@ def run_diff(
     full: bool,
     schema_only: bool,
     bounded: str | None,
+    max_column_examples: int | None = None,
+    max_row_only_examples: int | None = None,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
+    verbose: bool = False,
 ) -> int:
     """Execute the diff command."""
 
@@ -39,6 +42,10 @@ def run_diff(
     selected_modes: int = int(full) + int(schema_only) + int(bounded is not None)
     if selected_modes != 1:
         raise CliUserError("diff requires exactly one of --full, --schema-only, or --bounded")
+    if max_column_examples is not None and max_column_examples <= 0:
+        raise CliUserError("diff --max-column-examples must be positive")
+    if max_row_only_examples is not None and max_row_only_examples <= 0:
+        raise CliUserError("diff --max-row-only-examples must be positive")
     if not select:
         raise CliUserError("diff requires --select in v1")
 
@@ -66,6 +73,12 @@ def run_diff(
     )
     if not selected_names:
         raise CliUserError("No diffable models found in the selected scope")
+    effective_max_column_examples: int = (
+        max_column_examples if max_column_examples is not None else (10 if verbose else 3)
+    )
+    effective_max_row_only_examples: int = (
+        max_row_only_examples if max_row_only_examples is not None else (10 if verbose else 3)
+    )
     connection_config: dict[str, object] = resolve_connection_config(
         raw_config={
             **discovered_inputs.project_config.connection,
@@ -83,6 +96,9 @@ def run_diff(
             selected_names=selected_names,
             schema_only=schema_only,
             bounded=bounded,
+            collect_samples=not schema_only,
+            max_column_examples=effective_max_column_examples,
+            max_row_only_examples=effective_max_row_only_examples,
         )
     finally:
         adapter.close(connection)
@@ -97,6 +113,9 @@ def run_diff(
             to_label=to_environment,
             mode_label=mode_label,
             use_color=not no_color,
+            verbose=verbose,
+            max_column_examples=effective_max_column_examples,
+            max_row_only_examples=effective_max_row_only_examples,
         )
     )
     return 1 if has_diff_failures(result) else 0

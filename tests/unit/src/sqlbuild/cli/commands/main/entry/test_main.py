@@ -176,8 +176,11 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
             bool,
             bool,
             str | None,
+            int | None,
+            int | None,
             tuple[str, ...],
             tuple[str, ...],
+            bool,
         ]
     ] = []
 
@@ -190,8 +193,11 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
         full: bool,
         schema_only: bool,
         bounded: str | None,
+        max_column_examples: int | None,
+        max_row_only_examples: int | None,
         select: tuple[str, ...],
         exclude: tuple[str, ...],
+        verbose: bool,
     ) -> int:
         received_args.append(
             (
@@ -203,8 +209,11 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
                 full,
                 schema_only,
                 bounded,
+                max_column_examples,
+                max_row_only_examples,
                 select,
                 exclude,
+                verbose,
             )
         )
         return test_case.expected_exit_code
@@ -216,8 +225,121 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
 
     assert exit_code == test_case.expected_exit_code
     assert received_args == [
-        (None, False, False, "prod", "dev", True, False, None, ("orders",), ())
+        (None, False, False, "prod", "dev", True, False, None, None, None, ("orders",), (), False)
     ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="passes verbose flag to diff handler",
+            argv=[
+                "diff",
+                "--from",
+                "prod",
+                "--to",
+                "dev",
+                "--full",
+                "--verbose",
+                "--select",
+                "orders",
+            ],
+            expected_exit_code=6,
+        )
+    ],
+    ids=["passes verbose flag to diff handler"],
+)
+def test_given_verbose_diff_arguments_when_running_then_it_dispatches_verbose_flag(
+    test_case: MainTestCase,
+) -> None:
+    received_verbose: list[bool] = []
+
+    def run_diff(
+        project_dir: Path | None,
+        no_color: bool,
+        no_sql_validation: bool,
+        from_environment: str,
+        to_environment: str,
+        full: bool,
+        schema_only: bool,
+        bounded: str | None,
+        max_column_examples: int | None,
+        max_row_only_examples: int | None,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+        verbose: bool,
+    ) -> int:
+        del project_dir, no_color, no_sql_validation, from_environment, to_environment, full
+        del schema_only, bounded, max_column_examples, max_row_only_examples, select, exclude
+        received_verbose.append(verbose)
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_diff=run_diff),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_verbose == [True]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="passes diff example caps to handler",
+            argv=[
+                "diff",
+                "--from",
+                "prod",
+                "--to",
+                "dev",
+                "--full",
+                "--max-column-examples",
+                "7",
+                "--max-row-only-examples",
+                "4",
+                "--select",
+                "orders",
+            ],
+            expected_exit_code=6,
+        )
+    ],
+    ids=["passes diff example caps to handler"],
+)
+def test_given_diff_example_cap_arguments_when_running_then_it_dispatches_caps(
+    test_case: MainTestCase,
+) -> None:
+    received_caps: list[tuple[int | None, int | None]] = []
+
+    def run_diff(
+        project_dir: Path | None,
+        no_color: bool,
+        no_sql_validation: bool,
+        from_environment: str,
+        to_environment: str,
+        full: bool,
+        schema_only: bool,
+        bounded: str | None,
+        max_column_examples: int | None,
+        max_row_only_examples: int | None,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+        verbose: bool,
+    ) -> int:
+        del project_dir, no_color, no_sql_validation, from_environment, to_environment, full
+        del schema_only, bounded, select, exclude, verbose
+        received_caps.append((max_column_examples, max_row_only_examples))
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_diff=run_diff),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_caps == [(7, 4)]
 
 
 @pytest.mark.parametrize(
