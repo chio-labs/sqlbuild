@@ -9,7 +9,11 @@ from pathlib import Path
 
 from sqlbuild.cli.commands.main.entry.models import CliEntrypointHandlers, CliNamespace
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.main.shared.helpers.parsers import add_cursor_override_args
+from sqlbuild.cli.commands.main.shared.helpers.parsers import (
+    add_cursor_override_args,
+    add_execution_args,
+    add_select_args,
+)
 from sqlbuild.cli.commands.main.shared.types import CliCommand
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.compiler.planner.models import CursorOverrides
@@ -28,22 +32,42 @@ def _build_parser() -> argparse.ArgumentParser:
     compile_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     compile_parser.add_argument("--defer-to", default=None)
     compile_parser.add_argument("--json", action="store_true", default=False)
-    run_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.RUN)
-    run_parser.add_argument("--no-sql-validation", action="store_true", default=False)
-    run_parser.add_argument("--defer-to", default=None)
-    add_cursor_override_args(run_parser)
+
     plan_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PLAN)
     plan_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     plan_parser.add_argument("--defer-to", default=None)
     plan_parser.add_argument("--json", action="store_true", default=False)
     add_cursor_override_args(plan_parser)
+
     build_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.BUILD)
     build_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     build_parser.add_argument("--defer-to", default=None)
     add_cursor_override_args(build_parser)
-    subparsers.add_parser(CliCommand.TEST)
-    subparsers.add_parser(CliCommand.AUDIT)
-    subparsers.add_parser(CliCommand.SEED)
+    add_execution_args(build_parser)
+    add_select_args(build_parser)
+
+    run_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.RUN)
+    run_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    run_parser.add_argument("--defer-to", default=None)
+    add_cursor_override_args(run_parser)
+    add_execution_args(run_parser)
+    add_select_args(run_parser)
+
+    test_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.TEST)
+    test_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    test_parser.add_argument("--no-color", action="store_true", default=False)
+    add_select_args(test_parser)
+
+    audit_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.AUDIT)
+    audit_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    audit_parser.add_argument("--defer-to", default=None)
+    audit_parser.add_argument("--no-color", action="store_true", default=False)
+    add_select_args(audit_parser)
+
+    seed_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.SEED)
+    seed_parser.add_argument("--no-color", action="store_true", default=False)
+    add_select_args(seed_parser)
+
     subparsers.add_parser(CliCommand.CLONE)
     subparsers.add_parser(CliCommand.DIFF)
     subparsers.add_parser(CliCommand.CLEAN)
@@ -55,11 +79,22 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the CLI entrypoint."""
 
+    from sqlbuild.cli.commands.main.audit.main import run_audit
+    from sqlbuild.cli.commands.main.build.main import run_build
     from sqlbuild.cli.commands.main.compile.main import run_compile
     from sqlbuild.cli.commands.main.plan.main import run_plan
+    from sqlbuild.cli.commands.main.run.main import run_run
+    from sqlbuild.cli.commands.main.seed.main import run_seed
+    from sqlbuild.cli.commands.main.test.main import run_test
 
     handlers: CliEntrypointHandlers = CliEntrypointHandlers(
-        run_compile=run_compile, run_plan=run_plan
+        run_compile=run_compile,
+        run_plan=run_plan,
+        run_build=run_build,
+        run_run=run_run,
+        run_test=run_test,
+        run_audit=run_audit,
+        run_seed=run_seed,
     )
     return _main_with_dependencies(argv=argv, handlers=handlers)
 
@@ -95,6 +130,64 @@ def _main_with_dependencies(
             )
             return handlers.run_plan(
                 project_dir, args.no_sql_validation, args.defer_to, cursor_overrides, args.json
+            )
+        if args.command == CliCommand.BUILD:
+            cursor_overrides = CursorOverrides(
+                start_ts=args.start_cursor_ts,
+                end_ts=args.end_cursor_ts,
+                start_int=args.start_cursor_int,
+                end_int=args.end_cursor_int,
+            )
+            return handlers.run_build(
+                project_dir,
+                args.no_sql_validation,
+                args.defer_to,
+                cursor_overrides,
+                args.no_color,
+                args.fail_fast,
+                tuple(args.select),
+                tuple(args.exclude),
+            )
+        if args.command == CliCommand.RUN:
+            cursor_overrides = CursorOverrides(
+                start_ts=args.start_cursor_ts,
+                end_ts=args.end_cursor_ts,
+                start_int=args.start_cursor_int,
+                end_int=args.end_cursor_int,
+            )
+            return handlers.run_run(
+                project_dir,
+                args.no_sql_validation,
+                args.defer_to,
+                cursor_overrides,
+                args.no_color,
+                args.fail_fast,
+                tuple(args.select),
+                tuple(args.exclude),
+            )
+        if args.command == CliCommand.TEST:
+            return handlers.run_test(
+                project_dir,
+                args.no_sql_validation,
+                args.no_color,
+                tuple(args.select),
+                tuple(args.exclude),
+            )
+        if args.command == CliCommand.AUDIT:
+            return handlers.run_audit(
+                project_dir,
+                args.no_sql_validation,
+                args.defer_to,
+                args.no_color,
+                tuple(args.select),
+                tuple(args.exclude),
+            )
+        if args.command == CliCommand.SEED:
+            return handlers.run_seed(
+                project_dir,
+                args.no_color,
+                tuple(args.select),
+                tuple(args.exclude),
             )
         return 0
     except CliUserError as error:

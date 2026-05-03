@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import sys
+
 _RESET: str = "\033[0m"
 _BOLD: str = "\033[1m"
+_DIM: str = "\033[2m"
 _RED: str = "\033[31m"
 _GREEN: str = "\033[32m"
 _YELLOW: str = "\033[33m"
@@ -50,3 +54,47 @@ def yellow_bold(text: str) -> str:
     """Yellow bold text for warning section headers."""
 
     return f"{_YELLOW}{_BOLD}{text}{_RESET}"
+
+
+def dim(text: str) -> str:
+    """Dim text for skipped/inactive elements."""
+
+    return f"{_DIM}{text}{_RESET}"
+
+
+def supports_color() -> bool:
+    """Check if the terminal supports color output."""
+
+    if os.environ.get("NO_COLOR") is not None:
+        return False
+    if not hasattr(sys.stdout, "isatty"):
+        return False
+    return sys.stdout.isatty()
+
+
+def colorize_status(status: str, *, use_color: bool) -> str:
+    """Apply color to a status word based on its value."""
+
+    if not use_color:
+        return status
+    if status in ("OK", "PASS"):
+        return green(status)
+    if status == "WARN":
+        return yellow(status)
+    if status == "FAIL":
+        return red(status)
+    if status == "SKIP":
+        return dim(status)
+    return status
+
+
+def colorize_completion(message: str, *, use_color: bool) -> str:
+    """Apply color to the completion status message."""
+
+    if not use_color:
+        return message
+    if "errors" in message:
+        return red(message)
+    if "warnings" in message:
+        return yellow(message)
+    return green(message)

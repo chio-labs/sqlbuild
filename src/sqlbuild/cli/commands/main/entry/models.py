@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild.compiler.planner.models import CursorOverrides
@@ -22,6 +22,10 @@ class CliNamespace:
     end_cursor_ts: str | None = None
     start_cursor_int: str | None = None
     end_cursor_int: str | None = None
+    no_color: bool = False
+    fail_fast: bool = False
+    select: list[str] = field(default_factory=list)
+    exclude: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -30,3 +34,34 @@ class CliEntrypointHandlers:
 
     run_compile: Callable[[Path | None, bool, str | None, bool], int]
     run_plan: Callable[[Path | None, bool, str | None, CursorOverrides | None, bool], int]
+    run_build: Callable[
+        [
+            Path | None,
+            bool,
+            str | None,
+            CursorOverrides | None,
+            bool,
+            bool,
+            tuple[str, ...],
+            tuple[str, ...],
+        ],
+        int,
+    ]
+    run_run: Callable[
+        [
+            Path | None,
+            bool,
+            str | None,
+            CursorOverrides | None,
+            bool,
+            bool,
+            tuple[str, ...],
+            tuple[str, ...],
+        ],
+        int,
+    ]
+    run_test: Callable[[Path | None, bool, bool, tuple[str, ...], tuple[str, ...]], int]
+    run_audit: Callable[
+        [Path | None, bool, str | None, bool, tuple[str, ...], tuple[str, ...]], int
+    ]
+    run_seed: Callable[[Path | None, bool, tuple[str, ...], tuple[str, ...]], int]

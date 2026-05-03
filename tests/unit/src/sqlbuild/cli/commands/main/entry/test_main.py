@@ -5,13 +5,13 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.cli.commands.main.entry.main import _main_with_dependencies, main
-from sqlbuild.cli.commands.main.entry.models import CliEntrypointHandlers
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
     MainErrorRenderingTestCase,
     MainTestCase,
 )
+from tests.unit.src.sqlbuild.cli.commands.main.entry.helpers import build_handlers
 
 ERROR_RENDERING_TEST_CASES: list[MainErrorRenderingTestCase] = [
     MainErrorRenderingTestCase(
@@ -80,9 +80,8 @@ def test_given_compile_command_arguments_when_running_with_dependencies_then_it_
 ) -> None:
     exit_code: int = _main_with_dependencies(
         argv=test_case.argv,
-        handlers=CliEntrypointHandlers(
+        handlers=build_handlers(
             run_compile=lambda *_a, **_k: test_case.expected_exit_code,
-            run_plan=lambda *_a, **_k: 0,
         ),
     )
 
@@ -118,10 +117,7 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
 
     exit_code: int = _main_with_dependencies(
         argv=test_case.argv,
-        handlers=CliEntrypointHandlers(
-            run_compile=run_compile,
-            run_plan=lambda *_a, **_k: 0,
-        ),
+        handlers=build_handlers(run_compile=run_compile),
     )
 
     assert exit_code == test_case.expected_exit_code
@@ -153,10 +149,7 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
 
     exit_code: int = _main_with_dependencies(
         argv=test_case.argv,
-        handlers=CliEntrypointHandlers(
-            run_compile=run_compile,
-            run_plan=lambda *_a, **_k: 0,
-        ),
+        handlers=build_handlers(run_compile=run_compile),
     )
     rendered_stderr: str = capsys.readouterr().err
 
