@@ -9,7 +9,7 @@ from sqlbuild.compiler.planner.helpers.graph import (
     expand_upstream,
     find_path_keys,
 )
-from sqlbuild.compiler.planner.models import ParsedSelector
+from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
 from sqlbuild.compiler.planner.types import SelectorKind
 
 _SELECTOR_KIND_BY_PREFIX: dict[str, SelectorKind] = {
@@ -25,7 +25,7 @@ _RESOURCE_TYPE_BY_SELECTOR_KIND: dict[SelectorKind, CompiledResourceType] = {
 }
 
 
-def parse_selector(raw: str) -> ParsedSelector | tuple[str, str]:
+def parse_selector(raw: str) -> ParsedSelector | PathSelector:
     """Parse one raw selector token into a structured form.
 
     Returns a ParsedSelector for normal selectors, or a (start, end) tuple
@@ -36,19 +36,26 @@ def parse_selector(raw: str) -> ParsedSelector | tuple[str, str]:
     if not stripped:
         raise ValueError("Empty selector")
 
-    if "~" in stripped:
-        if "+" in stripped:
-            raise ValueError(f"Selector '{stripped}' mixes '~' and '+' which is not supported")
-        parts: list[str] = stripped.split("~", 1)
+    upstream: bool = stripped.startswith("+")
+    downstream: bool = stripped.endswith("+")
+    core: str = stripped.lstrip("+").rstrip("+")
+
+    if "~" in core:
+        if "+" in core:
+            raise ValueError(f"Selector '{stripped}' contains '+' in an unsupported position")
+        parts: list[str] = core.split("~", 1)
         start_name: str = parts[0].strip()
         end_name: str = parts[1].strip()
         if not start_name or not end_name:
             raise ValueError(f"Path selector '{stripped}' requires names on both sides of '~'")
-        return (start_name, end_name)
+        return PathSelector(
+            start_name=start_name,
+            end_name=end_name,
+            upstream=upstream,
+            downstream=downstream,
+        )
 
-    upstream: bool = stripped.startswith("+")
-    downstream: bool = stripped.endswith("+")
-    name: str = stripped.lstrip("+").rstrip("+")
+    name: str = core
     if not name:
         raise ValueError(f"Selector '{stripped}' has no name after removing '+' markers")
     if "+" in name:
@@ -184,18 +191,23 @@ def _resolve_single(
 ) -> frozenset[CompiledObjectKey]:
     """Resolve one atomic selector (no commas)."""
 
-    parsed: ParsedSelector | tuple[str, str] = parse_selector(raw)
+    parsed: ParsedSelector | PathSelector = parse_selector(raw)
 
-    if not isinstance(parsed, ParsedSelector):
-        start_name: str = parsed[0]
-        end_name: str = parsed[1]
+    if isinstance(parsed, PathSelector):
+        start_name: str = parsed.start_name
+        end_name: str = parsed.end_name
         start_key: CompiledObjectKey | None = all_keys.get(start_name)
         end_key: CompiledObjectKey | None = all_keys.get(end_name)
         if start_key is None:
             raise ValueError(f"Unknown selector name '{start_name}'")
         if end_key is None:
             raise ValueError(f"Unknown selector name '{end_name}'")
-        return find_path_keys(start_key, end_key, downstream)
+        result: set[CompiledObjectKey] = set(find_path_keys(start_key, end_key, downstream))
+        if parsed.upstream:
+            result.update(expand_upstream(start_key, upstream))
+        if parsed.downstream:
+            result.update(expand_downstream(end_key, downstream))
+        return frozenset(result)
 
     if parsed.kind == SelectorKind.TAG:
         return _resolve_tag(

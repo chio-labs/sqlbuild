@@ -7,7 +7,7 @@ from sqlbuild.compiler.planner.helpers.selectors import (
     parse_selector,
     resolve_selectors,
 )
-from sqlbuild.compiler.planner.models import ParsedSelector
+from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
 from sqlbuild.compiler.planner.types import SelectorKind
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     BuildPathIndexTestCase,
@@ -71,7 +71,24 @@ PARSE_SELECTOR_TEST_CASES: list[ParseSelectorTestCase] = [
     ParseSelectorTestCase(
         description="parses path selector as a~b tuple",
         raw="raw~orders",
-        expected_result=("raw", "orders"),
+        expected_result=PathSelector(start_name="raw", end_name="orders"),
+    ),
+    ParseSelectorTestCase(
+        description="parses path selector with upstream expansion",
+        raw="+raw~orders",
+        expected_result=PathSelector(start_name="raw", end_name="orders", upstream=True),
+    ),
+    ParseSelectorTestCase(
+        description="parses path selector with downstream expansion",
+        raw="raw~orders+",
+        expected_result=PathSelector(start_name="raw", end_name="orders", downstream=True),
+    ),
+    ParseSelectorTestCase(
+        description="parses path selector with endpoint expansion on both sides",
+        raw="+raw~orders+",
+        expected_result=PathSelector(
+            start_name="raw", end_name="orders", upstream=True, downstream=True
+        ),
     ),
     ParseSelectorTestCase(
         description="parses bare slash as path selector",
@@ -112,8 +129,8 @@ PARSE_SELECTOR_ERROR_TEST_CASES: list[ParseSelectorErrorTestCase] = [
         expected_error_type=ValueError,
     ),
     ParseSelectorErrorTestCase(
-        description="raises when mixing tilde and plus",
-        raw="+a~b",
+        description="raises when plus appears inside path selector",
+        raw="a~+b",
         expected_error_type=ValueError,
     ),
     ParseSelectorErrorTestCase(
@@ -147,7 +164,7 @@ PARSE_SELECTOR_ERROR_TEST_CASES: list[ParseSelectorErrorTestCase] = [
 def test_given_raw_selector_when_parsing_then_returns_expected_result(
     test_case: ParseSelectorTestCase,
 ) -> None:
-    result: ParsedSelector | tuple[str, str] = parse_selector(test_case.raw)
+    result: ParsedSelector | PathSelector = parse_selector(test_case.raw)
 
     assert result == test_case.expected_result
 
@@ -263,6 +280,24 @@ RESOLVE_SELECTOR_TEST_CASES: list[ResolveSelectorTestCase] = [
     ResolveSelectorTestCase(
         description="resolves path selector through resolve flow",
         select=("raw_orders~joined",),
+        exclude=(),
+        expected_names=frozenset({"raw_orders", "orders", "joined"}),
+    ),
+    ResolveSelectorTestCase(
+        description="path selector with upstream expansion includes start upstreams",
+        select=("+orders~joined",),
+        exclude=(),
+        expected_names=frozenset({"raw_orders", "orders", "joined"}),
+    ),
+    ResolveSelectorTestCase(
+        description="path selector with downstream expansion includes end downstreams",
+        select=("raw_orders~orders+",),
+        exclude=(),
+        expected_names=frozenset({"raw_orders", "orders", "joined"}),
+    ),
+    ResolveSelectorTestCase(
+        description="path selector with endpoint expansion on both sides includes both expansions",
+        select=("+raw_orders~orders+",),
         exclude=(),
         expected_names=frozenset({"raw_orders", "orders", "joined"}),
     ),

@@ -10,6 +10,7 @@ from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.compiler.planner.models import (
     MissingUpstream,
     ParsedSelector,
+    PathSelector,
     SchemaAction,
     SchemaFinding,
 )
@@ -91,7 +92,7 @@ class FindPathKeysErrorTestCase:
 class ParseSelectorTestCase:
     description: str
     raw: str
-    expected_result: ParsedSelector | tuple[str, str]
+    expected_result: ParsedSelector | PathSelector
 
 
 @dataclass(frozen=True)

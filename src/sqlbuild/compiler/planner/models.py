@@ -88,6 +88,16 @@ class ParsedSelector:
 
 
 @dataclass(frozen=True)
+class PathSelector:
+    """A directed path selector between two model names with optional endpoint expansion."""
+
+    start_name: str
+    end_name: str
+    upstream: bool = False
+    downstream: bool = False
+
+
+@dataclass(frozen=True)
 class ModelCursorSnapshot:
     """Cursor MIN/MAX values gathered from warehouse for one incremental model."""
 
