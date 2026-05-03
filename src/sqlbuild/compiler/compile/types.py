@@ -32,3 +32,12 @@ class CompileContextKey(StrEnum):
 class TemplateNamespace(StrEnum):
     ENV = "ENV"
     CTX = "CTX"
+
+
+class CompiledResourceType(StrEnum):
+    MODEL = "model"
+    SOURCE = "source"
+    SEED = "seed"
+    DBT_REF = "dbt_ref"
+    AUDIT = "audit"
+    SQL_TEST = "sql_test"

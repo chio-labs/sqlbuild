@@ -6,7 +6,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, SqlReferenceKind
+from sqlbuild.compiler.compile.types import (
+    AttachedAuditTargetKind,
+    CompiledResourceType,
+    SqlReferenceKind,
+)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
@@ -49,6 +53,17 @@ class CompileSqlReference:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "ref_kind", SqlReferenceKind(self.ref_kind))
+
+
+@dataclass(frozen=True)
+class CompiledObjectKey:
+    """Stable logical identity for one compiled resource or external dependency."""
+
+    resource_type: CompiledResourceType | str
+    name: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "resource_type", CompiledResourceType(self.resource_type))
 
 
 @dataclass(frozen=True)
@@ -149,3 +164,99 @@ class CompileProjectInputs:
     source_inputs: tuple[CompileSourceInput, ...] = field(default_factory=tuple)
     test_inputs: tuple[CompileSqlTestInput, ...] = field(default_factory=tuple)
     audit_inputs: tuple[CompileAuditInput, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class CompiledRelationTarget:
+    """Logical and physical target naming resolved during compile."""
+
+    database: str | None
+    schema: str | None
+    name: str
+    qualified_name: str | None
+
+
+@dataclass(frozen=True)
+class CompiledModel:
+    """Planner-ready compiled model metadata."""
+
+    key: CompiledObjectKey
+    deps: tuple[CompiledObjectKey, ...]
+    name: str
+    relative_path: Path
+    query_sql: str
+    config: CompileModelConfig
+    target: CompiledRelationTarget
+    references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
+    schema_entry: SchemaModelEntry | None = None
+
+
+@dataclass(frozen=True)
+class CompiledSource:
+    """Planner-ready compiled source metadata."""
+
+    key: CompiledObjectKey
+    deps: tuple[CompiledObjectKey, ...]
+    name: str
+    source_entry: SourceEntry
+    source_file: DiscoveredSourceFile
+
+
+@dataclass(frozen=True)
+class CompiledSeed:
+    """Planner-ready compiled seed metadata."""
+
+    key: CompiledObjectKey
+    deps: tuple[CompiledObjectKey, ...]
+    name: str
+    seed_file: DiscoveredSeedFile
+    schema_entry: SchemaSeedEntry
+    schema_file: DiscoveredSchemaFile
+    target: CompiledRelationTarget
+
+
+@dataclass(frozen=True)
+class CompiledAudit:
+    """Compiled audit metadata selected by scope dependencies."""
+
+    key: CompiledObjectKey
+    scope_deps: tuple[CompiledObjectKey, ...]
+    name: str
+    audit_file: DiscoveredAuditFile
+    audit_block: DiscoveredAuditBlock
+    sql_body: str
+    references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
+    attached_target_kind: AttachedAuditTargetKind | None = None
+    attached_target_name: str | None = None
+    attached_column_name: str | None = None
+
+
+@dataclass(frozen=True)
+class CompiledSqlTest:
+    """Compiled SQL-native unit test metadata selected by expected targets."""
+
+    key: CompiledObjectKey
+    scope_deps: tuple[CompiledObjectKey, ...]
+    name: str
+    test_file: DiscoveredSqlTestFile
+    test_block: DiscoveredSqlTestBlock
+    sql_body: str
+    authored_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
+    mock_model_names: tuple[str, ...] = field(default_factory=tuple)
+    mock_source_names: tuple[str, ...] = field(default_factory=tuple)
+    expected_model_names: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class CompiledProject:
+    """Planner-ready whole-project compile output."""
+
+    run_id: str
+    effective_environment_name: str | None
+    effective_connection: dict[str, object]
+    effective_vars: dict[str, str]
+    models: tuple[CompiledModel, ...] = field(default_factory=tuple)
+    sources: tuple[CompiledSource, ...] = field(default_factory=tuple)
+    seeds: tuple[CompiledSeed, ...] = field(default_factory=tuple)
+    audits: tuple[CompiledAudit, ...] = field(default_factory=tuple)
+    sql_tests: tuple[CompiledSqlTest, ...] = field(default_factory=tuple)

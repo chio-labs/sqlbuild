@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompileSqlReference
+
 
 @dataclass(frozen=True)
 class ExpandSqlMacrosTestCase:
@@ -46,3 +48,26 @@ class ExtractSqlglotExpectedBranchesErrorTestCase:
     description: str
     sql: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ModelBuildDepsTestCase:
+    description: str
+    references: tuple[CompileSqlReference, ...]
+    expected_deps: tuple[CompiledObjectKey, ...]
+
+
+@dataclass(frozen=True)
+class AuditScopeDepsTestCase:
+    description: str
+    references: tuple[CompileSqlReference, ...]
+    attached_target_kind: str | None
+    attached_target_name: str | None
+    expected_scope_deps: tuple[CompiledObjectKey, ...]
+
+
+@dataclass(frozen=True)
+class SqlTestScopeDepsTestCase:
+    description: str
+    expected_model_names: tuple[str, ...]
+    expected_scope_deps: tuple[CompiledObjectKey, ...]
