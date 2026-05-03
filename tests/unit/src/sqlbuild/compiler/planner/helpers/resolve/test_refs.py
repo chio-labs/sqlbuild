@@ -104,6 +104,7 @@ def test_given_refs_without_cursor_when_resolving_then_returns_expected_sql(
         seed_targets=_SEED_TARGETS,
         cursor_bounds=None,
         cursor_inputs={},
+        lower_bound_inclusive=True,
     )
 
     assert result == test_case.expected_sql
@@ -123,6 +124,37 @@ def test_given_refs_with_cursor_when_resolving_then_returns_expected_sql(
         seed_targets=_SEED_TARGETS,
         cursor_bounds=_CURSOR_BOUNDS,
         cursor_inputs=_CURSOR_INPUTS,
+        lower_bound_inclusive=True,
+    )
+
+    assert result == test_case.expected_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RefResolutionTestCase(
+            description="wraps ref in exclusive cursor-filtered subquery for append",
+            query_sql='SELECT * FROM __ref("orders")',
+            expected_sql=(
+                "SELECT * FROM (SELECT * FROM staging.orders"
+                " WHERE event_time > '2024-01-15'"
+                " AND event_time < '2024-02-01')"
+            ),
+        )
+    ],
+    ids=["wraps ref in exclusive cursor-filtered subquery for append"],
+)
+def test_given_refs_with_exclusive_cursor_when_resolving_then_returns_expected_sql(
+    test_case: RefResolutionTestCase,
+) -> None:
+    result: str = resolve_ref_references(
+        query_sql=test_case.query_sql,
+        model_targets=_MODEL_TARGETS,
+        seed_targets=_SEED_TARGETS,
+        cursor_bounds=_CURSOR_BOUNDS,
+        cursor_inputs=_CURSOR_INPUTS,
+        lower_bound_inclusive=False,
     )
 
     assert result == test_case.expected_sql

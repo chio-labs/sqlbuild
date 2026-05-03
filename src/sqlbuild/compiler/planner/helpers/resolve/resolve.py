@@ -8,7 +8,11 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationTarget,
 )
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
-from sqlbuild.compiler.planner.helpers.resolve.config import get_config_cursor_start, get_config_str
+from sqlbuild.compiler.planner.helpers.resolve.config import (
+    get_config_append_cursor_inclusive,
+    get_config_cursor_start,
+    get_config_str,
+)
 from sqlbuild.compiler.planner.helpers.resolve.cursor import compute_cursor_bounds
 from sqlbuild.compiler.planner.helpers.resolve.cursor_inputs import (
     has_model_backed_cursor_inputs,
@@ -60,6 +64,7 @@ def resolve_model_sql(
     )
 
     cursor_inputs: dict[str, str] = _get_cursor_inputs(model)
+    lower_bound_inclusive: bool = get_config_append_cursor_inclusive(model)
 
     query_sql = resolve_source_references(
         query_sql=query_sql,
@@ -68,6 +73,7 @@ def resolve_model_sql(
         star_exclude_keyword=star_exclude_keyword,
         cursor_bounds=cursor_bounds,
         cursor_inputs=cursor_inputs,
+        lower_bound_inclusive=lower_bound_inclusive,
     )
 
     query_sql = resolve_ref_references(
@@ -76,6 +82,7 @@ def resolve_model_sql(
         seed_targets=seed_targets,
         cursor_bounds=cursor_bounds,
         cursor_inputs=cursor_inputs,
+        lower_bound_inclusive=lower_bound_inclusive,
     )
 
     query_sql = resolve_dbt_ref_references(query_sql=query_sql)

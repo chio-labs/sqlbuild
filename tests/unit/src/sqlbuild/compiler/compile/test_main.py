@@ -536,6 +536,51 @@ defaults:
         expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
+        description="maps append cursor inclusive from project defaults",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.yml": """
+name: demo
+adapter: duckdb
+
+defaults:
+  materialized: incremental
+  incremental_strategy: append
+  append_cursor_inclusive: false
+""".strip()
+            + "\n",
+            "models/staging/orders.sql": (
+                "MODEL (\n  cursor event_time,"
+                "\n  cursor_type timestamp,"
+                "\n  cursor_grain second,"
+                "\n);\n\nselect 1\n"
+            ),
+        },
+        selected_environment=None,
+        cli_vars=None,
+        run_id=None,
+        expected_model_schema_names=(None,),
+        expected_model_config_values=(
+            {
+                "materialized": "incremental",
+                "incremental_strategy": "append",
+                "append_cursor_inclusive": False,
+                "cursor": "event_time",
+                "cursor_type": "timestamp",
+                "cursor_grain": "second",
+            },
+        ),
+        expected_model_query_sqls=("select 1",),
+        expected_model_path_defaults=(None,),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_effective_environment_name=None,
+        expected_effective_connection={},
+        expected_effective_vars={},
+        expected_model_references=((),),
+        expected_audit_references=(),
+    ),
+    BuildCompileInputsTestCase(
         description="merges row diff config from project defaults and model header",
         repo_files=base_repo_files()
         | {

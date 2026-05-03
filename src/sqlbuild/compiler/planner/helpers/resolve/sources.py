@@ -20,6 +20,7 @@ def resolve_source_references(
     star_exclude_keyword: str,
     cursor_bounds: CursorBounds | None,
     cursor_inputs: dict[str, str],
+    lower_bound_inclusive: bool,
 ) -> str:
     """Replace all __source() calls in query SQL with resolved names or CAST subqueries."""
 
@@ -52,6 +53,7 @@ def resolve_source_references(
             resolved_source=resolved_source,
             cursor_column=cursor_column,
             bounds=cursor_bounds,
+            lower_bound_inclusive=lower_bound_inclusive,
         )
 
     return _SOURCE_PATTERN.sub(_replace_source, query_sql)
@@ -115,11 +117,13 @@ def _build_cursor_subquery(
     resolved_source: str,
     cursor_column: str,
     bounds: CursorBounds,
+    lower_bound_inclusive: bool,
 ) -> str:
     """Wrap a resolved source relation in a cursor-filtered subquery."""
 
+    lower_operator: str = ">=" if lower_bound_inclusive else ">"
     return (
         f"(SELECT * FROM {resolved_source}"
-        f" WHERE {cursor_column} >= '{bounds.start}'"
+        f" WHERE {cursor_column} {lower_operator} '{bounds.start}'"
         f" AND {cursor_column} < '{bounds.end}')"
     )

@@ -23,6 +23,7 @@ def resolve_ref_references(
     seed_targets: dict[str, CompiledRelationTarget],
     cursor_bounds: CursorBounds | None,
     cursor_inputs: dict[str, str],
+    lower_bound_inclusive: bool,
 ) -> str:
     """Replace all __ref() calls with qualified names or cursor-filtered subqueries."""
 
@@ -43,6 +44,7 @@ def resolve_ref_references(
             qualified_name=qualified_name,
             cursor_column=cursor_column,
             bounds=cursor_bounds,
+            lower_bound_inclusive=lower_bound_inclusive,
         )
 
     return _REF_PATTERN.sub(_replace_ref, query_sql)
@@ -64,12 +66,14 @@ def _build_cursor_subquery(
     qualified_name: str,
     cursor_column: str,
     bounds: CursorBounds,
+    lower_bound_inclusive: bool,
 ) -> str:
     """Wrap a qualified name in a cursor-filtered subquery."""
 
+    lower_operator: str = ">=" if lower_bound_inclusive else ">"
     return (
         f"(SELECT * FROM {qualified_name}"
-        f" WHERE {cursor_column} >= '{bounds.start}'"
+        f" WHERE {cursor_column} {lower_operator} '{bounds.start}'"
         f" AND {cursor_column} < '{bounds.end}')"
     )
 

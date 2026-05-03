@@ -1480,6 +1480,8 @@ def project_defaults_to_mapping(defaults: DefaultsConfig) -> dict[str, object]:
         values["incremental_strategy"] = defaults.incremental_strategy
     if defaults.incremental_mode is not None:
         values["incremental_mode"] = defaults.incremental_mode
+    if defaults.append_cursor_inclusive is not None:
+        values["append_cursor_inclusive"] = defaults.append_cursor_inclusive
     if defaults.cursor_start is not None:
         values["cursor_start"] = defaults.cursor_start
     if defaults.lookback is not None:

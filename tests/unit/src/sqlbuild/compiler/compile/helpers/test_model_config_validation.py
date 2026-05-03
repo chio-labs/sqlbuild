@@ -44,6 +44,18 @@ VALID_TEST_CASES: list[IncrementalConfigValidTestCase] = [
         ref_count=1,
     ),
     IncrementalConfigValidTestCase(
+        description="valid append with cursor and explicit inclusive flag",
+        config_values={
+            "materialized": "incremental",
+            "incremental_strategy": "append",
+            "cursor": "event_time",
+            "cursor_type": "timestamp",
+            "cursor_grain": "second",
+            "append_cursor_inclusive": False,
+        },
+        ref_count=1,
+    ),
+    IncrementalConfigValidTestCase(
         description="valid merge with unique_key",
         config_values={
             "materialized": "incremental",
@@ -147,16 +159,40 @@ ERROR_TEST_CASES: list[IncrementalConfigErrorTestCase] = [
         expected_error_fragment="cursor requires cursor_type",
     ),
     IncrementalConfigErrorTestCase(
-        description="cursor on append raises",
+        description="append_cursor_inclusive on merge raises",
+        config_values={
+            "materialized": "incremental",
+            "incremental_strategy": "merge",
+            "cursor": "event_time",
+            "cursor_type": "timestamp",
+            "cursor_grain": "second",
+            "append_cursor_inclusive": True,
+        },
+        ref_count=1,
+        expected_error_fragment="only valid with append strategy",
+    ),
+    IncrementalConfigErrorTestCase(
+        description="append_cursor_inclusive without cursor raises",
+        config_values={
+            "materialized": "incremental",
+            "incremental_strategy": "append",
+            "append_cursor_inclusive": True,
+        },
+        ref_count=1,
+        expected_error_fragment="append_cursor_inclusive requires cursor",
+    ),
+    IncrementalConfigErrorTestCase(
+        description="append_cursor_inclusive non bool raises",
         config_values={
             "materialized": "incremental",
             "incremental_strategy": "append",
             "cursor": "event_time",
             "cursor_type": "timestamp",
             "cursor_grain": "second",
+            "append_cursor_inclusive": "yes",
         },
         ref_count=1,
-        expected_error_fragment="not allowed with append",
+        expected_error_fragment="append_cursor_inclusive must be a boolean",
     ),
     IncrementalConfigErrorTestCase(
         description="cursor_inputs without cursor raises",
@@ -287,6 +323,17 @@ NON_INCREMENTAL_VALID_TEST_CASES: list[NonIncrementalConfigValidTestCase] = [
             "schema_change_backfill": {"add_column": "bounded-30d"},
         },
     ),
+    NonIncrementalConfigValidTestCase(
+        description="incremental model with append_cursor_inclusive passes",
+        config_values={
+            "materialized": "incremental",
+            "incremental_strategy": "append",
+            "cursor": "event_time",
+            "cursor_type": "timestamp",
+            "cursor_grain": "second",
+            "append_cursor_inclusive": True,
+        },
+    ),
 ]
 
 
@@ -334,6 +381,11 @@ NON_INCREMENTAL_ERROR_TEST_CASES: list[NonIncrementalConfigErrorTestCase] = [
             "schema_change_backfill": {"type_change": "full"},
         },
         expected_error_fragment="schema_change_backfill is only valid for incremental",
+    ),
+    NonIncrementalConfigErrorTestCase(
+        description="table model with append_cursor_inclusive raises",
+        config_values={"materialized": "table", "append_cursor_inclusive": True},
+        expected_error_fragment="append_cursor_inclusive is only valid for incremental",
     ),
 ]
 

@@ -37,3 +37,10 @@ class DiffSelectorIntegrationTestCase:
     select: tuple[str, ...]
     exclude: tuple[str, ...]
     expected_model_names: frozenset[str]
+
+
+@dataclass(frozen=True)
+class AppendCursorPipelineIntegrationTestCase:
+    description: str
+    append_cursor_inclusive: bool
+    expected_resolved_sql_fragment: str

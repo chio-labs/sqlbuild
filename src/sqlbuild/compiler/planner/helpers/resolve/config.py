@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from sqlbuild.compiler.compile.models import CompiledModel
+from sqlbuild.compiler.planner.types import IncrementalStrategy
 
 
 def get_config_str(model: CompiledModel, key: str) -> str | None:
@@ -29,3 +30,15 @@ def get_config_cursor_start(model: CompiledModel) -> str | None:
     if isinstance(raw, str):
         return raw
     return None
+
+
+def get_config_append_cursor_inclusive(model: CompiledModel) -> bool:
+    """Return effective append cursor lower-bound inclusivity."""
+
+    strategy: str | None = get_config_str(model, "incremental_strategy")
+    if strategy != IncrementalStrategy.APPEND:
+        return True
+    raw: object | None = model.config.values.get("append_cursor_inclusive")
+    if isinstance(raw, bool):
+        return raw
+    return True

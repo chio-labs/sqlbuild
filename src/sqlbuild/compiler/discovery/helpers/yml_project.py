@@ -180,6 +180,10 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
         schema=_optional_str(payload=mapping, key="schema"),
         incremental_strategy=_optional_str(payload=mapping, key="incremental_strategy"),
         incremental_mode=_optional_str(payload=mapping, key="incremental_mode"),
+        append_cursor_inclusive=_optional_optional_bool(
+            mapping=mapping,
+            key="append_cursor_inclusive",
+        ),
         cursor_start=_optional_cursor_start(mapping=mapping, key="cursor_start"),
         lookback=_optional_str(payload=mapping, key="lookback"),
         batch_size=_optional_scalar_batch_size(mapping=mapping, key="batch_size"),
@@ -314,6 +318,15 @@ def _optional_bool(*, mapping: dict[str, object], key: str, default: bool) -> bo
     value: object | None = mapping.get(key)
     if value is None:
         return default
+    if not isinstance(value, bool):
+        raise ProjectConfigError(f"Expected '{key}' to be a boolean when provided")
+    return value
+
+
+def _optional_optional_bool(*, mapping: dict[str, object], key: str) -> bool | None:
+    value: object | None = mapping.get(key)
+    if value is None:
+        return None
     if not isinstance(value, bool):
         raise ProjectConfigError(f"Expected '{key}' to be a boolean when provided")
     return value

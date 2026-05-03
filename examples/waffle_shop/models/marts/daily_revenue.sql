@@ -8,6 +8,7 @@ SELECT
   COUNT(DISTINCT o.order_id) AS order_count,
   SUM(o.quantity) AS waffles_sold,
   SUM(p.amount_cents) AS total_revenue_cents,
+  @cents_to_dollars('SUM(p.amount_cents)') AS total_revenue_dollars,
   SUM(p.amount_cents) / COUNT(DISTINCT o.order_id) AS avg_order_value_cents
 FROM __ref("stg_orders") o
 INNER JOIN __ref("stg_payments") p ON o.order_id = p.order_id AND p.payment_status = 'success'

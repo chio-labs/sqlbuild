@@ -31,6 +31,9 @@ class SourceResolutionTestCase:
     source_map: dict[str, SourceEntry]
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]]
     expected_sql: str
+    cursor_bounds: CursorBounds | None = None
+    cursor_inputs: dict[str, str] = field(default_factory=dict)
+    lower_bound_inclusive: bool = True
 
 
 @dataclass(frozen=True)

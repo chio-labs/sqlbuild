@@ -22,12 +22,17 @@ _VALID_INCREMENTAL_MODES: frozenset[str] = frozenset(m.value for m in Incrementa
 _BUILTIN_MATERIALIZATION_TYPES: frozenset[str] = frozenset(
     (MaterializationType.VIEW, MaterializationType.TABLE, MaterializationType.INCREMENTAL)
 )
-_INCREMENTAL_ONLY_KEYS: tuple[str, ...] = ("on_schema_change", "schema_change_backfill")
+_INCREMENTAL_ONLY_KEYS: tuple[str, ...] = (
+    "on_schema_change",
+    "schema_change_backfill",
+    "append_cursor_inclusive",
+)
 _CUSTOM_MATERIALIZATION_DISALLOWED_KEYS: tuple[str, ...] = (
     "on_schema_change",
     "schema_change_backfill",
     "incremental_strategy",
     "incremental_mode",
+    "append_cursor_inclusive",
     "batch_size",
     "cursor",
     "cursor_type",
@@ -59,6 +64,7 @@ def validate_incremental_config(
     cursor: str | None = _str(config, "cursor")
     cursor_type: str | None = _str(config, "cursor_type")
     cursor_start: object | None = config.values.get("cursor_start")
+    append_cursor_inclusive: object | None = config.values.get("append_cursor_inclusive")
     unique_key: object | None = config.values.get("unique_key")
     has_unique_key: bool = unique_key is not None and unique_key != () and unique_key != []
     lookback: str | None = _str(config, "lookback")
@@ -109,8 +115,14 @@ def validate_incremental_config(
         _validate_timestamp_cursor_start(cursor_start=cursor_start, model_name=model_name)
     if cursor_start is not None and cursor_type == CursorType.INTEGER:
         _validate_integer_cursor_start(cursor_start=cursor_start, model_name=model_name)
-    if strategy == IncrementalStrategy.APPEND and cursor is not None:
-        raise CompileInputError(f"model '{model_name}': cursor is not allowed with append strategy")
+    if append_cursor_inclusive is not None and not isinstance(append_cursor_inclusive, bool):
+        raise CompileInputError(f"model '{model_name}': append_cursor_inclusive must be a boolean")
+    if append_cursor_inclusive is not None and strategy != IncrementalStrategy.APPEND:
+        raise CompileInputError(
+            f"model '{model_name}': append_cursor_inclusive is only valid with append strategy"
+        )
+    if append_cursor_inclusive is not None and cursor is None:
+        raise CompileInputError(f"model '{model_name}': append_cursor_inclusive requires cursor")
 
     if cursor_inputs is not None and cursor is None:
         raise CompileInputError(f"model '{model_name}': cursor_inputs requires cursor")

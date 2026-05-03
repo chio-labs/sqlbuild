@@ -10,6 +10,7 @@ from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
+    AppendCursorPipelineIntegrationTestCase,
     DeferToIntegrationTestCase,
     ExpectedModelEntry,
     RunCompilePipelineIntegrationTestCase,
@@ -263,3 +264,72 @@ def test_given_project_with_defer_to_when_compiling_then_resolves_refs_to_deferr
     expected_fragment: str
     for model_name, expected_fragment in test_case.expected_resolved_sql_fragments.items():
         assert expected_fragment in entry_map[model_name].resolved_sql
+
+
+APPEND_CURSOR_PIPELINE_TEST_CASES: list[AppendCursorPipelineIntegrationTestCase] = [
+    AppendCursorPipelineIntegrationTestCase(
+        description="append cursor defaults to inclusive lower bound in resolved sql",
+        append_cursor_inclusive=True,
+        expected_resolved_sql_fragment="WHERE ordered_at >= '2026-01-01 00:00:00'",
+    ),
+    AppendCursorPipelineIntegrationTestCase(
+        description="append cursor can use exclusive lower bound in resolved sql",
+        append_cursor_inclusive=False,
+        expected_resolved_sql_fragment="WHERE ordered_at > '2026-01-01 00:00:00'",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    APPEND_CURSOR_PIPELINE_TEST_CASES,
+    ids=[case.description for case in APPEND_CURSOR_PIPELINE_TEST_CASES],
+)
+def test_given_append_cursor_model_when_compiling_then_sql_uses_expected_lower_bound(
+    test_case: AppendCursorPipelineIntegrationTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    db_path: Path = tmp_path / "append_cursor.duckdb"
+    model_header: str = (
+        "MODEL (\n"
+        "  materialized incremental,\n"
+        "  incremental_strategy append,\n"
+        "  cursor ordered_at,\n"
+        "  cursor_type timestamp,\n"
+        "  cursor_grain second,\n"
+        + ("  append_cursor_inclusive false,\n" if not test_case.append_cursor_inclusive else "")
+        + ");\n\n"
+        + 'SELECT id, ordered_at FROM __source("raw_orders")'
+    )
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.yml": (
+                f"name: demo\nadapter: duckdb\nconnection:\n  database: '{db_path}'\n"
+            ),
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+            ),
+            "models/orders.sql": model_header,
+        },
+    )
+
+    import duckdb
+
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(str(db_path))
+    connection.execute("CREATE TABLE main.raw_orders (id INTEGER, ordered_at TIMESTAMP)")
+    connection.execute(
+        "INSERT INTO main.raw_orders VALUES (1, '2026-01-01 00:00:00'), (2, '2026-01-01 01:00:00')"
+    )
+    connection.execute("CREATE TABLE main.orders (id INTEGER, ordered_at TIMESTAMP)")
+    connection.execute("INSERT INTO main.orders VALUES (1, '2026-01-01 00:00:00')")
+    connection.close()
+
+    result: CompilePipelineResult = run_compile_pipeline_for_project(
+        project_dir=tmp_path,
+        adapter=DuckDbAdapter(),
+    )
+
+    entry_map: dict[str, ModelPlanEntry] = {e.name: e for e in result.plan_output.model_entries}
+    assert test_case.expected_resolved_sql_fragment in entry_map["orders"].resolved_sql

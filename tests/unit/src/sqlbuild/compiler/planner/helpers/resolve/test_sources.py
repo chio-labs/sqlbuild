@@ -8,6 +8,7 @@ from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.planner.helpers.resolve.sources import (
     resolve_source_references,
 )
+from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers.resolve._test_types import (
     SourceResolutionTestCase,
@@ -230,6 +231,21 @@ TEST_CASES: list[SourceResolutionTestCase] = [
             "FROM raw.public.all_cols)"
         ),
     ),
+    SourceResolutionTestCase(
+        description="uses exclusive lower bound when append cursor is not inclusive",
+        query_sql='SELECT * FROM __source("orders")',
+        star_exclude_keyword="EXCLUDE",
+        source_map={"orders": SourceEntry(name="orders", schema="raw", table="orders")},
+        source_warehouse_columns={},
+        cursor_bounds=CursorBounds(start="2024-01-15", end="2024-02-01"),
+        cursor_inputs={"orders": "event_time"},
+        lower_bound_inclusive=False,
+        expected_sql=(
+            "SELECT * FROM (SELECT * FROM raw.orders"
+            " WHERE event_time > '2024-01-15'"
+            " AND event_time < '2024-02-01')"
+        ),
+    ),
 ]
 
 
@@ -246,8 +262,9 @@ def test_given_source_references_when_resolving_then_returns_expected_sql(
         source_map=test_case.source_map,
         source_warehouse_columns=test_case.source_warehouse_columns,
         star_exclude_keyword=test_case.star_exclude_keyword,
-        cursor_bounds=None,
-        cursor_inputs={},
+        cursor_bounds=test_case.cursor_bounds,
+        cursor_inputs=test_case.cursor_inputs,
+        lower_bound_inclusive=test_case.lower_bound_inclusive,
     )
 
     assert result == test_case.expected_sql
