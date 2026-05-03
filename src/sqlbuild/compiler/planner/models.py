@@ -216,6 +216,9 @@ class ModelPlanEntry:
         default_factory=lambda: BackfillResult(action=BackfillAction.WARN_ONLY)
     )
     cascade: CascadeResult | None = None
+    custom_materialization_name: str | None = None
+    custom_config: dict[str, object] = field(default_factory=dict)
+    custom_placeholders: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

@@ -14,6 +14,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditFile,
     DiscoveredDbtManifestFile,
     DiscoveredMacroFile,
+    DiscoveredMaterializationFile,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
@@ -184,6 +185,26 @@ def discover_macro_files(*, project_dir: Path) -> tuple[DiscoveredMacroFile, ...
             contents=file_path.read_text(encoding="utf-8"),
         )
         for file_path in sorted(macros_root.rglob("*.py"))
+    )
+
+
+def discover_materialization_files(
+    *, project_dir: Path
+) -> tuple[DiscoveredMaterializationFile, ...]:
+    """Discover custom materialization Python files under materializations/."""
+
+    materializations_root: Path = project_dir / "materializations"
+    if not materializations_root.is_dir():
+        return ()
+
+    return tuple(
+        DiscoveredMaterializationFile(
+            file_path=file_path,
+            relative_path=file_path.relative_to(project_dir),
+            name=file_path.stem,
+        )
+        for file_path in sorted(materializations_root.rglob("*.py"))
+        if file_path.stem != "__init__"
     )
 
 

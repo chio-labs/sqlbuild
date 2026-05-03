@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
@@ -13,6 +14,7 @@ from sqlbuild.executor.build.helpers.indexes import build_execution_indexes
 from sqlbuild.executor.build.helpers.scheduler import BuildScheduler
 from sqlbuild.executor.build.models import BuildExecutionResult, BuildIndexes, SeedExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
+from sqlbuild.executor.custom.models import MaterializationResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus, TablePromotionMode
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
@@ -34,6 +36,10 @@ def execute_build_plan(
     on_progress: Callable[[str], None] | None = None,
     on_node_start: Callable[[str, str], None] | None = None,
     on_node_complete: Callable[[object], None] | None = None,
+    custom_materializations: dict[str, Callable[..., MaterializationResult]] | None = None,
+    environment: str = "",
+    effective_vars: dict[str, str] | None = None,
+    warehouse_relations: dict[str, RelationInfo] | None = None,
 ) -> BuildExecutionResult:
     """Execute a full build plan using the DAG scheduler."""
 
@@ -53,6 +59,10 @@ def execute_build_plan(
         on_node_start=on_node_start,
         on_node_complete=on_node_complete,
         on_progress=on_progress,
+        custom_materializations=custom_materializations,
+        environment=environment,
+        effective_vars=effective_vars,
+        warehouse_relations=warehouse_relations,
     )
 
     model_results: tuple[ModelExecutionResult, ...]

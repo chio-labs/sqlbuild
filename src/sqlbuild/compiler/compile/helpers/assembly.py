@@ -65,8 +65,16 @@ def _assemble_compiled_model(
 ) -> CompiledModel:
     model_name: str = model_input.model_file.file_path.stem
     inferred_columns: tuple[InferredColumn, ...] | None = None
+    raw_placeholders: object | None = model_input.config.values.get("placeholders")
+    placeholders: dict[str, str] | None = (
+        {str(k): str(v) for k, v in raw_placeholders.items()}
+        if isinstance(raw_placeholders, dict)
+        else None
+    )
     if sqlglot_enabled:
-        inferred_columns = infer_columns_with_sqlglot(query_sql=model_input.query_sql)
+        inferred_columns = infer_columns_with_sqlglot(
+            query_sql=model_input.query_sql, placeholders=placeholders
+        )
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=model_name),
         deps=model_build_deps(references=model_input.references, seed_names=seed_names),

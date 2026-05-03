@@ -11,9 +11,12 @@ from sqlbuild.compiler.compile.models import InferredColumn
 _REF_PATTERN: re.Pattern[str] = re.compile(r'__ref\("([^"]+)"\)')
 _SOURCE_PATTERN: re.Pattern[str] = re.compile(r'__source\("([^"]+)"\)')
 _DBT_REF_PATTERN: re.Pattern[str] = re.compile(r'__dbt_ref\("([^"]+)"\)')
+_PLACEHOLDER_PATTERN: re.Pattern[str] = re.compile(r"@@(\w+)")
 
 
-def infer_columns_with_sqlglot(*, query_sql: str) -> tuple[InferredColumn, ...] | None:
+def infer_columns_with_sqlglot(
+    *, query_sql: str, placeholders: dict[str, str] | None = None
+) -> tuple[InferredColumn, ...] | None:
     """Infer output columns from model query SQL using SQLGlot.
 
     Returns None if SQLGlot is not available or the SQL cannot be parsed.
@@ -28,6 +31,8 @@ def infer_columns_with_sqlglot(*, query_sql: str) -> tuple[InferredColumn, ...] 
         return None
 
     cleaned_sql: str = _replace_refs_with_stubs(query_sql)
+    if placeholders:
+        cleaned_sql = substitute_placeholder_defaults(cleaned_sql, placeholders)
 
     try:
         parsed: Any = sqlglot_module.parse_one(cleaned_sql)
@@ -41,6 +46,19 @@ def infer_columns_with_sqlglot(*, query_sql: str) -> tuple[InferredColumn, ...] 
         return None
 
     return _extract_columns_from_select(select=select, expressions_module=expressions_module)
+
+
+def substitute_placeholder_defaults(query_sql: str, placeholders: dict[str, str]) -> str:
+    """Replace @@name tokens with their default values for SQLGlot parsing."""
+
+    if not placeholders:
+        return query_sql
+
+    def _replacer(match: re.Match[str]) -> str:
+        name: str = match.group(1)
+        return placeholders.get(name, match.group(0))
+
+    return _PLACEHOLDER_PATTERN.sub(_replacer, query_sql)
 
 
 def _replace_refs_with_stubs(query_sql: str) -> str:

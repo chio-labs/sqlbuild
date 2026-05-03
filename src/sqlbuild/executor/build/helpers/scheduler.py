@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (
@@ -27,7 +28,9 @@ from sqlbuild.executor.build.helpers.blocking import block_downstream
 from sqlbuild.executor.build.helpers.end_audits import run_end_audits
 from sqlbuild.executor.build.helpers.source_audits import run_pending_source_audits
 from sqlbuild.executor.build.models import BuildIndexes, NodeCompletion, SeedExecutionResult
+from sqlbuild.executor.custom.models import MaterializationResult
 from sqlbuild.executor.run.main import (
+    execute_custom_entry,
     execute_incremental_entry,
     execute_microbatch_entry,
     execute_table_entry,
@@ -61,6 +64,10 @@ class BuildScheduler:
         on_node_start: Callable[[str, str], None] | None,
         on_node_complete: Callable[[object], None] | None,
         on_progress: Callable[[str], None] | None,
+        custom_materializations: dict[str, Callable[..., MaterializationResult]] | None = None,
+        environment: str = "",
+        effective_vars: dict[str, str] | None = None,
+        warehouse_relations: dict[str, RelationInfo] | None = None,
     ) -> None:
         self._plan: PlanOutput = plan
         self._indexes: BuildIndexes = indexes
@@ -76,6 +83,12 @@ class BuildScheduler:
         self._on_node_start: Callable[[str, str], None] | None = on_node_start
         self._on_node_complete: Callable[[object], None] | None = on_node_complete
         self._on_progress: Callable[[str], None] | None = on_progress
+        self._custom_materializations: dict[str, Callable[..., MaterializationResult]] = (
+            custom_materializations or {}
+        )
+        self._environment: str = environment
+        self._effective_vars: dict[str, str] = effective_vars or {}
+        self._warehouse_relations: dict[str, RelationInfo] = warehouse_relations or {}
 
         self._max_concurrency: int = len(connections)
         self._blocked_keys: set[CompiledObjectKey] = set()
@@ -347,6 +360,10 @@ class BuildScheduler:
             promotion_mode=self._promotion_mode,
             run_id=self._run_id,
             fingerprint_schema=self._fingerprint_schema,
+            custom_materializations=self._custom_materializations,
+            environment=self._environment,
+            effective_vars=self._effective_vars,
+            warehouse_relations=self._warehouse_relations,
         )
         duration: int = int((time.monotonic() - start) * 1000)
         return dataclasses.replace(result, duration_ms=duration)
@@ -452,8 +469,39 @@ def _dispatch_model(
     promotion_mode: TablePromotionMode,
     run_id: str,
     fingerprint_schema: str | None,
+    custom_materializations: dict[str, Callable[..., MaterializationResult]] | None = None,
+    environment: str = "",
+    effective_vars: dict[str, str] | None = None,
+    warehouse_relations: dict[str, RelationInfo] | None = None,
 ) -> ModelExecutionResult:
     """Route a model to the correct executor based on action and mode."""
+
+    if entry.action == PlanAction.CUSTOM:
+        mat_name: str | None = entry.custom_materialization_name
+        registry: dict[str, Callable[..., MaterializationResult]] = custom_materializations or {}
+        if mat_name is None or mat_name not in registry:
+            return ModelExecutionResult(
+                model_name=entry.name,
+                status=ExecutionStatus.FAILED,
+                error_message=f"custom materialization '{mat_name}' not found in registry",
+            )
+        existing: RelationInfo | None = (warehouse_relations or {}).get(entry.name)
+        return execute_custom_entry(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_targets=plan.model_targets,
+            seed_targets=plan.seed_targets,
+            source_map=plan.source_map,
+            model_audits=model_audits,
+            declared_columns=entry.declared_columns,
+            materialize_fn=registry[mat_name],
+            run_id=run_id,
+            fingerprint_schema=fingerprint_schema,
+            environment=environment,
+            effective_vars=effective_vars or {},
+            existing_relation=existing,
+        )
 
     is_microbatch: bool = entry.incremental_mode == IncrementalMode.MICROBATCH
     is_full_refresh_microbatch: bool = (

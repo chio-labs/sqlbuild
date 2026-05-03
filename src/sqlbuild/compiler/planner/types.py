@@ -57,6 +57,7 @@ class PlanAction(StrEnum):
     INCREMENTAL_MERGE = "incremental_merge"
     LOAD_SEED = "load_seed"
     SKIP = "skip"
+    CUSTOM = "custom"
 
 
 class PlanReason(StrEnum):
@@ -90,6 +91,7 @@ class MaterializationType(StrEnum):
     TABLE = "table"
     INCREMENTAL = "incremental"
     SEED = "seed"
+    CUSTOM = "custom"
 
 
 class SchemaActionKind(StrEnum):

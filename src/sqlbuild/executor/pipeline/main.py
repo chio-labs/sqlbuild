@@ -9,6 +9,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.main import execute_build_plan
 from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.executor.custom.models import MaterializationResult
 from sqlbuild.executor.pipeline.helpers.auditing import (
     run_audit_pipeline as run_audit_pipeline,
 )
@@ -38,6 +39,9 @@ def run_build_pipeline(
     on_node_start: Callable[[str, str], None] | None = None,
     on_node_complete: Callable[[object], None] | None = None,
     on_progress: Callable[[str], None] | None = None,
+    custom_materializations: dict[str, Callable[..., MaterializationResult]] | None = None,
+    environment: str = "",
+    effective_vars: dict[str, str] | None = None,
 ) -> BuildExecutionResult:
     """Execute a full build pipeline: resolve settings, open connections, run plan, close."""
 
@@ -63,6 +67,9 @@ def run_build_pipeline(
             on_node_start=on_node_start,
             on_node_complete=on_node_complete,
             on_progress=on_progress,
+            custom_materializations=custom_materializations,
+            environment=environment,
+            effective_vars=effective_vars,
         )
     finally:
         conn: Any

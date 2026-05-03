@@ -7,7 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.helpers.sqlglot_columns import _replace_refs_with_stubs
+from sqlbuild.compiler.compile.helpers.sqlglot_columns import (
+    _replace_refs_with_stubs,
+    substitute_placeholder_defaults,
+)
 
 
 def validate_sql_syntax(
@@ -15,6 +18,7 @@ def validate_sql_syntax(
     query_sql: str,
     model_name: str,
     file_path: Path,
+    placeholders: dict[str, str] | None = None,
 ) -> None:
     """Validate that the model query SQL is parseable by SQLGlot.
 
@@ -28,6 +32,8 @@ def validate_sql_syntax(
         return
 
     cleaned_sql: str = _replace_refs_with_stubs(query_sql)
+    if placeholders:
+        cleaned_sql = substitute_placeholder_defaults(cleaned_sql, placeholders)
 
     try:
         sqlglot_module.parse_one(cleaned_sql)

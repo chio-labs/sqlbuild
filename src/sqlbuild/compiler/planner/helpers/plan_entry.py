@@ -171,6 +171,21 @@ def plan_model(
     fingerprint: Fingerprint | None = snapshot.fingerprints.get(model.name)
     previous_query_sql: str | None = fingerprint.query_sql if fingerprint is not None else None
 
+    custom_materialization_name: str | None = None
+    custom_config: dict[str, object] = {}
+    custom_placeholders: dict[str, str] = {}
+    if materialization_type == MaterializationType.CUSTOM:
+        raw_materialized: object | None = model.config.values.get("materialized")
+        custom_materialization_name = (
+            raw_materialized if isinstance(raw_materialized, str) else None
+        )
+        raw_config: object | None = model.config.values.get("config")
+        if isinstance(raw_config, dict):
+            custom_config = {str(k): v for k, v in raw_config.items()}
+        raw_placeholders: object | None = model.config.values.get("placeholders")
+        if isinstance(raw_placeholders, dict):
+            custom_placeholders = {str(k): str(v) for k, v in raw_placeholders.items()}
+
     entry: ModelPlanEntry = ModelPlanEntry(
         key=model.key,
         name=model.name,
@@ -198,6 +213,9 @@ def plan_model(
         schema_actions=schema_actions,
         schema_findings=change_result.schema_findings,
         backfill=backfill,
+        custom_materialization_name=custom_materialization_name,
+        custom_config=custom_config,
+        custom_placeholders=custom_placeholders,
     )
 
     return entry, warnings
@@ -337,7 +355,7 @@ def _get_materialization_type(model: CompiledModel) -> MaterializationType:
         try:
             return MaterializationType(raw)
         except ValueError:
-            pass
+            return MaterializationType.CUSTOM
     return MaterializationType.TABLE
 
 

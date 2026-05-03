@@ -14,7 +14,22 @@ from sqlbuild.compiler.planner.types import (
 _VALID_STRATEGIES: frozenset[str] = frozenset(s.value for s in IncrementalStrategy)
 _VALID_CURSOR_TYPES: frozenset[str] = frozenset(ct.value for ct in CursorType)
 _VALID_INCREMENTAL_MODES: frozenset[str] = frozenset(m.value for m in IncrementalMode)
+_BUILTIN_MATERIALIZATION_TYPES: frozenset[str] = frozenset(
+    (MaterializationType.VIEW, MaterializationType.TABLE, MaterializationType.INCREMENTAL)
+)
 _INCREMENTAL_ONLY_KEYS: tuple[str, ...] = ("on_schema_change", "schema_change_backfill")
+_CUSTOM_MATERIALIZATION_DISALLOWED_KEYS: tuple[str, ...] = (
+    "on_schema_change",
+    "schema_change_backfill",
+    "incremental_strategy",
+    "incremental_mode",
+    "batch_size",
+    "cursor",
+    "cursor_type",
+    "cursor_inputs",
+    "lookback",
+    "query_change_backfill",
+)
 
 
 def validate_incremental_config(
@@ -121,6 +136,80 @@ def validate_non_incremental_config(
             raise CompileInputError(
                 f"model '{model_name}': {key} is only valid for incremental models"
             )
+
+
+def validate_custom_materialization_config(
+    *,
+    config: CompileModelConfig,
+    model_name: str,
+    custom_materialization_names: frozenset[str],
+) -> None:
+    """Validate config for custom materialization models."""
+
+    materialized: str | None = _str(config, "materialized")
+    if materialized is None or materialized in _BUILTIN_MATERIALIZATION_TYPES:
+        return
+
+    if materialized not in custom_materialization_names:
+        raise CompileInputError(
+            f"model '{model_name}': unknown materialization '{materialized}'; "
+            f"not a built-in type and no custom materialization with that name was discovered"
+        )
+
+    key: str
+    for key in _CUSTOM_MATERIALIZATION_DISALLOWED_KEYS:
+        if config.values.get(key) is not None:
+            raise CompileInputError(
+                f"model '{model_name}': {key} is not allowed on custom materializations"
+            )
+
+
+def validate_placeholder_config(
+    *,
+    config: CompileModelConfig,
+    model_name: str,
+    query_sql: str,
+    custom_materialization_names: frozenset[str],
+) -> None:
+    """Validate @@placeholder usage and placeholders config consistency."""
+
+    import re
+
+    materialized: str | None = _str(config, "materialized")
+    is_custom: bool = materialized is not None and materialized in custom_materialization_names
+    placeholders_config: object | None = config.values.get("placeholders")
+    sql_placeholders: frozenset[str] = frozenset(re.findall(r"@@(\w+)", query_sql))
+
+    if not is_custom and sql_placeholders:
+        raise CompileInputError(
+            f"model '{model_name}': @@placeholders are only allowed on custom materializations"
+        )
+    if not is_custom and placeholders_config is not None:
+        raise CompileInputError(
+            f"model '{model_name}': placeholders config is only allowed on custom materializations"
+        )
+
+    if is_custom and not sql_placeholders and placeholders_config is None:
+        return
+
+    declared_names: frozenset[str] = frozenset()
+    if isinstance(placeholders_config, dict):
+        declared_names = frozenset(str(k) for k in placeholders_config)
+
+    missing_defaults: frozenset[str] = sql_placeholders - declared_names
+    if missing_defaults:
+        sorted_missing: str = ", ".join(sorted(missing_defaults))
+        raise CompileInputError(
+            f"model '{model_name}': @@placeholders without default values "
+            f"in placeholders config: {sorted_missing}"
+        )
+
+    unused_defaults: frozenset[str] = declared_names - sql_placeholders
+    if unused_defaults:
+        sorted_unused: str = ", ".join(sorted(unused_defaults))
+        raise CompileInputError(
+            f"model '{model_name}': placeholders config entries not used in SQL: {sorted_unused}"
+        )
 
 
 def _str(config: CompileModelConfig, key: str) -> str | None:

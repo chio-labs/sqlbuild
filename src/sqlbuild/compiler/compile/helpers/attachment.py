@@ -21,8 +21,10 @@ from sqlbuild.compiler.compile.helpers.macros import (
     load_project_macros,
 )
 from sqlbuild.compiler.compile.helpers.model_config_validation import (
+    validate_custom_materialization_config,
     validate_incremental_config,
     validate_non_incremental_config,
+    validate_placeholder_config,
 )
 from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
 from sqlbuild.compiler.compile.helpers.sql_vars import (
@@ -93,6 +95,9 @@ def build_model_inputs(
     validate_var_macro_collision(effective_vars=effective_vars, loaded_macros=loaded_macros)
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
+    custom_materialization_names: frozenset[str] = frozenset(
+        mf.name for mf in discovered_inputs.materialization_files
+    )
     model_inputs: list[CompileModelInput] = []
     model_file: DiscoveredSqlModelFile
     for model_file in discovered_inputs.model_files:
@@ -121,6 +126,12 @@ def build_model_inputs(
             file_path=model_file.file_path,
             loaded_macros=loaded_macros,
         )
+        raw_placeholders: object | None = effective_config.values.get("placeholders")
+        sql_validation_placeholders: dict[str, str] | None = (
+            {str(k): str(v) for k, v in raw_placeholders.items()}
+            if isinstance(raw_placeholders, dict)
+            else None
+        )
         if not no_sql_validation and _is_sql_validation_enabled(
             project_setting=discovered_inputs.project_config.settings.sql_validation,
             model_config=effective_config,
@@ -129,6 +140,7 @@ def build_model_inputs(
                 query_sql=expanded_query_sql,
                 model_name=model_file.file_path.stem,
                 file_path=model_file.file_path,
+                placeholders=sql_validation_placeholders,
             )
         references: tuple[CompileSqlReference, ...] = extract_sql_references(expanded_query_sql)
         validate_model_references(
@@ -146,6 +158,17 @@ def build_model_inputs(
         validate_non_incremental_config(
             config=effective_config,
             model_name=model_file.file_path.stem,
+        )
+        validate_custom_materialization_config(
+            config=effective_config,
+            model_name=model_file.file_path.stem,
+            custom_materialization_names=custom_materialization_names,
+        )
+        validate_placeholder_config(
+            config=effective_config,
+            model_name=model_file.file_path.stem,
+            query_sql=expanded_query_sql,
+            custom_materialization_names=custom_materialization_names,
         )
         expanded_config: CompileModelConfig = CompileModelConfig(
             values=expand_model_hook_macros(

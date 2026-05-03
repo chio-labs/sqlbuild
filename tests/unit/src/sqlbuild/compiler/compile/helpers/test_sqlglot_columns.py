@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.helpers.sqlglot_columns import infer_columns_with_sqlglot
+from sqlbuild.compiler.compile.helpers.sqlglot_columns import (
+    infer_columns_with_sqlglot,
+    substitute_placeholder_defaults,
+)
 from sqlbuild.compiler.compile.models import InferredColumn
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     InferColumnsTestCase,
+    SubstitutePlaceholderDefaultsTestCase,
 )
 
 INFER_COLUMNS_TEST_CASES: list[InferColumnsTestCase] = [
@@ -140,3 +144,44 @@ def test_given_query_sql_when_inferring_columns_then_returns_expected(
     )
 
     assert result == test_case.expected_columns
+
+
+SUBSTITUTE_PLACEHOLDER_TEST_CASES: list[SubstitutePlaceholderDefaultsTestCase] = [
+    SubstitutePlaceholderDefaultsTestCase(
+        description="substitutes single placeholder",
+        query_sql="SELECT * FROM t WHERE d >= @@partition_start",
+        placeholders={"partition_start": "'2020-01-01'"},
+        expected_sql="SELECT * FROM t WHERE d >= '2020-01-01'",
+    ),
+    SubstitutePlaceholderDefaultsTestCase(
+        description="substitutes multiple placeholders",
+        query_sql="SELECT * FROM t WHERE d >= @@start AND d < @@end",
+        placeholders={"start": "'2020-01-01'", "end": "'2099-12-31'"},
+        expected_sql="SELECT * FROM t WHERE d >= '2020-01-01' AND d < '2099-12-31'",
+    ),
+    SubstitutePlaceholderDefaultsTestCase(
+        description="returns sql unchanged when no placeholders defined",
+        query_sql="SELECT * FROM t WHERE d >= @@start",
+        placeholders={},
+        expected_sql="SELECT * FROM t WHERE d >= @@start",
+    ),
+    SubstitutePlaceholderDefaultsTestCase(
+        description="returns sql unchanged when no placeholders in sql",
+        query_sql="SELECT * FROM t",
+        placeholders={"x": "'1'"},
+        expected_sql="SELECT * FROM t",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SUBSTITUTE_PLACEHOLDER_TEST_CASES,
+    ids=[case.description for case in SUBSTITUTE_PLACEHOLDER_TEST_CASES],
+)
+def test_given_sql_with_placeholders_when_substituting_then_returns_expected(
+    test_case: SubstitutePlaceholderDefaultsTestCase,
+) -> None:
+    result: str = substitute_placeholder_defaults(test_case.query_sql, test_case.placeholders)
+
+    assert result == test_case.expected_sql

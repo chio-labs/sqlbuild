@@ -42,6 +42,9 @@ def resolve_model_plan_action(
 
     materialization: MaterializationType = _get_materialization_type(model)
 
+    if materialization == MaterializationType.CUSTOM:
+        return PlanAction.CUSTOM, _custom_reason(change_result, full_refresh)
+
     if materialization == MaterializationType.VIEW:
         return PlanAction.CREATE_VIEW, _view_reason(change_result, full_refresh)
 
@@ -249,6 +252,20 @@ def _get_materialization_type(model: CompiledModel) -> MaterializationType:
         except ValueError:
             pass
     return MaterializationType.TABLE
+
+
+def _custom_reason(change_result: ChangeDetectionResult, full_refresh: bool) -> PlanReason:
+    """Determine the reason for a custom materialization action."""
+
+    if full_refresh:
+        return PlanReason.FULL_REFRESH
+    if change_result.change_kind == ChangeKind.FIRST_RUN:
+        return PlanReason.FIRST_RUN
+    if change_result.change_kind == ChangeKind.QUERY_CHANGED:
+        return PlanReason.QUERY_CHANGED
+    if change_result.change_kind == ChangeKind.SCHEMA_CHANGED:
+        return PlanReason.SCHEMA_CHANGED
+    return PlanReason.NO_CHANGE
 
 
 def _view_reason(change_result: ChangeDetectionResult, full_refresh: bool) -> PlanReason:

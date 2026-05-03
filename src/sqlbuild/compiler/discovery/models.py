@@ -117,6 +117,15 @@ class DiscoveredAdapterFile:
 
 
 @dataclass(frozen=True)
+class DiscoveredMaterializationFile:
+    """A discovered custom materialization Python file."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+
+
+@dataclass(frozen=True)
 class DiscoveredProjectInputs:
     """All raw project inputs discovered from disk before semantic resolution."""
 
@@ -129,5 +138,6 @@ class DiscoveredProjectInputs:
     test_files: tuple[DiscoveredSqlTestFile, ...] = field(default_factory=tuple)
     audit_files: tuple[DiscoveredAuditFile, ...] = field(default_factory=tuple)
     macro_files: tuple[DiscoveredMacroFile, ...] = field(default_factory=tuple)
+    materialization_files: tuple[DiscoveredMaterializationFile, ...] = field(default_factory=tuple)
     dbt_manifest_file: DiscoveredDbtManifestFile | None = None
     adapter_file: DiscoveredAdapterFile | None = None

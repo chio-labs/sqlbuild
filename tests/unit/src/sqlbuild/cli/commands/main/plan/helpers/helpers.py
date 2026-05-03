@@ -43,6 +43,7 @@ def build_model_entry(
     incremental_mode: str | None = None,
     schema_findings: tuple[SchemaFinding, ...] = (),
     cascade: CascadeResult | None = None,
+    custom_materialization_name: str | None = None,
 ) -> ModelPlanEntry:
     """Build a minimal ModelPlanEntry for formatter tests."""
 
@@ -67,6 +68,7 @@ def build_model_entry(
         schema_findings=schema_findings,
         backfill=BackfillResult(action=backfill_action, duration=backfill_duration),
         cascade=cascade,
+        custom_materialization_name=custom_materialization_name,
     )
 
 

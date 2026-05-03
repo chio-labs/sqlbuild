@@ -197,6 +197,9 @@ def _materialization_label(entry: ModelPlanEntry) -> str:
         return MaterializationType.TABLE.value
     if entry.materialization_type == MaterializationType.INCREMENTAL:
         return _incremental_label(entry)
+    if entry.materialization_type == MaterializationType.CUSTOM:
+        custom_name: str = entry.custom_materialization_name or MaterializationType.CUSTOM.value
+        return f"{custom_name} (custom)"
     return entry.materialization_type.value
 
 

@@ -318,6 +318,36 @@ TEST_CASES: list[FormatPlanTestCase] = [
         expected_fragments=("cursor: event_time",),
         unexpected_fragments=("mode:",),
     ),
+    FormatPlanTestCase(
+        description="custom materialization shows name with custom suffix in normal section",
+        plan_output=build_plan_output(
+            model_entries=(
+                build_model_entry(
+                    name="fact_orders",
+                    action=PlanAction.CUSTOM,
+                    reason=PlanReason.NO_CHANGE,
+                    materialization_type=MaterializationType.CUSTOM,
+                    custom_materialization_name="partition_tracked",
+                ),
+            ),
+        ),
+        expected_fragments=("partition_tracked (custom)",),
+    ),
+    FormatPlanTestCase(
+        description="custom materialization shows name with custom suffix in first run section",
+        plan_output=build_plan_output(
+            model_entries=(
+                build_model_entry(
+                    name="fact_orders",
+                    action=PlanAction.CUSTOM,
+                    reason=PlanReason.FIRST_RUN,
+                    materialization_type=MaterializationType.CUSTOM,
+                    custom_materialization_name="atomic_swap",
+                ),
+            ),
+        ),
+        expected_fragments=("atomic_swap (custom)",),
+    ),
 ]
 
 

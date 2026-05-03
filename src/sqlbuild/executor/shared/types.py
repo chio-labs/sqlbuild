@@ -26,3 +26,4 @@ class ExecutionPhase(StrEnum):
     DML = "dml"
     POST_HOOK = "post_hook"
     FINGERPRINT = "fingerprint"
+    CUSTOM_MATERIALIZATION = "custom_materialization"

@@ -133,3 +133,10 @@ class ParseSourcesYamlErrorTestCase:
     description: str
     contents: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class DiscoverMaterializationFilesTestCase:
+    description: str
+    files: dict[str, str]
+    expected_names: tuple[str, ...]

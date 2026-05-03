@@ -200,3 +200,45 @@ class ValidateModelAttachedAuditRefsTestCase:
     attached_target_name: str
     expected_valid: bool = True
     expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
+class CustomMaterializationConfigErrorTestCase:
+    description: str
+    config_values: dict[str, object]
+    custom_materialization_names: frozenset[str]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class CustomMaterializationConfigValidTestCase:
+    description: str
+    config_values: dict[str, object]
+    custom_materialization_names: frozenset[str]
+    expected_valid: bool = True
+
+
+@dataclass(frozen=True)
+class PlaceholderConfigErrorTestCase:
+    description: str
+    config_values: dict[str, object]
+    query_sql: str
+    custom_materialization_names: frozenset[str]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class PlaceholderConfigValidTestCase:
+    description: str
+    config_values: dict[str, object]
+    query_sql: str
+    custom_materialization_names: frozenset[str]
+    expected_valid: bool = True
+
+
+@dataclass(frozen=True)
+class SubstitutePlaceholderDefaultsTestCase:
+    description: str
+    query_sql: str
+    placeholders: dict[str, str]
+    expected_sql: str
