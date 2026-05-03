@@ -9,10 +9,20 @@ from sqlbuild.compiler.compile.constants import (
     SOURCE_TEST_CTE_PREFIX,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.helpers.sql_scanning import (
+    find_matching_paren,
+    is_identifier_character,
+    is_identifier_start,
+    skip_block_comment,
+    skip_line_comment,
+    skip_quoted_text,
+)
 from sqlbuild.compiler.compile.helpers.sqlglot_tests import (
     extract_expected_branch_column_names_with_sqlglot,
 )
 from sqlbuild.compiler.compile.models import CompileSqlTestCte, CompileSqlTestCtes
+
+_CONTEXT: str = "SQL test"
 
 
 def extract_sql_test_ctes(*, sql: str, file_label: str) -> CompileSqlTestCtes:
@@ -35,14 +45,14 @@ def extract_sql_test_ctes(*, sql: str, file_label: str) -> CompileSqlTestCtes:
 
         index = _skip_ignorable(sql=sql, start=index)
         if index < len(sql) and sql[index] == "(":
-            index = _find_matching_paren(sql=sql, open_paren_index=index) + 1
+            index = find_matching_paren(sql=sql, open_paren_index=index, context=_CONTEXT) + 1
             index = _skip_ignorable(sql=sql, start=index)
         index = _consume_keyword(sql=sql, start=index, keyword="AS", file_label=file_label)
         index = _skip_ignorable(sql=sql, start=index)
         if index >= len(sql) or sql[index] != "(":
             raise CompileInputError(f"SQL test '{file_label}' CTE '{cte_name}' must use AS (...)")
         cte_body_start: int = index + 1
-        cte_body_end: int = _find_matching_paren(sql=sql, open_paren_index=index)
+        cte_body_end: int = find_matching_paren(sql=sql, open_paren_index=index, context=_CONTEXT)
         ctes.append(
             CompileSqlTestCte(
                 name=cte_name,
@@ -166,13 +176,13 @@ def _split_set_operation_branches(sql: str) -> tuple[str, ...]:
     depth: int = 0
     while index < len(sql):
         if sql.startswith("--", index):
-            index = _skip_line_comment(sql=sql, start=index)
+            index = skip_line_comment(sql=sql, start=index)
             continue
         if sql.startswith("/*", index):
-            index = _skip_block_comment(sql=sql, start=index)
+            index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
             continue
         if sql[index] in {"'", '"', "`"}:
-            index = _skip_quoted_text(sql=sql, start=index)
+            index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
             continue
         if sql[index] == "(":
             depth += 1
@@ -227,13 +237,13 @@ def _find_select_list_end(*, sql: str, start: int) -> int:
     depth: int = 0
     while index < len(sql):
         if sql.startswith("--", index):
-            index = _skip_line_comment(sql=sql, start=index)
+            index = skip_line_comment(sql=sql, start=index)
             continue
         if sql.startswith("/*", index):
-            index = _skip_block_comment(sql=sql, start=index)
+            index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
             continue
         if sql[index] in {"'", '"', "`"}:
-            index = _skip_quoted_text(sql=sql, start=index)
+            index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
             continue
         if sql[index] == "(":
             depth += 1
@@ -256,13 +266,13 @@ def _split_top_level_commas(raw_value: str) -> tuple[str, ...]:
     depth: int = 0
     while index < len(raw_value):
         if raw_value.startswith("--", index):
-            index = _skip_line_comment(sql=raw_value, start=index)
+            index = skip_line_comment(sql=raw_value, start=index)
             continue
         if raw_value.startswith("/*", index):
-            index = _skip_block_comment(sql=raw_value, start=index)
+            index = skip_block_comment(sql=raw_value, start=index, context=_CONTEXT)
             continue
         if raw_value[index] in {"'", '"', "`"}:
-            index = _skip_quoted_text(sql=raw_value, start=index)
+            index = skip_quoted_text(sql=raw_value, start=index, context=_CONTEXT)
             continue
         if raw_value[index] == "(":
             depth += 1
@@ -299,13 +309,13 @@ def _extract_as_alias(expression: str) -> str | None:
     last_alias_name: str | None = None
     while index < len(expression):
         if expression.startswith("--", index):
-            index = _skip_line_comment(sql=expression, start=index)
+            index = skip_line_comment(sql=expression, start=index)
             continue
         if expression.startswith("/*", index):
-            index = _skip_block_comment(sql=expression, start=index)
+            index = skip_block_comment(sql=expression, start=index, context=_CONTEXT)
             continue
         if expression[index] in {"'", '"', "`"}:
-            index = _skip_quoted_text(sql=expression, start=index)
+            index = skip_quoted_text(sql=expression, start=index, context=_CONTEXT)
             continue
         if expression[index] == "(":
             depth += 1
@@ -318,7 +328,7 @@ def _extract_as_alias(expression: str) -> str | None:
         as_end: int | None = _try_consume_keyword(sql=expression, start=index, keyword="AS")
         if depth == 0 and as_end is not None:
             alias_index: int = _skip_ignorable(sql=expression, start=as_end)
-            if alias_index < len(expression) and _is_identifier_start(expression[alias_index]):
+            if alias_index < len(expression) and is_identifier_start(expression[alias_index]):
                 alias_name, alias_end = _read_identifier(
                     sql=expression,
                     start=alias_index,
@@ -333,22 +343,22 @@ def _extract_as_alias(expression: str) -> str | None:
 
 
 def _is_simple_identifier(value: str) -> bool:
-    if not value or not _is_identifier_start(value[0]):
+    if not value or not is_identifier_start(value[0]):
         return False
-    return all(_is_identifier_character(character) for character in value[1:])
+    return all(is_identifier_character(character) for character in value[1:])
 
 
 def _contains_select_star(sql: str) -> bool:
     index: int = 0
     while index < len(sql):
         if sql.startswith("--", index):
-            index = _skip_line_comment(sql=sql, start=index)
+            index = skip_line_comment(sql=sql, start=index)
             continue
         if sql.startswith("/*", index):
-            index = _skip_block_comment(sql=sql, start=index)
+            index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
             continue
         if sql[index] in {"'", '"', "`"}:
-            index = _skip_quoted_text(sql=sql, start=index)
+            index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
             continue
         select_end: int | None = _try_consume_keyword(sql=sql, start=index, keyword="SELECT")
         if select_end is not None:
@@ -403,43 +413,20 @@ def _try_consume_keyword(*, sql: str, start: int, keyword: str) -> int | None:
     keyword_end: int = start + len(keyword)
     if sql[start:keyword_end].upper() != keyword:
         return None
-    if keyword_end < len(sql) and _is_identifier_character(sql[keyword_end]):
+    if keyword_end < len(sql) and is_identifier_character(sql[keyword_end]):
         return None
-    if start > 0 and _is_identifier_character(sql[start - 1]):
+    if start > 0 and is_identifier_character(sql[start - 1]):
         return None
     return keyword_end
 
 
 def _read_identifier(*, sql: str, start: int, file_label: str) -> tuple[str, int]:
-    if start >= len(sql) or not _is_identifier_start(sql[start]):
+    if start >= len(sql) or not is_identifier_start(sql[start]):
         raise CompileInputError(f"SQL test '{file_label}' expected a CTE name")
     index: int = start + 1
-    while index < len(sql) and _is_identifier_character(sql[index]):
+    while index < len(sql) and is_identifier_character(sql[index]):
         index += 1
     return sql[start:index], index
-
-
-def _find_matching_paren(*, sql: str, open_paren_index: int) -> int:
-    depth: int = 1
-    index: int = open_paren_index + 1
-    while index < len(sql):
-        if sql.startswith("--", index):
-            index = _skip_line_comment(sql=sql, start=index)
-            continue
-        if sql.startswith("/*", index):
-            index = _skip_block_comment(sql=sql, start=index)
-            continue
-        if sql[index] in {"'", '"', "`"}:
-            index = _skip_quoted_text(sql=sql, start=index)
-            continue
-        if sql[index] == "(":
-            depth += 1
-        elif sql[index] == ")":
-            depth -= 1
-            if depth == 0:
-                return index
-        index += 1
-    raise CompileInputError("SQL test contains an unclosed parenthesis")
 
 
 def _skip_ignorable(*, sql: str, start: int) -> int:
@@ -449,47 +436,10 @@ def _skip_ignorable(*, sql: str, start: int) -> int:
             index += 1
             continue
         if sql.startswith("--", index):
-            index = _skip_line_comment(sql=sql, start=index)
+            index = skip_line_comment(sql=sql, start=index)
             continue
         if sql.startswith("/*", index):
-            index = _skip_block_comment(sql=sql, start=index)
+            index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
             continue
         return index
     return index
-
-
-def _skip_line_comment(*, sql: str, start: int) -> int:
-    newline_index: int = sql.find("\n", start)
-    return len(sql) if newline_index == -1 else newline_index + 1
-
-
-def _skip_block_comment(*, sql: str, start: int) -> int:
-    closing_index: int = sql.find("*/", start + 2)
-    if closing_index == -1:
-        raise CompileInputError("SQL test contains an unclosed block comment")
-    return closing_index + 2
-
-
-def _skip_quoted_text(*, sql: str, start: int) -> int:
-    quote_character: str = sql[start]
-    index: int = start + 1
-    while index < len(sql):
-        if sql[index] == quote_character:
-            if (
-                quote_character in {"'", '"'}
-                and index + 1 < len(sql)
-                and sql[index + 1] == quote_character
-            ):
-                index += 2
-                continue
-            return index + 1
-        index += 1
-    raise CompileInputError("SQL test contains an unclosed quoted string")
-
-
-def _is_identifier_start(character: str) -> bool:
-    return character.isalpha() or character == "_"
-
-
-def _is_identifier_character(character: str) -> bool:
-    return character.isalnum() or character == "_"

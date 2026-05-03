@@ -11,8 +11,22 @@ from types import ModuleType
 
 from sqlbuild.compiler.compile.constants import MACRO_CALL_PATTERN
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.helpers.sql_scanning import (
+    find_matching_paren,
+    skip_block_comment,
+    skip_line_comment,
+    skip_quoted_text,
+)
+from sqlbuild.compiler.compile.helpers.sql_scanning import (
+    is_identifier_character as _is_identifier_continue,
+)
+from sqlbuild.compiler.compile.helpers.sql_scanning import (
+    is_identifier_start as _is_identifier_start,
+)
 from sqlbuild.compiler.compile.models import LoadedMacro
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile
+
+_CONTEXT: str = "Macro expansion"
 
 
 def load_project_macros(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[str, LoadedMacro]:
@@ -309,20 +323,14 @@ def _find_next_macro_start(*, sql: str, start_index: int) -> int | None:
     index: int = start_index
     while index < len(sql):
         character: str = sql[index]
-        if character == "'":
-            index = _skip_single_quoted_string(sql=sql, start_index=index)
-            continue
-        if character == '"':
-            index = _skip_double_quoted_string(sql=sql, start_index=index)
-            continue
-        if character == "`":
-            index = _skip_backtick_quoted_identifier(sql=sql, start_index=index)
+        if character in {"'", '"', "`"}:
+            index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
             continue
         if sql.startswith("--", index):
-            index = _skip_line_comment(sql=sql, start_index=index)
+            index = skip_line_comment(sql=sql, start=index)
             continue
         if sql.startswith("/*", index):
-            index = _skip_block_comment(sql=sql, start_index=index)
+            index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
             continue
         if character == "@" and _is_macro_call_start(sql=sql, at_index=index):
             return index
@@ -350,33 +358,7 @@ def _parse_macro_name(*, sql: str, call_start_index: int) -> str:
 def _find_matching_paren(*, sql: str, opening_paren_index: int) -> int:
     if opening_paren_index >= len(sql) or sql[opening_paren_index] != "(":
         raise CompileInputError("expected opening parenthesis")
-    depth: int = 1
-    index: int = opening_paren_index + 1
-    while index < len(sql):
-        character: str = sql[index]
-        if character == "'":
-            index = _skip_single_quoted_string(sql=sql, start_index=index)
-            continue
-        if character == '"':
-            index = _skip_double_quoted_string(sql=sql, start_index=index)
-            continue
-        if character == "`":
-            index = _skip_backtick_quoted_identifier(sql=sql, start_index=index)
-            continue
-        if sql.startswith("--", index):
-            index = _skip_line_comment(sql=sql, start_index=index)
-            continue
-        if sql.startswith("/*", index):
-            index = _skip_block_comment(sql=sql, start_index=index)
-            continue
-        if character == "(":
-            depth += 1
-        elif character == ")":
-            depth -= 1
-            if depth == 0:
-                return index
-        index += 1
-    raise CompileInputError("Macro call could not be parsed: missing closing ')' ")
+    return find_matching_paren(sql=sql, open_paren_index=opening_paren_index, context=_CONTEXT)
 
 
 def _skip_whitespace(sql: str, start_index: int) -> int:
@@ -384,56 +366,3 @@ def _skip_whitespace(sql: str, start_index: int) -> int:
     while index < len(sql) and sql[index].isspace():
         index += 1
     return index
-
-
-def _skip_single_quoted_string(*, sql: str, start_index: int) -> int:
-    index: int = start_index + 1
-    while index < len(sql):
-        if sql[index] == "'":
-            if index + 1 < len(sql) and sql[index + 1] == "'":
-                index += 2
-                continue
-            return index + 1
-        index += 1
-    raise CompileInputError("Macro expansion encountered an unclosed single-quoted string")
-
-
-def _skip_double_quoted_string(*, sql: str, start_index: int) -> int:
-    index: int = start_index + 1
-    while index < len(sql):
-        if sql[index] == '"':
-            if index + 1 < len(sql) and sql[index + 1] == '"':
-                index += 2
-                continue
-            return index + 1
-        index += 1
-    raise CompileInputError("Macro expansion encountered an unclosed double-quoted string")
-
-
-def _skip_backtick_quoted_identifier(*, sql: str, start_index: int) -> int:
-    index: int = start_index + 1
-    while index < len(sql):
-        if sql[index] == "`":
-            return index + 1
-        index += 1
-    raise CompileInputError("Macro expansion encountered an unclosed backtick identifier")
-
-
-def _skip_line_comment(*, sql: str, start_index: int) -> int:
-    newline_index: int = sql.find("\n", start_index)
-    return len(sql) if newline_index == -1 else newline_index + 1
-
-
-def _skip_block_comment(*, sql: str, start_index: int) -> int:
-    closing_index: int = sql.find("*/", start_index + 2)
-    if closing_index == -1:
-        raise CompileInputError("Macro expansion encountered an unclosed block comment")
-    return closing_index + 2
-
-
-def _is_identifier_start(character: str) -> bool:
-    return character.isalpha() or character == "_"
-
-
-def _is_identifier_continue(character: str) -> bool:
-    return character.isalnum() or character == "_"

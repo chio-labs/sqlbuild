@@ -8,8 +8,16 @@ from sqlbuild.compiler.compile.constants import (
     SOURCE_CALL_NAME,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.helpers.sql_scanning import (
+    find_matching_paren,
+    skip_block_comment,
+    skip_line_comment,
+    skip_quoted_text,
+)
 from sqlbuild.compiler.compile.models import CompileSqlReference
 from sqlbuild.compiler.compile.types import SqlReferenceKind
+
+_CONTEXT: str = "SQL reference"
 
 
 def extract_sql_references(sql: str) -> tuple[CompileSqlReference, ...]:
@@ -20,17 +28,13 @@ def extract_sql_references(sql: str) -> tuple[CompileSqlReference, ...]:
     length: int = len(sql)
     while index < length:
         if sql.startswith("--", index):
-            newline_index: int = sql.find("\n", index)
-            index = length if newline_index == -1 else newline_index + 1
+            index = skip_line_comment(sql=sql, start=index)
             continue
         if sql.startswith("/*", index):
-            closing_index: int = sql.find("*/", index + 2)
-            if closing_index == -1:
-                raise CompileInputError("SQL reference contains an unclosed block comment")
-            index = closing_index + 2
+            index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
             continue
         if sql[index] in {"'", '"', "`"}:
-            index = _skip_quoted_text(sql=sql, start=index)
+            index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
             continue
 
         parsed_reference: tuple[CompileSqlReference, int] | None = _parse_reference_at(
@@ -57,7 +61,9 @@ def _parse_reference_at(*, sql: str, start: int) -> tuple[CompileSqlReference, i
         return None
 
     open_paren_index: int = start + len(ref_prefix(ref_kind))
-    closing_paren_index: int = _find_matching_paren(sql=sql, open_paren_index=open_paren_index)
+    closing_paren_index: int = find_matching_paren(
+        sql=sql, open_paren_index=open_paren_index, context=_CONTEXT
+    )
     raw_arguments: str = sql[open_paren_index + 1 : closing_paren_index]
     argument_values: tuple[str, ...] = _split_top_level_arguments(raw_arguments)
     if len(argument_values) != 1:
@@ -80,34 +86,6 @@ def ref_prefix(ref_kind: SqlReferenceKind | str) -> str:
     return REF_CALL_NAME
 
 
-def _find_matching_paren(*, sql: str, open_paren_index: int) -> int:
-    depth: int = 1
-    index: int = open_paren_index + 1
-    length: int = len(sql)
-    while index < length:
-        if sql.startswith("--", index):
-            newline_index: int = sql.find("\n", index)
-            index = length if newline_index == -1 else newline_index + 1
-            continue
-        if sql.startswith("/*", index):
-            closing_index: int = sql.find("*/", index + 2)
-            if closing_index == -1:
-                raise CompileInputError("SQL reference contains an unclosed block comment")
-            index = closing_index + 2
-            continue
-        if sql[index] in {"'", '"', "`"}:
-            index = _skip_quoted_text(sql=sql, start=index)
-            continue
-        if sql[index] == "(":
-            depth += 1
-        elif sql[index] == ")":
-            depth -= 1
-            if depth == 0:
-                return index
-        index += 1
-    raise CompileInputError("SQL reference contains an unclosed parenthesis")
-
-
 def _split_top_level_arguments(raw_arguments: str) -> tuple[str, ...]:
     arguments: list[str] = []
     current: list[str] = []
@@ -116,7 +94,7 @@ def _split_top_level_arguments(raw_arguments: str) -> tuple[str, ...]:
     while index < len(raw_arguments):
         character: str = raw_arguments[index]
         if character in {"'", '"', "`"}:
-            quoted_end: int = _skip_quoted_text(sql=raw_arguments, start=index)
+            quoted_end: int = skip_quoted_text(sql=raw_arguments, start=index, context=_CONTEXT)
             current.append(raw_arguments[index:quoted_end])
             index = quoted_end
             continue
@@ -161,20 +139,3 @@ def _parse_reference_name(*, raw_value: str, ref_kind: SqlReferenceKind) -> str:
     raise CompileInputError(
         f"{ref_prefix(ref_kind)} name argument must be a quoted string or identifier"
     )
-
-
-def _skip_quoted_text(*, sql: str, start: int) -> int:
-    quote_character: str = sql[start]
-    index: int = start + 1
-    while index < len(sql):
-        if sql[index] == quote_character:
-            if (
-                quote_character in {"'", '"'}
-                and index + 1 < len(sql)
-                and sql[index + 1] == quote_character
-            ):
-                index += 2
-                continue
-            return index + 1
-        index += 1
-    raise CompileInputError("SQL reference contains an unclosed quoted string")
