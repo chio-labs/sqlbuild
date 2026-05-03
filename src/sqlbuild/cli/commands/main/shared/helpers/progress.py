@@ -356,7 +356,11 @@ def _materialization_type_display(materialization_type: str) -> str:
 def _resolve_annotation(plan_entry: ModelPlanEntry | None) -> str:
     if plan_entry is None:
         return ""
-    if plan_entry.action not in INCREMENTAL_ACTIONS:
+    is_incremental: bool = (
+        plan_entry.action in INCREMENTAL_ACTIONS
+        or plan_entry.materialization_type == MaterializationType.INCREMENTAL
+    )
+    if not is_incremental:
         return ""
     parts: list[str] = []
     if plan_entry.incremental_strategy:
