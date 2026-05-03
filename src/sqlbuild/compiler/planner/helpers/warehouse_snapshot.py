@@ -21,6 +21,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType, SqlReferenceKi
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
+from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
 from sqlbuild.compiler.planner.models import ModelCursorSnapshot, WarehouseSnapshot
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.compiler.shared.helpers.sources import render_source_relation
@@ -79,12 +80,24 @@ def gather_warehouse_snapshot(
     schemas: tuple[str, ...] = _collect_target_schemas(project)
     if not schemas:
         return WarehouseSnapshot()
+    metadata_names: tuple[str, ...] | None = _build_metadata_name_filter(
+        project=project,
+        selected_keys=selected_keys,
+    )
 
     relations: dict[str, RelationInfo] = _gather_relations(
-        adapter=adapter, connection=connection, database=database, schemas=schemas
+        adapter=adapter,
+        connection=connection,
+        database=database,
+        schemas=schemas,
+        names=metadata_names,
     )
     columns: dict[str, tuple[ColumnInfo, ...]] = _gather_columns(
-        adapter=adapter, connection=connection, database=database, schemas=schemas
+        adapter=adapter,
+        connection=connection,
+        database=database,
+        schemas=schemas,
+        names=metadata_names,
     )
     fingerprints: dict[str, Fingerprint] = _gather_fingerprints(
         connection=connection, execute=execute, database=database, schemas=schemas
@@ -142,17 +155,77 @@ def _collect_target_schemas(project: CompiledProject) -> tuple[str, ...]:
     return tuple(sorted(schemas))
 
 
+def _build_metadata_name_filter(
+    *,
+    project: CompiledProject,
+    selected_keys: frozenset[CompiledObjectKey] | None,
+) -> tuple[str, ...] | None:
+    names: set[str] = set()
+    if selected_keys is None:
+        model: CompiledModel
+        for model in project.models:
+            names.add(model.target.name)
+        seed: CompiledSeed
+        for seed in project.seeds:
+            names.add(seed.target.name)
+    else:
+        selected_names: frozenset[str] = frozenset(key.name for key in selected_keys)
+        model_map: dict[str, CompiledModel] = {model.name: model for model in project.models}
+        seed_map: dict[str, CompiledSeed] = {seed.name: seed for seed in project.seeds}
+        key: CompiledObjectKey
+        for key in selected_keys:
+            selected_model: CompiledModel | None = model_map.get(key.name)
+            if selected_model is not None:
+                names.add(selected_model.target.name)
+                _add_model_upstream_names(
+                    model=selected_model,
+                    model_map=model_map,
+                    seed_map=seed_map,
+                    selected_names=selected_names,
+                    names=names,
+                )
+                continue
+            selected_seed: CompiledSeed | None = seed_map.get(key.name)
+            if selected_seed is not None:
+                names.add(selected_seed.target.name)
+    if not names or len(names) > METADATA_NAME_FILTER_LIMIT:
+        return None
+    return tuple(sorted(names))
+
+
+def _add_model_upstream_names(
+    *,
+    model: CompiledModel,
+    model_map: dict[str, CompiledModel],
+    seed_map: dict[str, CompiledSeed],
+    selected_names: frozenset[str],
+    names: set[str],
+) -> None:
+    reference: CompileSqlReference
+    for reference in model.references:
+        if reference.ref_kind != SqlReferenceKind.REF or reference.ref_name in selected_names:
+            continue
+        upstream_model: CompiledModel | None = model_map.get(reference.ref_name)
+        if upstream_model is not None:
+            names.add(upstream_model.target.name)
+            continue
+        upstream_seed: CompiledSeed | None = seed_map.get(reference.ref_name)
+        if upstream_seed is not None:
+            names.add(upstream_seed.target.name)
+
+
 def _gather_relations(
     *,
     adapter: BaseAdapter,
     connection: Any,
     database: str | None,
     schemas: tuple[str, ...],
+    names: tuple[str, ...] | None,
 ) -> dict[str, RelationInfo]:
     """Fetch all existing relations across target schemas."""
 
     relations: tuple[RelationInfo, ...] = adapter.list_relations(
-        connection, database=database, schemas=schemas
+        connection, database=database, schemas=schemas, names=names
     )
     result: dict[str, RelationInfo] = {}
     relation: RelationInfo
@@ -169,11 +242,12 @@ def _gather_columns(
     connection: Any,
     database: str | None,
     schemas: tuple[str, ...],
+    names: tuple[str, ...] | None,
 ) -> dict[str, tuple[ColumnInfo, ...]]:
     """Fetch column metadata for all relations across target schemas."""
 
     all_columns: dict[str, tuple[ColumnInfo, ...]] = adapter.get_all_columns(
-        connection, database=database, schemas=schemas
+        connection, database=database, schemas=schemas, names=names
     )
     return {name: cols for name, cols in all_columns.items() if name != FINGERPRINT_TABLE_NAME}
 

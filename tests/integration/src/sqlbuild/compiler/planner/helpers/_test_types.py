@@ -12,6 +12,8 @@ class GatherWarehouseSnapshotTestCase:
     setup_sql: tuple[str, ...]
     model_targets: dict[str, str | None]
     seed_targets: dict[str, str | None]
+    selected_keys: frozenset[CompiledObjectKey] | None = None
+    model_deps: dict[str, tuple[str, ...]] = field(default_factory=dict)
     fingerprints_to_write: tuple[tuple[str, Fingerprint], ...] = field(default_factory=tuple)
     expected_relation_names: frozenset[str] = field(default_factory=frozenset)
     expected_column_table_names: frozenset[str] = field(default_factory=frozenset)
@@ -39,6 +41,15 @@ class GatherCursorSnapshotTestCase:
     expected_progress_calls: int = 0
     deferred_targets: dict[str, str] | None = None
     extra_model_targets: dict[str, str | None] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class GatherSourceColumnsTestCase:
+    description: str
+    setup_sql: tuple[str, ...]
+    source_names: tuple[tuple[str, str, str], ...]
+    expected_source_names: frozenset[str]
+    expected_get_all_columns_names: tuple[tuple[str, ...] | None, ...]
 
 
 @dataclass(frozen=True)

@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
@@ -13,15 +14,19 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
+from sqlbuild.compiler.planner.helpers.plan_entry import gather_source_columns
 from sqlbuild.compiler.planner.helpers.warehouse_snapshot import gather_warehouse_snapshot
 from sqlbuild.compiler.planner.models import ModelCursorSnapshot, WarehouseSnapshot
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.compiler.planner.helpers._test_types import (
     GatherCursorSnapshotTestCase,
     GatherEmptySnapshotTestCase,
+    GatherSourceColumnsTestCase,
     GatherWarehouseSnapshotTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.planner.helpers.helpers import (
+    RecordingDuckDbAdapter,
     _IncrementalModelSpec,
     build_deferred_targets_from_map,
     build_project_with_targets,
@@ -40,6 +45,10 @@ _SELECTED_KEY: CompiledObjectKey = CompiledObjectKey(
 
 _ORDERS_KEY: CompiledObjectKey = CompiledObjectKey(
     resource_type=CompiledResourceType.MODEL, name="raw_orders"
+)
+
+_REVENUE_KEY: CompiledObjectKey = CompiledObjectKey(
+    resource_type=CompiledResourceType.MODEL, name="revenue"
 )
 
 GATHER_SNAPSHOT_TEST_CASES: list[GatherWarehouseSnapshotTestCase] = [
@@ -84,6 +93,43 @@ GATHER_SNAPSHOT_TEST_CASES: list[GatherWarehouseSnapshotTestCase] = [
         expected_column_table_names=frozenset({"orders", "country_codes"}),
         expected_fingerprint_names=frozenset(),
     ),
+    GatherWarehouseSnapshotTestCase(
+        description="filters metadata to selected model and unselected upstream names",
+        setup_sql=(
+            "CREATE TABLE staging.raw_orders (id INTEGER)",
+            "CREATE TABLE staging.revenue (amount DECIMAL)",
+            "CREATE TABLE staging.unrelated (value VARCHAR)",
+        ),
+        model_targets={"raw_orders": "staging", "revenue": "staging"},
+        model_deps={"revenue": ("raw_orders",)},
+        seed_targets={},
+        selected_keys=frozenset({_REVENUE_KEY}),
+        expected_relation_names=frozenset({"raw_orders", "revenue"}),
+        expected_column_table_names=frozenset({"raw_orders", "revenue"}),
+        expected_fingerprint_names=frozenset(),
+    ),
+    GatherWarehouseSnapshotTestCase(
+        description="falls back to schema-wide metadata when selected scope exceeds threshold",
+        setup_sql=(
+            *(f"CREATE TABLE staging.model_{index} (id INTEGER)" for index in range(251)),
+            "CREATE TABLE staging.unrelated (value VARCHAR)",
+        ),
+        model_targets={
+            f"model_{index}": "staging" for index in range(METADATA_NAME_FILTER_LIMIT + 1)
+        },
+        seed_targets={},
+        selected_keys=frozenset(
+            CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=f"model_{index}")
+            for index in range(METADATA_NAME_FILTER_LIMIT + 1)
+        ),
+        expected_relation_names=frozenset(
+            {*(f"model_{index}" for index in range(251)), "unrelated"}
+        ),
+        expected_column_table_names=frozenset(
+            {*(f"model_{index}" for index in range(251)), "unrelated"}
+        ),
+        expected_fingerprint_names=frozenset(),
+    ),
 ]
 
 
@@ -114,6 +160,7 @@ def test_given_warehouse_state_when_gathering_snapshot_then_returns_expected(
 
     project: CompiledProject = build_project_with_targets(
         model_targets=test_case.model_targets,
+        model_deps=test_case.model_deps,
         seed_targets=test_case.seed_targets,
     )
     snapshot: WarehouseSnapshot = gather_warehouse_snapshot(
@@ -121,6 +168,7 @@ def test_given_warehouse_state_when_gathering_snapshot_then_returns_expected(
         adapter=adapter,
         connection=connection,
         execute=execute,
+        selected_keys=test_case.selected_keys,
     )
 
     assert frozenset(snapshot.existing_relations.keys()) == test_case.expected_relation_names
@@ -157,6 +205,43 @@ def test_given_no_target_schemas_when_gathering_snapshot_then_returns_empty(
     assert len(snapshot.existing_relations) == test_case.expected_relation_count
     assert len(snapshot.existing_columns) == test_case.expected_column_count
     assert len(snapshot.fingerprints) == test_case.expected_fingerprint_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        GatherSourceColumnsTestCase(
+            description="filters source column metadata to declared source table names",
+            setup_sql=(
+                "CREATE SCHEMA raw",
+                "CREATE TABLE raw.orders (id INTEGER)",
+                "CREATE TABLE raw.unrelated (value VARCHAR)",
+            ),
+            source_names=(("raw_orders", "raw", "orders"),),
+            expected_source_names=frozenset({"raw_orders"}),
+            expected_get_all_columns_names=(("orders",),),
+        )
+    ],
+    ids=["filters source column metadata to declared source table names"],
+)
+def test_given_sources_when_gathering_source_columns_then_filters_metadata_names(
+    test_case: GatherSourceColumnsTestCase,
+    connection: Any,
+) -> None:
+    statement: str
+    for statement in test_case.setup_sql:
+        connection.execute(statement)
+    adapter: RecordingDuckDbAdapter = RecordingDuckDbAdapter()
+    project: CompiledProject = build_project_with_targets(source_names=test_case.source_names)
+
+    columns: dict[str, tuple[ColumnInfo, ...]] = gather_source_columns(
+        project=project,
+        adapter=adapter,
+        connection=connection,
+    )
+
+    assert frozenset(columns.keys()) == test_case.expected_source_names
+    assert tuple(adapter.get_all_columns_names) == test_case.expected_get_all_columns_names
 
 
 CURSOR_SNAPSHOT_TEST_CASES: list[GatherCursorSnapshotTestCase] = [

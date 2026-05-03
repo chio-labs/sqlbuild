@@ -18,7 +18,11 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import SqlReferenceKind
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
+from sqlbuild.compiler.planner.constants import (
+    METADATA_NAME_FILTER_LIMIT,
+    MICROBATCH_END_SENTINEL,
+    MICROBATCH_START_SENTINEL,
+)
 from sqlbuild.compiler.planner.helpers.changes.detect import detect_model_changes
 from sqlbuild.compiler.planner.helpers.cursor_type_check import (
     check_cursor_type_consistency,
@@ -373,8 +377,16 @@ def gather_source_columns(
     schemas: set[str]
     for db_key_iter, schemas in source_schemas.items():
         database: str | None = db_key_iter or None
+        names: tuple[str, ...] | None = _build_source_table_name_filter(
+            project=project,
+            database=database,
+            schemas=schemas,
+        )
         all_columns: dict[str, tuple[ColumnInfo, ...]] = adapter.get_all_columns(
-            connection, database=database, schemas=tuple(sorted(schemas))
+            connection,
+            database=database,
+            schemas=tuple(sorted(schemas)),
+            names=names,
         )
         source_iter: CompiledSource
         for source_iter in project.sources:
@@ -387,6 +399,26 @@ def gather_source_columns(
                 result[entry_iter.name] = cols
 
     return result
+
+
+def _build_source_table_name_filter(
+    *,
+    project: CompiledProject,
+    database: str | None,
+    schemas: set[str],
+) -> tuple[str, ...] | None:
+    names: set[str] = set()
+    source: CompiledSource
+    for source in project.sources:
+        entry: SourceEntry = source.source_entry
+        if entry.expression is not None or entry.schema not in schemas:
+            continue
+        if (entry.database or None) != database:
+            continue
+        names.add(entry.table if entry.table is not None else entry.name)
+    if not names or len(names) > METADATA_NAME_FILTER_LIMIT:
+        return None
+    return tuple(sorted(names))
 
 
 def _get_on_schema_change(model: CompiledModel) -> OnSchemaChange | None:

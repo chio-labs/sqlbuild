@@ -92,11 +92,14 @@ class FakeJanitorAdapter(BaseAdapter):
         *,
         database: str | None,
         schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
     ) -> tuple[RelationInfo, ...]:
         return tuple(
             relation
             for relation in self.relation_infos
-            if relation.database == database and (schemas is None or relation.schema in schemas)
+            if relation.database == database
+            and (schemas is None or relation.schema in schemas)
+            and (not names or relation.name in names)
         )
 
     def get_columns(
@@ -115,6 +118,7 @@ class FakeJanitorAdapter(BaseAdapter):
         *,
         database: str | None,
         schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
     ) -> dict[str, tuple[ColumnInfo, ...]]:
         return {}
 

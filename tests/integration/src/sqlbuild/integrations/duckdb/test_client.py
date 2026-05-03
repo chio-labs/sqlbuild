@@ -477,6 +477,7 @@ LIST_RELATIONS_TEST_CASES: list[ListRelationsTestCase] = [
         ),
         database=None,
         schemas=("main",),
+        names=None,
         expected_names=("orders", "orders_view"),
     ),
     ListRelationsTestCase(
@@ -490,6 +491,20 @@ LIST_RELATIONS_TEST_CASES: list[ListRelationsTestCase] = [
         ),
         database=None,
         schemas=("main", "staging"),
+        names=None,
+        expected_names=("orders", "raw_orders"),
+    ),
+    ListRelationsTestCase(
+        description="lists only requested relation names across schemas",
+        setup_sql=(
+            "CREATE TABLE orders (id INTEGER)",
+            "CREATE TABLE customers (id INTEGER)",
+            "CREATE SCHEMA staging",
+            "CREATE TABLE staging.raw_orders (id INTEGER)",
+        ),
+        database=None,
+        schemas=("main", "staging"),
+        names=("orders", "raw_orders"),
         expected_names=("orders", "raw_orders"),
     ),
 ]
@@ -513,6 +528,7 @@ def test_given_schema_with_relations_when_listing_then_returns_expected_names(
         connection,
         database=test_case.database,
         schemas=test_case.schemas,
+        names=test_case.names,
     )
     names: tuple[str, ...] = tuple(r.name for r in relations)
 
@@ -556,24 +572,41 @@ def test_given_table_when_getting_columns_then_returns_typed_column_info(
     assert columns == test_case.expected_columns
 
 
+GET_ALL_COLUMNS_TEST_CASES: list[GetAllColumnsTestCase] = [
+    GetAllColumnsTestCase(
+        description="returns all columns grouped by table name",
+        setup_sql=(
+            "CREATE TABLE t1 (a INTEGER, b VARCHAR)",
+            "CREATE TABLE t2 (x BOOLEAN)",
+        ),
+        database=None,
+        schemas=("main",),
+        names=None,
+        expected_columns_by_table={
+            "t1": (ColumnInfo(name="a", type="INTEGER"), ColumnInfo(name="b", type="VARCHAR")),
+            "t2": (ColumnInfo(name="x", type="BOOLEAN"),),
+        },
+    ),
+    GetAllColumnsTestCase(
+        description="returns only columns for requested table names",
+        setup_sql=(
+            "CREATE TABLE t1 (a INTEGER, b VARCHAR)",
+            "CREATE TABLE t2 (x BOOLEAN)",
+        ),
+        database=None,
+        schemas=("main",),
+        names=("t1",),
+        expected_columns_by_table={
+            "t1": (ColumnInfo(name="a", type="INTEGER"), ColumnInfo(name="b", type="VARCHAR")),
+        },
+    ),
+]
+
+
 @pytest.mark.parametrize(
     "test_case",
-    [
-        GetAllColumnsTestCase(
-            description="returns all columns grouped by table name",
-            setup_sql=(
-                "CREATE TABLE t1 (a INTEGER, b VARCHAR)",
-                "CREATE TABLE t2 (x BOOLEAN)",
-            ),
-            database=None,
-            schemas=("main",),
-            expected_columns_by_table={
-                "t1": (ColumnInfo(name="a", type="INTEGER"), ColumnInfo(name="b", type="VARCHAR")),
-                "t2": (ColumnInfo(name="x", type="BOOLEAN"),),
-            },
-        ),
-    ],
-    ids=["returns all columns grouped by table name"],
+    GET_ALL_COLUMNS_TEST_CASES,
+    ids=[case.description for case in GET_ALL_COLUMNS_TEST_CASES],
 )
 def test_given_schema_with_tables_when_getting_all_columns_then_returns_grouped(
     test_case: GetAllColumnsTestCase,
@@ -588,8 +621,10 @@ def test_given_schema_with_tables_when_getting_all_columns_then_returns_grouped(
         connection,
         database=test_case.database,
         schemas=test_case.schemas,
+        names=test_case.names,
     )
 
+    assert frozenset(all_columns.keys()) == frozenset(test_case.expected_columns_by_table.keys())
     table_name: str
     expected_cols: tuple[ColumnInfo, ...]
     for table_name, expected_cols in test_case.expected_columns_by_table.items():

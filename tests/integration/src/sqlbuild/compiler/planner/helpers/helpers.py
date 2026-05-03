@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
+from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
@@ -21,8 +23,32 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSeedFile,
     DiscoveredSourceFile,
 )
+from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from sqlbuild.spec.models.schema import SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
+
+
+class RecordingDuckDbAdapter(DuckDbAdapter):
+    """DuckDB adapter that records get_all_columns name filters for assertions."""
+
+    def __init__(self) -> None:
+        self.get_all_columns_names: list[tuple[str, ...] | None] = []
+
+    def get_all_columns(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> dict[str, tuple[ColumnInfo, ...]]:
+        self.get_all_columns_names.append(names)
+        return super().get_all_columns(
+            connection,
+            database=database,
+            schemas=schemas,
+            names=names,
+        )
 
 
 @dataclass(frozen=True)
@@ -38,6 +64,7 @@ class _IncrementalModelSpec:
 def build_project_with_targets(
     *,
     model_targets: dict[str, str | None] | None = None,
+    model_deps: dict[str, tuple[str, ...]] | None = None,
     seed_targets: dict[str, str | None] | None = None,
     incremental_models: tuple[_IncrementalModelSpec, ...] = (),
     source_names: tuple[tuple[str, str, str], ...] = (),
@@ -48,10 +75,18 @@ def build_project_with_targets(
     model_name: str
     target_schema: str | None
     for model_name, target_schema in (model_targets or {}).items():
+        deps: tuple[CompiledObjectKey, ...] = tuple(
+            CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=dep_name)
+            for dep_name in (model_deps or {}).get(model_name, ())
+        )
+        references: tuple[CompileSqlReference, ...] = tuple(
+            CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name=dep_name)
+            for dep_name in (model_deps or {}).get(model_name, ())
+        )
         models.append(
             CompiledModel(
                 key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=model_name),
-                deps=(),
+                deps=deps,
                 name=model_name,
                 relative_path=Path(f"models/{model_name}.sql"),
                 query_sql=f"SELECT * FROM {model_name}",
@@ -62,6 +97,7 @@ def build_project_with_targets(
                     name=model_name,
                     qualified_name=(f"{target_schema}.{model_name}" if target_schema else None),
                 ),
+                references=references,
             )
         )
 

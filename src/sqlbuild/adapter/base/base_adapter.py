@@ -58,11 +58,13 @@ class BaseAdapter(StrictAdapter):
         *,
         database: str | None,
         schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
     ) -> tuple[RelationInfo, ...]:
         query: str = (
             "SELECT table_name, table_schema, table_type "
             "FROM information_schema.tables WHERE 1=1"
             + _build_schemas_filter(schemas)
+            + _build_names_filter(names)
             + (f" AND table_catalog = '{database}'" if database else "")
         )
         cursor: Any = connection.execute(query)
@@ -100,11 +102,13 @@ class BaseAdapter(StrictAdapter):
         *,
         database: str | None,
         schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
     ) -> dict[str, tuple[ColumnInfo, ...]]:
         query: str = (
             "SELECT table_name, column_name, data_type "
             "FROM information_schema.columns WHERE 1=1"
             + _build_schemas_filter(schemas)
+            + _build_names_filter(names)
             + (f" AND table_catalog = '{database}'" if database else "")
             + " ORDER BY table_name, ordinal_position"
         )
@@ -560,3 +564,12 @@ def _build_schemas_filter(schemas: tuple[str, ...] | None) -> str:
         return ""
     quoted: str = ", ".join(f"'{s}'" for s in schemas)
     return f" AND table_schema IN ({quoted})"
+
+
+def _build_names_filter(names: tuple[str, ...] | None) -> str:
+    """Build an AND clause filtering to the given relation names."""
+
+    if not names:
+        return ""
+    quoted: str = ", ".join(f"'{name}'" for name in names)
+    return f" AND table_name IN ({quoted})"

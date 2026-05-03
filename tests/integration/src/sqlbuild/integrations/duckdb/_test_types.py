@@ -39,6 +39,7 @@ class ListRelationsTestCase:
     setup_sql: tuple[str, ...]
     database: str | None
     schemas: tuple[str, ...] | None
+    names: tuple[str, ...] | None
     expected_names: tuple[str, ...]
 
 
@@ -58,6 +59,7 @@ class GetAllColumnsTestCase:
     setup_sql: tuple[str, ...]
     database: str | None
     schemas: tuple[str, ...] | None
+    names: tuple[str, ...] | None
     expected_columns_by_table: dict[str, tuple[ColumnInfo, ...]]
 
 

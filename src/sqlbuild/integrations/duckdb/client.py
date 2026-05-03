@@ -102,6 +102,7 @@ class DuckDbAdapter(BaseAdapter):
         *,
         database: str | None,
         schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
     ) -> tuple[RelationInfo, ...]:
         query: str = (
             "SELECT table_name, table_schema, table_type FROM information_schema.tables WHERE 1=1"
@@ -109,6 +110,9 @@ class DuckDbAdapter(BaseAdapter):
         if schemas is not None:
             quoted: str = ", ".join(f"'{s}'" for s in schemas)
             query += f" AND table_schema IN ({quoted})"
+        if names:
+            quoted_names: str = ", ".join(f"'{name}'" for name in names)
+            query += f" AND table_name IN ({quoted_names})"
         if database is not None:
             query += f" AND table_catalog = '{database}'"
         rows: list[tuple[Any, ...]] = self.execute(connection, query).fetchall()
@@ -148,6 +152,7 @@ class DuckDbAdapter(BaseAdapter):
         *,
         database: str | None,
         schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
     ) -> dict[str, tuple[ColumnInfo, ...]]:
         query: str = (
             "SELECT table_name, column_name, data_type FROM information_schema.columns WHERE 1=1"
@@ -155,6 +160,9 @@ class DuckDbAdapter(BaseAdapter):
         if schemas is not None:
             quoted: str = ", ".join(f"'{s}'" for s in schemas)
             query += f" AND table_schema IN ({quoted})"
+        if names:
+            quoted_names: str = ", ".join(f"'{name}'" for name in names)
+            query += f" AND table_name IN ({quoted_names})"
         if database is not None:
             query += f" AND table_catalog = '{database}'"
         query += " ORDER BY table_name, ordinal_position"
