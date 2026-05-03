@@ -153,6 +153,58 @@ class DuckDbAdapter(BaseAdapter):
             result[table_name].append(ColumnInfo(name=row[1], type=row[2]))
         return {k: tuple(v) for k, v in result.items()}
 
+    def render_create_table_as(self, *, target: str, sql: str) -> tuple[str, ...]:
+        return (f"CREATE OR REPLACE TABLE {target} AS {sql}",)
+
+    def render_create_view_as(self, *, target: str, sql: str) -> tuple[str, ...]:
+        return (f"CREATE OR REPLACE VIEW {target} AS {sql}",)
+
+    def render_append(
+        self, *, target: str, sql: str, columns: tuple[str, ...] | None = None
+    ) -> tuple[str, ...]:
+        if columns is not None:
+            col_list: str = ", ".join(columns)
+            return (f"INSERT INTO {target} ({col_list}) {sql}",)
+        return (f"INSERT INTO {target} {sql}",)
+
+    def render_delete_insert(
+        self,
+        *,
+        target: str,
+        sql: str,
+        unique_key: tuple[str, ...],
+        columns: tuple[str, ...] | None = None,
+    ) -> tuple[str, ...]:
+        key_condition: str = " AND ".join(f"{target}.{k} = __source.{k}" for k in unique_key)
+        delete_sql: str = (
+            f"DELETE FROM {target} WHERE EXISTS "
+            f"(SELECT 1 FROM ({sql}) AS __source WHERE {key_condition})"
+        )
+        insert_stmts: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
+        return (delete_sql, *insert_stmts)
+
+    def render_delete_insert_cursor(
+        self,
+        *,
+        target: str,
+        sql: str,
+        cursor_column: str,
+        cursor_start: str,
+        cursor_end: str,
+        columns: tuple[str, ...] | None = None,
+    ) -> tuple[str, ...]:
+        delete_sql: str = (
+            f"DELETE FROM {target} "
+            f"WHERE {cursor_column} >= '{cursor_start}' "
+            f"AND {cursor_column} < '{cursor_end}'"
+        )
+        insert_stmts: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
+        return (delete_sql, *insert_stmts)
+
+    def render_drop(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+        exists_clause: str = " IF EXISTS" if if_exists else ""
+        return (f"DROP TABLE{exists_clause} {target}",)
+
     def create_table_as(
         self,
         connection: Any,
@@ -178,6 +230,14 @@ class DuckDbAdapter(BaseAdapter):
     def render_rename(self, *, source: str, target: str) -> tuple[str, ...]:
         unqualified_target: str = target.rsplit(".", 1)[-1]
         return (f"ALTER TABLE {source} RENAME TO {unqualified_target}",)
+
+    def render_swap(self, *, left: str, right: str) -> tuple[str, ...]:
+        staging: str = f"{left}__swap_staging"
+        return (
+            *self.render_rename(source=left, target=staging),
+            *self.render_rename(source=right, target=left),
+            *self.render_rename(source=staging, target=right),
+        )
 
     def rename(self, connection: Any, *, source: str, target: str) -> None:
         stmt: str
@@ -290,6 +350,43 @@ class DuckDbAdapter(BaseAdapter):
             target=target, sql=sql, unique_key=keys, source_columns=source_columns
         ):
             connection.execute(stmt)
+
+    def render_merge(
+        self,
+        *,
+        target: str,
+        sql: str,
+        unique_key: tuple[str, ...],
+        source_columns: tuple[str, ...] = (),
+    ) -> tuple[str, ...]:
+        join_condition: str = " AND ".join(f"__target.{k} = __source.{k}" for k in unique_key)
+        update_assignments: str = ", ".join(
+            f"{col} = __source.{col}" for col in source_columns if col not in unique_key
+        )
+        insert_columns: str = ", ".join(source_columns)
+        insert_values: str = ", ".join(f"__source.{col}" for col in source_columns)
+        merge_sql: str = (
+            f"MERGE INTO {target} AS __target USING ({sql}) AS __source ON {join_condition} "
+        )
+        if update_assignments:
+            merge_sql += f"WHEN MATCHED THEN UPDATE SET {update_assignments} "
+        merge_sql += f"WHEN NOT MATCHED THEN INSERT ({insert_columns}) VALUES ({insert_values})"
+        return (merge_sql,)
+
+    def render_add_columns(
+        self, *, target: str, columns: tuple[ColumnInfo, ...]
+    ) -> tuple[str, ...]:
+        return tuple(f"ALTER TABLE {target} ADD COLUMN {col.name} {col.type}" for col in columns)
+
+    def render_drop_columns(self, *, target: str, column_names: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(f"ALTER TABLE {target} DROP COLUMN {col_name}" for col_name in column_names)
+
+    def render_alter_column_types(
+        self, *, target: str, columns: tuple[ColumnInfo, ...]
+    ) -> tuple[str, ...]:
+        return tuple(
+            f"ALTER TABLE {target} ALTER COLUMN {col.name} TYPE {col.type}" for col in columns
+        )
 
     def add_columns(
         self,
