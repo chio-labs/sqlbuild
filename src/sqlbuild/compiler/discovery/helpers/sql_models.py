@@ -22,6 +22,7 @@ _WORD_TOKEN: str = "word"
 _STRING_TOKEN: str = "string"
 _SYMBOL_TOKEN: str = "symbol"
 _SYMBOLS: frozenset[str] = frozenset({"(", ")", "[", "]", ","})
+_QUOTE_NAMES: dict[str, str] = {"'": "single", '"': "double"}
 _INTEGER_PATTERN: re.Pattern[str] = re.compile(r"^[+-]?\d+$")
 _FLOAT_PATTERN: re.Pattern[str] = re.compile(r"^[+-]?(?:\d+\.\d*|\d*\.\d+)$")
 
@@ -79,6 +80,10 @@ class _ModelHeaderParser:
             if self._match_symbol(":"):
                 raise ValueError(
                     f"unexpected ':' after key '{key}'; use SQLBuild syntax '{key} value'"
+                )
+            if self._is_at_end_symbol(end_symbol) or self._peek().kind == _END_TOKEN:
+                raise ValueError(
+                    f"unexpected token '{key}' without a value; quote values with spaces"
                 )
             values[key] = self._parse_value()
             self._match_symbol(",")
@@ -166,7 +171,7 @@ def _tokenize_model_header(header: str) -> list[_ModelHeaderToken]:
             tokens.append(_ModelHeaderToken(kind=_SYMBOL_TOKEN, value=character, position=index))
             index += 1
             continue
-        if character == "'":
+        if character in _QUOTE_NAMES:
             string_value: str
             next_index: int
             string_value, next_index = _read_quoted_string(header=header, start=index)
@@ -179,8 +184,11 @@ def _tokenize_model_header(header: str) -> list[_ModelHeaderToken]:
             next_character: str = header[next_index]
             if next_character.isspace() or next_character in _SYMBOLS or next_character == ":":
                 break
-            if next_character == "'":
-                raise ValueError(f"unexpected quote inside bare value at position {next_index}")
+            if next_character in _QUOTE_NAMES:
+                raise ValueError(
+                    f"unexpected {_QUOTE_NAMES[next_character]} quote inside bare value "
+                    f"at position {next_index}; quote the whole value"
+                )
             next_index += 1
         value = header[index:next_index]
         if not value:
@@ -193,6 +201,8 @@ def _tokenize_model_header(header: str) -> list[_ModelHeaderToken]:
 
 def _read_quoted_string(*, header: str, start: int) -> tuple[str, int]:
     value_parts: list[str] = []
+    quote: str = header[start]
+    quote_name: str = _QUOTE_NAMES[quote]
     index: int = start + 1
     while index < len(header):
         character: str = header[index]
@@ -202,11 +212,11 @@ def _read_quoted_string(*, header: str, start: int) -> tuple[str, int]:
             value_parts.append(header[index + 1])
             index += 2
             continue
-        if character == "'":
+        if character == quote:
             return "".join(value_parts), index + 1
         value_parts.append(character)
         index += 1
-    raise ValueError(f"unterminated quoted string at position {start}")
+    raise ValueError(f"unterminated {quote_name}-quoted string at position {start}")
 
 
 def _parse_word_value(value: str) -> object:

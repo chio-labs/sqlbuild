@@ -97,15 +97,33 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
         description="accepts quoted, unquoted, and mixed string lists",
         contents="""
         MODEL (
-          tags [core, 'finance', marts],
+          tags [core, 'finance', "data platform", marts],
           unique_key [order_id, customer_id],
         );
 
         SELECT 1
         """,
         expected_header_values={
-            "tags": ["core", "finance", "marts"],
+            "tags": ["core", "finance", "data platform", "marts"],
             "unique_key": ["order_id", "customer_id"],
+        },
+        expected_query="SELECT 1",
+    ),
+    ParseModelSqlHeaderTestCase(
+        description="accepts double quoted strings and escapes",
+        contents="""
+        MODEL (
+          schema "analytics mart",
+          description "Bob said \\"hello\\"",
+          post_hook ["@grant_target('${CTX:target.qualified}')"],
+        );
+
+        SELECT 1
+        """,
+        expected_header_values={
+            "schema": "analytics mart",
+            "description": 'Bob said "hello"',
+            "post_hook": ["@grant_target('${CTX:target.qualified}')"],
         },
         expected_query="SELECT 1",
     ),
@@ -237,6 +255,39 @@ MODEL_SQL_ERROR_TEST_CASES: list[ParseModelSqlErrorTestCase] = [
         SELECT 1
         """,
         expected_error_fragment="expected value",
+    ),
+    ParseModelSqlErrorTestCase(
+        description="raises when a double quoted string is unterminated",
+        contents="""
+        MODEL (
+          schema "analytics
+        );
+
+        SELECT 1
+        """,
+        expected_error_fragment="unterminated double-quoted string",
+    ),
+    ParseModelSqlErrorTestCase(
+        description="raises when a quote appears inside a bare value",
+        contents="""
+        MODEL (
+          schema analytics"mart
+        );
+
+        SELECT 1
+        """,
+        expected_error_fragment="quote the whole value",
+    ),
+    ParseModelSqlErrorTestCase(
+        description="raises when a value with spaces is not quoted",
+        contents="""
+        MODEL (
+          schema analytics mart
+        );
+
+        SELECT 1
+        """,
+        expected_error_fragment="quote values with spaces",
     ),
 ]
 
