@@ -132,6 +132,33 @@ def test_given_invalid_selector_when_parsing_then_raises(
         parse_selector(test_case.raw)
 
 
+RESOLVE_TAG_SELECTOR_TEST_CASES: list[ResolveSelectorTestCase] = [
+    ResolveSelectorTestCase(
+        description="selects models by tag",
+        select=("tag:nightly",),
+        exclude=(),
+        expected_names=frozenset({"orders", "joined"}),
+    ),
+    ResolveSelectorTestCase(
+        description="selects tag with downstream expansion",
+        select=("tag:staging+",),
+        exclude=(),
+        expected_names=frozenset({"orders", "joined"}),
+    ),
+    ResolveSelectorTestCase(
+        description="intersects tag with name selector",
+        select=("tag:nightly,orders",),
+        exclude=(),
+        expected_names=frozenset({"orders"}),
+    ),
+    ResolveSelectorTestCase(
+        description="excludes tag from selected",
+        select=("orders", "customers", "joined"),
+        exclude=("tag:nightly",),
+        expected_names=frozenset({"customers"}),
+    ),
+]
+
 RESOLVE_SELECTOR_TEST_CASES: list[ResolveSelectorTestCase] = [
     ResolveSelectorTestCase(
         description="selects single model by name",
@@ -277,3 +304,34 @@ def test_given_unknown_name_when_resolving_then_raises(
             upstream=upstream,
             downstream=downstream,
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    RESOLVE_TAG_SELECTOR_TEST_CASES,
+    ids=[case.description for case in RESOLVE_TAG_SELECTOR_TEST_CASES],
+)
+def test_given_tag_selectors_when_resolving_then_returns_expected_names(
+    test_case: ResolveSelectorTestCase,
+    diamond_graph: tuple[
+        dict[str, CompiledObjectKey],
+        dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+        dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    ],
+    diamond_tag_index: dict[str, frozenset[CompiledObjectKey]],
+) -> None:
+    all_keys: dict[str, CompiledObjectKey] = diamond_graph[0]
+    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = diamond_graph[1]
+    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = diamond_graph[2]
+
+    result: frozenset[CompiledObjectKey] = resolve_selectors(
+        select=test_case.select,
+        exclude=test_case.exclude,
+        all_keys=all_keys,
+        upstream=upstream,
+        downstream=downstream,
+        tag_index=diamond_tag_index,
+    )
+    result_names: frozenset[str] = frozenset(key.name for key in result)
+
+    assert result_names == test_case.expected_names

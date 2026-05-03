@@ -77,6 +77,7 @@ def resolve_selectors(
     all_keys: dict[str, CompiledObjectKey],
     upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    tag_index: dict[str, frozenset[CompiledObjectKey]] | None = None,
 ) -> frozenset[CompiledObjectKey]:
     """Resolve raw select/exclude strings into a final set of object keys.
 
@@ -84,6 +85,8 @@ def resolve_selectors(
     are unioned. Comma within a token means intersection. --exclude is
     subtracted from the union.
     """
+
+    effective_tag_index: dict[str, frozenset[CompiledObjectKey]] = tag_index or {}
 
     if not select:
         return frozenset(all_keys.values())
@@ -99,6 +102,7 @@ def resolve_selectors(
                 all_keys=all_keys,
                 upstream=upstream,
                 downstream=downstream,
+                tag_index=effective_tag_index,
             )
             selected.update(resolved)
 
@@ -112,6 +116,7 @@ def resolve_selectors(
                 all_keys=all_keys,
                 upstream=upstream,
                 downstream=downstream,
+                tag_index=effective_tag_index,
             )
             excluded.update(resolved)
 
@@ -124,17 +129,28 @@ def _resolve_token(
     all_keys: dict[str, CompiledObjectKey],
     upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    tag_index: dict[str, frozenset[CompiledObjectKey]],
 ) -> frozenset[CompiledObjectKey]:
     """Resolve one selector token, handling comma intersection."""
 
     parts: list[str] = token.split(",")
     if len(parts) == 1:
         return _resolve_single(
-            raw=parts[0], all_keys=all_keys, upstream=upstream, downstream=downstream
+            raw=parts[0],
+            all_keys=all_keys,
+            upstream=upstream,
+            downstream=downstream,
+            tag_index=tag_index,
         )
 
     sets: list[frozenset[CompiledObjectKey]] = [
-        _resolve_single(raw=part, all_keys=all_keys, upstream=upstream, downstream=downstream)
+        _resolve_single(
+            raw=part,
+            all_keys=all_keys,
+            upstream=upstream,
+            downstream=downstream,
+            tag_index=tag_index,
+        )
         for part in parts
     ]
     result: frozenset[CompiledObjectKey] = sets[0]
@@ -150,6 +166,7 @@ def _resolve_single(
     all_keys: dict[str, CompiledObjectKey],
     upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    tag_index: dict[str, frozenset[CompiledObjectKey]],
 ) -> frozenset[CompiledObjectKey]:
     """Resolve one atomic selector (no commas)."""
 
@@ -166,6 +183,14 @@ def _resolve_single(
             raise ValueError(f"Unknown selector name '{end_name}'")
         return find_path_keys(start_key, end_key, downstream)
 
+    if parsed.kind == SelectorKind.TAG:
+        return _resolve_tag(
+            parsed=parsed,
+            tag_index=tag_index,
+            upstream=upstream,
+            downstream=downstream,
+        )
+
     key: CompiledObjectKey | None = _lookup_key(parsed, all_keys)
     if key is None:
         raise ValueError(f"Unknown selector name '{parsed.value}'")
@@ -175,6 +200,30 @@ def _resolve_single(
         result.update(expand_upstream(key, upstream))
     if parsed.downstream:
         result.update(expand_downstream(key, downstream))
+    return frozenset(result)
+
+
+def _resolve_tag(
+    *,
+    parsed: ParsedSelector,
+    tag_index: dict[str, frozenset[CompiledObjectKey]],
+    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+) -> frozenset[CompiledObjectKey]:
+    """Resolve a tag selector to matching keys with optional graph expansion."""
+
+    tagged_keys: frozenset[CompiledObjectKey] = tag_index.get(parsed.value, frozenset())
+    if not tagged_keys:
+        raise ValueError(f"No models found with tag '{parsed.value}'")
+
+    result: set[CompiledObjectKey] = set(tagged_keys)
+    key: CompiledObjectKey
+    if parsed.upstream:
+        for key in tagged_keys:
+            result.update(expand_upstream(key, upstream))
+    if parsed.downstream:
+        for key in tagged_keys:
+            result.update(expand_downstream(key, downstream))
     return frozenset(result)
 
 

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.models import (
+    CompiledAudit,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
@@ -16,6 +17,8 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import (
+    DiscoveredAuditBlock,
+    DiscoveredAuditFile,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
@@ -29,6 +32,7 @@ from sqlbuild.spec.models.schema import SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     BuildModelWarningsTestCase,
+    PlanAuditTestCase,
     ResolveModelPlanActionTestCase,
 )
 
@@ -215,6 +219,58 @@ def _resolve_dep_key(name: str, source_names: set[str], seed_names: set[str]) ->
     if name in seed_names:
         return seed_key(name)
     return model_key(name)
+
+
+def build_audit_from_test_case(
+    test_case: PlanAuditTestCase,
+) -> CompiledAudit:
+    """Build a minimal CompiledAudit from a test case."""
+
+    return CompiledAudit(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name="test_audit"),
+        scope_deps=(),
+        name="test_audit",
+        audit_file=DiscoveredAuditFile(
+            file_path=Path("audits/generic/test.sql"),
+            relative_path=Path("audits/generic/test.sql"),
+            contents="",
+            blocks=(),
+        ),
+        audit_block=DiscoveredAuditBlock(audit_index=0, header_values={}, sql_body=""),
+        sql_body=test_case.sql_body,
+    )
+
+
+def build_audit_model_targets(
+    targets: dict[str, str],
+) -> dict[str, CompiledRelationTarget]:
+    """Build model target lookup from name -> qualified_name."""
+
+    return {
+        name: CompiledRelationTarget(
+            database=None,
+            schema=None,
+            name=name,
+            qualified_name=qualified,
+        )
+        for name, qualified in targets.items()
+    }
+
+
+def build_audit_source_map(
+    entries: dict[str, tuple[str | None, str, str | None]],
+) -> dict[str, SourceEntry]:
+    """Build source map from name -> (database, schema, table)."""
+
+    return {
+        name: SourceEntry(
+            name=name,
+            database=parts[0],
+            schema=parts[1],
+            table=parts[2],
+        )
+        for name, parts in entries.items()
+    }
 
 
 def _stub_schema_file() -> DiscoveredSchemaFile:

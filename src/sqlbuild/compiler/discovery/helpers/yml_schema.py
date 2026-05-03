@@ -13,6 +13,7 @@ from sqlbuild.compiler.discovery.helpers.yml_primitives import (
     optional_bool,
     optional_mapping,
     optional_non_empty_string,
+    optional_string_tuple,
     parse_audit_instances,
     require_non_empty_string,
 )
@@ -123,6 +124,13 @@ def _parse_model_entry(*, entry: dict[str, object], file_path: Path) -> SchemaMo
         columns=_parse_columns(entry=entry, file_path=file_path, label="model"),
         audits=parse_audit_instances(
             entry=entry, file_path=file_path, label="model", error_class=SchemaParseError
+        ),
+        tags=optional_string_tuple(
+            entry=entry,
+            key="tags",
+            file_path=file_path,
+            label="model",
+            error_class=SchemaParseError,
         ),
     )
 

@@ -37,6 +37,7 @@ class SchemaModelEntry:
     meta: dict[str, object] = field(default_factory=dict)
     columns: tuple[SchemaColumn, ...] = field(default_factory=tuple)
     audits: tuple[SchemaAuditInstance, ...] = field(default_factory=tuple)
+    tags: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

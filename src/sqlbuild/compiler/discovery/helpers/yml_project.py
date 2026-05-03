@@ -143,6 +143,13 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
             file_path=file_path,
         )
     )
+    tags: tuple[str, ...] = tuple(
+        _load_string_sequence(
+            payload=mapping.get("tags"),
+            label="defaults.tags",
+            file_path=file_path,
+        )
+    )
     schema_change_backfill: dict[str, str] = _load_string_mapping(
         payload=mapping.get("schema_change_backfill"),
         file_path=file_path,
@@ -158,6 +165,7 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
         query_change_backfill=_optional_str(payload=mapping, key="query_change_backfill"),
         schema_change_backfill=schema_change_backfill,
         row_diff_exclude_columns=row_diff_exclude_columns,
+        tags=tags,
     )
 
 
@@ -171,7 +179,9 @@ def _load_path_defaults(*, payload: object, file_path: Path) -> dict[str, dict[s
     for path_key, path_value in mapping.items():
         if not isinstance(path_value, dict):
             raise ProjectConfigError(f"{file_path} path_defaults['{path_key}'] must be a mapping")
-        path_defaults[path_key] = cast(dict[str, object], path_value)
+        path_dict: dict[str, object] = cast(dict[str, object], path_value)
+        _validate_path_default_tags(path_dict=path_dict, path_key=path_key, file_path=file_path)
+        path_defaults[path_key] = path_dict
     return path_defaults
 
 
@@ -283,3 +293,24 @@ def _optional_scalar_batch_size(*, mapping: dict[str, object], key: str) -> str 
     if isinstance(value, (str, int)):
         return value
     raise ProjectConfigError(f"Expected '{key}' to be a string or integer when provided")
+
+
+def _validate_path_default_tags(
+    *,
+    path_dict: dict[str, object],
+    path_key: str,
+    file_path: Path,
+) -> None:
+    """Validate that tags in a path_defaults entry is a list of strings."""
+
+    raw_tags: object | None = path_dict.get("tags")
+    if raw_tags is None:
+        return
+    if not isinstance(raw_tags, list):
+        raise ProjectConfigError(f"{file_path} path_defaults['{path_key}'].tags must be a list")
+    item: object
+    for item in raw_tags:
+        if not isinstance(item, str):
+            raise ProjectConfigError(
+                f"{file_path} path_defaults['{path_key}'].tags entries must be strings"
+            )

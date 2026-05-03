@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import ModelCursorSnapshot
+from sqlbuild.spec.models.source import SourceEntry
 
 
 @dataclass(frozen=True)
@@ -36,3 +37,13 @@ class GatherCursorSnapshotTestCase:
     expected_cursor_model_names: frozenset[str]
     expected_cursor_snapshots: dict[str, ModelCursorSnapshot] = field(default_factory=dict)
     expected_progress_calls: int = 0
+
+
+@dataclass(frozen=True)
+class ExecuteAuditTestCase:
+    description: str
+    setup_sql: tuple[str, ...]
+    audit_sql: str
+    model_targets: dict[str, str]
+    source_map: dict[str, SourceEntry]
+    expected_row_count: int

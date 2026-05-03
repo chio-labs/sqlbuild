@@ -157,10 +157,13 @@ def build_model_inputs(
 
         schema_entry: SchemaModelEntry = schema_match[0]
         schema_file: DiscoveredSchemaFile = schema_match[1]
+        config_with_schema_tags: CompileModelConfig = _merge_schema_tags(
+            config=expanded_config, schema_entry=schema_entry
+        )
         model_inputs.append(
             CompileModelInput(
                 model_file=model_file,
-                config=expanded_config,
+                config=config_with_schema_tags,
                 query_sql=expanded_query_sql,
                 references=references,
                 schema_entry=schema_entry,
@@ -842,6 +845,7 @@ def build_model_config(
 ) -> CompileModelConfig:
     """Build the pre-semantic effective model config layers."""
 
+    _validate_model_header_tags(model_header_values=model_header_values, model_name=model_name)
     layered_values: dict[str, object] = build_layered_model_values(
         defaults=defaults,
         path_defaults=path_defaults,
@@ -980,9 +984,67 @@ def build_layered_model_values(
 
     values: dict[str, object] = project_defaults_to_mapping(defaults)
     if matched_path_default is not None:
-        values.update(path_defaults[matched_path_default])
-    values.update(model_header_values)
+        _merge_with_tag_union(values, path_defaults[matched_path_default])
+    _merge_with_tag_union(values, model_header_values)
     return values
+
+
+def _merge_with_tag_union(base: dict[str, object], overlay: dict[str, object]) -> None:
+    """Merge overlay into base, unioning 'tags' instead of replacing."""
+
+    overlay_tags: object | None = overlay.get("tags")
+    base_tags: object | None = base.get("tags")
+    base.update(overlay)
+    if overlay_tags is not None and base_tags is not None:
+        merged: list[str] = list(_as_string_list(base_tags))
+        tag: str
+        for tag in _as_string_list(overlay_tags):
+            if tag not in merged:
+                merged.append(tag)
+        base["tags"] = merged
+
+
+def _as_string_list(value: object) -> list[str]:
+    """Coerce a tags value to a list of strings."""
+
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    if isinstance(value, tuple):
+        return [str(item) for item in value]
+    return []
+
+
+def _validate_model_header_tags(
+    *,
+    model_header_values: dict[str, object],
+    model_name: str,
+) -> None:
+    """Validate that tags in a MODEL header is a list of strings."""
+
+    raw_tags: object | None = model_header_values.get("tags")
+    if raw_tags is None:
+        return
+    if not isinstance(raw_tags, list):
+        raise CompileInputError(f"model '{model_name}' tags must be a list")
+    item: object
+    for item in raw_tags:
+        if not isinstance(item, str):
+            raise CompileInputError(f"model '{model_name}' tags entries must be strings")
+
+
+def _merge_schema_tags(
+    *, config: CompileModelConfig, schema_entry: SchemaModelEntry
+) -> CompileModelConfig:
+    """Union schema.yml tags into model config values."""
+
+    if not schema_entry.tags:
+        return config
+    merged_values: dict[str, object] = dict(config.values)
+    _merge_with_tag_union(merged_values, {"tags": list(schema_entry.tags)})
+    return CompileModelConfig(
+        values=merged_values,
+        matched_path_default=config.matched_path_default,
+    )
 
 
 def resolve_early_model_templates(
@@ -1220,6 +1282,8 @@ def project_defaults_to_mapping(defaults: DefaultsConfig) -> dict[str, object]:
         values["schema_change_backfill"] = defaults.schema_change_backfill
     if defaults.row_diff_exclude_columns:
         values["row_diff_exclude_columns"] = defaults.row_diff_exclude_columns
+    if defaults.tags:
+        values["tags"] = list(defaults.tags)
     return values
 
 

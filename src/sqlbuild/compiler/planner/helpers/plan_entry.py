@@ -8,6 +8,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
+    CompiledObjectKey,
     CompiledProject,
     CompiledRelationTarget,
     CompiledSource,
@@ -151,6 +152,32 @@ def plan_model(
     )
 
     return entry, warnings
+
+
+def build_tag_index(
+    project: CompiledProject,
+) -> dict[str, frozenset[CompiledObjectKey]]:
+    """Build a tag-to-keys lookup from compiled model configs."""
+
+    index: dict[str, set[CompiledObjectKey]] = {}
+    model: CompiledModel
+    for model in project.models:
+        raw_tags: object | None = model.config.values.get("tags")
+        tags: list[str] = _as_string_list(raw_tags)
+        tag: str
+        for tag in tags:
+            index.setdefault(tag, set()).add(model.key)
+    return {tag: frozenset(keys) for tag, keys in index.items()}
+
+
+def _as_string_list(value: object) -> list[str]:
+    """Coerce a value to a list of strings."""
+
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    if isinstance(value, tuple):
+        return [str(item) for item in value]
+    return []
 
 
 def gather_source_columns(

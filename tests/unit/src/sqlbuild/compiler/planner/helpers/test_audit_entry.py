@@ -1,0 +1,88 @@
+from __future__ import annotations
+
+import pytest
+
+from sqlbuild.compiler.compile.models import CompiledAudit, CompiledRelationTarget
+from sqlbuild.compiler.planner.helpers.audit_entry import plan_audit
+from sqlbuild.compiler.planner.models import AuditPlanEntry
+from sqlbuild.spec.models.source import SourceEntry
+from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
+    PlanAuditTestCase,
+)
+from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
+    build_audit_from_test_case,
+    build_audit_model_targets,
+    build_audit_source_map,
+)
+
+PLAN_AUDIT_TEST_CASES: list[PlanAuditTestCase] = [
+    PlanAuditTestCase(
+        description="resolves ref to qualified model name",
+        sql_body=('SELECT id FROM __ref("orders") WHERE id IS NULL'),
+        model_targets={"orders": "staging.orders"},
+        source_map_entries={},
+        expected_sql_fragment=("SELECT id FROM staging.orders WHERE id IS NULL"),
+    ),
+    PlanAuditTestCase(
+        description="resolves source to qualified name",
+        sql_body=('SELECT id FROM __source("raw_orders") WHERE id IS NULL'),
+        model_targets={},
+        source_map_entries={
+            "raw_orders": (None, "public", "orders"),
+        },
+        expected_sql_fragment=("SELECT id FROM public.orders WHERE id IS NULL"),
+    ),
+    PlanAuditTestCase(
+        description="resolves both ref and source in same query",
+        sql_body=(
+            'SELECT a.id FROM __ref("orders") a JOIN __source("raw_orders") b ON a.id = b.id'
+        ),
+        model_targets={"orders": "staging.orders"},
+        source_map_entries={
+            "raw_orders": (None, "public", "orders"),
+        },
+        expected_sql_fragment=(
+            "SELECT a.id FROM staging.orders a JOIN public.orders b ON a.id = b.id"
+        ),
+    ),
+    PlanAuditTestCase(
+        description="unknown ref left as-is",
+        sql_body=('SELECT id FROM __ref("missing") WHERE id IS NULL'),
+        model_targets={},
+        source_map_entries={},
+        expected_sql_fragment='__ref("missing")',
+    ),
+    PlanAuditTestCase(
+        description=("source with database includes database in qualified name"),
+        sql_body='SELECT id FROM __source("raw_orders")',
+        model_targets={},
+        source_map_entries={
+            "raw_orders": ("raw_db", "public", "orders"),
+        },
+        expected_sql_fragment=("SELECT id FROM raw_db.public.orders"),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    PLAN_AUDIT_TEST_CASES,
+    ids=[case.description for case in PLAN_AUDIT_TEST_CASES],
+)
+def test_given_audit_when_planning_then_resolves_sql(
+    test_case: PlanAuditTestCase,
+) -> None:
+    audit: CompiledAudit = build_audit_from_test_case(test_case)
+    model_targets: dict[str, CompiledRelationTarget] = build_audit_model_targets(
+        test_case.model_targets
+    )
+    source_map: dict[str, SourceEntry] = build_audit_source_map(test_case.source_map_entries)
+
+    result: AuditPlanEntry = plan_audit(
+        audit=audit,
+        model_targets=model_targets,
+        seed_targets={},
+        source_map=source_map,
+    )
+
+    assert test_case.expected_sql_fragment in result.resolved_sql

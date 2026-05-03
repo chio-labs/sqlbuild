@@ -341,6 +341,24 @@ ERROR_TEST_CASES: list[ParseSchemaYamlErrorTestCase] = [
         """,
         expected_error_fragment="seed column must define non-empty string 'name'",
     ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when model tags is a string instead of list",
+        contents="""
+        models:
+          - name: orders
+            tags: nightly
+        """,
+        expected_error_fragment="model 'tags' must be a list",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when model tags contains non-string entry",
+        contents="""
+        models:
+          - name: orders
+            tags: [123]
+        """,
+        expected_error_fragment="model 'tags' entries must be strings",
+    ),
 ]
 
 

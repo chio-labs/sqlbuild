@@ -1677,6 +1677,16 @@ connection:
         run_id=None,
         expected_error_fragment="SQL syntax error in model 'broken'",
     ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when model header tags is a string instead of list",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/orders.sql": 'MODEL (tags: "nightly");\n\nSELECT 1\n',
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="tags must be a list",
+    ),
 ]
 
 

@@ -188,3 +188,27 @@ def optional_mapping(
     if not isinstance(raw_value, dict):
         raise error_class(f"{file_path} {label} '{key}' must be a mapping")
     return cast(dict[str, object], raw_value)
+
+
+def optional_string_tuple(
+    *,
+    entry: dict[str, object],
+    key: str,
+    file_path: Path,
+    label: str,
+    error_class: type[Exception],
+) -> tuple[str, ...]:
+    """Extract an optional list of strings from a YAML mapping."""
+
+    raw_value: object | None = entry.get(key)
+    if raw_value is None:
+        return ()
+    if not isinstance(raw_value, list):
+        raise error_class(f"{file_path} {label} '{key}' must be a list")
+    items: list[str] = []
+    item: object
+    for item in raw_value:
+        if not isinstance(item, str):
+            raise error_class(f"{file_path} {label} '{key}' entries must be strings")
+        items.append(item)
+    return tuple(items)

@@ -152,11 +152,44 @@ class SeedPlanEntry:
 
 
 @dataclass(frozen=True)
+class AuditPlanEntry:
+    """Per-audit execution plan entry with resolved SQL."""
+
+    key: CompiledObjectKey
+    name: str
+    resolved_sql: str
+    scope_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
+    attached_target_name: str | None = None
+    attached_column_name: str | None = None
+
+
+@dataclass(frozen=True)
+class ChainStep:
+    """One step in a chained test execution sequence."""
+
+    model_name: str
+    resolved_sql: str
+    expected_cte_sql: str
+
+
+@dataclass(frozen=True)
+class SqlTestPlanEntry:
+    """Per-test execution plan entry with chained resolution."""
+
+    key: CompiledObjectKey
+    name: str
+    chain: tuple[ChainStep, ...] = field(default_factory=tuple)
+    scope_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class PlanOutput:
     """Complete execution plan produced by the planner."""
 
     execution_order: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
     model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
     seed_entries: tuple[SeedPlanEntry, ...] = field(default_factory=tuple)
+    audit_entries: tuple[AuditPlanEntry, ...] = field(default_factory=tuple)
+    test_entries: tuple[SqlTestPlanEntry, ...] = field(default_factory=tuple)
     selected_keys: frozenset[CompiledObjectKey] = field(default_factory=frozenset)
     warnings: tuple[PlanWarning, ...] = field(default_factory=tuple)

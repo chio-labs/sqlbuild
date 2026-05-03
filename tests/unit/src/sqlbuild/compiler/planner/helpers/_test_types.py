@@ -169,3 +169,12 @@ class BuildModelWarningsTestCase:
     expected_severity: WarningSeverity | None
     expected_warning_count: int
     expected_severities: tuple[WarningSeverity, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class PlanAuditTestCase:
+    description: str
+    sql_body: str
+    model_targets: dict[str, str]
+    source_map_entries: dict[str, tuple[str | None, str, str | None]]
+    expected_sql_fragment: str

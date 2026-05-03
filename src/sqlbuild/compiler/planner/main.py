@@ -8,14 +8,17 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models import (
+    CompiledAudit,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationTarget,
     CompiledSeed,
     CompiledSource,
+    CompiledSqlTest,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner.helpers.audit_entry import plan_audit
 from sqlbuild.compiler.planner.helpers.buildability import check_buildability
 from sqlbuild.compiler.planner.helpers.graph import (
     build_downstream_deps,
@@ -23,6 +26,7 @@ from sqlbuild.compiler.planner.helpers.graph import (
     topologically_order_keys,
 )
 from sqlbuild.compiler.planner.helpers.plan_entry import (
+    build_tag_index,
     gather_source_columns,
     plan_model,
 )
@@ -31,15 +35,18 @@ from sqlbuild.compiler.planner.helpers.resolve.helpers.refs import (
     build_seed_targets,
 )
 from sqlbuild.compiler.planner.helpers.selectors import resolve_selectors
+from sqlbuild.compiler.planner.helpers.sql_test_assembly import plan_test
 from sqlbuild.compiler.planner.helpers.warehouse_snapshot import (
     gather_warehouse_snapshot,
 )
 from sqlbuild.compiler.planner.models import (
+    AuditPlanEntry,
     MissingUpstream,
     ModelPlanEntry,
     PlanOutput,
     PlanWarning,
     SeedPlanEntry,
+    SqlTestPlanEntry,
     WarehouseSnapshot,
 )
 from sqlbuild.spec.models.source import SourceEntry
@@ -66,6 +73,7 @@ def build_execution_plan(
         upstream_deps
     )
     all_keys: dict[str, CompiledObjectKey] = _build_all_keys(project)
+    tag_index: dict[str, frozenset[CompiledObjectKey]] = build_tag_index(project)
 
     selected_keys: frozenset[CompiledObjectKey] = resolve_selectors(
         select=select,
@@ -73,6 +81,7 @@ def build_execution_plan(
         all_keys=all_keys,
         upstream=upstream_deps,
         downstream=downstream_deps,
+        tag_index=tag_index,
     )
 
     execution_order: tuple[CompiledObjectKey, ...] = topologically_order_keys(upstream_deps)
@@ -153,6 +162,34 @@ def build_execution_plan(
         if seed.key in selected_keys
     ]
 
+    audit_entries: list[AuditPlanEntry] = []
+    audit: CompiledAudit
+    for audit in project.audits:
+        if not _scope_overlaps(audit.scope_deps, selected_keys):
+            continue
+        audit_entries.append(
+            plan_audit(
+                audit=audit,
+                model_targets=model_targets,
+                seed_targets=seed_targets,
+                source_map=source_map,
+            )
+        )
+
+    test_entries: list[SqlTestPlanEntry] = []
+    sql_test: CompiledSqlTest
+    for sql_test in project.sql_tests:
+        if not _scope_overlaps(sql_test.scope_deps, selected_keys):
+            continue
+        test_entry: SqlTestPlanEntry
+        test_warnings: tuple[PlanWarning, ...]
+        test_entry, test_warnings = plan_test(
+            test=sql_test,
+            project=project,
+        )
+        test_entries.append(test_entry)
+        all_warnings.extend(test_warnings)
+
     scoped_order: tuple[CompiledObjectKey, ...] = tuple(
         k for k in execution_order if k in selected_keys
     )
@@ -161,6 +198,8 @@ def build_execution_plan(
         execution_order=scoped_order,
         model_entries=tuple(model_entries),
         seed_entries=tuple(seed_entries),
+        audit_entries=tuple(audit_entries),
+        test_entries=tuple(test_entries),
         selected_keys=selected_keys,
         warnings=tuple(all_warnings),
     )
@@ -190,6 +229,19 @@ def _find_model(project: CompiledProject, name: str) -> CompiledModel | None:
         if model.name == name:
             return model
     return None
+
+
+def _scope_overlaps(
+    scope_deps: tuple[CompiledObjectKey, ...],
+    selected_keys: frozenset[CompiledObjectKey],
+) -> bool:
+    """Check if any scope dependency is in the selected keys."""
+
+    dep: CompiledObjectKey
+    for dep in scope_deps:
+        if dep in selected_keys:
+            return True
+    return False
 
 
 def _is_settings_flag(project: CompiledProject, key: str, *, default: bool) -> bool:

@@ -7,7 +7,10 @@ from sqlbuild.compiler.planner.helpers.graph import (
     build_downstream_deps,
     build_upstream_deps,
 )
-from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import build_test_project
+from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
+    build_test_project,
+    model_key,
+)
 
 
 @pytest.fixture
@@ -31,3 +34,11 @@ def diamond_graph() -> tuple[
     )
     all_keys: dict[str, CompiledObjectKey] = {key.name: key for key in upstream}
     return all_keys, upstream, downstream
+
+
+@pytest.fixture
+def diamond_tag_index() -> dict[str, frozenset[CompiledObjectKey]]:
+    return {
+        "nightly": frozenset({model_key("orders"), model_key("joined")}),
+        "staging": frozenset({model_key("orders")}),
+    }

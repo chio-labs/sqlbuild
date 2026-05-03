@@ -162,6 +162,38 @@ environments:
 """.strip(),
         expected_error_fragment="Expected 'allow_as_source' to be a boolean when provided",
     ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when defaults tags is a string instead of list",
+        project_file_contents="""
+name: demo
+adapter: duckdb
+defaults:
+  tags: nightly
+""".strip(),
+        expected_error_fragment="defaults.tags",
+    ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when path_defaults tags is a string instead of list",
+        project_file_contents="""
+name: demo
+adapter: duckdb
+path_defaults:
+  models/staging:
+    tags: staging
+""".strip(),
+        expected_error_fragment="path_defaults.*tags must be a list",
+    ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when path_defaults tags contains non-string entry",
+        project_file_contents="""
+name: demo
+adapter: duckdb
+path_defaults:
+  models/staging:
+    tags: [123]
+""".strip(),
+        expected_error_fragment="path_defaults.*tags.*must be strings",
+    ),
 ]
 
 LOCAL_CONFIG_ERROR_TEST_CASES: list[LoadLocalConfigErrorTestCase] = [
