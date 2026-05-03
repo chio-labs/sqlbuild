@@ -7,7 +7,7 @@ from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.colors import supports_color
+from sqlbuild.cli.commands.main.shared.helpers.colors import blue_bold, supports_color
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.plan_format import format_plan
 from sqlbuild.cli.commands.main.shared.helpers.progress import (
@@ -77,6 +77,8 @@ def run_run(
     header: str = format_build_header(
         command="sqb run", target=None, concurrency=effective_concurrency
     )
+    execution_header: str = blue_bold("Execution") if use_color else "Execution"
+    sys.stdout.write(execution_header + "\n")
     sys.stdout.write(header + "\n\n")
     sys.stdout.flush()
 

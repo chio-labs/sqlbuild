@@ -66,7 +66,7 @@ class BuildProgressCallbacks:
         name_display: str = self._current_node_name
         if self._current_sub_message:
             name_display = f"{self._current_node_name}  {self._current_sub_message}"
-        line: str = f"  {ctr}  {display_type:<6} {name_display:<40} {status}"
+        line: str = f"  {ctr}  {display_type:<8}{name_display:<40} {status}"
         sys.stdout.write(f"\r\033[K{line}")
         sys.stdout.flush()
 
@@ -91,7 +91,7 @@ class BuildProgressCallbacks:
             )
             duration: str = _format_duration(node_result.duration_ms)
             sys.stdout.write(
-                f"  {ctr}  seed   {node_result.seed_name:<40} {status:<6} {duration}\n"
+                f"  {ctr}  {'seed':<8}{node_result.seed_name:<40} {status:<6} {duration}\n"
             )
             sys.stdout.flush()
             return
@@ -121,7 +121,7 @@ class BuildProgressCallbacks:
             duration = ""
 
         sys.stdout.write(
-            f"  {ctr}  {display_type:<6} {name_display:<40} {status:<6} {duration}{detail}\n"
+            f"  {ctr}  {display_type:<8}{name_display:<40} {status:<6} {duration}{detail}\n"
         )
 
         test_result: SqlTestExecutionResult | None = self._test_results_by_model.get(
@@ -132,7 +132,7 @@ class BuildProgressCallbacks:
                 _test_outcome_display(test_result.outcome),
                 use_color=self._use_color,
             )
-            sys.stdout.write(f"{'':>10}  test   {test_result.test_name:<40} {test_status}\n")
+            sys.stdout.write(f"{'':>10}  {'test':<8}{test_result.test_name:<35} {test_status}\n")
 
         audit: AuditExecutionResult
         for audit in model_result.audit_results:
@@ -146,7 +146,9 @@ class BuildProgressCallbacks:
             if audit.outcome != AuditOutcome.PASS and audit.row_count > 0:
                 row_label: str = "row" if audit.row_count == 1 else "rows"
                 audit_detail = f"  {audit.row_count} {row_label}"
-            sys.stdout.write(f"{'':>10}  audit  {audit_name:<40} {audit_status}{audit_detail}\n")
+            sys.stdout.write(
+                f"{'':>10}  {'audit':<8}{audit_name:<35} {audit_status}{audit_detail}\n"
+            )
 
         sys.stdout.flush()
 

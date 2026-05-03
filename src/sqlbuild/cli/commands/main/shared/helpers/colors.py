@@ -50,6 +50,12 @@ def blue_bold(text: str) -> str:
     return f"{_BLUE}{_BOLD}{text}{_RESET}"
 
 
+def green_bold(text: str) -> str:
+    """Green bold text for successful section headers."""
+
+    return f"{_GREEN}{_BOLD}{text}{_RESET}"
+
+
 def yellow_bold(text: str) -> str:
     """Yellow bold text for warning section headers."""
 

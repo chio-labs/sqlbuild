@@ -10,6 +10,7 @@ from sqlbuild.cli.commands.main.shared.helpers.colors import (
     blue_bold,
     bold,
     green,
+    green_bold,
     red,
     yellow,
     yellow_bold,
@@ -66,7 +67,7 @@ def format_plan(plan: PlanOutput, *, full_refresh: bool = False, use_color: bool
     selected_count: int = len(plan.model_entries) + len(plan.seed_entries)
 
     header: str = "Plan ready"
-    lines.append(green(header))
+    lines.append(green_bold(header))
     lines.append(f"Selected: {selected_count}")
 
     normal: list[ModelPlanEntry] = _collect_normal(active)
@@ -109,7 +110,7 @@ def _format_full_refresh(lines: list[str], plan: PlanOutput) -> None:
     selected_count: int = len(plan.model_entries) + len(plan.seed_entries)
     active: list[ModelPlanEntry] = [e for e in plan.model_entries if e.action != PlanAction.SKIP]
 
-    lines.append(green("Plan ready (full refresh)"))
+    lines.append(green_bold("Plan ready (full refresh)"))
     lines.append(f"Selected: {selected_count}")
     lines.append("")
 
