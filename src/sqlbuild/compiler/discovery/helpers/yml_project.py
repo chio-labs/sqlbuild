@@ -188,6 +188,7 @@ def _load_environments(*, payload: object, file_path: Path) -> dict[str, Environ
         )
         environments[env_name] = EnvironmentConfig(
             connection=_optional_mapping(payload=env_mapping, key="connection"),
+            vars=_load_string_mapping(payload=env_mapping.get("vars"), file_path=file_path),
             database=_optional_str(payload=env_mapping, key="database"),
             schema=_optional_str(payload=env_mapping, key="schema"),
             clone=ClonePolicy(

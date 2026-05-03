@@ -18,7 +18,12 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSourceFile,
     DiscoveredSqlModelFile,
 )
-from sqlbuild.spec.models.project import DefaultsConfig
+from sqlbuild.spec.models.project import (
+    DefaultsConfig,
+    EnvironmentConfig,
+    LocalConfig,
+    ProjectConfig,
+)
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -121,6 +126,56 @@ def build_source_inputs(
                 )
             )
     return tuple(source_inputs)
+
+
+def resolve_environment_name(
+    *,
+    project_config: ProjectConfig,
+    local_config: LocalConfig,
+    selected_environment: str | None,
+) -> str | None:
+    """Resolve the effective environment name for compile input building."""
+
+    environment_name: str | None = selected_environment
+    if environment_name is None:
+        environment_name = local_config.environment
+    if environment_name is None:
+        environment_name = project_config.default_environment
+    if environment_name is None:
+        return None
+    if environment_name not in project_config.environments:
+        raise CompileInputError(f"Unknown environment '{environment_name}'")
+    return environment_name
+
+
+def build_effective_connection(
+    *,
+    project_config: ProjectConfig,
+    environment_config: EnvironmentConfig | None,
+) -> dict[str, object]:
+    """Merge base project connection with the selected environment overrides."""
+
+    connection: dict[str, object] = dict(project_config.connection)
+    if environment_config is not None:
+        connection.update(environment_config.connection)
+    return connection
+
+
+def build_effective_vars(
+    *,
+    project_config: ProjectConfig,
+    local_config: LocalConfig,
+    environment_config: EnvironmentConfig | None,
+    cli_vars: dict[str, str],
+) -> dict[str, str]:
+    """Merge effective vars using the locked precedence order."""
+
+    values: dict[str, str] = dict(project_config.vars)
+    if environment_config is not None:
+        values.update(environment_config.vars)
+    values.update(local_config.vars)
+    values.update(cli_vars)
+    return values
 
 
 def build_model_config(

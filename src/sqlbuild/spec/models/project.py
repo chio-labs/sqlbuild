@@ -18,6 +18,7 @@ class EnvironmentConfig:
     """One named environment configuration."""
 
     connection: dict[str, object] = field(default_factory=dict)
+    vars: dict[str, str] = field(default_factory=dict)
     database: str | None = None
     schema: str | None = None
     clone: ClonePolicy = field(default_factory=ClonePolicy)

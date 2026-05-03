@@ -14,6 +14,8 @@ class LoadProjectConfigTestCase:
     expected_row_diff_exclude_columns: tuple[str, ...]
     expected_path_default_schema: str
     expected_vars: dict[str, str]
+    expected_dev_connection: dict[str, object]
+    expected_dev_vars: dict[str, str]
     expected_dev_schema: str
     expected_allow_as_source: bool
     expected_retention_days: int

@@ -11,7 +11,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSourceFile,
     DiscoveredSqlModelFile,
 )
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
+from sqlbuild.spec.models.project import EnvironmentConfig, LocalConfig, ProjectConfig
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -58,6 +58,10 @@ class CompileProjectInputs:
     project_config: ProjectConfig
     local_config: LocalConfig
     discovered_inputs: DiscoveredProjectInputs
+    effective_environment_name: str | None = None
+    effective_environment: EnvironmentConfig | None = None
+    effective_connection: dict[str, object] = field(default_factory=dict)
+    effective_vars: dict[str, str] = field(default_factory=dict)
     model_inputs: tuple[CompileModelInput, ...] = field(default_factory=tuple)
     seed_inputs: tuple[CompileSeedInput, ...] = field(default_factory=tuple)
     source_inputs: tuple[CompileSourceInput, ...] = field(default_factory=tuple)

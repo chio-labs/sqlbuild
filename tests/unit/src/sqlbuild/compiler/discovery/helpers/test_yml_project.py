@@ -66,6 +66,10 @@ vars:
 
 environments:
   dev:
+    connection:
+      warehouse: dev_wh
+    vars:
+      schema_prefix: dev
     schema: "dev_${user}"
     clone:
       allow_as_source: true
@@ -83,6 +87,8 @@ janitor:
             expected_row_diff_exclude_columns=("loaded_at",),
             expected_path_default_schema="staging",
             expected_vars={"user": "kevin"},
+            expected_dev_connection={"warehouse": "dev_wh"},
+            expected_dev_vars={"schema_prefix": "dev"},
             expected_dev_schema="dev_${user}",
             expected_allow_as_source=True,
             expected_retention_days=14,
@@ -110,6 +116,8 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
         config.path_defaults["models/staging"]["schema"] == test_case.expected_path_default_schema
     )
     assert config.vars == test_case.expected_vars
+    assert config.environments["dev"].connection == test_case.expected_dev_connection
+    assert config.environments["dev"].vars == test_case.expected_dev_vars
     assert config.environments["dev"].schema == test_case.expected_dev_schema
     assert config.environments["dev"].clone.allow_as_source is test_case.expected_allow_as_source
     assert config.janitor.retention_days == test_case.expected_retention_days
