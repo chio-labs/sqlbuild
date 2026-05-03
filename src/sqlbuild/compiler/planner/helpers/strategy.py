@@ -40,7 +40,7 @@ def resolve_model_plan_action(
     if _is_disabled(model):
         return PlanAction.SKIP, PlanReason.DISABLED
 
-    materialization: MaterializationType = _get_materialization_type(model)
+    materialization: MaterializationType = get_materialization_type(model)
 
     if materialization == MaterializationType.CUSTOM:
         return PlanAction.CUSTOM, _custom_reason(change_result, full_refresh)
@@ -242,18 +242,6 @@ def _is_disabled(model: CompiledModel) -> bool:
     return False
 
 
-def _get_materialization_type(model: CompiledModel) -> MaterializationType:
-    """Extract the materialization type from model config."""
-
-    raw: object | None = model.config.values.get("materialized")
-    if isinstance(raw, str):
-        try:
-            return MaterializationType(raw)
-        except ValueError:
-            pass
-    return MaterializationType.TABLE
-
-
 def _custom_reason(change_result: ChangeDetectionResult, full_refresh: bool) -> PlanReason:
     """Determine the reason for a custom materialization action."""
 
@@ -395,3 +383,15 @@ def _describe_finding(finding: SchemaFinding) -> str:
     if finding.kind == SchemaChangeKind.COLUMN_TYPE_CHANGED:
         return f"expected {finding.expected_type}, warehouse has {finding.actual_type}"
     return f"{finding.kind.value}"
+
+
+def get_materialization_type(model: CompiledModel) -> MaterializationType:
+    """Extract materialization type from model config."""
+
+    raw: object | None = model.config.values.get("materialized")
+    if isinstance(raw, str):
+        try:
+            return MaterializationType(raw)
+        except ValueError:
+            return MaterializationType.CUSTOM
+    return MaterializationType.TABLE

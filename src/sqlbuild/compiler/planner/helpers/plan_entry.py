@@ -26,6 +26,7 @@ from sqlbuild.compiler.planner.helpers.resolve.main import resolve_model_sql
 from sqlbuild.compiler.planner.helpers.strategy import (
     build_logical_ddl,
     build_model_warnings,
+    get_materialization_type,
     resolve_model_plan_action,
     resolve_schema_actions,
 )
@@ -131,7 +132,7 @@ def plan_model(
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
     )
-    materialization_type: MaterializationType = _get_materialization_type(model)
+    materialization_type: MaterializationType = get_materialization_type(model)
 
     warnings: tuple[PlanWarning, ...] = build_model_warnings(
         model_name=model.name,
@@ -345,18 +346,6 @@ def gather_source_columns(
                 result[entry_iter.name] = cols
 
     return result
-
-
-def _get_materialization_type(model: CompiledModel) -> MaterializationType:
-    """Extract materialization type from model config."""
-
-    raw: object | None = model.config.values.get("materialized")
-    if isinstance(raw, str):
-        try:
-            return MaterializationType(raw)
-        except ValueError:
-            return MaterializationType.CUSTOM
-    return MaterializationType.TABLE
 
 
 def _get_on_schema_change(model: CompiledModel) -> OnSchemaChange | None:

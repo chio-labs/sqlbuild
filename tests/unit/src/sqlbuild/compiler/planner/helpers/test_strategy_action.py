@@ -236,14 +236,14 @@ RESOLVE_ACTION_TEST_CASES: list[ResolveModelPlanActionTestCase] = [
         ),
     ),
     ResolveModelPlanActionTestCase(
-        description="missing materialized config defaults to table behavior",
+        description="unknown materialized config routes to custom action",
         materialized="unknown_custom_thing",
         incremental_strategy=None,
         change_kind=ChangeKind.FIRST_RUN,
         query_changed=False,
         backfill_action=BackfillAction.FULL,
         full_refresh=False,
-        expected_action=PlanAction.CREATE_TABLE,
+        expected_action=PlanAction.CUSTOM,
         expected_reason=PlanReason.FIRST_RUN,
     ),
     ResolveModelPlanActionTestCase(

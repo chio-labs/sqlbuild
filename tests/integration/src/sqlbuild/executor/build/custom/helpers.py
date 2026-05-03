@@ -238,6 +238,137 @@ def build_cleanup_fn(*, fail: bool) -> Callable[[MaterializationContext], Materi
     return materialize
 
 
+def build_partition_tracking_fn() -> Callable[[MaterializationContext], MaterializationResult]:
+    """Build a materialize function that does partition-tracked incremental loads."""
+
+    def materialize(ctx: MaterializationContext) -> MaterializationResult:
+        tracking_table: str = str(ctx.config["tracking_table"])
+        partition_col: str = str(ctx.config["partition_column"])
+
+        ctx.adapter.execute(
+            ctx.connection,
+            f"CREATE TABLE IF NOT EXISTS {tracking_table} "
+            f"(partition_value VARCHAR, run_id VARCHAR)",
+        )
+
+        target_exists: bool = ctx.existing_relation is not None
+        if not target_exists:
+            full_sql: str = ctx.sql.replace("@@partition_start", "'2024-01-01'")
+            full_sql = full_sql.replace("@@partition_end", "'2024-01-04'")
+            ctx.adapter.create_table_as(ctx.connection, target=ctx.target, sql=full_sql)
+            partition: str
+            for partition in ("2024-01-01", "2024-01-02", "2024-01-03"):
+                ctx.adapter.execute(
+                    ctx.connection,
+                    f"INSERT INTO {tracking_table} VALUES ('{partition}', '{ctx.run_id}')",
+                )
+            return MaterializationResult(relation=ctx.target)
+
+        full_range_sql: str = ctx.sql.replace("@@partition_start", "'2024-01-01'").replace(
+            "@@partition_end", "'2024-01-04'"
+        )
+        cursor: Any = ctx.adapter.execute(
+            ctx.connection,
+            f"SELECT DISTINCT {partition_col} FROM ({full_range_sql}) sub "
+            f"WHERE {partition_col} NOT IN "
+            f"(SELECT partition_value FROM {tracking_table})",
+        )
+        stale_partitions: list[str] = [str(row[0]) for row in cursor.fetchall()]
+
+        stale: str
+        for stale in stale_partitions:
+            next_day: str = stale[:8] + str(int(stale[8:]) + 1).zfill(2)
+            partition_sql: str = ctx.sql.replace("@@partition_start", f"'{stale}'")
+            partition_sql = partition_sql.replace("@@partition_end", f"'{next_day}'")
+            ctx.adapter.append(ctx.connection, target=ctx.target, sql=partition_sql)
+            ctx.adapter.execute(
+                ctx.connection,
+                f"INSERT INTO {tracking_table} VALUES ('{stale}', '{ctx.run_id}')",
+            )
+
+        return MaterializationResult(relation=ctx.target)
+
+    return materialize
+
+
+def build_existing_relation_capture_fn(
+    captured: dict[str, Any],
+) -> Callable[[MaterializationContext], MaterializationResult]:
+    """Build a materialize function that captures existing_relation state."""
+
+    def materialize(ctx: MaterializationContext) -> MaterializationResult:
+        captured["existing_relation"] = ctx.existing_relation
+        captured["is_first_run"] = ctx.is_first_run
+        ctx.adapter.create_table_as(ctx.connection, target=ctx.target, sql=ctx.sql)
+        return MaterializationResult(relation=ctx.target)
+
+    return materialize
+
+
+def build_placeholder_execution_fn(
+    substitutions: dict[str, str],
+) -> Callable[[MaterializationContext], MaterializationResult]:
+    """Build a materialize function that substitutes @@placeholders and executes."""
+
+    def materialize(ctx: MaterializationContext) -> MaterializationResult:
+        sql: str = ctx.sql
+        placeholder_name: str
+        placeholder_value: str
+        for placeholder_name, placeholder_value in substitutions.items():
+            sql = sql.replace(f"@@{placeholder_name}", placeholder_value)
+        ctx.adapter.create_table_as(ctx.connection, target=ctx.target, sql=sql)
+        return MaterializationResult(relation=ctx.target)
+
+    return materialize
+
+
+def run_scheduler_build(
+    *,
+    project_files: dict[str, str],
+    project_dir: Path,
+    db_path: Path,
+    adapter: DuckDbAdapter,
+    custom_materializations: dict[str, Callable[[MaterializationContext], MaterializationResult]],
+) -> tuple[Any, Any]:
+    """Run a full build through the scheduler with custom materializations."""
+
+    from sqlbuild.compiler.discovery.main import discover_project_inputs
+    from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+    from sqlbuild.compiler.pipeline.main import run_compile_pipeline
+    from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+    from sqlbuild.compiler.planner.models import PlanOutput
+    from sqlbuild.executor.build.main import execute_build_plan
+    from sqlbuild.executor.build.models import BuildExecutionResult
+    from sqlbuild.executor.shared.types import TablePromotionMode
+
+    config: dict[str, object] = {"database": str(db_path)}
+    discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
+    pipeline_result: CompilePipelineResult = run_compile_pipeline(
+        discovered_inputs=discovered,
+        adapter=adapter,
+        no_sql_validation=True,
+        connection_config=config,
+    )
+    plan: PlanOutput = pipeline_result.plan_output
+
+    connection: Any = adapter.connect(config)
+    try:
+        result: BuildExecutionResult = execute_build_plan(
+            plan=plan,
+            adapter=adapter,
+            connections=(connection,),
+            scheduler_connection=connection,
+            promotion_mode=TablePromotionMode.STAGED,
+            run_id="test_scheduler",
+            run_audits=False,
+            custom_materializations=custom_materializations,
+        )
+        return result, connection
+    except Exception:
+        adapter.close(connection)
+        raise
+
+
 _FN_REGISTRY["simple"] = build_simple_fn
 _FN_REGISTRY["failing"] = build_failing_fn
 _FN_REGISTRY["excepting"] = build_excepting_fn

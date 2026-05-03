@@ -1,7 +1,8 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.planner.types import PlanReason
+from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 
 
@@ -77,3 +78,52 @@ class ContextVerificationTestCase:
     expected_environment: str
     expected_var_key: str
     expected_var_value: str
+
+
+@dataclass(frozen=True)
+class PartitionTrackingTestCase:
+    description: str
+    setup_sql: tuple[str, ...]
+    expected_target_row_count: int
+    expected_tracking_row_count: int
+    expected_partition_values: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ExistingRelationTestCase:
+    description: str
+    expected_row_count: int
+    expected_existing_was_none: bool
+    setup_sql: tuple[str, ...] = field(default_factory=tuple)
+    existing_database: str | None = None
+    existing_schema: str | None = None
+    existing_name: str | None = None
+    existing_type: str | None = None
+
+
+@dataclass(frozen=True)
+class PrePromotionAuditTestCase:
+    description: str
+    expected_status: ExecutionStatus
+    expected_failed_phase: ExecutionPhase
+    expected_min_audit_row_count: int
+
+
+@dataclass(frozen=True)
+class PlaceholderExecutionTestCase:
+    description: str
+    model_sql: str
+    placeholders: dict[str, str]
+    substitutions: dict[str, str]
+    expected_row_count: int
+
+
+@dataclass(frozen=True)
+class SchedulerRoutingTestCase:
+    description: str
+    project_files: dict[str, str]
+    expected_status: BuildStatus
+    expected_success_count: int
+    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...] = field(
+        default_factory=tuple
+    )
