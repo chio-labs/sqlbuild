@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from importlib import import_module
-from types import ModuleType
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -13,7 +11,7 @@ from sqlbuild.compiler.compile.models import CompiledProject, CompileProjectInpu
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.helpers.target_defaults import apply_target_defaults
 from sqlbuild.compiler.pipeline.models import ClonePipelineResult
-from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput, SeedPlanEntry
+from sqlbuild.compiler.planner.main.clone import run_clone_planning
 
 
 def prepare_clone_pipeline(
@@ -27,7 +25,6 @@ def prepare_clone_pipeline(
     exclude: tuple[str, ...],
     target_connection: Any,
 ) -> ClonePipelineResult:
-    planner_clone: ModuleType = import_module("sqlbuild.compiler.planner.helpers.clone")
     source_project: CompiledProject = _compile_project_for_environment(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
@@ -40,28 +37,19 @@ def prepare_clone_pipeline(
         environment_name=to_environment,
         no_sql_validation=no_sql_validation,
     )
-    clone_plan: PlanOutput = planner_clone.build_clone_plan_output(
+    (
+        clone_plan,
+        target_model_entries,
+        target_seed_entries,
+        source_model_entries,
+        source_seed_entries,
+    ) = run_clone_planning(
         project=target_project,
         select=select,
         exclude=exclude,
-    )
-    target_model_entries: tuple[ModelPlanEntry, ...] = planner_clone.build_clone_model_entries(
-        project=target_project,
-        plan=clone_plan,
         adapter=adapter,
         connection=target_connection,
-    )
-    target_seed_entries: tuple[SeedPlanEntry, ...] = planner_clone.build_clone_seed_entries(
-        project=target_project,
-        plan=clone_plan,
-    )
-    source_model_entries: tuple[ModelPlanEntry, ...] = planner_clone.build_source_model_entries(
-        project=source_project,
-        selected_names=frozenset(entry.name for entry in target_model_entries),
-    )
-    source_seed_entries: tuple[SeedPlanEntry, ...] = planner_clone.build_source_seed_entries(
-        project=source_project,
-        selected_names=frozenset(entry.name for entry in target_seed_entries),
+        source_project=source_project,
     )
     return ClonePipelineResult(
         source_project=source_project,

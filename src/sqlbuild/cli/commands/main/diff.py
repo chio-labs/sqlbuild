@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from importlib import import_module
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -17,6 +15,7 @@ from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_connection_config
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.pipeline.main.diff import run_diff_pipeline
 from sqlbuild.executor.diff.main.execute import execute_diff
 from sqlbuild.executor.diff.models import DiffExecutionResult
 
@@ -53,25 +52,15 @@ def run_diff(
         raise CliUserError(f"unknown diff --to environment '{to_environment}'")
 
     adapter: BaseAdapter = resolve_adapter(discovered_inputs.project_config.adapter)
-    diff_pipeline_module: ModuleType = import_module("sqlbuild.compiler.pipeline.helpers.diff")
-    compile_project_for_diff_environment: Any = (
-        diff_pipeline_module.compile_project_for_diff_environment
-    )
-    resolve_diff_model_names: Any = diff_pipeline_module.resolve_diff_model_names
-    left_project: Any = compile_project_for_diff_environment(
+    left_project: Any
+    right_project: Any
+    selected_names: tuple[str, ...]
+    left_project, right_project, selected_names = run_diff_pipeline(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
-        environment_name=from_environment,
+        from_environment=from_environment,
+        to_environment=to_environment,
         no_sql_validation=no_sql_validation,
-    )
-    right_project: Any = compile_project_for_diff_environment(
-        discovered_inputs=discovered_inputs,
-        adapter=adapter,
-        environment_name=to_environment,
-        no_sql_validation=no_sql_validation,
-    )
-    selected_names: tuple[str, ...] = resolve_diff_model_names(
-        project=right_project,
         select=select,
         exclude=exclude,
     )

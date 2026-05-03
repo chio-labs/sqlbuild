@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from importlib import import_module
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -18,6 +16,7 @@ from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_connection_config
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.pipeline.main.clone import run_clone_pipeline
 from sqlbuild.compiler.pipeline.models import ClonePipelineResult
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.executor.clone.main.execute import execute_clone
@@ -63,10 +62,6 @@ def run_clone(
     source_connection: Any = adapter.connect(source_connection_config)
     target_connection: Any = adapter.connect(target_connection_config)
     try:
-        clone_pipeline_module: ModuleType = import_module(
-            "sqlbuild.compiler.pipeline.helpers.clone"
-        )
-        run_clone_pipeline: Any = clone_pipeline_module.prepare_clone_pipeline
         clone_pipeline: ClonePipelineResult = run_clone_pipeline(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
