@@ -208,6 +208,7 @@ def build_model_inputs(
                     model_file=model_file,
                     config=expanded_config,
                     query_sql=expanded_query_sql,
+                    macro_source_sql=var_substituted_sql,
                     references=references,
                 )
             )
@@ -223,6 +224,7 @@ def build_model_inputs(
                 model_file=model_file,
                 config=config_with_schema_tags,
                 query_sql=expanded_query_sql,
+                macro_source_sql=var_substituted_sql,
                 references=references,
                 schema_entry=schema_entry,
                 schema_file=schema_file,
@@ -342,6 +344,7 @@ def build_test_inputs(
                 test_file=test_file,
                 known_model_names=known_model_names,
                 known_source_names=known_source_names,
+                loaded_macros=loaded_macros,
             )
             test_inputs.append(
                 CompileSqlTestInput(
@@ -349,6 +352,7 @@ def build_test_inputs(
                     test_block=test_block,
                     sql_body=expanded_sql_body,
                     authored_ctes=test_ctes.authored_ctes,
+                    macro_mocks=test_ctes.macro_mocks,
                     mock_model_names=test_ctes.mock_model_names,
                     mock_source_names=test_ctes.mock_source_names,
                     expected_model_names=test_ctes.expected_model_names,
@@ -363,6 +367,7 @@ def validate_test_ctes(
     test_file: DiscoveredSqlTestFile,
     known_model_names: set[str],
     known_source_names: set[str],
+    loaded_macros: dict[str, LoadedMacro],
 ) -> None:
     """Validate SQL-native test CTE targets against discovered inputs."""
 
@@ -377,6 +382,12 @@ def validate_test_ctes(
         if mock_source_name not in known_source_names:
             raise CompileInputError(
                 f"SQL test file {test_file.relative_path} mocks unknown source '{mock_source_name}'"
+            )
+    macro_mock_name: str
+    for macro_mock_name in test_ctes.macro_mocks:
+        if macro_mock_name not in loaded_macros:
+            raise CompileInputError(
+                f"SQL test file {test_file.relative_path} mocks unknown macro '{macro_mock_name}'"
             )
     expected_model_name: str
     for expected_model_name in test_ctes.expected_model_names:

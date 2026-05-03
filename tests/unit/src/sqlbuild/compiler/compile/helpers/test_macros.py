@@ -14,6 +14,28 @@ from tests.unit.src.sqlbuild.compiler.compile.helpers.helpers import build_loade
 
 TEST_CASES: list[ExpandSqlMacrosTestCase] = [
     ExpandSqlMacrosTestCase(
+        description="uses macro override text instead of loaded macro function",
+        macro_file_contents="""
+def country() -> str:
+    return "'CA'"
+""".strip()
+        + "\n",
+        sql="SELECT @country() AS country",
+        macro_overrides={"country": "'US'"},
+        expected_sql="SELECT 'US' AS country",
+    ),
+    ExpandSqlMacrosTestCase(
+        description="uses macro override text without evaluating macro arguments",
+        macro_file_contents="""
+def status(value: str) -> str:
+    return value
+""".strip()
+        + "\n",
+        sql="SELECT @status(@missing_nested()) AS status",
+        macro_overrides={"status": "'paid'"},
+        expected_sql="SELECT 'paid' AS status",
+    ),
+    ExpandSqlMacrosTestCase(
         description="expands nested macro arguments",
         macro_file_contents="""
 def project_column() -> str:
@@ -155,6 +177,7 @@ def test_given_sql_macro_variants_when_expanding_then_it_returns_expected_sql(
         sql=test_case.sql,
         file_path=tmp_path / "models" / "orders.sql",
         loaded_macros=loaded_macros,
+        macro_overrides=test_case.macro_overrides,
     )
 
     assert expanded_sql == test_case.expected_sql

@@ -26,6 +26,7 @@ GENERIC_AUDIT_RAW_PARAMETER_PATTERN: re.Pattern[str] = re.compile(
 EXPECTED_TEST_CTE_PREFIX: str = "__expected__"
 REF_TEST_CTE_PREFIX: str = "__ref__"
 SOURCE_TEST_CTE_PREFIX: str = "__source__"
+MACRO_TEST_CTE_PREFIX: str = "__macro__"
 RESERVED_SQL_TEST_CTE_NAMES: frozenset[str] = frozenset(
     {
         "__actual",

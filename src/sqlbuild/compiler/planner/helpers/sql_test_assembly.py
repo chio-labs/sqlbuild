@@ -71,8 +71,9 @@ def plan_test(
             )
             continue
 
+        query_sql: str = _resolve_test_model_query_sql(model=model, test=test)
         step_sql: str = _resolve_test_model_sql(
-            query_sql=model.query_sql,
+            query_sql=query_sql,
             mock_refs=mock_refs,
             mock_sources=mock_sources,
             helper_ctes=helper_ctes,
@@ -82,7 +83,7 @@ def plan_test(
         resolved_value: str = f"({step_sql})"
         if sqlglot_enabled:
             sqlglot_sql: SqlglotResolvedTestSql | None = try_resolve_test_model_sql_with_sqlglot(
-                query_sql=model.query_sql,
+                query_sql=query_sql,
                 mock_refs=mock_refs,
                 mock_sources=mock_sources,
                 helper_ctes=helper_ctes,
@@ -144,6 +145,16 @@ def plan_test(
         scope_deps=test.scope_deps,
     )
     return entry, tuple(warnings)
+
+
+def _resolve_test_model_query_sql(
+    *,
+    model: CompiledModel,
+    test: CompiledSqlTest,
+) -> str:
+    """Resolve model SQL for one SQL test, applying test macro mocks if present."""
+
+    return test.model_query_overrides.get(model.name, model.query_sql)
 
 
 def _resolve_test_model_sql(

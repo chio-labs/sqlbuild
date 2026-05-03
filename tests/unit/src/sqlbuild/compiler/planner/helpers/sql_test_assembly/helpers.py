@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from sqlbuild.compiler.compile.constants import (
@@ -9,6 +10,7 @@ from sqlbuild.compiler.compile.constants import (
     REF_TEST_CTE_PREFIX,
     SOURCE_TEST_CTE_PREFIX,
 )
+from sqlbuild.compiler.compile.helpers.macros import expand_sql_macros
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
@@ -17,6 +19,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledSqlTest,
     CompileModelConfig,
     CompileSqlTestCte,
+    LoadedMacro,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import (
@@ -75,6 +78,7 @@ def build_test_and_project(
             test_case.expected_cte_bodies,
         )
 
+    loaded_macros: dict[str, LoadedMacro] = _build_loaded_macros(test_case.loaded_macro_outputs)
     compiled_test: CompiledSqlTest = CompiledSqlTest(
         key=CompiledObjectKey(
             resource_type=CompiledResourceType.SQL_TEST,
@@ -89,6 +93,11 @@ def build_test_and_project(
         test_block=_STUB_TEST_BLOCK,
         sql_body=sql_body,
         authored_ctes=tuple(authored_ctes),
+        macro_mocks=test_case.macro_mocks,
+        model_query_overrides=_build_model_query_overrides(
+            test_case=test_case,
+            loaded_macros=loaded_macros,
+        ),
         mock_model_names=tuple(test_case.mock_ref_ctes.keys()),
         mock_source_names=tuple(test_case.mock_source_ctes.keys()),
         expected_model_names=test_case.expected_model_names,
@@ -127,6 +136,54 @@ def build_test_and_project(
     )
 
     return compiled_test, project
+
+
+def _build_model_query_overrides(
+    *,
+    test_case: PlanTestChainTestCase,
+    loaded_macros: dict[str, LoadedMacro],
+) -> dict[str, str]:
+    """Build model query overrides for planner tests with macro mocks."""
+
+    if not test_case.macro_mocks:
+        return {}
+    overrides: dict[str, str] = {}
+    model_name: str
+    query_sql: str
+    for model_name, query_sql in test_case.model_macro_source_queries.items():
+        overrides[model_name] = expand_sql_macros(
+            sql=query_sql,
+            file_path=Path(f"models/{model_name}.sql"),
+            loaded_macros=loaded_macros,
+            macro_overrides=test_case.macro_mocks,
+        )
+    return overrides
+
+
+def _build_loaded_macros(macro_outputs: dict[str, str]) -> dict[str, LoadedMacro]:
+    """Build loaded macro stubs for planner tests."""
+
+    loaded_macros: dict[str, LoadedMacro] = {}
+    name: str
+    output: str
+    for name, output in macro_outputs.items():
+        loaded_macros[name] = LoadedMacro(
+            name=name,
+            file_path=Path("macros/test_macros.py"),
+            relative_path=Path("macros/test_macros.py"),
+            raw_source="",
+            function=_macro_function(output),
+        )
+    return loaded_macros
+
+
+def _macro_function(output: str) -> Callable[..., object]:
+    """Return a callable macro stub."""
+
+    def _inner(*_args: object, **_kwargs: object) -> str:
+        return output
+
+    return _inner
 
 
 def _build_test_sql_body(

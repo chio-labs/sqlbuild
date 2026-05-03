@@ -12,6 +12,9 @@ class PlanTestChainTestCase:
     helper_ctes: dict[str, str]
     expected_model_names: tuple[str, ...]
     expected_chain_length: int
+    macro_mocks: dict[str, str] = field(default_factory=dict)
+    loaded_macro_outputs: dict[str, str] = field(default_factory=dict)
+    model_macro_source_queries: dict[str, str] = field(default_factory=dict)
     expected_sql_fragments: dict[str, str] = field(default_factory=dict)
     expected_warning_count: int = 0
     expected_warning_severity: WarningSeverity | None = None

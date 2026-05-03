@@ -10,6 +10,27 @@ from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
 
 TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
     ExtractSqlTestCtesTestCase(
+        description="extracts macro mocks from single string literal ctes",
+        sql="""
+        WITH
+        __macro__country AS (SELECT '''US'''),
+        __macro__empty AS (SELECT ''),
+        __macro__literal_text AS (SELECT ''' + x + '''),
+        __source__raw_orders AS (SELECT 1 AS order_id),
+        __expected__orders AS (SELECT 1 AS order_id)
+        SELECT 1
+        """.strip(),
+        expected_authored_cte_names=("__source__raw_orders",),
+        expected_mock_model_names=(),
+        expected_mock_source_names=("raw_orders",),
+        expected_expected_model_names=("orders",),
+        expected_macro_mocks={
+            "country": "'US'",
+            "empty": "",
+            "literal_text": "' + x + '",
+        },
+    ),
+    ExtractSqlTestCtesTestCase(
         description="extracts ctes from compact single line test sql",
         sql="""
         WITH
@@ -199,9 +220,54 @@ def test_given_sql_test_cte_variants_when_extracting_then_it_returns_expected_ro
     assert extracted_ctes.mock_model_names == test_case.expected_mock_model_names
     assert extracted_ctes.mock_source_names == test_case.expected_mock_source_names
     assert extracted_ctes.expected_model_names == test_case.expected_expected_model_names
+    assert extracted_ctes.macro_mocks == test_case.expected_macro_mocks
 
 
 ERROR_TEST_CASES: list[ExtractSqlTestCtesErrorTestCase] = [
+    ExtractSqlTestCtesErrorTestCase(
+        description="raises when macro mock returns multiple columns",
+        sql="""
+        WITH __macro__country AS (SELECT 'US', 'CA'),
+        __source__raw_orders AS (SELECT 1 AS order_id),
+        __expected__orders AS (SELECT 1 AS order_id)
+        SELECT 1
+        """.strip(),
+        expected_error_fragment=(
+            "macro mock '__macro__country' must be a single SELECT string literal"
+        ),
+    ),
+    ExtractSqlTestCtesErrorTestCase(
+        description="raises when macro mock returns non string literal",
+        sql="""
+        WITH __macro__country AS (SELECT 123),
+        __source__raw_orders AS (SELECT 1 AS order_id),
+        __expected__orders AS (SELECT 1 AS order_id)
+        SELECT 1
+        """.strip(),
+        expected_error_fragment=(
+            "macro mock '__macro__country' must be a single SELECT string literal"
+        ),
+    ),
+    ExtractSqlTestCtesErrorTestCase(
+        description="raises when macro mock reads from a table",
+        sql="""
+        WITH __macro__country AS (SELECT 'US' FROM values_table),
+        __source__raw_orders AS (SELECT 1 AS order_id),
+        __expected__orders AS (SELECT 1 AS order_id)
+        SELECT 1
+        """.strip(),
+        expected_error_fragment="with no FROM, UNION, or additional columns",
+    ),
+    ExtractSqlTestCtesErrorTestCase(
+        description="raises when macro mock uses union",
+        sql="""
+        WITH __macro__country AS (SELECT 'US' UNION ALL SELECT 'CA'),
+        __source__raw_orders AS (SELECT 1 AS order_id),
+        __expected__orders AS (SELECT 1 AS order_id)
+        SELECT 1
+        """.strip(),
+        expected_error_fragment="with no FROM, UNION, or additional columns",
+    ),
     ExtractSqlTestCtesErrorTestCase(
         description="raises when test sql does not start with top level with",
         sql="SELECT 1",

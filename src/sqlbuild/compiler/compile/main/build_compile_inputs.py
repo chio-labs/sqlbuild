@@ -13,6 +13,7 @@ from sqlbuild.compiler.compile.helpers.attachment import (
     resolve_environment_name,
     resolve_run_id,
 )
+from sqlbuild.compiler.compile.helpers.macros import load_project_macros
 from sqlbuild.compiler.compile.models import (
     CompileAuditInput,
     CompileModelInput,
@@ -20,6 +21,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSeedInput,
     CompileSourceInput,
     CompileSqlTestInput,
+    LoadedMacro,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.models.project import EnvironmentConfig
@@ -53,6 +55,7 @@ def build_compile_inputs(
         cli_vars={} if cli_vars is None else cli_vars,
     )
     resolved_run_id: str = resolve_run_id(selected_run_id=run_id)
+    loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
 
     model_inputs: tuple[CompileModelInput, ...] = build_model_inputs(
         discovered_inputs,
@@ -89,6 +92,7 @@ def build_compile_inputs(
             effective_vars=effective_vars,
         ),
         effective_vars=effective_vars,
+        loaded_macros=loaded_macros,
         model_inputs=model_inputs,
         seed_inputs=seed_inputs,
         source_inputs=source_inputs,

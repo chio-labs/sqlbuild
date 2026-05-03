@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.compiler.compile.constants import (
     EXPECTED_TEST_CTE_PREFIX,
+    MACRO_TEST_CTE_PREFIX,
     REF_TEST_CTE_PREFIX,
     RESERVED_SQL_TEST_CTE_NAMES,
     SOURCE_TEST_CTE_PREFIX,
@@ -73,12 +74,22 @@ def _classify_sql_test_ctes(
     *, ctes: tuple[CompileSqlTestCte, ...], file_label: str
 ) -> CompileSqlTestCtes:
     authored_ctes: list[CompileSqlTestCte] = []
+    macro_mocks: dict[str, str] = {}
     mock_model_names: list[str] = []
     mock_source_names: list[str] = []
     expected_model_names: list[str] = []
 
     cte: CompileSqlTestCte
     for cte in ctes:
+        if cte.name.startswith(MACRO_TEST_CTE_PREFIX):
+            macro_name: str = _require_prefixed_name(
+                cte_name=cte.name,
+                prefix=MACRO_TEST_CTE_PREFIX,
+                label="__macro__<macro>",
+                file_label=file_label,
+            )
+            macro_mocks[macro_name] = _extract_macro_mock_value(cte=cte, file_label=file_label)
+            continue
         if cte.name.startswith(REF_TEST_CTE_PREFIX):
             mock_model_names.append(
                 _require_prefixed_name(
@@ -128,10 +139,54 @@ def _classify_sql_test_ctes(
         )
     return CompileSqlTestCtes(
         authored_ctes=tuple(authored_ctes),
+        macro_mocks=macro_mocks,
         mock_model_names=tuple(mock_model_names),
         mock_source_names=tuple(mock_source_names),
         expected_model_names=tuple(expected_model_names),
     )
+
+
+def _extract_macro_mock_value(*, cte: CompileSqlTestCte, file_label: str) -> str:
+    """Extract the single SQL string literal value from a __macro__ CTE."""
+
+    body: str = cte.sql_body.strip()
+    index: int = _skip_ignorable(sql=body, start=0)
+    index = _consume_keyword(sql=body, start=index, keyword="SELECT", file_label=file_label)
+    index = _skip_ignorable(sql=body, start=index)
+    if index >= len(body) or body[index] != "'":
+        raise CompileInputError(
+            f"SQL test '{file_label}' macro mock '{cte.name}' must be a single SELECT string "
+            "literal, for example SELECT '''US'''"
+        )
+    value: str
+    value, index = _read_sql_string_literal(sql=body, start=index)
+    index = _skip_ignorable(sql=body, start=index)
+    if index < len(body) and body[index] == ";":
+        index = _skip_ignorable(sql=body, start=index + 1)
+    if index != len(body):
+        raise CompileInputError(
+            f"SQL test '{file_label}' macro mock '{cte.name}' must be a single SELECT string "
+            "literal with no FROM, UNION, or additional columns"
+        )
+    return value
+
+
+def _read_sql_string_literal(*, sql: str, start: int) -> tuple[str, int]:
+    """Read one single-quoted SQL string literal and unescape doubled quotes."""
+
+    value_parts: list[str] = []
+    index: int = start + 1
+    while index < len(sql):
+        char: str = sql[index]
+        if char == "'":
+            if index + 1 < len(sql) and sql[index + 1] == "'":
+                value_parts.append("'")
+                index += 2
+                continue
+            return "".join(value_parts), index + 1
+        value_parts.append(char)
+        index += 1
+    raise CompileInputError("SQL test macro mock has an unterminated string literal")
 
 
 def _validate_expected_cte_query(*, cte: CompileSqlTestCte, file_label: str) -> None:

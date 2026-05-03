@@ -1561,6 +1561,37 @@ SELECT 1
         expected_error_fragment="mocks unknown source 'missing_source'",
     ),
     BuildCompileInputsErrorTestCase(
+        description="raises when a compiled test body references an unknown macro mock",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            "sources/raw.yml": """
+sources:
+  - name: raw_orders
+""".strip()
+            + "\n",
+            "tests/unit/orders.sql": """
+TEST ();
+
+WITH
+__macro__missing_macro AS (
+  SELECT '1'
+),
+__source__raw_orders AS (
+  SELECT 1 AS order_id
+),
+__expected__orders AS (
+  SELECT 1 AS order_id
+)
+SELECT 1
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="mocks unknown macro 'missing_macro'",
+    ),
+    BuildCompileInputsErrorTestCase(
         description="raises when a compiled test body references an unknown expected model",
         repo_files=base_repo_files()
         | {

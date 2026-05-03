@@ -64,6 +64,7 @@ def expand_sql_macros(
     sql: str,
     file_path: Path,
     loaded_macros: dict[str, LoadedMacro],
+    macro_overrides: dict[str, str] | None = None,
 ) -> str:
     """Expand authored Python macros in one executable SQL string."""
 
@@ -85,6 +86,7 @@ def expand_sql_macros(
             call_start_index=macro_start_index,
             file_path=file_path,
             loaded_macros=loaded_macros,
+            macro_overrides={} if macro_overrides is None else macro_overrides,
             top_level=True,
         )
         if not isinstance(macro_result, str):
@@ -128,11 +130,13 @@ def _evaluate_macro_call(
     call_start_index: int,
     file_path: Path,
     loaded_macros: dict[str, LoadedMacro],
+    macro_overrides: dict[str, str],
     top_level: bool,
 ) -> tuple[object, int]:
     macro_name: str = _parse_macro_name(sql=sql, call_start_index=call_start_index)
     loaded_macro: LoadedMacro | None = loaded_macros.get(macro_name)
-    if loaded_macro is None:
+    override_value: str | None = macro_overrides.get(macro_name)
+    if loaded_macro is None and override_value is None:
         available_macro_names: str = ", ".join(sorted(loaded_macros)) or "none"
         raise CompileInputError(
             f"Unknown macro '@{macro_name}' in '{file_path}'. Available macros: "
@@ -142,6 +146,10 @@ def _evaluate_macro_call(
     closing_paren_index: int = _find_matching_paren(
         sql=sql, opening_paren_index=opening_paren_index
     )
+    if override_value is not None:
+        return override_value, closing_paren_index + 1
+    if loaded_macro is None:
+        raise AssertionError("loaded macro is unexpectedly missing after validation")
     args_source: str = sql[opening_paren_index + 1 : closing_paren_index]
     args: tuple[object, ...]
     kwargs: dict[str, object]
@@ -149,6 +157,7 @@ def _evaluate_macro_call(
         args_source=args_source,
         file_path=file_path,
         loaded_macros=loaded_macros,
+        macro_overrides=macro_overrides,
     )
     try:
         macro_result: object = loaded_macro.function(*args, **kwargs)
@@ -173,6 +182,7 @@ def _parse_macro_arguments(
     args_source: str,
     file_path: Path,
     loaded_macros: dict[str, LoadedMacro],
+    macro_overrides: dict[str, str],
 ) -> tuple[tuple[object, ...], dict[str, object]]:
     if not args_source.strip():
         return (), {}
@@ -182,6 +192,7 @@ def _parse_macro_arguments(
         args_source=args_source,
         file_path=file_path,
         loaded_macros=loaded_macros,
+        macro_overrides=macro_overrides,
     )
     try:
         expression: ast.Expression = ast.parse(f"_macro_call({rewritten_args_source})", mode="eval")
@@ -220,6 +231,7 @@ def _rewrite_nested_macro_calls(
     args_source: str,
     file_path: Path,
     loaded_macros: dict[str, LoadedMacro],
+    macro_overrides: dict[str, str],
 ) -> tuple[str, dict[str, object]]:
     rewritten_parts: list[str] = []
     placeholder_values: dict[str, object] = {}
@@ -238,6 +250,7 @@ def _rewrite_nested_macro_calls(
             call_start_index=macro_start_index,
             file_path=file_path,
             loaded_macros=loaded_macros,
+            macro_overrides=macro_overrides,
             top_level=False,
         )
         placeholder: str = f"__sqlbuild_macro_arg_{replacement_index}"

@@ -27,6 +27,9 @@ SQLGLOT_CHAIN_TEST_CASES: list[SqlglotChainSqlTestE2ETestCase] = [
             "__ref__stg_orders AS (",
             "__actual__fact_orders AS (",
             "FROM __ref__stg_orders",
+            "'US' AS country",
+            "' + x + ' AS literal_text",
+            "'active' AS status",
             "'fact_orders' AS model_name",
         ),
         unexpected_artifact_fragments=(
@@ -38,7 +41,11 @@ SQLGLOT_CHAIN_TEST_CASES: list[SqlglotChainSqlTestE2ETestCase] = [
         description="sqlglot disabled chain test runs and keeps nested fallback sql",
         sqlglot_enabled=False,
         expected_artifact_fragments=(
-            "__actual__fact_orders AS (\n  SELECT\n    id,\n    amount + 1 AS adjusted\n  FROM (",
+            "__actual__fact_orders AS (",
+            "FROM (",
+            "'US' AS country",
+            "' + x + ' AS literal_text",
+            "'active' AS status",
             "'fact_orders' AS model_name",
         ),
         unexpected_artifact_fragments=(

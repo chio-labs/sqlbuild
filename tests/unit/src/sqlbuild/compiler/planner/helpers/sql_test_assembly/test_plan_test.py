@@ -19,6 +19,41 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.sql_test_assembly.helpers 
 
 PLAN_TEST_CASES: list[PlanTestChainTestCase] = [
     PlanTestChainTestCase(
+        description="sql test macro mocks override model macro expansion before refs resolve",
+        model_queries={
+            "orders": "SELECT 1 AS id, 'real' AS country FROM __source(\"raw\")",
+        },
+        model_macro_source_queries={
+            "orders": 'SELECT 1 AS id, @country() AS country FROM __source("raw")',
+        },
+        loaded_macro_outputs={"country": "'real'"},
+        macro_mocks={"country": "'mocked'"},
+        mock_ref_ctes={},
+        mock_source_ctes={"raw": "SELECT 1 AS id"},
+        helper_ctes={},
+        expected_model_names=("orders",),
+        expected_chain_length=1,
+        expected_sql_fragments={"orders": "'mocked' AS country"},
+        expected_cte_bodies={"orders": "SELECT 1 AS id, 'mocked' AS country"},
+    ),
+    PlanTestChainTestCase(
+        description="unmocked macros keep real project macro expansion in sql tests",
+        model_queries={
+            "orders": "SELECT 1 AS id, 'real' AS country FROM __source(\"raw\")",
+        },
+        model_macro_source_queries={
+            "orders": 'SELECT 1 AS id, @country() AS country FROM __source("raw")',
+        },
+        loaded_macro_outputs={"country": "'real'"},
+        mock_ref_ctes={},
+        mock_source_ctes={"raw": "SELECT 1 AS id"},
+        helper_ctes={},
+        expected_model_names=("orders",),
+        expected_chain_length=1,
+        expected_sql_fragments={"orders": "'real' AS country"},
+        expected_cte_bodies={"orders": "SELECT 1 AS id, 'real' AS country"},
+    ),
+    PlanTestChainTestCase(
         description="single model with mock ref replaces ref in sql",
         model_queries={
             "orders": 'SELECT id, amount FROM __ref("raw_orders")',

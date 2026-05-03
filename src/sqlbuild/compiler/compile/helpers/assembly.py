@@ -7,6 +7,7 @@ from sqlbuild.compiler.compile.helpers.deps import (
     model_build_deps,
     sql_test_scope_deps,
 )
+from sqlbuild.compiler.compile.helpers.macros import expand_sql_macros
 from sqlbuild.compiler.compile.helpers.sqlglot_columns import infer_columns_with_sqlglot
 from sqlbuild.compiler.compile.models import (
     CompileAuditInput,
@@ -53,7 +54,8 @@ def assemble_compiled_project(inputs: CompileProjectInputs) -> CompiledProject:
         seeds=tuple(_assemble_compiled_seed(seed_input) for seed_input in inputs.seed_inputs),
         audits=tuple(_assemble_compiled_audit(audit_input) for audit_input in inputs.audit_inputs),
         sql_tests=tuple(
-            _assemble_compiled_sql_test(test_input) for test_input in inputs.test_inputs
+            _assemble_compiled_sql_test(test_input, model_inputs=inputs.model_inputs, inputs=inputs)
+            for test_input in inputs.test_inputs
         ),
     )
 
@@ -146,7 +148,12 @@ def _assemble_compiled_audit(audit_input: CompileAuditInput) -> CompiledAudit:
     )
 
 
-def _assemble_compiled_sql_test(test_input: CompileSqlTestInput) -> CompiledSqlTest:
+def _assemble_compiled_sql_test(
+    test_input: CompileSqlTestInput,
+    *,
+    model_inputs: tuple[CompileModelInput, ...],
+    inputs: CompileProjectInputs,
+) -> CompiledSqlTest:
     test_name: str = _resolve_test_name(test_input)
     return CompiledSqlTest(
         key=CompiledObjectKey(resource_type=CompiledResourceType.SQL_TEST, name=test_name),
@@ -156,10 +163,40 @@ def _assemble_compiled_sql_test(test_input: CompileSqlTestInput) -> CompiledSqlT
         test_block=test_input.test_block,
         sql_body=test_input.sql_body,
         authored_ctes=test_input.authored_ctes,
+        macro_mocks=test_input.macro_mocks,
+        model_query_overrides=_build_test_model_query_overrides(
+            test_input=test_input,
+            model_inputs=model_inputs,
+            inputs=inputs,
+        ),
         mock_model_names=test_input.mock_model_names,
         mock_source_names=test_input.mock_source_names,
         expected_model_names=test_input.expected_model_names,
     )
+
+
+def _build_test_model_query_overrides(
+    *,
+    test_input: CompileSqlTestInput,
+    model_inputs: tuple[CompileModelInput, ...],
+    inputs: CompileProjectInputs,
+) -> dict[str, str]:
+    """Build per-test model SQL with macro mocks applied."""
+
+    if not test_input.macro_mocks:
+        return {}
+    overrides: dict[str, str] = {}
+    model_input: CompileModelInput
+    for model_input in model_inputs:
+        model_name: str = model_input.model_file.file_path.stem
+        macro_source_sql: str = model_input.macro_source_sql or model_input.query_sql
+        overrides[model_name] = expand_sql_macros(
+            sql=macro_source_sql,
+            file_path=model_input.model_file.file_path,
+            loaded_macros=inputs.loaded_macros,
+            macro_overrides=test_input.macro_mocks,
+        )
+    return overrides
 
 
 def _resolve_audit_name(audit_input: CompileAuditInput) -> str:

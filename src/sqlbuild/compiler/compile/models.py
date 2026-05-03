@@ -96,6 +96,7 @@ class CompileSqlTestCtes:
     """Extracted top-level SQL-native test CTE semantics."""
 
     authored_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
+    macro_mocks: dict[str, str] = field(default_factory=dict)
     mock_model_names: tuple[str, ...] = field(default_factory=tuple)
     mock_source_names: tuple[str, ...] = field(default_factory=tuple)
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
@@ -108,6 +109,7 @@ class CompileModelInput:
     model_file: DiscoveredSqlModelFile
     config: CompileModelConfig = field(default_factory=CompileModelConfig)
     query_sql: str = ""
+    macro_source_sql: str = ""
     references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
     schema_entry: SchemaModelEntry | None = None
     schema_file: DiscoveredSchemaFile | None = None
@@ -138,6 +140,7 @@ class CompileSqlTestInput:
     test_block: DiscoveredSqlTestBlock
     sql_body: str
     authored_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
+    macro_mocks: dict[str, str] = field(default_factory=dict)
     mock_model_names: tuple[str, ...] = field(default_factory=tuple)
     mock_source_names: tuple[str, ...] = field(default_factory=tuple)
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
@@ -178,6 +181,7 @@ class CompileProjectInputs:
     effective_environment: EnvironmentConfig | None = None
     effective_connection: dict[str, object] = field(default_factory=dict)
     effective_vars: dict[str, str] = field(default_factory=dict)
+    loaded_macros: dict[str, LoadedMacro] = field(default_factory=dict)
     model_inputs: tuple[CompileModelInput, ...] = field(default_factory=tuple)
     seed_inputs: tuple[CompileSeedInput, ...] = field(default_factory=tuple)
     source_inputs: tuple[CompileSourceInput, ...] = field(default_factory=tuple)
@@ -266,6 +270,8 @@ class CompiledSqlTest:
     test_block: DiscoveredSqlTestBlock
     sql_body: str
     authored_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
+    macro_mocks: dict[str, str] = field(default_factory=dict)
+    model_query_overrides: dict[str, str] = field(default_factory=dict)
     mock_model_names: tuple[str, ...] = field(default_factory=tuple)
     mock_source_names: tuple[str, ...] = field(default_factory=tuple)
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)

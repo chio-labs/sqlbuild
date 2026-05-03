@@ -14,6 +14,7 @@ class ExpandSqlMacrosTestCase:
     macro_file_contents: str
     sql: str
     expected_sql: str
+    macro_overrides: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,7 @@ class ExtractSqlTestCtesTestCase:
     expected_mock_model_names: tuple[str, ...]
     expected_mock_source_names: tuple[str, ...]
     expected_expected_model_names: tuple[str, ...]
+    expected_macro_mocks: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
