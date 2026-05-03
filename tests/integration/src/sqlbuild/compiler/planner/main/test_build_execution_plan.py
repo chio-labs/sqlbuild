@@ -169,32 +169,57 @@ def test_given_project_when_building_plan_then_produces_expected_output(
     assert len(plan.model_entries) == expected_count
 
 
+CURSOR_TYPE_MISMATCH_TEST_CASES: list[BuildExecutionPlanTestCase] = [
+    BuildExecutionPlanTestCase(
+        description="heuristic cursor type mismatch produces warning",
+        setup_sql=("CREATE TABLE staging.events AS SELECT 1 AS event_id, 100 AS event_time",),
+        model_targets={"events": "staging"},
+        model_configs={
+            "events": {
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "cursor": "event_time",
+                "cursor_type": "timestamp",
+                "unique_key": "event_id",
+            },
+        },
+        model_queries={"events": "SELECT 1 AS event_id, 100 AS event_time"},
+        full_refresh=False,
+        expected_action={"events": PlanAction.INCREMENTAL_DELETE_INSERT},
+        expected_reason={"events": PlanReason.NORMAL_INCREMENTAL},
+        expected_warning_count=1,
+        expected_warning_severity=WarningSeverity.WARNING,
+        expected_warning_fragment="appears to be integer",
+    ),
+    BuildExecutionPlanTestCase(
+        description="sqlglot cursor type mismatch produces error",
+        setup_sql=("CREATE TABLE staging.events AS SELECT 1 AS event_id, 100 AS event_time",),
+        model_targets={"events": "staging"},
+        model_configs={
+            "events": {
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "cursor": "event_time",
+                "cursor_type": "timestamp",
+                "unique_key": "event_id",
+            },
+        },
+        model_queries={"events": "SELECT 1 AS event_id, 100 AS event_time"},
+        full_refresh=False,
+        effective_connection={"sqlglot": True},
+        expected_action={"events": PlanAction.INCREMENTAL_DELETE_INSERT},
+        expected_reason={"events": PlanReason.NORMAL_INCREMENTAL},
+        expected_warning_count=1,
+        expected_warning_severity=WarningSeverity.ERROR,
+        expected_warning_fragment="which is integer",
+    ),
+]
+
+
 @pytest.mark.parametrize(
     "test_case",
-    [
-        BuildExecutionPlanTestCase(
-            description="cursor type mismatch with warehouse column produces warning",
-            setup_sql=("CREATE TABLE staging.events AS SELECT 1 AS event_id, 100 AS event_time",),
-            model_targets={"events": "staging"},
-            model_configs={
-                "events": {
-                    "materialized": "incremental",
-                    "incremental_strategy": "delete_insert",
-                    "cursor": "event_time",
-                    "cursor_type": "timestamp",
-                    "unique_key": "event_id",
-                },
-            },
-            model_queries={"events": "SELECT 1 AS event_id, 100 AS event_time"},
-            full_refresh=False,
-            expected_action={"events": PlanAction.INCREMENTAL_DELETE_INSERT},
-            expected_reason={"events": PlanReason.NORMAL_INCREMENTAL},
-            expected_warning_count=1,
-            expected_warning_severity=WarningSeverity.WARNING,
-            expected_warning_fragment="appears to be integer",
-        ),
-    ],
-    ids=["cursor type mismatch with warehouse column produces warning"],
+    CURSOR_TYPE_MISMATCH_TEST_CASES,
+    ids=[case.description for case in CURSOR_TYPE_MISMATCH_TEST_CASES],
 )
 def test_given_cursor_type_mismatch_when_building_plan_then_produces_warning(
     test_case: BuildExecutionPlanTestCase,
