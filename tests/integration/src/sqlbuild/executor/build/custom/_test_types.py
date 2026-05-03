@@ -87,6 +87,7 @@ class PartitionTrackingTestCase:
     expected_target_row_count: int
     expected_tracking_row_count: int
     expected_partition_values: tuple[str, ...]
+    expected_statement_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

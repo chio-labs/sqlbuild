@@ -389,6 +389,7 @@ def test_given_sql_when_creating_table_as_then_table_is_writable(
         connection,
         target="result",
         sql="SELECT * FROM (VALUES (1), (2), (3)) AS t(id)",
+        statement_recorder=StatementRecorder(),
     )
     connection.execute("INSERT INTO result VALUES (4)")
     count: int = adapter.count_rows(connection, relation="result")
@@ -502,7 +503,12 @@ def test_given_source_table_when_creating_view_then_view_reflects_source(
     statement: str
     for statement in test_case.setup_sql:
         connection.execute(statement)
-    adapter.create_view_as(connection, target="result_view", sql="SELECT id FROM source")
+    adapter.create_view_as(
+        connection,
+        target="result_view",
+        sql="SELECT id FROM source",
+        statement_recorder=StatementRecorder(),
+    )
     count: int = adapter.count_rows(connection, relation="result_view")
 
     assert count == test_case.expected_row_count
@@ -528,7 +534,7 @@ def test_given_existing_table_when_dropping_then_table_no_longer_exists(
     statement: str
     for statement in test_case.setup_sql:
         connection.execute(statement)
-    adapter.drop(connection, target=test_case.target)
+    adapter.drop(connection, target=test_case.target, statement_recorder=StatementRecorder())
 
     result: bool = adapter.relation_exists(
         connection, database=None, schema=None, name=test_case.target
@@ -561,7 +567,12 @@ def test_given_existing_table_when_renaming_then_new_name_exists(
     statement: str
     for statement in test_case.setup_sql:
         connection.execute(statement)
-    adapter.rename(connection, source=test_case.source, target=test_case.target)
+    adapter.rename(
+        connection,
+        source=test_case.source,
+        target=test_case.target,
+        statement_recorder=StatementRecorder(),
+    )
 
     source_exists: bool = adapter.relation_exists(
         connection, database=None, schema=None, name=test_case.source
@@ -598,7 +609,7 @@ def test_given_two_tables_when_swapping_then_contents_are_exchanged(
     statement: str
     for statement in test_case.setup_sql:
         connection.execute(statement)
-    adapter.swap(connection, left="left_t", right="right_t")
+    adapter.swap(connection, left="left_t", right="right_t", statement_recorder=StatementRecorder())
     left_val: Any = connection.execute("SELECT val FROM left_t").fetchone()
     right_val: Any = connection.execute("SELECT val FROM right_t").fetchone()
 
@@ -628,7 +639,9 @@ def test_given_source_table_when_cloning_then_target_has_same_rows(
     statement: str
     for statement in test_case.setup_sql:
         connection.execute(statement)
-    adapter.clone(connection, source="source_t", target="cloned_t")
+    adapter.clone(
+        connection, source="source_t", target="cloned_t", statement_recorder=StatementRecorder()
+    )
     count: int = adapter.count_rows(connection, relation="cloned_t")
 
     assert count == test_case.expected_row_count
@@ -656,7 +669,12 @@ def test_given_existing_table_when_appending_then_row_count_increases(
     statement: str
     for statement in test_case.setup_sql:
         connection.execute(statement)
-    adapter.append(connection, target="append_t", sql="SELECT * FROM (VALUES (2), (3)) AS t(id)")
+    adapter.append(
+        connection,
+        target="append_t",
+        sql="SELECT * FROM (VALUES (2), (3)) AS t(id)",
+        statement_recorder=StatementRecorder(),
+    )
     count: int = adapter.count_rows(connection, relation="append_t")
 
     assert count == test_case.expected_row_count
@@ -731,6 +749,7 @@ def test_given_target_when_delete_inserting_then_matching_rows_replaced(
         target="di_target",
         sql=test_case.sql,
         unique_key=test_case.unique_key,
+        statement_recorder=StatementRecorder(),
     )
     count: int = adapter.count_rows(connection, relation="di_target")
     updated_val: Any = connection.execute("SELECT val FROM di_target WHERE id = 1").fetchone()
@@ -757,6 +776,7 @@ def test_given_target_and_source_when_merging_then_upserts_correctly(
         target="merge_target",
         sql=test_case.source_sql,
         unique_key=test_case.unique_key,
+        statement_recorder=StatementRecorder(),
     )
     count: int = adapter.count_rows(connection, relation="merge_target")
     rows: list[tuple[Any, ...]] = connection.execute(
@@ -786,6 +806,7 @@ def test_given_csv_file_when_loading_seed_twice_then_table_is_replaced(
         file_path=csv_path,
         columns=test_case.columns,
         infer_types=test_case.infer_types,
+        statement_recorder=StatementRecorder(),
     )
     adapter.load_seed(
         connection,
@@ -794,6 +815,7 @@ def test_given_csv_file_when_loading_seed_twice_then_table_is_replaced(
         columns=test_case.columns,
         replace=True,
         infer_types=test_case.infer_types,
+        statement_recorder=StatementRecorder(),
     )
     count: int = adapter.count_rows(connection, relation="seed_table")
     first_row: tuple[Any, ...] = connection.execute(

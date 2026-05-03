@@ -63,6 +63,10 @@ _PROJECT_YML: str = (
             expected_target_row_count=3,
             expected_tracking_row_count=3,
             expected_partition_values=("2024-01-01", "2024-01-02", "2024-01-03"),
+            expected_statement_fragments=(
+                "CREATE TABLE IF NOT EXISTS main.partition_state",
+                "INSERT INTO main.partition_state VALUES",
+            ),
         ),
     ],
     ids=["first run builds all partitions and populates tracking table"],
@@ -117,6 +121,12 @@ def test_given_partition_tracked_materialization_when_first_run_then_builds_all_
     )
     actual_partitions: tuple[str, ...] = tuple(row[0] for row in cursor.fetchall())
     assert actual_partitions == test_case.expected_partition_values
+
+    fragment: str
+    for fragment in test_case.expected_statement_fragments:
+        assert any(fragment in stmt for stmt in result.executed_statements), (
+            f"expected '{fragment}' in executed_statements"
+        )
 
 
 # --- Existing relation detection tests ---
@@ -352,7 +362,10 @@ def test_given_build_with_custom_materialization_when_scheduled_then_routes_corr
     mat_dir.mkdir()
     (mat_dir / "test_custom.py").write_text(
         "def materialize(ctx):\n"
-        "    ctx.adapter.create_table_as(ctx.connection, target=ctx.target, sql=ctx.sql)\n"
+        "    ctx.adapter.create_table_as(\n"
+        "        ctx.connection, target=ctx.target, sql=ctx.sql,\n"
+        "        statement_recorder=ctx.statement_recorder,\n"
+        "    )\n"
         "    from sqlbuild.executor.custom.models import MaterializationResult\n"
         "    return MaterializationResult(relation=ctx.target)\n",
         encoding="utf-8",
@@ -360,7 +373,12 @@ def test_given_build_with_custom_materialization_when_scheduled_then_routes_corr
 
     def custom_fn(ctx: MaterializationContext) -> MaterializationResult:
         augmented_sql: str = f"SELECT *, 'via_custom_fn' AS custom_marker FROM ({ctx.sql}) sub"
-        ctx.adapter.create_table_as(ctx.connection, target=ctx.target, sql=augmented_sql)
+        ctx.adapter.create_table_as(
+            ctx.connection,
+            target=ctx.target,
+            sql=augmented_sql,
+            statement_recorder=ctx.statement_recorder,
+        )
         return MaterializationResult(relation=ctx.target)
 
     custom_materializations: dict[

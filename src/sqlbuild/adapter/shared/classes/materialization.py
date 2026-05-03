@@ -20,7 +20,7 @@ class MaterializationMixin:
         target: str,
         sql: str,
         config: dict[str, Any] | None = None,
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         """Create or replace a table from a SELECT statement."""
         ...
@@ -32,7 +32,7 @@ class MaterializationMixin:
         *,
         target: str,
         sql: str,
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         """Create or replace a view from a SELECT statement."""
         ...
@@ -44,7 +44,7 @@ class MaterializationMixin:
         *,
         target: str,
         if_exists: bool = True,
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         """Drop a relation from the warehouse."""
         ...
@@ -56,7 +56,7 @@ class MaterializationMixin:
         *,
         source: str,
         target: str,
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         """Rename a relation."""
         ...
@@ -68,7 +68,7 @@ class MaterializationMixin:
         *,
         left: str,
         right: str,
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         """Swap two relations atomically where supported."""
         ...
@@ -81,7 +81,7 @@ class MaterializationMixin:
         source: str,
         target: str,
         hard_copy: bool = False,
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         """Clone a relation using zero-copy where supported."""
         ...
@@ -96,7 +96,7 @@ class MaterializationMixin:
         columns: tuple[ColumnInfo, ...],
         replace: bool = True,
         infer_types: bool = False,
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         """Load a seed CSV file into a warehouse table."""
         ...
@@ -109,7 +109,7 @@ class MaterializationMixin:
         target: str,
         sql: str,
         columns: tuple[str, ...] | None = None,
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         """Insert rows from a SELECT statement into an existing table."""
         ...
@@ -123,7 +123,7 @@ class MaterializationMixin:
         sql: str,
         unique_key: str | tuple[str, ...],
         columns: tuple[str, ...] | None = None,
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         """Delete matching rows then insert from a SELECT statement."""
         ...
@@ -139,7 +139,7 @@ class MaterializationMixin:
         cursor_start: str,
         cursor_end: str,
         columns: tuple[str, ...] | None = None,
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         """Delete rows by cursor range then insert from a SELECT statement."""
         ...
@@ -152,7 +152,7 @@ class MaterializationMixin:
         target: str,
         sql: str,
         unique_key: str | tuple[str, ...],
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         """Upsert rows from a SELECT statement using MERGE or equivalent."""
         ...
@@ -164,7 +164,7 @@ class MaterializationMixin:
         *,
         target: str,
         columns: tuple[ColumnInfo, ...],
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         """Add columns to an existing table."""
         ...
@@ -176,7 +176,7 @@ class MaterializationMixin:
         *,
         target: str,
         column_names: tuple[str, ...],
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         """Drop columns from an existing table."""
         ...
@@ -188,7 +188,7 @@ class MaterializationMixin:
         *,
         target: str,
         columns: tuple[ColumnInfo, ...],
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         """Alter column types on an existing table."""
         ...

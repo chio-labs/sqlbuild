@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import RelationInfo
+from sqlbuild.adapter.shared.models import RelationInfo, StatementRecorder
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (
@@ -320,7 +320,10 @@ class BuildScheduler:
             self._on_node_start(seed_entry.name, MaterializationType.SEED)
         start: float = time.monotonic()
         result: SeedExecutionResult = execute_seed(
-            seed_entry=seed_entry, adapter=self._adapter, connection=connection
+            seed_entry=seed_entry,
+            adapter=self._adapter,
+            connection=connection,
+            statement_recorder=StatementRecorder(),
         )
         duration: int = int((time.monotonic() - start) * 1000)
         return dataclasses.replace(result, duration_ms=duration)

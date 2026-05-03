@@ -213,11 +213,10 @@ class DuckDbAdapter(BaseAdapter):
         target: str,
         sql: str,
         config: dict[str, Any] | None = None,
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_create_table_as(target=target, sql=sql)
-        if statement_recorder is not None:
-            statement_recorder.record_many(statements)
+        statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
             connection.execute(stmt)
@@ -228,11 +227,10 @@ class DuckDbAdapter(BaseAdapter):
         *,
         target: str,
         sql: str,
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_create_view_as(target=target, sql=sql)
-        if statement_recorder is not None:
-            statement_recorder.record_many(statements)
+        statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
             connection.execute(stmt)
@@ -243,11 +241,10 @@ class DuckDbAdapter(BaseAdapter):
         *,
         target: str,
         if_exists: bool = True,
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_drop(target=target, if_exists=if_exists)
-        if statement_recorder is not None:
-            statement_recorder.record_many(statements)
+        statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
             connection.execute(stmt)
@@ -270,11 +267,10 @@ class DuckDbAdapter(BaseAdapter):
         *,
         source: str,
         target: str,
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_rename(source=source, target=target)
-        if statement_recorder is not None:
-            statement_recorder.record_many(statements)
+        statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
             connection.execute(stmt)
@@ -285,11 +281,10 @@ class DuckDbAdapter(BaseAdapter):
         *,
         left: str,
         right: str,
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_swap(left=left, right=right)
-        if statement_recorder is not None:
-            statement_recorder.record_many(statements)
+        statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
             connection.execute(stmt)
@@ -301,7 +296,7 @@ class DuckDbAdapter(BaseAdapter):
         source: str,
         target: str,
         hard_copy: bool = False,
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         self.create_table_as(
             connection,
@@ -319,7 +314,7 @@ class DuckDbAdapter(BaseAdapter):
         columns: tuple[ColumnInfo, ...],
         replace: bool = True,
         infer_types: bool = False,
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         """Load a seed CSV into a DuckDB table using read_csv."""
 
@@ -334,8 +329,7 @@ class DuckDbAdapter(BaseAdapter):
             stmt: str = (
                 f"CREATE TABLE {target} AS SELECT * FROM read_csv('{file_path}', auto_detect=true)"
             )
-            if statement_recorder is not None:
-                statement_recorder.record(stmt)
+            statement_recorder.record(stmt)
             connection.execute(stmt)
             return
         column_defs: str = ", ".join(f"{col.name} {col.type}" for col in columns)
@@ -344,8 +338,7 @@ class DuckDbAdapter(BaseAdapter):
             f"CREATE TABLE {target} ({column_defs})",
             f"INSERT INTO {target} SELECT * FROM read_csv('{file_path}', columns={{{type_map}}})",
         )
-        if statement_recorder is not None:
-            statement_recorder.record_many(statements)
+        statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
             connection.execute(stmt)
@@ -357,11 +350,10 @@ class DuckDbAdapter(BaseAdapter):
         target: str,
         sql: str,
         columns: tuple[str, ...] | None = None,
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
-        if statement_recorder is not None:
-            statement_recorder.record_many(statements)
+        statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
             connection.execute(stmt)
@@ -374,14 +366,13 @@ class DuckDbAdapter(BaseAdapter):
         sql: str,
         unique_key: str | tuple[str, ...],
         columns: tuple[str, ...] | None = None,
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         statements: tuple[str, ...] = self.render_delete_insert(
             target=target, sql=sql, unique_key=keys, columns=columns
         )
-        if statement_recorder is not None:
-            statement_recorder.record_many(statements)
+        statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
             connection.execute(stmt)
@@ -396,7 +387,7 @@ class DuckDbAdapter(BaseAdapter):
         cursor_start: str,
         cursor_end: str,
         columns: tuple[str, ...] | None = None,
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_delete_insert_cursor(
             target=target,
@@ -406,8 +397,7 @@ class DuckDbAdapter(BaseAdapter):
             cursor_end=cursor_end,
             columns=columns,
         )
-        if statement_recorder is not None:
-            statement_recorder.record_many(statements)
+        statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
             connection.execute(stmt)
@@ -419,15 +409,14 @@ class DuckDbAdapter(BaseAdapter):
         target: str,
         sql: str,
         unique_key: str | tuple[str, ...],
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         source_columns: tuple[str, ...] = tuple(query_column_names(connection, sql))
         statements: tuple[str, ...] = self.render_merge(
             target=target, sql=sql, unique_key=keys, source_columns=source_columns
         )
-        if statement_recorder is not None:
-            statement_recorder.record_many(statements)
+        statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
             connection.execute(stmt)
@@ -475,11 +464,10 @@ class DuckDbAdapter(BaseAdapter):
         *,
         target: str,
         columns: tuple[ColumnInfo, ...],
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_add_columns(target=target, columns=columns)
-        if statement_recorder is not None:
-            statement_recorder.record_many(statements)
+        statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
             connection.execute(stmt)
@@ -490,13 +478,12 @@ class DuckDbAdapter(BaseAdapter):
         *,
         target: str,
         column_names: tuple[str, ...],
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_drop_columns(
             target=target, column_names=column_names
         )
-        if statement_recorder is not None:
-            statement_recorder.record_many(statements)
+        statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
             connection.execute(stmt)
@@ -507,11 +494,10 @@ class DuckDbAdapter(BaseAdapter):
         *,
         target: str,
         columns: tuple[ColumnInfo, ...],
-        statement_recorder: StatementRecorder | None = None,
+        statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_alter_column_types(target=target, columns=columns)
-        if statement_recorder is not None:
-            statement_recorder.record_many(statements)
+        statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
             connection.execute(stmt)

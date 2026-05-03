@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.planner.models import SeedPlanEntry
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.shared.helpers.naming import build_qualified_name
@@ -16,6 +17,7 @@ def execute_seed(
     seed_entry: SeedPlanEntry,
     adapter: BaseAdapter,
     connection: Any,
+    statement_recorder: StatementRecorder,
 ) -> SeedExecutionResult:
     """Load one seed into the warehouse."""
 
@@ -31,6 +33,7 @@ def execute_seed(
             file_path=seed_entry.file_path,
             columns=seed_entry.columns,
             replace=True,
+            statement_recorder=statement_recorder,
         )
     except Exception as exc:
         return SeedExecutionResult(

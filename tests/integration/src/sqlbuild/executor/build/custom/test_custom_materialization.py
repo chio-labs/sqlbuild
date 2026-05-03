@@ -411,7 +411,12 @@ def test_given_custom_materialization_when_executing_then_context_fields_populat
         captured["placeholders"] = ctx.placeholders
         captured["environment"] = ctx.environment
         captured["vars"] = ctx.vars
-        ctx.adapter.create_table_as(ctx.connection, target=ctx.target, sql=ctx.sql)
+        ctx.adapter.create_table_as(
+            ctx.connection,
+            target=ctx.target,
+            sql=ctx.sql,
+            statement_recorder=ctx.statement_recorder,
+        )
         return MaterializationResult(relation=ctx.target)
 
     run_custom_entry(

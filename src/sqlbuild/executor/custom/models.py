@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo
+from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo, StatementRecorder
 from sqlbuild.compiler.planner.models import SchemaFinding
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 
@@ -37,6 +37,12 @@ class MaterializationContext:
     schema_findings: tuple[SchemaFinding, ...]
     run_audits: Callable[[str], tuple[AuditExecutionResult, ...]]
     on_progress: Callable[[str], None] | None
+    statement_recorder: StatementRecorder = field(default_factory=StatementRecorder)
+
+    def execute_sql(self, sql: str) -> Any:
+        """Execute a SQL statement, recording it for runtime artifacts and verbose output."""
+        self.statement_recorder.record(sql)
+        return self.adapter.execute(self.connection, sql)
 
 
 @dataclass(frozen=True)

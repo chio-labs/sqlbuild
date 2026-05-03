@@ -110,6 +110,7 @@ def execute_custom_entry(
         schema_findings=schema_findings,
         run_audits=run_audits_fn,
         on_progress=on_progress,
+        statement_recorder=statement_recorder,
     )
 
     try:
@@ -163,6 +164,7 @@ def execute_custom_entry(
                 connection=connection,
                 relations=result.cleanup_relations,
                 keep=True,
+                statement_recorder=statement_recorder,
             )
             return build_failed_result(
                 entry=entry,
@@ -183,7 +185,11 @@ def execute_custom_entry(
         )
     except Exception as exc:
         _cleanup_relations(
-            adapter=adapter, connection=connection, relations=result.cleanup_relations, keep=True
+            adapter=adapter,
+            connection=connection,
+            relations=result.cleanup_relations,
+            keep=True,
+            statement_recorder=statement_recorder,
         )
         return build_failed_result(
             entry=entry,
@@ -205,7 +211,11 @@ def execute_custom_entry(
     )
 
     _cleanup_relations(
-        adapter=adapter, connection=connection, relations=result.cleanup_relations, keep=False
+        adapter=adapter,
+        connection=connection,
+        relations=result.cleanup_relations,
+        keep=False,
+        statement_recorder=statement_recorder,
     )
 
     return ModelExecutionResult(
@@ -257,6 +267,7 @@ def _cleanup_relations(
     connection: Any,
     relations: tuple[str, ...],
     keep: bool,
+    statement_recorder: StatementRecorder,
 ) -> None:
     """Drop cleanup relations on success, keep on failure."""
 
@@ -266,6 +277,11 @@ def _cleanup_relations(
     relation: str
     for relation in relations:
         try:
-            adapter.drop(connection, target=relation, if_exists=True)
+            adapter.drop(
+                connection,
+                target=relation,
+                if_exists=True,
+                statement_recorder=statement_recorder,
+            )
         except Exception:
             pass
