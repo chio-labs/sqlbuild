@@ -37,6 +37,7 @@ def validate_incremental_config(
     config: CompileModelConfig,
     model_name: str,
     ref_count: int,
+    known_input_names: frozenset[str],
 ) -> None:
     """Validate incremental model config rules after layering.
 
@@ -85,6 +86,15 @@ def validate_incremental_config(
 
     if cursor_inputs is not None and cursor is None:
         raise CompileInputError(f"model '{model_name}': cursor_inputs requires cursor")
+    if isinstance(cursor_inputs, dict):
+        input_name: object
+        for input_name in cursor_inputs:
+            if str(input_name) not in known_input_names:
+                expected_names: str = ", ".join(sorted(known_input_names))
+                raise CompileInputError(
+                    f"model '{model_name}': cursor_inputs references unknown input "
+                    f"'{input_name}'; expected one of: {expected_names}"
+                )
     if cursor is not None and ref_count > 1 and cursor_inputs is None:
         raise CompileInputError(
             f"model '{model_name}': models with cursor and multiple inputs "

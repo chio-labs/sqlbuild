@@ -157,6 +157,7 @@ def build_model_inputs(
             config=effective_config,
             model_name=model_file.file_path.stem,
             ref_count=len(references),
+            known_input_names=frozenset(reference.ref_name for reference in references),
         )
         validate_non_incremental_config(
             config=effective_config,

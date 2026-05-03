@@ -100,11 +100,18 @@ def test_given_valid_config_when_validating_then_passes(
     test_case: IncrementalConfigValidTestCase,
 ) -> None:
     config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
+    cursor_inputs: object | None = test_case.config_values.get("cursor_inputs")
+    known_input_names: frozenset[str] = (
+        frozenset(str(name) for name in cursor_inputs)
+        if isinstance(cursor_inputs, dict)
+        else frozenset()
+    )
 
     validate_incremental_config(
         config=config,
         model_name="test_model",
         ref_count=test_case.ref_count,
+        known_input_names=known_input_names,
     )
 
     assert test_case.expected_valid
@@ -167,6 +174,18 @@ ERROR_TEST_CASES: list[IncrementalConfigErrorTestCase] = [
         },
         ref_count=2,
         expected_error_fragment="require explicit cursor_inputs",
+    ),
+    IncrementalConfigErrorTestCase(
+        description="cursor_inputs with unknown input key raises",
+        config_values={
+            "materialized": "incremental",
+            "incremental_strategy": "delete_insert",
+            "cursor": "event_time",
+            "cursor_type": "timestamp",
+            "cursor_inputs": {"missing_relation": "event_time"},
+        },
+        ref_count=1,
+        expected_error_fragment="cursor_inputs references unknown input 'missing_relation'",
     ),
     IncrementalConfigErrorTestCase(
         description="delete_insert without cursor or unique_key raises",
@@ -237,6 +256,7 @@ def test_given_invalid_config_when_validating_then_raises(
             config=config,
             model_name="test_model",
             ref_count=test_case.ref_count,
+            known_input_names=frozenset({"orders", "shipments"}),
         )
 
 
