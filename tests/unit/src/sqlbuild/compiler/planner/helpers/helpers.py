@@ -1,9 +1,10 @@
-"""Test helpers for planner graph tests."""
+"""Test helpers for planner helpers tests."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
@@ -19,6 +20,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSeedFile,
     DiscoveredSourceFile,
 )
+from sqlbuild.compiler.planner.models import WarehouseSnapshot
 from sqlbuild.spec.models.schema import SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -122,6 +124,16 @@ def build_test_project(
         sources=tuple(sources),
         seeds=tuple(seeds),
     )
+
+
+def build_snapshot_from_relation_names(relation_names: tuple[str, ...]) -> WarehouseSnapshot:
+    """Build a minimal WarehouseSnapshot with the given relation names."""
+
+    existing_relations: dict[str, RelationInfo] = {
+        name: RelationInfo(database=None, schema="public", name=name, relation_type="BASE TABLE")
+        for name in relation_names
+    }
+    return WarehouseSnapshot(existing_relations=existing_relations)
 
 
 def _resolve_dep_key(name: str, source_names: set[str], seed_names: set[str]) -> CompiledObjectKey:

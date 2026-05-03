@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
@@ -13,6 +14,14 @@ from sqlbuild.compiler.planner.types import (
     SchemaColumnSource,
     SelectorKind,
 )
+
+
+@dataclass(frozen=True)
+class MissingUpstream:
+    """One upstream dependency missing from both scope and warehouse."""
+
+    key: CompiledObjectKey
+    required_by: tuple[CompiledObjectKey, ...]
 
 
 @dataclass(frozen=True)

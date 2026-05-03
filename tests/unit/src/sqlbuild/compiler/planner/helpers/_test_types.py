@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey
-from sqlbuild.compiler.planner.models import ParsedSelector
+from sqlbuild.compiler.planner.models import MissingUpstream, ParsedSelector
 
 
 @dataclass(frozen=True)
@@ -96,3 +96,12 @@ class ResolveSelectorErrorTestCase:
     select: tuple[str, ...]
     exclude: tuple[str, ...]
     expected_error_type: type[Exception]
+
+
+@dataclass(frozen=True)
+class CheckBuildabilityTestCase:
+    description: str
+    selected_keys: frozenset[CompiledObjectKey]
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
+    existing_relation_names: tuple[str, ...]
+    expected_missing: tuple[MissingUpstream, ...]
