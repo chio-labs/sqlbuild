@@ -13,19 +13,31 @@ from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
 
 TEST_CASES: list[ParseSourcesYamlTestCase] = [
     ParseSourcesYamlTestCase(
-        description="parses sources with optional type enforcement and columns",
+        description="parses sources with quality metadata and columns",
         contents="""
         sources:
           - name: raw_orders
             database: raw
             schema: public
             table: orders
+            description: Raw orders from ingestion.
             type_enforcement: true
+            meta:
+              owner: finance
+            audits:
+              - source_freshness:
+                  threshold_hours: 2
             columns:
               - name: order_id
                 type: VARCHAR
+                description: Stable order identifier.
+                audits:
+                  - not_null
               - name: created_at
                 type: TIMESTAMP_NTZ
+                audits:
+                  - recency:
+                      max_age_hours: 24
           - name: raw_customers
             schema: public
             table: customers
@@ -33,6 +45,8 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
         expected_source_names=("raw_orders", "raw_customers"),
         expected_column_names=(("order_id", "created_at"), ()),
         expected_type_enforcement_values=(True, None),
+        expected_source_audit_names=(("source_freshness",), ()),
+        expected_column_audit_names=((("not_null",), ("recency",)), ()),
     ),
     ParseSourcesYamlTestCase(
         description="allows empty sources files with no declarations",
@@ -40,6 +54,8 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
         expected_source_names=(),
         expected_column_names=(),
         expected_type_enforcement_values=(),
+        expected_source_audit_names=(),
+        expected_column_audit_names=(),
     ),
 ]
 
@@ -65,6 +81,19 @@ def test_given_sources_yaml_variants_when_parsing_then_it_returns_expected_raw_m
         tuple(entry.type_enforcement for entry in source_entries)
         == test_case.expected_type_enforcement_values
     )
+    assert (
+        tuple(tuple(audit.definition_name for audit in entry.audits) for entry in source_entries)
+        == test_case.expected_source_audit_names
+    )
+    assert (
+        tuple(
+            tuple(
+                tuple(audit.definition_name for audit in column.audits) for column in entry.columns
+            )
+            for entry in source_entries
+        )
+        == test_case.expected_column_audit_names
+    )
 
 
 ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
@@ -72,6 +101,15 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
         description="raises when the file does not contain a top-level mapping",
         contents="- name: raw_orders\n",
         expected_error_fragment="must contain a top-level mapping",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source meta is not a mapping",
+        contents="""
+        sources:
+          - name: raw_orders
+            meta: []
+        """,
+        expected_error_fragment="source 'meta' must be a mapping",
     ),
     ParseSourcesYamlErrorTestCase(
         description="raises when sources is not a list",
@@ -131,6 +169,15 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
         expected_error_fragment="source 'type_enforcement' must be a boolean",
     ),
     ParseSourcesYamlErrorTestCase(
+        description="raises when source audits is not a list",
+        contents="""
+        sources:
+          - name: raw_orders
+            audits: {}
+        """,
+        expected_error_fragment="source audits must be a list",
+    ),
+    ParseSourcesYamlErrorTestCase(
         description="raises when source columns is not a list",
         contents="""
         sources:
@@ -138,6 +185,17 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
             columns: {}
         """,
         expected_error_fragment="source columns must be a list",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source column meta is not a mapping",
+        contents="""
+        sources:
+          - name: raw_orders
+            columns:
+              - name: order_id
+                meta: []
+        """,
+        expected_error_fragment="source column 'meta' must be a mapping",
     ),
     ParseSourcesYamlErrorTestCase(
         description="raises when a source column entry is not a mapping",
@@ -158,6 +216,17 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
               - type: VARCHAR
         """,
         expected_error_fragment="source column must define non-empty string 'name'",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source column audits is not a list",
+        contents="""
+        sources:
+          - name: raw_orders
+            columns:
+              - name: order_id
+                audits: {}
+        """,
+        expected_error_fragment="source column audits must be a list",
     ),
     ParseSourcesYamlErrorTestCase(
         description="raises when source column type is blank",

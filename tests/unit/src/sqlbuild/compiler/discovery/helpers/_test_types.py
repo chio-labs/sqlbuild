@@ -124,6 +124,8 @@ class ParseSourcesYamlTestCase:
     expected_source_names: tuple[str, ...]
     expected_column_names: tuple[tuple[str, ...], ...]
     expected_type_enforcement_values: tuple[bool | None, ...]
+    expected_source_audit_names: tuple[tuple[str, ...], ...] = ()
+    expected_column_audit_names: tuple[tuple[tuple[str, ...], ...], ...] = ()
 
 
 @dataclass(frozen=True)
