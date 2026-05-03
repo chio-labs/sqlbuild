@@ -459,6 +459,10 @@ TEST_CASES: list[BuildOutputTestCase] = [
                             content="DROP TABLE IF EXISTS main.orders__staging",
                         ),
                         LifeCycleEvent(
+                            kind=LifeCycleEventKind.LOG,
+                            content="building partition 2024-01-01",
+                        ),
+                        LifeCycleEvent(
                             kind=LifeCycleEventKind.SQL,
                             content="CREATE OR REPLACE TABLE main.orders__staging AS SELECT 1",
                         ),
@@ -477,6 +481,7 @@ TEST_CASES: list[BuildOutputTestCase] = [
         verbose=True,
         expected_output_fragments=(
             "DROP TABLE IF EXISTS main.orders__staging",
+            "log  building partition 2024-01-01",
             "CREATE OR REPLACE TABLE main.orders__staging AS SELECT 1;",
             "SELECT 1;",
             "orders",
@@ -503,6 +508,29 @@ TEST_CASES: list[BuildOutputTestCase] = [
             "OK",
         ),
         expected_absent_fragments=("CREATE TABLE",),
+    ),
+    BuildOutputTestCase(
+        description="colorized verbose mode shows lifecycle log messages in muted blue",
+        result=BuildExecutionResult(
+            status=BuildStatus.SUCCESS,
+            model_results=(
+                ModelExecutionResult(
+                    model_name="orders",
+                    status=ExecutionStatus.SUCCESS,
+                    duration_ms=100,
+                    lifecycle_events=(
+                        LifeCycleEvent(
+                            kind=LifeCycleEventKind.LOG,
+                            content="building partition 2024-01-01",
+                        ),
+                    ),
+                ),
+            ),
+            success_count=1,
+        ),
+        verbose=True,
+        use_color=True,
+        expected_output_fragments=("\033[34m\033[2m    log  building partition 2024-01-01\033[0m",),
     ),
 ]
 
@@ -547,7 +575,7 @@ def test_given_build_result_when_formatting_output_then_contains_expected_fragme
         target=test_case.target,
         concurrency=test_case.concurrency,
         elapsed_seconds=test_case.elapsed_seconds,
-        use_color=False,
+        use_color=test_case.use_color,
         verbose=test_case.verbose,
     )
 

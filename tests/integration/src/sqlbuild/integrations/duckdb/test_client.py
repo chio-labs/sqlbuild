@@ -434,7 +434,8 @@ def test_given_statement_recorder_when_creating_table_then_records_expected_sql(
         statement_recorder=recorder,
     )
 
-    assert recorder.snapshot() == test_case.expected_recorded_statements
+    actual_statements: tuple[str, ...] = tuple(event.content for event in recorder.snapshot())
+    assert actual_statements == test_case.expected_recorded_statements
 
 
 @pytest.mark.parametrize(
@@ -480,7 +481,8 @@ def test_given_statement_recorder_when_delete_inserting_then_records_expected_sq
         statement_recorder=recorder,
     )
 
-    assert recorder.snapshot() == test_case.expected_recorded_statements
+    actual_statements: tuple[str, ...] = tuple(event.content for event in recorder.snapshot())
+    assert actual_statements == test_case.expected_recorded_statements
 
 
 @pytest.mark.parametrize(

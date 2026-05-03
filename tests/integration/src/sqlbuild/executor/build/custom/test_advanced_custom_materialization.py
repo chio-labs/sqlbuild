@@ -10,6 +10,7 @@ import duckdb
 import pytest
 
 from sqlbuild.adapter.shared.models import RelationInfo
+from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from sqlbuild.compiler.compile.models import CompiledRelationTarget
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import PlanReason
@@ -66,6 +67,10 @@ _PROJECT_YML: str = (
             expected_statement_fragments=(
                 "CREATE TABLE IF NOT EXISTS main.partition_state",
                 "INSERT INTO main.partition_state VALUES",
+            ),
+            expected_log_fragments=(
+                "checking partition state",
+                "building initial partition range",
             ),
         ),
     ],
@@ -124,9 +129,17 @@ def test_given_partition_tracked_materialization_when_first_run_then_builds_all_
 
     fragment: str
     for fragment in test_case.expected_statement_fragments:
-        assert any(fragment in event.content for event in result.lifecycle_events), (
-            f"expected '{fragment}' in lifecycle_events"
-        )
+        assert any(
+            event.kind == LifeCycleEventKind.SQL and fragment in event.content
+            for event in result.lifecycle_events
+        ), f"expected '{fragment}' in lifecycle_events"
+
+    log_fragment: str
+    for log_fragment in test_case.expected_log_fragments:
+        assert any(
+            event.kind == LifeCycleEventKind.LOG and log_fragment in event.content
+            for event in result.lifecycle_events
+        ), f"expected '{log_fragment}' in lifecycle_events"
 
 
 # --- Existing relation detection tests ---

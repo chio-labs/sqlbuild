@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from sqlbuild.adapter.shared.models import LifeCycleEvent
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from sqlbuild.cli.commands.main.shared.helpers.colors import (
+    blue_dim,
     colorize_completion,
     colorize_status,
     dim,
@@ -101,9 +102,9 @@ class BuildProgressCallbacks:
         sys.stdout.write("\n")
 
     def _write_log_block(self, message: str) -> None:
-        """Write a log message with indent and dim styling."""
+        """Write a log message with indent and muted styling."""
 
-        styled: str = dim(f"    -- {message}") if self._use_color else f"    -- {message}"
+        styled: str = blue_dim(f"    log  {message}") if self._use_color else f"    log  {message}"
         sys.stdout.write(f"\n{styled}\n")
 
     def on_node_start(self, name: str, materialization_type: str) -> None:

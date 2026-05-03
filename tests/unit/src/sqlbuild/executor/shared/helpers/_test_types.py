@@ -7,4 +7,5 @@ from sqlbuild.adapter.shared.models import LifeCycleEvent
 class StatementRecorderTestCase:
     description: str
     statements: tuple[str, ...]
+    log_message: str
     expected_snapshot: tuple[LifeCycleEvent, ...]

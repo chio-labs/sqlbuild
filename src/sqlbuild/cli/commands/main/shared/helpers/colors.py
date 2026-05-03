@@ -68,6 +68,12 @@ def dim(text: str) -> str:
     return f"{_DIM}{text}{_RESET}"
 
 
+def blue_dim(text: str) -> str:
+    """Muted blue text for informational lifecycle messages."""
+
+    return f"{_BLUE}{_DIM}{text}{_RESET}"
+
+
 def supports_color() -> bool:
     """Check if the terminal supports color output."""
 

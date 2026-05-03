@@ -15,22 +15,28 @@ from tests.unit.src.sqlbuild.executor.shared.helpers._test_types import (
     "test_case",
     [
         StatementRecorderTestCase(
-            description="records individual and grouped statements in order",
+            description="records SQL and log events in order",
             statements=("CREATE TABLE x AS SELECT 1", "DROP TABLE y"),
+            log_message="building partition 2024-01-01",
             expected_snapshot=(
                 LifeCycleEvent(kind=LifeCycleEventKind.SQL, content="CREATE TABLE x AS SELECT 1"),
+                LifeCycleEvent(
+                    kind=LifeCycleEventKind.LOG,
+                    content="building partition 2024-01-01",
+                ),
                 LifeCycleEvent(kind=LifeCycleEventKind.SQL, content="DROP TABLE y"),
             ),
         )
     ],
-    ids=["records individual and grouped statements in order"],
+    ids=["records SQL and log events in order"],
 )
-def test_given_recorded_statements_when_snapshotting_then_returns_expected_tuple(
+def test_given_recorded_events_when_snapshotting_then_returns_expected_tuple(
     test_case: StatementRecorderTestCase,
 ) -> None:
     recorder: StatementRecorder = StatementRecorder()
 
     recorder.record(test_case.statements[0])
+    recorder.log(test_case.log_message)
     recorder.record_many(test_case.statements[1:])
     result: tuple[LifeCycleEvent, ...] = recorder.snapshot()
 

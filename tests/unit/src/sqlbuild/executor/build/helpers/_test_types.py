@@ -17,3 +17,4 @@ class BuildOutputTestCase:
     concurrency: int = 1
     elapsed_seconds: float = 1.5
     verbose: bool = False
+    use_color: bool = False

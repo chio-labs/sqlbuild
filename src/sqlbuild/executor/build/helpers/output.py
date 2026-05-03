@@ -11,7 +11,11 @@ from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
-from sqlbuild.executor.build.helpers.color import colorize_completion, colorize_status
+from sqlbuild.executor.build.helpers.color import (
+    blue_dim,
+    colorize_completion,
+    colorize_status,
+)
 from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
@@ -95,7 +99,7 @@ def format_build_output(
                 if event.kind == LifeCycleEventKind.SQL:
                     lines.extend(_format_sql_block(event.content))
                 elif event.kind == LifeCycleEventKind.LOG:
-                    lines.extend(_format_log_block(event.content))
+                    lines.extend(_format_log_block(event.content, use_color=use_color))
 
         test_result: SqlTestExecutionResult | None = test_results_by_model.get(
             model_result.model_name
@@ -222,10 +226,13 @@ def _resolve_verbose_events(
     return ()
 
 
-def _format_log_block(message: str) -> list[str]:
+def _format_log_block(message: str, *, use_color: bool) -> list[str]:
     """Format a log message with indent for verbose output."""
 
-    return ["", f"    -- {message}", ""]
+    line: str = f"    log  {message}"
+    if use_color:
+        line = blue_dim(line)
+    return ["", line, ""]
 
 
 def _format_sub_line(*, sub_type: str, name: str, status: str, use_color: bool) -> str:

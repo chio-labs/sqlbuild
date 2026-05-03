@@ -131,6 +131,10 @@ def build_runtime_target_execution_result() -> BuildExecutionResult:
                         content="DROP TABLE IF EXISTS analytics.orders__staging",
                     ),
                     LifeCycleEvent(
+                        kind=LifeCycleEventKind.LOG,
+                        content="building partition 2024-01-01",
+                    ),
+                    LifeCycleEvent(
                         kind=LifeCycleEventKind.SQL,
                         content="CREATE OR REPLACE TABLE analytics.orders__staging "
                         "AS SELECT 1 AS order_id",

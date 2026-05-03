@@ -32,6 +32,10 @@ def dim(text: str) -> str:
     return f"\033[2m{text}\033[0m"
 
 
+def blue_dim(text: str) -> str:
+    return f"\033[34m\033[2m{text}\033[0m"
+
+
 def colorize_status(status: str, *, use_color: bool) -> str:
     """Apply color to a status word based on its value."""
 

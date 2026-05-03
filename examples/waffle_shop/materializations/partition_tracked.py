@@ -29,9 +29,11 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
     )
 
     if ctx.is_full_refresh:
+        ctx.log("clearing partition tracking state")
         ctx.execute_sql(f"DELETE FROM {tracking_table}")
 
     all_partitions: list[str] = _generate_date_range(date_start, date_end)
+    ctx.log("checking for stale partitions")
     stale: list[str] = _find_untracked(ctx, tracking_table, all_partitions)
 
     if not stale:
@@ -56,6 +58,7 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
 
         if ctx.on_progress is not None:
             ctx.on_progress(f"partition {i + 1}/{len(stale)}: {partition_value}")
+        ctx.log(f"building partition {partition_value}")
 
         ctx.adapter.drop(
             ctx.connection,
@@ -82,6 +85,7 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
             )
 
         if not target_exists:
+            ctx.log("promoting first partition into target")
             ctx.adapter.rename(
                 ctx.connection,
                 source=staging,
@@ -90,6 +94,7 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
             )
             target_exists = True
         else:
+            ctx.log("promoting partition into target")
             ctx.execute_sql(
                 f"DELETE FROM {ctx.target} "
                 f"WHERE CAST({partition_col} AS VARCHAR) >= '{partition_value}' "
