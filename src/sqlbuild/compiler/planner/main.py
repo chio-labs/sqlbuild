@@ -30,6 +30,7 @@ from sqlbuild.compiler.planner.helpers.graph import (
     topologically_order_keys,
 )
 from sqlbuild.compiler.planner.helpers.plan_entry import (
+    build_model_materializations,
     build_path_index,
     build_tag_index,
     gather_source_columns,
@@ -236,6 +237,8 @@ def build_execution_plan(
         if seed.key in selected_keys
     ]
 
+    model_materializations: dict[str, str] = build_model_materializations(tuple(model_entries))
+
     audit_entries: list[AuditPlanEntry] = []
     audit: CompiledAudit
     for audit in project.audits:
@@ -247,6 +250,9 @@ def build_execution_plan(
                 model_targets=model_targets,
                 seed_targets=seed_targets,
                 source_map=source_map,
+                upstream_deps=upstream_deps,
+                downstream_deps=downstream_deps,
+                model_materializations=model_materializations,
             )
         )
 

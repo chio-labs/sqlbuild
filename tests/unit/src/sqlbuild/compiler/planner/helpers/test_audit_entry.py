@@ -83,6 +83,9 @@ def test_given_audit_when_planning_then_resolves_sql(
         model_targets=model_targets,
         seed_targets={},
         source_map=source_map,
+        upstream_deps={},
+        downstream_deps={},
+        model_materializations={},
     )
 
     assert test_case.expected_sql_fragment in result.resolved_sql

@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.compiler.auditing.types import (
+    AuditAttachmentKind,
+    AuditRunScope,
+    AuditSeverity,
+)
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationTarget
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (
@@ -60,6 +65,11 @@ def build_target_writer_plan_output() -> PlanOutput:
                 key=audit_key,
                 name="not_null",
                 resolved_sql="SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
+                unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+                attachment_kind=AuditAttachmentKind.MODEL,
+                severity=AuditSeverity.WARN,
+                requested_run_scope=AuditRunScope.FINAL,
+                effective_run_scope=AuditRunScope.FINAL,
                 attached_target_name="orders",
                 attached_column_name="order_id",
             ),

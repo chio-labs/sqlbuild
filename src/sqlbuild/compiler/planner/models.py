@@ -8,6 +8,11 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo
+from sqlbuild.compiler.auditing.types import (
+    AuditAttachmentKind,
+    AuditRunScope,
+    AuditSeverity,
+)
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationTarget
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.types import (
@@ -218,11 +223,16 @@ class SeedPlanEntry:
 
 @dataclass(frozen=True)
 class AuditPlanEntry:
-    """Per-audit execution plan entry with resolved SQL."""
+    """Per-audit execution plan entry with resolved SQL and scheduling metadata."""
 
     key: CompiledObjectKey
     name: str
     resolved_sql: str
+    unresolved_sql: str
+    attachment_kind: AuditAttachmentKind
+    severity: AuditSeverity
+    requested_run_scope: AuditRunScope
+    effective_run_scope: AuditRunScope
     scope_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
     attached_target_name: str | None = None
     attached_column_name: str | None = None

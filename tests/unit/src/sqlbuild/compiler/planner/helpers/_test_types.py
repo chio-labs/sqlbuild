@@ -1,7 +1,12 @@
 from dataclasses import dataclass, field
 
 from sqlbuild.adapter.shared.models import ColumnInfo
-from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.auditing.types import (
+    AuditAttachmentKind,
+    AuditRunScope,
+)
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompileSqlReference
+from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.compiler.planner.models import (
     MissingUpstream,
     ParsedSelector,
@@ -270,3 +275,32 @@ class ResolveCascadeTestCase:
     expected_duration: str | None = None
     expected_root_cause: str | None = None
     expected_cause_count: int = 0
+
+
+@dataclass(frozen=True)
+class ResolveAttachmentTestCase:
+    description: str
+    references: tuple[CompileSqlReference, ...]
+    attached_target_kind: AttachedAuditTargetKind | None
+    attached_target_name: str | None
+    upstream_edges: dict[str, tuple[str, ...]]
+    expected_attachment_kind: AuditAttachmentKind
+    expected_attached_name: str | None
+
+
+@dataclass(frozen=True)
+class ResolveAttachmentErrorTestCase:
+    description: str
+    references: tuple[CompileSqlReference, ...]
+    attached_target_kind: AttachedAuditTargetKind | None
+    attached_target_name: str | None
+    upstream_edges: dict[str, tuple[str, ...]]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ResolveEffectiveRunScopeTestCase:
+    description: str
+    requested_run_scope: AuditRunScope
+    attached_model_materialization: str | None
+    expected_effective_run_scope: AuditRunScope

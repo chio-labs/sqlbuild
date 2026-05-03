@@ -5,6 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from sqlbuild.compiler.auditing.types import (
+    AuditAttachmentKind,
+    AuditRunScope,
+    AuditSeverity,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
@@ -243,6 +248,11 @@ def build_test_audit_plan_entry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name=name),
         name=name,
         resolved_sql=resolved_sql,
+        unresolved_sql=resolved_sql,
+        attachment_kind=AuditAttachmentKind.MODEL,
+        severity=AuditSeverity.WARN,
+        requested_run_scope=AuditRunScope.FINAL,
+        effective_run_scope=AuditRunScope.FINAL,
         scope_deps=scope_deps,
         attached_target_name=attached_target_name,
         attached_column_name=attached_column_name,

@@ -417,6 +417,14 @@ def is_settings_flag(project: CompiledProject, key: str, *, default: bool) -> bo
     return default
 
 
+def build_model_materializations(
+    model_entries: tuple[ModelPlanEntry, ...],
+) -> dict[str, str]:
+    """Build a name-to-materialization-type lookup from planned model entries."""
+
+    return {entry.name: entry.materialization_type for entry in model_entries}
+
+
 def _get_config_str(model: CompiledModel, key: str) -> str | None:
     """Extract a string config value from model config."""
 

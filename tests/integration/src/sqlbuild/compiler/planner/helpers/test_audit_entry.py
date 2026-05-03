@@ -120,6 +120,9 @@ def test_given_audit_when_executing_resolved_sql_then_returns_expected_rows(
         model_targets=model_targets,
         seed_targets={},
         source_map=test_case.source_map,
+        upstream_deps={},
+        downstream_deps={},
+        model_materializations={},
     )
 
     query_result: Any = connection.execute(result.resolved_sql)

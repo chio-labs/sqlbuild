@@ -16,7 +16,11 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     CompileSqlReference,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType, SqlReferenceKind
+from sqlbuild.compiler.compile.types import (
+    AttachedAuditTargetKind,
+    CompiledResourceType,
+    SqlReferenceKind,
+)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
@@ -434,3 +438,64 @@ def _stub_schema_file() -> DiscoveredSchemaFile:
         model_entries=(),
         seed_entries=(),
     )
+
+
+def build_scheduling_audit(
+    *,
+    references: tuple[CompileSqlReference, ...],
+    attached_target_kind: AttachedAuditTargetKind | None,
+    attached_target_name: str | None,
+) -> CompiledAudit:
+    """Build a minimal CompiledAudit for scheduling tests."""
+
+    stub_file: DiscoveredAuditFile = DiscoveredAuditFile(
+        file_path=Path("audits/singular/check.sql"),
+        relative_path=Path("audits/singular/check.sql"),
+        contents="",
+        blocks=(),
+    )
+    stub_block: DiscoveredAuditBlock = DiscoveredAuditBlock(
+        audit_index=0,
+        header_values={},
+        sql_body="",
+    )
+    name: str = "test_audit"
+    return CompiledAudit(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name=name),
+        scope_deps=(),
+        name=name,
+        audit_file=stub_file,
+        audit_block=stub_block,
+        sql_body="SELECT 1",
+        references=references,
+        attached_target_kind=attached_target_kind,
+        attached_target_name=attached_target_name,
+        severity="warn",
+        run_scope="final",
+    )
+
+
+def build_scheduling_graph(
+    edges: dict[str, tuple[str, ...]],
+) -> tuple[
+    dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+]:
+    """Build upstream and downstream dep dicts from simple name-based edges."""
+
+    from sqlbuild.compiler.planner.helpers.graph import build_downstream_deps
+
+    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {}
+    name: str
+    deps: tuple[str, ...]
+    for name, deps in edges.items():
+        key: CompiledObjectKey = CompiledObjectKey(
+            resource_type=CompiledResourceType.MODEL, name=name
+        )
+        upstream[key] = tuple(
+            CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=d) for d in deps
+        )
+    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_downstream_deps(
+        upstream
+    )
+    return upstream, downstream
