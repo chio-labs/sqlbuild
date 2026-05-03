@@ -165,6 +165,13 @@ def check_nested_runtime_package_direct_modules(
         and file_path.name == "client.py"
     ):
         return []
+    if (
+        len(relative_parts) >= 5
+        and relative_parts[:3] == ("src", "sqlbuild", "adapter")
+        and file_path.name.endswith(".py")
+        and file_path.name not in {"__init__.py", "main.py"}
+    ):
+        return []
 
     return [
         Violation(
@@ -681,6 +688,65 @@ def check_helpers_subpackage_shape(repo_root: Path, file_path: Path) -> list[Vio
     ]
 
 
+def check_adapter_class_entry_module_shape(
+    repo_root: Path, file_path: Path, module: ast.Module
+) -> list[Violation]:
+    """Enforce focused single-class entry modules within adapter/ subpackages."""
+
+    relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
+    if len(relative_parts) < 6 or relative_parts[:3] != ("src", "sqlbuild", "adapter"):
+        return []
+    if file_path.name.startswith("_") or file_path.name in {
+        "main.py",
+        "models.py",
+        "types.py",
+        "constants.py",
+        "exceptions.py",
+        "helpers.py",
+    }:
+        return []
+    if any(
+        part in {"helpers", "classes", "models", "types", "constants", "exceptions", "shared"}
+        for part in relative_parts[3:-1]
+    ):
+        return []
+
+    public_class_nodes: list[ast.ClassDef] = [
+        node
+        for node in _non_docstring_body(module)
+        if isinstance(node, ast.ClassDef) and not node.name.startswith("_")
+    ]
+    violations: list[Violation] = []
+
+    if len(public_class_nodes) != 1:
+        violations.append(
+            Violation(
+                code="SC031",
+                path=file_path,
+                line=1,
+                message=(
+                    "adapter class entry modules must define exactly one public top-level class"
+                ),
+            )
+        )
+
+    for node in _non_docstring_body(module):
+        if isinstance(node, (ast.Import, ast.ImportFrom, ast.ClassDef)):
+            continue
+        violations.append(
+            Violation(
+                code="SC032",
+                path=file_path,
+                line=getattr(node, "lineno", 1),
+                message=(
+                    "adapter class entry modules must contain only imports and top-level classes"
+                ),
+            )
+        )
+
+    return violations
+
+
 def check_client_module_shape(
     repo_root: Path, file_path: Path, module: ast.Module
 ) -> list[Violation]:
@@ -1084,5 +1150,9 @@ def _is_allowed_sibling_public_surface(
     if len(imported_parts) != len(parent_package_parts) + 2:
         return False
 
-    public_module_name = imported_parts[-1]
-    return public_module_name in {"models", "types"}
+    public_module_name: str = imported_parts[-1]
+    if public_module_name in {"models", "types"}:
+        return True
+    if "adapter" in parent_package_parts:
+        return True
+    return False

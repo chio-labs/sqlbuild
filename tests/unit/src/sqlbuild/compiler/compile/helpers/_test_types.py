@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompileSqlReference
+from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 
 
 @dataclass(frozen=True)
@@ -71,3 +72,21 @@ class SqlTestScopeDepsTestCase:
     description: str
     expected_model_names: tuple[str, ...]
     expected_scope_deps: tuple[CompiledObjectKey, ...]
+
+
+@dataclass(frozen=True)
+class AssembleCompiledProjectTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_model_names: tuple[str, ...]
+    expected_model_deps: tuple[tuple[CompiledObjectKey, ...], ...]
+    expected_model_target_names: tuple[str, ...]
+    expected_model_target_schemas: tuple[str | None, ...]
+    expected_source_names: tuple[str, ...]
+    expected_seed_names: tuple[str, ...]
+    expected_audit_names: tuple[str, ...]
+    expected_audit_scope_deps: tuple[tuple[CompiledObjectKey, ...], ...]
+    expected_test_names: tuple[str, ...]
+    expected_test_scope_deps: tuple[tuple[CompiledObjectKey, ...], ...]
+    expected_test_expected_model_names: tuple[tuple[str, ...], ...]
+    expected_audit_attached_target_kinds: tuple[AttachedAuditTargetKind | None, ...] = ()
