@@ -531,6 +531,57 @@ select 1
         },
         environment_variables={"USER": "kevin", "BACKFILL_POLICY": "bounded(30d)"},
     ),
+    BuildCompileInputsTestCase(
+        description="supports multi hop var expansion and preserve environment overrides",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.yml": """
+name: demo
+adapter: duckdb
+default_environment: dev
+
+vars:
+  base: analytics
+  stage_one: "${base}_team"
+  stage_two: "${stage_one}_prod"
+
+defaults:
+  database: "${stage_two}"
+  schema: marts
+
+path_defaults:
+  models/staging:
+    alias: "${stage_two}_orders"
+
+environments:
+  dev:
+    database: preserve
+    schema: preserve
+""".strip()
+            + "\n",
+            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+        },
+        selected_environment=None,
+        cli_vars=None,
+        expected_model_schema_names=(None,),
+        expected_model_config_values=(
+            {
+                "database": "analytics_team_prod",
+                "schema": "marts",
+                "alias": "analytics_team_prod_orders",
+            },
+        ),
+        expected_model_path_defaults=("models/staging",),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_effective_environment_name="dev",
+        expected_effective_connection={},
+        expected_effective_vars={
+            "base": "analytics",
+            "stage_one": "analytics_team",
+            "stage_two": "analytics_team_prod",
+        },
+    ),
 ]
 
 
@@ -749,6 +800,63 @@ environments:
         expected_error_fragment=(
             "environment database references CTX key 'database' but no value is available"
         ),
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when effective vars contain a cyclic reference",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.yml": """
+name: demo
+adapter: duckdb
+
+vars:
+  first: "${second}"
+  second: "${first}"
+""".strip()
+            + "\n",
+            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+        },
+        selected_environment=None,
+        expected_error_fragment=(
+            "effective vars contain a cyclic reference: first -> second -> first"
+        ),
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when templates use an unsupported namespace",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.yml": """
+name: demo
+adapter: duckdb
+
+vars:
+  user: kevin
+
+defaults:
+  schema: "${SQLBUILD:user}"
+""".strip()
+            + "\n",
+            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+        },
+        selected_environment=None,
+        expected_error_fragment="model config references unsupported template namespace 'SQLBUILD'",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when connection values use disallowed ctx templates",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.yml": """
+name: demo
+adapter: duckdb
+
+connection:
+  path: "${CTX:schema}"
+""".strip()
+            + "\n",
+            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+        },
+        selected_environment=None,
+        expected_error_fragment="effective connection does not allow CTX templates",
     ),
 ]
 
