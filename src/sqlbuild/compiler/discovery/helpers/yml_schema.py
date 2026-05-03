@@ -106,6 +106,19 @@ def _parse_model_entry(*, entry: dict[str, object], file_path: Path) -> SchemaMo
 
 
 def _parse_seed_entry(*, entry: dict[str, object], file_path: Path) -> SchemaSeedEntry:
+    columns: tuple[SchemaColumn, ...] = _parse_columns(
+        entry=entry, file_path=file_path, label="seed"
+    )
+    if not columns:
+        raise SchemaParseError(f"{file_path} seed must declare at least one column")
+
+    column: SchemaColumn
+    for column in columns:
+        if column.type is None:
+            raise SchemaParseError(
+                f"{file_path} seed column '{column.name}' must define non-empty string 'type'"
+            )
+
     return SchemaSeedEntry(
         name=_require_non_empty_string(entry=entry, key="name", file_path=file_path, label="seed"),
         description=_optional_non_empty_string(
@@ -115,7 +128,7 @@ def _parse_seed_entry(*, entry: dict[str, object], file_path: Path) -> SchemaSee
             label="seed",
         ),
         meta=_optional_mapping(entry=entry, key="meta", file_path=file_path, label="seed"),
-        columns=_parse_columns(entry=entry, file_path=file_path, label="seed"),
+        columns=columns,
     )
 
 

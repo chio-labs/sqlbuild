@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.compiler.discovery.helpers.discovery_validation import validate_discovered_inputs
 from sqlbuild.compiler.discovery.helpers.filesystem import (
     discover_adapter_file,
     discover_audit_files,
@@ -29,7 +30,7 @@ def discover_project_inputs(*, project_dir: Path) -> DiscoveredProjectInputs:
     project_config: ProjectConfig = load_project_config(project_dir=project_dir)
     local_config: LocalConfig = load_local_config(project_dir=project_dir)
 
-    return DiscoveredProjectInputs(
+    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
         project_config=project_config,
         local_config=local_config,
         model_files=discover_model_files(project_dir=project_dir),
@@ -42,3 +43,5 @@ def discover_project_inputs(*, project_dir: Path) -> DiscoveredProjectInputs:
         dbt_manifest_file=discover_dbt_manifest_file(project_dir=project_dir),
         adapter_file=discover_adapter_file(project_dir=project_dir),
     )
+    validate_discovered_inputs(discovered_inputs)
+    return discovered_inputs

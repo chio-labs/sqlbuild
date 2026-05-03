@@ -94,6 +94,13 @@ class ParseSchemaYamlErrorTestCase:
 
 
 @dataclass(frozen=True)
+class DiscoverProjectInputsErrorTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class ParseSourcesYamlTestCase:
     description: str
     contents: str

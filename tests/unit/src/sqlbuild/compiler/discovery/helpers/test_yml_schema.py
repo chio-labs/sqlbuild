@@ -122,6 +122,24 @@ ERROR_TEST_CASES: list[ParseSchemaYamlErrorTestCase] = [
         """,
         expected_error_fragment="audits must be strings or single-key mappings",
     ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when a seed omits columns",
+        contents="""
+        seeds:
+          - name: country_codes
+        """,
+        expected_error_fragment="seed must declare at least one column",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when a seed column omits type",
+        contents="""
+        seeds:
+          - name: country_codes
+            columns:
+              - name: country_code
+        """,
+        expected_error_fragment="seed column 'country_code' must define non-empty string 'type'",
+    ),
 ]
 
 

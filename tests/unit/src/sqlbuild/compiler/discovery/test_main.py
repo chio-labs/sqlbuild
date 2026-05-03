@@ -10,6 +10,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._test_helpers import (
     write_repo_files,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._test_types import (
+    DiscoverProjectInputsErrorTestCase,
     DiscoverProjectInputsTestCase,
 )
 
@@ -165,3 +166,83 @@ def test_given_project_repo_slice_when_discovering_inputs_then_it_returns_expect
     assert discovered_inputs.project_config.name == "demo"
     assert discovered_inputs.project_config.adapter == "duckdb"
     assert discovered_inputs.local_config.environment == "dev"
+
+
+DISCOVERY_ERROR_TEST_CASES: list[DiscoverProjectInputsErrorTestCase] = [
+    DiscoverProjectInputsErrorTestCase(
+        description="raises on duplicate source names across files",
+        repo_files=base_repo_files()
+        | {
+            "sources/raw_orders.yml": """
+sources:
+  - name: raw_orders
+    schema: public
+    table: orders
+""".strip()
+            + "\n",
+            "sources/raw_orders_duplicate.yml": """
+sources:
+  - name: raw_orders
+    schema: public
+    table: orders_backup
+""".strip()
+            + "\n",
+        },
+        expected_error_fragment="Duplicate source declaration found for 'raw_orders'",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises on duplicate schema model names across files",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/schema.yml": """
+models:
+  - name: stg_orders
+""".strip()
+            + "\n",
+            "models/marts/schema.yml": """
+models:
+  - name: stg_orders
+""".strip()
+            + "\n",
+        },
+        expected_error_fragment="Duplicate schema.yml model declaration found for 'stg_orders'",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises on duplicate schema seed names across files",
+        repo_files=base_repo_files()
+        | {
+            "models/schema.yml": """
+seeds:
+  - name: country_codes
+    columns:
+      - name: country_code
+        type: VARCHAR
+""".strip()
+            + "\n",
+            "seeds/schema.yml": """
+seeds:
+  - name: country_codes
+    columns:
+      - name: country_code
+        type: VARCHAR
+""".strip()
+            + "\n",
+        },
+        expected_error_fragment="Duplicate schema.yml seed declaration found for 'country_codes'",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    DISCOVERY_ERROR_TEST_CASES,
+    ids=[case.description for case in DISCOVERY_ERROR_TEST_CASES],
+)
+def test_given_discovery_conflicts_when_discovering_inputs_then_it_raises_clear_errors(
+    test_case: DiscoverProjectInputsErrorTestCase,
+    tmp_path: Path,
+) -> None:
+    write_repo_files(tmp_path, test_case.repo_files)
+
+    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+        discover_project_inputs(project_dir=tmp_path)

@@ -27,3 +27,7 @@ class SchemaParseError(DiscoveryError):
 
 class SourceParseError(DiscoveryError):
     """Raised when a sources/*.yml file has an invalid shape."""
+
+
+class DiscoveryConflictError(DiscoveryError):
+    """Raised when discovered project inputs conflict across files."""

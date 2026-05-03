@@ -25,3 +25,10 @@ class DiscoverProjectInputsTestCase:
     expected_macro_paths: tuple[str, ...]
     expected_manifest_path: str | None
     expected_adapter_path: str | None
+
+
+@dataclass(frozen=True)
+class DiscoverProjectInputsErrorTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_error_fragment: str
