@@ -1595,7 +1595,7 @@ def resolve_audit_run_scope(
     instance_run_scope: str | None,
     default_run_scope: str | None,
 ) -> str:
-    """Resolve effective audit run scope from instance, then project default, then final."""
+    """Resolve audit run scope from instance, project default, or delta/final fallback."""
 
     from sqlbuild.compiler.auditing.types import AuditRunScope
 
@@ -1615,7 +1615,7 @@ def resolve_audit_run_scope(
                 f"valid values: {', '.join(sorted(valid_values))}"
             )
         return default_run_scope
-    return AuditRunScope.FINAL
+    return AuditRunScope.DELTA_AND_FINAL
 
 
 def validate_model_attached_audit_references(

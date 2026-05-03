@@ -113,10 +113,10 @@ RUN_SCOPE_VALID_TEST_CASES: list[ResolveAuditRunScopeTestCase] = [
         expected_run_scope="delta_and_final",
     ),
     ResolveAuditRunScopeTestCase(
-        description="falls back to final when both are None",
+        description="falls back to delta_and_final when both are None",
         instance_run_scope=None,
         default_run_scope=None,
-        expected_run_scope=AuditRunScope.FINAL,
+        expected_run_scope=AuditRunScope.DELTA_AND_FINAL,
     ),
 ]
 
