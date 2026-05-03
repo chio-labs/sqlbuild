@@ -153,6 +153,9 @@ def plan_model(
     if cursor_type_warning is not None:
         warnings = (*warnings, cursor_type_warning)
 
+    incremental_strategy: str | None = _get_config_str(model, "incremental_strategy")
+    incremental_mode: str | None = _get_config_str(model, "incremental_mode")
+
     fingerprint: Fingerprint | None = snapshot.fingerprints.get(model.name)
     previous_query_sql: str | None = fingerprint.query_sql if fingerprint is not None else None
 
@@ -166,6 +169,8 @@ def plan_model(
         target=model.target,
         resolved_sql=resolved_sql,
         logical_ddl=logical_ddl,
+        incremental_strategy=incremental_strategy,
+        incremental_mode=incremental_mode,
         cursor_column=cursor_column,
         cursor_type=cursor_type,
         cursor_bounds=cursor_bounds,

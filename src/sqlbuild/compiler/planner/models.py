@@ -189,6 +189,8 @@ class ModelPlanEntry:
     target: CompiledRelationTarget
     resolved_sql: str
     logical_ddl: str
+    incremental_strategy: str | None = None
+    incremental_mode: str | None = None
     cursor_column: str | None = None
     cursor_type: str | None = None
     cursor_bounds: CursorBounds | None = None

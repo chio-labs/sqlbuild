@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import difflib
+from collections import Counter
 
 from sqlbuild.cli.commands.main.shared.helpers.colors import (
     blue_bold,
@@ -13,6 +14,7 @@ from sqlbuild.cli.commands.main.shared.helpers.colors import (
     yellow_bold,
 )
 from sqlbuild.compiler.planner.models import (
+    CascadeResult,
     ModelPlanEntry,
     PlanOutput,
     PlanWarning,
@@ -20,27 +22,25 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
+    IncrementalMode,
+    MaterializationType,
     PlanAction,
     PlanReason,
     SchemaChangeKind,
     WarningSeverity,
 )
 
-_REASON_GROUP_LABELS: dict[PlanReason, str] = {
-    PlanReason.QUERY_CHANGED: "Query changed",
-    PlanReason.SCHEMA_CHANGED: "Schema changed",
-    PlanReason.FIRST_RUN: "First run",
-    PlanReason.FULL_REFRESH: "Full refresh",
-    PlanReason.NORMAL_INCREMENTAL: "Normal incremental",
-}
-
 _REASON_GROUP_ORDER: tuple[PlanReason, ...] = (
     PlanReason.QUERY_CHANGED,
     PlanReason.SCHEMA_CHANGED,
     PlanReason.FIRST_RUN,
-    PlanReason.FULL_REFRESH,
-    PlanReason.NORMAL_INCREMENTAL,
 )
+
+_REASON_GROUP_LABELS: dict[PlanReason, str] = {
+    PlanReason.QUERY_CHANGED: "Query changed",
+    PlanReason.SCHEMA_CHANGED: "Schema changed",
+    PlanReason.FIRST_RUN: "First run",
+}
 
 _SCHEMA_CHANGE_SYMBOLS: dict[SchemaChangeKind, str] = {
     SchemaChangeKind.COLUMN_ADDED: "+",
@@ -49,131 +49,238 @@ _SCHEMA_CHANGE_SYMBOLS: dict[SchemaChangeKind, str] = {
 }
 
 
-def format_plan(plan: PlanOutput) -> str:
+def format_plan(plan: PlanOutput, *, full_refresh: bool = False) -> str:
     """Format plan output grouped by reason with inline detail."""
 
     lines: list[str] = []
-    will_run: list[ModelPlanEntry] = [e for e in plan.model_entries if e.action != PlanAction.SKIP]
-    normal_count: int = _count_normal(plan.model_entries)
+
+    if full_refresh:
+        _format_full_refresh(lines, plan)
+        return "\n".join(lines)
+
+    active: list[ModelPlanEntry] = [e for e in plan.model_entries if e.action != PlanAction.SKIP]
     selected_count: int = len(plan.model_entries) + len(plan.seed_entries)
-    warning_entries: list[PlanWarning] = [
-        w for w in plan.warnings if w.severity != WarningSeverity.INFO
-    ]
 
-    lines.append(green("Plan ready"))
-    lines.append("")
+    header: str = "Plan ready"
+    lines.append(green(header))
     lines.append(f"Selected: {selected_count}")
-    if normal_count > 0:
-        lines.append(f"Normal: {normal_count}")
 
-    groups: dict[PlanReason, list[ModelPlanEntry]] = _group_by_reason(will_run)
+    normal: list[ModelPlanEntry] = _collect_normal(active)
+    cascade: list[ModelPlanEntry] = _collect_upstream_changed(active)
+    groups: dict[PlanReason, list[ModelPlanEntry]] = _group_by_reason(active, cascade)
+
+    if normal:
+        lines.append("")
+        _format_normal_section(lines, normal)
+
     reason: PlanReason
     for reason in _REASON_GROUP_ORDER:
         entries: list[ModelPlanEntry] | None = groups.get(reason)
-        if entries is None:
+        if not entries:
             continue
-        label: str = _REASON_GROUP_LABELS.get(reason, str(reason))
+        label: str = _REASON_GROUP_LABELS[reason]
         lines.append("")
-        is_first_run: bool = reason == PlanReason.FIRST_RUN
-        _format_header_line(lines, label, len(entries), is_first_run)
-        _format_group_entries(lines, entries, is_first_run, plan)
+        lines.append(bold(f"{label} ({len(entries)})"))
+        entry: ModelPlanEntry
+        for entry in entries:
+            _format_detail_entry(lines, entry, reason)
 
-    _format_warnings(lines, warning_entries, plan)
+    if cascade:
+        lines.append("")
+        lines.append(bold(f"Upstream changed ({len(cascade)})"))
+        entry_c: ModelPlanEntry
+        for entry_c in cascade:
+            _format_upstream_changed_entry(lines, entry_c)
+
+    _format_seeds(lines, plan)
+    _format_warnings(lines, plan)
 
     return "\n".join(lines)
 
 
-def _count_normal(entries: tuple[ModelPlanEntry, ...]) -> int:
-    """Count models that will run with no special action."""
+def _format_full_refresh(lines: list[str], plan: PlanOutput) -> None:
+    """Format the full refresh variant of plan output."""
 
-    count: int = 0
+    selected_count: int = len(plan.model_entries) + len(plan.seed_entries)
+    active: list[ModelPlanEntry] = [e for e in plan.model_entries if e.action != PlanAction.SKIP]
+
+    lines.append(green("Plan ready (full refresh)"))
+    lines.append(f"Selected: {selected_count}")
+    lines.append("")
+
+    counts: Counter[str] = Counter()
+    entry: ModelPlanEntry
+    for entry in active:
+        label: str = _materialization_label(entry)
+        counts[label] += 1
+
+    lines.append(bold(f"Full refresh ({len(active)})"))
+    count_label: str
+    count_value: int
+    for count_label, count_value in counts.most_common():
+        lines.append(f"  {count_value:>3} {count_label}")
+
+    _format_seeds(lines, plan)
+
+
+def _collect_normal(entries: list[ModelPlanEntry]) -> list[ModelPlanEntry]:
+    """Collect entries that belong in the Normal aggregate section."""
+
+    result: list[ModelPlanEntry] = []
     entry: ModelPlanEntry
     for entry in entries:
-        if entry.action == PlanAction.SKIP:
+        if entry.reason not in (PlanReason.NO_CHANGE, PlanReason.NORMAL_INCREMENTAL):
             continue
-        if entry.reason in (PlanReason.NO_CHANGE, PlanReason.NORMAL_INCREMENTAL):
-            count += 1
-    return count
+        if entry.cascade is not None:
+            continue
+        result.append(entry)
+    return result
+
+
+def _collect_upstream_changed(entries: list[ModelPlanEntry]) -> list[ModelPlanEntry]:
+    """Collect entries where cascade upgraded the effective window beyond own backfill."""
+
+    result: list[ModelPlanEntry] = []
+    entry: ModelPlanEntry
+    for entry in entries:
+        if entry.cascade is None:
+            continue
+        result.append(entry)
+    return result
 
 
 def _group_by_reason(
     entries: list[ModelPlanEntry],
+    cascade_entries: list[ModelPlanEntry],
 ) -> dict[PlanReason, list[ModelPlanEntry]]:
-    """Group will-run entries by reason, excluding normal/no-change."""
+    """Group entries by reason, excluding normal/no-change and cascade entries."""
 
+    cascade_names: frozenset[str] = frozenset(e.name for e in cascade_entries)
     groups: dict[PlanReason, list[ModelPlanEntry]] = {}
     entry: ModelPlanEntry
     for entry in entries:
         if entry.reason in (PlanReason.NO_CHANGE, PlanReason.NORMAL_INCREMENTAL):
             continue
+        if entry.name in cascade_names:
+            continue
         groups.setdefault(entry.reason, []).append(entry)
     return groups
 
 
-def _format_header_line(lines: list[str], label: str, count: int, is_first_run: bool) -> None:
-    """Append a group header with count, or inline count for first run."""
+def _format_normal_section(lines: list[str], entries: list[ModelPlanEntry]) -> None:
+    """Format the Normal aggregate counts section."""
 
-    if is_first_run:
-        lines.append(bold(f"{label}: {count}"))
-    else:
-        lines.append(bold(f"{label} ({count})"))
-
-
-def _format_group_entries(
-    lines: list[str],
-    entries: list[ModelPlanEntry],
-    is_first_run: bool,
-    plan: PlanOutput,
-) -> None:
-    """Append formatted entries for one reason group."""
-
+    counts: Counter[str] = Counter()
     entry: ModelPlanEntry
     for entry in entries:
-        if is_first_run:
-            lines.append(f"  {blue_bold(entry.name)}")
-            continue
-        action_text: str = _action_text(entry)
-        lines.append(f"  {blue_bold(entry.name):<40s} {action_text}")
-        _format_entry_detail(lines, entry)
+        label: str = _materialization_label(entry)
+        counts[label] += 1
+
+    lines.append(bold(f"Normal ({len(entries)})"))
+    count_label: str
+    count_value: int
+    for count_label, count_value in counts.most_common():
+        lines.append(f"  {count_value:>3} {count_label}")
 
 
-def _format_entry_detail(lines: list[str], entry: ModelPlanEntry) -> None:
-    """Append cursor, policy, schema diff, and query diff for one entry."""
+def _materialization_label(entry: ModelPlanEntry) -> str:
+    """Build the display label for a model's materialization in aggregate counts."""
 
-    if entry.cursor_bounds is not None and entry.cursor_column is not None:
-        lines.append(f"    cursor: {entry.cursor_column}")
-        lines.append(f"    range: {entry.cursor_bounds.start} \u2192 {entry.cursor_bounds.end}")
-    policy: str | None = _policy_label(entry)
-    if policy is not None:
-        lines.append(f"    policy: {policy}")
-    if entry.schema_findings:
-        lines.append("    schema diff:")
-        lines.extend(_format_schema_findings(entry.schema_findings))
-    if entry.previous_query_sql is not None:
-        lines.append("    query diff:")
-        lines.extend(_format_query_diff(entry.previous_query_sql, entry.resolved_sql))
+    if entry.materialization_type == MaterializationType.VIEW:
+        return MaterializationType.VIEW.value
+    if entry.materialization_type == MaterializationType.TABLE:
+        return MaterializationType.TABLE.value
+    if entry.materialization_type == MaterializationType.INCREMENTAL:
+        return _incremental_label(entry)
+    return entry.materialization_type.value
 
 
-def _format_warnings(
+def _incremental_label(entry: ModelPlanEntry) -> str:
+    """Build the display label for an incremental model."""
+
+    strategy: str = entry.incremental_strategy or MaterializationType.INCREMENTAL.value
+    parts: list[str] = []
+    if entry.cursor_type is not None:
+        parts.append(entry.cursor_type)
+    if entry.incremental_mode == IncrementalMode.MICROBATCH:
+        parts.append("microbatch")
+    if parts:
+        return f"{strategy} ({', '.join(parts)})"
+    return strategy
+
+
+def _format_detail_entry(
     lines: list[str],
-    warning_entries: list[PlanWarning],
-    plan: PlanOutput,
+    entry: ModelPlanEntry,
+    reason: PlanReason,
 ) -> None:
-    """Append the warnings section."""
+    """Format a per-model entry with action text and detail lines."""
 
-    if not warning_entries:
+    if reason == PlanReason.FIRST_RUN:
+        mat_label: str = _materialization_label(entry)
+        lines.append(f"  {blue_bold(entry.name):<40s} {mat_label}")
         return
-    lines.append("")
-    lines.append(yellow_bold(f"Warnings ({len(warning_entries)})"))
-    warning: PlanWarning
-    for warning in warning_entries:
-        if warning.model_name is not None:
-            lines.append(f"  {blue_bold(warning.model_name)}")
-        lines.append(f"  {yellow(f'- {warning.message}')}")
-        warning_model: ModelPlanEntry | None = _find_entry(plan, warning.model_name)
-        if warning_model is not None and warning_model.schema_findings:
-            lines.append("    schema diff:")
-            lines.extend(_format_schema_findings(warning_model.schema_findings))
+
+    action_text: str = _action_text(entry)
+    lines.append(f"  {blue_bold(entry.name):<40s} {action_text}")
+    _append_cursor_detail(lines, entry)
+    _append_policy_line(lines, entry)
+    _append_schema_diff(lines, entry)
+    _append_query_diff(lines, entry)
+
+
+def _format_upstream_changed_entry(lines: list[str], entry: ModelPlanEntry) -> None:
+    """Format a per-model entry in the Upstream changed group."""
+
+    cascade: CascadeResult | None = entry.cascade
+    action_text: str = _cascade_action_text(cascade)
+    lines.append(f"  {blue_bold(entry.name):<40s} {action_text}")
+    _append_cursor_detail(lines, entry)
+    if cascade is not None and cascade.root_cause is not None:
+        cause_desc: str = _cascade_cause_description(cascade)
+        lines.append(f"    cause: {cause_desc}")
+
+
+def _append_cursor_detail(lines: list[str], entry: ModelPlanEntry) -> None:
+    """Append cursor column, mode, and range detail lines."""
+
+    if entry.cursor_column is not None:
+        lines.append(f"    cursor: {entry.cursor_column}")
+    if entry.incremental_mode == IncrementalMode.MICROBATCH:
+        lines.append(f"    mode: {IncrementalMode.MICROBATCH.value}")
+    if entry.cursor_bounds is not None:
+        lines.append(f"    range: {entry.cursor_bounds.start} \u2192 {entry.cursor_bounds.end}")
+
+
+def _append_policy_line(lines: list[str], entry: ModelPlanEntry) -> None:
+    """Append the policy line if a backfill policy triggered."""
+
+    if entry.backfill.action == BackfillAction.WARN_ONLY:
+        return
+    duration: str = entry.backfill.duration or "full"
+    policy_value: str = _backfill_value(entry.backfill.action, duration)
+    if entry.reason == PlanReason.QUERY_CHANGED:
+        lines.append(f"    policy: query_change_backfill={policy_value}")
+    elif entry.reason == PlanReason.SCHEMA_CHANGED:
+        lines.append(f"    policy: schema_change_backfill={policy_value}")
+
+
+def _append_schema_diff(lines: list[str], entry: ModelPlanEntry) -> None:
+    """Append schema diff lines if findings exist."""
+
+    if not entry.schema_findings:
+        return
+    lines.append("    schema diff:")
+    lines.extend(_format_schema_findings(entry.schema_findings))
+
+
+def _append_query_diff(lines: list[str], entry: ModelPlanEntry) -> None:
+    """Append query diff lines if previous SQL is available."""
+
+    if entry.previous_query_sql is None:
+        return
+    lines.append("    query diff:")
+    lines.extend(_format_query_diff(entry.previous_query_sql, entry.resolved_sql))
 
 
 def _action_text(entry: ModelPlanEntry) -> str:
@@ -187,6 +294,35 @@ def _action_text(entry: ModelPlanEntry) -> str:
         suffix = _schema_change_suffix(entry)
         return f"full rebuild, {suffix}" if suffix else "full rebuild"
     return ""
+
+
+def _cascade_action_text(cascade: CascadeResult | None) -> str:
+    """Action text for an upstream-changed entry."""
+
+    if cascade is None:
+        return ""
+    if cascade.effective_action == BackfillAction.FULL:
+        return "full rebuild"
+    if (
+        cascade.effective_action == BackfillAction.BOUNDED
+        and cascade.effective_duration is not None
+    ):
+        return f"rebuild last {cascade.effective_duration}"
+    return ""
+
+
+def _cascade_cause_description(cascade: CascadeResult) -> str:
+    """Format the cause line content for an upstream-changed entry."""
+
+    root: str = cascade.root_cause or "unknown"
+    if cascade.effective_action == BackfillAction.FULL:
+        return f"{root} (full)"
+    if (
+        cascade.effective_action == BackfillAction.BOUNDED
+        and cascade.effective_duration is not None
+    ):
+        return f"{root} ({cascade.effective_duration})"
+    return root
 
 
 def _schema_change_suffix(entry: ModelPlanEntry) -> str:
@@ -205,25 +341,41 @@ def _schema_change_suffix(entry: ModelPlanEntry) -> str:
     return ", ".join(parts)
 
 
-def _policy_label(entry: ModelPlanEntry) -> str | None:
-    """Format the policy that caused the action, if any."""
-
-    if entry.backfill.action == BackfillAction.WARN_ONLY:
-        return None
-    duration: str = entry.backfill.duration or "full"
-    if entry.reason == PlanReason.QUERY_CHANGED:
-        return f"query_change_backfill={_backfill_value(entry.backfill.action, duration)}"
-    if entry.reason == PlanReason.SCHEMA_CHANGED:
-        return f"schema_change_backfill={_backfill_value(entry.backfill.action, duration)}"
-    return None
-
-
 def _backfill_value(action: BackfillAction, duration: str) -> str:
     """Format a backfill action as a policy value string."""
 
     if action == BackfillAction.BOUNDED:
         return f"bounded({duration})"
     return str(action)
+
+
+def _format_seeds(lines: list[str], plan: PlanOutput) -> None:
+    """Append the seeds section."""
+
+    if not plan.seed_entries:
+        return
+    lines.append("")
+    lines.append(bold(f"Seeds ({len(plan.seed_entries)})"))
+    seed_entry: object
+    for seed_entry in plan.seed_entries:
+        lines.append(f"  {getattr(seed_entry, 'name', str(seed_entry))}")
+
+
+def _format_warnings(lines: list[str], plan: PlanOutput) -> None:
+    """Append the warnings section."""
+
+    warning_entries: list[PlanWarning] = [
+        w for w in plan.warnings if w.severity != WarningSeverity.INFO
+    ]
+    if not warning_entries:
+        return
+    lines.append("")
+    lines.append(yellow_bold(f"Warnings ({len(warning_entries)})"))
+    warning: PlanWarning
+    for warning in warning_entries:
+        if warning.model_name is not None:
+            lines.append(f"  {blue_bold(warning.model_name)}")
+        lines.append(f"  {yellow(f'- {warning.message}')}")
 
 
 def _format_schema_findings(findings: tuple[SchemaFinding, ...]) -> list[str]:
@@ -283,15 +435,3 @@ def _format_query_diff(previous: str, current: str) -> list[str]:
         else:
             result.append(formatted)
     return result
-
-
-def _find_entry(plan: PlanOutput, model_name: str | None) -> ModelPlanEntry | None:
-    """Find a model plan entry by name."""
-
-    if model_name is None:
-        return None
-    entry: ModelPlanEntry
-    for entry in plan.model_entries:
-        if entry.name == model_name:
-            return entry
-    return None

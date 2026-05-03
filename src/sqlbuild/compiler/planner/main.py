@@ -209,6 +209,8 @@ def build_execution_plan(
                 target=entry.target,
                 resolved_sql=entry.resolved_sql,
                 logical_ddl=entry.logical_ddl,
+                incremental_strategy=entry.incremental_strategy,
+                incremental_mode=entry.incremental_mode,
                 cursor_column=entry.cursor_column,
                 cursor_type=entry.cursor_type,
                 cursor_bounds=entry.cursor_bounds,

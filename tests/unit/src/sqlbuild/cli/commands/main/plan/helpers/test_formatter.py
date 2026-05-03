@@ -5,8 +5,10 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.cli.commands.main.plan.helpers.formatter import format_plan
+from sqlbuild.compiler.planner.models import CascadeCause, CascadeResult, CursorBounds
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
+    MaterializationType,
     PlanAction,
     PlanReason,
     SchemaChangeKind,
@@ -19,27 +21,92 @@ from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers.helpers import (
     build_model_entry,
     build_plan_output,
     build_schema_finding,
+    build_seed_entry,
     build_warning,
 )
 
 TEST_CASES: list[FormatPlanTestCase] = [
     FormatPlanTestCase(
-        description="first run models do not show action detail",
+        description="normal section shows aggregate counts by strategy and cursor type",
         plan_output=build_plan_output(
-            model_entries=(build_model_entry(name="orders", action=PlanAction.CREATE_TABLE),),
+            model_entries=(
+                build_model_entry(
+                    name="stg_orders",
+                    action=PlanAction.CREATE_VIEW,
+                    reason=PlanReason.NO_CHANGE,
+                    materialization_type=MaterializationType.VIEW,
+                ),
+                build_model_entry(
+                    name="fact_orders",
+                    action=PlanAction.INCREMENTAL_DELETE_INSERT,
+                    reason=PlanReason.NORMAL_INCREMENTAL,
+                    materialization_type=MaterializationType.INCREMENTAL,
+                    incremental_strategy="delete_insert",
+                    cursor_type="timestamp",
+                ),
+                build_model_entry(
+                    name="fact_events",
+                    action=PlanAction.INCREMENTAL_DELETE_INSERT,
+                    reason=PlanReason.NORMAL_INCREMENTAL,
+                    materialization_type=MaterializationType.INCREMENTAL,
+                    incremental_strategy="delete_insert",
+                    cursor_type="integer",
+                    incremental_mode="microbatch",
+                ),
+            ),
         ),
-        unexpected_fragments=("rebuild", "policy:", "cursor:"),
+        expected_fragments=(
+            "Normal (3)",
+            "delete_insert (timestamp)",
+            "delete_insert (integer, microbatch)",
+            "view",
+        ),
+        unexpected_fragments=("stg_orders", "fact_orders", "fact_events"),
     ),
     FormatPlanTestCase(
-        description="query changed group shows action and policy inline",
+        description="first run shows materialization label with strategy and microbatch",
+        plan_output=build_plan_output(
+            model_entries=(
+                build_model_entry(
+                    name="stg_orders",
+                    action=PlanAction.CREATE_VIEW,
+                    reason=PlanReason.FIRST_RUN,
+                    materialization_type=MaterializationType.VIEW,
+                ),
+                build_model_entry(
+                    name="fact_orders",
+                    action=PlanAction.CREATE_TABLE,
+                    reason=PlanReason.FIRST_RUN,
+                    materialization_type=MaterializationType.INCREMENTAL,
+                    incremental_strategy="delete_insert",
+                    cursor_type="timestamp",
+                    incremental_mode="microbatch",
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "First run (2)",
+            "stg_orders",
+            "view",
+            "fact_orders",
+            "delete_insert (timestamp, microbatch)",
+        ),
+    ),
+    FormatPlanTestCase(
+        description="query changed shows action policy cursor and mode",
         plan_output=build_plan_output(
             model_entries=(
                 build_model_entry(
                     name="fact_orders",
-                    action=PlanAction.CREATE_TABLE,
+                    action=PlanAction.INCREMENTAL_DELETE_INSERT,
                     reason=PlanReason.QUERY_CHANGED,
+                    materialization_type=MaterializationType.INCREMENTAL,
                     backfill_action=BackfillAction.BOUNDED,
                     backfill_duration="30d",
+                    cursor_column="event_time",
+                    cursor_type="timestamp",
+                    incremental_mode="microbatch",
+                    cursor_bounds=CursorBounds(start="2026-03-26", end="2026-04-25"),
                     previous_query_sql="SELECT order_id FROM raw",
                 ),
             ),
@@ -48,12 +115,16 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "Query changed (1)",
             "fact_orders",
             "rebuild last 30d",
+            "cursor: event_time",
+            "mode: microbatch",
+            "2026-03-26",
+            "2026-04-25",
             "policy: query_change_backfill=bounded(30d)",
             "query diff:",
         ),
     ),
     FormatPlanTestCase(
-        description="schema changed group shows schema diff and action",
+        description="schema changed shows schema diff and policy",
         plan_output=build_plan_output(
             model_entries=(
                 build_model_entry(
@@ -82,25 +153,81 @@ TEST_CASES: list[FormatPlanTestCase] = [
         ),
     ),
     FormatPlanTestCase(
-        description="normal models shown as count in header not listed",
+        description="upstream changed shows cascade cause",
         plan_output=build_plan_output(
             model_entries=(
                 build_model_entry(
-                    name="stg_orders",
-                    action=PlanAction.CREATE_TABLE,
-                    reason=PlanReason.NO_CHANGE,
-                ),
-                build_model_entry(
-                    name="fact_orders",
-                    action=PlanAction.CREATE_TABLE,
-                    reason=PlanReason.QUERY_CHANGED,
-                    backfill_action=BackfillAction.BOUNDED,
-                    backfill_duration="30d",
+                    name="fact_daily_revenue",
+                    action=PlanAction.INCREMENTAL_DELETE_INSERT,
+                    reason=PlanReason.NORMAL_INCREMENTAL,
+                    materialization_type=MaterializationType.INCREMENTAL,
+                    incremental_strategy="delete_insert",
+                    cursor_column="event_time",
+                    cursor_type="timestamp",
+                    backfill_action=BackfillAction.WARN_ONLY,
+                    cascade=CascadeResult(
+                        effective_action=BackfillAction.BOUNDED,
+                        effective_duration="90d",
+                        root_cause="fact_orders",
+                        causes=(
+                            CascadeCause(
+                                model_name="fact_orders",
+                                effective_action=BackfillAction.BOUNDED,
+                                effective_duration="90d",
+                            ),
+                        ),
+                    ),
                 ),
             ),
         ),
-        expected_fragments=("Normal: 1", "Query changed (1)"),
-        unexpected_fragments=("stg_orders",),
+        expected_fragments=(
+            "Upstream changed (1)",
+            "fact_daily_revenue",
+            "rebuild last 90d",
+            "cause: fact_orders (90d)",
+        ),
+        unexpected_fragments=("Normal",),
+    ),
+    FormatPlanTestCase(
+        description="upstream changed with full shows full in cause",
+        plan_output=build_plan_output(
+            model_entries=(
+                build_model_entry(
+                    name="dim_summary",
+                    action=PlanAction.CREATE_TABLE,
+                    reason=PlanReason.NO_CHANGE,
+                    cascade=CascadeResult(
+                        effective_action=BackfillAction.FULL,
+                        effective_duration=None,
+                        root_cause="fact_orders",
+                        causes=(
+                            CascadeCause(
+                                model_name="fact_orders",
+                                effective_action=BackfillAction.FULL,
+                                effective_duration=None,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "Upstream changed (1)",
+            "dim_summary",
+            "full rebuild",
+            "cause: fact_orders (full)",
+        ),
+    ),
+    FormatPlanTestCase(
+        description="seeds section shows seed names",
+        plan_output=build_plan_output(
+            model_entries=(build_model_entry(name="orders", action=PlanAction.CREATE_TABLE),),
+            seed_entries=(build_seed_entry(name="country_codes"),),
+        ),
+        expected_fragments=(
+            "Seeds (1)",
+            "country_codes",
+        ),
     ),
     FormatPlanTestCase(
         description="warnings section shows warning messages",
@@ -110,12 +237,13 @@ TEST_CASES: list[FormatPlanTestCase] = [
                     name="orders",
                     action=PlanAction.SKIP,
                     reason=PlanReason.NO_CHANGE,
+                    backfill_action=BackfillAction.WARN_ONLY,
                 ),
             ),
             warnings=(
                 build_warning(
                     model_name="stg_customers",
-                    message="type change detected, no on_schema_change configured",
+                    message="type change detected",
                     severity=WarningSeverity.WARNING,
                 ),
             ),
@@ -127,32 +255,68 @@ TEST_CASES: list[FormatPlanTestCase] = [
         ),
     ),
     FormatPlanTestCase(
-        description="schema changed with full rebuild shows type change suffix",
+        description="full refresh shows aggregate counts with incremental detail",
         plan_output=build_plan_output(
             model_entries=(
                 build_model_entry(
-                    name="stg_payments",
+                    name="stg_orders",
+                    action=PlanAction.CREATE_VIEW,
+                    reason=PlanReason.FULL_REFRESH,
+                    materialization_type=MaterializationType.VIEW,
+                ),
+                build_model_entry(
+                    name="dim_customers",
                     action=PlanAction.CREATE_TABLE,
-                    reason=PlanReason.SCHEMA_CHANGED,
-                    backfill_action=BackfillAction.FULL,
-                    schema_findings=(
-                        build_schema_finding(
-                            kind=SchemaChangeKind.COLUMN_TYPE_CHANGED,
-                            column_name="customer_id",
-                            expected_type="VARCHAR",
-                            actual_type="INTEGER",
-                        ),
-                    ),
+                    reason=PlanReason.FULL_REFRESH,
+                ),
+                build_model_entry(
+                    name="fact_orders",
+                    action=PlanAction.CREATE_TABLE,
+                    reason=PlanReason.FULL_REFRESH,
+                    materialization_type=MaterializationType.INCREMENTAL,
+                    incremental_strategy="delete_insert",
+                    cursor_type="timestamp",
+                    incremental_mode="microbatch",
                 ),
             ),
         ),
+        full_refresh=True,
         expected_fragments=(
-            "stg_payments",
-            "full rebuild, type change",
-            "~ customer_id",
-            "VARCHAR",
-            "INTEGER",
+            "Plan ready (full refresh)",
+            "Full refresh (3)",
+            "view",
+            "table",
+            "delete_insert (timestamp, microbatch)",
         ),
+        unexpected_fragments=("Normal", "Query changed", "First run"),
+    ),
+    FormatPlanTestCase(
+        description="empty plan shows only header and selected zero",
+        plan_output=build_plan_output(),
+        expected_fragments=(
+            "Plan ready",
+            "Selected: 0",
+        ),
+        unexpected_fragments=("Normal", "Seeds", "Warnings"),
+    ),
+    FormatPlanTestCase(
+        description="non-microbatch incremental omits mode line",
+        plan_output=build_plan_output(
+            model_entries=(
+                build_model_entry(
+                    name="fact_orders",
+                    action=PlanAction.INCREMENTAL_DELETE_INSERT,
+                    reason=PlanReason.QUERY_CHANGED,
+                    materialization_type=MaterializationType.INCREMENTAL,
+                    backfill_action=BackfillAction.BOUNDED,
+                    backfill_duration="30d",
+                    cursor_column="event_time",
+                    cursor_type="timestamp",
+                ),
+            ),
+        ),
+        expected_fragments=("cursor: event_time",),
+        unexpected_fragments=("mode:",),
     ),
 ]
 
@@ -165,7 +329,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
 def test_given_plan_output_when_formatting_then_contains_expected_fragments(
     test_case: FormatPlanTestCase,
 ) -> None:
-    result: str = format_plan(test_case.plan_output)
+    result: str = format_plan(test_case.plan_output, full_refresh=test_case.full_refresh)
 
     fragment: str
     for fragment in test_case.expected_fragments:

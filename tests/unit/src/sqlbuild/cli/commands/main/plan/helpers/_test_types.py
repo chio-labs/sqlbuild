@@ -13,5 +13,6 @@ from sqlbuild.compiler.planner.models import (
 class FormatPlanTestCase:
     description: str
     plan_output: PlanOutput
+    full_refresh: bool = False
     expected_fragments: tuple[str, ...] = field(default_factory=tuple)
     unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)

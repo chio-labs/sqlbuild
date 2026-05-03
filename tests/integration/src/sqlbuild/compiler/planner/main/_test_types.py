@@ -9,6 +9,21 @@ from sqlbuild.compiler.planner.types import (
 
 
 @dataclass(frozen=True)
+class FormatPlanIntegrationTestCase:
+    description: str
+    setup_sql: tuple[str, ...]
+    model_targets: dict[str, str]
+    model_configs: dict[str, dict[str, object]]
+    model_queries: dict[str, str]
+    full_refresh: bool
+    expected_format_fragments: tuple[str, ...]
+    unexpected_format_fragments: tuple[str, ...] = ()
+    model_deps: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    seed_targets: dict[str, str] = field(default_factory=dict)
+    effective_connection: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class BuildExecutionPlanTestCase:
     description: str
     setup_sql: tuple[str, ...]

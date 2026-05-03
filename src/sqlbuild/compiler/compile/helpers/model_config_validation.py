@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileModelConfig
-from sqlbuild.compiler.planner.types import CursorType, IncrementalMode, IncrementalStrategy
+from sqlbuild.compiler.planner.types import (
+    CursorType,
+    IncrementalMode,
+    IncrementalStrategy,
+    MaterializationType,
+)
 
 _VALID_STRATEGIES: frozenset[str] = frozenset(s.value for s in IncrementalStrategy)
 _VALID_CURSOR_TYPES: frozenset[str] = frozenset(ct.value for ct in CursorType)
@@ -24,7 +29,7 @@ def validate_incremental_config(
     """
 
     materialized: str | None = _str(config, "materialized")
-    if materialized != "incremental":
+    if materialized != MaterializationType.INCREMENTAL:
         return
 
     strategy: str | None = _str(config, "incremental_strategy")

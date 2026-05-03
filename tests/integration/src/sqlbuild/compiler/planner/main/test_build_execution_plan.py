@@ -4,14 +4,17 @@ from typing import Any
 
 import pytest
 
+from sqlbuild.cli.commands.main.plan.helpers.formatter import format_plan
 from sqlbuild.compiler.planner.main import build_execution_plan
 from sqlbuild.compiler.planner.models import CascadeResult, ModelPlanEntry, PlanOutput, PlanWarning
 from sqlbuild.compiler.planner.types import BackfillAction, PlanAction, PlanReason, WarningSeverity
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     BuildExecutionPlanTestCase,
+    FormatPlanIntegrationTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.planner.main.helpers import (
+    build_project_from_format_test_case,
     build_project_from_test_case,
 )
 
@@ -323,3 +326,96 @@ def test_given_upstream_first_run_when_building_plan_then_cascades_to_downstream
         cascade_for_root: CascadeResult | None = entry_map[model_name].cascade
         assert cascade_for_root is not None
         assert cascade_for_root.root_cause == expected_root
+
+
+FORMAT_PLAN_TEST_CASES: list[FormatPlanIntegrationTestCase] = [
+    FormatPlanIntegrationTestCase(
+        description="new project formats with first run group and seeds",
+        setup_sql=(),
+        model_targets={
+            "stg_orders": "staging",
+            "dim_customers": "staging",
+        },
+        model_configs={
+            "stg_orders": {"materialized": "view"},
+            "dim_customers": {"materialized": "table"},
+        },
+        model_queries={
+            "stg_orders": "SELECT 1 AS id",
+            "dim_customers": "SELECT 1 AS id",
+        },
+        seed_targets={"country_codes": "staging"},
+        full_refresh=False,
+        expected_format_fragments=(
+            "Plan ready",
+            "Selected: 3",
+            "First run (2)",
+            "stg_orders",
+            "view",
+            "dim_customers",
+            "table",
+            "Seeds (1)",
+            "country_codes",
+        ),
+        unexpected_format_fragments=("Normal", "Query changed", "Upstream changed"),
+    ),
+    FormatPlanIntegrationTestCase(
+        description="cascade formats with upstream changed group and cause line",
+        setup_sql=("CREATE TABLE staging.fact_orders AS SELECT 1 AS id",),
+        model_targets={
+            "stg_orders": "staging",
+            "fact_orders": "staging",
+        },
+        model_configs={
+            "stg_orders": {"materialized": "table"},
+            "fact_orders": {"materialized": "table"},
+        },
+        model_queries={
+            "stg_orders": "SELECT 1 AS id",
+            "fact_orders": "SELECT 1 AS id",
+        },
+        model_deps={"fact_orders": ("stg_orders",)},
+        full_refresh=False,
+        expected_format_fragments=(
+            "Plan ready",
+            "First run (1)",
+            "stg_orders",
+            "Upstream changed (1)",
+            "fact_orders",
+            "full rebuild",
+            "cause: stg_orders",
+        ),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    FORMAT_PLAN_TEST_CASES,
+    ids=[case.description for case in FORMAT_PLAN_TEST_CASES],
+)
+def test_given_real_plan_when_formatting_then_contains_expected_fragments(
+    test_case: FormatPlanIntegrationTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    sql: str
+    for sql in test_case.setup_sql:
+        connection.execute(sql)
+
+    project: Any = build_project_from_format_test_case(test_case)
+
+    plan: PlanOutput = build_execution_plan(
+        project=project,
+        adapter=adapter,
+        connection=connection,
+        full_refresh=test_case.full_refresh,
+    )
+
+    result: str = format_plan(plan, full_refresh=test_case.full_refresh)
+
+    fragment: str
+    for fragment in test_case.expected_format_fragments:
+        assert fragment in result, f"Expected '{fragment}' in output:\n{result}"
+    for fragment in test_case.unexpected_format_fragments:
+        assert fragment not in result, f"Did not expect '{fragment}' in output:\n{result}"

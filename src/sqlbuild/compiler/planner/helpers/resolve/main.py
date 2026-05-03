@@ -22,7 +22,7 @@ from sqlbuild.compiler.planner.models import (
     ModelCursorSnapshot,
     WarehouseSnapshot,
 )
-from sqlbuild.compiler.planner.types import BackfillAction
+from sqlbuild.compiler.planner.types import BackfillAction, IncrementalMode, MaterializationType
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -89,7 +89,7 @@ def _compute_model_cursor_bounds(
     materialized: str | None = get_config_str(model, "materialized")
     cursor_column: str | None = get_config_str(model, "cursor")
 
-    if materialized != "incremental" or cursor_column is None:
+    if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
         return None
 
     if full_refresh:
@@ -101,7 +101,7 @@ def _compute_model_cursor_bounds(
 
     lookback: str | None = get_config_str(model, "lookback")
     incremental_mode: str | None = get_config_str(model, "incremental_mode")
-    is_microbatch: bool = incremental_mode == "microbatch"
+    is_microbatch: bool = incremental_mode == IncrementalMode.MICROBATCH
 
     backfill_duration: str | None = None
     if backfill.action == BackfillAction.BOUNDED:
