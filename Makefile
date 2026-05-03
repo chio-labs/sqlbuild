@@ -11,7 +11,7 @@ type:
 
 
 test:
-	uv run pytest tests/unit -vv
+	uv run pytest tests/unit tests/integration -vv
 
 
 test-all:

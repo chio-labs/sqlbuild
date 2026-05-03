@@ -22,24 +22,6 @@ class BaseAdapter(StrictAdapter):
     Override only the methods your engine requires.
     """
 
-    def resolve_database(
-        self,
-        *,
-        model_database: str | None,
-        environment: str | None,
-        vars: dict[str, str],
-    ) -> str | None:
-        return model_database
-
-    def resolve_schema(
-        self,
-        *,
-        model_schema: str | None,
-        environment: str | None,
-        vars: dict[str, str],
-    ) -> str | None:
-        return model_schema
-
     def relation_exists(
         self,
         connection: Any,

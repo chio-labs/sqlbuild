@@ -5,14 +5,12 @@ from __future__ import annotations
 from sqlbuild.adapter.shared.classes.connection import ConnectionMixin
 from sqlbuild.adapter.shared.classes.diff import DiffMixin
 from sqlbuild.adapter.shared.classes.materialization import MaterializationMixin
-from sqlbuild.adapter.shared.classes.resolution import ResolutionMixin
 from sqlbuild.adapter.shared.classes.schema import SchemaMixin
 
 
 class StrictAdapter(
     ConnectionMixin,
     SchemaMixin,
-    ResolutionMixin,
     MaterializationMixin,
     DiffMixin,
 ):
