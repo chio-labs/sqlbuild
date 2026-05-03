@@ -16,6 +16,7 @@ class StepResult:
     actual_row_count: int = 0
     expected_row_count: int = 0
     mismatched_row_count: int = 0
+    error_message: str | None = None
 
 
 @dataclass(frozen=True)

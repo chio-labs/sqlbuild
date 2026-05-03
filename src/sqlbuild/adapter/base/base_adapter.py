@@ -31,6 +31,11 @@ class BaseAdapter(StrictAdapter):
     def supports_relation_age_metadata(self) -> bool:
         return False
 
+    def recommended_max_sql_length(self) -> int | None:
+        """Return the recommended maximum SQL length for lightweight unit-test queries."""
+
+        return 256_000
+
     def relation_exists(
         self,
         connection: Any,

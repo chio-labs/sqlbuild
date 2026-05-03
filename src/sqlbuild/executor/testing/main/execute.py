@@ -6,6 +6,9 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
+from sqlbuild.executor.testing.main.sql_length import (
+    validate_unit_test_sql_length,
+)
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 
@@ -33,7 +36,10 @@ def execute_sql_test(
                 test_name=test_entry.name,
                 outcome=overall_outcome,
                 step_results=tuple(step_results),
-                error_message=f"step '{step.model_name}' encountered an execution error",
+                error_message=(
+                    step_result.error_message
+                    or f"step '{step.model_name}' encountered an execution error"
+                ),
             )
         if step_result.outcome == SqlTestOutcome.FAIL:
             overall_outcome = SqlTestOutcome.FAIL
@@ -71,6 +77,25 @@ def _execute_chain_step(
         f"SELECT * FROM __actual EXCEPT SELECT * FROM __expected"
         f")) AS mismatched_count"
     )
+
+    try:
+        validate_unit_test_sql_length(
+            sql=comparison_sql,
+            adapter=adapter,
+            test_name=step.model_name,
+        )
+    except Exception:
+        return StepResult(
+            model_name=step.model_name,
+            outcome=SqlTestOutcome.ERROR,
+            error_message=(
+                f"Combined unit test SQL for '{step.model_name}' is {len(comparison_sql)} "
+                f"characters, which exceeds the recommended maximum of "
+                f"{adapter.recommended_max_sql_length()} for this adapter. This test is too "
+                "large for a single lightweight unit query. Consider splitting it into smaller "
+                "unit tests or moving it to a scenario test."
+            ),
+        )
 
     try:
         cursor: Any = adapter.execute(connection, comparison_sql)

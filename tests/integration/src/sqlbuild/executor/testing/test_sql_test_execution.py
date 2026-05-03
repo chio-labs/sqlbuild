@@ -17,6 +17,12 @@ from tests.integration.src.sqlbuild.executor.testing.helpers import (
     verify_test_result,
 )
 
+
+class TinySqlLimitDuckDbAdapter(DuckDbAdapter):
+    def recommended_max_sql_length(self) -> int | None:
+        return 80
+
+
 SUCCESS_TEST_CASES: list[SqlTestExecutionTestCase] = [
     SqlTestExecutionTestCase(
         description="single step passes when actual matches expected",
@@ -206,4 +212,40 @@ def test_given_invalid_sql_when_executing_test_then_errors(
     )
 
     assert result.outcome == test_case.expected_outcome
+    verify_test_result(result=result, test_case=test_case)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlTestExecutionTestCase(
+            description="oversized combined unit test sql fails with clear guidance",
+            chain_steps=(
+                (
+                    "wide_model",
+                    "SELECT 1 AS col_1, 2 AS col_2, 3 AS col_3, 4 AS col_4, 5 AS col_5",
+                    "SELECT 1 AS col_1, 2 AS col_2, 3 AS col_3, 4 AS col_4, 5 AS col_5",
+                ),
+            ),
+            expected_outcome=SqlTestOutcome.ERROR,
+            expected_step_count=1,
+            expected_error_fragment="wide_model",
+        ),
+    ],
+    ids=["oversized combined unit test sql fails with clear guidance"],
+)
+def test_given_oversized_unit_test_sql_when_executing_then_it_returns_clear_error(
+    test_case: SqlTestExecutionTestCase,
+    connection: Any,
+) -> None:
+    result: SqlTestExecutionResult = run_sql_test(
+        test_case=test_case,
+        adapter=TinySqlLimitDuckDbAdapter(),
+        connection=connection,
+    )
+
+    assert result.outcome == test_case.expected_outcome
+    assert result.error_message is not None
+    assert "recommended maximum" in result.error_message
+    assert "scenario test" in result.error_message
     verify_test_result(result=result, test_case=test_case)

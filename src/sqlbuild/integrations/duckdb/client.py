@@ -33,6 +33,11 @@ from sqlbuild.shared.helpers.diagnostics_logging import log_sql
 class DuckDbAdapter(BaseAdapter):
     """First-class DuckDB adapter with full method coverage."""
 
+    def recommended_max_sql_length(self) -> int | None:
+        """DuckDB uses the framework default recommendation for lightweight unit-test SQL."""
+
+        return 256_000
+
     def default_schema(self) -> str:
         """DuckDB uses 'main' as its default schema."""
         return "main"
