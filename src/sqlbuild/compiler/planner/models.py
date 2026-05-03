@@ -19,6 +19,7 @@ from sqlbuild.compiler.planner.types import (
     BackfillAction,
     ChangeKind,
     MaterializationType,
+    OnSchemaChange,
     PlanAction,
     PlanReason,
     SchemaActionKind,
@@ -200,6 +201,8 @@ class ModelPlanEntry:
     cursor_column: str | None = None
     cursor_type: str | None = None
     cursor_bounds: CursorBounds | None = None
+    unique_key: tuple[str, ...] = field(default_factory=tuple)
+    on_schema_change: OnSchemaChange | None = None
     type_enforcement: bool = False
     declared_columns: tuple[ColumnInfo, ...] = field(default_factory=tuple)
     pre_hook: object = None

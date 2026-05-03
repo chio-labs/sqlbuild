@@ -16,6 +16,7 @@ from sqlbuild.compiler.planner.models import (
     SeedPlanEntry,
 )
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
 from sqlbuild.executor.build.helpers.blocking import block_downstream
 from sqlbuild.executor.build.helpers.end_audits import run_end_audits
 from sqlbuild.executor.build.helpers.indexes import build_execution_indexes
@@ -27,7 +28,7 @@ from sqlbuild.executor.build.models import (
     SeedExecutionResult,
 )
 from sqlbuild.executor.build.types import BuildStatus
-from sqlbuild.executor.run.main import execute_table_entry
+from sqlbuild.executor.run.main import execute_incremental_entry, execute_table_entry
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus, TablePromotionMode
 
@@ -130,19 +131,34 @@ def execute_build_plan(
                 indexes.model_audits_by_model.get(model_entry.name, ()) if run_audits else ()
             )
 
-            model_result: ModelExecutionResult = execute_table_entry(
-                entry=model_entry,
-                adapter=adapter,
-                connection=connection,
-                model_targets=plan.model_targets,
-                seed_targets=plan.seed_targets,
-                source_map=plan.source_map,
-                model_audits=model_audits,
-                declared_columns=model_entry.declared_columns,
-                promotion_mode=promotion_mode,
-                run_id=run_id,
-                fingerprint_schema=fingerprint_schema,
-            )
+            model_result: ModelExecutionResult
+            if model_entry.action in INCREMENTAL_ACTIONS:
+                model_result = execute_incremental_entry(
+                    entry=model_entry,
+                    adapter=adapter,
+                    connection=connection,
+                    model_targets=plan.model_targets,
+                    seed_targets=plan.seed_targets,
+                    source_map=plan.source_map,
+                    model_audits=model_audits,
+                    declared_columns=model_entry.declared_columns,
+                    run_id=run_id,
+                    fingerprint_schema=fingerprint_schema,
+                )
+            else:
+                model_result = execute_table_entry(
+                    entry=model_entry,
+                    adapter=adapter,
+                    connection=connection,
+                    model_targets=plan.model_targets,
+                    seed_targets=plan.seed_targets,
+                    source_map=plan.source_map,
+                    model_audits=model_audits,
+                    declared_columns=model_entry.declared_columns,
+                    promotion_mode=promotion_mode,
+                    run_id=run_id,
+                    fingerprint_schema=fingerprint_schema,
+                )
             model_results.append(model_result)
 
             if model_result.status == ExecutionStatus.FAILED:

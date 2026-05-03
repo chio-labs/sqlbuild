@@ -216,8 +216,19 @@ class DuckDbAdapter(BaseAdapter):
             f"INSERT INTO {target} SELECT * FROM read_csv('{file_path}', columns={{{type_map}}})"
         )
 
-    def append(self, connection: Any, *, target: str, sql: str) -> None:
-        connection.execute(f"INSERT INTO {target} {sql}")
+    def append(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        sql: str,
+        columns: tuple[str, ...] | None = None,
+    ) -> None:
+        if columns is not None:
+            col_list: str = ", ".join(columns)
+            connection.execute(f"INSERT INTO {target} ({col_list}) {sql}")
+        else:
+            connection.execute(f"INSERT INTO {target} {sql}")
 
     def delete_insert(
         self,
@@ -226,6 +237,7 @@ class DuckDbAdapter(BaseAdapter):
         target: str,
         sql: str,
         unique_key: str | tuple[str, ...],
+        columns: tuple[str, ...] | None = None,
     ) -> None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         key_condition: str = " AND ".join(f"{target}.{k} = __source.{k}" for k in keys)
@@ -233,7 +245,7 @@ class DuckDbAdapter(BaseAdapter):
             f"DELETE FROM {target} WHERE EXISTS "
             f"(SELECT 1 FROM ({sql}) AS __source WHERE {key_condition})"
         )
-        self.append(connection, target=target, sql=sql)
+        self.append(connection, target=target, sql=sql, columns=columns)
 
     def merge(
         self,
@@ -260,6 +272,39 @@ class DuckDbAdapter(BaseAdapter):
             merge_sql += f"WHEN MATCHED THEN UPDATE SET {update_assignments} "
         merge_sql += f"WHEN NOT MATCHED THEN INSERT ({insert_columns}) VALUES ({insert_values})"
         connection.execute(merge_sql)
+
+    def add_columns(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        columns: tuple[ColumnInfo, ...],
+    ) -> None:
+        col: ColumnInfo
+        for col in columns:
+            connection.execute(f"ALTER TABLE {target} ADD COLUMN {col.name} {col.type}")
+
+    def drop_columns(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        column_names: tuple[str, ...],
+    ) -> None:
+        col_name: str
+        for col_name in column_names:
+            connection.execute(f"ALTER TABLE {target} DROP COLUMN {col_name}")
+
+    def alter_column_types(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        columns: tuple[ColumnInfo, ...],
+    ) -> None:
+        col: ColumnInfo
+        for col in columns:
+            connection.execute(f"ALTER TABLE {target} ALTER COLUMN {col.name} TYPE {col.type}")
 
     def diff_schema(
         self,

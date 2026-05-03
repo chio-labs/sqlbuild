@@ -71,7 +71,14 @@ class MaterializationMixin:
         ...
 
     @abstractmethod
-    def append(self, connection: Any, *, target: str, sql: str) -> None:
+    def append(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        sql: str,
+        columns: tuple[str, ...] | None = None,
+    ) -> None:
         """Insert rows from a SELECT statement into an existing table."""
         ...
 
@@ -83,6 +90,7 @@ class MaterializationMixin:
         target: str,
         sql: str,
         unique_key: str | tuple[str, ...],
+        columns: tuple[str, ...] | None = None,
     ) -> None:
         """Delete matching rows then insert from a SELECT statement."""
         ...
@@ -97,4 +105,37 @@ class MaterializationMixin:
         unique_key: str | tuple[str, ...],
     ) -> None:
         """Upsert rows from a SELECT statement using MERGE or equivalent."""
+        ...
+
+    @abstractmethod
+    def add_columns(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        columns: tuple[ColumnInfo, ...],
+    ) -> None:
+        """Add columns to an existing table."""
+        ...
+
+    @abstractmethod
+    def drop_columns(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        column_names: tuple[str, ...],
+    ) -> None:
+        """Drop columns from an existing table."""
+        ...
+
+    @abstractmethod
+    def alter_column_types(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        columns: tuple[ColumnInfo, ...],
+    ) -> None:
+        """Alter column types on an existing table."""
         ...

@@ -152,8 +152,19 @@ class BaseAdapter(StrictAdapter):
     ) -> None:
         raise NotImplementedError("load_seed requires an engine-specific implementation")
 
-    def append(self, connection: Any, *, target: str, sql: str) -> None:
-        connection.execute(f"INSERT INTO {target} {sql}")
+    def append(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        sql: str,
+        columns: tuple[str, ...] | None = None,
+    ) -> None:
+        if columns is not None:
+            col_list: str = ", ".join(columns)
+            connection.execute(f"INSERT INTO {target} ({col_list}) {sql}")
+        else:
+            connection.execute(f"INSERT INTO {target} {sql}")
 
     def delete_insert(
         self,
@@ -162,6 +173,7 @@ class BaseAdapter(StrictAdapter):
         target: str,
         sql: str,
         unique_key: str | tuple[str, ...],
+        columns: tuple[str, ...] | None = None,
     ) -> None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         key_condition: str = " AND ".join(f"{target}.{k} = __source.{k}" for k in keys)
@@ -169,7 +181,7 @@ class BaseAdapter(StrictAdapter):
             f"DELETE FROM {target} WHERE EXISTS "
             f"(SELECT 1 FROM ({sql}) AS __source WHERE {key_condition})"
         )
-        self.append(connection, target=target, sql=sql)
+        self.append(connection, target=target, sql=sql, columns=columns)
 
     def merge(
         self,
@@ -180,6 +192,33 @@ class BaseAdapter(StrictAdapter):
         unique_key: str | tuple[str, ...],
     ) -> None:
         raise NotImplementedError("merge requires an engine-specific implementation")
+
+    def add_columns(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        columns: tuple[ColumnInfo, ...],
+    ) -> None:
+        raise NotImplementedError("add_columns requires an engine-specific implementation")
+
+    def drop_columns(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        column_names: tuple[str, ...],
+    ) -> None:
+        raise NotImplementedError("drop_columns requires an engine-specific implementation")
+
+    def alter_column_types(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        columns: tuple[ColumnInfo, ...],
+    ) -> None:
+        raise NotImplementedError("alter_column_types requires an engine-specific implementation")
 
     def diff_schema(
         self,

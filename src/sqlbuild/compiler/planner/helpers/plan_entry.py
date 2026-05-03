@@ -177,6 +177,8 @@ def plan_model(
         cursor_column=cursor_column,
         cursor_type=cursor_type,
         cursor_bounds=cursor_bounds,
+        unique_key=unique_key,
+        on_schema_change=on_schema_change,
         type_enforcement=type_enforcement,
         declared_columns=declared_columns,
         pre_hook=pre_hook,
