@@ -237,23 +237,39 @@ def test_given_relation_state_when_checking_exists_then_returns_expected(
     assert result == test_case.expected_exists
 
 
+LIST_RELATIONS_TEST_CASES: list[ListRelationsTestCase] = [
+    ListRelationsTestCase(
+        description="lists only relations in the requested schemas",
+        setup_sql=(
+            "CREATE TABLE orders (id INTEGER)",
+            "CREATE VIEW orders_view AS SELECT id FROM orders",
+            "CREATE SCHEMA other_schema",
+            "CREATE TABLE other_schema.hidden (id INTEGER)",
+        ),
+        database=None,
+        schemas=("main",),
+        expected_names=("orders", "orders_view"),
+    ),
+    ListRelationsTestCase(
+        description="lists relations across multiple requested schemas",
+        setup_sql=(
+            "CREATE TABLE orders (id INTEGER)",
+            "CREATE SCHEMA staging",
+            "CREATE TABLE staging.raw_orders (id INTEGER)",
+            "CREATE SCHEMA excluded",
+            "CREATE TABLE excluded.hidden (id INTEGER)",
+        ),
+        database=None,
+        schemas=("main", "staging"),
+        expected_names=("orders", "raw_orders"),
+    ),
+]
+
+
 @pytest.mark.parametrize(
     "test_case",
-    [
-        ListRelationsTestCase(
-            description="lists only relations in the requested schema",
-            setup_sql=(
-                "CREATE TABLE orders (id INTEGER)",
-                "CREATE VIEW orders_view AS SELECT id FROM orders",
-                "CREATE SCHEMA other_schema",
-                "CREATE TABLE other_schema.hidden (id INTEGER)",
-            ),
-            database=None,
-            schema="main",
-            expected_names=("orders", "orders_view"),
-        ),
-    ],
-    ids=["lists only relations in the requested schema"],
+    LIST_RELATIONS_TEST_CASES,
+    ids=[case.description for case in LIST_RELATIONS_TEST_CASES],
 )
 def test_given_schema_with_relations_when_listing_then_returns_expected_names(
     test_case: ListRelationsTestCase,
@@ -267,7 +283,7 @@ def test_given_schema_with_relations_when_listing_then_returns_expected_names(
     relations: tuple[Any, ...] = adapter.list_relations(
         connection,
         database=test_case.database,
-        schema=test_case.schema,
+        schemas=test_case.schemas,
     )
     names: tuple[str, ...] = tuple(r.name for r in relations)
 
@@ -321,7 +337,7 @@ def test_given_table_when_getting_columns_then_returns_typed_column_info(
                 "CREATE TABLE t2 (x BOOLEAN)",
             ),
             database=None,
-            schema="main",
+            schemas=("main",),
             expected_columns_by_table={
                 "t1": (ColumnInfo(name="a", type="INTEGER"), ColumnInfo(name="b", type="VARCHAR")),
                 "t2": (ColumnInfo(name="x", type="BOOLEAN"),),
@@ -342,7 +358,7 @@ def test_given_schema_with_tables_when_getting_all_columns_then_returns_grouped(
     all_columns: dict[str, tuple[ColumnInfo, ...]] = adapter.get_all_columns(
         connection,
         database=test_case.database,
-        schema=test_case.schema,
+        schemas=test_case.schemas,
     )
 
     table_name: str

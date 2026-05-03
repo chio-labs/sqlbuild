@@ -17,7 +17,7 @@ class SchemaMixin:
         connection: Any,
         *,
         database: str | None,
-        schema: str | None,
+        schemas: tuple[str, ...] | None,
     ) -> tuple[RelationInfo, ...]:
         """Return all relations in the given database/schema scope."""
         ...
@@ -40,7 +40,7 @@ class SchemaMixin:
         connection: Any,
         *,
         database: str | None,
-        schema: str | None,
+        schemas: tuple[str, ...] | None,
     ) -> dict[str, tuple[ColumnInfo, ...]]:
         """Return column metadata for all relations in the given scope."""
         ...

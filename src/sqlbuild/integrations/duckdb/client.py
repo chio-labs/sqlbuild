@@ -82,20 +82,23 @@ class DuckDbAdapter(BaseAdapter):
         connection: Any,
         *,
         database: str | None,
-        schema: str | None,
+        schemas: tuple[str, ...] | None,
     ) -> tuple[RelationInfo, ...]:
-        query: str = "SELECT table_name, table_type FROM information_schema.tables WHERE 1=1"
-        if schema is not None:
-            query += f" AND table_schema = '{schema}'"
+        query: str = (
+            "SELECT table_name, table_schema, table_type FROM information_schema.tables WHERE 1=1"
+        )
+        if schemas is not None:
+            quoted: str = ", ".join(f"'{s}'" for s in schemas)
+            query += f" AND table_schema IN ({quoted})"
         if database is not None:
             query += f" AND table_catalog = '{database}'"
         rows: list[tuple[Any, ...]] = connection.execute(query).fetchall()
         return tuple(
             RelationInfo(
                 database=database,
-                schema=schema,
+                schema=row[1],
                 name=row[0],
-                relation_type=row[1],
+                relation_type=row[2],
             )
             for row in rows
         )
@@ -125,13 +128,14 @@ class DuckDbAdapter(BaseAdapter):
         connection: Any,
         *,
         database: str | None,
-        schema: str | None,
+        schemas: tuple[str, ...] | None,
     ) -> dict[str, tuple[ColumnInfo, ...]]:
         query: str = (
             "SELECT table_name, column_name, data_type FROM information_schema.columns WHERE 1=1"
         )
-        if schema is not None:
-            query += f" AND table_schema = '{schema}'"
+        if schemas is not None:
+            quoted: str = ", ".join(f"'{s}'" for s in schemas)
+            query += f" AND table_schema IN ({quoted})"
         if database is not None:
             query += f" AND table_catalog = '{database}'"
         query += " ORDER BY table_name, ordinal_position"
