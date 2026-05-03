@@ -557,6 +557,55 @@ select 1
         environment_variables={"USER": "kevin", "BACKFILL_POLICY": "bounded(30d)"},
     ),
     BuildCompileInputsTestCase(
+        description="resolves run context before late target context",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.yml": """
+name: demo
+adapter: duckdb
+default_environment: ci
+
+environments:
+  ci:
+    database: "db_${CTX:run.environment}"
+    schema: "schema_${CTX:run.id}"
+""".strip()
+            + "\n",
+            "models/staging/orders.sql": """
+MODEL (
+  alias: "orders_${CTX:run.environment}",
+  config:
+    run_label: "${CTX:run.id}"
+    target_qualified: "${CTX:target.qualified}"
+);
+
+select 1
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        cli_vars=None,
+        run_id="run_123",
+        expected_model_schema_names=(None,),
+        expected_model_config_values=(
+            {
+                "database": "db_ci",
+                "schema": "schema_run_123",
+                "alias": "orders_ci",
+                "config": {
+                    "run_label": "run_123",
+                    "target_qualified": "db_ci.schema_run_123.orders_ci",
+                },
+            },
+        ),
+        expected_model_path_defaults=(None,),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_effective_environment_name="ci",
+        expected_effective_connection={},
+        expected_effective_vars={},
+    ),
+    BuildCompileInputsTestCase(
         description="supports multi hop var expansion and preserve environment overrides",
         repo_files=base_repo_files()
         | {

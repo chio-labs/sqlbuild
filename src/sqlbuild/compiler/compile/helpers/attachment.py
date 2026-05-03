@@ -232,11 +232,14 @@ def build_model_config(
         expand_template_data(
             values,
             variables=effective_vars,
-            context_values={},
+            context_values=build_run_context_values(
+                effective_environment_name=effective_environment_name,
+                run_id=run_id,
+            ),
             context_label="model config",
-            allow_context=False,
-            preserve_context_tokens=True,
-            preserve_unknown_context=False,
+            allow_context=True,
+            preserve_context_tokens=False,
+            preserve_unknown_context=True,
         ),
     )
     model_context_values: dict[str, str | None] = build_model_context_values(
@@ -326,8 +329,10 @@ def build_model_context_values(
     logical_schema: str | None = None if not isinstance(raw_schema, str) else raw_schema
     logical_alias: str = model_name if not isinstance(raw_alias, str) else raw_alias
     context_values: dict[str, str | None] = {
-        "run.id": run_id,
-        "run.environment": effective_environment_name,
+        **build_run_context_values(
+            effective_environment_name=effective_environment_name,
+            run_id=run_id,
+        ),
         "model.name": model_name,
         "model.database": logical_database,
         "model.schema": logical_schema,
@@ -349,6 +354,17 @@ def build_model_context_values(
     context_values["target.table"] = target_table
     context_values["target.qualified"] = target_qualified
     return context_values
+
+
+def build_run_context_values(
+    *, effective_environment_name: str | None, run_id: str
+) -> dict[str, str | None]:
+    """Build the compile-time CTX values known before resource-specific resolution."""
+
+    return {
+        "run.id": run_id,
+        "run.environment": effective_environment_name,
+    }
 
 
 def apply_environment_database_schema_overrides(
