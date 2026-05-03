@@ -91,3 +91,19 @@ class ParseSchemaYamlErrorTestCase:
     description: str
     contents: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ParseSourcesYamlTestCase:
+    description: str
+    contents: str
+    expected_source_names: tuple[str, ...]
+    expected_column_names: tuple[tuple[str, ...], ...]
+    expected_type_enforcement_values: tuple[bool | None, ...]
+
+
+@dataclass(frozen=True)
+class ParseSourcesYamlErrorTestCase:
+    description: str
+    contents: str
+    expected_error_fragment: str

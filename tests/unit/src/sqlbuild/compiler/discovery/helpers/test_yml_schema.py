@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery.helpers.schema_yaml import parse_schema_yaml
+from sqlbuild.compiler.discovery.helpers.yml_schema import parse_schema_yml
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
 from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
     ParseSchemaYamlErrorTestCase,
@@ -73,7 +73,7 @@ def test_given_schema_yaml_variants_when_parsing_then_it_returns_expected_raw_me
 ) -> None:
     model_entries: tuple[SchemaModelEntry, ...]
     seed_entries: tuple[SchemaSeedEntry, ...]
-    model_entries, seed_entries = parse_schema_yaml(test_case.contents, Path("models/schema.yml"))
+    model_entries, seed_entries = parse_schema_yml(test_case.contents, Path("models/schema.yml"))
 
     assert tuple(entry.name for entry in model_entries) == test_case.expected_model_names
     assert tuple(entry.name for entry in seed_entries) == test_case.expected_seed_names
@@ -134,4 +134,4 @@ def test_given_invalid_schema_yaml_when_parsing_then_it_raises_clear_errors(
     test_case: ParseSchemaYamlErrorTestCase,
 ) -> None:
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
-        parse_schema_yaml(test_case.contents, Path("models/schema.yml"))
+        parse_schema_yml(test_case.contents, Path("models/schema.yml"))

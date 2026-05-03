@@ -12,6 +12,7 @@ class DiscoverProjectInputsTestCase:
     expected_schema_model_names: tuple[tuple[str, ...], ...]
     expected_schema_seed_names: tuple[tuple[str, ...], ...]
     expected_source_paths: tuple[str, ...]
+    expected_source_entry_names: tuple[tuple[str, ...], ...]
     expected_seed_paths: tuple[str, ...]
     expected_test_paths: tuple[str, ...]
     expected_test_block_indexes: tuple[int, ...]

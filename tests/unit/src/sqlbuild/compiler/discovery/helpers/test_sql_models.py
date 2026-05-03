@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery.helpers.model_sql import parse_model_sql
+from sqlbuild.compiler.discovery.helpers.sql_models import parse_model_sql
 from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
     ParseModelSqlErrorTestCase,
     ParseModelSqlHeaderTestCase,

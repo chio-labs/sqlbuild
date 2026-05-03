@@ -23,7 +23,13 @@ from tests.unit.src.sqlbuild.compiler.discovery._test_types import (
             | {
                 "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
                 "models/staging/schema.yml": "models: []\n",
-                "sources/raw.yml": "sources: []\n",
+                "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    schema: public
+    table: orders
+""".strip()
+                + "\n",
                 "seeds/country_codes.csv": "country_code,country_name\nUS,United States\n",
                 "seeds/schema.yml": "seeds: []\n",
                 "tests/unit/orders.sql": "TEST ();\nSELECT 1\n",
@@ -40,6 +46,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._test_types import (
             expected_schema_model_names=((), ()),
             expected_schema_seed_names=((), ()),
             expected_source_paths=("sources/raw.yml",),
+            expected_source_entry_names=(("raw_orders",),),
             expected_seed_paths=("seeds/country_codes.csv",),
             expected_test_paths=("tests/unit/orders.sql",),
             expected_test_block_indexes=(1,),
@@ -97,6 +104,13 @@ def test_given_project_repo_slice_when_discovering_inputs_then_it_returns_expect
     assert (
         tuple(str(source_file.relative_path) for source_file in discovered_inputs.source_files)
         == test_case.expected_source_paths
+    )
+    assert (
+        tuple(
+            tuple(source_entry.name for source_entry in source_file.source_entries)
+            for source_file in discovered_inputs.source_files
+        )
+        == test_case.expected_source_entry_names
     )
     assert (
         tuple(str(seed_file.relative_path) for seed_file in discovered_inputs.seed_files)

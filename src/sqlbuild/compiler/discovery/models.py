@@ -7,6 +7,7 @@ from pathlib import Path
 
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
+from sqlbuild.spec.models.source import SourceEntry
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,7 @@ class DiscoveredSourceFile:
     file_path: Path
     relative_path: Path
     contents: str
+    source_entries: tuple[SourceEntry, ...]
 
 
 @dataclass(frozen=True)

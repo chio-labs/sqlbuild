@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.compiler.discovery.helpers.model_sql import parse_model_sql
-from sqlbuild.compiler.discovery.helpers.schema_yaml import parse_schema_yaml
 from sqlbuild.compiler.discovery.helpers.sql_audits import parse_sql_audit_file
+from sqlbuild.compiler.discovery.helpers.sql_models import parse_model_sql
 from sqlbuild.compiler.discovery.helpers.sql_tests import parse_sql_test_file
+from sqlbuild.compiler.discovery.helpers.yml_schema import parse_schema_yml
+from sqlbuild.compiler.discovery.helpers.yml_sources import parse_sources_yml
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAdapterFile,
     DiscoveredAuditFile,
@@ -20,6 +21,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
 )
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
+from sqlbuild.spec.models.source import SourceEntry
 
 
 def discover_model_files(*, project_dir: Path) -> tuple[DiscoveredSqlModelFile, ...]:
@@ -67,7 +69,7 @@ def discover_schema_files(*, project_dir: Path) -> tuple[DiscoveredSchemaFile, .
         contents: str = file_path.read_text(encoding="utf-8")
         model_entries: tuple[SchemaModelEntry, ...]
         seed_entries: tuple[SchemaSeedEntry, ...]
-        model_entries, seed_entries = parse_schema_yaml(contents, file_path)
+        model_entries, seed_entries = parse_schema_yml(contents, file_path)
         discovered_schema_files.append(
             DiscoveredSchemaFile(
                 file_path=file_path,
@@ -90,14 +92,20 @@ def discover_source_files(*, project_dir: Path) -> tuple[DiscoveredSourceFile, .
     yaml_paths: tuple[Path, ...] = tuple(
         sorted(path for path in sources_root.iterdir() if path.suffix in {".yml", ".yaml"})
     )
-    return tuple(
-        DiscoveredSourceFile(
-            file_path=file_path,
-            relative_path=file_path.relative_to(project_dir),
-            contents=file_path.read_text(encoding="utf-8"),
+    discovered_source_files: list[DiscoveredSourceFile] = []
+    file_path: Path
+    for file_path in yaml_paths:
+        contents: str = file_path.read_text(encoding="utf-8")
+        source_entries: tuple[SourceEntry, ...] = parse_sources_yml(contents, file_path)
+        discovered_source_files.append(
+            DiscoveredSourceFile(
+                file_path=file_path,
+                relative_path=file_path.relative_to(project_dir),
+                contents=contents,
+                source_entries=source_entries,
+            )
         )
-        for file_path in yaml_paths
-    )
+    return tuple(discovered_source_files)
 
 
 def discover_seed_files(*, project_dir: Path) -> tuple[DiscoveredSeedFile, ...]:

@@ -15,7 +15,7 @@ from sqlbuild.compiler.discovery.helpers.filesystem import (
     discover_source_files,
     discover_test_files,
 )
-from sqlbuild.compiler.discovery.helpers.project_config import (
+from sqlbuild.compiler.discovery.helpers.yml_project import (
     load_local_config,
     load_project_config,
 )

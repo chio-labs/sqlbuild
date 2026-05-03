@@ -17,7 +17,7 @@ from sqlbuild.spec.models.schema import (
 )
 
 
-def parse_schema_yaml(
+def parse_schema_yml(
     contents: str,
     file_path: Path,
 ) -> tuple[tuple[SchemaModelEntry, ...], tuple[SchemaSeedEntry, ...]]:
