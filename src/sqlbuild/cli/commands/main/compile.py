@@ -7,7 +7,7 @@ from pathlib import Path
 from sqlbuild.cli.commands.main.helpers.compile.models import WrittenTarget
 from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compile_target
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_connection_config
+from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.json_output import format_compile_json
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -33,9 +33,8 @@ def run_compile(
         adapter=resolve_adapter(discovered_inputs.project_config.adapter),
         no_sql_validation=no_sql_validation,
         defer_to=defer_to,
-        connection_config=resolve_connection_config(
-            raw_config=discovered_inputs.project_config.connection,
-            project_dir=effective_project_dir,
+        connection_config=resolve_project_connection_config(
+            discovered_inputs=discovered_inputs, project_dir=effective_project_dir
         ),
     )
 

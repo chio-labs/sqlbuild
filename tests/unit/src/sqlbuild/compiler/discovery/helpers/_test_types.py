@@ -31,7 +31,13 @@ class LoadLocalConfigTestCase:
     description: str
     repo_files: dict[str, str]
     expected_environment: str | None
+    expected_connection: dict[str, object]
+    expected_sqlglot: bool
+    expected_sql_validation: bool
+    expected_max_concurrency: int
+    expected_setting_overrides: frozenset[str]
     expected_vars: dict[str, str]
+    expected_missing_attributes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

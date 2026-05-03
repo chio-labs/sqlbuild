@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlbuild.compiler.compile.helpers.attachment import (
     build_audit_inputs,
     build_effective_connection,
+    build_effective_settings,
     build_effective_vars,
     build_model_inputs,
     build_seed_inputs,
@@ -24,7 +25,7 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.models.project import EnvironmentConfig
+from sqlbuild.spec.models.project import EnvironmentConfig, SettingsConfig
 
 
 def build_compile_inputs(
@@ -54,12 +55,17 @@ def build_compile_inputs(
         environment_config=effective_environment,
         cli_vars={} if cli_vars is None else cli_vars,
     )
+    effective_settings: SettingsConfig = build_effective_settings(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+    )
     resolved_run_id: str = resolve_run_id(selected_run_id=run_id)
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
 
     model_inputs: tuple[CompileModelInput, ...] = build_model_inputs(
         discovered_inputs,
         effective_vars=effective_vars,
+        effective_settings=effective_settings,
         environment_config=effective_environment,
         effective_environment_name=effective_environment_name,
         run_id=resolved_run_id,
@@ -68,6 +74,7 @@ def build_compile_inputs(
     seed_inputs: tuple[CompileSeedInput, ...] = build_seed_inputs(discovered_inputs)
     source_inputs: tuple[CompileSourceInput, ...] = build_source_inputs(
         discovered_inputs,
+        effective_settings=effective_settings,
         no_sql_validation=no_sql_validation,
     )
     test_inputs: tuple[CompileSqlTestInput, ...] = build_test_inputs(
@@ -76,6 +83,7 @@ def build_compile_inputs(
     )
     audit_inputs: tuple[CompileAuditInput, ...] = build_audit_inputs(
         discovered_inputs,
+        effective_settings=effective_settings,
         model_inputs=model_inputs,
         source_inputs=source_inputs,
     )
@@ -88,9 +96,11 @@ def build_compile_inputs(
         effective_environment=effective_environment,
         effective_connection=build_effective_connection(
             project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
             environment_config=effective_environment,
             effective_vars=effective_vars,
         ),
+        effective_settings=effective_settings,
         effective_vars=effective_vars,
         loaded_macros=loaded_macros,
         model_inputs=model_inputs,

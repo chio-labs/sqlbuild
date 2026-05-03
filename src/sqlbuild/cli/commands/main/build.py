@@ -8,7 +8,7 @@ from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_connection_config
+from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.plan_format import format_plan
 from sqlbuild.cli.commands.main.shared.helpers.progress import (
     BuildProgressCallbacks,
@@ -48,8 +48,8 @@ def run_build(
         project_dir=effective_project_dir
     )
     adapter: BaseAdapter = resolve_adapter(discovered_inputs.project_config.adapter)
-    connection_config: dict[str, object] = resolve_connection_config(
-        raw_config=discovered_inputs.project_config.connection,
+    connection_config: dict[str, object] = resolve_project_connection_config(
+        discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
     )
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
@@ -77,9 +77,7 @@ def run_build(
     )
     progress_stream: TextIO = sys.stderr if debug else sys.stdout
     effective_concurrency: int = (
-        concurrency
-        if concurrency is not None
-        else discovered_inputs.project_config.settings.max_concurrency
+        concurrency if concurrency is not None else pipeline_result.project.settings.max_concurrency
     )
     header: str = format_build_header(
         command="sqb build", target=None, concurrency=effective_concurrency
@@ -93,7 +91,7 @@ def run_build(
         plan=plan_output,
         connection_config=connection_config,
         adapter=adapter,
-        settings=discovered_inputs.project_config.settings,
+        settings=pipeline_result.project.settings,
         run_id=pipeline_result.project.run_id,
         run_tests=True,
         run_audits=True,

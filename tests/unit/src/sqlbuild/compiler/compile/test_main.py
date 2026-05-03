@@ -60,6 +60,12 @@ environments:
             + "\n",
             "sqlbuild_local.yml": """
 environment: dev
+connection:
+  path: local.db
+settings:
+  sqlglot: false
+  sql_validation: false
+  max_concurrency: 4
 vars:
   shared: local
   local_only: present
@@ -129,7 +135,7 @@ sources:
         expected_seed_names=("country_codes",),
         expected_source_names=("raw_orders",),
         expected_effective_environment_name="dev",
-        expected_effective_connection={"path": "base.db", "warehouse": "dev_wh"},
+        expected_effective_connection={"path": "local.db", "warehouse": "dev_wh"},
         expected_effective_vars={
             "shared": "cli",
             "project_only": "present",
@@ -137,6 +143,9 @@ sources:
             "local_only": "present",
             "cli_only": "present",
         },
+        expected_effective_sqlglot=False,
+        expected_effective_sql_validation=False,
+        expected_effective_max_concurrency=4,
         expected_model_references=((), ()),
         expected_audit_references=(),
     ),
@@ -1254,6 +1263,7 @@ settings:
         expected_effective_environment_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
+        expected_effective_sql_validation=False,
         expected_model_references=((),),
         expected_audit_references=(),
     ),
@@ -1383,6 +1393,15 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
         compile_inputs.effective_environment_name == test_case.expected_effective_environment_name
     )
     assert compile_inputs.effective_connection == test_case.expected_effective_connection
+    assert compile_inputs.effective_settings.sqlglot is test_case.expected_effective_sqlglot
+    assert (
+        compile_inputs.effective_settings.sql_validation
+        is test_case.expected_effective_sql_validation
+    )
+    assert (
+        compile_inputs.effective_settings.max_concurrency
+        == test_case.expected_effective_max_concurrency
+    )
     assert compile_inputs.effective_vars == test_case.expected_effective_vars
     assert (
         compile_inputs.run_id == test_case.run_id

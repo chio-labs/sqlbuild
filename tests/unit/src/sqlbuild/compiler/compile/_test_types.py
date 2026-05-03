@@ -16,6 +16,9 @@ class BuildCompileInputsTestCase:
     expected_effective_environment_name: str | None
     expected_effective_connection: dict[str, object]
     expected_effective_vars: dict[str, str]
+    expected_effective_sqlglot: bool = True
+    expected_effective_sql_validation: bool = True
+    expected_effective_max_concurrency: int = 1
     expected_model_query_sqls: tuple[str, ...] = field(default_factory=tuple)
     expected_test_sql_bodies: tuple[str, ...] = field(default_factory=tuple)
     expected_test_authored_cte_names: tuple[tuple[str, ...], ...] = field(default_factory=tuple)

@@ -31,3 +31,10 @@ class AuditAggregationTestCase:
     expected_outcomes: tuple[AuditOutcome, ...]
     expected_batch_totals: tuple[int, ...]
     expected_batch_passes: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class ResolveProjectConnectionConfigTestCase:
+    description: str
+    project_dir_name: str
+    expected_connection: dict[str, object]

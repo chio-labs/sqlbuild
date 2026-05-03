@@ -180,6 +180,7 @@ class CompileProjectInputs:
     effective_environment_name: str | None = None
     effective_environment: EnvironmentConfig | None = None
     effective_connection: dict[str, object] = field(default_factory=dict)
+    effective_settings: SettingsConfig = field(default_factory=SettingsConfig)
     effective_vars: dict[str, str] = field(default_factory=dict)
     loaded_macros: dict[str, LoadedMacro] = field(default_factory=dict)
     model_inputs: tuple[CompileModelInput, ...] = field(default_factory=tuple)

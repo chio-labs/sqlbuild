@@ -6,7 +6,7 @@ from pathlib import Path
 
 from sqlbuild.cli.commands.main.helpers.plan.formatter import format_plan
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_connection_config
+from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.json_output import format_plan_json
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -42,9 +42,8 @@ def run_plan(
         full_refresh=full_refresh,
         select=select,
         exclude=exclude,
-        connection_config=resolve_connection_config(
-            raw_config=discovered_inputs.project_config.connection,
-            project_dir=effective_project_dir,
+        connection_config=resolve_project_connection_config(
+            discovered_inputs=discovered_inputs, project_dir=effective_project_dir
         ),
     )
 

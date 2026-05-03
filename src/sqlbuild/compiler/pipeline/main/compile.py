@@ -8,6 +8,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.main.assemble_project import assemble_project
 from sqlbuild.compiler.compile.main.build_compile_inputs import build_compile_inputs
+from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.compile.main.load_macros import load_macros
 from sqlbuild.compiler.compile.models import (
     CompiledProject,
@@ -47,7 +48,7 @@ def run_compile_pipeline(
     effective_config: dict[str, object] = (
         connection_config
         if connection_config is not None
-        else dict(discovered_inputs.project_config.connection)
+        else build_effective_connection_config(discovered_inputs=discovered_inputs)
     )
     connection: Any = adapter.connect(effective_config)
     try:

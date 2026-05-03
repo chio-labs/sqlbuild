@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import fields
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from uuid import uuid4
 
 from sqlbuild.compiler.compile.constants import (
@@ -74,6 +75,7 @@ from sqlbuild.spec.models.project import (
     EnvironmentConfig,
     LocalConfig,
     ProjectConfig,
+    SettingsConfig,
 )
 from sqlbuild.spec.models.schema import (
     SchemaAuditInstance,
@@ -88,6 +90,7 @@ def build_model_inputs(
     discovered_inputs: DiscoveredProjectInputs,
     *,
     effective_vars: dict[str, str],
+    effective_settings: SettingsConfig,
     environment_config: EnvironmentConfig | None,
     effective_environment_name: str | None,
     run_id: str,
@@ -137,7 +140,7 @@ def build_model_inputs(
             else None
         )
         if not no_sql_validation and _is_sql_validation_enabled(
-            project_setting=discovered_inputs.project_config.settings.sql_validation,
+            project_setting=effective_settings.sql_validation,
             model_config=effective_config,
         ):
             validate_sql_syntax(
@@ -184,7 +187,7 @@ def build_model_inputs(
             matched_path_default=effective_config.matched_path_default,
         )
         if not no_sql_validation and _is_sql_validation_enabled(
-            project_setting=discovered_inputs.project_config.settings.sql_validation,
+            project_setting=effective_settings.sql_validation,
             model_config=effective_config,
         ):
             hook_name: str
@@ -278,14 +281,13 @@ def build_seed_inputs(discovered_inputs: DiscoveredProjectInputs) -> tuple[Compi
 def build_source_inputs(
     discovered_inputs: DiscoveredProjectInputs,
     *,
+    effective_settings: SettingsConfig,
     no_sql_validation: bool = False,
 ) -> tuple[CompileSourceInput, ...]:
     """Normalize discovered source declarations into one collection."""
 
     source_inputs: list[CompileSourceInput] = []
-    sql_validation_enabled: bool = (
-        discovered_inputs.project_config.settings.sql_validation and not no_sql_validation
-    )
+    sql_validation_enabled: bool = effective_settings.sql_validation and not no_sql_validation
     source_file: DiscoveredSourceFile
     for source_file in discovered_inputs.source_files:
         source_entry: SourceEntry
@@ -401,6 +403,7 @@ def validate_test_ctes(
 def build_audit_inputs(
     discovered_inputs: DiscoveredProjectInputs,
     *,
+    effective_settings: SettingsConfig,
     model_inputs: tuple[CompileModelInput, ...],
     source_inputs: tuple[CompileSourceInput, ...],
 ) -> tuple[CompileAuditInput, ...]:
@@ -412,12 +415,8 @@ def build_audit_inputs(
     generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]] = (
         index_generic_audit_definitions(discovered_inputs.audit_files)
     )
-    default_audit_severity: str | None = (
-        discovered_inputs.project_config.settings.default_audit_severity
-    )
-    default_audit_run_scope: str | None = (
-        discovered_inputs.project_config.settings.default_audit_run_scope
-    )
+    default_audit_severity: str | None = effective_settings.default_audit_severity
+    default_audit_run_scope: str | None = effective_settings.default_audit_run_scope
     audit_inputs: list[CompileAuditInput] = []
     audit_file: DiscoveredAuditFile
     for audit_file in discovered_inputs.audit_files:
@@ -925,6 +924,7 @@ def resolve_environment_name(
 def build_effective_connection(
     *,
     project_config: ProjectConfig,
+    local_config: LocalConfig,
     environment_config: EnvironmentConfig | None,
     effective_vars: dict[str, str],
 ) -> dict[str, object]:
@@ -933,6 +933,7 @@ def build_effective_connection(
     connection: dict[str, object] = dict(project_config.connection)
     if environment_config is not None:
         connection.update(environment_config.connection)
+    connection.update(local_config.connection)
     return cast(
         dict[str, object],
         expand_template_data(
@@ -945,6 +946,20 @@ def build_effective_connection(
             preserve_unknown_context=False,
         ),
     )
+
+
+def build_effective_settings(
+    *, project_config: ProjectConfig, local_config: LocalConfig
+) -> SettingsConfig:
+    """Merge project settings with local developer overrides."""
+
+    values: dict[str, object] = {
+        field.name: getattr(project_config.settings, field.name) for field in fields(SettingsConfig)
+    }
+    setting_name: str
+    for setting_name in local_config.setting_overrides:
+        values[setting_name] = getattr(local_config.settings, setting_name)
+    return SettingsConfig(**cast(dict[str, Any], values))
 
 
 def build_known_ref_names(discovered_inputs: DiscoveredProjectInputs) -> set[str]:

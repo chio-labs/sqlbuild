@@ -32,7 +32,7 @@ from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledRes
 def assemble_compiled_project(inputs: CompileProjectInputs) -> CompiledProject:
     """Convert attached compile inputs into the planner-ready project view."""
 
-    sqlglot_enabled: bool = inputs.project_config.settings.sqlglot
+    sqlglot_enabled: bool = inputs.effective_settings.sqlglot
     seed_names: frozenset[str] = frozenset(
         seed_input.schema_entry.name for seed_input in inputs.seed_inputs
     )
@@ -41,7 +41,7 @@ def assemble_compiled_project(inputs: CompileProjectInputs) -> CompiledProject:
         effective_environment_name=inputs.effective_environment_name,
         effective_connection=inputs.effective_connection,
         effective_vars=inputs.effective_vars,
-        settings=inputs.project_config.settings,
+        settings=inputs.effective_settings,
         models=tuple(
             _assemble_compiled_model(
                 model_input, sqlglot_enabled=sqlglot_enabled, seed_names=seed_names

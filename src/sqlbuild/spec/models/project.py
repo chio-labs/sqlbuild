@@ -88,4 +88,7 @@ class LocalConfig:
     """Local developer overrides from sqlbuild_local.yml."""
 
     environment: str | None = None
+    connection: dict[str, object] = field(default_factory=dict)
+    settings: SettingsConfig = field(default_factory=SettingsConfig)
+    setting_overrides: frozenset[str] = field(default_factory=frozenset)
     vars: dict[str, str] = field(default_factory=dict)

@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+
 
 def resolve_connection_config(
     *,
@@ -17,3 +20,16 @@ def resolve_connection_config(
     if isinstance(database, str) and not Path(database).is_absolute() and database != ":memory:":
         config["database"] = str(project_dir / database)
     return config
+
+
+def resolve_project_connection_config(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    project_dir: Path,
+) -> dict[str, object]:
+    """Resolve the effective project connection config for CLI command execution."""
+
+    return resolve_connection_config(
+        raw_config=build_effective_connection_config(discovered_inputs=discovered_inputs),
+        project_dir=project_dir,
+    )

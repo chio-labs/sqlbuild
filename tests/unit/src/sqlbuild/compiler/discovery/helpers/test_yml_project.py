@@ -20,19 +20,58 @@ LOCAL_CONFIG_TEST_CASES: list[LoadLocalConfigTestCase] = [
         description="defaults cleanly when local file is missing",
         repo_files={},
         expected_environment=None,
+        expected_connection={},
+        expected_sqlglot=True,
+        expected_sql_validation=True,
+        expected_max_concurrency=1,
+        expected_setting_overrides=frozenset(),
         expected_vars={},
     ),
     LoadLocalConfigTestCase(
-        description="loads environment and vars from local config",
+        description="loads environment connection settings and vars from local config",
         repo_files={
             "sqlbuild_local.yml": """
 environment: dev
+connection:
+  database: local.duckdb
+settings:
+  sqlglot: false
+  sql_validation: false
+  max_concurrency: 4
 vars:
   user: kevin
 """.strip()
         },
         expected_environment="dev",
+        expected_connection={"database": "local.duckdb"},
+        expected_sqlglot=False,
+        expected_sql_validation=False,
+        expected_max_concurrency=4,
+        expected_setting_overrides=frozenset({"sqlglot", "sql_validation", "max_concurrency"}),
         expected_vars={"user": "kevin"},
+    ),
+    LoadLocalConfigTestCase(
+        description="does not expose unsupported project level overrides",
+        repo_files={
+            "sqlbuild_local.yml": """
+adapter: sqlite
+default_environment: prod
+defaults:
+  materialized: table
+janitor:
+  enabled: true
+connection:
+  database: local.duckdb
+""".strip()
+        },
+        expected_environment=None,
+        expected_connection={"database": "local.duckdb"},
+        expected_sqlglot=True,
+        expected_sql_validation=True,
+        expected_max_concurrency=1,
+        expected_setting_overrides=frozenset(),
+        expected_vars={},
+        expected_missing_attributes=("adapter", "default_environment", "defaults", "janitor"),
     ),
 ]
 
@@ -222,6 +261,27 @@ vars:
 """.strip(),
         expected_error_fragment="expected string value for 'user'",
     ),
+    LoadLocalConfigErrorTestCase(
+        description="raises when local connection is not a mapping",
+        local_file_contents="connection: local.duckdb\n",
+        expected_error_fragment="Expected 'connection' to be a mapping when provided",
+    ),
+    LoadLocalConfigErrorTestCase(
+        description="raises when local settings sqlglot is not a boolean",
+        local_file_contents="""
+settings:
+  sqlglot: no thanks
+""".strip(),
+        expected_error_fragment="Expected 'sqlglot' to be a boolean when provided",
+    ),
+    LoadLocalConfigErrorTestCase(
+        description="raises when local settings max concurrency is not an integer",
+        local_file_contents="""
+settings:
+  max_concurrency: many
+""".strip(),
+        expected_error_fragment="Expected 'max_concurrency' to be an integer when provided",
+    ),
 ]
 
 
@@ -362,7 +422,15 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
     config: object = load_local_config(project_dir=tmp_path)
 
     assert config.environment == test_case.expected_environment
+    assert config.connection == test_case.expected_connection
+    assert config.settings.sqlglot is test_case.expected_sqlglot
+    assert config.settings.sql_validation is test_case.expected_sql_validation
+    assert config.settings.max_concurrency == test_case.expected_max_concurrency
+    assert config.setting_overrides == test_case.expected_setting_overrides
     assert config.vars == test_case.expected_vars
+    attribute_name: str
+    for attribute_name in test_case.expected_missing_attributes:
+        assert not hasattr(config, attribute_name)
 
 
 @pytest.mark.parametrize(

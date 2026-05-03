@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import fields
 from datetime import date, datetime
 from pathlib import Path
 from typing import cast
@@ -74,10 +75,22 @@ def load_local_config(*, project_dir: Path) -> LocalConfig:
 
     payload: dict[str, object] = _load_yaml_mapping(file_path=file_path)
     environment: str | None = _optional_str(payload=payload, key="environment")
+    connection: dict[str, object] = _optional_mapping(payload=payload, key="connection")
+    local_settings_result: tuple[SettingsConfig, frozenset[str]] = _load_local_settings(
+        payload=payload.get("settings"), file_path=file_path
+    )
+    settings: SettingsConfig = local_settings_result[0]
+    setting_overrides: frozenset[str] = local_settings_result[1]
     vars_map: dict[str, str] = _load_string_mapping(
         payload=payload.get("vars"), file_path=file_path
     )
-    return LocalConfig(environment=environment, vars=vars_map)
+    return LocalConfig(
+        environment=environment,
+        connection=connection,
+        settings=settings,
+        setting_overrides=setting_overrides,
+        vars=vars_map,
+    )
 
 
 def _load_yaml_mapping(*, file_path: Path) -> dict[str, object]:
@@ -145,6 +158,19 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         table_promotion_mode=table_promotion_mode,
         default_audit_severity=default_audit_severity,
         default_audit_run_scope=default_audit_run_scope,
+    )
+
+
+def _load_local_settings(
+    *, payload: object, file_path: Path
+) -> tuple[SettingsConfig, frozenset[str]]:
+    mapping: dict[str, object] = _coerce_mapping(
+        payload=payload, label="settings", file_path=file_path
+    )
+    setting_names: frozenset[str] = frozenset(field.name for field in fields(SettingsConfig))
+    return (
+        _load_settings(payload=payload, file_path=file_path),
+        frozenset(key for key in mapping if key in setting_names),
     )
 
 
