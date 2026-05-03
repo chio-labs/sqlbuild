@@ -223,11 +223,79 @@ def build_model_config(
 ) -> CompileModelConfig:
     """Build the pre-semantic effective model config layers."""
 
+    layered_values: dict[str, object] = build_layered_model_values(
+        defaults=defaults,
+        path_defaults=path_defaults,
+        matched_path_default=matched_path_default,
+        model_header_values=model_header_values,
+    )
+    early_resolved_values: dict[str, object] = resolve_early_model_templates(
+        values=layered_values,
+        effective_vars=effective_vars,
+        effective_environment_name=effective_environment_name,
+        run_id=run_id,
+    )
+    model_resolved_values: dict[str, object] = resolve_model_context_templates(
+        values=early_resolved_values,
+        model_name=model_name,
+        effective_environment_name=effective_environment_name,
+        run_id=run_id,
+    )
+    model_resolved_values = resolve_model_context_templates(
+        values=model_resolved_values,
+        model_name=model_name,
+        effective_environment_name=effective_environment_name,
+        run_id=run_id,
+    )
+    apply_environment_database_schema_overrides(
+        values=model_resolved_values,
+        effective_vars=effective_vars,
+        environment_config=environment_config,
+        model_context_values=build_model_context_values(
+            values=model_resolved_values,
+            model_name=model_name,
+            effective_environment_name=effective_environment_name,
+            run_id=run_id,
+            include_target_values=False,
+        ),
+    )
+    target_resolved_values: dict[str, object] = resolve_target_context_templates(
+        values=model_resolved_values,
+        model_name=model_name,
+        effective_environment_name=effective_environment_name,
+        run_id=run_id,
+    )
+    return CompileModelConfig(
+        values=target_resolved_values, matched_path_default=matched_path_default
+    )
+
+
+def build_layered_model_values(
+    *,
+    defaults: DefaultsConfig,
+    path_defaults: dict[str, dict[str, object]],
+    matched_path_default: str | None,
+    model_header_values: dict[str, object],
+) -> dict[str, object]:
+    """Layer project defaults, path defaults, and MODEL header values."""
+
     values: dict[str, object] = project_defaults_to_mapping(defaults)
     if matched_path_default is not None:
         values.update(path_defaults[matched_path_default])
     values.update(model_header_values)
-    expanded_values: dict[str, object] = cast(
+    return values
+
+
+def resolve_early_model_templates(
+    *,
+    values: dict[str, object],
+    effective_vars: dict[str, str],
+    effective_environment_name: str | None,
+    run_id: str,
+) -> dict[str, object]:
+    """Resolve `${name}`, `${ENV:...}`, and early `run.*` model templates."""
+
+    return cast(
         dict[str, object],
         expand_template_data(
             values,
@@ -242,32 +310,24 @@ def build_model_config(
             preserve_unknown_context=True,
         ),
     )
-    model_context_values: dict[str, str | None] = build_model_context_values(
-        values=expanded_values,
-        model_name=model_name,
-        effective_environment_name=effective_environment_name,
-        run_id=run_id,
-        include_target_values=False,
-    )
-    expanded_values = cast(
+
+
+def resolve_model_context_templates(
+    *,
+    values: dict[str, object],
+    model_name: str,
+    effective_environment_name: str | None,
+    run_id: str,
+) -> dict[str, object]:
+    """Resolve model-bound `CTX` values once logical model identity is known."""
+
+    return cast(
         dict[str, object],
         expand_template_data(
-            expanded_values,
-            variables={},
-            context_values=model_context_values,
-            context_label="model config",
-            allow_context=True,
-            preserve_context_tokens=False,
-            preserve_unknown_context=True,
-        ),
-    )
-    expanded_values = cast(
-        dict[str, object],
-        expand_template_data(
-            expanded_values,
+            values,
             variables={},
             context_values=build_model_context_values(
-                values=expanded_values,
+                values=values,
                 model_name=model_name,
                 effective_environment_name=effective_environment_name,
                 run_id=run_id,
@@ -279,25 +339,24 @@ def build_model_config(
             preserve_unknown_context=True,
         ),
     )
-    apply_environment_database_schema_overrides(
-        values=expanded_values,
-        effective_vars=effective_vars,
-        environment_config=environment_config,
-        model_context_values=build_model_context_values(
-            values=expanded_values,
-            model_name=model_name,
-            effective_environment_name=effective_environment_name,
-            run_id=run_id,
-            include_target_values=False,
-        ),
-    )
-    expanded_values = cast(
+
+
+def resolve_target_context_templates(
+    *,
+    values: dict[str, object],
+    model_name: str,
+    effective_environment_name: str | None,
+    run_id: str,
+) -> dict[str, object]:
+    """Resolve late `target.*` values after environment overrides finalize naming."""
+
+    return cast(
         dict[str, object],
         expand_template_data(
-            expanded_values,
+            values,
             variables={},
             context_values=build_model_context_values(
-                values=expanded_values,
+                values=values,
                 model_name=model_name,
                 effective_environment_name=effective_environment_name,
                 run_id=run_id,
@@ -309,7 +368,6 @@ def build_model_config(
             preserve_unknown_context=False,
         ),
     )
-    return CompileModelConfig(values=expanded_values, matched_path_default=matched_path_default)
 
 
 def build_model_context_values(
