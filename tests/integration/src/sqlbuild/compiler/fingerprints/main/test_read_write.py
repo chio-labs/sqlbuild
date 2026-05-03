@@ -1,0 +1,276 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
+
+import pytest
+
+from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
+from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
+from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
+from tests.integration.src.sqlbuild.compiler.fingerprints.main._test_types import (
+    LatestResolutionTestCase,
+    NullAstHashTestCase,
+    ReadNonExistentTableTestCase,
+    WriteAndReadTestCase,
+    WriteCreatesTableTestCase,
+)
+
+WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
+    WriteAndReadTestCase(
+        description="writes and reads back a single fingerprint",
+        database=None,
+        schema="test_schema",
+        fingerprints=(
+            Fingerprint(
+                model_name="orders",
+                run_id="run_001",
+                query_hash="hash_a",
+                ast_hash="ast_a",
+                schema_fingerprint="schema_a",
+                query_sql="SELECT id FROM orders",
+                ts=datetime(2026, 1, 15, 12, 0, 0),
+            ),
+        ),
+        expected_model_names=("orders",),
+        expected_latest_query_hashes={"orders": "hash_a"},
+    ),
+    WriteAndReadTestCase(
+        description="writes and reads fingerprints for multiple models",
+        database=None,
+        schema="test_schema",
+        fingerprints=(
+            Fingerprint(
+                model_name="orders",
+                run_id="run_001",
+                query_hash="hash_a",
+                ast_hash="ast_a",
+                schema_fingerprint="schema_a",
+                query_sql="SELECT id FROM orders",
+                ts=datetime(2026, 1, 15, 12, 0, 0),
+            ),
+            Fingerprint(
+                model_name="customers",
+                run_id="run_001",
+                query_hash="hash_b",
+                ast_hash="ast_b",
+                schema_fingerprint="schema_b",
+                query_sql="SELECT id FROM customers",
+                ts=datetime(2026, 1, 15, 12, 0, 0),
+            ),
+        ),
+        expected_model_names=("customers", "orders"),
+        expected_latest_query_hashes={"orders": "hash_a", "customers": "hash_b"},
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    WRITE_AND_READ_TEST_CASES,
+    ids=[case.description for case in WRITE_AND_READ_TEST_CASES],
+)
+def test_given_fingerprints_when_writing_and_reading_then_returns_expected(
+    test_case: WriteAndReadTestCase,
+    connection: Any,
+    execute: Any,
+) -> None:
+    fp: Fingerprint
+    for fp in test_case.fingerprints:
+        write_fingerprint(
+            connection=connection,
+            execute=execute,
+            database=test_case.database,
+            schema=test_case.schema,
+            fingerprint=fp,
+        )
+
+    result: FingerprintSet = read_latest_fingerprints(
+        connection=connection,
+        execute=execute,
+        database=test_case.database,
+        schema=test_case.schema,
+    )
+
+    assert tuple(sorted(result.fingerprints.keys())) == test_case.expected_model_names
+    model_name: str
+    expected_hash: str
+    for model_name, expected_hash in test_case.expected_latest_query_hashes.items():
+        assert result.fingerprints[model_name].query_hash == expected_hash
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ReadNonExistentTableTestCase(
+            description="returns empty set when fingerprint table does not exist",
+            database=None,
+            schema="test_schema",
+            expected_model_count=0,
+        ),
+    ],
+    ids=["returns empty set when fingerprint table does not exist"],
+)
+def test_given_no_table_when_reading_then_returns_empty_set(
+    test_case: ReadNonExistentTableTestCase,
+    connection: Any,
+    execute: Any,
+) -> None:
+    result: FingerprintSet = read_latest_fingerprints(
+        connection=connection,
+        execute=execute,
+        database=test_case.database,
+        schema=test_case.schema,
+    )
+
+    assert len(result.fingerprints) == test_case.expected_model_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        WriteCreatesTableTestCase(
+            description="write creates table if it does not exist",
+            database=None,
+            schema="test_schema",
+            fingerprint=Fingerprint(
+                model_name="orders",
+                run_id="run_001",
+                query_hash="hash_a",
+                ast_hash="ast_a",
+                schema_fingerprint="schema_a",
+                query_sql="SELECT 1",
+                ts=datetime(2026, 1, 15, 12, 0, 0),
+            ),
+            expected_table_exists=True,
+        ),
+    ],
+    ids=["write creates table if it does not exist"],
+)
+def test_given_no_table_when_writing_then_creates_table(
+    test_case: WriteCreatesTableTestCase,
+    connection: Any,
+    execute: Any,
+) -> None:
+    write_fingerprint(
+        connection=connection,
+        execute=execute,
+        database=test_case.database,
+        schema=test_case.schema,
+        fingerprint=test_case.fingerprint,
+    )
+
+    row: Any = connection.execute(
+        f"SELECT 1 FROM information_schema.tables "
+        f"WHERE table_schema = '{test_case.schema}' "
+        f"AND table_name = '{FINGERPRINT_TABLE_NAME}'"
+    ).fetchone()
+    assert (row is not None) == test_case.expected_table_exists
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LatestResolutionTestCase(
+            description="resolves latest fingerprint when older row is inserted after newer",
+            database=None,
+            schema="test_schema",
+            fingerprints=(
+                Fingerprint(
+                    model_name="orders",
+                    run_id="run_002",
+                    query_hash="new_hash",
+                    ast_hash="new_ast",
+                    schema_fingerprint="new_schema",
+                    query_sql="SELECT 2",
+                    ts=datetime(2026, 1, 15, 12, 0, 0),
+                ),
+                Fingerprint(
+                    model_name="orders",
+                    run_id="run_001",
+                    query_hash="old_hash",
+                    ast_hash="old_ast",
+                    schema_fingerprint="old_schema",
+                    query_sql="SELECT 1",
+                    ts=datetime(2026, 1, 15, 10, 0, 0),
+                ),
+            ),
+            expected_latest_run_id="run_002",
+            expected_latest_query_hash="new_hash",
+            expected_latest_query_sql="SELECT 2",
+        ),
+    ],
+    ids=["resolves latest fingerprint when older row is inserted after newer"],
+)
+def test_given_multiple_fingerprints_when_reading_then_resolves_latest(
+    test_case: LatestResolutionTestCase,
+    connection: Any,
+    execute: Any,
+) -> None:
+    fp: Fingerprint
+    for fp in test_case.fingerprints:
+        write_fingerprint(
+            connection=connection,
+            execute=execute,
+            database=test_case.database,
+            schema=test_case.schema,
+            fingerprint=fp,
+        )
+
+    result: FingerprintSet = read_latest_fingerprints(
+        connection=connection,
+        execute=execute,
+        database=test_case.database,
+        schema=test_case.schema,
+    )
+    latest: Fingerprint = result.fingerprints["orders"]
+
+    assert latest.run_id == test_case.expected_latest_run_id
+    assert latest.query_hash == test_case.expected_latest_query_hash
+    assert latest.query_sql == test_case.expected_latest_query_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NullAstHashTestCase(
+            description="preserves null ast hash through write and read",
+            database=None,
+            schema="test_schema",
+            fingerprint=Fingerprint(
+                model_name="orders",
+                run_id="run_001",
+                query_hash="hash_a",
+                ast_hash=None,
+                schema_fingerprint="schema_a",
+                query_sql="SELECT 1",
+                ts=datetime(2026, 1, 15, 12, 0, 0),
+            ),
+            expected_ast_hash_is_none=True,
+        ),
+    ],
+    ids=["preserves null ast hash through write and read"],
+)
+def test_given_null_ast_hash_when_writing_and_reading_then_ast_hash_is_none(
+    test_case: NullAstHashTestCase,
+    connection: Any,
+    execute: Any,
+) -> None:
+    write_fingerprint(
+        connection=connection,
+        execute=execute,
+        database=test_case.database,
+        schema=test_case.schema,
+        fingerprint=test_case.fingerprint,
+    )
+
+    result: FingerprintSet = read_latest_fingerprints(
+        connection=connection,
+        execute=execute,
+        database=test_case.database,
+        schema=test_case.schema,
+    )
+    latest: Fingerprint = result.fingerprints["orders"]
+
+    assert (latest.ast_hash is None) == test_case.expected_ast_hash_is_none

@@ -1,0 +1,23 @@
+"""Stable constants for fingerprint storage."""
+
+from __future__ import annotations
+
+FINGERPRINT_TABLE_NAME: str = "_sqlbuild_fingerprints"
+
+COLUMN_MODEL_NAME: str = "model_name"
+COLUMN_RUN_ID: str = "run_id"
+COLUMN_QUERY_HASH: str = "query_hash"
+COLUMN_AST_HASH: str = "ast_hash"
+COLUMN_SCHEMA_FINGERPRINT: str = "schema_fingerprint"
+COLUMN_QUERY_SQL: str = "query_sql"
+COLUMN_TIMESTAMP: str = "ts"
+
+FINGERPRINT_COLUMNS: tuple[str, ...] = (
+    COLUMN_MODEL_NAME,
+    COLUMN_RUN_ID,
+    COLUMN_QUERY_HASH,
+    COLUMN_AST_HASH,
+    COLUMN_SCHEMA_FINGERPRINT,
+    COLUMN_QUERY_SQL,
+    COLUMN_TIMESTAMP,
+)
