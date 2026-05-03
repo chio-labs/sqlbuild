@@ -152,6 +152,36 @@ class BaseAdapter(StrictAdapter):
         insert_stmts: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
         return (delete_sql, *insert_stmts)
 
+    def render_drop(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+        exists_clause: str = " IF EXISTS" if if_exists else ""
+        return (f"DROP TABLE{exists_clause} {target}",)
+
+    def render_rename(self, *, source: str, target: str) -> tuple[str, ...]:
+        return (f"ALTER TABLE {source} RENAME TO {target}",)
+
+    def render_swap(self, *, left: str, right: str) -> tuple[str, ...]:
+        staging: str = f"{left}__swap_staging"
+        return (
+            *self.render_rename(source=left, target=staging),
+            *self.render_rename(source=right, target=left),
+            *self.render_rename(source=staging, target=right),
+        )
+
+    def render_add_columns(
+        self, *, target: str, columns: tuple[ColumnInfo, ...]
+    ) -> tuple[str, ...]:
+        return tuple(f"ALTER TABLE {target} ADD COLUMN {col.name} {col.type}" for col in columns)
+
+    def render_drop_columns(self, *, target: str, column_names: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(f"ALTER TABLE {target} DROP COLUMN {col_name}" for col_name in column_names)
+
+    def render_alter_column_types(
+        self, *, target: str, columns: tuple[ColumnInfo, ...]
+    ) -> tuple[str, ...]:
+        return tuple(
+            f"ALTER TABLE {target} ALTER COLUMN {col.name} TYPE {col.type}" for col in columns
+        )
+
     def render_merge(
         self,
         *,
@@ -192,17 +222,19 @@ class BaseAdapter(StrictAdapter):
             connection.execute(stmt)
 
     def drop(self, connection: Any, *, target: str, if_exists: bool = True) -> None:
-        exists_clause: str = " IF EXISTS" if if_exists else ""
-        connection.execute(f"DROP TABLE{exists_clause} {target}")
+        stmt: str
+        for stmt in self.render_drop(target=target, if_exists=if_exists):
+            connection.execute(stmt)
 
     def rename(self, connection: Any, *, source: str, target: str) -> None:
-        connection.execute(f"ALTER TABLE {source} RENAME TO {target}")
+        stmt: str
+        for stmt in self.render_rename(source=source, target=target):
+            connection.execute(stmt)
 
     def swap(self, connection: Any, *, left: str, right: str) -> None:
-        staging: str = f"{left}__swap_staging"
-        self.rename(connection, source=left, target=staging)
-        self.rename(connection, source=right, target=left)
-        self.rename(connection, source=staging, target=right)
+        stmt: str
+        for stmt in self.render_swap(left=left, right=right):
+            connection.execute(stmt)
 
     def clone(
         self,

@@ -11,7 +11,7 @@ from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.executor.auditing.main import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
-from sqlbuild.executor.run.helpers.hooks import execute_hooks
+from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.results import build_failed_result
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.helpers.naming import build_qualified_name
@@ -41,8 +41,10 @@ def execute_view_entry(
     )
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
+    executed_statements: list[str] = []
 
     try:
+        executed_statements.extend(render_hooks(hooks=entry.pre_hook, phase_label="pre_hook"))
         execute_hooks(
             connection=connection,
             adapter=adapter,
@@ -56,9 +58,13 @@ def execute_view_entry(
             error=str(exc),
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     try:
+        executed_statements.extend(
+            adapter.render_create_view_as(target=target_qualified, sql=entry.resolved_sql)
+        )
         adapter.create_view_as(connection, target=target_qualified, sql=entry.resolved_sql)
     except Exception as exc:
         return build_failed_result(
@@ -67,6 +73,7 @@ def execute_view_entry(
             error=str(exc),
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     audit_error: bool = False
@@ -94,9 +101,11 @@ def execute_view_entry(
             promoted_relation=target_qualified,
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     try:
+        executed_statements.extend(render_hooks(hooks=entry.post_hook, phase_label="post_hook"))
         execute_hooks(
             connection=connection,
             adapter=adapter,
@@ -111,6 +120,7 @@ def execute_view_entry(
             promoted_relation=target_qualified,
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     try_write_fingerprint(
@@ -128,4 +138,5 @@ def execute_view_entry(
         promoted_relation=target_qualified,
         audit_results=tuple(audit_results),
         warning_messages=tuple(warnings),
+        executed_statements=tuple(executed_statements),
     )

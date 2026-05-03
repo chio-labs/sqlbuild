@@ -170,6 +170,11 @@ def verify_success_state(
         )
         assert not _relation_exists(connection, delta_qualified)
 
+    statement_output: str = "\n".join(result.executed_statements)
+    expected_fragment: str
+    for expected_fragment in test_case.expected_executed_statement_fragments:
+        assert expected_fragment in statement_output
+
 
 def verify_failure_state(
     *,

@@ -30,3 +30,20 @@ def execute_hooks(
                 raise ValueError(f"{phase_label} hook entry must be a string, got {type(hook)}")
         return
     raise ValueError(f"{phase_label} must be a string or list of strings, got {type(hooks)}")
+
+
+def render_hooks(*, hooks: object, phase_label: str) -> tuple[str, ...]:
+    if hooks is None:
+        return ()
+    if isinstance(hooks, str):
+        return (hooks,)
+    if isinstance(hooks, list | tuple):
+        statements: list[str] = []
+        hook: object
+        for hook in hooks:
+            if isinstance(hook, str):
+                statements.append(hook)
+            else:
+                raise ValueError(f"{phase_label} hook entry must be a string, got {type(hook)}")
+        return tuple(statements)
+    raise ValueError(f"{phase_label} must be a string or list of strings, got {type(hooks)}")

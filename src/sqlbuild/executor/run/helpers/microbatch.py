@@ -24,7 +24,7 @@ from sqlbuild.compiler.planner.types import CursorType, IncrementalStrategy, OnS
 from sqlbuild.executor.auditing.main import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
-from sqlbuild.executor.run.helpers.hooks import execute_hooks
+from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.incremental import (
     _apply_schema_change,
     _execute_dml,
@@ -68,8 +68,10 @@ def execute_microbatch_entry(
     )
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
+    executed_statements: list[str] = []
 
     try:
+        executed_statements.extend(render_hooks(hooks=entry.pre_hook, phase_label="pre_hook"))
         execute_hooks(
             connection=connection,
             adapter=adapter,
@@ -83,6 +85,7 @@ def execute_microbatch_entry(
             error=str(exc),
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     microbatch_range: CursorBounds | None = entry.microbatch_range
@@ -100,6 +103,7 @@ def execute_microbatch_entry(
                 error=f"failed to discover microbatch cursor range: {exc}",
                 warnings=warnings,
                 audit_results=audit_results,
+                executed_statements=executed_statements,
             )
         if microbatch_range is None:
             return ModelExecutionResult(
@@ -111,6 +115,7 @@ def execute_microbatch_entry(
                     *tuple(warnings),
                     "microbatch range is empty; no batches to process",
                 ),
+                executed_statements=tuple(executed_statements),
             )
 
     if microbatch_range is None:
@@ -120,6 +125,7 @@ def execute_microbatch_entry(
             error="microbatch_range is not available and model is not full refresh",
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     batch_size: str | None = entry.batch_size
@@ -131,6 +137,7 @@ def execute_microbatch_entry(
             error="microbatch requires batch_size and cursor_type",
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     batches: tuple[BatchWindow, ...] = compute_batch_windows(
@@ -147,10 +154,12 @@ def execute_microbatch_entry(
             promoted_relation=target_qualified,
             audit_results=tuple(audit_results),
             warning_messages=(*tuple(warnings), "no batches to process"),
+            executed_statements=tuple(executed_statements),
         )
 
     if is_full_refresh:
         try:
+            executed_statements.extend(adapter.render_drop(target=target_qualified, if_exists=True))
             adapter.drop(connection, target=target_qualified, if_exists=True)
         except Exception as exc:
             return build_failed_result(
@@ -159,6 +168,7 @@ def execute_microbatch_entry(
                 error=f"failed to drop target for full-refresh microbatch: {exc}",
                 warnings=warnings,
                 audit_results=audit_results,
+                executed_statements=executed_statements,
             )
 
     schema_checked: bool = False
@@ -172,6 +182,10 @@ def execute_microbatch_entry(
         )
 
         try:
+            executed_statements.extend(adapter.render_drop(target=delta_qualified, if_exists=True))
+            executed_statements.extend(
+                adapter.render_create_table_as(target=delta_qualified, sql=batch_sql)
+            )
             adapter.drop(connection, target=delta_qualified, if_exists=True)
             adapter.create_table_as(connection, target=delta_qualified, sql=batch_sql)
         except Exception as exc:
@@ -182,6 +196,7 @@ def execute_microbatch_entry(
                 staging_relation=delta_qualified,
                 warnings=warnings,
                 audit_results=audit_results,
+                executed_statements=executed_statements,
             )
 
         if not schema_checked and not is_full_refresh:
@@ -198,7 +213,7 @@ def execute_microbatch_entry(
                     schema=target_schema,
                     name=target_table,
                 )
-                _apply_schema_change(
+                schema_change_statements: tuple[str, ...] = _apply_schema_change(
                     adapter=adapter,
                     connection=connection,
                     target_qualified=target_qualified,
@@ -207,6 +222,7 @@ def execute_microbatch_entry(
                     on_schema_change=entry.on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE,
                     warnings=warnings,
                 )
+                executed_statements.extend(schema_change_statements)
             except Exception as exc:
                 return build_failed_result(
                     entry=entry,
@@ -215,12 +231,13 @@ def execute_microbatch_entry(
                     staging_relation=delta_qualified,
                     warnings=warnings,
                     audit_results=audit_results,
+                    executed_statements=executed_statements,
                 )
             schema_checked = True
 
         if entry.type_enforcement and declared_columns:
             try:
-                enforce_types_staged(
+                type_enforcement_statements: tuple[str, ...] = enforce_types_staged(
                     adapter=adapter,
                     connection=connection,
                     staging_qualified=delta_qualified,
@@ -229,6 +246,7 @@ def execute_microbatch_entry(
                     staging_table=delta_table,
                     declared_columns=declared_columns,
                 )
+                executed_statements.extend(type_enforcement_statements)
             except Exception as exc:
                 return build_failed_result(
                     entry=entry,
@@ -237,6 +255,7 @@ def execute_microbatch_entry(
                     staging_relation=delta_qualified,
                     warnings=warnings,
                     audit_results=audit_results,
+                    executed_statements=executed_statements,
                 )
 
         delta_overrides: dict[str, str] = {entry.name: delta_qualified}
@@ -266,6 +285,7 @@ def execute_microbatch_entry(
                 staging_relation=delta_qualified,
                 warnings=warnings,
                 audit_results=audit_results,
+                executed_statements=executed_statements,
             )
 
         try:
@@ -287,13 +307,19 @@ def execute_microbatch_entry(
             )
             _validate_cursor_output_columns(entry=entry, delta_columns=delta_columns_for_dml)
             if is_full_refresh and completed_batches == 0:
+                executed_statements.extend(
+                    adapter.render_create_table_as(
+                        target=target_qualified,
+                        sql=f"SELECT * FROM {delta_qualified}",
+                    )
+                )
                 adapter.create_table_as(
                     connection,
                     target=target_qualified,
                     sql=f"SELECT * FROM {delta_qualified}",
                 )
             else:
-                _execute_dml(
+                dml_statements: tuple[str, ...] = _execute_dml(
                     adapter=adapter,
                     connection=connection,
                     target_qualified=target_qualified,
@@ -304,6 +330,7 @@ def execute_microbatch_entry(
                     cursor_start=batch.start,
                     cursor_end=batch.end,
                 )
+                executed_statements.extend(dml_statements)
         except Exception as exc:
             return build_failed_result(
                 entry=entry,
@@ -312,8 +339,10 @@ def execute_microbatch_entry(
                 staging_relation=delta_qualified,
                 warnings=warnings,
                 audit_results=audit_results,
+                executed_statements=executed_statements,
             )
 
+        executed_statements.extend(adapter.render_drop(target=delta_qualified, if_exists=True))
         adapter.drop(connection, target=delta_qualified, if_exists=True)
         completed_batches += 1
 
@@ -341,9 +370,11 @@ def execute_microbatch_entry(
             promoted_relation=target_qualified,
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     try:
+        executed_statements.extend(render_hooks(hooks=entry.post_hook, phase_label="post_hook"))
         execute_hooks(
             connection=connection,
             adapter=adapter,
@@ -358,6 +389,7 @@ def execute_microbatch_entry(
             promoted_relation=target_qualified,
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     try_write_fingerprint(
@@ -375,6 +407,7 @@ def execute_microbatch_entry(
         promoted_relation=target_qualified,
         audit_results=tuple(audit_results),
         warning_messages=tuple(warnings),
+        executed_statements=tuple(executed_statements),
     )
 
 

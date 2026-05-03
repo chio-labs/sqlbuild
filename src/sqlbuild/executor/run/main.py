@@ -15,7 +15,7 @@ from sqlbuild.executor.run.helpers.custom import (
     execute_custom_entry as execute_custom_entry,
 )
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
-from sqlbuild.executor.run.helpers.hooks import execute_hooks
+from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.incremental import (
     execute_incremental_entry as execute_incremental_entry,
 )
@@ -65,8 +65,10 @@ def execute_table_entry(
     )
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
+    executed_statements: list[str] = []
 
     try:
+        executed_statements.extend(render_hooks(hooks=entry.pre_hook, phase_label="pre_hook"))
         execute_hooks(
             connection=connection,
             adapter=adapter,
@@ -80,6 +82,7 @@ def execute_table_entry(
             error=str(exc),
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     if promotion_mode == TablePromotionMode.STAGED:
@@ -102,6 +105,7 @@ def execute_table_entry(
             fingerprint_schema=fingerprint_schema,
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     return _direct_lifecycle(
@@ -118,6 +122,7 @@ def execute_table_entry(
         fingerprint_schema=fingerprint_schema,
         warnings=warnings,
         audit_results=audit_results,
+        executed_statements=executed_statements,
     )
 
 
@@ -141,10 +146,15 @@ def _staged_lifecycle(
     fingerprint_schema: str | None,
     warnings: list[str],
     audit_results: list[AuditExecutionResult],
+    executed_statements: list[str],
 ) -> ModelExecutionResult:
     """Staged table lifecycle: CTAS staging, type enforce, audit, promote."""
 
     try:
+        executed_statements.extend(adapter.render_drop(target=staging_qualified, if_exists=True))
+        executed_statements.extend(
+            adapter.render_create_table_as(target=staging_qualified, sql=entry.resolved_sql)
+        )
         adapter.drop(connection, target=staging_qualified, if_exists=True)
         adapter.create_table_as(connection, target=staging_qualified, sql=entry.resolved_sql)
     except Exception as exc:
@@ -155,11 +165,12 @@ def _staged_lifecycle(
             staging_relation=staging_qualified,
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     if entry.type_enforcement and declared_columns:
         try:
-            enforce_types_staged(
+            type_enforcement_statements: tuple[str, ...] = enforce_types_staged(
                 adapter=adapter,
                 connection=connection,
                 staging_qualified=staging_qualified,
@@ -168,6 +179,7 @@ def _staged_lifecycle(
                 staging_table=staging_table,
                 declared_columns=declared_columns,
             )
+            executed_statements.extend(type_enforcement_statements)
         except Exception as exc:
             return build_failed_result(
                 entry=entry,
@@ -176,6 +188,7 @@ def _staged_lifecycle(
                 staging_relation=staging_qualified,
                 warnings=warnings,
                 audit_results=audit_results,
+                executed_statements=executed_statements,
             )
 
     overrides: dict[str, str] = {entry.name: staging_qualified}
@@ -204,6 +217,7 @@ def _staged_lifecycle(
             staging_relation=staging_qualified,
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     try:
@@ -214,9 +228,18 @@ def _staged_lifecycle(
             name=target_table,
         )
         if existing:
+            executed_statements.extend(
+                adapter.render_swap(left=target_qualified, right=staging_qualified)
+            )
+            executed_statements.extend(
+                adapter.render_drop(target=staging_qualified, if_exists=True)
+            )
             adapter.swap(connection, left=target_qualified, right=staging_qualified)
             adapter.drop(connection, target=staging_qualified, if_exists=True)
         else:
+            executed_statements.extend(
+                adapter.render_rename(source=staging_qualified, target=target_qualified)
+            )
             adapter.rename(connection, source=staging_qualified, target=target_qualified)
     except Exception as exc:
         return build_failed_result(
@@ -226,9 +249,11 @@ def _staged_lifecycle(
             staging_relation=staging_qualified,
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     try:
+        executed_statements.extend(render_hooks(hooks=entry.post_hook, phase_label="post_hook"))
         execute_hooks(
             connection=connection,
             adapter=adapter,
@@ -243,6 +268,7 @@ def _staged_lifecycle(
             promoted_relation=target_qualified,
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     try_write_fingerprint(
@@ -260,6 +286,7 @@ def _staged_lifecycle(
         promoted_relation=target_qualified,
         audit_results=tuple(audit_results),
         warning_messages=tuple(warnings),
+        executed_statements=tuple(executed_statements),
     )
 
 
@@ -278,6 +305,7 @@ def _direct_lifecycle(
     fingerprint_schema: str | None,
     warnings: list[str],
     audit_results: list[AuditExecutionResult],
+    executed_statements: list[str],
 ) -> ModelExecutionResult:
     """Direct table lifecycle: CTAS target, audit after, no staging."""
 
@@ -292,9 +320,13 @@ def _direct_lifecycle(
             ),
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     try:
+        executed_statements.extend(
+            adapter.render_create_table_as(target=target_qualified, sql=entry.resolved_sql)
+        )
         adapter.create_table_as(connection, target=target_qualified, sql=entry.resolved_sql)
     except Exception as exc:
         return build_failed_result(
@@ -303,6 +335,7 @@ def _direct_lifecycle(
             error=str(exc),
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     audit_error: bool = False
@@ -330,9 +363,11 @@ def _direct_lifecycle(
             promoted_relation=target_qualified,
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     try:
+        executed_statements.extend(render_hooks(hooks=entry.post_hook, phase_label="post_hook"))
         execute_hooks(
             connection=connection,
             adapter=adapter,
@@ -347,6 +382,7 @@ def _direct_lifecycle(
             promoted_relation=target_qualified,
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     try_write_fingerprint(
@@ -364,4 +400,5 @@ def _direct_lifecycle(
         promoted_relation=target_qualified,
         audit_results=tuple(audit_results),
         warning_messages=tuple(warnings),
+        executed_statements=tuple(executed_statements),
     )

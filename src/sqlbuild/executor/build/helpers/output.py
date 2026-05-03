@@ -84,8 +84,14 @@ def format_build_output(
             )
         )
 
-        if verbose and plan_entry is not None:
-            lines.extend(_format_sql_block(plan_entry.logical_ddl))
+        if verbose:
+            statements: tuple[str, ...] = _resolve_verbose_statements(
+                model_result=model_result,
+                plan_entry=plan_entry,
+            )
+            statement: str
+            for statement in statements:
+                lines.extend(_format_sql_block(statement))
 
         test_result: SqlTestExecutionResult | None = test_results_by_model.get(
             model_result.model_name
@@ -187,10 +193,29 @@ def _format_sql_block(sql: str) -> list[str]:
 
     lines: list[str] = [""]
     sql_line: str
-    for sql_line in sql.split("\n"):
+    for sql_line in _format_display_sql(sql).split("\n"):
         lines.append(f"    {sql_line}")
     lines.append("")
     return lines
+
+
+def _format_display_sql(sql: str) -> str:
+    stripped: str = sql.rstrip()
+    if not stripped:
+        return sql
+    if stripped.endswith(";"):
+        return stripped
+    return f"{stripped};"
+
+
+def _resolve_verbose_statements(
+    *, model_result: ModelExecutionResult, plan_entry: ModelPlanEntry | None
+) -> tuple[str, ...]:
+    if model_result.executed_statements:
+        return model_result.executed_statements
+    if plan_entry is not None:
+        return (plan_entry.logical_ddl,)
+    return ()
 
 
 def _format_sub_line(*, sub_type: str, name: str, status: str, use_color: bool) -> str:

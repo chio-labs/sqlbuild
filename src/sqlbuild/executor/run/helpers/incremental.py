@@ -13,7 +13,7 @@ from sqlbuild.compiler.planner.types import IncrementalStrategy, OnSchemaChange
 from sqlbuild.executor.auditing.main import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
-from sqlbuild.executor.run.helpers.hooks import execute_hooks
+from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.results import build_failed_result
 from sqlbuild.executor.run.helpers.type_enforcement import enforce_types_staged
 from sqlbuild.executor.run.models import ModelExecutionResult
@@ -51,8 +51,10 @@ def execute_incremental_entry(
     )
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
+    executed_statements: list[str] = []
 
     try:
+        executed_statements.extend(render_hooks(hooks=entry.pre_hook, phase_label="pre_hook"))
         execute_hooks(
             connection=connection,
             adapter=adapter,
@@ -66,9 +68,14 @@ def execute_incremental_entry(
             error=str(exc),
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     try:
+        executed_statements.extend(adapter.render_drop(target=delta_qualified, if_exists=True))
+        executed_statements.extend(
+            adapter.render_create_table_as(target=delta_qualified, sql=entry.resolved_sql)
+        )
         adapter.drop(connection, target=delta_qualified, if_exists=True)
         adapter.create_table_as(connection, target=delta_qualified, sql=entry.resolved_sql)
     except Exception as exc:
@@ -79,6 +86,7 @@ def execute_incremental_entry(
             staging_relation=delta_qualified,
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     try:
@@ -94,7 +102,7 @@ def execute_incremental_entry(
             schema=target_schema,
             name=target_table,
         )
-        _apply_schema_change(
+        schema_change_statements: tuple[str, ...] = _apply_schema_change(
             adapter=adapter,
             connection=connection,
             target_qualified=target_qualified,
@@ -103,6 +111,7 @@ def execute_incremental_entry(
             on_schema_change=entry.on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE,
             warnings=warnings,
         )
+        executed_statements.extend(schema_change_statements)
         target_columns = adapter.get_columns(
             connection,
             database=target_database,
@@ -117,11 +126,12 @@ def execute_incremental_entry(
             staging_relation=delta_qualified,
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     if entry.type_enforcement and declared_columns:
         try:
-            enforce_types_staged(
+            type_enforcement_statements: tuple[str, ...] = enforce_types_staged(
                 adapter=adapter,
                 connection=connection,
                 staging_qualified=delta_qualified,
@@ -130,6 +140,7 @@ def execute_incremental_entry(
                 staging_table=delta_table,
                 declared_columns=declared_columns,
             )
+            executed_statements.extend(type_enforcement_statements)
         except Exception as exc:
             return build_failed_result(
                 entry=entry,
@@ -138,6 +149,7 @@ def execute_incremental_entry(
                 staging_relation=delta_qualified,
                 warnings=warnings,
                 audit_results=audit_results,
+                executed_statements=executed_statements,
             )
 
     delta_overrides: dict[str, str] = {entry.name: delta_qualified}
@@ -167,13 +179,14 @@ def execute_incremental_entry(
             staging_relation=delta_qualified,
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     cursor_start: str | None = entry.cursor_bounds.start if entry.cursor_bounds else None
     cursor_end: str | None = entry.cursor_bounds.end if entry.cursor_bounds else None
 
     try:
-        _execute_dml(
+        dml_statements: tuple[str, ...] = _execute_dml(
             adapter=adapter,
             connection=connection,
             target_qualified=target_qualified,
@@ -184,6 +197,7 @@ def execute_incremental_entry(
             cursor_start=cursor_start,
             cursor_end=cursor_end,
         )
+        executed_statements.extend(dml_statements)
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -192,6 +206,7 @@ def execute_incremental_entry(
             staging_relation=delta_qualified,
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     final_audit_error: bool = False
@@ -219,9 +234,11 @@ def execute_incremental_entry(
             promoted_relation=target_qualified,
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     try:
+        executed_statements.extend(render_hooks(hooks=entry.post_hook, phase_label="post_hook"))
         execute_hooks(
             connection=connection,
             adapter=adapter,
@@ -237,6 +254,7 @@ def execute_incremental_entry(
             promoted_relation=target_qualified,
             warnings=warnings,
             audit_results=audit_results,
+            executed_statements=executed_statements,
         )
 
     try_write_fingerprint(
@@ -248,6 +266,7 @@ def execute_incremental_entry(
         warnings=warnings,
     )
 
+    executed_statements.extend(adapter.render_drop(target=delta_qualified, if_exists=True))
     adapter.drop(connection, target=delta_qualified, if_exists=True)
 
     return ModelExecutionResult(
@@ -256,6 +275,7 @@ def execute_incremental_entry(
         promoted_relation=target_qualified,
         audit_results=tuple(audit_results),
         warning_messages=tuple(warnings),
+        executed_statements=tuple(executed_statements),
     )
 
 
@@ -268,7 +288,7 @@ def _apply_schema_change(
     delta_columns: tuple[ColumnInfo, ...],
     on_schema_change: OnSchemaChange,
     warnings: list[str],
-) -> None:
+) -> tuple[str, ...]:
     """Inspect runtime schema diff and apply on_schema_change policy."""
 
     target_map: dict[str, str] = {col.name.lower(): col.type for col in target_columns}
@@ -294,7 +314,7 @@ def _apply_schema_change(
     has_diff: bool = bool(added or removed or type_changed)
 
     if not has_diff:
-        return
+        return ()
 
     if on_schema_change == OnSchemaChange.FAIL:
         diff_parts: list[str] = []
@@ -323,34 +343,52 @@ def _apply_schema_change(
                 f"schema change ignored: type changes detected: "
                 f"{', '.join(c.name for c in type_changed)}"
             )
-        return
+        return ()
 
     if on_schema_change == OnSchemaChange.APPEND_NEW_COLUMNS:
+        statements: list[str] = []
         if added:
+            statements.extend(
+                adapter.render_add_columns(target=target_qualified, columns=tuple(added))
+            )
             adapter.add_columns(connection, target=target_qualified, columns=tuple(added))
         if type_changed:
             raise ValueError(
                 f"append_new_columns does not support type changes: "
                 f"{', '.join(c.name for c in type_changed)}"
             )
-        return
+        return tuple(statements)
 
     if on_schema_change == OnSchemaChange.SYNC_ALL_COLUMNS:
+        statements = []
         if added:
+            statements.extend(
+                adapter.render_add_columns(target=target_qualified, columns=tuple(added))
+            )
             adapter.add_columns(connection, target=target_qualified, columns=tuple(added))
         if removed:
+            statements.extend(
+                adapter.render_drop_columns(target=target_qualified, column_names=tuple(removed))
+            )
             adapter.drop_columns(
                 connection,
                 target=target_qualified,
                 column_names=tuple(removed),
             )
         if type_changed:
+            statements.extend(
+                adapter.render_alter_column_types(
+                    target=target_qualified, columns=tuple(type_changed)
+                )
+            )
             adapter.alter_column_types(
                 connection,
                 target=target_qualified,
                 columns=tuple(type_changed),
             )
-        return
+        return tuple(statements)
+
+    return ()
 
 
 def _execute_dml(
@@ -364,7 +402,7 @@ def _execute_dml(
     entry: ModelPlanEntry,
     cursor_start: str | None = None,
     cursor_end: str | None = None,
-) -> None:
+) -> tuple[str, ...]:
     """Execute the incremental DML strategy from delta into target."""
 
     strategy: str | None = entry.incremental_strategy
@@ -381,13 +419,18 @@ def _execute_dml(
     dml_sql: str = f"SELECT {projection} FROM {delta_qualified}"
 
     if strategy == IncrementalStrategy.APPEND:
+        statements: tuple[str, ...] = adapter.render_append(
+            target=target_qualified,
+            sql=dml_sql,
+            columns=dml_columns,
+        )
         adapter.append(
             connection,
             target=target_qualified,
             sql=dml_sql,
             columns=dml_columns,
         )
-        return
+        return statements
 
     if strategy == IncrementalStrategy.DELETE_INSERT:
         cursor_column: str | None = entry.cursor_column
@@ -398,6 +441,14 @@ def _execute_dml(
                     f"cursor_start and cursor_end but got "
                     f"cursor_start={cursor_start}, cursor_end={cursor_end}"
                 )
+            statements = adapter.render_delete_insert_cursor(
+                target=target_qualified,
+                sql=dml_sql,
+                cursor_column=cursor_column,
+                cursor_start=cursor_start,
+                cursor_end=cursor_end,
+                columns=dml_columns,
+            )
             adapter.delete_insert_cursor(
                 connection,
                 target=target_qualified,
@@ -408,6 +459,12 @@ def _execute_dml(
                 columns=dml_columns,
             )
         else:
+            statements = adapter.render_delete_insert(
+                target=target_qualified,
+                sql=dml_sql,
+                unique_key=unique_key,
+                columns=dml_columns,
+            )
             adapter.delete_insert(
                 connection,
                 target=target_qualified,
@@ -415,17 +472,23 @@ def _execute_dml(
                 unique_key=unique_key,
                 columns=dml_columns,
             )
-        return
+        return statements
 
     if strategy == IncrementalStrategy.MERGE:
         merge_projection: str = ", ".join(intersection_names)
         merge_sql: str = f"SELECT {merge_projection} FROM {delta_qualified}"
+        statements = adapter.render_merge(
+            target=target_qualified,
+            sql=merge_sql,
+            unique_key=unique_key,
+            source_columns=intersection_names,
+        )
         adapter.merge(
             connection,
             target=target_qualified,
             sql=merge_sql,
             unique_key=unique_key,
         )
-        return
+        return statements
 
     raise ValueError(f"unsupported incremental strategy: {strategy}")

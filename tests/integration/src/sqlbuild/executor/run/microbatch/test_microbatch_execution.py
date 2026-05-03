@@ -80,6 +80,13 @@ SUCCESS_TEST_CASES: list[MicrobatchSuccessTestCase] = [
                 ((1, "a"), (2, "b"), (3, "c")),
             ),
         ),
+        expected_executed_statement_fragments=(
+            "CREATE OR REPLACE TABLE main.orders__delta AS SELECT id, event_time, payload",
+            "event_time >= '2026-01-01T00:00:00'",
+            "event_time < '2026-01-01T01:00:00'",
+            "INSERT INTO main.orders SELECT * FROM main.orders__delta",
+            "DROP TABLE IF EXISTS main.orders__delta",
+        ),
     ),
     MicrobatchSuccessTestCase(
         description="integer microbatch appends 2 batches of size 50",

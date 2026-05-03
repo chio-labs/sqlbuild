@@ -39,6 +39,7 @@ class MicrobatchSuccessTestCase:
     )
     expected_column_names: tuple[str, ...] = field(default_factory=tuple)
     expected_delta_cleaned: bool = True
+    expected_executed_statement_fragments: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

@@ -443,7 +443,7 @@ TEST_CASES: list[BuildOutputTestCase] = [
         ),
     ),
     BuildOutputTestCase(
-        description="verbose mode shows model DDL and audit SQL",
+        description="verbose mode shows executed lifecycle SQL and audit SQL",
         result=BuildExecutionResult(
             status=BuildStatus.SUCCESS,
             model_results=(
@@ -451,6 +451,10 @@ TEST_CASES: list[BuildOutputTestCase] = [
                     model_name="orders",
                     status=ExecutionStatus.SUCCESS,
                     duration_ms=100,
+                    executed_statements=(
+                        "DROP TABLE IF EXISTS main.orders__staging",
+                        "CREATE OR REPLACE TABLE main.orders__staging AS SELECT 1",
+                    ),
                     audit_results=(
                         build_audit_result(
                             name="not_null",
@@ -464,11 +468,13 @@ TEST_CASES: list[BuildOutputTestCase] = [
         ),
         verbose=True,
         expected_output_fragments=(
-            "CREATE TABLE main.orders AS SELECT 1",
-            "SELECT 1",
+            "DROP TABLE IF EXISTS main.orders__staging",
+            "CREATE OR REPLACE TABLE main.orders__staging AS SELECT 1;",
+            "SELECT 1;",
             "orders",
             "OK",
         ),
+        expected_absent_fragments=("CREATE TABLE main.orders AS SELECT 1",),
     ),
     BuildOutputTestCase(
         description="non-verbose mode omits model DDL",

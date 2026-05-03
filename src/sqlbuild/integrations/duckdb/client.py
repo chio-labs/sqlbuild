@@ -171,18 +171,23 @@ class DuckDbAdapter(BaseAdapter):
             connection.execute(stmt)
 
     def drop(self, connection: Any, *, target: str, if_exists: bool = True) -> None:
-        exists_clause: str = " IF EXISTS" if if_exists else ""
-        connection.execute(f"DROP TABLE{exists_clause} {target}")
+        stmt: str
+        for stmt in self.render_drop(target=target, if_exists=if_exists):
+            connection.execute(stmt)
+
+    def render_rename(self, *, source: str, target: str) -> tuple[str, ...]:
+        unqualified_target: str = target.rsplit(".", 1)[-1]
+        return (f"ALTER TABLE {source} RENAME TO {unqualified_target}",)
 
     def rename(self, connection: Any, *, source: str, target: str) -> None:
-        unqualified_target: str = target.rsplit(".", 1)[-1]
-        connection.execute(f"ALTER TABLE {source} RENAME TO {unqualified_target}")
+        stmt: str
+        for stmt in self.render_rename(source=source, target=target):
+            connection.execute(stmt)
 
     def swap(self, connection: Any, *, left: str, right: str) -> None:
-        staging: str = f"{left}__swap_staging"
-        self.rename(connection, source=left, target=staging)
-        self.rename(connection, source=right, target=left)
-        self.rename(connection, source=staging, target=right)
+        stmt: str
+        for stmt in self.render_swap(left=left, right=right):
+            connection.execute(stmt)
 
     def clone(
         self,
@@ -293,9 +298,9 @@ class DuckDbAdapter(BaseAdapter):
         target: str,
         columns: tuple[ColumnInfo, ...],
     ) -> None:
-        col: ColumnInfo
-        for col in columns:
-            connection.execute(f"ALTER TABLE {target} ADD COLUMN {col.name} {col.type}")
+        stmt: str
+        for stmt in self.render_add_columns(target=target, columns=columns):
+            connection.execute(stmt)
 
     def drop_columns(
         self,
@@ -304,9 +309,9 @@ class DuckDbAdapter(BaseAdapter):
         target: str,
         column_names: tuple[str, ...],
     ) -> None:
-        col_name: str
-        for col_name in column_names:
-            connection.execute(f"ALTER TABLE {target} DROP COLUMN {col_name}")
+        stmt: str
+        for stmt in self.render_drop_columns(target=target, column_names=column_names):
+            connection.execute(stmt)
 
     def alter_column_types(
         self,
@@ -315,9 +320,9 @@ class DuckDbAdapter(BaseAdapter):
         target: str,
         columns: tuple[ColumnInfo, ...],
     ) -> None:
-        col: ColumnInfo
-        for col in columns:
-            connection.execute(f"ALTER TABLE {target} ALTER COLUMN {col.name} TYPE {col.type}")
+        stmt: str
+        for stmt in self.render_alter_column_types(target=target, columns=columns):
+            connection.execute(stmt)
 
     def diff_schema(
         self,

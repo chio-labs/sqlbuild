@@ -93,7 +93,7 @@ class BuildProgressCallbacks:
 
         sys.stdout.write("\n")
         sql_line: str
-        for sql_line in sql.split("\n"):
+        for sql_line in _format_display_sql(sql).split("\n"):
             styled: str = dim(f"    {sql_line}") if self._use_color else f"    {sql_line}"
             sys.stdout.write(f"{styled}\n")
         sys.stdout.write("\n")
@@ -184,8 +184,13 @@ class BuildProgressCallbacks:
         )
         sys.stdout.write(line)
 
-        if self._verbose and plan_entry is not None:
-            self._write_sql_block(plan_entry.logical_ddl)
+        if self._verbose:
+            statement: str
+            for statement in _resolve_verbose_statements(
+                model_result=model_result,
+                plan_entry=plan_entry,
+            ):
+                self._write_sql_block(statement)
 
         sub_pad: str = " " * (self._prefix_width + _SUB_INDENT)
         sub_nw: int = self._name_width - _SUB_INDENT
@@ -508,6 +513,25 @@ def _phase_label(phase: str, *, has_delta_audits: bool, batch_count: int) -> str
     if phase == AuditRunScope.DELTA_AND_FINAL:
         return "audit (d)"
     return "audit (f)"
+
+
+def _resolve_verbose_statements(
+    *, model_result: ModelExecutionResult, plan_entry: ModelPlanEntry | None
+) -> tuple[str, ...]:
+    if model_result.executed_statements:
+        return model_result.executed_statements
+    if plan_entry is not None:
+        return (plan_entry.logical_ddl,)
+    return ()
+
+
+def _format_display_sql(sql: str) -> str:
+    stripped: str = sql.rstrip()
+    if not stripped:
+        return sql
+    if stripped.endswith(";"):
+        return stripped
+    return f"{stripped};"
 
 
 def _truncate_name(name: str, width: int) -> str:

@@ -17,6 +17,7 @@ def build_failed_result(
     promoted_relation: str | None = None,
     warnings: list[str],
     audit_results: list[AuditExecutionResult],
+    executed_statements: list[str] | None = None,
 ) -> ModelExecutionResult:
     """Build a failed ModelExecutionResult for a specific phase."""
 
@@ -28,5 +29,6 @@ def build_failed_result(
         promoted_relation=promoted_relation,
         audit_results=tuple(audit_results),
         warning_messages=tuple(warnings),
+        executed_statements=tuple(executed_statements or ()),
         error_message=error,
     )
