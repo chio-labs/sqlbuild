@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
     CursorValue,
+    QueryResult,
     RowDiffResult,
     RowDiffTolerances,
     SchemaDiffResult,
@@ -21,6 +22,14 @@ class ConnectSettingsTestCase:
     description: str
     config: dict[str, object]
     expected_setting_value: str
+
+
+@dataclass(frozen=True)
+class QueryTestCase:
+    description: str
+    sql: str
+    limit: int | None
+    expected_result: QueryResult
 
 
 @dataclass(frozen=True)

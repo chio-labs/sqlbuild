@@ -9,6 +9,7 @@ from typing import Any
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
     CursorValue,
+    QueryResult,
     RelationInfo,
     RowDiffResult,
     RowDiffSampleRow,
@@ -37,6 +38,26 @@ class BaseAdapter(StrictAdapter):
         """Return the recommended maximum SQL length for lightweight unit-test queries."""
 
         return 256_000
+
+    def query(self, connection: Any, sql: str, *, limit: int | None) -> QueryResult:
+        """Execute SQL and return normalized rows for ad hoc query output."""
+
+        cursor: Any = self.execute(connection, sql)
+        description: Any | None = getattr(cursor, "description", None)
+        if description is None:
+            return QueryResult()
+        columns: tuple[str, ...] = tuple(str(column[0]) for column in description)
+        rows: tuple[tuple[object, ...], ...]
+        truncated: bool = False
+        if limit is None:
+            rows = tuple(tuple(row) for row in cursor.fetchall())
+        else:
+            fetched_rows: list[tuple[object, ...]] = [
+                tuple(row) for row in cursor.fetchmany(limit + 1)
+            ]
+            truncated = len(fetched_rows) > limit
+            rows = tuple(fetched_rows[:limit])
+        return QueryResult(columns=columns, rows=rows, truncated=truncated)
 
     def relation_exists(
         self,

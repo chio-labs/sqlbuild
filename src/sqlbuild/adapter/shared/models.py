@@ -42,6 +42,15 @@ class RelationInfo:
 
 
 @dataclass(frozen=True)
+class QueryResult:
+    """Rows returned by an ad hoc warehouse query."""
+
+    columns: tuple[str, ...] = field(default_factory=tuple)
+    rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
+    truncated: bool = False
+
+
+@dataclass(frozen=True)
 class SchemaDiffResult:
     """Schema comparison between two relations."""
 
