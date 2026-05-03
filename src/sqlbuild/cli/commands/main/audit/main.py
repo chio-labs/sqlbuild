@@ -9,6 +9,7 @@ from pathlib import Path
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.colors import colorize_status, supports_color
+from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_connection_config
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.discovery.main import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -33,6 +34,10 @@ def run_audit(
         project_dir=effective_project_dir
     )
     adapter: BaseAdapter = resolve_adapter(discovered_inputs.project_config.adapter)
+    connection_config: dict[str, object] = resolve_connection_config(
+        raw_config=discovered_inputs.project_config.connection,
+        project_dir=effective_project_dir,
+    )
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
@@ -40,6 +45,7 @@ def run_audit(
         defer_to=defer_to,
         select=select,
         exclude=exclude,
+        connection_config=connection_config,
     )
 
     use_color: bool = not no_color and supports_color()
@@ -49,7 +55,7 @@ def run_audit(
     on_complete: Callable[[AuditExecutionResult], None] = _build_on_complete(use_color=use_color)
     results: tuple[AuditExecutionResult, ...] = run_audit_pipeline(
         plan=pipeline_result.plan_output,
-        connection_config=dict(discovered_inputs.project_config.connection),
+        connection_config=connection_config,
         adapter=adapter,
         on_audit_complete=on_complete,
     )

@@ -8,6 +8,7 @@ from pathlib import Path
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.colors import supports_color
+from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.plan_format import format_plan
 from sqlbuild.cli.commands.main.shared.helpers.progress import (
     BuildProgressCallbacks,
@@ -41,6 +42,10 @@ def run_build(
         project_dir=effective_project_dir
     )
     adapter: BaseAdapter = resolve_adapter(discovered_inputs.project_config.adapter)
+    connection_config: dict[str, object] = resolve_connection_config(
+        raw_config=discovered_inputs.project_config.connection,
+        project_dir=effective_project_dir,
+    )
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
@@ -49,6 +54,7 @@ def run_build(
         cursor_overrides=cursor_overrides,
         select=select,
         exclude=exclude,
+        connection_config=connection_config,
     )
 
     plan_output: PlanOutput = pipeline_result.plan_output
@@ -66,7 +72,7 @@ def run_build(
 
     result: BuildExecutionResult = run_build_pipeline(
         plan=plan_output,
-        connection_config=dict(discovered_inputs.project_config.connection),
+        connection_config=connection_config,
         adapter=adapter,
         settings=discovered_inputs.project_config.settings,
         run_id=pipeline_result.project.run_id,

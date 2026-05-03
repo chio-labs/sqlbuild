@@ -38,10 +38,16 @@ def run_compile_pipeline(
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     cursor_overrides: CursorOverrides | None = None,
+    connection_config: dict[str, object] | None = None,
 ) -> CompilePipelineResult:
     """Run compile inputs, assembly, planning, and manifest generation."""
 
-    connection: Any = adapter.connect(dict(discovered_inputs.project_config.connection))
+    effective_config: dict[str, object] = (
+        connection_config
+        if connection_config is not None
+        else dict(discovered_inputs.project_config.connection)
+    )
+    connection: Any = adapter.connect(effective_config)
     try:
         return _build_result(
             discovered_inputs=discovered_inputs,
