@@ -364,6 +364,7 @@ class BuildScheduler:
             environment=self._environment,
             effective_vars=self._effective_vars,
             warehouse_relations=self._warehouse_relations,
+            on_progress=self._on_progress,
         )
         duration: int = int((time.monotonic() - start) * 1000)
         return dataclasses.replace(result, duration_ms=duration)
@@ -473,6 +474,7 @@ def _dispatch_model(
     environment: str = "",
     effective_vars: dict[str, str] | None = None,
     warehouse_relations: dict[str, RelationInfo] | None = None,
+    on_progress: Callable[[str], None] | None = None,
 ) -> ModelExecutionResult:
     """Route a model to the correct executor based on action and mode."""
 
@@ -501,6 +503,7 @@ def _dispatch_model(
             environment=environment,
             effective_vars=effective_vars or {},
             existing_relation=existing,
+            on_progress=on_progress,
         )
 
     is_microbatch: bool = entry.incremental_mode == IncrementalMode.MICROBATCH

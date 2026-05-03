@@ -36,6 +36,7 @@ class MaterializationContext:
     query_changed: bool
     schema_findings: tuple[SchemaFinding, ...]
     run_audits: Callable[[str], tuple[AuditExecutionResult, ...]]
+    on_progress: Callable[[str], None] | None
 
 
 @dataclass(frozen=True)

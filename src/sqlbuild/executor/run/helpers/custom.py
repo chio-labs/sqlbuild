@@ -39,6 +39,7 @@ def execute_custom_entry(
     environment: str,
     effective_vars: dict[str, str],
     existing_relation: RelationInfo | None,
+    on_progress: Callable[[str], None] | None = None,
 ) -> ModelExecutionResult:
     """Execute one model through the custom materialization lifecycle."""
 
@@ -106,6 +107,7 @@ def execute_custom_entry(
         query_changed=query_changed,
         schema_findings=schema_findings,
         run_audits=run_audits_fn,
+        on_progress=on_progress,
     )
 
     try:
