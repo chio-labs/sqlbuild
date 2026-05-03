@@ -2,7 +2,7 @@
 
 Typed, test-first SQL pipelines with change-aware incremental rebuilds.
 
-SQLBuild is a framework for building batch SQL transformation pipelines where correctness is a first-class concern. You define models as SQL files, write macros in Python instead of Jinja, and SQLBuild handles compilation, change detection, incremental execution, and data quality auditing.
+SQLBuild is a framework for building batch SQL transformation pipelines where correctness and extensibility are first-class concerns.
 
 ## Key features
 
