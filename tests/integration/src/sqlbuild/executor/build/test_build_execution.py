@@ -19,6 +19,7 @@ from tests.integration.src.sqlbuild.executor.build.helpers import (
     run_build_for_project,
     verify_audit_counts,
     verify_model_statuses,
+    verify_test_counts,
     verify_warehouse_state,
 )
 
@@ -51,6 +52,30 @@ _PROJECT_YML_DIRECT: str = (
 )
 
 _NOT_NULL_AUDIT: str = 'AUDIT ();\n\nSELECT @column FROM __ref("@model") WHERE @column IS NULL'
+
+_PASSING_TEST_SQL: str = (
+    "TEST ();\n\n"
+    "WITH\n"
+    "__ref__stg_orders AS (\n"
+    "  SELECT 1 AS id, 'alice' AS name\n"
+    "),\n"
+    "__expected__stg_orders AS (\n"
+    "  SELECT 1 AS id, 'alice' AS name\n"
+    ")\n"
+    "SELECT 1\n"
+)
+
+_FAILING_TEST_SQL: str = (
+    "TEST ();\n\n"
+    "WITH\n"
+    "__ref__stg_orders AS (\n"
+    "  SELECT 1 AS id, 'alice' AS name\n"
+    "),\n"
+    "__expected__stg_orders AS (\n"
+    "  SELECT 1 AS id, 'wrong_name' AS name\n"
+    ")\n"
+    "SELECT 1\n"
+)
 
 SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
@@ -585,6 +610,166 @@ def test_given_build_plan_when_executing_then_succeeds(
     verify_warehouse_state(connection=connection, test_case=test_case)
 
 
+VIEW_SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
+    BuildExecutionTestCase(
+        description="view model creates view and downstream table reads it",
+        project_files={
+            "sqlbuild_project.yml": _PROJECT_YML,
+            "models/stg_orders.sql": (
+                "MODEL (materialized: view);\n\nSELECT 1 AS id, 'alice' AS name"
+            ),
+            "models/dim_orders.sql": (
+                'MODEL (materialized: table);\n\nSELECT id, name FROM __ref("stg_orders")'
+            ),
+        },
+        expected_status=BuildStatus.SUCCESS,
+        expected_success_count=2,
+        expected_model_statuses=(
+            ("stg_orders", ExecutionStatus.SUCCESS),
+            ("dim_orders", ExecutionStatus.SUCCESS),
+        ),
+        expected_query_results=(("SELECT id, name FROM main.dim_orders", ((1, "alice"),)),),
+    ),
+    BuildExecutionTestCase(
+        description="view with audit succeeds when audit passes",
+        project_files={
+            "sqlbuild_project.yml": _PROJECT_YML,
+            "models/stg_orders.sql": (
+                "MODEL (materialized: view);\n\nSELECT 1 AS id, 'alice' AS name"
+            ),
+            "models/schema.yml": (
+                "models:\n"
+                "  - name: stg_orders\n"
+                "    columns:\n"
+                "      - name: id\n"
+                "        audits:\n"
+                "          - not_null\n"
+            ),
+            "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
+        },
+        expected_status=BuildStatus.SUCCESS,
+        expected_success_count=1,
+        expected_model_audit_count=1,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    VIEW_SUCCESS_TEST_CASES,
+    ids=[case.description for case in VIEW_SUCCESS_TEST_CASES],
+)
+def test_given_view_build_plan_when_executing_then_succeeds(
+    test_case: BuildExecutionTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+    result: BuildExecutionResult = run_build_for_project(
+        test_case=test_case, project_dir=tmp_path, adapter=adapter, connection=connection
+    )
+
+    assert result.status == test_case.expected_status
+    assert result.success_count == test_case.expected_success_count
+    verify_model_statuses(result=result, test_case=test_case)
+    verify_audit_counts(result=result, test_case=test_case)
+    verify_warehouse_state(connection=connection, test_case=test_case)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildExecutionTestCase(
+            description="view failure blocks downstream table",
+            project_files={
+                "sqlbuild_project.yml": _PROJECT_YML,
+                "models/bad_view.sql": (
+                    "MODEL (materialized: view);\n\nSELECT * FROM nonexistent_source_table"
+                ),
+                "models/downstream.sql": (
+                    'MODEL (materialized: table);\n\nSELECT * FROM __ref("bad_view")'
+                ),
+            },
+            expected_status=BuildStatus.FAILED,
+            expected_failure_count=1,
+            expected_skipped_count=1,
+            expected_model_statuses=(
+                ("bad_view", ExecutionStatus.FAILED),
+                ("downstream", ExecutionStatus.SKIPPED),
+            ),
+            expected_missing_relations=("main.downstream",),
+        ),
+    ],
+    ids=["view failure blocks downstream table"],
+)
+def test_given_view_build_plan_when_executing_then_fails(
+    test_case: BuildExecutionTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+    result: BuildExecutionResult = run_build_for_project(
+        test_case=test_case, project_dir=tmp_path, adapter=adapter, connection=connection
+    )
+
+    assert result.status == test_case.expected_status
+    assert result.failure_count == test_case.expected_failure_count
+    assert result.skipped_count == test_case.expected_skipped_count
+    verify_model_statuses(result=result, test_case=test_case)
+    verify_warehouse_state(connection=connection, test_case=test_case)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildExecutionTestCase(
+            description="view with run_audits false still creates view",
+            project_files={
+                "sqlbuild_project.yml": _PROJECT_YML,
+                "models/stg_orders.sql": (
+                    "MODEL (materialized: view);\n\nSELECT 1 AS id, 'alice' AS name"
+                ),
+                "models/schema.yml": (
+                    "models:\n"
+                    "  - name: stg_orders\n"
+                    "    columns:\n"
+                    "      - name: id\n"
+                    "        audits:\n"
+                    "          - not_null\n"
+                ),
+                "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
+            },
+            run_audits=False,
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=1,
+            expected_model_audit_count=0,
+            expected_query_results=(("SELECT id, name FROM main.stg_orders", ((1, "alice"),)),),
+        ),
+    ],
+    ids=["view with run_audits false still creates view"],
+)
+def test_given_view_with_run_audits_false_when_executing_then_succeeds(
+    test_case: BuildExecutionTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+    result: BuildExecutionResult = run_build_for_project(
+        test_case=test_case, project_dir=tmp_path, adapter=adapter, connection=connection
+    )
+
+    assert result.status == test_case.expected_status
+    assert result.success_count == test_case.expected_success_count
+    verify_audit_counts(result=result, test_case=test_case)
+    verify_warehouse_state(connection=connection, test_case=test_case)
+
+
 @pytest.mark.parametrize(
     "test_case",
     FAILURE_TEST_CASES,
@@ -608,4 +793,103 @@ def test_given_build_plan_when_executing_then_fails(
     assert result.skipped_count == test_case.expected_skipped_count
     verify_model_statuses(result=result, test_case=test_case)
     verify_audit_counts(result=result, test_case=test_case)
+    verify_warehouse_state(connection=connection, test_case=test_case)
+
+
+SQL_TEST_BUILD_TEST_CASES: list[BuildExecutionTestCase] = [
+    BuildExecutionTestCase(
+        description="passing unit test allows model to materialize",
+        project_files={
+            "sqlbuild_project.yml": _PROJECT_YML,
+            "models/stg_orders.sql": (
+                "MODEL (materialized: table);\n\nSELECT 1 AS id, 'alice' AS name"
+            ),
+            "tests/unit/test_stg_orders.sql": _PASSING_TEST_SQL,
+        },
+        expected_status=BuildStatus.SUCCESS,
+        expected_success_count=2,
+        expected_test_count=1,
+        expected_model_statuses=(("stg_orders", ExecutionStatus.SUCCESS),),
+        expected_query_results=(("SELECT id, name FROM main.stg_orders", ((1, "alice"),)),),
+    ),
+    BuildExecutionTestCase(
+        description="failing unit test blocks model materialization",
+        project_files={
+            "sqlbuild_project.yml": _PROJECT_YML,
+            "models/stg_orders.sql": (
+                "MODEL (materialized: table);\n\nSELECT 1 AS id, 'alice' AS name"
+            ),
+            "tests/unit/test_stg_orders.sql": _FAILING_TEST_SQL,
+        },
+        expected_status=BuildStatus.FAILED,
+        expected_failure_count=1,
+        expected_skipped_count=1,
+        expected_test_count=1,
+        expected_model_statuses=(("stg_orders", ExecutionStatus.SKIPPED),),
+        expected_missing_relations=("main.stg_orders",),
+    ),
+    BuildExecutionTestCase(
+        description="run_tests false skips test and model materializes",
+        project_files={
+            "sqlbuild_project.yml": _PROJECT_YML,
+            "models/stg_orders.sql": (
+                "MODEL (materialized: table);\n\nSELECT 1 AS id, 'alice' AS name"
+            ),
+            "tests/unit/test_stg_orders.sql": _FAILING_TEST_SQL,
+        },
+        run_tests=False,
+        expected_status=BuildStatus.SUCCESS,
+        expected_success_count=1,
+        expected_test_count=0,
+        expected_model_statuses=(("stg_orders", ExecutionStatus.SUCCESS),),
+        expected_query_results=(("SELECT id, name FROM main.stg_orders", ((1, "alice"),)),),
+    ),
+    BuildExecutionTestCase(
+        description="failing test blocks target model and downstream chain",
+        project_files={
+            "sqlbuild_project.yml": _PROJECT_YML,
+            "models/stg_orders.sql": (
+                "MODEL (materialized: table);\n\nSELECT 1 AS id, 'alice' AS name"
+            ),
+            "models/dim_orders.sql": (
+                'MODEL (materialized: table);\n\nSELECT id, name FROM __ref("stg_orders")'
+            ),
+            "tests/unit/test_stg_orders.sql": _FAILING_TEST_SQL,
+        },
+        expected_status=BuildStatus.FAILED,
+        expected_failure_count=1,
+        expected_skipped_count=2,
+        expected_test_count=1,
+        expected_model_statuses=(
+            ("stg_orders", ExecutionStatus.SKIPPED),
+            ("dim_orders", ExecutionStatus.SKIPPED),
+        ),
+        expected_missing_relations=("main.stg_orders", "main.dim_orders"),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SQL_TEST_BUILD_TEST_CASES,
+    ids=[case.description for case in SQL_TEST_BUILD_TEST_CASES],
+)
+def test_given_sql_test_in_build_when_executing_then_matches_expected(
+    test_case: BuildExecutionTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+    result: BuildExecutionResult = run_build_for_project(
+        test_case=test_case, project_dir=tmp_path, adapter=adapter, connection=connection
+    )
+
+    assert result.status == test_case.expected_status
+    assert result.success_count == test_case.expected_success_count
+    assert result.failure_count == test_case.expected_failure_count
+    assert result.skipped_count == test_case.expected_skipped_count
+    verify_test_counts(result=result, test_case=test_case)
+    verify_model_statuses(result=result, test_case=test_case)
     verify_warehouse_state(connection=connection, test_case=test_case)

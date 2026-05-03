@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import MissingUpstream, WarehouseSnapshot
 
 
@@ -26,6 +27,8 @@ def check_buildability(
         dep_keys: tuple[CompiledObjectKey, ...] = upstream_deps.get(selected_key, ())
         dep_key: CompiledObjectKey
         for dep_key in dep_keys:
+            if dep_key.resource_type == CompiledResourceType.SQL_TEST:
+                continue
             if dep_key in selected_keys:
                 continue
             if dep_key.name in snapshot.existing_relations:

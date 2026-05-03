@@ -28,6 +28,7 @@ def build_execution_indexes(plan: PlanOutput) -> BuildIndexes:
     return BuildIndexes(
         model_entries_by_key={entry.key: entry for entry in plan.model_entries},
         seed_entries_by_key={entry.key: entry for entry in plan.seed_entries},
+        test_entries_by_key={entry.key: entry for entry in plan.test_entries},
         source_audits_by_source={k: tuple(v) for k, v in source_audits.items()},
         model_audits_by_model={k: tuple(v) for k, v in model_audits.items()},
         end_audits=tuple(end_audits),

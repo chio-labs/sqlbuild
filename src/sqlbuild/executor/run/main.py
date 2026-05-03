@@ -21,6 +21,9 @@ from sqlbuild.executor.run.helpers.microbatch import (
 )
 from sqlbuild.executor.run.helpers.results import build_failed_result
 from sqlbuild.executor.run.helpers.type_enforcement import enforce_types_staged
+from sqlbuild.executor.run.helpers.view import (
+    execute_view_entry as execute_view_entry,
+)
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.helpers.naming import build_qualified_name
 from sqlbuild.executor.shared.types import (

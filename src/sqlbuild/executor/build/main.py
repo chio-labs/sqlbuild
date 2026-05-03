@@ -14,6 +14,7 @@ from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,
     PlanOutput,
     SeedPlanEntry,
+    SqlTestPlanEntry,
 )
 from sqlbuild.compiler.planner.types import IncrementalMode, MaterializationType, PlanAction
 from sqlbuild.executor.auditing.models import AuditExecutionResult
@@ -33,9 +34,13 @@ from sqlbuild.executor.run.main import (
     execute_incremental_entry,
     execute_microbatch_entry,
     execute_table_entry,
+    execute_view_entry,
 )
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus, TablePromotionMode
+from sqlbuild.executor.testing.main import execute_sql_test
+from sqlbuild.executor.testing.models import SqlTestExecutionResult
+from sqlbuild.executor.testing.types import SqlTestOutcome
 
 
 def execute_build_plan(
@@ -60,6 +65,7 @@ def execute_build_plan(
 
     model_results: list[ModelExecutionResult] = []
     seed_results: list[SeedExecutionResult] = []
+    test_results: list[SqlTestExecutionResult] = []
     source_audit_results: list[AuditExecutionResult] = []
 
     key: CompiledObjectKey
@@ -90,6 +96,32 @@ def execute_build_plan(
                     selected_keys=plan.selected_keys,
                     blocked_keys=blocked_keys,
                 )
+                if fail_fast:
+                    break
+            continue
+
+        if key.resource_type == CompiledResourceType.SQL_TEST:
+            if not run_tests:
+                continue
+            test_entry: SqlTestPlanEntry | None = indexes.test_entries_by_key.get(key)
+            if test_entry is None:
+                continue
+            if on_progress is not None:
+                on_progress(f"test: {test_entry.name}")
+            test_result: SqlTestExecutionResult = execute_sql_test(
+                test_entry=test_entry, adapter=adapter, connection=connection
+            )
+            test_results.append(test_result)
+            if test_result.outcome != SqlTestOutcome.PASS:
+                dep_key: CompiledObjectKey
+                for dep_key in test_entry.scope_deps:
+                    blocked_keys.add(dep_key)
+                    block_downstream(
+                        failed_key=dep_key,
+                        downstream_deps=plan.downstream_deps,
+                        selected_keys=plan.selected_keys,
+                        blocked_keys=blocked_keys,
+                    )
                 if fail_fast:
                     break
             continue
@@ -184,6 +216,18 @@ def execute_build_plan(
                     run_id=run_id,
                     fingerprint_schema=fingerprint_schema,
                 )
+            elif model_entry.action == PlanAction.CREATE_VIEW:
+                model_result = execute_view_entry(
+                    entry=model_entry,
+                    adapter=adapter,
+                    connection=connection,
+                    model_targets=plan.model_targets,
+                    seed_targets=plan.seed_targets,
+                    source_map=plan.source_map,
+                    model_audits=model_audits,
+                    run_id=run_id,
+                    fingerprint_schema=fingerprint_schema,
+                )
             else:
                 model_result = execute_table_entry(
                     entry=model_entry,
@@ -225,6 +269,7 @@ def execute_build_plan(
     return _aggregate_build_result(
         model_results=model_results,
         seed_results=seed_results,
+        test_results=test_results,
         source_audit_results=source_audit_results,
         end_audit_results=end_audit_results,
     )
@@ -263,6 +308,7 @@ def _aggregate_build_result(
     *,
     model_results: list[ModelExecutionResult],
     seed_results: list[SeedExecutionResult],
+    test_results: list[SqlTestExecutionResult],
     source_audit_results: list[AuditExecutionResult],
     end_audit_results: tuple[AuditExecutionResult, ...],
 ) -> BuildExecutionResult:
@@ -296,6 +342,13 @@ def _aggregate_build_result(
         elif seed_result.status == ExecutionStatus.SKIPPED:
             skipped_count += 1
 
+    test_result_entry: SqlTestExecutionResult
+    for test_result_entry in test_results:
+        if test_result_entry.outcome == SqlTestOutcome.PASS:
+            success_count += 1
+        else:
+            failure_count += 1
+
     any_end_error: bool = False
     end_result: AuditExecutionResult
     for end_result in end_audit_results:
@@ -318,6 +371,7 @@ def _aggregate_build_result(
         status=status,
         model_results=tuple(model_results),
         seed_results=tuple(seed_results),
+        test_results=tuple(test_results),
         source_audit_results=tuple(source_audit_results),
         end_audit_results=end_audit_results,
         success_count=success_count,

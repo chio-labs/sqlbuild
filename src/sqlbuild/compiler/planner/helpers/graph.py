@@ -5,19 +5,34 @@ from __future__ import annotations
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
+    CompiledSqlTest,
 )
 
 
 def build_upstream_deps(
     project: CompiledProject,
 ) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]:
-    """Return upstream edges keyed by object key (what each node depends on)."""
+    """Return upstream edges keyed by object key (what each node depends on).
 
-    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {}
-    upstream.update({model.key: model.deps for model in project.models})
-    upstream.update({source.key: source.deps for source in project.sources})
-    upstream.update({seed.key: seed.deps for seed in project.seeds})
-    return upstream
+    SQL tests are virtual nodes with no warehouse deps. Each test is placed
+    before its target models by adding the test key as an upstream dep of
+    each target model key.
+    """
+
+    upstream: dict[CompiledObjectKey, list[CompiledObjectKey]] = {}
+    upstream.update({model.key: list(model.deps) for model in project.models})
+    upstream.update({source.key: list(source.deps) for source in project.sources})
+    upstream.update({seed.key: list(seed.deps) for seed in project.seeds})
+
+    test: CompiledSqlTest
+    for test in project.sql_tests:
+        upstream[test.key] = []
+        target_key: CompiledObjectKey
+        for target_key in test.scope_deps:
+            if target_key in upstream:
+                upstream[target_key].append(test.key)
+
+    return {k: tuple(v) for k, v in upstream.items()}
 
 
 def build_downstream_deps(

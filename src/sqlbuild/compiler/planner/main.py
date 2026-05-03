@@ -277,8 +277,12 @@ def build_execution_plan(
         test_entries.append(test_entry)
         all_warnings.extend(test_warnings)
 
+    selected_test_keys: frozenset[CompiledObjectKey] = frozenset(
+        entry.key for entry in test_entries
+    )
+    scoped_keys: frozenset[CompiledObjectKey] = selected_keys | selected_test_keys
     scoped_order: tuple[CompiledObjectKey, ...] = tuple(
-        k for k in execution_order if k in selected_keys
+        k for k in execution_order if k in scoped_keys
     )
 
     return PlanOutput(

@@ -55,6 +55,7 @@ def run_build_for_project(
         run_id="test_run",
         fingerprint_schema=test_case.fingerprint_schema,
         run_audits=test_case.run_audits,
+        run_tests=test_case.run_tests,
         fail_fast=test_case.fail_fast,
     )
 
@@ -75,6 +76,16 @@ def verify_model_statuses(
     expected_status: ExecutionStatus
     for expected_name, expected_status in test_case.expected_model_statuses:
         assert actual_statuses.get(expected_name) == expected_status
+
+
+def verify_test_counts(
+    *,
+    result: BuildExecutionResult,
+    test_case: BuildExecutionTestCase,
+) -> None:
+    """Assert test result counts match expected."""
+
+    assert len(result.test_results) == test_case.expected_test_count
 
 
 def verify_audit_counts(
