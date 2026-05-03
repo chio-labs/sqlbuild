@@ -117,6 +117,7 @@ def test_given_dag_when_building_concurrently_then_no_node_starts_before_deps_co
             scheduler_connection=scheduler_connection,
             promotion_mode=TablePromotionMode.STAGED,
             run_id="test_ordering",
+            query_change_tracking=True,
             on_node_start=on_start,
             on_node_complete=on_complete,
         )

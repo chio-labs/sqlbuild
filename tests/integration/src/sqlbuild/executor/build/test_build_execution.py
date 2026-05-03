@@ -292,16 +292,20 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         expected_query_results=(("SELECT id FROM main.orders", ((None,),)),),
     ),
     BuildExecutionTestCase(
-        description="fingerprint failure produces warning but build succeeds",
+        description="build writes fingerprints when query tracking is enabled",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
             "models/orders.sql": "MODEL (materialized: table);\n\nSELECT 1 AS id",
         },
-        fingerprint_schema="nonexistent_schema",
         expected_status=BuildStatus.SUCCESS,
         expected_success_count=1,
-        expected_warning_count=1,
-        expected_query_results=(("SELECT id FROM main.orders", ((1,),)),),
+        expected_query_results=(
+            ("SELECT id FROM main.orders", ((1,),)),
+            (
+                "SELECT model_name FROM main._sqlbuild_fingerprints ORDER BY model_name",
+                (("orders",),),
+            ),
+        ),
     ),
     BuildExecutionTestCase(
         description="direct mode with passing audit creates table",

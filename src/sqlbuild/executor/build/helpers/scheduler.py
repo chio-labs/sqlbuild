@@ -61,7 +61,7 @@ class BuildScheduler:
         scheduler_connection: Any,
         promotion_mode: TablePromotionMode,
         run_id: str,
-        fingerprint_schema: str | None,
+        query_change_tracking: bool,
         run_audits: bool,
         run_tests: bool,
         fail_fast: bool,
@@ -81,7 +81,7 @@ class BuildScheduler:
         self._scheduler_connection: Any = scheduler_connection
         self._promotion_mode: TablePromotionMode = promotion_mode
         self._run_id: str = run_id
-        self._fingerprint_schema: str | None = fingerprint_schema
+        self._query_change_tracking: bool = query_change_tracking
         self._run_audits: bool = run_audits
         self._run_tests: bool = run_tests
         self._fail_fast: bool = fail_fast
@@ -431,7 +431,7 @@ class BuildScheduler:
                 model_audits=model_audits,
                 promotion_mode=self._promotion_mode,
                 run_id=self._run_id,
-                fingerprint_schema=self._fingerprint_schema,
+                query_change_tracking=self._query_change_tracking,
                 custom_materializations=self._custom_materializations,
                 environment=self._environment,
                 effective_vars=self._effective_vars,
@@ -551,7 +551,7 @@ def _dispatch_model(
     model_audits: tuple[AuditPlanEntry, ...],
     promotion_mode: TablePromotionMode,
     run_id: str,
-    fingerprint_schema: str | None,
+    query_change_tracking: bool,
     custom_materializations: dict[str, Callable[..., MaterializationResult]] | None = None,
     environment: str = "",
     effective_vars: dict[str, str] | None = None,
@@ -581,7 +581,7 @@ def _dispatch_model(
             declared_columns=entry.declared_columns,
             materialize_fn=registry[mat_name],
             run_id=run_id,
-            fingerprint_schema=fingerprint_schema,
+            query_change_tracking=query_change_tracking,
             environment=environment,
             effective_vars=effective_vars or {},
             existing_relation=existing,
@@ -606,7 +606,7 @@ def _dispatch_model(
             model_audits=model_audits,
             declared_columns=entry.declared_columns,
             run_id=run_id,
-            fingerprint_schema=fingerprint_schema,
+            query_change_tracking=query_change_tracking,
         )
     if is_full_refresh_microbatch:
         return execute_microbatch_entry(
@@ -619,7 +619,7 @@ def _dispatch_model(
             model_audits=model_audits,
             declared_columns=entry.declared_columns,
             run_id=run_id,
-            fingerprint_schema=fingerprint_schema,
+            query_change_tracking=query_change_tracking,
             is_full_refresh=True,
         )
     if entry.action in INCREMENTAL_ACTIONS:
@@ -633,7 +633,7 @@ def _dispatch_model(
             model_audits=model_audits,
             declared_columns=entry.declared_columns,
             run_id=run_id,
-            fingerprint_schema=fingerprint_schema,
+            query_change_tracking=query_change_tracking,
         )
     if entry.action == PlanAction.CREATE_VIEW:
         return execute_view_entry(
@@ -645,7 +645,7 @@ def _dispatch_model(
             source_map=plan.source_map,
             model_audits=model_audits,
             run_id=run_id,
-            fingerprint_schema=fingerprint_schema,
+            query_change_tracking=query_change_tracking,
         )
     return execute_table_entry(
         entry=entry,
@@ -658,5 +658,5 @@ def _dispatch_model(
         declared_columns=entry.declared_columns,
         promotion_mode=promotion_mode,
         run_id=run_id,
-        fingerprint_schema=fingerprint_schema,
+        query_change_tracking=query_change_tracking,
     )

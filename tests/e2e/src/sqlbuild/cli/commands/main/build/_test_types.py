@@ -34,3 +34,16 @@ class ModelBackedCursorBuildE2ETestCase:
     expected_table_names: tuple[str, ...]
     expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
     expected_absent_runtime_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class QueryChangeTrackingBuildE2ETestCase:
+    """Test case for query-change tracking e2e regression coverage."""
+
+    description: str
+    repo_files: dict[str, str]
+    build_command: tuple[str, ...]
+    plan_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_fingerprint_models: tuple[str, ...]
+    expected_unchanged_models: tuple[str, ...]

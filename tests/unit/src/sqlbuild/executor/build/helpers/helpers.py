@@ -95,6 +95,7 @@ def build_model_plan_entry(
         target=CompiledRelationTarget(
             database=None, schema="main", name=name, qualified_name=f"main.{name}"
         ),
+        fingerprint_query_sql="SELECT 1",
         resolved_sql="SELECT 1",
         logical_ddl=f"CREATE TABLE main.{name} AS SELECT 1",
         incremental_strategy=incremental_strategy,

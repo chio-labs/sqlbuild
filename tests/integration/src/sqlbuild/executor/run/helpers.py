@@ -55,6 +55,7 @@ def build_table_plan_entry(
             name=target_name,
             qualified_name=qualified,
         ),
+        fingerprint_query_sql=sql,
         resolved_sql=sql,
         logical_ddl=f"CREATE TABLE {qualified} AS {sql}",
         type_enforcement=type_enforcement,
@@ -203,10 +204,6 @@ def _execute_test(
         ),
     }
 
-    fingerprint_schema: str | None = (
-        test_case.fingerprint_schema if isinstance(test_case, TableSuccessTestCase) else None
-    )
-
     return execute_table_entry(
         entry=entry,
         adapter=adapter,
@@ -218,7 +215,9 @@ def _execute_test(
         declared_columns=declared_columns,
         promotion_mode=test_case.promotion_mode,
         run_id="test_run",
-        fingerprint_schema=fingerprint_schema,
+        query_change_tracking=(
+            test_case.query_change_tracking if isinstance(test_case, TableSuccessTestCase) else True
+        ),
     )
 
 

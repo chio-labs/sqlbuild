@@ -210,6 +210,7 @@ def build_execution_plan(
                 action=entry.action,
                 reason=entry.reason,
                 target=entry.target,
+                fingerprint_query_sql=entry.fingerprint_query_sql,
                 resolved_sql=entry.resolved_sql,
                 logical_ddl=entry.logical_ddl,
                 incremental_strategy=entry.incremental_strategy,

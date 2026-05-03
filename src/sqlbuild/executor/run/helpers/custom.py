@@ -37,7 +37,7 @@ def execute_custom_entry(
     declared_columns: tuple[ColumnInfo, ...],
     materialize_fn: Callable[[MaterializationContext], MaterializationResult],
     run_id: str,
-    fingerprint_schema: str | None,
+    query_change_tracking: bool,
     environment: str,
     effective_vars: dict[str, str],
     existing_relation: RelationInfo | None,
@@ -212,7 +212,7 @@ def execute_custom_entry(
         adapter=adapter,
         connection=connection,
         run_id=run_id,
-        fingerprint_schema=fingerprint_schema,
+        query_change_tracking=query_change_tracking,
         warnings=warnings,
     )
 

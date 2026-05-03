@@ -221,6 +221,7 @@ def plan_model(
         action=action,
         reason=reason,
         target=model.target,
+        fingerprint_query_sql=model.query_sql,
         resolved_sql=resolved_sql,
         logical_ddl=logical_ddl,
         incremental_strategy=incremental_strategy,

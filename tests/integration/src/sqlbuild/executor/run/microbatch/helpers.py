@@ -89,6 +89,7 @@ def build_microbatch_plan_entry(
             name=target_name,
             qualified_name=qualified,
         ),
+        fingerprint_query_sql=test_case.model_sql,
         resolved_sql=test_case.model_sql,
         logical_ddl="",
         incremental_strategy=test_case.incremental_strategy,
@@ -246,10 +247,6 @@ def _execute_test(
         ),
     }
 
-    fingerprint_schema: str | None = (
-        test_case.fingerprint_schema if isinstance(test_case, MicrobatchSuccessTestCase) else None
-    )
-
     return execute_microbatch_entry(
         entry=entry,
         adapter=adapter,
@@ -260,7 +257,11 @@ def _execute_test(
         model_audits=model_audits,
         declared_columns=(),
         run_id="test_run",
-        fingerprint_schema=fingerprint_schema,
+        query_change_tracking=(
+            test_case.query_change_tracking
+            if isinstance(test_case, MicrobatchSuccessTestCase)
+            else True
+        ),
         is_full_refresh=test_case.is_full_refresh,
     )
 

@@ -78,14 +78,13 @@ SUCCESS_TEST_CASES: list[ViewSuccessTestCase] = [
         expected_row_count=1,
     ),
     ViewSuccessTestCase(
-        description="fingerprint failure produces warning not failure",
+        description="missing target schema warns when query tracking is enabled",
         setup_sql=(),
         model_sql="SELECT 1 AS id",
-        target_schema="test_schema",
+        target_schema=None,
         target_name="dim_customers",
         expected_row_count=1,
-        fingerprint_schema="nonexistent_schema",
-        expected_warning_fragment="fingerprint write failed",
+        expected_warning_fragment="target schema is missing",
     ),
 ]
 

@@ -61,6 +61,7 @@ def build_target_writer_plan_output() -> PlanOutput:
                 action=PlanAction.CREATE_TABLE,
                 reason=PlanReason.FIRST_RUN,
                 target=target,
+                fingerprint_query_sql="SELECT 1 AS order_id",
                 resolved_sql="SELECT 1 AS order_id",
                 logical_ddl="CREATE TABLE analytics.orders AS SELECT 1 AS order_id",
             ),

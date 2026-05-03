@@ -23,6 +23,7 @@ def build_result_model_plan_entry() -> ModelPlanEntry:
             name="orders",
             qualified_name="analytics.orders",
         ),
+        fingerprint_query_sql="SELECT 1 AS id",
         resolved_sql="SELECT 1 AS id",
         logical_ddl="CREATE TABLE analytics.orders AS SELECT 1 AS id",
     )

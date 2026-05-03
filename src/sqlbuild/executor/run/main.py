@@ -55,7 +55,7 @@ def execute_table_entry(
     declared_columns: tuple[ColumnInfo, ...],
     promotion_mode: TablePromotionMode,
     run_id: str,
-    fingerprint_schema: str | None,
+    query_change_tracking: bool,
 ) -> ModelExecutionResult:
     """Execute one table model through its full materialization lifecycle."""
 
@@ -139,7 +139,7 @@ def execute_table_entry(
             model_audits=model_audits,
             declared_columns=declared_columns,
             run_id=run_id,
-            fingerprint_schema=fingerprint_schema,
+            query_change_tracking=query_change_tracking,
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
@@ -157,7 +157,7 @@ def execute_table_entry(
         model_audits=model_audits,
         declared_columns=declared_columns,
         run_id=run_id,
-        fingerprint_schema=fingerprint_schema,
+        query_change_tracking=query_change_tracking,
         warnings=warnings,
         audit_results=audit_results,
         statement_recorder=statement_recorder,
@@ -182,7 +182,7 @@ def _staged_lifecycle(
     model_audits: tuple[AuditPlanEntry, ...],
     declared_columns: tuple[ColumnInfo, ...],
     run_id: str,
-    fingerprint_schema: str | None,
+    query_change_tracking: bool,
     warnings: list[str],
     audit_results: list[AuditExecutionResult],
     statement_recorder: StatementRecorder,
@@ -338,7 +338,7 @@ def _staged_lifecycle(
         adapter=adapter,
         connection=connection,
         run_id=run_id,
-        fingerprint_schema=fingerprint_schema,
+        query_change_tracking=query_change_tracking,
         warnings=warnings,
     )
 
@@ -364,7 +364,7 @@ def _direct_lifecycle(
     model_audits: tuple[AuditPlanEntry, ...],
     declared_columns: tuple[ColumnInfo, ...],
     run_id: str,
-    fingerprint_schema: str | None,
+    query_change_tracking: bool,
     warnings: list[str],
     audit_results: list[AuditExecutionResult],
     statement_recorder: StatementRecorder,
@@ -457,7 +457,7 @@ def _direct_lifecycle(
         adapter=adapter,
         connection=connection,
         run_id=run_id,
-        fingerprint_schema=fingerprint_schema,
+        query_change_tracking=query_change_tracking,
         warnings=warnings,
     )
 

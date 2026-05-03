@@ -470,18 +470,17 @@ def test_given_type_enforcement_when_executing_staged_table_then_columns_match(
     "test_case",
     [
         TableSuccessTestCase(
-            description="fingerprint failure produces warning not failure",
+            description="missing target schema warns when query tracking is enabled",
             setup_sql=(),
             model_sql="SELECT 1 AS id",
-            target_schema="staging",
+            target_schema=None,
             target_name="orders",
             promotion_mode=TablePromotionMode.STAGED,
             expected_row_count=1,
-            fingerprint_schema="nonexistent_schema",
-            expected_warning_fragment="fingerprint write failed",
+            expected_warning_fragment="target schema is missing",
         ),
     ],
-    ids=["fingerprint failure produces warning not failure"],
+    ids=["missing target schema warns when query tracking is enabled"],
 )
 def test_given_fingerprint_failure_when_executing_table_then_succeeds_with_warning(
     test_case: TableSuccessTestCase,

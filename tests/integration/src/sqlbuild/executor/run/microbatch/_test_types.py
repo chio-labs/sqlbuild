@@ -33,7 +33,7 @@ class MicrobatchSuccessTestCase:
     audit_sql: str | None = None
     audit_severity: str = "warn"
     audit_run_scope: AuditRunScope = AuditRunScope.FINAL
-    fingerprint_schema: str | None = None
+    query_change_tracking: bool = True
     expected_audit_count: int = 0
     expected_warning_count: int = 0
     expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...] = field(

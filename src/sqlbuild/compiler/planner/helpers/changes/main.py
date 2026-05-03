@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models import CompiledModel, InferredColumn
 from sqlbuild.compiler.fingerprints.models import Fingerprint
@@ -27,6 +29,7 @@ from sqlbuild.compiler.shared.helpers.hashing import (
     compute_ast_hash,
     compute_query_hash,
 )
+from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event, log_sql
 
 
 def detect_model_changes(
@@ -61,6 +64,7 @@ def detect_model_changes(
     query_changed: bool = False
     query_backfill: BackfillResult = BackfillResult(action=BackfillAction.WARN_ONLY)
     if query_change_tracking and fingerprint is not None:
+        debug_logger: logging.Logger = logging.getLogger("sqlbuild.planner.changes")
         compiled_query_hash: str = compute_query_hash(model.query_sql)
         compiled_ast_hash: str | None = (
             compute_ast_hash(model.query_sql) if sqlglot_enabled else None
@@ -71,6 +75,24 @@ def detect_model_changes(
             fingerprint=fingerprint,
             sqlglot_enabled=sqlglot_enabled,
         )
+        log_debug_event(
+            debug_logger,
+            (
+                "fingerprint comparison"
+                f" compiled_query_hash={compiled_query_hash}"
+                f" fingerprint_query_hash={fingerprint.query_hash}"
+                f" compiled_ast_hash={compiled_ast_hash}"
+                f" fingerprint_ast_hash={fingerprint.ast_hash}"
+                f" query_changed={query_changed}"
+            ),
+            sqlbuild_subject="model",
+            sqlbuild_name=model_name,
+            sqlbuild_event="query_change_check",
+            sqlbuild_phase="planner",
+            sqlbuild_status="changed" if query_changed else "unchanged",
+        )
+        log_sql(logger=debug_logger, sql=model.query_sql, action="compiled_query")
+        log_sql(logger=debug_logger, sql=fingerprint.query_sql, action="fingerprint_query")
         if query_changed:
             raw_policy: str | None = get_config_str(model, "query_change_backfill")
             query_backfill = resolve_query_change_backfill(query_change_backfill=raw_policy)

@@ -41,7 +41,7 @@ def execute_incremental_entry(
     model_audits: tuple[AuditPlanEntry, ...],
     declared_columns: tuple[ColumnInfo, ...],
     run_id: str,
-    fingerprint_schema: str | None,
+    query_change_tracking: bool,
 ) -> ModelExecutionResult:
     """Execute one incremental model through its delta/DML lifecycle."""
 
@@ -301,7 +301,7 @@ def execute_incremental_entry(
         adapter=adapter,
         connection=connection,
         run_id=run_id,
-        fingerprint_schema=fingerprint_schema,
+        query_change_tracking=query_change_tracking,
         warnings=warnings,
     )
 

@@ -203,6 +203,7 @@ class ModelPlanEntry:
     action: PlanAction
     reason: PlanReason
     target: CompiledRelationTarget
+    fingerprint_query_sql: str
     resolved_sql: str
     logical_ddl: str
     incremental_strategy: str | None = None

@@ -31,7 +31,7 @@ def execute_view_entry(
     source_map: dict[str, SourceEntry],
     model_audits: tuple[AuditPlanEntry, ...],
     run_id: str,
-    fingerprint_schema: str | None,
+    query_change_tracking: bool,
 ) -> ModelExecutionResult:
     """Execute one view model through its full materialization lifecycle."""
 
@@ -135,7 +135,7 @@ def execute_view_entry(
         adapter=adapter,
         connection=connection,
         run_id=run_id,
-        fingerprint_schema=fingerprint_schema,
+        query_change_tracking=query_change_tracking,
         warnings=warnings,
     )
 

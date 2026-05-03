@@ -54,7 +54,7 @@ def run_build_for_project(
         scheduler_connection=connection,
         promotion_mode=promotion_mode,
         run_id="test_run",
-        fingerprint_schema=test_case.fingerprint_schema,
+        query_change_tracking=test_case.query_change_tracking,
         run_audits=test_case.run_audits,
         run_tests=test_case.run_tests,
         fail_fast=test_case.fail_fast,

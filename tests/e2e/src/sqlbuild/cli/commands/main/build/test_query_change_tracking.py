@@ -1,0 +1,158 @@
+"""E2E regression tests for query-change tracking across repeated CLI runs."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+from pathlib import Path
+from textwrap import dedent
+
+import pytest
+
+from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
+    QueryChangeTrackingBuildE2ETestCase,
+)
+from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    prepare_inline_project,
+    query_duckdb,
+    run_sqb,
+    table_exists,
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        QueryChangeTrackingBuildE2ETestCase(
+            description="unchanged source and ref models are not query_changed after build",
+            repo_files={
+                "sqlbuild_project.yml": dedent(
+                    """
+                    name: query_change_tracking_project
+                    adapter: duckdb
+
+                    connection:
+                      database: regression.duckdb
+
+                    defaults:
+                      materialized: table
+                    """
+                ).strip()
+                + "\n",
+                "seed_raw_data.sql": dedent(
+                    """
+                    CREATE TABLE IF NOT EXISTS raw_orders (
+                      id INTEGER,
+                      customer_id INTEGER,
+                      ordered_at TIMESTAMP,
+                      amount_cents INTEGER
+                    );
+
+                    INSERT INTO raw_orders VALUES
+                      (1, 10, '2026-01-01 00:30:00', 100),
+                      (2, 11, '2026-01-01 01:30:00', 200);
+                    """
+                ).strip()
+                + "\n",
+                "sources/raw.yml": dedent(
+                    """
+                    sources:
+                      - name: raw_orders
+                        schema: main
+                        table: raw_orders
+                    """
+                ).strip()
+                + "\n",
+                "models/staging/stg_orders.sql": dedent(
+                    """
+                    MODEL (
+                      materialized: view
+                    );
+
+                    SELECT
+                      id AS order_id,
+                      customer_id,
+                      ordered_at,
+                      amount_cents
+                    FROM __source("raw_orders")
+                    """
+                ).strip()
+                + "\n",
+                "models/marts/fact_orders.sql": dedent(
+                    """
+                    MODEL (
+                      materialized: table
+                    );
+
+                    SELECT
+                      order_id,
+                      customer_id,
+                      ordered_at,
+                      amount_cents AS line_total_cents
+                    FROM __ref("stg_orders")
+                    """
+                ).strip()
+                + "\n",
+            },
+            build_command=("build", "--no-color"),
+            plan_command=("plan", "--json"),
+            expected_exit_code=0,
+            expected_fingerprint_models=("fact_orders", "stg_orders"),
+            expected_unchanged_models=("fact_orders", "stg_orders"),
+        )
+    ],
+    ids=["unchanged source and ref models are not query_changed after build"],
+)
+def test_given_unchanged_project_when_planning_after_build_then_models_are_not_query_changed(
+    test_case: QueryChangeTrackingBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="query_change_tracking_project",
+        repo_files=test_case.repo_files,
+    )
+    db_path: Path = project_dir / "regression.duckdb"
+
+    import duckdb
+
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(str(db_path))
+    connection.execute((project_dir / "seed_raw_data.sql").read_text(encoding="utf-8"))
+    connection.close()
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.build_command,
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == test_case.expected_exit_code, (
+        build_result.stdout + build_result.stderr
+    )
+    assert table_exists(db_path=db_path, table_name="_sqlbuild_fingerprints")
+
+    fingerprint_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=db_path,
+        sql="SELECT model_name FROM main._sqlbuild_fingerprints ORDER BY model_name",
+    )
+    assert tuple(row[0] for row in fingerprint_rows) == test_case.expected_fingerprint_models
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.plan_command,
+        project_dir=project_dir,
+    )
+
+    assert plan_result.returncode == test_case.expected_exit_code, (
+        plan_result.stdout + plan_result.stderr
+    )
+
+    plan_payload: dict[str, object] = json.loads(plan_result.stdout)
+    model_entries: list[dict[str, object]] = plan_payload["models"]
+    reasons_by_name: dict[str, str] = {
+        str(entry["name"]): str(entry["reason"])
+        for entry in model_entries
+        if str(entry["name"]) in test_case.expected_unchanged_models
+    }
+
+    model_name: str
+    for model_name in test_case.expected_unchanged_models:
+        assert reasons_by_name[model_name] != "query_changed"

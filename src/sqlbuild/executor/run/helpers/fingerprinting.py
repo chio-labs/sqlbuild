@@ -18,15 +18,22 @@ def try_write_fingerprint(
     adapter: BaseAdapter,
     connection: Any,
     run_id: str,
-    fingerprint_schema: str | None,
+    query_change_tracking: bool,
     warnings: list[str],
 ) -> None:
     """Attempt best-effort fingerprint write after successful lifecycle."""
 
-    if fingerprint_schema is None:
+    if not query_change_tracking:
+        return
+    target_schema: str | None = entry.target.schema
+    if target_schema is None:
+        warnings.append(
+            "fingerprint write skipped for "
+            f"'{entry.name}': target schema is missing while query_change_tracking is enabled"
+        )
         return
     try:
-        normalized_sql: str = " ".join(entry.resolved_sql.split())
+        normalized_sql: str = " ".join(entry.fingerprint_query_sql.split())
         query_hash: str = hashlib.sha256(normalized_sql.encode()).hexdigest()
         schema_fp: str = hashlib.sha256(b"").hexdigest()
         fingerprint: Fingerprint = Fingerprint(
@@ -35,7 +42,7 @@ def try_write_fingerprint(
             query_hash=query_hash,
             ast_hash=None,
             schema_fingerprint=schema_fp,
-            query_sql=entry.resolved_sql,
+            query_sql=entry.fingerprint_query_sql,
             ts=datetime.now(tz=UTC),
         )
         execute_fn: Any = adapter.execute
@@ -43,8 +50,11 @@ def try_write_fingerprint(
             connection=connection,
             execute=execute_fn,
             database=entry.target.database,
-            schema=fingerprint_schema,
+            schema=target_schema,
             fingerprint=fingerprint,
         )
     except Exception as exc:
-        warnings.append(f"fingerprint write failed for '{entry.name}': {exc}")
+        warnings.append(
+            f"fingerprint write failed for '{entry.name}'; "
+            f"future query-change detection may be incorrect: {exc}"
+        )

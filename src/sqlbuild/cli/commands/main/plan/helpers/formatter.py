@@ -279,7 +279,7 @@ def _append_query_diff(lines: list[str], entry: ModelPlanEntry) -> None:
     if entry.previous_query_sql is None:
         return
     lines.append("    query diff:")
-    lines.extend(_format_query_diff(entry.previous_query_sql, entry.resolved_sql))
+    lines.extend(_format_query_diff(entry.previous_query_sql, entry.fingerprint_query_sql))
 
 
 def _action_text(entry: ModelPlanEntry) -> str:

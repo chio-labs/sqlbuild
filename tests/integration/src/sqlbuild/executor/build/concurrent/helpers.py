@@ -62,6 +62,7 @@ def run_concurrent_build(
             scheduler_connection=scheduler_connection,
             promotion_mode=TablePromotionMode.STAGED,
             run_id="test_concurrent",
+            query_change_tracking=True,
             run_audits=test_case.run_audits,
             fail_fast=test_case.fail_fast,
         )

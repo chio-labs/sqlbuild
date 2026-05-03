@@ -210,6 +210,7 @@ def build_test_plan_entry(
         target=CompiledRelationTarget(
             database=None, schema="public", name=name, qualified_name=f"public.{name}"
         ),
+        fingerprint_query_sql=resolved_sql,
         resolved_sql=resolved_sql,
         logical_ddl=logical_ddl,
     )

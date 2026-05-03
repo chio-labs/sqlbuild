@@ -90,6 +90,7 @@ def build_incremental_plan_entry(
             name=target_name,
             qualified_name=qualified,
         ),
+        fingerprint_query_sql=sql,
         resolved_sql=sql,
         logical_ddl="",
         incremental_strategy=incremental_strategy,
@@ -284,10 +285,6 @@ def _execute_test(
         ),
     }
 
-    fingerprint_schema: str | None = (
-        test_case.fingerprint_schema if isinstance(test_case, IncrementalSuccessTestCase) else None
-    )
-
     return execute_incremental_entry(
         entry=entry,
         adapter=adapter,
@@ -298,7 +295,11 @@ def _execute_test(
         model_audits=model_audits,
         declared_columns=declared_columns,
         run_id="test_run",
-        fingerprint_schema=fingerprint_schema,
+        query_change_tracking=(
+            test_case.query_change_tracking
+            if isinstance(test_case, IncrementalSuccessTestCase)
+            else True
+        ),
     )
 
 

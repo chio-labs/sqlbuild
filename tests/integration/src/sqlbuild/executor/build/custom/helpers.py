@@ -46,6 +46,7 @@ def build_custom_plan_entry(
         target=CompiledRelationTarget(
             database=None, schema="main", name=name, qualified_name=f"main.{name}"
         ),
+        fingerprint_query_sql=sql,
         resolved_sql=sql,
         logical_ddl="",
         custom_materialization_name="test_custom",
@@ -113,7 +114,7 @@ def run_custom_entry(
         declared_columns=(),
         materialize_fn=materialize_fn,
         run_id="test_run",
-        fingerprint_schema=None,
+        query_change_tracking=True,
         environment=environment,
         effective_vars=effective_vars or {},
         existing_relation=existing_relation,
@@ -410,6 +411,7 @@ def run_scheduler_build(
             scheduler_connection=connection,
             promotion_mode=TablePromotionMode.STAGED,
             run_id="test_scheduler",
+            query_change_tracking=True,
             run_audits=False,
             custom_materializations=custom_materializations,
         )

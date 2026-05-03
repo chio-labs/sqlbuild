@@ -19,7 +19,7 @@ class ViewSuccessTestCase:
     audit_sql: str | None = None
     audit_severity: str = "warn"
     extra_audits: tuple[tuple[str, str, str], ...] = field(default_factory=tuple)
-    fingerprint_schema: str | None = None
+    query_change_tracking: bool = True
     expected_warning_fragment: str | None = None
 
 

@@ -24,7 +24,7 @@ class BuildExecutionTestCase:
     expected_end_audit_count: int = 0
     expected_test_count: int = 0
     expected_warning_count: int = 0
-    fingerprint_schema: str | None = None
+    query_change_tracking: bool = True
     expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...] = field(
         default_factory=tuple
     )

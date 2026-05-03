@@ -53,6 +53,7 @@ def build_view_plan_entry(
             name=target_name,
             qualified_name=qualified,
         ),
+        fingerprint_query_sql=sql,
         resolved_sql=sql,
         logical_ddl=f"CREATE OR REPLACE VIEW {qualified} AS {sql}",
         pre_hook=pre_hook,
@@ -177,10 +178,6 @@ def _execute_view_test(
         ),
     }
 
-    fingerprint_schema: str | None = (
-        test_case.fingerprint_schema if isinstance(test_case, ViewSuccessTestCase) else None
-    )
-
     return execute_view_entry(
         entry=entry,
         adapter=adapter,
@@ -190,7 +187,9 @@ def _execute_view_test(
         source_map={},
         model_audits=model_audits,
         run_id="test_run",
-        fingerprint_schema=fingerprint_schema,
+        query_change_tracking=(
+            test_case.query_change_tracking if isinstance(test_case, ViewSuccessTestCase) else True
+        ),
     )
 
 
