@@ -49,6 +49,8 @@ class LoadedMacro:
 
     name: str
     file_path: Path
+    relative_path: Path
+    raw_source: str
     function: Callable[..., object]
 
 

@@ -38,6 +38,7 @@ check-type-annotation-conventions = "scripts.type_annotations.check_type_annotat
 [dependency-groups]
 dev = [
   "commitizen>=4.9.1",
+  "jsonschema>=4.23.0",
   "pre-commit>=4.3.0",
   "pytest>=8.4.2",
   "pytest-cov>=7.0.0",

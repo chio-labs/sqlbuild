@@ -52,6 +52,8 @@ def load_project_macros(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[st
             loaded_macros[attribute_name] = LoadedMacro(
                 name=attribute_name,
                 file_path=macro_file.file_path,
+                relative_path=macro_file.relative_path,
+                raw_source=macro_file.contents,
                 function=attribute_value,
             )
     return loaded_macros
