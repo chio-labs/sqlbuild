@@ -21,9 +21,12 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser] = parser.add_subparsers(
         dest="command"
     )
-    subparsers.add_parser("compile")
-    subparsers.add_parser("run")
-    subparsers.add_parser("build")
+    compile_parser: argparse.ArgumentParser = subparsers.add_parser("compile")
+    compile_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    run_parser: argparse.ArgumentParser = subparsers.add_parser("run")
+    run_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    build_parser: argparse.ArgumentParser = subparsers.add_parser("build")
+    build_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     subparsers.add_parser("test")
     subparsers.add_parser("audit")
     subparsers.add_parser("seed")

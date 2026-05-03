@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.planner.helpers.selectors import (
     parse_selector,
     resolve_selectors,
@@ -10,11 +10,13 @@ from sqlbuild.compiler.planner.helpers.selectors import (
 from sqlbuild.compiler.planner.models import ParsedSelector
 from sqlbuild.compiler.planner.types import SelectorKind
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
+    BuildPathIndexTestCase,
     ParseSelectorErrorTestCase,
     ParseSelectorTestCase,
     ResolveSelectorErrorTestCase,
     ResolveSelectorTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import build_test_project
 
 PARSE_SELECTOR_TEST_CASES: list[ParseSelectorTestCase] = [
     ParseSelectorTestCase(
@@ -70,6 +72,31 @@ PARSE_SELECTOR_TEST_CASES: list[ParseSelectorTestCase] = [
         description="parses path selector as a~b tuple",
         raw="raw~orders",
         expected_result=("raw", "orders"),
+    ),
+    ParseSelectorTestCase(
+        description="parses bare slash as path selector",
+        raw="staging/",
+        expected_result=ParsedSelector(kind=SelectorKind.PATH, value="staging"),
+    ),
+    ParseSelectorTestCase(
+        description="parses nested bare slash as path selector",
+        raw="staging/orders/",
+        expected_result=ParsedSelector(kind=SelectorKind.PATH, value="staging/orders"),
+    ),
+    ParseSelectorTestCase(
+        description="parses bare slash without trailing slash as path selector",
+        raw="staging/orders",
+        expected_result=ParsedSelector(kind=SelectorKind.PATH, value="staging/orders"),
+    ),
+    ParseSelectorTestCase(
+        description="parses bare slash with upstream expansion",
+        raw="+staging/",
+        expected_result=ParsedSelector(kind=SelectorKind.PATH, value="staging", upstream=True),
+    ),
+    ParseSelectorTestCase(
+        description="parses bare slash with downstream expansion",
+        raw="staging/+",
+        expected_result=ParsedSelector(kind=SelectorKind.PATH, value="staging", downstream=True),
     ),
 ]
 
@@ -335,3 +362,218 @@ def test_given_tag_selectors_when_resolving_then_returns_expected_names(
     result_names: frozenset[str] = frozenset(key.name for key in result)
 
     assert result_names == test_case.expected_names
+
+
+RESOLVE_PATH_SELECTOR_TEST_CASES: list[ResolveSelectorTestCase] = [
+    ResolveSelectorTestCase(
+        description="selects models by path folder including nested subdirectories",
+        select=("path:staging",),
+        exclude=(),
+        expected_names=frozenset({"stg_orders", "stg_customers", "stg_deep"}),
+    ),
+    ResolveSelectorTestCase(
+        description="selects models by bare slash convention",
+        select=("staging/",),
+        exclude=(),
+        expected_names=frozenset({"stg_orders", "stg_customers", "stg_deep"}),
+    ),
+    ResolveSelectorTestCase(
+        description="selects single folder with one model",
+        select=("path:marts",),
+        exclude=(),
+        expected_names=frozenset({"fact_orders"}),
+    ),
+    ResolveSelectorTestCase(
+        description="selects path with downstream expansion",
+        select=("path:staging+",),
+        exclude=(),
+        expected_names=frozenset(
+            {
+                "stg_orders",
+                "stg_customers",
+                "stg_deep",
+                "int_enriched",
+                "fact_orders",
+            }
+        ),
+    ),
+    ResolveSelectorTestCase(
+        description="selects path with upstream expansion",
+        select=("+path:marts",),
+        exclude=(),
+        expected_names=frozenset(
+            {
+                "fact_orders",
+                "int_enriched",
+                "stg_orders",
+                "stg_customers",
+                "raw_orders",
+                "raw_customers",
+            }
+        ),
+    ),
+    ResolveSelectorTestCase(
+        description="intersects path with name selector",
+        select=("path:staging,stg_orders",),
+        exclude=(),
+        expected_names=frozenset({"stg_orders"}),
+    ),
+    ResolveSelectorTestCase(
+        description="excludes path from selected",
+        select=("+fact_orders",),
+        exclude=("path:staging",),
+        expected_names=frozenset({"fact_orders", "int_enriched", "raw_orders", "raw_customers"}),
+    ),
+    ResolveSelectorTestCase(
+        description="bare slash with trailing slash selects single-model folder",
+        select=("intermediate/",),
+        exclude=(),
+        expected_names=frozenset({"int_enriched"}),
+    ),
+    ResolveSelectorTestCase(
+        description="selects only nested subdirectory not parent",
+        select=("path:staging/raw",),
+        exclude=(),
+        expected_names=frozenset({"stg_deep"}),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    RESOLVE_PATH_SELECTOR_TEST_CASES,
+    ids=[case.description for case in RESOLVE_PATH_SELECTOR_TEST_CASES],
+)
+def test_given_path_selectors_when_resolving_then_returns_expected_names(
+    test_case: ResolveSelectorTestCase,
+    path_graph: tuple[
+        dict[str, CompiledObjectKey],
+        dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+        dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+        dict[CompiledObjectKey, str],
+    ],
+) -> None:
+    all_keys: dict[str, CompiledObjectKey] = path_graph[0]
+    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = path_graph[1]
+    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = path_graph[2]
+    path_idx: dict[CompiledObjectKey, str] = path_graph[3]
+
+    result: frozenset[CompiledObjectKey] = resolve_selectors(
+        select=test_case.select,
+        exclude=test_case.exclude,
+        all_keys=all_keys,
+        upstream=upstream,
+        downstream=downstream,
+        path_index=path_idx,
+    )
+    result_names: frozenset[str] = frozenset(key.name for key in result)
+
+    assert result_names == test_case.expected_names
+
+
+RESOLVE_PATH_SELECTOR_ERROR_TEST_CASES: list[ResolveSelectorErrorTestCase] = [
+    ResolveSelectorErrorTestCase(
+        description="raises with folder name when path matches no models",
+        select=("path:nonexistent",),
+        exclude=(),
+        expected_error_type=ValueError,
+        expected_error_fragment="No models found under path 'nonexistent'",
+    ),
+    ResolveSelectorErrorTestCase(
+        description="raises with hint when user includes models prefix",
+        select=("path:models/staging",),
+        exclude=(),
+        expected_error_type=ValueError,
+        expected_error_fragment="try 'path:staging'",
+    ),
+    ResolveSelectorErrorTestCase(
+        description="raises with folder name when bare slash matches no models",
+        select=("nonexistent/",),
+        exclude=(),
+        expected_error_type=ValueError,
+        expected_error_fragment="No models found under path 'nonexistent'",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    RESOLVE_PATH_SELECTOR_ERROR_TEST_CASES,
+    ids=[case.description for case in RESOLVE_PATH_SELECTOR_ERROR_TEST_CASES],
+)
+def test_given_invalid_path_selector_when_resolving_then_raises_with_message(
+    test_case: ResolveSelectorErrorTestCase,
+    path_graph: tuple[
+        dict[str, CompiledObjectKey],
+        dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+        dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+        dict[CompiledObjectKey, str],
+    ],
+) -> None:
+    all_keys: dict[str, CompiledObjectKey] = path_graph[0]
+    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = path_graph[1]
+    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = path_graph[2]
+    path_idx: dict[CompiledObjectKey, str] = path_graph[3]
+
+    with pytest.raises(test_case.expected_error_type, match=test_case.expected_error_fragment):
+        resolve_selectors(
+            select=test_case.select,
+            exclude=test_case.exclude,
+            all_keys=all_keys,
+            upstream=upstream,
+            downstream=downstream,
+            path_index=path_idx,
+        )
+
+
+BUILD_PATH_INDEX_TEST_CASES: list[BuildPathIndexTestCase] = [
+    BuildPathIndexTestCase(
+        description="strips models prefix from relative paths",
+        model_paths={
+            "stg_orders": "models/staging/stg_orders.sql",
+            "fact_orders": "models/marts/fact_orders.sql",
+        },
+        expected_folders={
+            "stg_orders": "staging",
+            "fact_orders": "marts",
+        },
+    ),
+    BuildPathIndexTestCase(
+        description="handles nested subdirectories",
+        model_paths={
+            "deep_model": "models/staging/raw/deep_model.sql",
+        },
+        expected_folders={
+            "deep_model": "staging/raw",
+        },
+    ),
+    BuildPathIndexTestCase(
+        description="handles models at top level models dir",
+        model_paths={
+            "top_model": "models/top_model.sql",
+        },
+        expected_folders={
+            "top_model": "",
+        },
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    BUILD_PATH_INDEX_TEST_CASES,
+    ids=[case.description for case in BUILD_PATH_INDEX_TEST_CASES],
+)
+def test_given_model_paths_when_building_path_index_then_returns_expected_folders(
+    test_case: BuildPathIndexTestCase,
+) -> None:
+    from sqlbuild.compiler.planner.helpers.plan_entry import build_path_index
+
+    project: CompiledProject = build_test_project(
+        model_deps={name: () for name in test_case.model_paths},
+        model_paths=test_case.model_paths,
+    )
+    result: dict[CompiledObjectKey, str] = build_path_index(project)
+    result_by_name: dict[str, str] = {key.name: folder for key, folder in result.items()}
+
+    assert result_by_name == test_case.expected_folders

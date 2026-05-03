@@ -110,6 +110,7 @@ class ResolveSelectorErrorTestCase:
     select: tuple[str, ...]
     exclude: tuple[str, ...]
     expected_error_type: type[Exception]
+    expected_error_fragment: str | None = None
 
 
 @dataclass(frozen=True)
@@ -169,6 +170,13 @@ class BuildModelWarningsTestCase:
     expected_severity: WarningSeverity | None
     expected_warning_count: int
     expected_severities: tuple[WarningSeverity, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class BuildPathIndexTestCase:
+    description: str
+    model_paths: dict[str, str]
+    expected_folders: dict[str, str]
 
 
 @dataclass(frozen=True)

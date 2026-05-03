@@ -30,6 +30,7 @@ class BuildCompileInputsTestCase:
         default_factory=tuple
     )
     environment_variables: dict[str, str] = field(default_factory=dict)
+    no_sql_validation: bool = False
 
 
 @dataclass(frozen=True)

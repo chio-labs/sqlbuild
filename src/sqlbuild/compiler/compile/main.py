@@ -31,6 +31,7 @@ def build_compile_inputs(
     selected_environment: str | None = None,
     cli_vars: dict[str, str] | None = None,
     run_id: str | None = None,
+    no_sql_validation: bool = False,
 ) -> CompileProjectInputs:
     """Attach discovered metadata into the first compile input snapshot."""
 
@@ -59,6 +60,7 @@ def build_compile_inputs(
         environment_config=effective_environment,
         effective_environment_name=effective_environment_name,
         run_id=resolved_run_id,
+        no_sql_validation=no_sql_validation,
     )
     seed_inputs: tuple[CompileSeedInput, ...] = build_seed_inputs(discovered_inputs)
     source_inputs: tuple[CompileSourceInput, ...] = build_source_inputs(discovered_inputs)

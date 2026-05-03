@@ -58,11 +58,13 @@ def seed_key(name: str) -> CompiledObjectKey:
 def build_test_project(
     *,
     model_deps: dict[str, tuple[str, ...]] | None = None,
+    model_paths: dict[str, str] | None = None,
     source_names: tuple[str, ...] = (),
     seed_names: tuple[str, ...] = (),
 ) -> CompiledProject:
     """Build a minimal CompiledProject for graph tests."""
 
+    effective_paths: dict[str, str] = model_paths or {}
     source_name_set: set[str] = set(source_names)
     seed_name_set: set[str] = set(seed_names)
     models: list[CompiledModel] = []
@@ -72,12 +74,13 @@ def build_test_project(
         deps: tuple[CompiledObjectKey, ...] = tuple(
             _resolve_dep_key(d, source_name_set, seed_name_set) for d in dep_names
         )
+        rel_path: str = effective_paths.get(model_name, f"models/{model_name}.sql")
         models.append(
             CompiledModel(
                 key=model_key(model_name),
                 deps=deps,
                 name=model_name,
-                relative_path=Path(f"models/{model_name}.sql"),
+                relative_path=Path(rel_path),
                 query_sql=f"SELECT * FROM {model_name}",
                 config=CompileModelConfig(),
                 target=CompiledRelationTarget(

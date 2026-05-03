@@ -65,6 +65,12 @@ def parse_selector(raw: str) -> ParsedSelector | tuple[str, str]:
             raise ValueError(f"Selector '{stripped}' has empty value after ':'")
         return ParsedSelector(kind=kind, value=value, upstream=upstream, downstream=downstream)
 
+    if "/" in name:
+        folder_value: str = name.rstrip("/")
+        return ParsedSelector(
+            kind=SelectorKind.PATH, value=folder_value, upstream=upstream, downstream=downstream
+        )
+
     return ParsedSelector(
         kind=SelectorKind.NAME, value=name, upstream=upstream, downstream=downstream
     )
@@ -78,6 +84,7 @@ def resolve_selectors(
     upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     tag_index: dict[str, frozenset[CompiledObjectKey]] | None = None,
+    path_index: dict[CompiledObjectKey, str] | None = None,
 ) -> frozenset[CompiledObjectKey]:
     """Resolve raw select/exclude strings into a final set of object keys.
 
@@ -87,6 +94,7 @@ def resolve_selectors(
     """
 
     effective_tag_index: dict[str, frozenset[CompiledObjectKey]] = tag_index or {}
+    effective_path_index: dict[CompiledObjectKey, str] = path_index or {}
 
     if not select:
         return frozenset(all_keys.values())
@@ -103,6 +111,7 @@ def resolve_selectors(
                 upstream=upstream,
                 downstream=downstream,
                 tag_index=effective_tag_index,
+                path_index=effective_path_index,
             )
             selected.update(resolved)
 
@@ -117,6 +126,7 @@ def resolve_selectors(
                 upstream=upstream,
                 downstream=downstream,
                 tag_index=effective_tag_index,
+                path_index=effective_path_index,
             )
             excluded.update(resolved)
 
@@ -130,6 +140,7 @@ def _resolve_token(
     upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     tag_index: dict[str, frozenset[CompiledObjectKey]],
+    path_index: dict[CompiledObjectKey, str],
 ) -> frozenset[CompiledObjectKey]:
     """Resolve one selector token, handling comma intersection."""
 
@@ -141,6 +152,7 @@ def _resolve_token(
             upstream=upstream,
             downstream=downstream,
             tag_index=tag_index,
+            path_index=path_index,
         )
 
     sets: list[frozenset[CompiledObjectKey]] = [
@@ -150,6 +162,7 @@ def _resolve_token(
             upstream=upstream,
             downstream=downstream,
             tag_index=tag_index,
+            path_index=path_index,
         )
         for part in parts
     ]
@@ -167,6 +180,7 @@ def _resolve_single(
     upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     tag_index: dict[str, frozenset[CompiledObjectKey]],
+    path_index: dict[CompiledObjectKey, str],
 ) -> frozenset[CompiledObjectKey]:
     """Resolve one atomic selector (no commas)."""
 
@@ -187,6 +201,14 @@ def _resolve_single(
         return _resolve_tag(
             parsed=parsed,
             tag_index=tag_index,
+            upstream=upstream,
+            downstream=downstream,
+        )
+
+    if parsed.kind == SelectorKind.PATH:
+        return _resolve_path(
+            parsed=parsed,
+            path_index=path_index,
             upstream=upstream,
             downstream=downstream,
         )
@@ -223,6 +245,42 @@ def _resolve_tag(
             result.update(expand_upstream(key, upstream))
     if parsed.downstream:
         for key in tagged_keys:
+            result.update(expand_downstream(key, downstream))
+    return frozenset(result)
+
+
+def _resolve_path(
+    *,
+    parsed: ParsedSelector,
+    path_index: dict[CompiledObjectKey, str],
+    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+) -> frozenset[CompiledObjectKey]:
+    """Resolve a path selector to matching keys with optional graph expansion."""
+
+    folder: str = parsed.value
+    prefix: str = folder + "/"
+    matched_keys: frozenset[CompiledObjectKey] = frozenset(
+        key
+        for key, model_folder in path_index.items()
+        if model_folder == folder or model_folder.startswith(prefix)
+    )
+    if not matched_keys:
+        hint: str = ""
+        if folder.startswith("models/"):
+            stripped_folder: str = folder[len("models/") :]
+            hint = (
+                f" (the 'models/' prefix is stripped automatically — try 'path:{stripped_folder}')"
+            )
+        raise ValueError(f"No models found under path '{folder}'.{hint}")
+
+    result: set[CompiledObjectKey] = set(matched_keys)
+    key: CompiledObjectKey
+    if parsed.upstream:
+        for key in matched_keys:
+            result.update(expand_upstream(key, upstream))
+    if parsed.downstream:
+        for key in matched_keys:
             result.update(expand_downstream(key, downstream))
     return frozenset(result)
 

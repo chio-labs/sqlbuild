@@ -77,6 +77,7 @@ def build_model_inputs(
     environment_config: EnvironmentConfig | None,
     effective_environment_name: str | None,
     run_id: str,
+    no_sql_validation: bool = False,
 ) -> tuple[CompileModelInput, ...]:
     """Attach schema metadata to discovered model files."""
 
@@ -113,7 +114,7 @@ def build_model_inputs(
             file_path=model_file.file_path,
             loaded_macros=loaded_macros,
         )
-        if _is_sql_validation_enabled(
+        if not no_sql_validation and _is_sql_validation_enabled(
             project_setting=discovered_inputs.project_config.settings.sql_validation,
             model_config=effective_config,
         ):

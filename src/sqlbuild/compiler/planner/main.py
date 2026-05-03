@@ -26,6 +26,7 @@ from sqlbuild.compiler.planner.helpers.graph import (
     topologically_order_keys,
 )
 from sqlbuild.compiler.planner.helpers.plan_entry import (
+    build_path_index,
     build_tag_index,
     gather_source_columns,
     plan_model,
@@ -74,6 +75,7 @@ def build_execution_plan(
     )
     all_keys: dict[str, CompiledObjectKey] = _build_all_keys(project)
     tag_index: dict[str, frozenset[CompiledObjectKey]] = build_tag_index(project)
+    path_idx: dict[CompiledObjectKey, str] = build_path_index(project)
 
     selected_keys: frozenset[CompiledObjectKey] = resolve_selectors(
         select=select,
@@ -82,6 +84,7 @@ def build_execution_plan(
         upstream=upstream_deps,
         downstream=downstream_deps,
         tag_index=tag_index,
+        path_index=path_idx,
     )
 
     execution_order: tuple[CompiledObjectKey, ...] = topologically_order_keys(upstream_deps)

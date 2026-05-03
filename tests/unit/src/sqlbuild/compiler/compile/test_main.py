@@ -1043,6 +1043,28 @@ settings:
         expected_model_references=((),),
         expected_audit_references=(),
     ),
+    BuildCompileInputsTestCase(
+        description="allows invalid sql when no_sql_validation flag is set",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/broken.sql": "MODEL ();\n\nSELEC id FROM (SELECT 1\n",
+        },
+        selected_environment=None,
+        cli_vars=None,
+        run_id="test_run",
+        no_sql_validation=True,
+        expected_model_schema_names=(None,),
+        expected_model_config_values=({},),
+        expected_model_query_sqls=("SELEC id FROM (SELECT 1",),
+        expected_model_path_defaults=(None,),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_effective_environment_name=None,
+        expected_effective_connection={},
+        expected_effective_vars={},
+        expected_model_references=((),),
+        expected_audit_references=(),
+    ),
 ]
 
 
@@ -1070,6 +1092,7 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
         selected_environment=test_case.selected_environment,
         cli_vars=test_case.cli_vars,
         run_id=test_case.run_id,
+        no_sql_validation=test_case.no_sql_validation,
     )
 
     assert (

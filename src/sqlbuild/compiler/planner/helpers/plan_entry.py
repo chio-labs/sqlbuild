@@ -43,6 +43,8 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.spec.models.source import SourceEntry
 
+_MODELS_DIR_PREFIX: str = "models/"
+
 
 def plan_model(
     *,
@@ -168,6 +170,34 @@ def build_tag_index(
         for tag in tags:
             index.setdefault(tag, set()).add(model.key)
     return {tag: frozenset(keys) for tag, keys in index.items()}
+
+
+def build_path_index(
+    project: CompiledProject,
+) -> dict[CompiledObjectKey, str]:
+    """Build a key-to-folder lookup from compiled model relative paths.
+
+    The folder value is the model's parent directory relative to models/,
+    with the implicit models/ prefix stripped.
+    """
+
+    index: dict[CompiledObjectKey, str] = {}
+    model: CompiledModel
+    for model in project.models:
+        parent: str = str(model.relative_path.parent)
+        folder: str = _strip_models_prefix(parent)
+        index[model.key] = folder
+    return index
+
+
+def _strip_models_prefix(path: str) -> str:
+    """Strip leading models/ from a relative path string."""
+
+    if path.startswith(_MODELS_DIR_PREFIX):
+        return path[len(_MODELS_DIR_PREFIX) :]
+    if path == "models":
+        return ""
+    return path
 
 
 def _as_string_list(value: object) -> list[str]:
