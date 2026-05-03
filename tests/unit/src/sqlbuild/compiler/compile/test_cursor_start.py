@@ -23,7 +23,7 @@ from tests.unit.src.sqlbuild.compiler.compile._test_types import (
             repo_files={
                 "sqlbuild_project.yml": (
                     "name: demo\nadapter: duckdb\ndefaults:\n  cursor_start: 10\n"
-                    "path_defaults:\n  models/events:\n    cursor_start: 20\n"
+                    "path_defaults:\n  events:\n    cursor_start: 20\n"
                 ),
                 "models/events/orders.sql": (
                     "MODEL (\nmaterialized incremental\nincremental_strategy delete_insert\n"

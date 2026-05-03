@@ -34,6 +34,10 @@ def validate_discovered_inputs(discovered_inputs: DiscoveredProjectInputs) -> No
         schema_files=discovered_inputs.schema_files,
         seed_files=discovered_inputs.seed_files,
     )
+    _validate_path_defaults_match_models(
+        path_defaults=discovered_inputs.project_config.path_defaults,
+        model_files=discovered_inputs.model_files,
+    )
 
 
 def _validate_unique_model_file_names(model_files: tuple[DiscoveredSqlModelFile, ...]) -> None:
@@ -216,3 +220,37 @@ def _load_seed_csv_header(file_path: Path) -> tuple[str, ...]:
         except StopIteration:
             return ()
     return tuple(header_row)
+
+
+def _validate_path_defaults_match_models(
+    *,
+    path_defaults: dict[str, dict[str, object]],
+    model_files: tuple[DiscoveredSqlModelFile, ...],
+) -> None:
+    if not path_defaults:
+        return
+    model_paths: tuple[str, ...] = tuple(
+        str(model_file.relative_path).removeprefix("models/") for model_file in model_files
+    )
+    model_folders: tuple[str, ...] = tuple(
+        sorted(
+            {
+                str(Path(model_path).parent)
+                for model_path in model_paths
+                if str(Path(model_path).parent) != "."
+            }
+        )
+    )
+    path_key: str
+    for path_key in path_defaults:
+        path_key_parts: tuple[str, ...] = Path(path_key).parts
+        if any(
+            Path(model_path).parts[: len(path_key_parts)] == path_key_parts
+            for model_path in model_paths
+        ):
+            continue
+        known_folders: str = ", ".join(model_folders[:5]) if model_folders else "<none>"
+        raise DiscoveryConflictError(
+            f"path_defaults['{path_key}'] does not match any model paths. Known model folders "
+            f"include: {known_folders}"
+        )

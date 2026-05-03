@@ -18,6 +18,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.diff import run_diff_pipeline
 from sqlbuild.executor.diff.main.execute import execute_diff
 from sqlbuild.executor.diff.models import DiffExecutionResult
+from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
 def run_diff(
@@ -58,7 +59,11 @@ def run_diff(
     if to_environment not in discovered_inputs.project_config.environments:
         raise CliUserError(f"unknown diff --to environment '{to_environment}'")
 
-    adapter: BaseAdapter = resolve_adapter(discovered_inputs.project_config.adapter)
+    effective_adapter_name: str = resolve_effective_adapter_name(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+    )
+    adapter: BaseAdapter = resolve_adapter(effective_adapter_name)
     left_project: Any
     right_project: Any
     selected_names: tuple[str, ...]
@@ -85,7 +90,7 @@ def run_diff(
             **discovered_inputs.project_config.environments[to_environment].connection,
         },
         project_dir=effective_project_dir,
-        adapter_name=discovered_inputs.project_config.adapter,
+        adapter_name=effective_adapter_name,
     )
     connection: Any = adapter.connect(connection_config)
     try:

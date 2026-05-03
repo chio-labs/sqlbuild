@@ -18,6 +18,7 @@ from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.build.types import ExecutionStatus
 from sqlbuild.executor.pipeline.main.run import run_seed_pipeline
 from sqlbuild.shared.helpers.colors import colorize_status, supports_color
+from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
 def run_seed(
@@ -32,7 +33,12 @@ def run_seed(
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
-    adapter: BaseAdapter = resolve_adapter(discovered_inputs.project_config.adapter)
+    adapter: BaseAdapter = resolve_adapter(
+        resolve_effective_adapter_name(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+        )
+    )
     connection_config: dict[str, object] = resolve_project_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,

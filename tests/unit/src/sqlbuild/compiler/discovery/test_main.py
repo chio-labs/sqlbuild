@@ -326,6 +326,22 @@ seeds:
         },
         expected_error_fragment="contains duplicate CSV header column 'country_code'",
     ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when path defaults match no model paths",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.yml": """
+name: demo
+adapter: duckdb
+path_defaults:
+  stagingg:
+    schema: staging
+""".strip()
+            + "\n",
+            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+        },
+        expected_error_fragment=r"path_defaults\['stagingg'\] does not match any model paths",
+    ),
 ]
 
 

@@ -19,5 +19,5 @@ environments:
     schema: dev
 
 path_defaults:
-  models/staging:
+  staging:
     materialized: view

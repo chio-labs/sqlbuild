@@ -20,6 +20,7 @@ LOCAL_CONFIG_TEST_CASES: list[LoadLocalConfigTestCase] = [
         description="defaults cleanly when local file is missing",
         repo_files={},
         expected_environment=None,
+        expected_adapter=None,
         expected_connection={},
         expected_sqlglot=True,
         expected_sql_validation=True,
@@ -32,6 +33,7 @@ LOCAL_CONFIG_TEST_CASES: list[LoadLocalConfigTestCase] = [
         repo_files={
             "sqlbuild_local.yml": """
 environment: dev
+adapter: snowflake
 connection:
   database: local.duckdb
 settings:
@@ -43,6 +45,7 @@ vars:
 """.strip()
         },
         expected_environment="dev",
+        expected_adapter="snowflake",
         expected_connection={"database": "local.duckdb"},
         expected_sqlglot=False,
         expected_sql_validation=False,
@@ -54,7 +57,6 @@ vars:
         description="does not expose unsupported project level overrides",
         repo_files={
             "sqlbuild_local.yml": """
-adapter: sqlite
 default_environment: prod
 defaults:
   materialized: table
@@ -65,13 +67,14 @@ connection:
 """.strip()
         },
         expected_environment=None,
+        expected_adapter=None,
         expected_connection={"database": "local.duckdb"},
         expected_sqlglot=True,
         expected_sql_validation=True,
         expected_max_concurrency=1,
         expected_setting_overrides=frozenset(),
         expected_vars={},
-        expected_missing_attributes=("adapter", "default_environment", "defaults", "janitor"),
+        expected_missing_attributes=("default_environment", "defaults", "janitor"),
     ),
 ]
 
@@ -113,7 +116,7 @@ defaults:
 name: demo
 adapter: duckdb
 path_defaults:
-  models/staging: view
+  staging: view
 """.strip(),
         expected_error_fragment="path_defaults",
     ),
@@ -234,6 +237,39 @@ path_defaults:
         expected_error_fragment="path_defaults.*tags.*must be strings",
     ),
     LoadProjectConfigErrorTestCase(
+        description="raises when path defaults key has leading slash",
+        project_file_contents="""
+name: demo
+adapter: duckdb
+path_defaults:
+  /staging:
+    schema: staging
+""".strip(),
+        expected_error_fragment="without a leading slash",
+    ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when path defaults key has empty path segment",
+        project_file_contents="""
+name: demo
+adapter: duckdb
+path_defaults:
+  staging//nested:
+    schema: staging
+""".strip(),
+        expected_error_fragment="empty path segments",
+    ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when path defaults uses redundant models prefix",
+        project_file_contents="""
+name: demo
+adapter: duckdb
+path_defaults:
+  models/staging:
+    schema: staging
+""".strip(),
+        expected_error_fragment="uses redundant 'models/' prefix",
+    ),
+    LoadProjectConfigErrorTestCase(
         description="raises when tracked-only janitor is enabled without query tracking",
         project_file_contents="""
 name: demo
@@ -244,6 +280,16 @@ janitor:
   enabled: true
 """.strip(),
         expected_error_fragment="janitor.delete_tracked_only requires",
+    ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when project settings contain unknown key",
+        project_file_contents="""
+name: demo
+adapter: duckdb
+settings:
+  threads: 4
+""".strip(),
+        expected_error_fragment=r"settings contains unknown key\(s\): threads",
     ),
 ]
 
@@ -282,6 +328,14 @@ settings:
 """.strip(),
         expected_error_fragment="Expected 'max_concurrency' to be an integer when provided",
     ),
+    LoadLocalConfigErrorTestCase(
+        description="raises when local settings contain unknown key",
+        local_file_contents="""
+settings:
+  concurrency: 8
+""".strip(),
+        expected_error_fragment=r"settings contains unknown key\(s\): concurrency",
+    ),
 ]
 
 
@@ -317,7 +371,7 @@ defaults:
         absolute: 0.01
 
 path_defaults:
-  models/staging:
+  staging:
     schema: staging
 
 vars:
@@ -389,9 +443,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.defaults.materialized == test_case.expected_materialized
     assert config.defaults.row_diff_exclude_columns == test_case.expected_row_diff_exclude_columns
     assert config.defaults.row_diff_tolerances == test_case.expected_row_diff_tolerances
-    assert (
-        config.path_defaults["models/staging"]["schema"] == test_case.expected_path_default_schema
-    )
+    assert config.path_defaults["staging"]["schema"] == test_case.expected_path_default_schema
     assert config.vars == test_case.expected_vars
     assert config.environments["dev"].connection == test_case.expected_dev_connection
     assert config.environments["dev"].vars == test_case.expected_dev_vars
@@ -422,6 +474,7 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
     config: object = load_local_config(project_dir=tmp_path)
 
     assert config.environment == test_case.expected_environment
+    assert config.adapter == test_case.expected_adapter
     assert config.connection == test_case.expected_connection
     assert config.settings.sqlglot is test_case.expected_sqlglot
     assert config.settings.sql_validation is test_case.expected_sql_validation

@@ -7,6 +7,7 @@ from pathlib import Path
 from sqlbuild.adapter.shared.types import BuiltinAdapter
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
 def resolve_connection_config(
@@ -39,5 +40,8 @@ def resolve_project_connection_config(
     return resolve_connection_config(
         raw_config=build_effective_connection_config(discovered_inputs=discovered_inputs),
         project_dir=project_dir,
-        adapter_name=discovered_inputs.project_config.adapter,
+        adapter_name=resolve_effective_adapter_name(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+        ),
     )

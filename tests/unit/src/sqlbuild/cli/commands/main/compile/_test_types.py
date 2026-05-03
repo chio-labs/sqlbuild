@@ -23,3 +23,11 @@ class ResolveAdapterErrorTestCase:
     description: str
     adapter_name: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ResolveEffectiveAdapterNameTestCase:
+    description: str
+    project_adapter: str
+    local_adapter: str | None
+    expected_adapter_name: str

@@ -88,7 +88,18 @@ class LocalConfig:
     """Local developer overrides from sqlbuild_local.yml."""
 
     environment: str | None = None
+    adapter: str | None = None
     connection: dict[str, object] = field(default_factory=dict)
     settings: SettingsConfig = field(default_factory=SettingsConfig)
     setting_overrides: frozenset[str] = field(default_factory=frozenset)
     vars: dict[str, str] = field(default_factory=dict)
+
+
+def resolve_effective_adapter_name(
+    *, project_config: ProjectConfig, local_config: LocalConfig
+) -> str:
+    """Resolve the effective adapter name, allowing local override."""
+
+    if local_config.adapter is not None:
+        return local_config.adapter
+    return project_config.adapter

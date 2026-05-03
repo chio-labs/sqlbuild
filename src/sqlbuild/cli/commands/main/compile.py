@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.compile.models import WrittenTarget
 from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compile_target
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
@@ -14,6 +15,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
 def run_compile(
@@ -28,9 +30,15 @@ def run_compile(
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
+    adapter: BaseAdapter = resolve_adapter(
+        resolve_effective_adapter_name(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+        )
+    )
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered_inputs,
-        adapter=resolve_adapter(discovered_inputs.project_config.adapter),
+        adapter=adapter,
         no_sql_validation=no_sql_validation,
         defer_to=defer_to,
         connection_config=resolve_project_connection_config(

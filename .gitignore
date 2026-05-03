@@ -52,3 +52,7 @@ data/
 
 # Local artifacts
 target/
+
+# Local SQLBuild overrides
+sqlbuild_local.yml
+**/sqlbuild_local.yml

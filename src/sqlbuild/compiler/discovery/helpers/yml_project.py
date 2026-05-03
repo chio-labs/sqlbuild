@@ -75,6 +75,7 @@ def load_local_config(*, project_dir: Path) -> LocalConfig:
 
     payload: dict[str, object] = _load_yaml_mapping(file_path=file_path)
     environment: str | None = _optional_str(payload=payload, key="environment")
+    adapter: str | None = _optional_str(payload=payload, key="adapter")
     connection: dict[str, object] = _optional_mapping(payload=payload, key="connection")
     local_settings_result: tuple[SettingsConfig, frozenset[str]] = _load_local_settings(
         payload=payload.get("settings"), file_path=file_path
@@ -86,6 +87,7 @@ def load_local_config(*, project_dir: Path) -> LocalConfig:
     )
     return LocalConfig(
         environment=environment,
+        adapter=adapter,
         connection=connection,
         settings=settings,
         setting_overrides=setting_overrides,
@@ -135,6 +137,12 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
     mapping: dict[str, object] = _coerce_mapping(
         payload=payload, label="settings", file_path=file_path
     )
+    _validate_allowed_keys(
+        mapping=mapping,
+        allowed_keys=frozenset(field.name for field in fields(SettingsConfig)),
+        label="settings",
+        file_path=file_path,
+    )
     sqlglot: bool = _optional_bool(mapping=mapping, key="sqlglot", default=True)
     query_change_tracking: bool = _optional_bool(
         mapping=mapping,
@@ -172,6 +180,51 @@ def _load_local_settings(
         _load_settings(payload=payload, file_path=file_path),
         frozenset(key for key in mapping if key in setting_names),
     )
+
+
+def _validate_allowed_keys(
+    *,
+    mapping: dict[str, object],
+    allowed_keys: frozenset[str],
+    label: str,
+    file_path: Path,
+) -> None:
+    unknown_keys: tuple[str, ...] = tuple(sorted(key for key in mapping if key not in allowed_keys))
+    if not unknown_keys:
+        return
+    allowed: str = ", ".join(sorted(allowed_keys))
+    unknown: str = ", ".join(unknown_keys)
+    raise ProjectConfigError(
+        f"{file_path} {label} contains unknown key(s): {unknown}. Allowed keys: {allowed}"
+    )
+
+
+def _normalize_path_default_key(*, path_key: str, file_path: Path) -> str:
+    normalized_key: str = path_key.strip()
+    if not normalized_key:
+        raise ProjectConfigError(f"{file_path} path_defaults contains an empty path key")
+    if normalized_key.startswith("/"):
+        raise ProjectConfigError(
+            f"{file_path} path_defaults['{path_key}'] is invalid. Use model-relative paths "
+            "without a leading slash, for example 'staging' or 'staging/nested'."
+        )
+    if normalized_key.endswith("/"):
+        raise ProjectConfigError(
+            f"{file_path} path_defaults['{path_key}'] is invalid. Remove the trailing slash and "
+            "use a model-relative path such as 'staging' or 'staging/nested'."
+        )
+    path_parts: list[str] = normalized_key.split("/")
+    if any(not part for part in path_parts):
+        raise ProjectConfigError(
+            f"{file_path} path_defaults['{path_key}'] is invalid. Path defaults cannot contain "
+            "empty path segments."
+        )
+    if path_parts[0] == "models":
+        raise ProjectConfigError(
+            f"{file_path} path_defaults['{path_key}'] uses redundant 'models/' prefix. "
+            "Use a model-relative path such as 'staging' or 'staging/nested'."
+        )
+    return "/".join(path_parts)
 
 
 def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
@@ -233,7 +286,16 @@ def _load_path_defaults(*, payload: object, file_path: Path) -> dict[str, dict[s
             raise ProjectConfigError(f"{file_path} path_defaults['{path_key}'] must be a mapping")
         path_dict: dict[str, object] = cast(dict[str, object], path_value)
         _validate_path_default_tags(path_dict=path_dict, path_key=path_key, file_path=file_path)
-        path_defaults[path_key] = path_dict
+        normalized_path_key: str = _normalize_path_default_key(
+            path_key=path_key, file_path=file_path
+        )
+        if normalized_path_key in path_defaults:
+            raise ProjectConfigError(
+                f"{file_path} path_defaults defines both '{path_key}' and another key that "
+                f"normalize to '{normalized_path_key}'. Use only the canonical model-relative "
+                "form without a leading 'models/' prefix."
+            )
+        path_defaults[normalized_path_key] = path_dict
     return path_defaults
 
 

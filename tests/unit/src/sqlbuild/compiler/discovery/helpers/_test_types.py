@@ -31,6 +31,7 @@ class LoadLocalConfigTestCase:
     description: str
     repo_files: dict[str, str]
     expected_environment: str | None
+    expected_adapter: str | None
     expected_connection: dict[str, object]
     expected_sqlglot: bool
     expected_sql_validation: bool

@@ -28,7 +28,7 @@ from sqlbuild.compiler.pipeline.helpers.target_defaults import apply_target_defa
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.main.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
-from sqlbuild.spec.models.project import EnvironmentConfig
+from sqlbuild.spec.models.project import EnvironmentConfig, resolve_effective_adapter_name
 
 
 def run_compile_pipeline(
@@ -127,7 +127,10 @@ def _build_result(
         plan_output=plan_output,
         loaded_macros=loaded_macros,
         project_name=discovered_inputs.project_config.name,
-        adapter_type=discovered_inputs.project_config.adapter,
+        adapter_type=resolve_effective_adapter_name(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+        ),
         upstream_deps=plan_output.upstream_deps,
         downstream_deps=plan_output.downstream_deps,
     )

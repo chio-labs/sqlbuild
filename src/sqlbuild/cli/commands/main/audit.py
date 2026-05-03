@@ -17,6 +17,7 @@ from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.pipeline.main.run import run_audit_pipeline
 from sqlbuild.shared.helpers.colors import bold, colorize_status, green_bold, supports_color
+from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
 def run_audit(
@@ -33,7 +34,12 @@ def run_audit(
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
-    adapter: BaseAdapter = resolve_adapter(discovered_inputs.project_config.adapter)
+    adapter: BaseAdapter = resolve_adapter(
+        resolve_effective_adapter_name(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+        )
+    )
     connection_config: dict[str, object] = resolve_project_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,

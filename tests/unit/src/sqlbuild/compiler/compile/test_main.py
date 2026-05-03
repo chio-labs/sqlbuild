@@ -43,10 +43,10 @@ defaults:
   batch_size: 1h
 
 path_defaults:
-  models/staging:
+  staging:
     materialized: view
     schema: staging
-  models/staging/nested:
+  staging/nested:
     schema: nested
 
 environments:
@@ -131,7 +131,7 @@ sources:
             {"materialized": "view", "schema": "staging", "batch_size": "1h"},
         ),
         expected_model_query_sqls=("select 1", "select 1"),
-        expected_model_path_defaults=("models/staging/nested", "models/staging"),
+        expected_model_path_defaults=("staging/nested", "staging"),
         expected_seed_names=("country_codes",),
         expected_source_names=("raw_orders",),
         expected_effective_environment_name="dev",
@@ -880,7 +880,7 @@ defaults:
   schema: marts
 
 path_defaults:
-  models/staging:
+  staging:
     alias: "${stage_two}_orders"
 
 environments:
@@ -903,7 +903,7 @@ environments:
             },
         ),
         expected_model_query_sqls=("select 1",),
-        expected_model_path_defaults=("models/staging",),
+        expected_model_path_defaults=("staging",),
         expected_seed_names=(),
         expected_source_names=(),
         expected_effective_environment_name="dev",

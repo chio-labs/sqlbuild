@@ -22,6 +22,7 @@ from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.executor.clone.main.execute import execute_clone
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.shared.helpers.colors import supports_color
+from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
 def run_clone(
@@ -43,7 +44,11 @@ def run_clone(
         from_environment=from_environment,
         to_environment=to_environment,
     )
-    adapter: BaseAdapter = resolve_adapter(discovered_inputs.project_config.adapter)
+    effective_adapter_name: str = resolve_effective_adapter_name(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+    )
+    adapter: BaseAdapter = resolve_adapter(effective_adapter_name)
 
     source_connection_config: dict[str, object] = resolve_connection_config(
         raw_config={
@@ -51,7 +56,7 @@ def run_clone(
             **discovered_inputs.project_config.environments[from_environment].connection,
         },
         project_dir=effective_project_dir,
-        adapter_name=discovered_inputs.project_config.adapter,
+        adapter_name=effective_adapter_name,
     )
     target_connection_config: dict[str, object] = resolve_connection_config(
         raw_config={
@@ -59,7 +64,7 @@ def run_clone(
             **discovered_inputs.project_config.environments[to_environment].connection,
         },
         project_dir=effective_project_dir,
-        adapter_name=discovered_inputs.project_config.adapter,
+        adapter_name=effective_adapter_name,
     )
     source_connection: Any = adapter.connect(source_connection_config)
     target_connection: Any = adapter.connect(target_connection_config)

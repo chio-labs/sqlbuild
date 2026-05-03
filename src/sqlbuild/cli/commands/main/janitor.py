@@ -22,6 +22,7 @@ from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.executor.janitor.main.execute import execute_janitor_plan
 from sqlbuild.executor.janitor.main.plan import build_janitor_plan
 from sqlbuild.executor.janitor.models import JanitorExecutionResult, JanitorPlan
+from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
 def run_janitor(
@@ -48,7 +49,11 @@ def run_janitor(
     if effective_retention_days < 0:
         raise CliUserError("janitor --retention-days must be >= 0")
 
-    adapter: BaseAdapter = resolve_adapter(discovered_inputs.project_config.adapter)
+    effective_adapter_name: str = resolve_effective_adapter_name(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+    )
+    adapter: BaseAdapter = resolve_adapter(effective_adapter_name)
     project: CompiledProject = compile_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
@@ -56,7 +61,7 @@ def run_janitor(
     connection_config: dict[str, object] = resolve_connection_config(
         raw_config=project.effective_connection,
         project_dir=effective_project_dir,
-        adapter_name=discovered_inputs.project_config.adapter,
+        adapter_name=effective_adapter_name,
     )
     connection: object = adapter.connect(connection_config)
     try:
