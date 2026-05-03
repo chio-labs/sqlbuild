@@ -1,0 +1,272 @@
+"""Project config loading helpers."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import cast
+
+import yaml
+
+from sqlbuild.spec.models.project import (
+    ClonePolicy,
+    DefaultsConfig,
+    EnvironmentConfig,
+    JanitorConfig,
+    LocalConfig,
+    ProjectConfig,
+    SettingsConfig,
+)
+
+
+def load_project_config(*, project_dir: Path) -> ProjectConfig:
+    """Load `sqlbuild_project.yml` from the given project directory."""
+
+    file_path: Path = project_dir / "sqlbuild_project.yml"
+    payload: dict[str, object] = _load_yaml_mapping(file_path=file_path)
+
+    name: str = _require_str(payload=payload, key="name", file_path=file_path)
+    adapter: str = _require_str(payload=payload, key="adapter", file_path=file_path)
+    default_environment: str | None = _optional_str(payload=payload, key="default_environment")
+    connection: dict[str, object] = _optional_mapping(payload=payload, key="connection")
+    settings: SettingsConfig = _load_settings(payload=payload.get("settings"), file_path=file_path)
+    defaults: DefaultsConfig = _load_defaults(payload=payload.get("defaults"), file_path=file_path)
+    path_defaults: dict[str, dict[str, object]] = _load_path_defaults(
+        payload=payload.get("path_defaults"),
+        file_path=file_path,
+    )
+    vars_map: dict[str, str] = _load_string_mapping(
+        payload=payload.get("vars"), file_path=file_path
+    )
+    environments: dict[str, EnvironmentConfig] = _load_environments(
+        payload=payload.get("environments"),
+        file_path=file_path,
+    )
+    janitor: JanitorConfig = _load_janitor(payload=payload.get("janitor"), file_path=file_path)
+
+    return ProjectConfig(
+        name=name,
+        adapter=adapter,
+        default_environment=default_environment,
+        connection=connection,
+        settings=settings,
+        defaults=defaults,
+        path_defaults=path_defaults,
+        vars=vars_map,
+        environments=environments,
+        janitor=janitor,
+    )
+
+
+def load_local_config(*, project_dir: Path) -> LocalConfig:
+    """Load `sqlbuild_local.yml` if present."""
+
+    file_path: Path = project_dir / "sqlbuild_local.yml"
+    if not file_path.exists():
+        return LocalConfig()
+
+    payload: dict[str, object] = _load_yaml_mapping(file_path=file_path)
+    environment: str | None = _optional_str(payload=payload, key="environment")
+    vars_map: dict[str, str] = _load_string_mapping(
+        payload=payload.get("vars"), file_path=file_path
+    )
+    return LocalConfig(environment=environment, vars=vars_map)
+
+
+def _load_yaml_mapping(*, file_path: Path) -> dict[str, object]:
+    contents: str = file_path.read_text(encoding="utf-8")
+    payload: object = yaml.safe_load(contents)
+    if payload is None:
+        return {}
+    if not isinstance(payload, dict):
+        raise ValueError(f"{file_path} must contain a top-level mapping")
+    return cast(dict[str, object], payload)
+
+
+def _require_str(*, payload: dict[str, object], key: str, file_path: Path) -> str:
+    value: object | None = payload.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{file_path} must define non-empty string '{key}'")
+    return value.strip()
+
+
+def _optional_str(*, payload: dict[str, object], key: str) -> str | None:
+    value: object | None = payload.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"Expected '{key}' to be a non-empty string when provided")
+    return value.strip()
+
+
+def _optional_mapping(*, payload: dict[str, object], key: str) -> dict[str, object]:
+    value: object | None = payload.get(key)
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError(f"Expected '{key}' to be a mapping when provided")
+    return cast(dict[str, object], value)
+
+
+def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
+    mapping: dict[str, object] = _coerce_mapping(
+        payload=payload, label="settings", file_path=file_path
+    )
+    sqlglot: bool = _optional_bool(mapping=mapping, key="sqlglot", default=True)
+    query_change_tracking: bool = _optional_bool(
+        mapping=mapping,
+        key="query_change_tracking",
+        default=True,
+    )
+    return SettingsConfig(sqlglot=sqlglot, query_change_tracking=query_change_tracking)
+
+
+def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
+    mapping: dict[str, object] = _coerce_mapping(
+        payload=payload, label="defaults", file_path=file_path
+    )
+    row_diff_exclude_columns: tuple[str, ...] = tuple(
+        _load_string_sequence(
+            payload=mapping.get("row_diff_exclude_columns"),
+            label="defaults.row_diff_exclude_columns",
+            file_path=file_path,
+        )
+    )
+    schema_change_backfill: dict[str, str] = _load_string_mapping(
+        payload=mapping.get("schema_change_backfill"),
+        file_path=file_path,
+    )
+    return DefaultsConfig(
+        materialized=_optional_str(payload=mapping, key="materialized"),
+        database=_optional_str(payload=mapping, key="database"),
+        schema=_optional_str(payload=mapping, key="schema"),
+        incremental_strategy=_optional_str(payload=mapping, key="incremental_strategy"),
+        incremental_mode=_optional_str(payload=mapping, key="incremental_mode"),
+        lookback=_optional_str(payload=mapping, key="lookback"),
+        batch_size=_optional_scalar_batch_size(mapping=mapping, key="batch_size"),
+        query_change_backfill=_optional_str(payload=mapping, key="query_change_backfill"),
+        schema_change_backfill=schema_change_backfill,
+        row_diff_exclude_columns=row_diff_exclude_columns,
+    )
+
+
+def _load_path_defaults(*, payload: object, file_path: Path) -> dict[str, dict[str, object]]:
+    mapping: dict[str, object] = _coerce_mapping(
+        payload=payload, label="path_defaults", file_path=file_path
+    )
+    path_defaults: dict[str, dict[str, object]] = {}
+    path_key: str
+    path_value: object
+    for path_key, path_value in mapping.items():
+        if not isinstance(path_value, dict):
+            raise ValueError(f"{file_path} path_defaults['{path_key}'] must be a mapping")
+        path_defaults[path_key] = cast(dict[str, object], path_value)
+    return path_defaults
+
+
+def _load_environments(*, payload: object, file_path: Path) -> dict[str, EnvironmentConfig]:
+    mapping: dict[str, object] = _coerce_mapping(
+        payload=payload, label="environments", file_path=file_path
+    )
+    environments: dict[str, EnvironmentConfig] = {}
+    env_name: str
+    env_payload: object
+    for env_name, env_payload in mapping.items():
+        env_mapping: dict[str, object] = _coerce_mapping(
+            payload=env_payload,
+            label=f"environments.{env_name}",
+            file_path=file_path,
+        )
+        clone_mapping: dict[str, object] = _coerce_mapping(
+            payload=env_mapping.get("clone"),
+            label=f"environments.{env_name}.clone",
+            file_path=file_path,
+        )
+        environments[env_name] = EnvironmentConfig(
+            connection=_optional_mapping(payload=env_mapping, key="connection"),
+            database=_optional_str(payload=env_mapping, key="database"),
+            schema=_optional_str(payload=env_mapping, key="schema"),
+            clone=ClonePolicy(
+                allow_as_source=_optional_bool(
+                    mapping=clone_mapping,
+                    key="allow_as_source",
+                    default=False,
+                ),
+                allow_as_target=_optional_bool(
+                    mapping=clone_mapping,
+                    key="allow_as_target",
+                    default=False,
+                ),
+            ),
+        )
+    return environments
+
+
+def _load_janitor(*, payload: object, file_path: Path) -> JanitorConfig:
+    mapping: dict[str, object] = _coerce_mapping(
+        payload=payload, label="janitor", file_path=file_path
+    )
+    retention_days: int = _optional_int(mapping=mapping, key="retention_days", default=7)
+    return JanitorConfig(retention_days=retention_days)
+
+
+def _load_string_mapping(*, payload: object, file_path: Path) -> dict[str, str]:
+    mapping: dict[str, object] = _coerce_mapping(
+        payload=payload, label="mapping", file_path=file_path
+    )
+    result: dict[str, str] = {}
+    key: str
+    value: object
+    for key, value in mapping.items():
+        if not isinstance(value, str):
+            raise ValueError(f"{file_path} expected string value for '{key}'")
+        result[key] = value
+    return result
+
+
+def _load_string_sequence(*, payload: object, label: str, file_path: Path) -> list[str]:
+    if payload is None:
+        return []
+    if not isinstance(payload, list):
+        raise ValueError(f"{file_path} {label} must be a list of strings")
+    values: list[str] = []
+    item: object
+    for item in payload:
+        if not isinstance(item, str):
+            raise ValueError(f"{file_path} {label} must contain only strings")
+        values.append(item)
+    return values
+
+
+def _coerce_mapping(*, payload: object, label: str, file_path: Path) -> dict[str, object]:
+    if payload is None:
+        return {}
+    if not isinstance(payload, dict):
+        raise ValueError(f"{file_path} {label} must be a mapping")
+    return cast(dict[str, object], payload)
+
+
+def _optional_bool(*, mapping: dict[str, object], key: str, default: bool) -> bool:
+    value: object | None = mapping.get(key)
+    if value is None:
+        return default
+    if not isinstance(value, bool):
+        raise ValueError(f"Expected '{key}' to be a boolean when provided")
+    return value
+
+
+def _optional_int(*, mapping: dict[str, object], key: str, default: int) -> int:
+    value: object | None = mapping.get(key)
+    if value is None:
+        return default
+    if not isinstance(value, int):
+        raise ValueError(f"Expected '{key}' to be an integer when provided")
+    return value
+
+
+def _optional_scalar_batch_size(*, mapping: dict[str, object], key: str) -> str | int | None:
+    value: object | None = mapping.get(key)
+    if value is None:
+        return None
+    if isinstance(value, (str, int)):
+        return value
+    raise ValueError(f"Expected '{key}' to be a string or integer when provided")

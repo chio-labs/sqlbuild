@@ -1,0 +1,1 @@
+"""Type annotation script package."""
