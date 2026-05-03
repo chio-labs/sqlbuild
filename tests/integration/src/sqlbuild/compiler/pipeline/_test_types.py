@@ -29,3 +29,11 @@ class DeferToIntegrationTestCase:
     select: tuple[str, ...]
     expected_model_count: int
     expected_resolved_sql_fragments: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class DiffSelectorIntegrationTestCase:
+    description: str
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    expected_model_names: frozenset[str]
