@@ -1,12 +1,38 @@
 sources:
   - name: raw_customers
-    schema: main
-    table: raw_customers
+    expression: |
+      SELECT * FROM (VALUES
+        (1, 'Leslie', 'Knope', 'leslie@pawnee.gov', TIMESTAMP '2026-01-15 09:00:00'),
+        (2, 'Ron', 'Swanson', 'ron@pawnee.gov', TIMESTAMP '2026-02-01 08:00:00'),
+        (3, 'Ann', 'Perkins', 'ann@pawnee.gov', TIMESTAMP '2026-02-14 10:00:00'),
+        (4, 'Ben', 'Wyatt', 'ben@pawnee.gov', TIMESTAMP '2026-03-01 07:30:00'),
+        (5, 'April', 'Ludgate', 'april@pawnee.gov', TIMESTAMP '2026-03-15 11:00:00')
+      ) AS raw_customers(id, first_name, last_name, email, created_at)
 
   - name: raw_orders
-    schema: main
-    table: raw_orders
+    expression: |
+      SELECT * FROM (VALUES
+        (1, 1, 1, 2, TIMESTAMP '2026-04-01 09:15:00', 'completed'),
+        (2, 1, 4, 1, TIMESTAMP '2026-04-01 09:15:00', 'completed'),
+        (3, 2, 6, 3, TIMESTAMP '2026-04-01 10:30:00', 'completed'),
+        (4, 3, 2, 1, TIMESTAMP '2026-04-02 08:45:00', 'completed'),
+        (5, 4, 1, 1, TIMESTAMP '2026-04-02 12:00:00', 'completed'),
+        (6, 4, 3, 1, TIMESTAMP '2026-04-02 12:00:00', 'completed'),
+        (7, 5, 5, 2, TIMESTAMP '2026-04-03 09:00:00', 'cancelled'),
+        (8, 1, 2, 1, TIMESTAMP '2026-04-03 11:00:00', 'completed'),
+        (9, 2, 6, 2, TIMESTAMP '2026-04-04 10:00:00', 'preparing'),
+        (10, 3, 1, 4, TIMESTAMP '2026-04-04 14:30:00', 'placed')
+      ) AS raw_orders(id, customer_id, waffle_type_id, quantity, ordered_at, status)
 
   - name: raw_payments
-    schema: main
-    table: raw_payments
+    expression: |
+      SELECT * FROM (VALUES
+        (1, 1, 1700, 'credit_card', TIMESTAMP '2026-04-01 09:16:00', 'success'),
+        (2, 2, 1050, 'credit_card', TIMESTAMP '2026-04-01 09:16:00', 'success'),
+        (3, 3, 4350, 'cash', TIMESTAMP '2026-04-01 10:31:00', 'success'),
+        (4, 4, 950, 'credit_card', TIMESTAMP '2026-04-02 08:46:00', 'success'),
+        (5, 5, 850, 'debit_card', TIMESTAMP '2026-04-02 12:01:00', 'success'),
+        (6, 6, 750, 'debit_card', TIMESTAMP '2026-04-02 12:01:00', 'success'),
+        (7, 7, 2200, 'credit_card', NULL, 'failed'),
+        (8, 8, 950, 'cash', TIMESTAMP '2026-04-03 11:01:00', 'success')
+      ) AS raw_payments(id, order_id, amount_cents, payment_method, paid_at, status)

@@ -13,7 +13,7 @@ WAFFLE_SHOP_DIR: Path = REPO_ROOT / "tests" / "e2e" / "fixtures" / "waffle_shop"
 
 
 def prepare_waffle_shop(tmp_path: Path) -> Path:
-    """Copy waffle shop project to tmp dir and seed raw data into a fresh DuckDB file."""
+    """Copy waffle shop project to tmp dir with a fresh DuckDB target path."""
 
     project_dir: Path = tmp_path / "waffle_shop"
     copytree(WAFFLE_SHOP_DIR, project_dir)
@@ -21,13 +21,6 @@ def prepare_waffle_shop(tmp_path: Path) -> Path:
     db_path: Path = project_dir / "waffle_shop.duckdb"
     if db_path.exists():
         db_path.unlink()
-
-    import duckdb
-
-    connection: duckdb.DuckDBPyConnection = duckdb.connect(str(db_path))
-    seed_sql: str = (project_dir / "seed_raw_data.sql").read_text(encoding="utf-8")
-    connection.execute(seed_sql)
-    connection.close()
 
     return project_dir
 
