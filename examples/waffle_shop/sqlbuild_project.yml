@@ -4,6 +4,9 @@ adapter: duckdb
 connection:
   database: waffle_shop.duckdb
 
+settings:
+  default_audit_severity: warn
+
 defaults:
   materialized: table
 

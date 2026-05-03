@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -55,6 +57,8 @@ def execute_build_plan(
     run_tests: bool = True,
     fail_fast: bool = False,
     on_progress: Callable[[str], None] | None = None,
+    on_node_start: Callable[[str, str], None] | None = None,
+    on_node_complete: Callable[[object], None] | None = None,
 ) -> BuildExecutionResult:
     """Execute a full build plan over the planned execution schedule."""
 
@@ -85,10 +89,17 @@ def execute_build_plan(
                 continue
             if on_progress is not None:
                 on_progress(f"seed: {seed_entry.name}")
+            if on_node_start is not None:
+                on_node_start(seed_entry.name, MaterializationType.SEED)
+            seed_start: float = time.monotonic()
             seed_result: SeedExecutionResult = execute_seed(
                 seed_entry=seed_entry, adapter=adapter, connection=connection
             )
+            seed_duration: int = int((time.monotonic() - seed_start) * 1000)
+            seed_result = dataclasses.replace(seed_result, duration_ms=seed_duration)
             seed_results.append(seed_result)
+            if on_node_complete is not None:
+                on_node_complete(seed_result)
             if seed_result.status == ExecutionStatus.FAILED:
                 block_downstream(
                     failed_key=key,
@@ -112,6 +123,8 @@ def execute_build_plan(
                 test_entry=test_entry, adapter=adapter, connection=connection
             )
             test_results.append(test_result)
+            if on_node_complete is not None:
+                on_node_complete(test_result)
             if test_result.outcome != SqlTestOutcome.PASS:
                 dep_key: CompiledObjectKey
                 for dep_key in test_entry.scope_deps:
@@ -163,6 +176,8 @@ def execute_build_plan(
 
             if on_progress is not None:
                 on_progress(f"model: {model_entry.name}")
+            if on_node_start is not None:
+                on_node_start(model_entry.name, model_entry.materialization_type)
 
             model_audits: tuple[AuditPlanEntry, ...] = (
                 indexes.model_audits_by_model.get(model_entry.name, ()) if run_audits else ()
@@ -175,6 +190,7 @@ def execute_build_plan(
                 and model_entry.materialization_type == MaterializationType.INCREMENTAL
             )
 
+            model_start: float = time.monotonic()
             model_result: ModelExecutionResult
             if is_microbatch and model_entry.action in INCREMENTAL_ACTIONS:
                 model_result = execute_microbatch_entry(
@@ -242,7 +258,11 @@ def execute_build_plan(
                     run_id=run_id,
                     fingerprint_schema=fingerprint_schema,
                 )
+            model_duration: int = int((time.monotonic() - model_start) * 1000)
+            model_result = dataclasses.replace(model_result, duration_ms=model_duration)
             model_results.append(model_result)
+            if on_node_complete is not None:
+                on_node_complete(model_result)
 
             if model_result.status == ExecutionStatus.FAILED:
                 block_downstream(

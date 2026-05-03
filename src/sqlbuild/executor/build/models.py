@@ -24,6 +24,7 @@ class SeedExecutionResult:
 
     seed_name: str
     status: ExecutionStatus
+    duration_ms: int | None = None
     error_message: str | None = None
 
 
