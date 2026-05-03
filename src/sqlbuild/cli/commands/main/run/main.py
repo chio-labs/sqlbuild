@@ -7,7 +7,7 @@ from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.colors import blue_bold, supports_color
+from sqlbuild.cli.commands.main.shared.helpers.colors import blue_bold, dim, supports_color
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.plan_format import format_plan
 from sqlbuild.cli.commands.main.shared.helpers.progress import (
@@ -64,7 +64,7 @@ def run_run(
     use_color: bool = not no_color and supports_color()
 
     plan_text: str = format_plan(plan_output, full_refresh=full_refresh, use_color=use_color)
-    sys.stdout.write(plan_text + "\n\n")
+    sys.stdout.write("\n" + plan_text + "\n\n")
 
     callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
         plan=plan_output, use_color=use_color
@@ -77,9 +77,9 @@ def run_run(
     header: str = format_build_header(
         command="sqb run", target=None, concurrency=effective_concurrency
     )
-    execution_header: str = blue_bold("Execution") if use_color else "Execution"
-    sys.stdout.write(execution_header + "\n")
-    sys.stdout.write(header + "\n\n")
+    execution_label: str = blue_bold("Execution") if use_color else "Execution"
+    header_detail: str = dim(header) if use_color else header
+    sys.stdout.write(f"{execution_label}  {header_detail}\n\n")
     sys.stdout.flush()
 
     result: BuildExecutionResult = run_build_pipeline(

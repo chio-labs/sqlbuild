@@ -347,8 +347,7 @@ FORMAT_PLAN_TEST_CASES: list[FormatPlanIntegrationTestCase] = [
         seed_targets={"country_codes": "staging"},
         full_refresh=False,
         expected_format_fragments=(
-            "Plan ready",
-            "Selected: 3",
+            "Plan ready (3 selected)",
             "First run (2)",
             "stg_orders",
             "view",

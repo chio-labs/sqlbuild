@@ -48,5 +48,5 @@ def run_plan(
         print(format_plan_json(plan_output))
         return 0
 
-    print(format_plan(plan_output, full_refresh=full_refresh))
+    print("\n" + format_plan(plan_output, full_refresh=full_refresh))
     return 0

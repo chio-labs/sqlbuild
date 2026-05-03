@@ -282,7 +282,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
         ),
         full_refresh=True,
         expected_fragments=(
-            "Plan ready (full refresh)",
+            "Plan ready (full refresh, 3 selected)",
             "Full refresh (3)",
             "view",
             "table",
@@ -293,10 +293,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
     FormatPlanTestCase(
         description="empty plan shows only header and selected zero",
         plan_output=build_plan_output(),
-        expected_fragments=(
-            "Plan ready",
-            "Selected: 0",
-        ),
+        expected_fragments=("Plan ready (0 selected)",),
         unexpected_fragments=("Normal", "Seeds", "Warnings"),
     ),
     FormatPlanTestCase(

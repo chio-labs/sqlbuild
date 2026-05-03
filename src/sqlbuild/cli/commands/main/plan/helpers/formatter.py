@@ -8,7 +8,6 @@ from collections import Counter
 
 from sqlbuild.cli.commands.main.shared.helpers.colors import (
     blue_bold,
-    bold,
     green,
     green_bold,
     red,
@@ -66,9 +65,8 @@ def format_plan(plan: PlanOutput, *, full_refresh: bool = False, use_color: bool
     active: list[ModelPlanEntry] = [e for e in plan.model_entries if e.action != PlanAction.SKIP]
     selected_count: int = len(plan.model_entries) + len(plan.seed_entries)
 
-    header: str = "Plan ready"
+    header: str = f"Plan ready ({selected_count} selected)"
     lines.append(green_bold(header))
-    lines.append(f"Selected: {selected_count}")
 
     normal: list[ModelPlanEntry] = _collect_normal(active)
     cascade: list[ModelPlanEntry] = _collect_upstream_changed(active)
@@ -85,14 +83,14 @@ def format_plan(plan: PlanOutput, *, full_refresh: bool = False, use_color: bool
             continue
         label: str = _REASON_GROUP_LABELS[reason]
         lines.append("")
-        lines.append(bold(f"{label} ({len(entries)})"))
+        lines.append(green_bold(f"{label} ({len(entries)})"))
         entry: ModelPlanEntry
         for entry in entries:
             _format_detail_entry(lines, entry, reason)
 
     if cascade:
         lines.append("")
-        lines.append(bold(f"Upstream changed ({len(cascade)})"))
+        lines.append(green_bold(f"Upstream changed ({len(cascade)})"))
         entry_c: ModelPlanEntry
         for entry_c in cascade:
             _format_upstream_changed_entry(lines, entry_c)
@@ -110,8 +108,7 @@ def _format_full_refresh(lines: list[str], plan: PlanOutput) -> None:
     selected_count: int = len(plan.model_entries) + len(plan.seed_entries)
     active: list[ModelPlanEntry] = [e for e in plan.model_entries if e.action != PlanAction.SKIP]
 
-    lines.append(green_bold("Plan ready (full refresh)"))
-    lines.append(f"Selected: {selected_count}")
+    lines.append(green_bold(f"Plan ready (full refresh, {selected_count} selected)"))
     lines.append("")
 
     counts: Counter[str] = Counter()
@@ -120,7 +117,7 @@ def _format_full_refresh(lines: list[str], plan: PlanOutput) -> None:
         label: str = _materialization_label(entry)
         counts[label] += 1
 
-    lines.append(bold(f"Full refresh ({len(active)})"))
+    lines.append(green_bold(f"Full refresh ({len(active)})"))
     count_label: str
     count_value: int
     for count_label, count_value in counts.most_common():
@@ -182,7 +179,7 @@ def _format_normal_section(lines: list[str], entries: list[ModelPlanEntry]) -> N
         label: str = _materialization_label(entry)
         counts[label] += 1
 
-    lines.append(bold(f"Normal ({len(entries)})"))
+    lines.append(green_bold(f"Normal ({len(entries)})"))
     count_label: str
     count_value: int
     for count_label, count_value in counts.most_common():
@@ -364,7 +361,7 @@ def _format_seeds(lines: list[str], plan: PlanOutput) -> None:
     if not plan.seed_entries:
         return
     lines.append("")
-    lines.append(bold(f"Seeds ({len(plan.seed_entries)})"))
+    lines.append(green_bold(f"Seeds ({len(plan.seed_entries)})"))
     seed_entry: object
     for seed_entry in plan.seed_entries:
         lines.append(f"  {getattr(seed_entry, 'name', str(seed_entry))}")
