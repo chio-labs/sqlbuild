@@ -35,7 +35,7 @@ def prepare_diff_project(tmp_path: Path) -> Path:
                   materialized: table
 
                 path_defaults:
-                  models/staging:
+                  staging:
                     materialized: view
                 """
             ).strip()
