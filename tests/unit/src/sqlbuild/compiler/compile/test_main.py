@@ -462,6 +462,75 @@ defaults:
         expected_effective_connection={},
         expected_effective_vars={},
     ),
+    BuildCompileInputsTestCase(
+        description="expands vars env connection model config and environment overrides",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.yml": """
+name: demo
+adapter: duckdb
+default_environment: dev
+
+connection:
+  path: "/tmp/${user}.db"
+  warehouse: "${schema_prefix}_wh"
+
+vars:
+  user: "${ENV:USER}"
+  schema_prefix: "analytics_${user}"
+
+defaults:
+  database: "${schema_prefix}"
+  schema: marts
+  query_change_backfill: "${ENV:BACKFILL_POLICY}"
+  row_diff_exclude_columns:
+    - "${schema_prefix}_loaded_at"
+
+environments:
+  dev:
+    database: "dev_${CTX:database}"
+    schema: "dev_${ENV:USER}_${CTX:schema}"
+""".strip()
+            + "\n",
+            "models/staging/orders.sql": """
+MODEL (
+  alias: "${schema_prefix}_orders",
+  config: {
+    cluster_by: ["${schema_prefix}_day"]
+  },
+);
+
+select 1
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        cli_vars=None,
+        expected_model_schema_names=(None,),
+        expected_model_config_values=(
+            {
+                "database": "dev_analytics_kevin",
+                "schema": "dev_kevin_marts",
+                "query_change_backfill": "bounded(30d)",
+                "row_diff_exclude_columns": ("analytics_kevin_loaded_at",),
+                "alias": "analytics_kevin_orders",
+                "config": {"cluster_by": ["analytics_kevin_day"]},
+            },
+        ),
+        expected_model_path_defaults=(None,),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_effective_environment_name="dev",
+        expected_effective_connection={
+            "path": "/tmp/kevin.db",
+            "warehouse": "analytics_kevin_wh",
+        },
+        expected_effective_vars={
+            "user": "kevin",
+            "schema_prefix": "analytics_kevin",
+        },
+        environment_variables={"USER": "kevin", "BACKFILL_POLICY": "bounded(30d)"},
+    ),
 ]
 
 
@@ -473,7 +542,13 @@ defaults:
 def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_metadata(
     test_case: BuildCompileInputsTestCase,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    environment_name: str
+    environment_value: str
+    for environment_name, environment_value in test_case.environment_variables.items():
+        monkeypatch.setenv(environment_name, environment_value)
+
     write_repo_files(tmp_path, test_case.repo_files)
 
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
@@ -575,6 +650,106 @@ default_environment: missing
         selected_environment=None,
         expected_error_fragment="Unknown environment 'missing'",
     ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when effective vars reference an unknown project variable",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.yml": """
+name: demo
+adapter: duckdb
+
+vars:
+  user: "${missing}"
+""".strip()
+            + "\n",
+            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+        },
+        selected_environment=None,
+        expected_error_fragment="effective vars references unknown variable 'missing'",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when connection templates reference missing env vars",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.yml": """
+name: demo
+adapter: duckdb
+
+connection:
+  path: "${ENV:SQLBUILD_DB_PATH}"
+""".strip()
+            + "\n",
+            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+        },
+        selected_environment=None,
+        expected_error_fragment=(
+            "effective connection references missing ENV variable 'SQLBUILD_DB_PATH'"
+        ),
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when model config uses disallowed ctx templates",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.yml": """
+name: demo
+adapter: duckdb
+""".strip()
+            + "\n",
+            "models/staging/orders.sql": """
+MODEL (
+  schema: "${CTX:schema}",
+);
+
+select 1
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        expected_error_fragment="model config does not allow CTX templates",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when environment override references an unknown ctx key",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.yml": """
+name: demo
+adapter: duckdb
+default_environment: dev
+
+defaults:
+  schema: marts
+
+environments:
+  dev:
+    schema: "dev_${CTX:this}"
+""".strip()
+            + "\n",
+            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+        },
+        selected_environment=None,
+        expected_error_fragment="environment schema references unknown CTX key 'this'",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when environment database override references unavailable ctx value",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.yml": """
+name: demo
+adapter: duckdb
+default_environment: dev
+
+environments:
+  dev:
+    database: "dev_${CTX:database}"
+""".strip()
+            + "\n",
+            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+        },
+        selected_environment=None,
+        expected_error_fragment=(
+            "environment database references CTX key 'database' but no value is available"
+        ),
+    ),
 ]
 
 
@@ -586,7 +761,13 @@ default_environment: missing
 def test_given_attachment_conflicts_when_building_compile_inputs_then_it_raises_clear_errors(
     test_case: BuildCompileInputsErrorTestCase,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    environment_name: str
+    environment_value: str
+    for environment_name, environment_value in test_case.environment_variables.items():
+        monkeypatch.setenv(environment_name, environment_value)
+
     write_repo_files(tmp_path, test_case.repo_files)
 
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)

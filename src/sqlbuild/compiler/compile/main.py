@@ -39,7 +39,18 @@ def build_compile_inputs(
             effective_environment_name
         ]
 
-    model_inputs: tuple[CompileModelInput, ...] = build_model_inputs(discovered_inputs)
+    effective_vars: dict[str, str] = build_effective_vars(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+        environment_config=effective_environment,
+        cli_vars={} if cli_vars is None else cli_vars,
+    )
+
+    model_inputs: tuple[CompileModelInput, ...] = build_model_inputs(
+        discovered_inputs,
+        effective_vars=effective_vars,
+        environment_config=effective_environment,
+    )
     seed_inputs: tuple[CompileSeedInput, ...] = build_seed_inputs(discovered_inputs)
     source_inputs: tuple[CompileSourceInput, ...] = build_source_inputs(discovered_inputs)
     return CompileProjectInputs(
@@ -51,13 +62,9 @@ def build_compile_inputs(
         effective_connection=build_effective_connection(
             project_config=discovered_inputs.project_config,
             environment_config=effective_environment,
+            effective_vars=effective_vars,
         ),
-        effective_vars=build_effective_vars(
-            project_config=discovered_inputs.project_config,
-            local_config=discovered_inputs.local_config,
-            environment_config=effective_environment,
-            cli_vars={} if cli_vars is None else cli_vars,
-        ),
+        effective_vars=effective_vars,
         model_inputs=model_inputs,
         seed_inputs=seed_inputs,
         source_inputs=source_inputs,

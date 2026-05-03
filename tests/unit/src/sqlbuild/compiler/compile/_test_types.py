@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -15,6 +15,7 @@ class BuildCompileInputsTestCase:
     expected_effective_environment_name: str | None
     expected_effective_connection: dict[str, object]
     expected_effective_vars: dict[str, str]
+    environment_variables: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -23,3 +24,4 @@ class BuildCompileInputsErrorTestCase:
     repo_files: dict[str, str]
     selected_environment: str | None
     expected_error_fragment: str
+    environment_variables: dict[str, str] = field(default_factory=dict)

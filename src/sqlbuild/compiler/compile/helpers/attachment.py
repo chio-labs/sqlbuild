@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.helpers.templating import (
+    expand_effective_vars,
+    expand_template_data,
+)
 from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     CompileModelInput,
@@ -28,7 +33,12 @@ from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
 
 
-def build_model_inputs(discovered_inputs: DiscoveredProjectInputs) -> tuple[CompileModelInput, ...]:
+def build_model_inputs(
+    discovered_inputs: DiscoveredProjectInputs,
+    *,
+    effective_vars: dict[str, str],
+    environment_config: EnvironmentConfig | None,
+) -> tuple[CompileModelInput, ...]:
     """Attach schema metadata to discovered model files."""
 
     model_inputs: list[CompileModelInput] = []
@@ -43,6 +53,8 @@ def build_model_inputs(discovered_inputs: DiscoveredProjectInputs) -> tuple[Comp
             path_defaults=discovered_inputs.project_config.path_defaults,
             matched_path_default=matched_path_default,
             model_header_values=model_file.header_values,
+            effective_vars=effective_vars,
+            environment_config=environment_config,
         )
         schema_match: tuple[SchemaModelEntry, DiscoveredSchemaFile] | None = (
             find_schema_model_match(
@@ -152,13 +164,24 @@ def build_effective_connection(
     *,
     project_config: ProjectConfig,
     environment_config: EnvironmentConfig | None,
+    effective_vars: dict[str, str],
 ) -> dict[str, object]:
     """Merge base project connection with the selected environment overrides."""
 
     connection: dict[str, object] = dict(project_config.connection)
     if environment_config is not None:
         connection.update(environment_config.connection)
-    return connection
+    return cast(
+        dict[str, object],
+        expand_template_data(
+            connection,
+            variables=effective_vars,
+            context_values={},
+            context_label="effective connection",
+            allow_context=False,
+            allowed_context_keys=tuple(),
+        ),
+    )
 
 
 def build_effective_vars(
@@ -175,7 +198,7 @@ def build_effective_vars(
         values.update(environment_config.vars)
     values.update(local_config.vars)
     values.update(cli_vars)
-    return values
+    return expand_effective_vars(values)
 
 
 def build_model_config(
@@ -184,6 +207,8 @@ def build_model_config(
     path_defaults: dict[str, dict[str, object]],
     matched_path_default: str | None,
     model_header_values: dict[str, object],
+    effective_vars: dict[str, str],
+    environment_config: EnvironmentConfig | None,
 ) -> CompileModelConfig:
     """Build the pre-semantic effective model config layers."""
 
@@ -191,7 +216,63 @@ def build_model_config(
     if matched_path_default is not None:
         values.update(path_defaults[matched_path_default])
     values.update(model_header_values)
-    return CompileModelConfig(values=values, matched_path_default=matched_path_default)
+    expanded_values: dict[str, object] = cast(
+        dict[str, object],
+        expand_template_data(
+            values,
+            variables=effective_vars,
+            context_values={},
+            context_label="model config",
+            allow_context=False,
+            allowed_context_keys=tuple(),
+        ),
+    )
+    apply_environment_database_schema_overrides(
+        values=expanded_values,
+        effective_vars=effective_vars,
+        environment_config=environment_config,
+    )
+    return CompileModelConfig(values=expanded_values, matched_path_default=matched_path_default)
+
+
+def apply_environment_database_schema_overrides(
+    *,
+    values: dict[str, object],
+    effective_vars: dict[str, str],
+    environment_config: EnvironmentConfig | None,
+) -> None:
+    """Apply environment database/schema overrides using the logical config as CTX."""
+
+    if environment_config is None:
+        return
+
+    raw_database: object | None = values.get("database")
+    raw_schema: object | None = values.get("schema")
+    logical_database: str | None = None if not isinstance(raw_database, str) else raw_database
+    logical_schema: str | None = None if not isinstance(raw_schema, str) else raw_schema
+    context_values: dict[str, str | None] = {
+        "database": logical_database,
+        "schema": logical_schema,
+    }
+
+    if environment_config.database is not None and environment_config.database != "preserve":
+        values["database"] = expand_template_data(
+            environment_config.database,
+            variables=effective_vars,
+            context_values=context_values,
+            context_label="environment database",
+            allow_context=True,
+            allowed_context_keys=("database", "schema"),
+        )
+    if environment_config.schema is not None and environment_config.schema != "preserve":
+        values["schema"] = expand_template_data(
+            environment_config.schema,
+            variables=effective_vars,
+            context_values=context_values,
+            context_label="environment schema",
+            allow_context=True,
+            allowed_context_keys=("database", "schema"),
+        )
 
 
 def find_matching_path_default(
