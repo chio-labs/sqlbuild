@@ -179,6 +179,7 @@ def build_execution_plan(
         entry, warnings = plan_model(
             model=model,
             snapshot=snapshot,
+            adapter=adapter,
             model_targets=model_targets,
             seed_targets=seed_targets,
             source_map=source_map,

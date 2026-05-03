@@ -104,6 +104,76 @@ class BaseAdapter(StrictAdapter):
             result[table_name].append(ColumnInfo(name=row[1], type=row[2]))
         return {k: tuple(v) for k, v in result.items()}
 
+    def render_create_table_as(self, *, target: str, sql: str) -> tuple[str, ...]:
+        return (f"CREATE OR REPLACE TABLE {target} AS {sql}",)
+
+    def render_create_view_as(self, *, target: str, sql: str) -> tuple[str, ...]:
+        return (f"CREATE OR REPLACE VIEW {target} AS {sql}",)
+
+    def render_append(
+        self, *, target: str, sql: str, columns: tuple[str, ...] | None = None
+    ) -> tuple[str, ...]:
+        if columns is not None:
+            col_list: str = ", ".join(columns)
+            return (f"INSERT INTO {target} ({col_list}) {sql}",)
+        return (f"INSERT INTO {target} {sql}",)
+
+    def render_delete_insert(
+        self,
+        *,
+        target: str,
+        sql: str,
+        unique_key: tuple[str, ...],
+        columns: tuple[str, ...] | None = None,
+    ) -> tuple[str, ...]:
+        key_condition: str = " AND ".join(f"{target}.{k} = __source.{k}" for k in unique_key)
+        delete_sql: str = (
+            f"DELETE FROM {target} WHERE EXISTS "
+            f"(SELECT 1 FROM ({sql}) AS __source WHERE {key_condition})"
+        )
+        insert_stmts: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
+        return (delete_sql, *insert_stmts)
+
+    def render_delete_insert_cursor(
+        self,
+        *,
+        target: str,
+        sql: str,
+        cursor_column: str,
+        cursor_start: str,
+        cursor_end: str,
+        columns: tuple[str, ...] | None = None,
+    ) -> tuple[str, ...]:
+        delete_sql: str = (
+            f"DELETE FROM {target} "
+            f"WHERE {cursor_column} >= '{cursor_start}' "
+            f"AND {cursor_column} < '{cursor_end}'"
+        )
+        insert_stmts: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
+        return (delete_sql, *insert_stmts)
+
+    def render_merge(
+        self,
+        *,
+        target: str,
+        sql: str,
+        unique_key: tuple[str, ...],
+        source_columns: tuple[str, ...] = (),
+    ) -> tuple[str, ...]:
+        join_condition: str = " AND ".join(f"__target.{k} = __source.{k}" for k in unique_key)
+        update_assignments: str = ", ".join(
+            f"{col} = __source.{col}" for col in source_columns if col not in unique_key
+        )
+        insert_columns: str = ", ".join(source_columns)
+        insert_values: str = ", ".join(f"__source.{col}" for col in source_columns)
+        merge_sql: str = (
+            f"MERGE INTO {target} AS __target USING ({sql}) AS __source ON {join_condition} "
+        )
+        if update_assignments:
+            merge_sql += f"WHEN MATCHED THEN UPDATE SET {update_assignments} "
+        merge_sql += f"WHEN NOT MATCHED THEN INSERT ({insert_columns}) VALUES ({insert_values})"
+        return (merge_sql,)
+
     def create_table_as(
         self,
         connection: Any,
@@ -112,10 +182,14 @@ class BaseAdapter(StrictAdapter):
         sql: str,
         config: dict[str, Any] | None = None,
     ) -> None:
-        connection.execute(f"CREATE OR REPLACE TABLE {target} AS {sql}")
+        stmt: str
+        for stmt in self.render_create_table_as(target=target, sql=sql):
+            connection.execute(stmt)
 
     def create_view_as(self, connection: Any, *, target: str, sql: str) -> None:
-        connection.execute(f"CREATE OR REPLACE VIEW {target} AS {sql}")
+        stmt: str
+        for stmt in self.render_create_view_as(target=target, sql=sql):
+            connection.execute(stmt)
 
     def drop(self, connection: Any, *, target: str, if_exists: bool = True) -> None:
         exists_clause: str = " IF EXISTS" if if_exists else ""
@@ -160,11 +234,9 @@ class BaseAdapter(StrictAdapter):
         sql: str,
         columns: tuple[str, ...] | None = None,
     ) -> None:
-        if columns is not None:
-            col_list: str = ", ".join(columns)
-            connection.execute(f"INSERT INTO {target} ({col_list}) {sql}")
-        else:
-            connection.execute(f"INSERT INTO {target} {sql}")
+        stmt: str
+        for stmt in self.render_append(target=target, sql=sql, columns=columns):
+            connection.execute(stmt)
 
     def delete_insert(
         self,
@@ -176,12 +248,11 @@ class BaseAdapter(StrictAdapter):
         columns: tuple[str, ...] | None = None,
     ) -> None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        key_condition: str = " AND ".join(f"{target}.{k} = __source.{k}" for k in keys)
-        connection.execute(
-            f"DELETE FROM {target} WHERE EXISTS "
-            f"(SELECT 1 FROM ({sql}) AS __source WHERE {key_condition})"
-        )
-        self.append(connection, target=target, sql=sql, columns=columns)
+        stmt: str
+        for stmt in self.render_delete_insert(
+            target=target, sql=sql, unique_key=keys, columns=columns
+        ):
+            connection.execute(stmt)
 
     def delete_insert_cursor(
         self,
@@ -194,12 +265,16 @@ class BaseAdapter(StrictAdapter):
         cursor_end: str,
         columns: tuple[str, ...] | None = None,
     ) -> None:
-        connection.execute(
-            f"DELETE FROM {target} "
-            f"WHERE {cursor_column} >= '{cursor_start}' "
-            f"AND {cursor_column} < '{cursor_end}'"
-        )
-        self.append(connection, target=target, sql=sql, columns=columns)
+        stmt: str
+        for stmt in self.render_delete_insert_cursor(
+            target=target,
+            sql=sql,
+            cursor_column=cursor_column,
+            cursor_start=cursor_start,
+            cursor_end=cursor_end,
+            columns=columns,
+        ):
+            connection.execute(stmt)
 
     def merge(
         self,

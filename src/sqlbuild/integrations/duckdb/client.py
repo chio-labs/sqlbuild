@@ -161,10 +161,14 @@ class DuckDbAdapter(BaseAdapter):
         sql: str,
         config: dict[str, Any] | None = None,
     ) -> None:
-        connection.execute(f"CREATE OR REPLACE TABLE {target} AS {sql}")
+        stmt: str
+        for stmt in self.render_create_table_as(target=target, sql=sql):
+            connection.execute(stmt)
 
     def create_view_as(self, connection: Any, *, target: str, sql: str) -> None:
-        connection.execute(f"CREATE OR REPLACE VIEW {target} AS {sql}")
+        stmt: str
+        for stmt in self.render_create_view_as(target=target, sql=sql):
+            connection.execute(stmt)
 
     def drop(self, connection: Any, *, target: str, if_exists: bool = True) -> None:
         exists_clause: str = " IF EXISTS" if if_exists else ""
@@ -224,11 +228,9 @@ class DuckDbAdapter(BaseAdapter):
         sql: str,
         columns: tuple[str, ...] | None = None,
     ) -> None:
-        if columns is not None:
-            col_list: str = ", ".join(columns)
-            connection.execute(f"INSERT INTO {target} ({col_list}) {sql}")
-        else:
-            connection.execute(f"INSERT INTO {target} {sql}")
+        stmt: str
+        for stmt in self.render_append(target=target, sql=sql, columns=columns):
+            connection.execute(stmt)
 
     def delete_insert(
         self,
@@ -240,12 +242,11 @@ class DuckDbAdapter(BaseAdapter):
         columns: tuple[str, ...] | None = None,
     ) -> None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        key_condition: str = " AND ".join(f"{target}.{k} = __source.{k}" for k in keys)
-        connection.execute(
-            f"DELETE FROM {target} WHERE EXISTS "
-            f"(SELECT 1 FROM ({sql}) AS __source WHERE {key_condition})"
-        )
-        self.append(connection, target=target, sql=sql, columns=columns)
+        stmt: str
+        for stmt in self.render_delete_insert(
+            target=target, sql=sql, unique_key=keys, columns=columns
+        ):
+            connection.execute(stmt)
 
     def delete_insert_cursor(
         self,
@@ -258,12 +259,16 @@ class DuckDbAdapter(BaseAdapter):
         cursor_end: str,
         columns: tuple[str, ...] | None = None,
     ) -> None:
-        connection.execute(
-            f"DELETE FROM {target} "
-            f"WHERE {cursor_column} >= '{cursor_start}' "
-            f"AND {cursor_column} < '{cursor_end}'"
-        )
-        self.append(connection, target=target, sql=sql, columns=columns)
+        stmt: str
+        for stmt in self.render_delete_insert_cursor(
+            target=target,
+            sql=sql,
+            cursor_column=cursor_column,
+            cursor_start=cursor_start,
+            cursor_end=cursor_end,
+            columns=columns,
+        ):
+            connection.execute(stmt)
 
     def merge(
         self,
@@ -273,23 +278,13 @@ class DuckDbAdapter(BaseAdapter):
         sql: str,
         unique_key: str | tuple[str, ...],
     ) -> None:
-        """Upsert rows using DuckDB's native MERGE statement (v1.4.0+)."""
-
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        source_columns: list[str] = query_column_names(connection, sql)
-        join_condition: str = " AND ".join(f"__target.{k} = __source.{k}" for k in keys)
-        update_assignments: str = ", ".join(
-            f"{col} = __source.{col}" for col in source_columns if col not in keys
-        )
-        insert_columns: str = ", ".join(source_columns)
-        insert_values: str = ", ".join(f"__source.{col}" for col in source_columns)
-        merge_sql: str = (
-            f"MERGE INTO {target} AS __target USING ({sql}) AS __source ON {join_condition} "
-        )
-        if update_assignments:
-            merge_sql += f"WHEN MATCHED THEN UPDATE SET {update_assignments} "
-        merge_sql += f"WHEN NOT MATCHED THEN INSERT ({insert_columns}) VALUES ({insert_values})"
-        connection.execute(merge_sql)
+        source_columns: tuple[str, ...] = tuple(query_column_names(connection, sql))
+        stmt: str
+        for stmt in self.render_merge(
+            target=target, sql=sql, unique_key=keys, source_columns=source_columns
+        ):
+            connection.execute(stmt)
 
     def add_columns(
         self,

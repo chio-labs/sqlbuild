@@ -32,7 +32,7 @@ PIPELINE_TEST_CASES: list[RunCompilePipelineIntegrationTestCase] = [
             "orders": ExpectedModelEntry(
                 description="table model with adapter default schema",
                 expected_resolved_sql_fragment="SELECT 1 AS order_id",
-                expected_logical_ddl_fragment="CREATE TABLE",
+                expected_logical_ddl_fragment="CREATE OR REPLACE TABLE",
                 expected_manifest_compiled_code_fragment="SELECT 1 AS order_id",
             ),
         },
@@ -74,7 +74,7 @@ PIPELINE_TEST_CASES: list[RunCompilePipelineIntegrationTestCase] = [
             "orders": ExpectedModelEntry(
                 description="table model with explicit schema and database",
                 expected_resolved_sql_fragment="SELECT 1 AS order_id",
-                expected_logical_ddl_fragment="CREATE TABLE",
+                expected_logical_ddl_fragment="CREATE OR REPLACE TABLE",
                 expected_manifest_compiled_code_fragment="SELECT 1 AS order_id",
             ),
         },
@@ -95,13 +95,13 @@ PIPELINE_TEST_CASES: list[RunCompilePipelineIntegrationTestCase] = [
             "stg_orders": ExpectedModelEntry(
                 description="upstream staging model",
                 expected_resolved_sql_fragment="SELECT 1 AS order_id",
-                expected_logical_ddl_fragment="CREATE TABLE",
+                expected_logical_ddl_fragment="CREATE OR REPLACE TABLE",
                 expected_manifest_compiled_code_fragment="SELECT 1 AS order_id",
             ),
             "fact_orders": ExpectedModelEntry(
                 description="downstream model with resolved ref",
                 expected_resolved_sql_fragment="main.stg_orders",
-                expected_logical_ddl_fragment="CREATE TABLE",
+                expected_logical_ddl_fragment="CREATE OR REPLACE TABLE",
                 expected_manifest_compiled_code_fragment="main.stg_orders",
             ),
         },
@@ -124,7 +124,7 @@ PIPELINE_TEST_CASES: list[RunCompilePipelineIntegrationTestCase] = [
             "stg_payments": ExpectedModelEntry(
                 description="model with resolved source reference",
                 expected_resolved_sql_fragment="main.payments",
-                expected_logical_ddl_fragment="CREATE TABLE",
+                expected_logical_ddl_fragment="CREATE OR REPLACE TABLE",
                 expected_manifest_compiled_code_fragment="main.payments",
             ),
         },
@@ -153,7 +153,7 @@ PIPELINE_TEST_CASES: list[RunCompilePipelineIntegrationTestCase] = [
             "fact_orders": ExpectedModelEntry(
                 description="mart table with ref to staging view",
                 expected_resolved_sql_fragment="main.stg_orders",
-                expected_logical_ddl_fragment="CREATE TABLE",
+                expected_logical_ddl_fragment="CREATE OR REPLACE TABLE",
                 expected_manifest_compiled_code_fragment="main.stg_orders",
             ),
         },

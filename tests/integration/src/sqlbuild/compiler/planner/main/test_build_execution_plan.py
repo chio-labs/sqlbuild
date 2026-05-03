@@ -28,7 +28,7 @@ BUILD_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
         full_refresh=False,
         expected_action={"orders": PlanAction.CREATE_TABLE},
         expected_reason={"orders": PlanReason.FIRST_RUN},
-        expected_ddl_fragments={"orders": "CREATE TABLE staging.orders AS"},
+        expected_ddl_fragments={"orders": "CREATE OR REPLACE TABLE staging.orders AS"},
     ),
     BuildExecutionPlanTestCase(
         description="existing table with no change always rebuilds",
@@ -39,7 +39,7 @@ BUILD_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
         full_refresh=False,
         expected_action={"orders": PlanAction.CREATE_TABLE},
         expected_reason={"orders": PlanReason.NO_CHANGE},
-        expected_ddl_fragments={"orders": "CREATE TABLE staging.orders AS"},
+        expected_ddl_fragments={"orders": "CREATE OR REPLACE TABLE staging.orders AS"},
     ),
     BuildExecutionPlanTestCase(
         description="full refresh forces create_table on existing table",
@@ -50,7 +50,7 @@ BUILD_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
         full_refresh=True,
         expected_action={"orders": PlanAction.CREATE_TABLE},
         expected_reason={"orders": PlanReason.FULL_REFRESH},
-        expected_ddl_fragments={"orders": "CREATE TABLE staging.orders AS"},
+        expected_ddl_fragments={"orders": "CREATE OR REPLACE TABLE staging.orders AS"},
     ),
     BuildExecutionPlanTestCase(
         description="view model produces create_view action",

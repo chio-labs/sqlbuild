@@ -26,7 +26,6 @@ from sqlbuild.compiler.planner.helpers.resolve.helpers.cursor import (
 )
 from sqlbuild.compiler.planner.helpers.resolve.main import resolve_model_sql
 from sqlbuild.compiler.planner.helpers.strategy import (
-    build_logical_ddl,
     build_model_warnings,
     get_materialization_type,
     resolve_model_plan_action,
@@ -67,6 +66,7 @@ def plan_model(
     *,
     model: CompiledModel,
     snapshot: WarehouseSnapshot,
+    adapter: BaseAdapter,
     model_targets: dict[str, CompiledRelationTarget],
     seed_targets: dict[str, CompiledRelationTarget],
     source_map: dict[str, SourceEntry],
@@ -122,14 +122,6 @@ def plan_model(
     declared_columns: tuple[ColumnInfo, ...] = _get_declared_columns(model)
     unique_key: tuple[str, ...] = _get_unique_key(model)
     warehouse_columns: tuple[ColumnInfo, ...] = snapshot.existing_columns.get(model.name, ())
-
-    logical_ddl: str = build_logical_ddl(
-        action=action,
-        resolved_sql=resolved_sql,
-        target=model.target,
-        unique_key=unique_key,
-        warehouse_columns=warehouse_columns,
-    )
 
     cursor_bounds: CursorBounds | None = _compute_plan_cursor_bounds(
         model=model,
@@ -200,6 +192,18 @@ def plan_model(
         raw_placeholders: object | None = model.config.values.get("placeholders")
         if isinstance(raw_placeholders, dict):
             custom_placeholders = {str(k): str(v) for k, v in raw_placeholders.items()}
+
+    ddl_cursor_bounds: CursorBounds | None = microbatch_range if microbatch_range else cursor_bounds
+    logical_ddl: str = _build_logical_ddl_from_adapter(
+        adapter=adapter,
+        action=action,
+        resolved_sql=resolved_sql,
+        target=model.target,
+        unique_key=unique_key,
+        warehouse_columns=warehouse_columns,
+        cursor_column=cursor_column,
+        cursor_bounds=ddl_cursor_bounds,
+    )
 
     entry: ModelPlanEntry = ModelPlanEntry(
         key=model.key,
@@ -509,6 +513,63 @@ def _compute_plan_cursor_bounds(
         end_cursor_override=end_cursor_override,
         is_microbatch=is_microbatch,
     )
+
+
+def _build_logical_ddl_from_adapter(
+    *,
+    adapter: BaseAdapter,
+    action: PlanAction,
+    resolved_sql: str,
+    target: CompiledRelationTarget,
+    unique_key: tuple[str, ...],
+    warehouse_columns: tuple[ColumnInfo, ...],
+    cursor_column: str | None = None,
+    cursor_bounds: CursorBounds | None = None,
+) -> str:
+    """Generate logical DDL using adapter render methods."""
+
+    qualified_name: str = target.qualified_name or target.name
+
+    if action == PlanAction.CREATE_VIEW:
+        return ";\n\n".join(adapter.render_create_view_as(target=qualified_name, sql=resolved_sql))
+
+    if action == PlanAction.CREATE_TABLE:
+        return ";\n\n".join(adapter.render_create_table_as(target=qualified_name, sql=resolved_sql))
+
+    if action == PlanAction.INCREMENTAL_APPEND:
+        return ";\n\n".join(adapter.render_append(target=qualified_name, sql=resolved_sql))
+
+    if action == PlanAction.INCREMENTAL_DELETE_INSERT:
+        if cursor_column is not None and cursor_bounds is not None:
+            return ";\n\n".join(
+                adapter.render_delete_insert_cursor(
+                    target=qualified_name,
+                    sql=resolved_sql,
+                    cursor_column=cursor_column,
+                    cursor_start=cursor_bounds.start,
+                    cursor_end=cursor_bounds.end,
+                )
+            )
+        return ";\n\n".join(
+            adapter.render_delete_insert(
+                target=qualified_name,
+                sql=resolved_sql,
+                unique_key=unique_key,
+            )
+        )
+
+    if action == PlanAction.INCREMENTAL_MERGE:
+        source_columns: tuple[str, ...] = tuple(col.name for col in warehouse_columns)
+        return ";\n\n".join(
+            adapter.render_merge(
+                target=qualified_name,
+                sql=resolved_sql,
+                unique_key=unique_key,
+                source_columns=source_columns,
+            )
+        )
+
+    return ""
 
 
 def _build_cursor_input_relations(
