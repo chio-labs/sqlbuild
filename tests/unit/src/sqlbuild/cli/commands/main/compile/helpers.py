@@ -59,7 +59,15 @@ def build_target_writer_plan_output() -> PlanOutput:
                 logical_ddl="CREATE TABLE analytics.orders AS SELECT 1 AS order_id",
             ),
         ),
-        seed_entries=(SeedPlanEntry(key=seed_key, name="country_codes", target=target),),
+        seed_entries=(
+            SeedPlanEntry(
+                key=seed_key,
+                name="country_codes",
+                target=target,
+                file_path=Path("seeds/country_codes.csv"),
+                columns=(),
+            ),
+        ),
         audit_entries=(
             AuditPlanEntry(
                 key=audit_key,

@@ -134,7 +134,8 @@ def _infer_singular_attachment(
     ]
 
     if not model_ref_names and source_ref_names:
-        return AuditAttachmentKind.SOURCE, None
+        attached_source: str = sorted(source_ref_names)[0]
+        return AuditAttachmentKind.SOURCE, attached_source
 
     if not model_ref_names and not source_ref_names:
         return AuditAttachmentKind.END, None

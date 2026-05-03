@@ -11,6 +11,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationTarget,
+    CompiledSeed,
     CompiledSource,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
@@ -48,6 +49,7 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
+from sqlbuild.spec.models.schema import SchemaColumn
 from sqlbuild.spec.models.source import SourceEntry
 
 _MODELS_DIR_PREFIX: str = "models/"
@@ -109,6 +111,7 @@ def plan_model(
     )
 
     type_enforcement: bool = _get_type_enforcement(model)
+    declared_columns: tuple[ColumnInfo, ...] = _get_declared_columns(model)
     unique_key: tuple[str, ...] = _get_unique_key(model)
     warehouse_columns: tuple[ColumnInfo, ...] = snapshot.existing_columns.get(model.name, ())
 
@@ -175,6 +178,7 @@ def plan_model(
         cursor_type=cursor_type,
         cursor_bounds=cursor_bounds,
         type_enforcement=type_enforcement,
+        declared_columns=declared_columns,
         pre_hook=pre_hook,
         post_hook=post_hook,
         previous_query_sql=previous_query_sql,
@@ -336,12 +340,36 @@ def _get_on_schema_change(model: CompiledModel) -> OnSchemaChange | None:
     return None
 
 
+def extract_seed_columns(seed: CompiledSeed) -> tuple[ColumnInfo, ...]:
+    """Extract declared columns from seed schema entry."""
+
+    columns: list[ColumnInfo] = []
+    col: SchemaColumn
+    for col in seed.schema_entry.columns:
+        if col.type is not None:
+            columns.append(ColumnInfo(name=col.name, type=col.type))
+    return tuple(columns)
+
+
 def _get_type_enforcement(model: CompiledModel) -> bool:
     """Resolve whether type enforcement is active for a model."""
 
     if model.schema_entry is not None and model.schema_entry.type_enforcement is not None:
         return model.schema_entry.type_enforcement
     return False
+
+
+def _get_declared_columns(model: CompiledModel) -> tuple[ColumnInfo, ...]:
+    """Extract declared columns with types from schema entry."""
+
+    if model.schema_entry is None:
+        return ()
+    columns: list[ColumnInfo] = []
+    col: SchemaColumn
+    for col in model.schema_entry.columns:
+        if col.type is not None:
+            columns.append(ColumnInfo(name=col.name, type=col.type))
+    return tuple(columns)
 
 
 def _get_unique_key(model: CompiledModel) -> tuple[str, ...]:

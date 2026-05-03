@@ -61,7 +61,7 @@ ATTACHMENT_VALID_TEST_CASES: list[ResolveAttachmentTestCase] = [
         attached_target_name=None,
         upstream_edges={},
         expected_attachment_kind=AuditAttachmentKind.SOURCE,
-        expected_attached_name=None,
+        expected_attached_name="raw_orders",
     ),
     ResolveAttachmentTestCase(
         description="singular audit with single model ref returns MODEL",

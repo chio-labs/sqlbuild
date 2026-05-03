@@ -97,6 +97,8 @@ def build_seed_entry(*, name: str) -> SeedPlanEntry:
         target=CompiledRelationTarget(
             database=None, schema="main", name=name, qualified_name=f"main.{name}"
         ),
+        file_path=Path(f"seeds/{name}.csv"),
+        columns=(),
     )
 
 

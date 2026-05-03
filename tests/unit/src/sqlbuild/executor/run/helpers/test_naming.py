@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.executor.run.helpers.naming import build_qualified_name
+from sqlbuild.executor.shared.helpers.naming import build_qualified_name
 from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
     BuildQualifiedNameTestCase,
 )

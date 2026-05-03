@@ -33,6 +33,7 @@ from sqlbuild.compiler.planner.helpers.plan_entry import (
     build_model_materializations,
     build_path_index,
     build_tag_index,
+    extract_seed_columns,
     gather_source_columns,
     is_settings_flag,
     plan_model,
@@ -232,7 +233,13 @@ def build_execution_plan(
         all_warnings.extend(warnings)
 
     seed_entries: list[SeedPlanEntry] = [
-        SeedPlanEntry(key=seed.key, name=seed.name, target=seed.target)
+        SeedPlanEntry(
+            key=seed.key,
+            name=seed.name,
+            target=seed.target,
+            file_path=seed.seed_file.file_path,
+            columns=extract_seed_columns(seed),
+        )
         for seed in project.seeds
         if seed.key in selected_keys
     ]
@@ -284,6 +291,9 @@ def build_execution_plan(
         warnings=tuple(all_warnings),
         upstream_deps=upstream_deps,
         downstream_deps=downstream_deps,
+        model_targets=model_targets,
+        seed_targets=seed_targets,
+        source_map=source_map,
     )
 
 

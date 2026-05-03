@@ -27,6 +27,7 @@ from sqlbuild.compiler.planner.types import (
     SelectorKind,
     WarningSeverity,
 )
+from sqlbuild.spec.models.source import SourceEntry
 
 
 @dataclass(frozen=True)
@@ -200,6 +201,7 @@ class ModelPlanEntry:
     cursor_type: str | None = None
     cursor_bounds: CursorBounds | None = None
     type_enforcement: bool = False
+    declared_columns: tuple[ColumnInfo, ...] = field(default_factory=tuple)
     pre_hook: object = None
     post_hook: object = None
     previous_query_sql: str | None = None
@@ -218,6 +220,8 @@ class SeedPlanEntry:
     key: CompiledObjectKey
     name: str
     target: CompiledRelationTarget
+    file_path: Path
+    columns: tuple[ColumnInfo, ...]
     action: PlanAction = PlanAction.LOAD_SEED
 
 
@@ -274,3 +278,6 @@ class PlanOutput:
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = field(
         default_factory=dict
     )
+    model_targets: dict[str, CompiledRelationTarget] = field(default_factory=dict)
+    seed_targets: dict[str, CompiledRelationTarget] = field(default_factory=dict)
+    source_map: dict[str, SourceEntry] = field(default_factory=dict)

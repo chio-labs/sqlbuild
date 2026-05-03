@@ -1,4 +1,4 @@
-"""Audit execution within model materialization lifecycle."""
+"""Audit execution within build and model lifecycle."""
 
 from __future__ import annotations
 

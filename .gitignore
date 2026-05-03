@@ -7,6 +7,8 @@ __pycache__/
 
 # Python packaging
 build/
+!src/sqlbuild/**/build/
+!tests/**/build/
 dist/
 *.egg-info/
 .eggs/

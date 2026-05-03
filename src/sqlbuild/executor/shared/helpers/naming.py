@@ -1,4 +1,4 @@
-"""Relation naming helpers for executor."""
+"""Relation naming helpers shared across executor packages."""
 
 from __future__ import annotations
 
