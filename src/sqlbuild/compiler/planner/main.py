@@ -20,6 +20,10 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.helpers.audit_entry import plan_audit
 from sqlbuild.compiler.planner.helpers.buildability import check_buildability
+from sqlbuild.compiler.planner.helpers.cascade import (
+    build_self_cascade,
+    resolve_cascade,
+)
 from sqlbuild.compiler.planner.helpers.graph import (
     build_downstream_deps,
     build_upstream_deps,
@@ -46,6 +50,7 @@ from sqlbuild.compiler.planner.helpers.warehouse_snapshot import (
 )
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
+    CascadeResult,
     CursorOverrides,
     MissingUpstream,
     ModelPlanEntry,
@@ -145,6 +150,8 @@ def build_execution_plan(
 
     model_entries: list[ModelPlanEntry] = []
     all_warnings: list[PlanWarning] = []
+    effective_cascades: dict[str, CascadeResult] = {}
+    model_cursor_types: dict[str, str | None] = {}
 
     key: CompiledObjectKey
     for key in execution_order:
@@ -181,6 +188,43 @@ def build_execution_plan(
             start_cursor_override=resolved_start,
             end_cursor_override=resolved_end,
         )
+
+        model_cursor_types[entry.name] = entry.cursor_type
+        cascade: CascadeResult | None = resolve_cascade(
+            model_name=entry.name,
+            own_backfill=entry.backfill,
+            own_cursor_type=entry.cursor_type,
+            upstream_keys=upstream_deps.get(key, ()),
+            effective_cascades=effective_cascades,
+            model_cursor_types=model_cursor_types,
+        )
+        if cascade is not None:
+            entry = ModelPlanEntry(
+                key=entry.key,
+                name=entry.name,
+                relative_path=entry.relative_path,
+                materialization_type=entry.materialization_type,
+                action=entry.action,
+                reason=entry.reason,
+                target=entry.target,
+                resolved_sql=entry.resolved_sql,
+                logical_ddl=entry.logical_ddl,
+                cursor_column=entry.cursor_column,
+                cursor_type=entry.cursor_type,
+                cursor_bounds=entry.cursor_bounds,
+                type_enforcement=entry.type_enforcement,
+                pre_hook=entry.pre_hook,
+                post_hook=entry.post_hook,
+                previous_query_sql=entry.previous_query_sql,
+                schema_actions=entry.schema_actions,
+                schema_findings=entry.schema_findings,
+                backfill=entry.backfill,
+                cascade=cascade,
+            )
+            effective_cascades[entry.name] = cascade
+        else:
+            effective_cascades[entry.name] = build_self_cascade(entry.backfill)
+
         model_entries.append(entry)
         all_warnings.extend(warnings)
 

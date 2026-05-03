@@ -26,6 +26,7 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
+    CascadeResult,
     ChangeDetectionResult,
     WarehouseSnapshot,
 )
@@ -390,6 +391,37 @@ def build_cursor_override_model(cursor_type: str | None) -> CompiledModel:
             qualified_name="staging.test_model",
         ),
     )
+
+
+def build_cascade_upstream_state(
+    entries: tuple[tuple[str, BackfillAction, str | None, str | None], ...],
+) -> tuple[
+    tuple[CompiledObjectKey, ...],
+    dict[str, CascadeResult],
+    dict[str, str | None],
+]:
+    """Build upstream keys, effective cascades, and cursor types from test tuples.
+
+    Each tuple is (model_name, effective_action, effective_duration, cursor_type).
+    """
+
+    keys: list[CompiledObjectKey] = []
+    cascades: dict[str, CascadeResult] = {}
+    cursor_types: dict[str, str | None] = {}
+    name: str
+    action: BackfillAction
+    duration: str | None
+    cursor_type: str | None
+    for name, action, duration, cursor_type in entries:
+        keys.append(model_key(name))
+        cascades[name] = CascadeResult(
+            effective_action=action,
+            effective_duration=duration,
+            root_cause=None,
+            causes=(),
+        )
+        cursor_types[name] = cursor_type
+    return tuple(keys), cascades, cursor_types
 
 
 def _stub_schema_file() -> DiscoveredSchemaFile:

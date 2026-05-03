@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 
 from sqlbuild.compiler.planner.types import (
+    BackfillAction,
     PlanAction,
     PlanReason,
     WarningSeverity,
@@ -26,3 +27,6 @@ class BuildExecutionPlanTestCase:
     expected_seed_names: tuple[str, ...] = ()
     expected_model_count: int | None = None
     effective_connection: dict[str, object] = field(default_factory=dict)
+    model_deps: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    expected_cascade_action: dict[str, BackfillAction] = field(default_factory=dict)
+    expected_cascade_root_cause: dict[str, str] = field(default_factory=dict)

@@ -5,8 +5,8 @@ from typing import Any
 import pytest
 
 from sqlbuild.compiler.planner.main import build_execution_plan
-from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput, PlanWarning
-from sqlbuild.compiler.planner.types import PlanAction, PlanReason, WarningSeverity
+from sqlbuild.compiler.planner.models import CascadeResult, ModelPlanEntry, PlanOutput, PlanWarning
+from sqlbuild.compiler.planner.types import BackfillAction, PlanAction, PlanReason, WarningSeverity
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     BuildExecutionPlanTestCase,
@@ -251,3 +251,75 @@ def test_given_cursor_type_mismatch_when_building_plan_then_produces_warning(
     assert warning.severity == test_case.expected_warning_severity
     assert test_case.expected_warning_fragment is not None
     assert test_case.expected_warning_fragment in warning.message
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildExecutionPlanTestCase(
+            description="upstream first run full cascades to existing downstream",
+            setup_sql=("CREATE TABLE staging.fact_orders AS SELECT 1 AS id",),
+            model_targets={
+                "stg_orders": "staging",
+                "fact_orders": "staging",
+            },
+            model_configs={
+                "stg_orders": {"materialized": "table"},
+                "fact_orders": {"materialized": "table"},
+            },
+            model_queries={
+                "stg_orders": "SELECT 1 AS id",
+                "fact_orders": "SELECT 1 AS id",
+            },
+            model_deps={"fact_orders": ("stg_orders",)},
+            full_refresh=False,
+            expected_action={
+                "stg_orders": PlanAction.CREATE_TABLE,
+                "fact_orders": PlanAction.CREATE_TABLE,
+            },
+            expected_reason={
+                "stg_orders": PlanReason.FIRST_RUN,
+                "fact_orders": PlanReason.NO_CHANGE,
+            },
+            expected_cascade_action={"fact_orders": BackfillAction.FULL},
+            expected_cascade_root_cause={"fact_orders": "stg_orders"},
+        ),
+    ],
+    ids=["upstream first run full cascades to existing downstream"],
+)
+def test_given_upstream_first_run_when_building_plan_then_cascades_to_downstream(
+    test_case: BuildExecutionPlanTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    sql: str
+    for sql in test_case.setup_sql:
+        connection.execute(sql)
+
+    project: Any = build_project_from_test_case(test_case)
+
+    plan: PlanOutput = build_execution_plan(
+        project=project,
+        adapter=adapter,
+        connection=connection,
+        full_refresh=test_case.full_refresh,
+    )
+
+    entry_map: dict[str, ModelPlanEntry] = {e.name: e for e in plan.model_entries}
+
+    model_name: str
+    expected_action: PlanAction
+    for model_name, expected_action in test_case.expected_action.items():
+        assert entry_map[model_name].action == expected_action
+
+    expected_cascade_action: BackfillAction
+    for model_name, expected_cascade_action in test_case.expected_cascade_action.items():
+        cascade: CascadeResult | None = entry_map[model_name].cascade
+        assert cascade is not None
+        assert cascade.effective_action == expected_cascade_action
+
+    expected_root: str
+    for model_name, expected_root in test_case.expected_cascade_root_cause.items():
+        cascade_for_root: CascadeResult | None = entry_map[model_name].cascade
+        assert cascade_for_root is not None
+        assert cascade_for_root.root_cause == expected_root

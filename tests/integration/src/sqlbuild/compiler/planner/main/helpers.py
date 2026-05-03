@@ -31,13 +31,17 @@ def build_project_from_test_case(
     for model_name, target_schema in test_case.model_targets.items():
         config_values: dict[str, object] = test_case.model_configs.get(model_name, {})
         query_sql: str = test_case.model_queries.get(model_name, f"SELECT * FROM {model_name}")
+        dep_names: tuple[str, ...] = test_case.model_deps.get(model_name, ())
+        deps: tuple[CompiledObjectKey, ...] = tuple(
+            CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=d) for d in dep_names
+        )
         models.append(
             CompiledModel(
                 key=CompiledObjectKey(
                     resource_type=CompiledResourceType.MODEL,
                     name=model_name,
                 ),
-                deps=(),
+                deps=deps,
                 name=model_name,
                 relative_path=Path(f"models/{model_name}.sql"),
                 query_sql=query_sql,

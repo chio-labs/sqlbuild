@@ -127,6 +127,25 @@ class BackfillResult:
 
 
 @dataclass(frozen=True)
+class CascadeCause:
+    """One upstream model that contributed to a backfill cascade."""
+
+    model_name: str
+    effective_action: BackfillAction
+    effective_duration: str | None
+
+
+@dataclass(frozen=True)
+class CascadeResult:
+    """Effective backfill after upstream cascade propagation."""
+
+    effective_action: BackfillAction
+    effective_duration: str | None
+    root_cause: str | None
+    causes: tuple[CascadeCause, ...]
+
+
+@dataclass(frozen=True)
 class ChangeDetectionResult:
     """Per-model output from change detection and policy resolution."""
 
@@ -182,6 +201,7 @@ class ModelPlanEntry:
     backfill: BackfillResult = field(
         default_factory=lambda: BackfillResult(action=BackfillAction.WARN_ONLY)
     )
+    cascade: CascadeResult | None = None
 
 
 @dataclass(frozen=True)

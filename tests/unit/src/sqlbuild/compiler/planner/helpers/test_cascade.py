@@ -1,0 +1,247 @@
+"""Tests for backfill cascade propagation."""
+
+from __future__ import annotations
+
+import pytest
+
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.planner.helpers.cascade import (
+    build_self_cascade,
+    resolve_cascade,
+)
+from sqlbuild.compiler.planner.models import (
+    BackfillResult,
+    CascadeResult,
+)
+from sqlbuild.compiler.planner.types import BackfillAction
+from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
+    ResolveCascadeTestCase,
+)
+from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
+    build_cascade_upstream_state,
+)
+
+CASCADE_RETURNS_RESULT_TEST_CASES: list[ResolveCascadeTestCase] = [
+    ResolveCascadeTestCase(
+        description="upstream full cascades to same cursor type downstream",
+        own_action=BackfillAction.WARN_ONLY,
+        own_duration=None,
+        own_cursor_type="timestamp",
+        upstream_entries=(("orders", BackfillAction.FULL, None, "timestamp"),),
+        expected_cascade=True,
+        expected_action=BackfillAction.FULL,
+        expected_root_cause="orders",
+        expected_cause_count=1,
+    ),
+    ResolveCascadeTestCase(
+        description="upstream bounded cascades to same cursor type downstream",
+        own_action=BackfillAction.WARN_ONLY,
+        own_duration=None,
+        own_cursor_type="timestamp",
+        upstream_entries=(("orders", BackfillAction.BOUNDED, "90d", "timestamp"),),
+        expected_cascade=True,
+        expected_action=BackfillAction.BOUNDED,
+        expected_duration="90d",
+        expected_root_cause="orders",
+        expected_cause_count=1,
+    ),
+    ResolveCascadeTestCase(
+        description="upstream full cascades across cursor types",
+        own_action=BackfillAction.WARN_ONLY,
+        own_duration=None,
+        own_cursor_type="integer",
+        upstream_entries=(("orders", BackfillAction.FULL, None, "timestamp"),),
+        expected_cascade=True,
+        expected_action=BackfillAction.FULL,
+        expected_root_cause="orders",
+        expected_cause_count=1,
+    ),
+    ResolveCascadeTestCase(
+        description="picks most aggressive upstream when multiple cascade",
+        own_action=BackfillAction.WARN_ONLY,
+        own_duration=None,
+        own_cursor_type="timestamp",
+        upstream_entries=(
+            ("orders", BackfillAction.BOUNDED, "30d", "timestamp"),
+            ("payments", BackfillAction.BOUNDED, "90d", "timestamp"),
+        ),
+        expected_cascade=True,
+        expected_action=BackfillAction.BOUNDED,
+        expected_duration="90d",
+        expected_root_cause="payments",
+        expected_cause_count=2,
+    ),
+    ResolveCascadeTestCase(
+        description="alphabetical tiebreak among equal upstream windows",
+        own_action=BackfillAction.WARN_ONLY,
+        own_duration=None,
+        own_cursor_type="timestamp",
+        upstream_entries=(
+            ("orders", BackfillAction.BOUNDED, "90d", "timestamp"),
+            ("customers", BackfillAction.BOUNDED, "90d", "timestamp"),
+        ),
+        expected_cascade=True,
+        expected_action=BackfillAction.BOUNDED,
+        expected_duration="90d",
+        expected_root_cause="customers",
+        expected_cause_count=2,
+    ),
+    ResolveCascadeTestCase(
+        description="full beats bounded in upstream comparison",
+        own_action=BackfillAction.WARN_ONLY,
+        own_duration=None,
+        own_cursor_type="timestamp",
+        upstream_entries=(
+            ("orders", BackfillAction.BOUNDED, "90d", "timestamp"),
+            ("payments", BackfillAction.FULL, None, "timestamp"),
+        ),
+        expected_cascade=True,
+        expected_action=BackfillAction.FULL,
+        expected_root_cause="payments",
+        expected_cause_count=2,
+    ),
+    ResolveCascadeTestCase(
+        description="cascade overrides own bounded when upstream is stronger",
+        own_action=BackfillAction.BOUNDED,
+        own_duration="30d",
+        own_cursor_type="timestamp",
+        upstream_entries=(("orders", BackfillAction.BOUNDED, "90d", "timestamp"),),
+        expected_cascade=True,
+        expected_action=BackfillAction.BOUNDED,
+        expected_duration="90d",
+        expected_root_cause="orders",
+        expected_cause_count=1,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    CASCADE_RETURNS_RESULT_TEST_CASES,
+    ids=[case.description for case in CASCADE_RETURNS_RESULT_TEST_CASES],
+)
+def test_given_upstream_cascade_when_resolving_then_returns_cascade_result(
+    test_case: ResolveCascadeTestCase,
+) -> None:
+    upstream_keys: tuple[CompiledObjectKey, ...]
+    effective_cascades: dict[str, CascadeResult]
+    model_cursor_types: dict[str, str | None]
+    upstream_keys, effective_cascades, model_cursor_types = build_cascade_upstream_state(
+        test_case.upstream_entries
+    )
+
+    result: CascadeResult | None = resolve_cascade(
+        model_name="test_model",
+        own_backfill=BackfillResult(action=test_case.own_action, duration=test_case.own_duration),
+        own_cursor_type=test_case.own_cursor_type,
+        upstream_keys=upstream_keys,
+        effective_cascades=effective_cascades,
+        model_cursor_types=model_cursor_types,
+    )
+
+    assert result is not None
+    assert result.effective_action == test_case.expected_action
+    assert result.effective_duration == test_case.expected_duration
+    assert result.root_cause == test_case.expected_root_cause
+    assert len(result.causes) == test_case.expected_cause_count
+
+
+CASCADE_RETURNS_NONE_TEST_CASES: list[ResolveCascadeTestCase] = [
+    ResolveCascadeTestCase(
+        description="no upstream produces no cascade",
+        own_action=BackfillAction.WARN_ONLY,
+        own_duration=None,
+        own_cursor_type="timestamp",
+        upstream_entries=(),
+        expected_cascade=False,
+    ),
+    ResolveCascadeTestCase(
+        description="upstream warn_only produces no cascade",
+        own_action=BackfillAction.WARN_ONLY,
+        own_duration=None,
+        own_cursor_type="timestamp",
+        upstream_entries=(("orders", BackfillAction.WARN_ONLY, None, "timestamp"),),
+        expected_cascade=False,
+    ),
+    ResolveCascadeTestCase(
+        description="upstream bounded does not cascade across cursor types",
+        own_action=BackfillAction.WARN_ONLY,
+        own_duration=None,
+        own_cursor_type="integer",
+        upstream_entries=(("orders", BackfillAction.BOUNDED, "90d", "timestamp"),),
+        expected_cascade=False,
+    ),
+    ResolveCascadeTestCase(
+        description="upstream weaker than own backfill produces no cascade",
+        own_action=BackfillAction.BOUNDED,
+        own_duration="90d",
+        own_cursor_type="timestamp",
+        upstream_entries=(("orders", BackfillAction.BOUNDED, "30d", "timestamp"),),
+        expected_cascade=False,
+    ),
+    ResolveCascadeTestCase(
+        description="own full is not exceeded by upstream bounded",
+        own_action=BackfillAction.FULL,
+        own_duration=None,
+        own_cursor_type="timestamp",
+        upstream_entries=(("orders", BackfillAction.BOUNDED, "90d", "timestamp"),),
+        expected_cascade=False,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    CASCADE_RETURNS_NONE_TEST_CASES,
+    ids=[case.description for case in CASCADE_RETURNS_NONE_TEST_CASES],
+)
+def test_given_no_stronger_upstream_when_resolving_then_returns_none(
+    test_case: ResolveCascadeTestCase,
+) -> None:
+    upstream_keys: tuple[CompiledObjectKey, ...]
+    effective_cascades: dict[str, CascadeResult]
+    model_cursor_types: dict[str, str | None]
+    upstream_keys, effective_cascades, model_cursor_types = build_cascade_upstream_state(
+        test_case.upstream_entries
+    )
+
+    result: CascadeResult | None = resolve_cascade(
+        model_name="test_model",
+        own_backfill=BackfillResult(action=test_case.own_action, duration=test_case.own_duration),
+        own_cursor_type=test_case.own_cursor_type,
+        upstream_keys=upstream_keys,
+        effective_cascades=effective_cascades,
+        model_cursor_types=model_cursor_types,
+    )
+
+    assert result is None
+    assert not test_case.expected_cascade
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ResolveCascadeTestCase(
+            description="build_self_cascade preserves own backfill in accumulator",
+            own_action=BackfillAction.BOUNDED,
+            own_duration="30d",
+            own_cursor_type="timestamp",
+            upstream_entries=(),
+            expected_cascade=False,
+            expected_action=BackfillAction.BOUNDED,
+            expected_duration="30d",
+        ),
+    ],
+    ids=["build_self_cascade preserves own backfill in accumulator"],
+)
+def test_given_own_backfill_when_building_self_cascade_then_preserves_values(
+    test_case: ResolveCascadeTestCase,
+) -> None:
+    result: CascadeResult = build_self_cascade(
+        BackfillResult(action=test_case.own_action, duration=test_case.own_duration)
+    )
+
+    assert result.effective_action == test_case.expected_action
+    assert result.effective_duration == test_case.expected_duration
+    assert result.root_cause is None
+    assert result.causes == ()
