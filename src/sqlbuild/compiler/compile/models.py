@@ -93,6 +93,9 @@ class CompileAuditInput:
     audit_block: DiscoveredAuditBlock
     sql_body: str
     references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
+    attached_target_kind: str | None = None
+    attached_target_name: str | None = None
+    attached_column_name: str | None = None
 
 
 @dataclass(frozen=True)

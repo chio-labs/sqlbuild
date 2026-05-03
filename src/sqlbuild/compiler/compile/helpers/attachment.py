@@ -7,7 +7,11 @@ from pathlib import Path
 from typing import cast
 from uuid import uuid4
 
-from sqlbuild.compiler.compile.constants import MACRO_CALL_PATTERN
+from sqlbuild.compiler.compile.constants import (
+    GENERIC_AUDIT_QUOTED_PARAMETER_PATTERN,
+    GENERIC_AUDIT_RAW_PARAMETER_PATTERN,
+    MACRO_CALL_PATTERN,
+)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.helpers.macros import (
     expand_sql_macros,
@@ -45,8 +49,13 @@ from sqlbuild.spec.models.project import (
     LocalConfig,
     ProjectConfig,
 )
-from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.models.schema import (
+    SchemaAuditInstance,
+    SchemaColumn,
+    SchemaModelEntry,
+    SchemaSeedEntry,
+)
+from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 
 
 def build_model_inputs(
@@ -228,6 +237,9 @@ def build_test_inputs(
 
 def build_audit_inputs(
     discovered_inputs: DiscoveredProjectInputs,
+    *,
+    model_inputs: tuple[CompileModelInput, ...],
+    source_inputs: tuple[CompileSourceInput, ...],
 ) -> tuple[CompileAuditInput, ...]:
     """Build compile-time audit inputs from discovered SQL audit blocks."""
 
@@ -241,9 +253,14 @@ def build_audit_inputs(
         for source_file in discovered_inputs.source_files
         for source_entry in source_file.source_entries
     }
+    generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]] = (
+        index_generic_audit_definitions(discovered_inputs.audit_files)
+    )
     audit_inputs: list[CompileAuditInput] = []
     audit_file: DiscoveredAuditFile
     for audit_file in discovered_inputs.audit_files:
+        if is_generic_audit_file(audit_file):
+            continue
         audit_block: DiscoveredAuditBlock
         for audit_block in audit_file.blocks:
             expanded_sql_body: str = expand_sql_macros(
@@ -266,7 +283,340 @@ def build_audit_inputs(
                     references=references,
                 )
             )
+    model_input: CompileModelInput
+    for model_input in model_inputs:
+        if model_input.schema_entry is None or model_input.schema_file is None:
+            continue
+        audit_inputs.extend(
+            build_model_attached_audit_inputs(
+                model_input=model_input,
+                schema_file=model_input.schema_file,
+                generic_audit_definitions=generic_audit_definitions,
+                loaded_macros=loaded_macros,
+                known_model_names=known_model_names,
+                known_source_names=known_source_names,
+            )
+        )
+    source_input: CompileSourceInput
+    for source_input in source_inputs:
+        audit_inputs.extend(
+            build_source_attached_audit_inputs(
+                source_input=source_input,
+                generic_audit_definitions=generic_audit_definitions,
+                loaded_macros=loaded_macros,
+                known_model_names=known_model_names,
+                known_source_names=known_source_names,
+            )
+        )
     return tuple(audit_inputs)
+
+
+def build_model_attached_audit_inputs(
+    *,
+    model_input: CompileModelInput,
+    schema_file: DiscoveredSchemaFile,
+    generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]],
+    loaded_macros: dict[str, LoadedMacro],
+    known_model_names: set[str],
+    known_source_names: set[str],
+) -> tuple[CompileAuditInput, ...]:
+    """Render schema-attached model audits into compile audit inputs."""
+
+    assert model_input.schema_entry is not None
+    attached_audit_inputs: list[CompileAuditInput] = []
+    audit_instance: SchemaAuditInstance
+    for audit_instance in model_input.schema_entry.audits:
+        attached_audit_inputs.append(
+            build_attached_audit_input(
+                audit_instance=audit_instance,
+                owner_file=schema_file.relative_path,
+                generic_audit_definitions=generic_audit_definitions,
+                implicit_arguments={"model": model_input.model_file.file_path.stem},
+                attached_target_kind="model",
+                attached_target_name=model_input.model_file.file_path.stem,
+                attached_column_name=None,
+                loaded_macros=loaded_macros,
+                known_model_names=known_model_names,
+                known_source_names=known_source_names,
+            )
+        )
+    column_entry: SchemaColumn
+    for column_entry in model_input.schema_entry.columns:
+        for audit_instance in column_entry.audits:
+            attached_audit_inputs.append(
+                build_attached_audit_input(
+                    audit_instance=audit_instance,
+                    owner_file=schema_file.relative_path,
+                    generic_audit_definitions=generic_audit_definitions,
+                    implicit_arguments={
+                        "model": model_input.model_file.file_path.stem,
+                        "column": column_entry.name,
+                    },
+                    attached_target_kind="model",
+                    attached_target_name=model_input.model_file.file_path.stem,
+                    attached_column_name=column_entry.name,
+                    loaded_macros=loaded_macros,
+                    known_model_names=known_model_names,
+                    known_source_names=known_source_names,
+                )
+            )
+    return tuple(attached_audit_inputs)
+
+
+def build_source_attached_audit_inputs(
+    *,
+    source_input: CompileSourceInput,
+    generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]],
+    loaded_macros: dict[str, LoadedMacro],
+    known_model_names: set[str],
+    known_source_names: set[str],
+) -> tuple[CompileAuditInput, ...]:
+    """Render source-attached audits into compile audit inputs."""
+
+    attached_audit_inputs: list[CompileAuditInput] = []
+    audit_instance: SchemaAuditInstance
+    for audit_instance in source_input.source_entry.audits:
+        attached_audit_inputs.append(
+            build_attached_audit_input(
+                audit_instance=audit_instance,
+                owner_file=source_input.source_file.relative_path,
+                generic_audit_definitions=generic_audit_definitions,
+                implicit_arguments={"source": source_input.source_entry.name},
+                attached_target_kind="source",
+                attached_target_name=source_input.source_entry.name,
+                attached_column_name=None,
+                loaded_macros=loaded_macros,
+                known_model_names=known_model_names,
+                known_source_names=known_source_names,
+            )
+        )
+    column_entry: SourceColumnEntry
+    for column_entry in source_input.source_entry.columns:
+        for audit_instance in column_entry.audits:
+            attached_audit_inputs.append(
+                build_attached_audit_input(
+                    audit_instance=audit_instance,
+                    owner_file=source_input.source_file.relative_path,
+                    generic_audit_definitions=generic_audit_definitions,
+                    implicit_arguments={
+                        "source": source_input.source_entry.name,
+                        "column": column_entry.name,
+                    },
+                    attached_target_kind="source",
+                    attached_target_name=source_input.source_entry.name,
+                    attached_column_name=column_entry.name,
+                    loaded_macros=loaded_macros,
+                    known_model_names=known_model_names,
+                    known_source_names=known_source_names,
+                )
+            )
+    return tuple(attached_audit_inputs)
+
+
+def build_attached_audit_input(
+    *,
+    audit_instance: SchemaAuditInstance,
+    owner_file: Path,
+    generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]],
+    implicit_arguments: dict[str, object],
+    attached_target_kind: str,
+    attached_target_name: str,
+    attached_column_name: str | None,
+    loaded_macros: dict[str, LoadedMacro],
+    known_model_names: set[str],
+    known_source_names: set[str],
+) -> CompileAuditInput:
+    """Render one attached generic audit instance into a compile audit input."""
+
+    definition: tuple[DiscoveredAuditFile, DiscoveredAuditBlock] | None = (
+        generic_audit_definitions.get(audit_instance.definition_name)
+    )
+    if definition is None:
+        raise CompileInputError(
+            f"{owner_file} references unknown generic audit '{audit_instance.definition_name}'"
+        )
+    merged_arguments: dict[str, object] = merge_audit_arguments(
+        owner_file=owner_file,
+        definition_name=audit_instance.definition_name,
+        implicit_arguments=implicit_arguments,
+        explicit_arguments=audit_instance.arguments,
+    )
+    rendered_sql_body: str = render_generic_audit_sql(
+        sql=definition[1].sql_body,
+        arguments=merged_arguments,
+        owner_file=owner_file,
+        definition_name=audit_instance.definition_name,
+    )
+    expanded_sql_body: str = expand_sql_macros(
+        sql=rendered_sql_body,
+        file_path=definition[0].file_path,
+        loaded_macros=loaded_macros,
+    )
+    references: tuple[CompileSqlReference, ...] = extract_sql_references(expanded_sql_body)
+    validate_audit_references(
+        references=references,
+        audit_file=definition[0],
+        known_model_names=known_model_names,
+        known_source_names=known_source_names,
+    )
+    return CompileAuditInput(
+        audit_file=definition[0],
+        audit_block=definition[1],
+        sql_body=expanded_sql_body,
+        references=references,
+        attached_target_kind=attached_target_kind,
+        attached_target_name=attached_target_name,
+        attached_column_name=attached_column_name,
+    )
+
+
+def index_generic_audit_definitions(
+    audit_files: tuple[DiscoveredAuditFile, ...],
+) -> dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]]:
+    """Index generic audit definitions discovered under audits/generic/."""
+
+    definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]] = {}
+    audit_file: DiscoveredAuditFile
+    for audit_file in audit_files:
+        if not is_generic_audit_file(audit_file):
+            continue
+        if len(audit_file.blocks) != 1:
+            raise CompileInputError(
+                f"Generic audit definition {audit_file.relative_path} must contain exactly "
+                "one AUDIT block"
+            )
+        definition_name: str = audit_file.file_path.stem
+        if definition_name in definitions:
+            raise CompileInputError(
+                f"Duplicate generic audit definition found for '{definition_name}'"
+            )
+        definitions[definition_name] = (audit_file, audit_file.blocks[0])
+    return definitions
+
+
+def is_generic_audit_file(audit_file: DiscoveredAuditFile) -> bool:
+    """Return whether a discovered audit file is a generic definition."""
+
+    return audit_file.relative_path.parts[:2] == ("audits", "generic")
+
+
+def merge_audit_arguments(
+    *,
+    owner_file: Path,
+    definition_name: str,
+    implicit_arguments: dict[str, object],
+    explicit_arguments: dict[str, object],
+) -> dict[str, object]:
+    """Merge implicit attached-audit arguments with explicit authored arguments."""
+
+    merged_arguments: dict[str, object] = dict(implicit_arguments)
+    argument_name: str
+    argument_value: object
+    for argument_name, argument_value in explicit_arguments.items():
+        if (
+            argument_name in implicit_arguments
+            and implicit_arguments[argument_name] != argument_value
+        ):
+            raise CompileInputError(
+                f"{owner_file} audit '{definition_name}' must not override implicit "
+                f"{argument_name} from attached context"
+            )
+        merged_arguments[argument_name] = argument_value
+    return merged_arguments
+
+
+def render_generic_audit_sql(
+    *,
+    sql: str,
+    arguments: dict[str, object],
+    owner_file: Path,
+    definition_name: str,
+) -> str:
+    """Render generic attached-audit parameters into executable SQL text."""
+
+    rendered_sql: str = GENERIC_AUDIT_QUOTED_PARAMETER_PATTERN.sub(
+        lambda match: render_generic_audit_argument(
+            argument_name=match.group("name"),
+            arguments=arguments,
+            owner_file=owner_file,
+            definition_name=definition_name,
+            quoted=True,
+        ),
+        sql,
+    )
+    rendered_sql = GENERIC_AUDIT_RAW_PARAMETER_PATTERN.sub(
+        lambda match: render_generic_audit_argument(
+            argument_name=match.group("name"),
+            arguments=arguments,
+            owner_file=owner_file,
+            definition_name=definition_name,
+            quoted=False,
+        ),
+        rendered_sql,
+    )
+    return rendered_sql
+
+
+def render_generic_audit_argument(
+    *,
+    argument_name: str,
+    arguments: dict[str, object],
+    owner_file: Path,
+    definition_name: str,
+    quoted: bool,
+) -> str:
+    """Render one generic attached-audit parameter value into SQL text."""
+
+    if argument_name not in arguments:
+        raise CompileInputError(
+            f"{owner_file} is missing argument '{argument_name}' for generic audit "
+            f"'{definition_name}'"
+        )
+    return render_generic_audit_argument_value(
+        argument_value=arguments[argument_name],
+        owner_file=owner_file,
+        definition_name=definition_name,
+        argument_name=argument_name,
+        quoted=quoted,
+    )
+
+
+def render_generic_audit_argument_value(
+    *,
+    argument_value: object,
+    owner_file: Path,
+    definition_name: str,
+    argument_name: str,
+    quoted: bool,
+) -> str:
+    """Render one generic attached-audit argument value using raw or literal SQL rules."""
+
+    if isinstance(argument_value, list | tuple):
+        return ", ".join(
+            render_generic_audit_argument_value(
+                argument_value=item,
+                owner_file=owner_file,
+                definition_name=definition_name,
+                argument_name=argument_name,
+                quoted=quoted,
+            )
+            for item in argument_value
+        )
+    if isinstance(argument_value, bool):
+        return "TRUE" if argument_value else "FALSE"
+    if argument_value is None:
+        return "NULL"
+    if isinstance(argument_value, int | float):
+        return str(argument_value)
+    if isinstance(argument_value, str):
+        if quoted:
+            escaped_value: str = argument_value.replace("'", "''")
+            return f"'{escaped_value}'"
+        return argument_value
+    raise CompileInputError(
+        f"{owner_file} audit '{definition_name}' argument '{argument_name}' uses an "
+        "unsupported value"
+    )
 
 
 def validate_model_references(

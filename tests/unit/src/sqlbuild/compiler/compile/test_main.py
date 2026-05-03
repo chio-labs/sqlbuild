@@ -828,6 +828,114 @@ SELECT @project_columns() FROM raw_customers
         expected_audit_references=((), ()),
     ),
     BuildCompileInputsTestCase(
+        description="renders attached model and source audits from generic definitions",
+        repo_files=base_repo_files()
+        | {
+            "models/marts/orders.sql": "MODEL ();\n\nselect 1\n",
+            "models/marts/schema.yml": """
+models:
+  - name: orders
+    audits:
+      - model_not_null
+    columns:
+      - name: order_id
+        audits:
+          - column_not_null
+""".strip()
+            + "\n",
+            "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    audits:
+      - source_not_null
+    columns:
+      - name: order_id
+        audits:
+          - source_column_not_null
+""".strip()
+            + "\n",
+            "audits/generic/model_not_null.sql": """
+AUDIT ();
+
+SELECT 1 FROM __ref("@model")
+""".strip()
+            + "\n",
+            "audits/generic/column_not_null.sql": """
+AUDIT ();
+
+SELECT @column FROM __ref("@model") WHERE @column IS NULL
+""".strip()
+            + "\n",
+            "audits/generic/source_not_null.sql": """
+AUDIT ();
+
+SELECT 1 FROM __source("@source")
+""".strip()
+            + "\n",
+            "audits/generic/source_column_not_null.sql": """
+AUDIT ();
+
+SELECT @column FROM __source("@source") WHERE @column IS NULL
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        cli_vars=None,
+        run_id=None,
+        expected_model_schema_names=("orders",),
+        expected_model_config_values=({},),
+        expected_model_query_sqls=("select 1",),
+        expected_model_path_defaults=(None,),
+        expected_seed_names=(),
+        expected_source_names=("raw_orders",),
+        expected_test_sql_bodies=(),
+        expected_audit_sql_bodies=(
+            'SELECT 1 FROM __ref("orders")',
+            'SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+            'SELECT 1 FROM __source("raw_orders")',
+            'SELECT order_id FROM __source("raw_orders") WHERE order_id IS NULL',
+        ),
+        expected_effective_environment_name=None,
+        expected_effective_connection={},
+        expected_effective_vars={},
+        expected_model_references=((),),
+        expected_audit_references=(
+            (("ref", "orders"),),
+            (("ref", "orders"),),
+            (("source", "raw_orders"),),
+            (("source", "raw_orders"),),
+        ),
+    ),
+    BuildCompileInputsTestCase(
+        description="skips generic audit definitions as direct executable audits",
+        repo_files=base_repo_files()
+        | {
+            "models/marts/orders.sql": "MODEL ();\n\nselect 1\n",
+            "audits/generic/not_null.sql": """
+AUDIT ();
+
+SELECT 1
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        cli_vars=None,
+        run_id=None,
+        expected_model_schema_names=(None,),
+        expected_model_config_values=({},),
+        expected_model_query_sqls=("select 1",),
+        expected_model_path_defaults=(None,),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_test_sql_bodies=(),
+        expected_audit_sql_bodies=(),
+        expected_effective_environment_name=None,
+        expected_effective_connection={},
+        expected_effective_vars={},
+        expected_model_references=((),),
+        expected_audit_references=(),
+    ),
+    BuildCompileInputsTestCase(
         description="generates clickstate style run ids when none are provided",
         repo_files=base_repo_files() | {"models/staging/orders.sql": "MODEL ();\n\nselect 1\n"},
         selected_environment=None,
@@ -983,6 +1091,45 @@ SELECT * FROM __dbt_ref("stg_orders")
         expected_error_fragment=(
             r"Audit file audits/orders\.sql may not use __dbt_ref\('stg_orders'\) right now"
         ),
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when an attached source audit overrides implicit source context",
+        repo_files=base_repo_files()
+        | {
+            "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    audits:
+      - source_not_null:
+          source: other_source
+""".strip()
+            + "\n",
+            "audits/generic/source_not_null.sql": """
+AUDIT ();
+
+SELECT 1 FROM __source("@source")
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="must not override implicit source from attached context",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when an attached source audit references an unknown generic definition",
+        repo_files=base_repo_files()
+        | {
+            "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    audits:
+      - missing_definition
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="references unknown generic audit 'missing_definition'",
     ),
     BuildCompileInputsErrorTestCase(
         description="raises when a compiled test body references an unknown macro",
