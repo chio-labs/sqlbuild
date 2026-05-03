@@ -155,3 +155,39 @@ class AuditFailureBuildE2ETestCase:
     expected_exit_code: int
     expected_failure_fragment: str
     expected_retained_relation_fragment: str
+
+
+@dataclass(frozen=True)
+class CompileJsonBuildE2ETestCase:
+    """Test case for compile JSON behavior."""
+
+    description: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_model_names: tuple[str, ...]
+    expected_sql_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PlanCommandBuildE2ETestCase:
+    """Test case for plan command surface behavior."""
+
+    description: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_fragments: tuple[str, ...]
+    expected_stream: str
+
+
+@dataclass(frozen=True)
+class RemoveColumnSemanticsBuildE2ETestCase:
+    """Test case for remove-column mutation semantics."""
+
+    description: str
+    mutate_file: str
+    before_text: str
+    after_text: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_reason: str
+    expected_warning_fragment: str
