@@ -1,6 +1,10 @@
 from dataclasses import dataclass, field
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompileSqlReference, InferredColumn
+from sqlbuild.compiler.compile.models import (
+    CompiledObjectKey,
+    CompileSqlReference,
+    InferredColumn,
+)
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 
 
@@ -146,4 +150,53 @@ class VarMacroCollisionTestCase:
     var_names: tuple[str, ...]
     macro_names: tuple[str, ...]
     expected_valid: bool
+    expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
+class NonIncrementalConfigValidTestCase:
+    description: str
+    config_values: dict[str, object]
+    expected_valid: bool = True
+
+
+@dataclass(frozen=True)
+class NonIncrementalConfigErrorTestCase:
+    description: str
+    config_values: dict[str, object]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ResolveAuditSeverityTestCase:
+    description: str
+    instance_severity: str | None
+    default_severity: str | None
+    expected_severity: str | None = None
+    expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
+class ResolveAuditRunScopeTestCase:
+    description: str
+    instance_run_scope: str | None
+    default_run_scope: str | None
+    expected_run_scope: str
+
+
+@dataclass(frozen=True)
+class ResolveAuditRunScopeErrorTestCase:
+    description: str
+    instance_run_scope: str | None
+    default_run_scope: str | None
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ValidateModelAttachedAuditRefsTestCase:
+    description: str
+    references: tuple[CompileSqlReference, ...]
+    attached_target_kind: str
+    attached_target_name: str
+    expected_valid: bool = True
     expected_error_fragment: str | None = None

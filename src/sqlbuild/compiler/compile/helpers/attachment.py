@@ -22,6 +22,7 @@ from sqlbuild.compiler.compile.helpers.macros import (
 )
 from sqlbuild.compiler.compile.helpers.model_config_validation import (
     validate_incremental_config,
+    validate_non_incremental_config,
 )
 from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
 from sqlbuild.compiler.compile.helpers.sql_vars import (
@@ -141,6 +142,10 @@ def build_model_inputs(
             config=effective_config,
             model_name=model_file.file_path.stem,
             ref_count=len(references),
+        )
+        validate_non_incremental_config(
+            config=effective_config,
+            model_name=model_file.file_path.stem,
         )
         expanded_config: CompileModelConfig = CompileModelConfig(
             values=expand_model_hook_macros(
@@ -340,6 +345,12 @@ def build_audit_inputs(
     generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]] = (
         index_generic_audit_definitions(discovered_inputs.audit_files)
     )
+    default_audit_severity: str | None = (
+        discovered_inputs.project_config.settings.default_audit_severity
+    )
+    default_audit_run_scope: str | None = (
+        discovered_inputs.project_config.settings.default_audit_run_scope
+    )
     audit_inputs: list[CompileAuditInput] = []
     audit_file: DiscoveredAuditFile
     for audit_file in discovered_inputs.audit_files:
@@ -359,12 +370,25 @@ def build_audit_inputs(
                 known_model_names=known_model_names,
                 known_source_names=known_source_names,
             )
+            header_severity: str | None = _str_from_dict(audit_block.header_values, "severity")
+            header_run_scope: str | None = _str_from_dict(audit_block.header_values, "run_scope")
+            resolved_severity: str = resolve_audit_severity(
+                instance_severity=header_severity,
+                default_severity=default_audit_severity,
+                audit_label=str(audit_file.relative_path),
+            )
+            resolved_run_scope: str = resolve_audit_run_scope(
+                instance_run_scope=header_run_scope,
+                default_run_scope=default_audit_run_scope,
+            )
             audit_inputs.append(
                 CompileAuditInput(
                     audit_file=audit_file,
                     audit_block=audit_block,
                     sql_body=expanded_sql_body,
                     references=references,
+                    severity=resolved_severity,
+                    run_scope=resolved_run_scope,
                 )
             )
     model_input: CompileModelInput
@@ -379,6 +403,8 @@ def build_audit_inputs(
                 loaded_macros=loaded_macros,
                 known_model_names=known_model_names,
                 known_source_names=known_source_names,
+                default_audit_severity=default_audit_severity,
+                default_audit_run_scope=default_audit_run_scope,
             )
         )
     source_input: CompileSourceInput
@@ -390,6 +416,8 @@ def build_audit_inputs(
                 loaded_macros=loaded_macros,
                 known_model_names=known_model_names,
                 known_source_names=known_source_names,
+                default_audit_severity=default_audit_severity,
+                default_audit_run_scope=default_audit_run_scope,
             )
         )
     return tuple(audit_inputs)
@@ -403,6 +431,8 @@ def build_model_attached_audit_inputs(
     loaded_macros: dict[str, LoadedMacro],
     known_model_names: set[str],
     known_source_names: set[str],
+    default_audit_severity: str | None,
+    default_audit_run_scope: str | None,
 ) -> tuple[CompileAuditInput, ...]:
     """Render schema-attached model audits into compile audit inputs."""
 
@@ -422,6 +452,8 @@ def build_model_attached_audit_inputs(
                 loaded_macros=loaded_macros,
                 known_model_names=known_model_names,
                 known_source_names=known_source_names,
+                default_audit_severity=default_audit_severity,
+                default_audit_run_scope=default_audit_run_scope,
             )
         )
     column_entry: SchemaColumn
@@ -442,6 +474,8 @@ def build_model_attached_audit_inputs(
                     loaded_macros=loaded_macros,
                     known_model_names=known_model_names,
                     known_source_names=known_source_names,
+                    default_audit_severity=default_audit_severity,
+                    default_audit_run_scope=default_audit_run_scope,
                 )
             )
     return tuple(attached_audit_inputs)
@@ -454,6 +488,8 @@ def build_source_attached_audit_inputs(
     loaded_macros: dict[str, LoadedMacro],
     known_model_names: set[str],
     known_source_names: set[str],
+    default_audit_severity: str | None,
+    default_audit_run_scope: str | None,
 ) -> tuple[CompileAuditInput, ...]:
     """Render source-attached audits into compile audit inputs."""
 
@@ -472,6 +508,8 @@ def build_source_attached_audit_inputs(
                 loaded_macros=loaded_macros,
                 known_model_names=known_model_names,
                 known_source_names=known_source_names,
+                default_audit_severity=default_audit_severity,
+                default_audit_run_scope=default_audit_run_scope,
             )
         )
     column_entry: SourceColumnEntry
@@ -492,6 +530,8 @@ def build_source_attached_audit_inputs(
                     loaded_macros=loaded_macros,
                     known_model_names=known_model_names,
                     known_source_names=known_source_names,
+                    default_audit_severity=default_audit_severity,
+                    default_audit_run_scope=default_audit_run_scope,
                 )
             )
     return tuple(attached_audit_inputs)
@@ -509,6 +549,8 @@ def build_attached_audit_input(
     loaded_macros: dict[str, LoadedMacro],
     known_model_names: set[str],
     known_source_names: set[str],
+    default_audit_severity: str | None,
+    default_audit_run_scope: str | None,
 ) -> CompileAuditInput:
     """Render one attached generic audit instance into a compile audit input."""
 
@@ -543,6 +585,22 @@ def build_attached_audit_input(
         known_model_names=known_model_names,
         known_source_names=known_source_names,
     )
+    audit_label: str = f"{owner_file} audit '{audit_instance.definition_name}'"
+    resolved_severity: str = resolve_audit_severity(
+        instance_severity=audit_instance.severity,
+        default_severity=default_audit_severity,
+        audit_label=audit_label,
+    )
+    resolved_run_scope: str = resolve_audit_run_scope(
+        instance_run_scope=audit_instance.run_scope,
+        default_run_scope=default_audit_run_scope,
+    )
+    validate_model_attached_audit_references(
+        references=references,
+        attached_target_kind=attached_target_kind,
+        attached_target_name=attached_target_name,
+        audit_label=audit_label,
+    )
     return CompileAuditInput(
         audit_file=definition[0],
         audit_block=definition[1],
@@ -551,6 +609,8 @@ def build_attached_audit_input(
         attached_target_kind=attached_target_kind,
         attached_target_name=attached_target_name,
         attached_column_name=attached_column_name,
+        severity=resolved_severity,
+        run_scope=resolved_run_scope,
     )
 
 
@@ -1382,6 +1442,94 @@ def validate_declared_schema_models_are_attached(
                     f"{schema_file.relative_path} "
                     "does not match any discovered model file in that directory scope"
                 )
+
+
+def resolve_audit_severity(
+    *,
+    instance_severity: str | None,
+    default_severity: str | None,
+    audit_label: str,
+) -> str:
+    """Resolve effective audit severity from instance, then project default."""
+
+    from sqlbuild.compiler.auditing.types import AuditSeverity
+
+    valid_values: frozenset[str] = frozenset(s.value for s in AuditSeverity)
+    if instance_severity is not None:
+        if instance_severity not in valid_values:
+            raise CompileInputError(
+                f"{audit_label}: unknown severity '{instance_severity}'; "
+                f"valid values: {', '.join(sorted(valid_values))}"
+            )
+        return instance_severity
+    if default_severity is not None:
+        if default_severity not in valid_values:
+            raise CompileInputError(
+                f"settings.default_audit_severity in sqlbuild_project.yml: "
+                f"unknown value '{default_severity}'; "
+                f"valid values: {', '.join(sorted(valid_values))}"
+            )
+        return default_severity
+    raise CompileInputError(
+        f"{audit_label}: severity is required; set it on the audit instance "
+        f"or set settings.default_audit_severity in sqlbuild_project.yml"
+    )
+
+
+def resolve_audit_run_scope(
+    *,
+    instance_run_scope: str | None,
+    default_run_scope: str | None,
+) -> str:
+    """Resolve effective audit run scope from instance, then project default, then final."""
+
+    from sqlbuild.compiler.auditing.types import AuditRunScope
+
+    valid_values: frozenset[str] = frozenset(s.value for s in AuditRunScope)
+    if instance_run_scope is not None:
+        if instance_run_scope not in valid_values:
+            raise CompileInputError(
+                f"unknown audit run_scope '{instance_run_scope}'; "
+                f"valid values: {', '.join(sorted(valid_values))}"
+            )
+        return instance_run_scope
+    if default_run_scope is not None:
+        if default_run_scope not in valid_values:
+            raise CompileInputError(
+                f"settings.default_audit_run_scope in sqlbuild_project.yml: "
+                f"unknown value '{default_run_scope}'; "
+                f"valid values: {', '.join(sorted(valid_values))}"
+            )
+        return default_run_scope
+    return AuditRunScope.FINAL
+
+
+def validate_model_attached_audit_references(
+    *,
+    references: tuple[CompileSqlReference, ...],
+    attached_target_kind: str,
+    attached_target_name: str,
+    audit_label: str,
+) -> None:
+    """Validate that a model-attached generic audit references the attached model."""
+
+    if attached_target_kind != AttachedAuditTargetKind.MODEL:
+        return
+    ref_names: frozenset[str] = frozenset(
+        ref.ref_name for ref in references if ref.ref_kind == SqlReferenceKind.REF
+    )
+    if attached_target_name not in ref_names:
+        raise CompileInputError(
+            f"{audit_label}: model-attached audit must reference the attached model "
+            f"'{attached_target_name}' via __ref()"
+        )
+
+
+def _str_from_dict(values: dict[str, object], key: str) -> str | None:
+    """Extract a string value from a dict."""
+
+    raw: object | None = values.get(key)
+    return raw if isinstance(raw, str) else None
 
 
 def _is_sql_validation_enabled(*, project_setting: bool, model_config: CompileModelConfig) -> bool:

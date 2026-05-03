@@ -734,6 +734,9 @@ name: demo
 adapter: duckdb
 default_environment: dev
 
+settings:
+  default_audit_severity: warn
+
 defaults:
   schema: marts
 

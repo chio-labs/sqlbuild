@@ -124,11 +124,21 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
     )
     sql_validation: bool = _optional_bool(mapping=mapping, key="sql_validation", default=True)
     max_concurrency: int = _optional_int(mapping=mapping, key="max_concurrency", default=1)
+    table_promotion_mode: str | None = _optional_str(payload=mapping, key="table_promotion_mode")
+    default_audit_severity: str | None = _optional_str(
+        payload=mapping, key="default_audit_severity"
+    )
+    default_audit_run_scope: str | None = _optional_str(
+        payload=mapping, key="default_audit_run_scope"
+    )
     return SettingsConfig(
         sqlglot=sqlglot,
         query_change_tracking=query_change_tracking,
         sql_validation=sql_validation,
         max_concurrency=max_concurrency,
+        table_promotion_mode=table_promotion_mode,
+        default_audit_severity=default_audit_severity,
+        default_audit_run_scope=default_audit_run_scope,
     )
 
 

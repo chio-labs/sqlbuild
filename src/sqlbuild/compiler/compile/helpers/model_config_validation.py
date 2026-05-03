@@ -1,4 +1,4 @@
-"""Compile-time validation of incremental model config combinations."""
+"""Compile-time validation of model config combinations."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from sqlbuild.compiler.planner.types import (
 _VALID_STRATEGIES: frozenset[str] = frozenset(s.value for s in IncrementalStrategy)
 _VALID_CURSOR_TYPES: frozenset[str] = frozenset(ct.value for ct in CursorType)
 _VALID_INCREMENTAL_MODES: frozenset[str] = frozenset(m.value for m in IncrementalMode)
+_INCREMENTAL_ONLY_KEYS: tuple[str, ...] = ("on_schema_change", "schema_change_backfill")
 
 
 def validate_incremental_config(
@@ -101,6 +102,25 @@ def validate_incremental_config(
             f"model '{model_name}': batch_concurrency is only valid with "
             f"incremental_mode=microbatch"
         )
+
+
+def validate_non_incremental_config(
+    *,
+    config: CompileModelConfig,
+    model_name: str,
+) -> None:
+    """Reject incremental-only config keys on non-incremental models."""
+
+    materialized: str | None = _str(config, "materialized")
+    if materialized == MaterializationType.INCREMENTAL:
+        return
+
+    key: str
+    for key in _INCREMENTAL_ONLY_KEYS:
+        if config.values.get(key) is not None:
+            raise CompileInputError(
+                f"model '{model_name}': {key} is only valid for incremental models"
+            )
 
 
 def _str(config: CompileModelConfig, key: str) -> str | None:

@@ -88,10 +88,17 @@ def parse_audit_instance(
         key="severity",
         error_class=error_class,
     )
+    run_scope: str | None = optional_named_string(
+        raw_value=argument_mapping.get("run_scope"),
+        file_path=file_path,
+        label=f"{label} audit '{definition_name}'",
+        key="run_scope",
+        error_class=error_class,
+    )
     arguments: dict[str, object] = {
         key: value
         for key, value in argument_mapping.items()
-        if key not in {"name", "description", "severity"}
+        if key not in {"name", "description", "severity", "run_scope"}
     }
     return SchemaAuditInstance(
         definition_name=definition_name,
@@ -99,6 +106,7 @@ def parse_audit_instance(
         name=name,
         description=description,
         severity=severity,
+        run_scope=run_scope,
     )
 
 

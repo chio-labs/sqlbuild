@@ -132,6 +132,8 @@ def _assemble_compiled_audit(audit_input: CompileAuditInput) -> CompiledAudit:
         attached_target_kind=normalized_target_kind,
         attached_target_name=audit_input.attached_target_name,
         attached_column_name=audit_input.attached_column_name,
+        severity=audit_input.severity,
+        run_scope=audit_input.run_scope,
     )
 
 

@@ -1,4 +1,4 @@
-"""Tests for compile-time incremental model config validation."""
+"""Tests for compile-time model config validation."""
 
 from __future__ import annotations
 
@@ -7,11 +7,14 @@ import pytest
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.helpers.model_config_validation import (
     validate_incremental_config,
+    validate_non_incremental_config,
 )
 from sqlbuild.compiler.compile.models import CompileModelConfig
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     IncrementalConfigErrorTestCase,
     IncrementalConfigValidTestCase,
+    NonIncrementalConfigErrorTestCase,
+    NonIncrementalConfigValidTestCase,
 )
 
 VALID_TEST_CASES: list[IncrementalConfigValidTestCase] = [
@@ -228,4 +231,92 @@ def test_given_invalid_config_when_validating_then_raises(
             config=config,
             model_name="test_model",
             ref_count=test_case.ref_count,
+        )
+
+
+NON_INCREMENTAL_VALID_TEST_CASES: list[NonIncrementalConfigValidTestCase] = [
+    NonIncrementalConfigValidTestCase(
+        description="table model without schema change keys passes",
+        config_values={"materialized": "table"},
+    ),
+    NonIncrementalConfigValidTestCase(
+        description="view model without schema change keys passes",
+        config_values={"materialized": "view"},
+    ),
+    NonIncrementalConfigValidTestCase(
+        description="incremental model with on_schema_change passes",
+        config_values={"materialized": "incremental", "on_schema_change": "append_new_columns"},
+    ),
+    NonIncrementalConfigValidTestCase(
+        description="incremental model with schema_change_backfill passes",
+        config_values={
+            "materialized": "incremental",
+            "schema_change_backfill": {"add_column": "bounded(30d)"},
+        },
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    NON_INCREMENTAL_VALID_TEST_CASES,
+    ids=[case.description for case in NON_INCREMENTAL_VALID_TEST_CASES],
+)
+def test_given_valid_non_incremental_config_when_validating_then_passes(
+    test_case: NonIncrementalConfigValidTestCase,
+) -> None:
+    config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
+
+    validate_non_incremental_config(
+        config=config,
+        model_name="test_model",
+    )
+
+    assert test_case.expected_valid
+
+
+NON_INCREMENTAL_ERROR_TEST_CASES: list[NonIncrementalConfigErrorTestCase] = [
+    NonIncrementalConfigErrorTestCase(
+        description="table model with on_schema_change raises",
+        config_values={"materialized": "table", "on_schema_change": "append_new_columns"},
+        expected_error_fragment="on_schema_change is only valid for incremental",
+    ),
+    NonIncrementalConfigErrorTestCase(
+        description="view model with on_schema_change raises",
+        config_values={"materialized": "view", "on_schema_change": "fail"},
+        expected_error_fragment="on_schema_change is only valid for incremental",
+    ),
+    NonIncrementalConfigErrorTestCase(
+        description="table model with schema_change_backfill raises",
+        config_values={
+            "materialized": "table",
+            "schema_change_backfill": {"add_column": "full"},
+        },
+        expected_error_fragment="schema_change_backfill is only valid for incremental",
+    ),
+    NonIncrementalConfigErrorTestCase(
+        description="view model with schema_change_backfill raises",
+        config_values={
+            "materialized": "view",
+            "schema_change_backfill": {"type_change": "full"},
+        },
+        expected_error_fragment="schema_change_backfill is only valid for incremental",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    NON_INCREMENTAL_ERROR_TEST_CASES,
+    ids=[case.description for case in NON_INCREMENTAL_ERROR_TEST_CASES],
+)
+def test_given_non_incremental_config_with_incremental_keys_when_validating_then_raises(
+    test_case: NonIncrementalConfigErrorTestCase,
+) -> None:
+    config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
+
+    with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
+        validate_non_incremental_config(
+            config=config,
+            model_name="test_model",
         )

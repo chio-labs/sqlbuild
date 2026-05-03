@@ -37,6 +37,9 @@ from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
 name: demo
 adapter: duckdb
 
+settings:
+  default_audit_severity: warn
+
 defaults:
   materialized: table
   schema: analytics

@@ -149,6 +149,8 @@ class CompileAuditInput:
     attached_target_kind: AttachedAuditTargetKind | str | None = None
     attached_target_name: str | None = None
     attached_column_name: str | None = None
+    severity: str | None = None
+    run_scope: str | None = None
 
     def __post_init__(self) -> None:
         if self.attached_target_kind is not None:
@@ -244,6 +246,8 @@ class CompiledAudit:
     attached_target_kind: AttachedAuditTargetKind | None = None
     attached_target_name: str | None = None
     attached_column_name: str | None = None
+    severity: str | None = None
+    run_scope: str | None = None
 
 
 @dataclass(frozen=True)

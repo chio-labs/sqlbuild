@@ -12,3 +12,9 @@ class BuiltinAdapter(StrEnum):
 class CursorKind(StrEnum):
     TIMESTAMP = "timestamp"
     INTEGER = "integer"
+
+
+class PromotionStrategy(StrEnum):
+    ATOMIC_SWAP = "atomic_swap"
+    ATOMIC_REPLACE = "atomic_replace"
+    CREATE_NEW = "create_new"

@@ -14,6 +14,7 @@ class SchemaAuditInstance:
     name: str | None = None
     description: str | None = None
     severity: str | None = None
+    run_scope: str | None = None
 
 
 @dataclass(frozen=True)
