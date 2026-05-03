@@ -90,6 +90,19 @@ def _build_parser() -> argparse.ArgumentParser:
     diff_parser.add_argument("--max-column-examples", type=int, default=None)
     diff_parser.add_argument("--max-row-only-examples", type=int, default=None)
     add_select_args(diff_parser)
+    query_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.QUERY)
+    query_parser.add_argument("query_sql", nargs="?", metavar="sql")
+    query_parser.add_argument("--file", dest="query_file", default=None)
+    query_parser.add_argument(
+        "--format",
+        dest="query_format",
+        choices=("long", "table", "json", "csv"),
+        default="long",
+    )
+    query_parser.add_argument("--limit", dest="query_limit", type=int, default=20)
+    query_parser.add_argument(
+        "--no-limit", dest="query_no_limit", action="store_true", default=False
+    )
     subparsers.add_parser(CliCommand.CLEAN)
     janitor_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.JANITOR)
     janitor_parser.add_argument("--auto-approve", action="store_true", default=False)
@@ -108,6 +121,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.diff import run_diff
     from sqlbuild.cli.commands.main.janitor import run_janitor
     from sqlbuild.cli.commands.main.plan import run_plan
+    from sqlbuild.cli.commands.main.query import run_query
     from sqlbuild.cli.commands.main.run import run_run
     from sqlbuild.cli.commands.main.seed import run_seed
     from sqlbuild.cli.commands.main.test import run_test
@@ -122,6 +136,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_seed=run_seed,
         run_clone=run_clone,
         run_diff=run_diff,
+        run_query=run_query,
         run_janitor=run_janitor,
     )
     return _main_with_dependencies(argv=argv, handlers=handlers)
@@ -273,6 +288,15 @@ def _main_with_dependencies(
                 tuple(args.select),
                 tuple(args.exclude),
                 args.verbose,
+            )
+        if args.command == CliCommand.QUERY:
+            query_limit: int | None = None if args.query_no_limit else args.query_limit
+            return handlers.run_query(
+                project_dir,
+                args.query_sql,
+                args.query_file,
+                args.query_format,
+                query_limit,
             )
         if args.command == CliCommand.JANITOR:
             return handlers.run_janitor(

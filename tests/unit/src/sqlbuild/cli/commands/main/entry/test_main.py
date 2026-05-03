@@ -233,6 +233,48 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
     "test_case",
     [
         MainTestCase(
+            description="dispatches query command through injected handler",
+            argv=[
+                "query",
+                "select 1 as id",
+                "--format",
+                "table",
+                "--limit",
+                "5",
+            ],
+            expected_exit_code=4,
+        )
+    ],
+    ids=["dispatches query command through injected handler"],
+)
+def test_given_query_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[tuple[Path | None, str | None, str | None, str, int | None]] = []
+
+    def run_query(
+        project_dir: Path | None,
+        sql: str | None,
+        file_path: str | None,
+        output_format: str,
+        limit: int | None,
+    ) -> int:
+        received_args.append((project_dir, sql, file_path, output_format, limit))
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_query=run_query),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [(None, "select 1 as id", None, "table", 5)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
             description="passes verbose flag to diff handler",
             argv=[
                 "diff",
