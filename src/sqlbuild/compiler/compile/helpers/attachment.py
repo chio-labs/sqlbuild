@@ -10,7 +10,6 @@ from uuid import uuid4
 from sqlbuild.compiler.compile.constants import MACRO_CALL_PATTERN
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.helpers.macros import (
-    LoadedMacro,
     expand_sql_macros,
     load_project_macros,
 )
@@ -19,17 +18,24 @@ from sqlbuild.compiler.compile.helpers.templating import (
     expand_template_data,
 )
 from sqlbuild.compiler.compile.models import (
+    CompileAuditInput,
     CompileModelConfig,
     CompileModelInput,
     CompileSeedInput,
     CompileSourceInput,
+    CompileSqlTestInput,
+    LoadedMacro,
 )
 from sqlbuild.compiler.discovery.models import (
+    DiscoveredAuditBlock,
+    DiscoveredAuditFile,
     DiscoveredProjectInputs,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
     DiscoveredSqlModelFile,
+    DiscoveredSqlTestBlock,
+    DiscoveredSqlTestFile,
 )
 from sqlbuild.spec.models.project import (
     DefaultsConfig,
@@ -172,6 +178,56 @@ def build_source_inputs(
                 )
             )
     return tuple(source_inputs)
+
+
+def build_test_inputs(
+    discovered_inputs: DiscoveredProjectInputs,
+) -> tuple[CompileSqlTestInput, ...]:
+    """Build compile-time test inputs from discovered SQL-native test blocks."""
+
+    loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
+    test_inputs: list[CompileSqlTestInput] = []
+    test_file: DiscoveredSqlTestFile
+    for test_file in discovered_inputs.test_files:
+        test_block: DiscoveredSqlTestBlock
+        for test_block in test_file.blocks:
+            test_inputs.append(
+                CompileSqlTestInput(
+                    test_file=test_file,
+                    test_block=test_block,
+                    sql_body=expand_sql_macros(
+                        sql=test_block.sql_body,
+                        file_path=test_file.file_path,
+                        loaded_macros=loaded_macros,
+                    ),
+                )
+            )
+    return tuple(test_inputs)
+
+
+def build_audit_inputs(
+    discovered_inputs: DiscoveredProjectInputs,
+) -> tuple[CompileAuditInput, ...]:
+    """Build compile-time audit inputs from discovered SQL audit blocks."""
+
+    loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
+    audit_inputs: list[CompileAuditInput] = []
+    audit_file: DiscoveredAuditFile
+    for audit_file in discovered_inputs.audit_files:
+        audit_block: DiscoveredAuditBlock
+        for audit_block in audit_file.blocks:
+            audit_inputs.append(
+                CompileAuditInput(
+                    audit_file=audit_file,
+                    audit_block=audit_block,
+                    sql_body=expand_sql_macros(
+                        sql=audit_block.sql_body,
+                        file_path=audit_file.file_path,
+                        loaded_macros=loaded_macros,
+                    ),
+                )
+            )
+    return tuple(audit_inputs)
 
 
 def resolve_environment_name(

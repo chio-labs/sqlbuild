@@ -3,19 +3,23 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.helpers.attachment import (
+    build_audit_inputs,
     build_effective_connection,
     build_effective_vars,
     build_model_inputs,
     build_seed_inputs,
     build_source_inputs,
+    build_test_inputs,
     resolve_environment_name,
     resolve_run_id,
 )
 from sqlbuild.compiler.compile.models import (
+    CompileAuditInput,
     CompileModelInput,
     CompileProjectInputs,
     CompileSeedInput,
     CompileSourceInput,
+    CompileSqlTestInput,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.models.project import EnvironmentConfig
@@ -58,6 +62,8 @@ def build_compile_inputs(
     )
     seed_inputs: tuple[CompileSeedInput, ...] = build_seed_inputs(discovered_inputs)
     source_inputs: tuple[CompileSourceInput, ...] = build_source_inputs(discovered_inputs)
+    test_inputs: tuple[CompileSqlTestInput, ...] = build_test_inputs(discovered_inputs)
+    audit_inputs: tuple[CompileAuditInput, ...] = build_audit_inputs(discovered_inputs)
     return CompileProjectInputs(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
@@ -74,4 +80,6 @@ def build_compile_inputs(
         model_inputs=model_inputs,
         seed_inputs=seed_inputs,
         source_inputs=source_inputs,
+        test_inputs=test_inputs,
+        audit_inputs=audit_inputs,
     )

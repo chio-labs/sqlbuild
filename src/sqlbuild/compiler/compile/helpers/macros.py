@@ -51,7 +51,7 @@ def expand_sql_macros(
 ) -> str:
     """Expand authored Python macros in one executable SQL string."""
 
-    if not loaded_macros or "@" not in sql:
+    if "@" not in sql:
         return sql
 
     rendered_sql_parts: list[str] = []

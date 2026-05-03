@@ -704,6 +704,18 @@ MODEL (
 select @project_columns() from raw_orders
 """.strip()
             + "\n",
+            "tests/unit/orders.sql": """
+TEST ();
+
+SELECT @project_columns() FROM raw_orders
+""".strip()
+            + "\n",
+            "audits/orders.sql": """
+AUDIT ();
+
+SELECT @project_columns() FROM raw_orders
+""".strip()
+            + "\n",
         },
         selected_environment=None,
         cli_vars=None,
@@ -720,10 +732,64 @@ select @project_columns() from raw_orders
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
+        expected_test_sql_bodies=("SELECT order_id, customer_id FROM raw_orders",),
+        expected_audit_sql_bodies=("SELECT order_id, customer_id FROM raw_orders",),
         expected_effective_environment_name="dev",
         expected_effective_connection={},
         expected_effective_vars={},
         expected_model_query_sqls=("select order_id, customer_id from raw_orders",),
+    ),
+    BuildCompileInputsTestCase(
+        description="expands macros across multi block tests and audits",
+        repo_files=base_repo_files()
+        | {
+            "macros/common.py": """
+def project_columns() -> str:
+    return "order_id"
+""".strip()
+            + "\n",
+            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            "tests/unit/orders.sql": """
+TEST (name: "first");
+
+SELECT @project_columns() FROM raw_orders;
+
+TEST (name: "second");
+
+SELECT @project_columns() FROM raw_customers
+""".strip()
+            + "\n",
+            "audits/orders.sql": """
+AUDIT (name: "first");
+
+SELECT @project_columns() FROM raw_orders;
+
+AUDIT (name: "second");
+
+SELECT @project_columns() FROM raw_customers
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        cli_vars=None,
+        run_id=None,
+        expected_model_schema_names=(None,),
+        expected_model_config_values=({},),
+        expected_model_query_sqls=("select 1",),
+        expected_model_path_defaults=(None,),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_effective_environment_name=None,
+        expected_effective_connection={},
+        expected_effective_vars={},
+        expected_test_sql_bodies=(
+            "SELECT order_id FROM raw_orders;",
+            "SELECT order_id FROM raw_customers",
+        ),
+        expected_audit_sql_bodies=(
+            "SELECT order_id FROM raw_orders;",
+            "SELECT order_id FROM raw_customers",
+        ),
     ),
     BuildCompileInputsTestCase(
         description="generates clickstate style run ids when none are provided",
@@ -799,6 +865,14 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
         == test_case.expected_source_names
     )
     assert (
+        tuple(test_input.sql_body for test_input in compile_inputs.test_inputs)
+        == test_case.expected_test_sql_bodies
+    )
+    assert (
+        tuple(audit_input.sql_body for audit_input in compile_inputs.audit_inputs)
+        == test_case.expected_audit_sql_bodies
+    )
+    assert (
         compile_inputs.effective_environment_name == test_case.expected_effective_environment_name
     )
     assert compile_inputs.effective_connection == test_case.expected_effective_connection
@@ -811,6 +885,56 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
 
 
 COMPILE_ERROR_TEST_CASES: list[BuildCompileInputsErrorTestCase] = [
+    BuildCompileInputsErrorTestCase(
+        description="raises when a compiled test body references an unknown macro",
+        repo_files=base_repo_files()
+        | {
+            "tests/unit/orders.sql": """
+TEST ();
+
+SELECT @missing_macro()
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="Unknown macro '@missing_macro'",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when a compiled audit body references an unknown macro",
+        repo_files=base_repo_files()
+        | {
+            "audits/orders.sql": """
+AUDIT ();
+
+SELECT @missing_macro()
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="Unknown macro '@missing_macro'",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when macro files collide during compile",
+        repo_files=base_repo_files()
+        | {
+            "macros/common.py": """
+def project_columns() -> str:
+    return "order_id"
+""".strip()
+            + "\n",
+            "macros/nested/common.py": """
+def project_columns() -> str:
+    return "customer_id"
+""".strip()
+            + "\n",
+            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="Macro name collision for 'project_columns'",
+    ),
     BuildCompileInputsErrorTestCase(
         description="raises when model config field contains a macro call",
         repo_files=base_repo_files()

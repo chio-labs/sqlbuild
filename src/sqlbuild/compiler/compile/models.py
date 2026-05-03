@@ -7,11 +7,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild.compiler.discovery.models import (
+    DiscoveredAuditBlock,
+    DiscoveredAuditFile,
     DiscoveredProjectInputs,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
     DiscoveredSqlModelFile,
+    DiscoveredSqlTestBlock,
+    DiscoveredSqlTestFile,
 )
 from sqlbuild.spec.models.project import EnvironmentConfig, LocalConfig, ProjectConfig
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
@@ -64,6 +68,24 @@ class CompileSourceInput:
 
 
 @dataclass(frozen=True)
+class CompileSqlTestInput:
+    """One discovered SQL-native test block with compile-time SQL expansion applied."""
+
+    test_file: DiscoveredSqlTestFile
+    test_block: DiscoveredSqlTestBlock
+    sql_body: str
+
+
+@dataclass(frozen=True)
+class CompileAuditInput:
+    """One discovered SQL audit block with compile-time SQL expansion applied."""
+
+    audit_file: DiscoveredAuditFile
+    audit_block: DiscoveredAuditBlock
+    sql_body: str
+
+
+@dataclass(frozen=True)
 class CompileProjectInputs:
     """Attached project view used as the first pre-semantic compile input snapshot."""
 
@@ -78,3 +100,5 @@ class CompileProjectInputs:
     model_inputs: tuple[CompileModelInput, ...] = field(default_factory=tuple)
     seed_inputs: tuple[CompileSeedInput, ...] = field(default_factory=tuple)
     source_inputs: tuple[CompileSourceInput, ...] = field(default_factory=tuple)
+    test_inputs: tuple[CompileSqlTestInput, ...] = field(default_factory=tuple)
+    audit_inputs: tuple[CompileAuditInput, ...] = field(default_factory=tuple)
