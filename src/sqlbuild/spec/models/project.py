@@ -30,6 +30,7 @@ class SettingsConfig:
 
     sqlglot: bool = True
     query_change_tracking: bool = True
+    max_concurrency: int = 1
 
 
 @dataclass(frozen=True)

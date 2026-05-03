@@ -122,7 +122,12 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         key="query_change_tracking",
         default=True,
     )
-    return SettingsConfig(sqlglot=sqlglot, query_change_tracking=query_change_tracking)
+    max_concurrency: int = _optional_int(mapping=mapping, key="max_concurrency", default=1)
+    return SettingsConfig(
+        sqlglot=sqlglot,
+        query_change_tracking=query_change_tracking,
+        max_concurrency=max_concurrency,
+    )
 
 
 def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:

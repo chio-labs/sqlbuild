@@ -48,6 +48,16 @@ settings:
         expected_error_fragment="Expected 'sqlglot' to be a boolean when provided",
     ),
     LoadProjectConfigErrorTestCase(
+        description="raises when settings max concurrency is not an integer",
+        project_file_contents="""
+name: demo
+adapter: duckdb
+settings:
+  max_concurrency: nope
+""".strip(),
+        expected_error_fragment="Expected 'max_concurrency' to be an integer when provided",
+    ),
+    LoadProjectConfigErrorTestCase(
         description="raises when defaults batch_size has unsupported type",
         project_file_contents="""
 name: demo
@@ -187,6 +197,7 @@ connection:
 settings:
   sqlglot: false
   query_change_tracking: true
+  max_concurrency: 8
 
 defaults:
   materialized: table
@@ -219,6 +230,7 @@ janitor:
             expected_default_environment="dev",
             expected_connection={"path": "data.db"},
             expected_sqlglot=False,
+            expected_max_concurrency=8,
             expected_materialized="table",
             expected_row_diff_exclude_columns=("loaded_at",),
             expected_path_default_schema="staging",
@@ -246,6 +258,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.default_environment == test_case.expected_default_environment
     assert config.connection == test_case.expected_connection
     assert config.settings.sqlglot is test_case.expected_sqlglot
+    assert config.settings.max_concurrency == test_case.expected_max_concurrency
     assert config.defaults.materialized == test_case.expected_materialized
     assert config.defaults.row_diff_exclude_columns == test_case.expected_row_diff_exclude_columns
     assert (

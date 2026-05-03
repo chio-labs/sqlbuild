@@ -10,6 +10,7 @@ class LoadProjectConfigTestCase:
     expected_default_environment: str
     expected_connection: dict[str, str]
     expected_sqlglot: bool
+    expected_max_concurrency: int
     expected_materialized: str
     expected_row_diff_exclude_columns: tuple[str, ...]
     expected_path_default_schema: str
