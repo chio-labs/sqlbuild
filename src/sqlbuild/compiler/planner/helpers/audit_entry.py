@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.auditing.main import render_audit_sql
+from sqlbuild.compiler.auditing.main.render import render_audit_sql
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditRunScope,

@@ -30,7 +30,7 @@ from sqlbuild.executor.build.helpers.end_audits import run_end_audits
 from sqlbuild.executor.build.helpers.source_audits import run_pending_source_audits
 from sqlbuild.executor.build.models import BuildIndexes, NodeCompletion, SeedExecutionResult
 from sqlbuild.executor.custom.models import MaterializationResult
-from sqlbuild.executor.run.main import (
+from sqlbuild.executor.run.main.execute import (
     execute_custom_entry,
     execute_incremental_entry,
     execute_microbatch_entry,
@@ -38,9 +38,9 @@ from sqlbuild.executor.run.main import (
     execute_view_entry,
 )
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.seed.main import execute_seed
+from sqlbuild.executor.seed.main.execute import execute_seed
 from sqlbuild.executor.shared.types import ExecutionStatus, TablePromotionMode
-from sqlbuild.executor.testing.main import execute_sql_test
+from sqlbuild.executor.testing.main.execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context, log_debug_event

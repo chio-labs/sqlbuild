@@ -15,7 +15,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlReference,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, SqlReferenceKind
-from sqlbuild.compiler.planner.helpers.resolve.main import resolve_model_sql
+from sqlbuild.compiler.planner.helpers.resolve.resolve import resolve_model_sql
 from sqlbuild.compiler.planner.models import BackfillResult, WarehouseSnapshot
 from sqlbuild.compiler.planner.types import BackfillAction
 from sqlbuild.spec.models.source import SourceEntry

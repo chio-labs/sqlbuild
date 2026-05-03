@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import PlanOutput, SqlTestPlanEntry
-from sqlbuild.executor.testing.main import execute_sql_test
+from sqlbuild.executor.testing.main.execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 
 

@@ -7,7 +7,7 @@ from typing import Any
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
-from sqlbuild.executor.testing.main import execute_sql_test
+from sqlbuild.executor.testing.main.execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter

@@ -25,7 +25,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSeedFile,
     DiscoveredSourceFile,
 )
-from sqlbuild.compiler.manifest.main import build_manifest
+from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     ChainStep,

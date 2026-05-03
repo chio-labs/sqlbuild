@@ -18,14 +18,14 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import SqlReferenceKind
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
-from sqlbuild.compiler.planner.helpers.changes.main import detect_model_changes
+from sqlbuild.compiler.planner.helpers.changes.detect import detect_model_changes
 from sqlbuild.compiler.planner.helpers.cursor_type_check import (
     check_cursor_type_consistency,
 )
-from sqlbuild.compiler.planner.helpers.resolve.helpers.cursor import (
+from sqlbuild.compiler.planner.helpers.resolve.cursor import (
     compute_cursor_bounds,
 )
-from sqlbuild.compiler.planner.helpers.resolve.main import resolve_model_sql
+from sqlbuild.compiler.planner.helpers.resolve.resolve import resolve_model_sql
 from sqlbuild.compiler.planner.helpers.strategy import (
     build_model_warnings,
     get_materialization_type,

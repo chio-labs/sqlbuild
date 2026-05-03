@@ -18,7 +18,8 @@ def base_repo_files() -> dict[str, str]:
 def compliant_repo_files() -> dict[str, str]:
     return base_repo_files() | {
         "src/sqlbuild/example/widget/__init__.py": '"""Widget domain."""\n',
-        "src/sqlbuild/example/widget/main.py": dedent(
+        "src/sqlbuild/example/widget/main/__init__.py": '"""Widget entries."""\n',
+        "src/sqlbuild/example/widget/main/load.py": dedent(
             """
             from sqlbuild.example.widget.constants import DEFAULT_NAME
             from sqlbuild.example.widget.models import ExampleModel

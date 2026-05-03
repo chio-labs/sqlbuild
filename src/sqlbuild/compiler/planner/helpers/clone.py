@@ -21,11 +21,11 @@ from sqlbuild.compiler.planner.helpers.plan_entry import (
     build_tag_index,
     gather_source_columns,
 )
-from sqlbuild.compiler.planner.helpers.resolve.helpers.refs import (
+from sqlbuild.compiler.planner.helpers.resolve.refs import (
     build_model_targets,
     build_seed_targets,
 )
-from sqlbuild.compiler.planner.helpers.resolve.main import resolve_model_sql
+from sqlbuild.compiler.planner.helpers.resolve.resolve import resolve_model_sql
 from sqlbuild.compiler.planner.helpers.selectors import resolve_selectors
 from sqlbuild.compiler.planner.helpers.strategy import get_materialization_type
 from sqlbuild.compiler.planner.models import (

@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.compiler.auditing.main import render_audit_sql
+from sqlbuild.compiler.auditing.main.render import render_audit_sql
 from sqlbuild.compiler.compile.models import CompiledRelationTarget
 from sqlbuild.spec.models.source import SourceEntry
 from tests.integration.src.sqlbuild.compiler.auditing.main._test_types import (

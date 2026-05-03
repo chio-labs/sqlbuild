@@ -27,7 +27,7 @@ from sqlbuild.compiler.planner.types import (
     IncrementalStrategy,
     OnSchemaChange,
 )
-from sqlbuild.executor.auditing.main import execute_audit
+from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.helpers.cursor_bounds import (
     has_model_backed_cursor_inputs,

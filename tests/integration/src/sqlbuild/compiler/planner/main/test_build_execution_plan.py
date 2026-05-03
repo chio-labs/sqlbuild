@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.cli.commands.main.plan.helpers.formatter import format_plan
+from sqlbuild.cli.commands.main.helpers.plan.formatter import format_plan
 from sqlbuild.compiler.planner.main.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import CascadeResult, ModelPlanEntry, PlanOutput, PlanWarning
 from sqlbuild.compiler.planner.types import BackfillAction, PlanAction, PlanReason, WarningSeverity

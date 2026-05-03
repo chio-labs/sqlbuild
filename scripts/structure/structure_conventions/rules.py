@@ -108,14 +108,13 @@ def check_top_level_domain_role_placement(repo_root: Path, file_path: Path) -> l
 
 
 def check_top_level_domain_direct_modules(repo_root: Path, file_path: Path) -> list[Violation]:
-    """Reject direct modules under top-level runtime domains except __init__.py and main.py."""
+    """Reject direct modules under top-level runtime domains except role files."""
 
     relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
     if len(relative_parts) != 4 or relative_parts[:2] != ("src", "sqlbuild"):
         return []
     if file_path.name in {
         "__init__.py",
-        "main.py",
         "models.py",
         "types.py",
         "constants.py",
@@ -130,7 +129,7 @@ def check_top_level_domain_direct_modules(repo_root: Path, file_path: Path) -> l
             line=None,
             message=(
                 "top-level runtime domains must contain subpackages, not direct modules; "
-                "keep direct files limited to __init__.py or main.py"
+                "keep direct files limited to role-oriented files like models.py or types.py"
             ),
         )
     ]
@@ -144,6 +143,13 @@ def check_nested_runtime_package_direct_modules(
     relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
     if len(relative_parts) < 5 or relative_parts[:2] != ("src", "sqlbuild"):
         return []
+    if file_path.name == "main.py":
+        if relative_parts[:3] == ("src", "sqlbuild", "integrations"):
+            return []
+        if "shared" in relative_parts[2:-1]:
+            return []
+        if "main" in relative_parts[2:-1]:
+            return []
     if _is_direct_child_of_main_package(relative_parts):
         return []
     if any(
@@ -153,7 +159,6 @@ def check_nested_runtime_package_direct_modules(
         return []
     if file_path.name in {
         "__init__.py",
-        "main.py",
         "models.py",
         "types.py",
         "constants.py",
@@ -218,9 +223,6 @@ def check_nested_runtime_package_direct_subpackages(
         "main",
     }:
         return []
-    if parent_package_name == "main":
-        return []
-
     return [
         Violation(
             code="SC030",
@@ -244,6 +246,8 @@ def check_main_command_package_entry_surface(repo_root: Path, file_path: Path) -
     if file_path.name != "__init__.py":
         return []
     if file_path.parent.parent.name != "main":
+        return []
+    if file_path.parent.parent.parent.name != "main":
         return []
     if file_path.parent.name == "shared":
         return []
@@ -271,6 +275,8 @@ def check_main_entry_name_collisions(repo_root: Path, file_path: Path) -> list[V
         or file_path.suffix != ".py"
         or file_path.name == "__init__.py"
     ):
+        return []
+    if len(relative_parts) < 7 or relative_parts[-3] != "main":
         return []
     if not file_path.with_suffix("").is_dir():
         return []
@@ -713,27 +719,17 @@ def check_integrations_package_structure(repo_root: Path, file_path: Path) -> li
 
 
 def check_helpers_subpackage_shape(repo_root: Path, file_path: Path) -> list[Violation]:
-    """Reject ad hoc direct modules inside helper subpackages."""
+    """Keep scoped helper packages shallow and free of generic entrypoints."""
 
     relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
     if "helpers" not in relative_parts[:-1]:
         return []
 
     helpers_index = relative_parts.index("helpers")
-    if "helpers" in relative_parts[helpers_index + 1 : -1]:
-        return []
     if len(relative_parts) <= helpers_index + 2:
         return []
 
-    if file_path.name in {
-        "__init__.py",
-        "main.py",
-        "models.py",
-        "types.py",
-        "constants.py",
-        "exceptions.py",
-        "helpers.py",
-    }:
+    if len(relative_parts) == helpers_index + 3 and file_path.name != "main.py":
         return []
 
     return [
@@ -742,10 +738,8 @@ def check_helpers_subpackage_shape(repo_root: Path, file_path: Path) -> list[Vio
             path=file_path,
             line=None,
             message=(
-                "helper subpackages must use role-oriented files like main.py, "
-                "models.py, types.py, constants.py, or exceptions.py; either flatten "
-                "to a single module under helpers/ or restructure as a package with "
-                "main.py for orchestration and its own helpers/ for focused modules"
+                "helper subpackages must stay shallow and use direct role-oriented files; "
+                "main.py and nested subpackages are not allowed under scoped helpers"
             ),
         )
     ]

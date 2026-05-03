@@ -19,7 +19,7 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
-from sqlbuild.executor.run.main import execute_table_entry
+from sqlbuild.executor.run.main.execute import execute_table_entry
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter

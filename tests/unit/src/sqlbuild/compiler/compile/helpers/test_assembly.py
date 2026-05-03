@@ -16,7 +16,7 @@ from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledResourceType,
 )
-from sqlbuild.compiler.discovery.main import discover_project_inputs
+from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.unit.src.sqlbuild.compiler.compile._test_helpers import (
     base_repo_files,

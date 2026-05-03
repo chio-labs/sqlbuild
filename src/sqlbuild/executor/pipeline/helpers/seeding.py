@@ -9,7 +9,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.planner.models import PlanOutput, SeedPlanEntry
 from sqlbuild.executor.build.models import SeedExecutionResult
-from sqlbuild.executor.seed.main import execute_seed
+from sqlbuild.executor.seed.main.execute import execute_seed
 
 
 def run_seed_pipeline(

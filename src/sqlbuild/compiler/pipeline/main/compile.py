@@ -16,7 +16,7 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.manifest.main import build_manifest
+from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.pipeline.helpers.deferred_targets import (
     build_deferred_targets,
     gather_deferred_relations,

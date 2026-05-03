@@ -9,7 +9,7 @@ from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationTarget
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import AuditPlanEntry
-from sqlbuild.executor.auditing.main import execute_audit
+from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.helpers.blocking import block_downstream
 from sqlbuild.spec.models.source import SourceEntry

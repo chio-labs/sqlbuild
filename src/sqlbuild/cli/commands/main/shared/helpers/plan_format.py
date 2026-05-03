@@ -2,4 +2,4 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.commands.main.plan.helpers.formatter import format_plan as format_plan
+from sqlbuild.cli.commands.main.helpers.plan.formatter import format_plan as format_plan

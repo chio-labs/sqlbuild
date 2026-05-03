@@ -26,7 +26,7 @@ TEST_CASES: list[CheckPathsTestCase] = [
         description="reports relative import usage",
         repo_files=compliant_repo_files()
         | {
-            "src/sqlbuild/example/widget/main.py": dedent(
+            "src/sqlbuild/example/widget/main/load.py": dedent(
                 """
                 from .models import ExampleModel
 
@@ -38,6 +38,20 @@ TEST_CASES: list[CheckPathsTestCase] = [
             + "\n"
         },
         expected_violation_codes=("SC001",),
+    ),
+    CheckPathsTestCase(
+        description="reports flat runtime main module under nested package",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main.py": dedent(
+                """
+                def load_example() -> str:
+                    return "demo"
+                """
+            ).strip()
+            + "\n"
+        },
+        expected_violation_codes=("SC027",),
     ),
     CheckPathsTestCase(
         description="reports obvious dev tooling under src package",
@@ -258,64 +272,13 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=(),
     ),
     CheckPathsTestCase(
-        description="allows command packages directly under main with role files",
+        description="allows flat public entry modules under main",
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/example/widget/main/__init__.py": '"""Main entry modules."""\n',
-            "src/sqlbuild/example/widget/main/plan/__init__.py": '"""Plan command."""\n',
-            "src/sqlbuild/example/widget/main/plan/main.py": dedent(
+            "src/sqlbuild/example/widget/main/plan.py": dedent(
                 """
-                from sqlbuild.example.widget.main.plan.types import PlanName
-
-
-                def run_plan() -> PlanName:
-                    return "demo"
-                """
-            ).strip()
-            + "\n",
-            "src/sqlbuild/example/widget/main/plan/types.py": dedent(
-                """
-                from typing import TypeAlias
-
-
-                PlanName: TypeAlias = str
-                """
-            ).strip()
-            + "\n",
-            "src/sqlbuild/example/widget/main/plan/helpers/__init__.py": '"""Plan helpers."""\n',
-            "src/sqlbuild/example/widget/main/plan/helpers/models.py": dedent(
-                """
-                from dataclasses import dataclass
-
-
-                @dataclass(frozen=True)
-                class PlanHelperModel:
-                    name: str
-                """
-            ).strip()
-            + "\n",
-        },
-        expected_violation_codes=(),
-    ),
-    CheckPathsTestCase(
-        description="allows imports from main shared package",
-        repo_files=compliant_repo_files()
-        | {
-            "src/sqlbuild/example/widget/main/__init__.py": '"""Main entry modules."""\n',
-            "src/sqlbuild/example/widget/main/shared/__init__.py": '"""Main shared support."""\n',
-            "src/sqlbuild/example/widget/main/shared/types.py": dedent(
-                """
-                from typing import TypeAlias
-
-
-                ExampleName: TypeAlias = str
-                """
-            ).strip()
-            + "\n",
-            "src/sqlbuild/example/widget/main/plan/__init__.py": '"""Plan command."""\n',
-            "src/sqlbuild/example/widget/main/plan/main.py": dedent(
-                """
-                from sqlbuild.example.widget.main.shared.types import ExampleName
+                from sqlbuild.example.widget.types import ExampleName
 
 
                 def run_plan() -> ExampleName:
@@ -327,37 +290,54 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=(),
     ),
     CheckPathsTestCase(
-        description="reports command package under main missing main.py entry surface",
+        description="allows imports from parent shared package",
         repo_files=compliant_repo_files()
         | {
-            "src/sqlbuild/example/widget/main/__init__.py": '"""Main entry modules."""\n',
-            "src/sqlbuild/example/widget/main/plan/__init__.py": '"""Plan command."""\n',
-            "src/sqlbuild/example/widget/main/plan/types.py": dedent(
+            "src/sqlbuild/example/widget/shared/__init__.py": '"""Widget shared support."""\n',
+            "src/sqlbuild/example/widget/shared/types.py": dedent(
                 """
                 from typing import TypeAlias
 
 
-                PlanName: TypeAlias = str
+                ExampleName: TypeAlias = str
+                """
+            ).strip()
+            + "\n",
+            "src/sqlbuild/example/widget/main/plan.py": dedent(
+                """
+                from sqlbuild.example.widget.shared.types import ExampleName
+
+
+                def run_plan() -> ExampleName:
+                    return "demo"
                 """
             ).strip()
             + "\n",
         },
-        expected_violation_codes=("SC028",),
+        expected_violation_codes=(),
     ),
     CheckPathsTestCase(
-        description="reports ad hoc direct module inside command package under main",
+        description="reports subpackage under main",
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/example/widget/main/__init__.py": '"""Main entry modules."""\n',
             "src/sqlbuild/example/widget/main/plan/__init__.py": '"""Plan command."""\n',
-            "src/sqlbuild/example/widget/main/plan/main.py": dedent(
+        },
+        expected_violation_codes=("SC030",),
+    ),
+    CheckPathsTestCase(
+        description="reports extra support module directly under main",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/__init__.py": '"""Main entry modules."""\n',
+            "src/sqlbuild/example/widget/main/plan.py": dedent(
                 """
                 def run_plan() -> str:
                     return "demo"
                 """
             ).strip()
             + "\n",
-            "src/sqlbuild/example/widget/main/plan/preview.py": dedent(
+            "src/sqlbuild/example/widget/main/preview.py": dedent(
                 """
                 def render_preview() -> str:
                     return "demo"
@@ -365,7 +345,7 @@ TEST_CASES: list[CheckPathsTestCase] = [
             ).strip()
             + "\n",
         },
-        expected_violation_codes=("SC027",),
+        expected_violation_codes=(),
     ),
     CheckPathsTestCase(
         description="reports multiple public functions in main package module",
@@ -387,14 +367,13 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC019",),
     ),
     CheckPathsTestCase(
-        description="reports sibling command package internal import under main",
+        description="reports sibling entry internal helper import under main",
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/example/widget/main/__init__.py": '"""Main entry modules."""\n',
-            "src/sqlbuild/example/widget/main/plan/__init__.py": '"""Plan command."""\n',
-            "src/sqlbuild/example/widget/main/plan/main.py": dedent(
+            "src/sqlbuild/example/widget/main/plan.py": dedent(
                 """
-                from sqlbuild.example.widget.main.backfill.main import run_backfill
+                from sqlbuild.example.widget.helpers.backfill.run import run_backfill
 
 
                 def run_plan() -> str:
@@ -402,8 +381,8 @@ TEST_CASES: list[CheckPathsTestCase] = [
                 """
             ).strip()
             + "\n",
-            "src/sqlbuild/example/widget/main/backfill/__init__.py": '"""Backfill command."""\n',
-            "src/sqlbuild/example/widget/main/backfill/main.py": dedent(
+            "src/sqlbuild/example/widget/helpers/backfill/__init__.py": '"""Backfill helpers."""\n',
+            "src/sqlbuild/example/widget/helpers/backfill/run.py": dedent(
                 """
                 def run_backfill() -> str:
                     return "demo"
@@ -411,17 +390,16 @@ TEST_CASES: list[CheckPathsTestCase] = [
             ).strip()
             + "\n",
         },
-        expected_violation_codes=("SC011",),
+        expected_violation_codes=(),
     ),
     CheckPathsTestCase(
-        description="allows entry package to import sibling command public main surfaces",
+        description="allows one main entry to import another main entry",
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/example/widget/main/__init__.py": '"""Main entry modules."""\n',
-            "src/sqlbuild/example/widget/main/entry/__init__.py": '"""Entry command."""\n',
-            "src/sqlbuild/example/widget/main/entry/main.py": dedent(
+            "src/sqlbuild/example/widget/main/entry.py": dedent(
                 """
-                from sqlbuild.example.widget.main.plan.main import run_plan
+                from sqlbuild.example.widget.main.plan import run_plan
 
 
                 def run_entry() -> str:
@@ -429,8 +407,7 @@ TEST_CASES: list[CheckPathsTestCase] = [
                 """
             ).strip()
             + "\n",
-            "src/sqlbuild/example/widget/main/plan/__init__.py": '"""Plan command."""\n',
-            "src/sqlbuild/example/widget/main/plan/main.py": dedent(
+            "src/sqlbuild/example/widget/main/plan.py": dedent(
                 """
                 def run_plan() -> str:
                     return "demo"
@@ -441,7 +418,7 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=(),
     ),
     CheckPathsTestCase(
-        description="reports flat module and package name collision under main",
+        description="reports subpackage under main even when flat entry exists",
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/example/widget/main/__init__.py": '"""Main entry modules."""\n',
@@ -453,15 +430,8 @@ TEST_CASES: list[CheckPathsTestCase] = [
             ).strip()
             + "\n",
             "src/sqlbuild/example/widget/main/plan/__init__.py": '"""Plan command."""\n',
-            "src/sqlbuild/example/widget/main/plan/main.py": dedent(
-                """
-                def run_plan() -> str:
-                    return "demo"
-                """
-            ).strip()
-            + "\n",
         },
-        expected_violation_codes=("SC029",),
+        expected_violation_codes=("SC030",),
     ),
     CheckPathsTestCase(
         description="reports custom exception declared outside exceptions module",
@@ -496,10 +466,10 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC021",),
     ),
     CheckPathsTestCase(
-        description="reports multiple public functions in main module",
+        description="reports multiple public functions in main entry module",
         repo_files=compliant_repo_files()
         | {
-            "src/sqlbuild/example/widget/main.py": dedent(
+            "src/sqlbuild/example/widget/main/load.py": dedent(
                 """
                 def load_example() -> str:
                     return "demo"
@@ -514,10 +484,10 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC019",),
     ),
     CheckPathsTestCase(
-        description="reports assignments in main module",
+        description="reports assignments in main entry module",
         repo_files=compliant_repo_files()
         | {
-            "src/sqlbuild/example/widget/main.py": dedent(
+            "src/sqlbuild/example/widget/main/load.py": dedent(
                 """
                 VALUE = "demo"
 
@@ -531,10 +501,10 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC016", "SC020"),
     ),
     CheckPathsTestCase(
-        description="reports too many private functions in main module",
+        description="reports too many private functions in main entry module",
         repo_files=compliant_repo_files()
         | {
-            "src/sqlbuild/example/widget/main.py": dedent(
+            "src/sqlbuild/example/widget/main/load.py": dedent(
                 """
                 def load_example() -> str:
                     return _first()
@@ -580,7 +550,7 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC010",),
     ),
     CheckPathsTestCase(
-        description="reports ad hoc modules inside helper subpackages",
+        description="allows direct role modules inside helper subpackages",
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/example/widget/helpers/__init__.py": '"""Helpers."""\n',
@@ -593,10 +563,10 @@ TEST_CASES: list[CheckPathsTestCase] = [
             ).strip()
             + "\n",
         },
-        expected_violation_codes=("SC022",),
+        expected_violation_codes=(),
     ),
     CheckPathsTestCase(
-        description="allows role files inside helper subpackages",
+        description="allows conventional files inside helper subpackages",
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/example/widget/helpers/__init__.py": '"""Helpers."""\n',
@@ -617,13 +587,40 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=(),
     ),
     CheckPathsTestCase(
+        description="reports main module inside helper subpackages",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/helpers/__init__.py": '"""Helpers."""\n',
+            "src/sqlbuild/example/widget/helpers/diff/__init__.py": '"""Diff helpers."""\n',
+            "src/sqlbuild/example/widget/helpers/diff/main.py": dedent(
+                """
+                def parse_diff() -> str:
+                    return "demo"
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("SC022",),
+    ),
+    CheckPathsTestCase(
+        description="reports nested package inside helper subpackages",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/helpers/__init__.py": '"""Helpers."""\n',
+            "src/sqlbuild/example/widget/helpers/diff/__init__.py": '"""Diff helpers."""\n',
+            "src/sqlbuild/example/widget/helpers/diff/parsing/__init__.py": '"""Parsing."""\n',
+        },
+        expected_violation_codes=("SC022", "SC030"),
+    ),
+    CheckPathsTestCase(
         description="allows sibling public main import",
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/example/discovery/__init__.py": '"""Discovery."""\n',
-            "src/sqlbuild/example/discovery/main.py": dedent(
+            "src/sqlbuild/example/discovery/main/__init__.py": '"""Discovery entries."""\n',
+            "src/sqlbuild/example/discovery/main/discover.py": dedent(
                 """
-                from sqlbuild.example.refs.main import parse_ref
+                from sqlbuild.example.refs.main.parse import parse_ref
 
 
                 def discover_name() -> str:
@@ -632,7 +629,8 @@ TEST_CASES: list[CheckPathsTestCase] = [
             ).strip()
             + "\n",
             "src/sqlbuild/example/refs/__init__.py": '"""Refs."""\n',
-            "src/sqlbuild/example/refs/main.py": dedent(
+            "src/sqlbuild/example/refs/main/__init__.py": '"""Ref entries."""\n',
+            "src/sqlbuild/example/refs/main/parse.py": dedent(
                 """
                 def parse_ref() -> str:
                     return "demo"
@@ -647,7 +645,8 @@ TEST_CASES: list[CheckPathsTestCase] = [
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/example/discovery/__init__.py": '"""Discovery."""\n',
-            "src/sqlbuild/example/discovery/main.py": dedent(
+            "src/sqlbuild/example/discovery/main/__init__.py": '"""Discovery entries."""\n',
+            "src/sqlbuild/example/discovery/main/discover.py": dedent(
                 """
                 from sqlbuild.example.refs.main.parse import parse_ref
 
@@ -674,7 +673,8 @@ TEST_CASES: list[CheckPathsTestCase] = [
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/example/discovery/__init__.py": '"""Discovery."""\n',
-            "src/sqlbuild/example/discovery/main.py": dedent(
+            "src/sqlbuild/example/discovery/main/__init__.py": '"""Discovery entries."""\n',
+            "src/sqlbuild/example/discovery/main/discover.py": dedent(
                 """
                 from sqlbuild.example.refs.helpers.parse import parse_ref
 
@@ -694,14 +694,15 @@ TEST_CASES: list[CheckPathsTestCase] = [
             ).strip()
             + "\n",
         },
-        expected_violation_codes=("SC011", "SC033"),
+        expected_violation_codes=("SC033",),
     ),
     CheckPathsTestCase(
         description="allows sibling models import",
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/example/discovery/__init__.py": '"""Discovery."""\n',
-            "src/sqlbuild/example/discovery/main.py": dedent(
+            "src/sqlbuild/example/discovery/main/__init__.py": '"""Discovery entries."""\n',
+            "src/sqlbuild/example/discovery/main/discover.py": dedent(
                 """
                 from sqlbuild.example.refs.models import RefModel
 
@@ -773,7 +774,8 @@ TEST_CASES: list[CheckPathsTestCase] = [
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/example/discovery/__init__.py": '"""Discovery."""\n',
-            "src/sqlbuild/example/discovery/main.py": dedent(
+            "src/sqlbuild/example/discovery/main/__init__.py": '"""Discovery entries."""\n',
+            "src/sqlbuild/example/discovery/main/discover.py": dedent(
                 """
                 from sqlbuild.example.shared.types import ExampleName
 
@@ -802,7 +804,8 @@ TEST_CASES: list[CheckPathsTestCase] = [
             ).strip()
             + "\n",
             "src/sqlbuild/example/discovery/__init__.py": '"""Discovery."""\n',
-            "src/sqlbuild/example/discovery/main.py": dedent(
+            "src/sqlbuild/example/discovery/main/__init__.py": '"""Discovery entries."""\n',
+            "src/sqlbuild/example/discovery/main/discover.py": dedent(
                 """
                 from sqlbuild.shared.helpers.colors import blue
 

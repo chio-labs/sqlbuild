@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.cli.commands.main.plan.helpers.formatter import format_plan
+from sqlbuild.cli.commands.main.helpers.plan.formatter import format_plan
 from sqlbuild.compiler.planner.models import CascadeCause, CascadeResult, CursorBounds
 from sqlbuild.compiler.planner.types import (
     BackfillAction,

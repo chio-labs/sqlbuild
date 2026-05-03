@@ -2,4 +2,4 @@
 
 from __future__ import annotations
 
-from sqlbuild.executor.seed.main import execute_seed as execute_seed
+from sqlbuild.executor.seed.main.execute import execute_seed as execute_seed

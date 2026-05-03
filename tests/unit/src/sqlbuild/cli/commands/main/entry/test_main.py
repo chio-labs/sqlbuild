@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.cli.commands.main.entry.main import _main_with_dependencies, main
+from sqlbuild.cli.commands.main.entry import _main_with_dependencies, main
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (

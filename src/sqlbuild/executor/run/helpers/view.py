@@ -9,7 +9,7 @@ from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models import CompiledRelationTarget
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
-from sqlbuild.executor.auditing.main import execute_audit
+from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks

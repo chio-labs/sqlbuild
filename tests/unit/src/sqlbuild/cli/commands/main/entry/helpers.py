@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.cli.commands.main.entry.models import CliEntrypointHandlers
+from sqlbuild.cli.commands.main.helpers.entry.models import CliEntrypointHandlers
 
 
 def noop_handler(*_a: Any, **_k: Any) -> int:

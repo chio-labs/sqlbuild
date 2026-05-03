@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery.main import discover_project_inputs
+from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from tests.unit.src.sqlbuild.compiler.discovery._test_helpers import (
     base_repo_files,
 )

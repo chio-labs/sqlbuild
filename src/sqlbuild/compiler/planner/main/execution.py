@@ -37,7 +37,7 @@ from sqlbuild.compiler.planner.helpers.plan_entry import (
     resolve_cursor_overrides,
     scope_overlaps,
 )
-from sqlbuild.compiler.planner.helpers.resolve.helpers.refs import (
+from sqlbuild.compiler.planner.helpers.resolve.refs import (
     apply_deferred_targets,
     build_model_targets,
     build_seed_targets,
