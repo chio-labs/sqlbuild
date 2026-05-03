@@ -145,6 +145,7 @@ def _main_with_dependencies(
                 cursor_overrides,
                 args.no_color,
                 args.fail_fast,
+                args.concurrency,
                 tuple(args.select),
                 tuple(args.exclude),
             )
@@ -162,6 +163,7 @@ def _main_with_dependencies(
                 cursor_overrides,
                 args.no_color,
                 args.fail_fast,
+                args.concurrency,
                 tuple(args.select),
                 tuple(args.exclude),
             )

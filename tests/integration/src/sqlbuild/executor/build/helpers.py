@@ -50,7 +50,8 @@ def run_build_for_project(
     return execute_build_plan(
         plan=plan,
         adapter=adapter,
-        connection=connection,
+        connections=(connection,),
+        scheduler_connection=connection,
         promotion_mode=promotion_mode,
         run_id="test_run",
         fingerprint_schema=test_case.fingerprint_schema,

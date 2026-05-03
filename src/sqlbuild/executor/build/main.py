@@ -2,45 +2,19 @@
 
 from __future__ import annotations
 
-import dataclasses
-import time
 from collections.abc import Callable
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.auditing.types import AuditOutcome
-from sqlbuild.compiler.compile.models import CompiledObjectKey
-from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.models import (
-    AuditPlanEntry,
-    ModelPlanEntry,
-    PlanOutput,
-    SeedPlanEntry,
-    SqlTestPlanEntry,
-)
-from sqlbuild.compiler.planner.types import IncrementalMode, MaterializationType, PlanAction
+from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
-from sqlbuild.executor.build.helpers.blocking import block_downstream
-from sqlbuild.executor.build.helpers.end_audits import run_end_audits
 from sqlbuild.executor.build.helpers.indexes import build_execution_indexes
-from sqlbuild.executor.build.helpers.seeds import execute_seed
-from sqlbuild.executor.build.helpers.source_audits import run_pending_source_audits
-from sqlbuild.executor.build.models import (
-    BuildExecutionResult,
-    BuildIndexes,
-    SeedExecutionResult,
-)
+from sqlbuild.executor.build.helpers.scheduler import BuildScheduler
+from sqlbuild.executor.build.models import BuildExecutionResult, BuildIndexes, SeedExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
-from sqlbuild.executor.run.main import (
-    execute_incremental_entry,
-    execute_microbatch_entry,
-    execute_table_entry,
-    execute_view_entry,
-)
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus, TablePromotionMode
-from sqlbuild.executor.testing.main import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 
@@ -49,7 +23,8 @@ def execute_build_plan(
     *,
     plan: PlanOutput,
     adapter: BaseAdapter,
-    connection: Any,
+    connections: tuple[Any, ...],
+    scheduler_connection: Any,
     promotion_mode: TablePromotionMode,
     run_id: str,
     fingerprint_schema: str | None = None,
@@ -60,231 +35,38 @@ def execute_build_plan(
     on_node_start: Callable[[str, str], None] | None = None,
     on_node_complete: Callable[[object], None] | None = None,
 ) -> BuildExecutionResult:
-    """Execute a full build plan over the planned execution schedule."""
+    """Execute a full build plan using the DAG scheduler."""
 
     indexes: BuildIndexes = build_execution_indexes(plan)
-    blocked_keys: set[CompiledObjectKey] = set()
-    executed_source_audits: set[str] = set()
-    failed_sources: set[str] = set()
+    scheduler: BuildScheduler = BuildScheduler(
+        plan=plan,
+        indexes=indexes,
+        adapter=adapter,
+        connections=connections,
+        scheduler_connection=scheduler_connection,
+        promotion_mode=promotion_mode,
+        run_id=run_id,
+        fingerprint_schema=fingerprint_schema,
+        run_audits=run_audits,
+        run_tests=run_tests,
+        fail_fast=fail_fast,
+        on_node_start=on_node_start,
+        on_node_complete=on_node_complete,
+        on_progress=on_progress,
+    )
 
-    model_results: list[ModelExecutionResult] = []
-    seed_results: list[SeedExecutionResult] = []
-    test_results: list[SqlTestExecutionResult] = []
-    source_audit_results: list[AuditExecutionResult] = []
-
-    key: CompiledObjectKey
-    for key in plan.execution_order:
-        if key in blocked_keys:
-            _record_skipped(
-                key=key,
-                indexes=indexes,
-                model_results=model_results,
-                seed_results=seed_results,
-            )
-            continue
-
-        if key.resource_type == CompiledResourceType.SEED:
-            seed_entry: SeedPlanEntry | None = indexes.seed_entries_by_key.get(key)
-            if seed_entry is None:
-                continue
-            if on_progress is not None:
-                on_progress(f"seed: {seed_entry.name}")
-            if on_node_start is not None:
-                on_node_start(seed_entry.name, MaterializationType.SEED)
-            seed_start: float = time.monotonic()
-            seed_result: SeedExecutionResult = execute_seed(
-                seed_entry=seed_entry, adapter=adapter, connection=connection
-            )
-            seed_duration: int = int((time.monotonic() - seed_start) * 1000)
-            seed_result = dataclasses.replace(seed_result, duration_ms=seed_duration)
-            seed_results.append(seed_result)
-            if on_node_complete is not None:
-                on_node_complete(seed_result)
-            if seed_result.status == ExecutionStatus.FAILED:
-                block_downstream(
-                    failed_key=key,
-                    downstream_deps=plan.downstream_deps,
-                    selected_keys=plan.selected_keys,
-                    blocked_keys=blocked_keys,
-                )
-                if fail_fast:
-                    break
-            continue
-
-        if key.resource_type == CompiledResourceType.SQL_TEST:
-            if not run_tests:
-                continue
-            test_entry: SqlTestPlanEntry | None = indexes.test_entries_by_key.get(key)
-            if test_entry is None:
-                continue
-            if on_progress is not None:
-                on_progress(f"test: {test_entry.name}")
-            test_result: SqlTestExecutionResult = execute_sql_test(
-                test_entry=test_entry, adapter=adapter, connection=connection
-            )
-            test_results.append(test_result)
-            if on_node_complete is not None:
-                on_node_complete(test_result)
-            if test_result.outcome != SqlTestOutcome.PASS:
-                dep_key: CompiledObjectKey
-                for dep_key in test_entry.scope_deps:
-                    blocked_keys.add(dep_key)
-                    block_downstream(
-                        failed_key=dep_key,
-                        downstream_deps=plan.downstream_deps,
-                        selected_keys=plan.selected_keys,
-                        blocked_keys=blocked_keys,
-                    )
-                if fail_fast:
-                    break
-            continue
-
-        if key.resource_type == CompiledResourceType.MODEL:
-            model_entry: ModelPlanEntry | None = indexes.model_entries_by_key.get(key)
-            if model_entry is None:
-                continue
-
-            if run_audits:
-                source_blocked: bool = run_pending_source_audits(
-                    model_key=key,
-                    upstream_deps=plan.upstream_deps,
-                    downstream_deps=plan.downstream_deps,
-                    selected_keys=plan.selected_keys,
-                    source_audits_by_source=indexes.source_audits_by_source,
-                    executed_source_audits=executed_source_audits,
-                    failed_sources=failed_sources,
-                    blocked_keys=blocked_keys,
-                    adapter=adapter,
-                    connection=connection,
-                    model_targets=plan.model_targets,
-                    seed_targets=plan.seed_targets,
-                    source_map=plan.source_map,
-                    all_source_audit_results=source_audit_results,
-                    fail_fast=fail_fast,
-                )
-                if source_blocked:
-                    blocked_keys.add(key)
-                    model_results.append(
-                        ModelExecutionResult(
-                            model_name=model_entry.name,
-                            status=ExecutionStatus.SKIPPED,
-                        )
-                    )
-                    if fail_fast:
-                        break
-                    continue
-
-            if on_progress is not None:
-                on_progress(f"model: {model_entry.name}")
-            if on_node_start is not None:
-                on_node_start(model_entry.name, model_entry.materialization_type)
-
-            model_audits: tuple[AuditPlanEntry, ...] = (
-                indexes.model_audits_by_model.get(model_entry.name, ()) if run_audits else ()
-            )
-
-            is_microbatch: bool = model_entry.incremental_mode == IncrementalMode.MICROBATCH
-            is_full_refresh_microbatch: bool = (
-                is_microbatch
-                and model_entry.action == PlanAction.CREATE_TABLE
-                and model_entry.materialization_type == MaterializationType.INCREMENTAL
-            )
-
-            model_start: float = time.monotonic()
-            model_result: ModelExecutionResult
-            if is_microbatch and model_entry.action in INCREMENTAL_ACTIONS:
-                model_result = execute_microbatch_entry(
-                    entry=model_entry,
-                    adapter=adapter,
-                    connection=connection,
-                    model_targets=plan.model_targets,
-                    seed_targets=plan.seed_targets,
-                    source_map=plan.source_map,
-                    model_audits=model_audits,
-                    declared_columns=model_entry.declared_columns,
-                    run_id=run_id,
-                    fingerprint_schema=fingerprint_schema,
-                )
-            elif is_full_refresh_microbatch:
-                model_result = execute_microbatch_entry(
-                    entry=model_entry,
-                    adapter=adapter,
-                    connection=connection,
-                    model_targets=plan.model_targets,
-                    seed_targets=plan.seed_targets,
-                    source_map=plan.source_map,
-                    model_audits=model_audits,
-                    declared_columns=model_entry.declared_columns,
-                    run_id=run_id,
-                    fingerprint_schema=fingerprint_schema,
-                    is_full_refresh=True,
-                )
-            elif model_entry.action in INCREMENTAL_ACTIONS:
-                model_result = execute_incremental_entry(
-                    entry=model_entry,
-                    adapter=adapter,
-                    connection=connection,
-                    model_targets=plan.model_targets,
-                    seed_targets=plan.seed_targets,
-                    source_map=plan.source_map,
-                    model_audits=model_audits,
-                    declared_columns=model_entry.declared_columns,
-                    run_id=run_id,
-                    fingerprint_schema=fingerprint_schema,
-                )
-            elif model_entry.action == PlanAction.CREATE_VIEW:
-                model_result = execute_view_entry(
-                    entry=model_entry,
-                    adapter=adapter,
-                    connection=connection,
-                    model_targets=plan.model_targets,
-                    seed_targets=plan.seed_targets,
-                    source_map=plan.source_map,
-                    model_audits=model_audits,
-                    run_id=run_id,
-                    fingerprint_schema=fingerprint_schema,
-                )
-            else:
-                model_result = execute_table_entry(
-                    entry=model_entry,
-                    adapter=adapter,
-                    connection=connection,
-                    model_targets=plan.model_targets,
-                    seed_targets=plan.seed_targets,
-                    source_map=plan.source_map,
-                    model_audits=model_audits,
-                    declared_columns=model_entry.declared_columns,
-                    promotion_mode=promotion_mode,
-                    run_id=run_id,
-                    fingerprint_schema=fingerprint_schema,
-                )
-            model_duration: int = int((time.monotonic() - model_start) * 1000)
-            model_result = dataclasses.replace(model_result, duration_ms=model_duration)
-            model_results.append(model_result)
-            if on_node_complete is not None:
-                on_node_complete(model_result)
-
-            if model_result.status == ExecutionStatus.FAILED:
-                block_downstream(
-                    failed_key=key,
-                    downstream_deps=plan.downstream_deps,
-                    selected_keys=plan.selected_keys,
-                    blocked_keys=blocked_keys,
-                )
-                if fail_fast:
-                    break
-            continue
-
-    end_audit_results: tuple[AuditExecutionResult, ...] = ()
-    if run_audits and indexes.end_audits:
-        end_audit_results = run_end_audits(
-            end_audits=indexes.end_audits,
-            adapter=adapter,
-            connection=connection,
-            model_targets=plan.model_targets,
-            seed_targets=plan.seed_targets,
-            source_map=plan.source_map,
-        )
+    model_results: tuple[ModelExecutionResult, ...]
+    seed_results: tuple[SeedExecutionResult, ...]
+    test_results: tuple[SqlTestExecutionResult, ...]
+    source_audit_results: tuple[AuditExecutionResult, ...]
+    end_audit_results: tuple[AuditExecutionResult, ...]
+    (
+        model_results,
+        seed_results,
+        test_results,
+        source_audit_results,
+        end_audit_results,
+    ) = scheduler.run()
 
     return _aggregate_build_result(
         model_results=model_results,
@@ -295,41 +77,12 @@ def execute_build_plan(
     )
 
 
-def _record_skipped(
-    *,
-    key: CompiledObjectKey,
-    indexes: BuildIndexes,
-    model_results: list[ModelExecutionResult],
-    seed_results: list[SeedExecutionResult],
-) -> None:
-    """Record a SKIPPED result for a blocked key."""
-
-    if key.resource_type == CompiledResourceType.MODEL:
-        model_entry: ModelPlanEntry | None = indexes.model_entries_by_key.get(key)
-        if model_entry is not None:
-            model_results.append(
-                ModelExecutionResult(
-                    model_name=model_entry.name,
-                    status=ExecutionStatus.SKIPPED,
-                )
-            )
-    elif key.resource_type == CompiledResourceType.SEED:
-        seed_entry: SeedPlanEntry | None = indexes.seed_entries_by_key.get(key)
-        if seed_entry is not None:
-            seed_results.append(
-                SeedExecutionResult(
-                    seed_name=seed_entry.name,
-                    status=ExecutionStatus.SKIPPED,
-                )
-            )
-
-
 def _aggregate_build_result(
     *,
-    model_results: list[ModelExecutionResult],
-    seed_results: list[SeedExecutionResult],
-    test_results: list[SqlTestExecutionResult],
-    source_audit_results: list[AuditExecutionResult],
+    model_results: tuple[ModelExecutionResult, ...],
+    seed_results: tuple[SeedExecutionResult, ...],
+    test_results: tuple[SqlTestExecutionResult, ...],
+    source_audit_results: tuple[AuditExecutionResult, ...],
     end_audit_results: tuple[AuditExecutionResult, ...],
 ) -> BuildExecutionResult:
     """Compute aggregate counts and overall build status."""
@@ -389,10 +142,10 @@ def _aggregate_build_result(
 
     return BuildExecutionResult(
         status=status,
-        model_results=tuple(model_results),
-        seed_results=tuple(seed_results),
-        test_results=tuple(test_results),
-        source_audit_results=tuple(source_audit_results),
+        model_results=model_results,
+        seed_results=seed_results,
+        test_results=test_results,
+        source_audit_results=source_audit_results,
         end_audit_results=end_audit_results,
         success_count=success_count,
         failure_count=failure_count,

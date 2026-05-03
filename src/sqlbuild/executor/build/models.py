@@ -41,6 +41,14 @@ class BuildIndexes:
 
 
 @dataclass(frozen=True)
+class NodeCompletion:
+    """Result of a single node execution passed back from a worker to the scheduler."""
+
+    key: CompiledObjectKey
+    result: ModelExecutionResult | SeedExecutionResult | SqlTestExecutionResult
+
+
+@dataclass(frozen=True)
 class BuildExecutionResult:
     """Aggregate outcome of a full build execution."""
 

@@ -426,7 +426,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         expected_status=BuildStatus.FAILED,
         expected_failure_count=1,
         expected_success_count=0,
-        expected_skipped_count=0,
+        expected_skipped_count=1,
         expected_missing_relations=("main.aaa_broken", "main.zzz_healthy"),
     ),
     BuildExecutionTestCase(

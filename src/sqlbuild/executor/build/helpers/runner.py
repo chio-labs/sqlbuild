@@ -151,7 +151,8 @@ def run_build_with_output(
     result: BuildExecutionResult = execute_build_plan(
         plan=plan,
         adapter=adapter,
-        connection=connection,
+        connections=(connection,),
+        scheduler_connection=connection,
         promotion_mode=promotion_mode,
         run_id=run_id,
         fingerprint_schema=fingerprint_schema,

@@ -34,19 +34,26 @@ def run_build_pipeline(
     run_tests: bool = True,
     run_audits: bool = True,
     fail_fast: bool = False,
+    max_concurrency: int = 1,
     on_node_start: Callable[[str, str], None] | None = None,
     on_node_complete: Callable[[object], None] | None = None,
     on_progress: Callable[[str], None] | None = None,
 ) -> BuildExecutionResult:
-    """Execute a full build pipeline: resolve settings, open connection, run plan, close."""
+    """Execute a full build pipeline: resolve settings, open connections, run plan, close."""
 
     promotion_mode: TablePromotionMode = resolve_promotion_mode(settings=settings, adapter=adapter)
-    connection: Any = adapter.connect(connection_config)
+    effective_concurrency: int = max(1, max_concurrency)
+    scheduler_connection: Any = adapter.connect(connection_config)
+    worker_connections: list[Any] = []
+    _i: int
+    for _i in range(effective_concurrency):
+        worker_connections.append(adapter.connect(connection_config))
     try:
         return execute_build_plan(
             plan=plan,
             adapter=adapter,
-            connection=connection,
+            connections=tuple(worker_connections),
+            scheduler_connection=scheduler_connection,
             promotion_mode=promotion_mode,
             run_id=run_id,
             fingerprint_schema=fingerprint_schema,
@@ -58,4 +65,7 @@ def run_build_pipeline(
             on_progress=on_progress,
         )
     finally:
-        adapter.close(connection)
+        conn: Any
+        for conn in worker_connections:
+            adapter.close(conn)
+        adapter.close(scheduler_connection)

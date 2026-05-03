@@ -32,6 +32,7 @@ def run_run(
     cursor_overrides: CursorOverrides | None = None,
     no_color: bool = False,
     fail_fast: bool = False,
+    concurrency: int | None = None,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
 ) -> int:
@@ -66,7 +67,14 @@ def run_run(
     callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
         plan=plan_output, use_color=use_color
     )
-    header: str = format_build_header(command="sqb run", target=None, concurrency=1)
+    effective_concurrency: int = (
+        concurrency
+        if concurrency is not None
+        else discovered_inputs.project_config.settings.max_concurrency
+    )
+    header: str = format_build_header(
+        command="sqb run", target=None, concurrency=effective_concurrency
+    )
     sys.stdout.write(header + "\n\n")
     sys.stdout.flush()
 
@@ -79,6 +87,7 @@ def run_run(
         run_tests=False,
         run_audits=False,
         fail_fast=fail_fast,
+        max_concurrency=effective_concurrency,
         on_node_start=callbacks.on_node_start,
         on_node_complete=callbacks.on_node_complete,
     )

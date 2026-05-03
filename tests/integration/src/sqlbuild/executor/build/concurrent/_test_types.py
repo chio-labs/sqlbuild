@@ -1,0 +1,39 @@
+"""Test types for concurrent build execution tests."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+from sqlbuild.executor.build.types import BuildStatus
+from sqlbuild.executor.shared.types import ExecutionStatus
+
+
+@dataclass(frozen=True)
+class ConcurrentBuildTestCase:
+    """Test case for concurrent build execution with file-based DuckDB."""
+
+    description: str
+    project_files: dict[str, str]
+    max_concurrency: int
+    expected_status: BuildStatus
+    expected_success_count: int = 0
+    expected_failure_count: int = 0
+    expected_skipped_count: int = 0
+    expected_model_statuses: tuple[tuple[str, ExecutionStatus], ...] = field(default_factory=tuple)
+    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...] = field(
+        default_factory=tuple
+    )
+    expected_missing_relations: tuple[str, ...] = field(default_factory=tuple)
+    setup_sql: tuple[str, ...] = field(default_factory=tuple)
+    run_audits: bool = True
+    fail_fast: bool = False
+
+
+@dataclass(frozen=True)
+class OrderingInvariantTestCase:
+    """Test case for verifying dependency ordering under concurrency."""
+
+    description: str
+    project_files: dict[str, str]
+    max_concurrency: int
+    expected_upstream_model_deps: tuple[tuple[str, tuple[str, ...]], ...]
