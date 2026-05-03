@@ -85,6 +85,7 @@ def run_diff(
             **discovered_inputs.project_config.environments[to_environment].connection,
         },
         project_dir=effective_project_dir,
+        adapter_name=discovered_inputs.project_config.adapter,
     )
     connection: Any = adapter.connect(connection_config)
     try:

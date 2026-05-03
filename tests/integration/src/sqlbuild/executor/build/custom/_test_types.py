@@ -78,6 +78,9 @@ class ContextVerificationTestCase:
     expected_environment: str
     expected_var_key: str
     expected_var_value: str
+    expected_qualified_name: str
+    expected_target_schema_qualified_name: str
+    expected_preserved_qualified_name: str
 
 
 @dataclass(frozen=True)

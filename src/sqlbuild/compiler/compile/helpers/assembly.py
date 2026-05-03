@@ -27,6 +27,7 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledResourceType
+from sqlbuild.spec.models.project import DefaultsConfig, EnvironmentConfig
 
 
 def assemble_compiled_project(inputs: CompileProjectInputs) -> CompiledProject:
@@ -51,7 +52,14 @@ def assemble_compiled_project(inputs: CompileProjectInputs) -> CompiledProject:
         sources=tuple(
             _assemble_compiled_source(source_input) for source_input in inputs.source_inputs
         ),
-        seeds=tuple(_assemble_compiled_seed(seed_input) for seed_input in inputs.seed_inputs),
+        seeds=tuple(
+            _assemble_compiled_seed(
+                seed_input,
+                defaults=inputs.project_config.defaults,
+                environment_config=inputs.effective_environment,
+            )
+            for seed_input in inputs.seed_inputs
+        ),
         audits=tuple(_assemble_compiled_audit(audit_input) for audit_input in inputs.audit_inputs),
         sql_tests=tuple(
             _assemble_compiled_sql_test(test_input, model_inputs=inputs.model_inputs, inputs=inputs)
@@ -104,7 +112,17 @@ def _assemble_compiled_source(source_input: CompileSourceInput) -> CompiledSourc
     )
 
 
-def _assemble_compiled_seed(seed_input: CompileSeedInput) -> CompiledSeed:
+def _assemble_compiled_seed(
+    seed_input: CompileSeedInput,
+    *,
+    defaults: DefaultsConfig,
+    environment_config: EnvironmentConfig | None,
+) -> CompiledSeed:
+    target: CompiledRelationTarget = _build_seed_relation_target(
+        seed_name=seed_input.schema_entry.name,
+        defaults=defaults,
+        environment_config=environment_config,
+    )
     return CompiledSeed(
         key=CompiledObjectKey(
             resource_type=CompiledResourceType.SEED, name=seed_input.schema_entry.name
@@ -114,12 +132,7 @@ def _assemble_compiled_seed(seed_input: CompileSeedInput) -> CompiledSeed:
         seed_file=seed_input.seed_file,
         schema_entry=seed_input.schema_entry,
         schema_file=seed_input.schema_file,
-        target=CompiledRelationTarget(
-            database=None,
-            schema=None,
-            name=seed_input.schema_entry.name,
-            qualified_name=None,
-        ),
+        target=target,
     )
 
 
@@ -220,16 +233,65 @@ def _build_model_relation_target(
     database: str | None = raw_database if isinstance(raw_database, str) else None
     schema: str | None = raw_schema if isinstance(raw_schema, str) else None
     name: str = raw_alias if isinstance(raw_alias, str) else model_name
-    qualified_name: str | None = None
-    if database is not None and schema is not None:
-        qualified_name = f"{database}.{schema}.{name}"
-    elif schema is not None:
-        qualified_name = f"{schema}.{name}"
     return CompiledRelationTarget(
         database=database,
         schema=schema,
         name=name,
-        qualified_name=qualified_name,
+        qualified_name=_build_qualified_relation_name(
+            database=database,
+            schema=schema,
+            name=name,
+        ),
         logical_schema=model_input.config.logical_schema,
         logical_database=model_input.config.logical_database,
     )
+
+
+def _build_seed_relation_target(
+    *,
+    seed_name: str,
+    defaults: DefaultsConfig,
+    environment_config: EnvironmentConfig | None,
+) -> CompiledRelationTarget:
+    database, schema = _resolve_target_namespace(
+        defaults=defaults,
+        environment_config=environment_config,
+    )
+    return CompiledRelationTarget(
+        database=database,
+        schema=schema,
+        name=seed_name,
+        qualified_name=_build_qualified_relation_name(
+            database=database,
+            schema=schema,
+            name=seed_name,
+        ),
+    )
+
+
+def _resolve_target_namespace(
+    *,
+    defaults: DefaultsConfig,
+    environment_config: EnvironmentConfig | None,
+) -> tuple[str | None, str | None]:
+    database: str | None = defaults.database
+    schema: str | None = defaults.schema
+    if environment_config is not None:
+        if environment_config.database is not None:
+            database = environment_config.database
+        if environment_config.schema is not None:
+            schema = environment_config.schema
+    return database, schema
+
+
+def _build_qualified_relation_name(
+    *,
+    database: str | None,
+    schema: str | None,
+    name: str,
+) -> str | None:
+    if database is not None and schema is not None:
+        return f"{database}.{schema}.{name}"
+    if schema is not None:
+        return f"{schema}.{name}"
+    return None

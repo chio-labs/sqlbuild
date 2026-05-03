@@ -56,6 +56,7 @@ def run_janitor(
     connection_config: dict[str, object] = resolve_connection_config(
         raw_config=project.effective_connection,
         project_dir=effective_project_dir,
+        adapter_name=discovered_inputs.project_config.adapter,
     )
     connection: object = adapter.connect(connection_config)
     try:

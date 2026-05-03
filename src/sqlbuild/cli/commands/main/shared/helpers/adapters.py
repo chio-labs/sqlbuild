@@ -14,6 +14,10 @@ def resolve_adapter(adapter_name: str) -> BaseAdapter:
             from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 
             return DuckDbAdapter()
+        case BuiltinAdapter.SNOWFLAKE:
+            from sqlbuild.integrations.snowflake.client import SnowflakeAdapter
+
+            return SnowflakeAdapter()
         case _:
             available: str = ", ".join(a.value for a in BuiltinAdapter)
             raise ValueError(

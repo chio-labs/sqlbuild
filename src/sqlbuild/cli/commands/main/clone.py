@@ -51,6 +51,7 @@ def run_clone(
             **discovered_inputs.project_config.environments[from_environment].connection,
         },
         project_dir=effective_project_dir,
+        adapter_name=discovered_inputs.project_config.adapter,
     )
     target_connection_config: dict[str, object] = resolve_connection_config(
         raw_config={
@@ -58,6 +59,7 @@ def run_clone(
             **discovered_inputs.project_config.environments[to_environment].connection,
         },
         project_dir=effective_project_dir,
+        adapter_name=discovered_inputs.project_config.adapter,
     )
     source_connection: Any = adapter.connect(source_connection_config)
     target_connection: Any = adapter.connect(target_connection_config)

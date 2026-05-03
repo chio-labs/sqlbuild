@@ -7,6 +7,7 @@ from enum import StrEnum
 
 class BuiltinAdapter(StrEnum):
     DUCKDB = "duckdb"
+    SNOWFLAKE = "snowflake"
 
 
 class CursorKind(StrEnum):

@@ -11,6 +11,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo, StatementRecorder
 from sqlbuild.compiler.planner.models import SchemaFinding
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.shared.helpers.naming import build_qualified_name
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,28 @@ class MaterializationContext:
     def log(self, message: str) -> None:
         """Record a log message for verbose output."""
         self.statement_recorder.log(message)
+
+    def qualify_name(
+        self,
+        name: str,
+        *,
+        database: str | None = None,
+        schema: str | None = None,
+    ) -> str:
+        """Return a fully-qualified relation name, preserving already-qualified input."""
+
+        if "." in name:
+            return name
+        return build_qualified_name(
+            database=self.target_database if database is None else database,
+            schema=self.target_schema if schema is None else schema,
+            name=name,
+        )
+
+    def qualify_in_target_schema(self, name: str) -> str:
+        """Return a relation name qualified into the target database/schema."""
+
+        return self.qualify_name(name)
 
 
 @dataclass(frozen=True)

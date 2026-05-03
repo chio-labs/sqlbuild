@@ -17,7 +17,7 @@ _AUDIT_ERROR: str = "ERROR"
 
 
 def materialize(ctx: MaterializationContext) -> MaterializationResult:
-    tracking_table: str = str(ctx.config["tracking_table"])
+    tracking_table: str = ctx.qualify_in_target_schema(str(ctx.config["tracking_table"]))
     partition_col: str = str(ctx.config["partition_column"])
     date_start: str = str(ctx.config["date_range_start"])
     date_end: str = str(ctx.config["date_range_end"])
