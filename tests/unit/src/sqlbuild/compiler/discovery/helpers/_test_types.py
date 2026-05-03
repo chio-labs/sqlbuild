@@ -30,6 +30,20 @@ class LoadLocalConfigTestCase:
 
 
 @dataclass(frozen=True)
+class LoadProjectConfigErrorTestCase:
+    description: str
+    project_file_contents: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class LoadLocalConfigErrorTestCase:
+    description: str
+    local_file_contents: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class ParseModelSqlHeaderTestCase:
     description: str
     contents: str

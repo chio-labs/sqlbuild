@@ -47,6 +47,17 @@ TEST_CASES: list[ParseSqlAuditFileTestCase] = [
         ),
         expected_audit_indexes=(1, 2),
     ),
+    ParseSqlAuditFileTestCase(
+        description="parses a single named audit block",
+        contents="""
+        AUDIT (name: "negative totals");
+
+        SELECT 1
+        """,
+        expected_names=("negative totals",),
+        expected_sql_bodies=("SELECT 1",),
+        expected_audit_indexes=(1,),
+    ),
 ]
 
 
@@ -74,6 +85,52 @@ ERROR_TEST_CASES: list[ParseSqlAuditFileErrorTestCase] = [
         description="raises when the file does not start with an audit header",
         contents="SELECT 1\n",
         expected_error_fragment="must start with an AUDIT",
+    ),
+    ParseSqlAuditFileErrorTestCase(
+        description="raises when leading comments appear before the first audit header",
+        contents="-- comment\nAUDIT ();\n\nSELECT 1\n",
+        expected_error_fragment="must start with an AUDIT",
+    ),
+    ParseSqlAuditFileErrorTestCase(
+        description="raises when an audit block has no sql body",
+        contents="AUDIT ();\n",
+        expected_error_fragment="must define SQL after AUDIT(...)",
+    ),
+    ParseSqlAuditFileErrorTestCase(
+        description="raises when the audit header contains malformed yaml",
+        contents="""
+        AUDIT (name: [broken);
+
+        SELECT 1
+        """,
+        expected_error_fragment="could not be parsed",
+    ),
+    ParseSqlAuditFileErrorTestCase(
+        description="raises when the audit header includes unsupported keys",
+        contents="""
+        AUDIT (name: "negative totals", severity: warning);
+
+        SELECT 1
+        """,
+        expected_error_fragment="only supports `name` right now; unsupported keys: severity",
+    ),
+    ParseSqlAuditFileErrorTestCase(
+        description="raises when the audit name is blank",
+        contents="""
+        AUDIT (name: "   ");
+
+        SELECT 1
+        """,
+        expected_error_fragment="must be a non-empty string",
+    ),
+    ParseSqlAuditFileErrorTestCase(
+        description="raises when the audit name is not a string",
+        contents="""
+        AUDIT (name: 123);
+
+        SELECT 1
+        """,
+        expected_error_fragment="must be a non-empty string",
     ),
     ParseSqlAuditFileErrorTestCase(
         description="raises when a multi-block file leaves one audit unnamed",

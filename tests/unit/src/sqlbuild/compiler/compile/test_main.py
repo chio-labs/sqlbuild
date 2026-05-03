@@ -408,6 +408,60 @@ vars:
             "cli_only": "present",
         },
     ),
+    BuildCompileInputsTestCase(
+        description="maps every supported project default into compile model config",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.yml": """
+name: demo
+adapter: duckdb
+
+defaults:
+  materialized: incremental
+  database: analytics
+  schema: marts
+  incremental_strategy: merge
+  incremental_mode: microbatch
+  lookback: 1d
+  batch_size: 1h
+  query_change_backfill: bounded(30d)
+  schema_change_backfill:
+    add_column: bounded(7d)
+    type_change: full
+  row_diff_exclude_columns:
+    - loaded_at
+    - run_id
+""".strip()
+            + "\n",
+            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+        },
+        selected_environment=None,
+        cli_vars=None,
+        expected_model_schema_names=(None,),
+        expected_model_config_values=(
+            {
+                "materialized": "incremental",
+                "database": "analytics",
+                "schema": "marts",
+                "incremental_strategy": "merge",
+                "incremental_mode": "microbatch",
+                "lookback": "1d",
+                "batch_size": "1h",
+                "query_change_backfill": "bounded(30d)",
+                "schema_change_backfill": {
+                    "add_column": "bounded(7d)",
+                    "type_change": "full",
+                },
+                "row_diff_exclude_columns": ("loaded_at", "run_id"),
+            },
+        ),
+        expected_model_path_defaults=(None,),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_effective_environment_name=None,
+        expected_effective_connection={},
+        expected_effective_vars={},
+    ),
 ]
 
 

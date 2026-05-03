@@ -79,6 +79,67 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
         expected_error_fragment="sources must be a list",
     ),
     ParseSourcesYamlErrorTestCase(
+        description="raises when one source entry is not a mapping",
+        contents="""
+        sources:
+          - raw_orders
+        """,
+        expected_error_fragment="sources must contain only mappings",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when a source omits name",
+        contents="""
+        sources:
+          - schema: public
+        """,
+        expected_error_fragment="source must define non-empty string 'name'",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source database is blank",
+        contents="""
+        sources:
+          - name: raw_orders
+            database: ""
+        """,
+        expected_error_fragment="source 'database' must be a non-empty string",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source schema is blank",
+        contents="""
+        sources:
+          - name: raw_orders
+            schema: ""
+        """,
+        expected_error_fragment="source 'schema' must be a non-empty string",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source table is blank",
+        contents="""
+        sources:
+          - name: raw_orders
+            table: ""
+        """,
+        expected_error_fragment="source 'table' must be a non-empty string",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source type enforcement is not a boolean",
+        contents="""
+        sources:
+          - name: raw_orders
+            type_enforcement: 123
+        """,
+        expected_error_fragment="source 'type_enforcement' must be a boolean",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source columns is not a list",
+        contents="""
+        sources:
+          - name: raw_orders
+            columns: {}
+        """,
+        expected_error_fragment="source columns must be a list",
+    ),
+    ParseSourcesYamlErrorTestCase(
         description="raises when a source column entry is not a mapping",
         contents="""
         sources:
@@ -87,6 +148,27 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
               - order_id
         """,
         expected_error_fragment="source columns must contain only mappings",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source column omits name",
+        contents="""
+        sources:
+          - name: raw_orders
+            columns:
+              - type: VARCHAR
+        """,
+        expected_error_fragment="source column must define non-empty string 'name'",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source column type is blank",
+        contents="""
+        sources:
+          - name: raw_orders
+            columns:
+              - name: order_id
+                type: ""
+        """,
+        expected_error_fragment="source column 'type' must be a non-empty string",
     ),
 ]
 

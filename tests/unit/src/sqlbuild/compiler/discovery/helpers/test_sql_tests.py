@@ -53,6 +53,17 @@ TEST_CASES: list[ParseSqlTestFileTestCase] = [
         ),
         expected_test_indexes=(1, 2),
     ),
+    ParseSqlTestFileTestCase(
+        description="parses a single named test block",
+        contents="""
+        TEST (name: "orders logic");
+
+        SELECT 1
+        """,
+        expected_names=("orders logic",),
+        expected_sql_bodies=("SELECT 1",),
+        expected_test_indexes=(1,),
+    ),
 ]
 
 
@@ -78,6 +89,52 @@ ERROR_TEST_CASES: list[ParseSqlTestFileErrorTestCase] = [
         description="raises when the file does not start with a test header",
         contents="SELECT 1\n",
         expected_error_fragment="must start with a TEST",
+    ),
+    ParseSqlTestFileErrorTestCase(
+        description="raises when leading comments appear before the first test header",
+        contents="-- comment\nTEST ();\n\nSELECT 1\n",
+        expected_error_fragment="must start with a TEST",
+    ),
+    ParseSqlTestFileErrorTestCase(
+        description="raises when a test block has no sql body",
+        contents="TEST ();\n",
+        expected_error_fragment="must define SQL after TEST(...)",
+    ),
+    ParseSqlTestFileErrorTestCase(
+        description="raises when the test header contains malformed yaml",
+        contents="""
+        TEST (name: [broken);
+
+        SELECT 1
+        """,
+        expected_error_fragment="could not be parsed",
+    ),
+    ParseSqlTestFileErrorTestCase(
+        description="raises when the test header includes unsupported keys",
+        contents="""
+        TEST (name: "orders", chain: true);
+
+        SELECT 1
+        """,
+        expected_error_fragment="only supports `name` right now; unsupported keys: chain",
+    ),
+    ParseSqlTestFileErrorTestCase(
+        description="raises when the test name is blank",
+        contents="""
+        TEST (name: "   ");
+
+        SELECT 1
+        """,
+        expected_error_fragment="must be a non-empty string",
+    ),
+    ParseSqlTestFileErrorTestCase(
+        description="raises when the test name is not a string",
+        contents="""
+        TEST (name: 123);
+
+        SELECT 1
+        """,
+        expected_error_fragment="must be a non-empty string",
     ),
     ParseSqlTestFileErrorTestCase(
         description="raises when a multi-block file leaves one block unnamed",

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import cast
 
 import yaml
+from yaml import YAMLError
 
 from sqlbuild.compiler.discovery.exceptions import SqlTestParseError
 from sqlbuild.compiler.discovery.helpers.constants import (
@@ -102,7 +103,12 @@ def _parse_test_header(*, header: str, file_path: Path) -> dict[str, object]:
     if not stripped_header:
         return {}
 
-    parsed_header: object = yaml.safe_load(f"{{{stripped_header}}}")
+    try:
+        parsed_header: object = yaml.safe_load(f"{{{stripped_header}}}")
+    except YAMLError as error:
+        raise SqlTestParseError(
+            f"TEST() header in '{file_path}' could not be parsed: {error}"
+        ) from error
     if not isinstance(parsed_header, dict) or not all(
         isinstance(key, str) for key in parsed_header
     ):

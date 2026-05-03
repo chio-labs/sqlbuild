@@ -112,6 +112,89 @@ ERROR_TEST_CASES: list[ParseSchemaYamlErrorTestCase] = [
         expected_error_fragment="models must be a list",
     ),
     ParseSchemaYamlErrorTestCase(
+        description="raises when a model entry is not a mapping",
+        contents="""
+        models:
+          - stg_orders
+        """,
+        expected_error_fragment="models must contain only mappings",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when a model omits name",
+        contents="""
+        models:
+          - description: no name
+        """,
+        expected_error_fragment="model must define non-empty string 'name'",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when model type enforcement is not a boolean",
+        contents="""
+        models:
+          - name: stg_orders
+            type_enforcement: 123
+        """,
+        expected_error_fragment="model 'type_enforcement' must be a boolean",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when model meta is not a mapping",
+        contents="""
+        models:
+          - name: stg_orders
+            meta: finance
+        """,
+        expected_error_fragment="model 'meta' must be a mapping",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when model columns is not a list",
+        contents="""
+        models:
+          - name: stg_orders
+            columns: {}
+        """,
+        expected_error_fragment="model columns must be a list",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when model column entry is not a mapping",
+        contents="""
+        models:
+          - name: stg_orders
+            columns:
+              - order_id
+        """,
+        expected_error_fragment="model columns must contain only mappings",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when model column omits name",
+        contents="""
+        models:
+          - name: stg_orders
+            columns:
+              - type: VARCHAR
+        """,
+        expected_error_fragment="model column must define non-empty string 'name'",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when model column meta is not a mapping",
+        contents="""
+        models:
+          - name: stg_orders
+            columns:
+              - name: order_id
+                meta: finance
+        """,
+        expected_error_fragment="model column 'meta' must be a mapping",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when model audits is not a list",
+        contents="""
+        models:
+          - name: stg_orders
+            audits: {}
+        """,
+        expected_error_fragment="model audits must be a list",
+    ),
+    ParseSchemaYamlErrorTestCase(
         description="raises when an audit entry is not a string or single-key mapping",
         contents="""
         models:
@@ -123,12 +206,119 @@ ERROR_TEST_CASES: list[ParseSchemaYamlErrorTestCase] = [
         expected_error_fragment="audits must be strings or single-key mappings",
     ),
     ParseSchemaYamlErrorTestCase(
+        description="raises when an audit entry has an empty string name",
+        contents="""
+        models:
+          - name: stg_orders
+            audits:
+              - "  "
+        """,
+        expected_error_fragment="audits must not contain empty names",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when an audit mapping has an empty definition name",
+        contents="""
+        models:
+          - name: stg_orders
+            audits:
+              - "": {}
+        """,
+        expected_error_fragment="audit names must be non-empty strings",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when audit arguments are not a mapping",
+        contents="""
+        models:
+          - name: stg_orders
+            audits:
+              - unique: warning
+        """,
+        expected_error_fragment="audit 'unique' arguments must be a mapping",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when audit metadata name is not a string",
+        contents="""
+        models:
+          - name: stg_orders
+            audits:
+              - unique:
+                  name: 123
+        """,
+        expected_error_fragment="audit 'unique' 'name' must be a non-empty string",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when audit metadata description is not a string",
+        contents="""
+        models:
+          - name: stg_orders
+            audits:
+              - unique:
+                  description: 123
+        """,
+        expected_error_fragment="audit 'unique' 'description' must be a non-empty string",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when audit metadata severity is not a string",
+        contents="""
+        models:
+          - name: stg_orders
+            audits:
+              - unique:
+                  severity: 123
+        """,
+        expected_error_fragment="audit 'unique' 'severity' must be a non-empty string",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when seeds is not a list",
+        contents="seeds: {}\n",
+        expected_error_fragment="seeds must be a list",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when a seed entry is not a mapping",
+        contents="""
+        seeds:
+          - country_codes
+        """,
+        expected_error_fragment="seeds must contain only mappings",
+    ),
+    ParseSchemaYamlErrorTestCase(
         description="raises when a seed omits columns",
         contents="""
         seeds:
           - name: country_codes
         """,
         expected_error_fragment="seed must declare at least one column",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when seed meta is not a mapping",
+        contents="""
+        seeds:
+          - name: country_codes
+            meta: nope
+            columns:
+              - name: country_code
+                type: VARCHAR
+        """,
+        expected_error_fragment="seed 'meta' must be a mapping",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when seed columns is not a list",
+        contents="""
+        seeds:
+          - name: country_codes
+            columns: {}
+        """,
+        expected_error_fragment="seed columns must be a list",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when seed column entry is not a mapping",
+        contents="""
+        seeds:
+          - name: country_codes
+            columns:
+              - country_code
+        """,
+        expected_error_fragment="seed columns must contain only mappings",
     ),
     ParseSchemaYamlErrorTestCase(
         description="raises when a seed column omits type",
@@ -139,6 +329,17 @@ ERROR_TEST_CASES: list[ParseSchemaYamlErrorTestCase] = [
               - name: country_code
         """,
         expected_error_fragment="seed column 'country_code' must define non-empty string 'type'",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when seed column name is blank",
+        contents="""
+        seeds:
+          - name: country_codes
+            columns:
+              - name: ""
+                type: VARCHAR
+        """,
+        expected_error_fragment="seed column must define non-empty string 'name'",
     ),
 ]
 

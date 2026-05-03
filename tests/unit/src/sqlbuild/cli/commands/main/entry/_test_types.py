@@ -1,4 +1,9 @@
+from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
+
+from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
+from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 
 
 @dataclass(frozen=True)
@@ -12,5 +17,7 @@ class MainTestCase:
 class MainErrorRenderingTestCase:
     description: str
     argv: list[str]
+    error_type: type[CliUserError] | type[ProjectConfigError] | type[ValueError]
+    error_factory: Callable[[Path], Exception]
     expected_stderr_fragment: str
     expected_exit_code: int
