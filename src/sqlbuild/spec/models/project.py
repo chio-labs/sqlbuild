@@ -58,7 +58,10 @@ class DefaultsConfig:
 class JanitorConfig:
     """Janitor command defaults."""
 
-    retention_days: int = 7
+    enabled: bool = False
+    retention_days: int = 30
+    delete_tracked_only: bool = True
+    exclude_patterns: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

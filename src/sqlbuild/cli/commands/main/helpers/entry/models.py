@@ -31,6 +31,8 @@ class CliNamespace:
     concurrency: int | None = None
     verbose: bool = False
     debug: bool = False
+    auto_approve: bool = False
+    retention_days: int | None = None
     select: list[str] = field(default_factory=list)
     exclude: list[str] = field(default_factory=list)
 
@@ -97,3 +99,4 @@ class CliEntrypointHandlers:
         [Path | None, bool, bool, str, str, bool, tuple[str, ...], tuple[str, ...]],
         int,
     ]
+    run_janitor: Callable[[Path | None, bool, bool, int | None], int]

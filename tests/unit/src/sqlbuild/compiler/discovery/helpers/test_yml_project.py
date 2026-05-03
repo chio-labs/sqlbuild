@@ -194,6 +194,18 @@ path_defaults:
 """.strip(),
         expected_error_fragment="path_defaults.*tags.*must be strings",
     ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when tracked-only janitor is enabled without query tracking",
+        project_file_contents="""
+name: demo
+adapter: duckdb
+settings:
+  query_change_tracking: false
+janitor:
+  enabled: true
+""".strip(),
+        expected_error_fragment="janitor.delete_tracked_only requires",
+    ),
 ]
 
 LOCAL_CONFIG_ERROR_TEST_CASES: list[LoadLocalConfigErrorTestCase] = [
@@ -255,7 +267,11 @@ environments:
       allow_as_target: true
 
 janitor:
+  enabled: true
   retention_days: 14
+  delete_tracked_only: false
+  exclude_patterns:
+    - partition_*
 """.strip(),
             expected_name="demo",
             expected_adapter="duckdb",
@@ -271,7 +287,10 @@ janitor:
             expected_dev_vars={"schema_prefix": "dev"},
             expected_dev_schema="dev_${user}",
             expected_allow_as_source=True,
+            expected_janitor_enabled=True,
             expected_retention_days=14,
+            expected_janitor_delete_tracked_only=False,
+            expected_janitor_exclude_patterns=("partition_*",),
         )
     ],
     ids=["loads expected fields from project config"],
@@ -301,7 +320,10 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.environments["dev"].vars == test_case.expected_dev_vars
     assert config.environments["dev"].schema == test_case.expected_dev_schema
     assert config.environments["dev"].clone.allow_as_source is test_case.expected_allow_as_source
+    assert config.janitor.enabled is test_case.expected_janitor_enabled
     assert config.janitor.retention_days == test_case.expected_retention_days
+    assert config.janitor.delete_tracked_only is test_case.expected_janitor_delete_tracked_only
+    assert config.janitor.exclude_patterns == test_case.expected_janitor_exclude_patterns
 
 
 @pytest.mark.parametrize(

@@ -49,16 +49,22 @@ def _table_exists(*, connection: Any, execute: Any, qualified_name: str) -> bool
 
 
 def _row_to_fingerprint(row: tuple[Any, ...]) -> Fingerprint:
-    raw_ts: Any = row[6]
+    raw_ts: Any = row[9]
     ts: datetime = raw_ts if isinstance(raw_ts, datetime) else datetime.fromisoformat(str(raw_ts))
-    raw_ast_hash: Any = row[3]
+    raw_ast_hash: Any = row[6]
     ast_hash: str | None = str(raw_ast_hash) if raw_ast_hash is not None else None
+    raw_target_database: Any = row[1]
+    raw_target_schema: Any = row[2]
+    raw_target_name: Any = row[3]
     return Fingerprint(
         model_name=str(row[0]),
-        run_id=str(row[1]),
-        query_hash=str(row[2]),
+        target_database=str(raw_target_database) if raw_target_database is not None else None,
+        target_schema=str(raw_target_schema) if raw_target_schema is not None else None,
+        target_name=str(raw_target_name) if raw_target_name is not None else None,
+        run_id=str(row[4]),
+        query_hash=str(row[5]),
         ast_hash=ast_hash,
-        schema_fingerprint=str(row[4]),
-        query_sql=str(row[5]),
+        schema_fingerprint=str(row[7]),
+        query_sql=str(row[8]),
         ts=ts,
     )

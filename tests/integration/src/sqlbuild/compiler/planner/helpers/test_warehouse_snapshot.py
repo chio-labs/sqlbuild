@@ -56,6 +56,9 @@ GATHER_SNAPSHOT_TEST_CASES: list[GatherWarehouseSnapshotTestCase] = [
                 "staging",
                 Fingerprint(
                     model_name="orders",
+                    target_database=None,
+                    target_schema=None,
+                    target_name="orders",
                     run_id="run_001",
                     query_hash="hash_a",
                     ast_hash=None,

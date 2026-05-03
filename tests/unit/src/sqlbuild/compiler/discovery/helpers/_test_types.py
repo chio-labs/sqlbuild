@@ -19,7 +19,10 @@ class LoadProjectConfigTestCase:
     expected_dev_vars: dict[str, str]
     expected_dev_schema: str
     expected_allow_as_source: bool
+    expected_janitor_enabled: bool
     expected_retention_days: int
+    expected_janitor_delete_tracked_only: bool
+    expected_janitor_exclude_patterns: tuple[str, ...]
 
 
 @dataclass(frozen=True)

@@ -9,6 +9,9 @@ from sqlbuild.compiler.fingerprints.constants import (
     COLUMN_QUERY_SQL,
     COLUMN_RUN_ID,
     COLUMN_SCHEMA_FINGERPRINT,
+    COLUMN_TARGET_DATABASE,
+    COLUMN_TARGET_NAME,
+    COLUMN_TARGET_SCHEMA,
     COLUMN_TIMESTAMP,
     FINGERPRINT_TABLE_NAME,
 )
@@ -29,6 +32,9 @@ def build_create_table_sql(*, database: str | None, schema: str) -> str:
     return (
         f"CREATE TABLE IF NOT EXISTS {qualified_name} ("
         f"{COLUMN_MODEL_NAME} VARCHAR NOT NULL, "
+        f"{COLUMN_TARGET_DATABASE} VARCHAR, "
+        f"{COLUMN_TARGET_SCHEMA} VARCHAR, "
+        f"{COLUMN_TARGET_NAME} VARCHAR, "
         f"{COLUMN_RUN_ID} VARCHAR NOT NULL, "
         f"{COLUMN_QUERY_HASH} VARCHAR NOT NULL, "
         f"{COLUMN_AST_HASH} VARCHAR, "
@@ -46,6 +52,9 @@ def build_read_all_sql(*, database: str | None, schema: str) -> str:
     return (
         f"SELECT "
         f"{COLUMN_MODEL_NAME}, "
+        f"{COLUMN_TARGET_DATABASE}, "
+        f"{COLUMN_TARGET_SCHEMA}, "
+        f"{COLUMN_TARGET_NAME}, "
         f"{COLUMN_RUN_ID}, "
         f"{COLUMN_QUERY_HASH}, "
         f"{COLUMN_AST_HASH}, "
@@ -61,6 +70,9 @@ def build_insert_sql(
     database: str | None,
     schema: str,
     model_name: str,
+    target_database: str | None,
+    target_schema: str | None,
+    target_name: str | None,
     run_id: str,
     query_hash: str,
     ast_hash: str | None,
@@ -73,9 +85,15 @@ def build_insert_sql(
     qualified_name: str = build_qualified_table_name(database=database, schema=schema)
     escaped_query_sql: str = query_sql.replace("'", "''")
     ast_hash_literal: str = f"'{ast_hash}'" if ast_hash is not None else "NULL"
+    target_database_literal: str = _optional_string_literal(target_database)
+    target_schema_literal: str = _optional_string_literal(target_schema)
+    target_name_literal: str = _optional_string_literal(target_name)
     return (
         f"INSERT INTO {qualified_name} ("
         f"{COLUMN_MODEL_NAME}, "
+        f"{COLUMN_TARGET_DATABASE}, "
+        f"{COLUMN_TARGET_SCHEMA}, "
+        f"{COLUMN_TARGET_NAME}, "
         f"{COLUMN_RUN_ID}, "
         f"{COLUMN_QUERY_HASH}, "
         f"{COLUMN_AST_HASH}, "
@@ -84,6 +102,9 @@ def build_insert_sql(
         f"{COLUMN_TIMESTAMP}"
         f") VALUES ("
         f"'{model_name}', "
+        f"{target_database_literal}, "
+        f"{target_schema_literal}, "
+        f"{target_name_literal}, "
         f"'{run_id}', "
         f"'{query_hash}', "
         f"{ast_hash_literal}, "
@@ -92,3 +113,21 @@ def build_insert_sql(
         f"'{ts}'"
         f")"
     )
+
+
+def build_add_target_columns_sql(*, database: str | None, schema: str) -> tuple[str, ...]:
+    """Build best-effort schema migration statements for existing fingerprint tables."""
+
+    qualified_name: str = build_qualified_table_name(database=database, schema=schema)
+    return (
+        f"ALTER TABLE {qualified_name} ADD COLUMN {COLUMN_TARGET_DATABASE} VARCHAR",
+        f"ALTER TABLE {qualified_name} ADD COLUMN {COLUMN_TARGET_SCHEMA} VARCHAR",
+        f"ALTER TABLE {qualified_name} ADD COLUMN {COLUMN_TARGET_NAME} VARCHAR",
+    )
+
+
+def _optional_string_literal(value: str | None) -> str:
+    if value is None:
+        return "NULL"
+    escaped_value: str = value.replace("'", "''")
+    return f"'{escaped_value}'"

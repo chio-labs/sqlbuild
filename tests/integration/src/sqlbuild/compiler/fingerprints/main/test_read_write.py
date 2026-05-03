@@ -25,6 +25,9 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
         fingerprints=(
             Fingerprint(
                 model_name="orders",
+                target_database=None,
+                target_schema=None,
+                target_name="orders",
                 run_id="run_001",
                 query_hash="hash_a",
                 ast_hash="ast_a",
@@ -35,6 +38,7 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
         ),
         expected_model_names=("orders",),
         expected_latest_query_hashes={"orders": "hash_a"},
+        expected_latest_target_names={"orders": "orders"},
     ),
     WriteAndReadTestCase(
         description="writes and reads fingerprints for multiple models",
@@ -43,6 +47,9 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
         fingerprints=(
             Fingerprint(
                 model_name="orders",
+                target_database=None,
+                target_schema=None,
+                target_name="orders",
                 run_id="run_001",
                 query_hash="hash_a",
                 ast_hash="ast_a",
@@ -52,6 +59,9 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
             ),
             Fingerprint(
                 model_name="customers",
+                target_database=None,
+                target_schema=None,
+                target_name="customers",
                 run_id="run_001",
                 query_hash="hash_b",
                 ast_hash="ast_b",
@@ -62,6 +72,7 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
         ),
         expected_model_names=("customers", "orders"),
         expected_latest_query_hashes={"orders": "hash_a", "customers": "hash_b"},
+        expected_latest_target_names={"orders": "orders", "customers": "customers"},
     ),
 ]
 
@@ -98,6 +109,9 @@ def test_given_fingerprints_when_writing_and_reading_then_returns_expected(
     expected_hash: str
     for model_name, expected_hash in test_case.expected_latest_query_hashes.items():
         assert result.fingerprints[model_name].query_hash == expected_hash
+    expected_target_name: str | None
+    for model_name, expected_target_name in test_case.expected_latest_target_names.items():
+        assert result.fingerprints[model_name].target_name == expected_target_name
 
 
 @pytest.mark.parametrize(
@@ -136,6 +150,9 @@ def test_given_no_table_when_reading_then_returns_empty_set(
             schema="test_schema",
             fingerprint=Fingerprint(
                 model_name="orders",
+                target_database=None,
+                target_schema=None,
+                target_name="orders",
                 run_id="run_001",
                 query_hash="hash_a",
                 ast_hash="ast_a",
@@ -179,6 +196,9 @@ def test_given_no_table_when_writing_then_creates_table(
             fingerprints=(
                 Fingerprint(
                     model_name="orders",
+                    target_database=None,
+                    target_schema=None,
+                    target_name="orders",
                     run_id="run_002",
                     query_hash="new_hash",
                     ast_hash="new_ast",
@@ -188,6 +208,9 @@ def test_given_no_table_when_writing_then_creates_table(
                 ),
                 Fingerprint(
                     model_name="orders",
+                    target_database=None,
+                    target_schema=None,
+                    target_name="orders",
                     run_id="run_001",
                     query_hash="old_hash",
                     ast_hash="old_ast",
@@ -240,6 +263,9 @@ def test_given_multiple_fingerprints_when_reading_then_resolves_latest(
             schema="test_schema",
             fingerprint=Fingerprint(
                 model_name="orders",
+                target_database=None,
+                target_schema=None,
+                target_name="orders",
                 run_id="run_001",
                 query_hash="hash_a",
                 ast_hash=None,

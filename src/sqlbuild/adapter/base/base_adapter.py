@@ -26,6 +26,9 @@ class BaseAdapter(StrictAdapter):
     def supports_zero_copy_clone(self) -> bool:
         return False
 
+    def supports_relation_age_metadata(self) -> bool:
+        return False
+
     def relation_exists(
         self,
         connection: Any,

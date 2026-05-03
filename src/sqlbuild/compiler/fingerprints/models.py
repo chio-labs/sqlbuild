@@ -11,6 +11,9 @@ class Fingerprint:
     """One applied fingerprint record from a successful materialization."""
 
     model_name: str
+    target_database: str | None
+    target_schema: str | None
+    target_name: str | None
     run_id: str
     query_hash: str
     ast_hash: str | None

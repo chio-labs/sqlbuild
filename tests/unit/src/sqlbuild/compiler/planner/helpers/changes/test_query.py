@@ -71,6 +71,9 @@ def test_given_hashes_when_detecting_query_change_then_returns_expected(
 ) -> None:
     fingerprint: Fingerprint = Fingerprint(
         model_name="test",
+        target_database=None,
+        target_schema=None,
+        target_name="test",
         run_id="run_001",
         query_hash=test_case.fingerprint_query_hash,
         ast_hash=test_case.fingerprint_ast_hash,

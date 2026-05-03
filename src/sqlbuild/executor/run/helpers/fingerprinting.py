@@ -38,6 +38,9 @@ def try_write_fingerprint(
         schema_fp: str = hashlib.sha256(b"").hexdigest()
         fingerprint: Fingerprint = Fingerprint(
             model_name=entry.name,
+            target_database=entry.target.database,
+            target_schema=entry.target.schema,
+            target_name=entry.target.name,
             run_id=run_id,
             query_hash=query_hash,
             ast_hash=None,

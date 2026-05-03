@@ -95,6 +95,9 @@ def _build_fingerprints(test_case: DetectModelChangesTestCase) -> dict[str, Fing
     return {
         test_case.model_name: Fingerprint(
             model_name=test_case.model_name,
+            target_database=None,
+            target_schema=None,
+            target_name=test_case.model_name,
             run_id="run_001",
             query_hash=test_case.fingerprint_query_hash,
             ast_hash=test_case.fingerprint_ast_hash,

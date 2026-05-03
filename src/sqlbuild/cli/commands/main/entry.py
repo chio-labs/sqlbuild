@@ -81,7 +81,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser(CliCommand.DIFF)
     subparsers.add_parser(CliCommand.CLEAN)
-    subparsers.add_parser(CliCommand.JANITOR)
+    janitor_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.JANITOR)
+    janitor_parser.add_argument("--auto-approve", action="store_true", default=False)
+    janitor_parser.add_argument("--retention-days", type=int, default=None)
     subparsers.add_parser(CliCommand.INIT)
     return parser
 
@@ -93,6 +95,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.build import run_build
     from sqlbuild.cli.commands.main.clone import run_clone
     from sqlbuild.cli.commands.main.compile import run_compile
+    from sqlbuild.cli.commands.main.janitor import run_janitor
     from sqlbuild.cli.commands.main.plan import run_plan
     from sqlbuild.cli.commands.main.run import run_run
     from sqlbuild.cli.commands.main.seed import run_seed
@@ -107,6 +110,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_audit=run_audit,
         run_seed=run_seed,
         run_clone=run_clone,
+        run_janitor=run_janitor,
     )
     return _main_with_dependencies(argv=argv, handlers=handlers)
 
@@ -239,6 +243,13 @@ def _main_with_dependencies(
                 args.hard_copy,
                 tuple(args.select),
                 tuple(args.exclude),
+            )
+        if args.command == CliCommand.JANITOR:
+            return handlers.run_janitor(
+                project_dir,
+                args.no_color,
+                args.auto_approve,
+                args.retention_days,
             )
         return 0
     except CliUserError as error:

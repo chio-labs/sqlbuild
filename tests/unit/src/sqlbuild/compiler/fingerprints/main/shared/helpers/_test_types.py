@@ -31,6 +31,9 @@ class BuildInsertSqlTestCase:
     database: str | None
     schema: str
     model_name: str
+    target_database: str | None
+    target_schema: str | None
+    target_name: str | None
     run_id: str
     query_hash: str
     ast_hash: str | None

@@ -44,6 +44,11 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         file_path=file_path,
     )
     janitor: JanitorConfig = _load_janitor(payload=payload.get("janitor"), file_path=file_path)
+    if janitor.enabled and janitor.delete_tracked_only and not settings.query_change_tracking:
+        raise ProjectConfigError(
+            f"{file_path} janitor.delete_tracked_only requires "
+            "settings.query_change_tracking to be true"
+        )
 
     return ProjectConfig(
         name=name,
@@ -238,8 +243,28 @@ def _load_janitor(*, payload: object, file_path: Path) -> JanitorConfig:
     mapping: dict[str, object] = _coerce_mapping(
         payload=payload, label="janitor", file_path=file_path
     )
-    retention_days: int = _optional_int(mapping=mapping, key="retention_days", default=7)
-    return JanitorConfig(retention_days=retention_days)
+    enabled: bool = _optional_bool(mapping=mapping, key="enabled", default=False)
+    retention_days: int = _optional_int(mapping=mapping, key="retention_days", default=30)
+    delete_tracked_only: bool = _optional_bool(
+        mapping=mapping,
+        key="delete_tracked_only",
+        default=True,
+    )
+    exclude_patterns: tuple[str, ...] = tuple(
+        _load_string_sequence(
+            payload=mapping.get("exclude_patterns"),
+            label="janitor.exclude_patterns",
+            file_path=file_path,
+        )
+    )
+    if retention_days < 0:
+        raise ProjectConfigError(f"{file_path} janitor.retention_days must be >= 0")
+    return JanitorConfig(
+        enabled=enabled,
+        retention_days=retention_days,
+        delete_tracked_only=delete_tracked_only,
+        exclude_patterns=exclude_patterns,
+    )
 
 
 def _load_string_mapping(*, payload: object, file_path: Path) -> dict[str, str]:
