@@ -22,6 +22,8 @@ class IncrementalSuccessTestCase:
     cursor_column: str | None = None
     cursor_start: str | None = None
     cursor_end: str | None = None
+    cursor_input_relations: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    cursor_inputs_model_backed: bool = False
     type_enforcement: bool = False
     declared_columns: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     pre_hook: object = None
@@ -55,6 +57,8 @@ class IncrementalFailureTestCase:
     cursor_column: str | None = None
     cursor_start: str | None = None
     cursor_end: str | None = None
+    cursor_input_relations: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    cursor_inputs_model_backed: bool = False
     type_enforcement: bool = False
     declared_columns: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     pre_hook: object = None

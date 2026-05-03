@@ -203,6 +203,8 @@ def test_given_source_references_when_resolving_then_returns_expected_sql(
         source_map=test_case.source_map,
         source_warehouse_columns=test_case.source_warehouse_columns,
         star_exclude_keyword=test_case.star_exclude_keyword,
+        cursor_bounds=None,
+        cursor_inputs={},
     )
 
     assert result == test_case.expected_sql

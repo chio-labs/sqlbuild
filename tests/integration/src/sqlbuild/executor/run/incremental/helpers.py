@@ -13,7 +13,12 @@ from sqlbuild.compiler.auditing.types import (
 )
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationTarget
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorBounds, ModelPlanEntry
+from sqlbuild.compiler.planner.models import (
+    AuditPlanEntry,
+    CursorBounds,
+    CursorInputRelation,
+    ModelPlanEntry,
+)
 from sqlbuild.compiler.planner.types import (
     IncrementalStrategy,
     MaterializationType,
@@ -49,6 +54,8 @@ def build_incremental_plan_entry(
     cursor_column: str | None = None,
     cursor_start: str | None = None,
     cursor_end: str | None = None,
+    cursor_input_relations: tuple[tuple[str, str], ...] = (),
+    cursor_inputs_model_backed: bool = False,
     type_enforcement: bool = False,
     pre_hook: object = None,
     post_hook: object = None,
@@ -61,6 +68,14 @@ def build_incremental_plan_entry(
         CursorBounds(start=cursor_start, end=cursor_end)
         if cursor_start is not None and cursor_end is not None
         else None
+    )
+    input_relations: tuple[CursorInputRelation, ...] = tuple(
+        CursorInputRelation(
+            relation=relation,
+            cursor_column=cursor_column,
+            is_model_backed=cursor_inputs_model_backed,
+        )
+        for relation, cursor_column in cursor_input_relations
     )
     return ModelPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name),
@@ -82,6 +97,7 @@ def build_incremental_plan_entry(
         on_schema_change=on_schema_change,
         cursor_column=cursor_column,
         cursor_bounds=cursor_bounds,
+        cursor_input_relations=input_relations,
         type_enforcement=type_enforcement,
         pre_hook=pre_hook,
         post_hook=post_hook,
@@ -247,6 +263,8 @@ def _execute_test(
         cursor_column=test_case.cursor_column,
         cursor_start=test_case.cursor_start,
         cursor_end=test_case.cursor_end,
+        cursor_input_relations=test_case.cursor_input_relations,
+        cursor_inputs_model_backed=test_case.cursor_inputs_model_backed,
         type_enforcement=test_case.type_enforcement,
         pre_hook=test_case.pre_hook,
         post_hook=test_case.post_hook,

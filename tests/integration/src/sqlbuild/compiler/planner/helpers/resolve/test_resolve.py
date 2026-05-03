@@ -158,7 +158,7 @@ def test_given_refs_when_resolving_and_executing_then_returns_expected_rows(
     "test_case",
     [
         ResolveAndExecuteTestCase(
-            description="resolves incremental ref with cursor filter and returns bounded rows",
+            description="resolves incremental source with cursor filter and returns bounded rows",
             setup_sql=(
                 "CREATE TABLE staging.raw_events (event_id INTEGER, event_time TIMESTAMP)",
                 "INSERT INTO staging.raw_events VALUES "
@@ -166,21 +166,22 @@ def test_given_refs_when_resolving_and_executing_then_returns_expected_rows(
                 "CREATE TABLE staging.fact_events (event_id INTEGER, event_time TIMESTAMP)",
                 "INSERT INTO staging.fact_events VALUES (1, '2024-01-15')",
             ),
-            query_sql='SELECT event_id, event_time FROM __ref("raw_events")',
+            query_sql='SELECT event_id, event_time FROM __source("raw_events")',
             model_config={
                 "materialized": "incremental",
                 "incremental_strategy": "delete_insert",
                 "cursor": "event_time",
+                "cursor_inputs": {"raw_events": "event_time"},
                 "schema": "staging",
             },
-            ref_names=("raw_events",),
+            ref_names=(),
             expected_row_count=2,
             expected_column_types={"event_id": "INTEGER", "event_time": "TIMESTAMP"},
         ),
     ],
-    ids=["resolves incremental ref with cursor filter and returns bounded rows"],
+    ids=["resolves incremental source with cursor filter and returns bounded rows"],
 )
-def test_given_incremental_ref_when_resolving_and_executing_then_returns_cursor_bounded_rows(
+def test_given_incremental_source_when_resolving_and_executing_then_returns_cursor_bounded_rows(
     test_case: ResolveAndExecuteTestCase,
     connection: Any,
 ) -> None:
@@ -194,14 +195,6 @@ def test_given_incremental_ref_when_resolving_and_executing_then_returns_cursor_
         config=test_case.model_config,
         ref_names=test_case.ref_names,
     )
-    model_targets: dict[str, CompiledRelationTarget] = {
-        "raw_events": CompiledRelationTarget(
-            database=None,
-            schema="staging",
-            name="raw_events",
-            qualified_name="staging.raw_events",
-        ),
-    }
     snapshot: WarehouseSnapshot = WarehouseSnapshot(
         cursor_snapshots={
             "fact_events": ModelCursorSnapshot(
@@ -215,8 +208,10 @@ def test_given_incremental_ref_when_resolving_and_executing_then_returns_cursor_
     result: _ResolveResult = resolve_and_execute(
         model=model,
         snapshot=snapshot,
-        model_targets=model_targets,
-        source_map={},
+        model_targets={},
+        source_map={
+            "raw_events": SourceEntry(name="raw_events", schema="staging", table="raw_events")
+        },
         source_warehouse_columns={},
         connection=connection,
     )

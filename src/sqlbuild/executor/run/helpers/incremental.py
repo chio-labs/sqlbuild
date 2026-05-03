@@ -8,10 +8,15 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models import CompiledRelationTarget
-from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
+from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorBounds, ModelPlanEntry
 from sqlbuild.compiler.planner.types import IncrementalStrategy, OnSchemaChange
 from sqlbuild.executor.auditing.main import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.run.helpers.cursor_bounds import (
+    has_model_backed_cursor_inputs,
+    resolve_runtime_cursor_bounds,
+    substitute_cursor_sentinels,
+)
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.results import build_failed_result
@@ -53,6 +58,9 @@ def execute_incremental_entry(
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
     statement_recorder: StatementRecorder = StatementRecorder()
+    runtime_owned_cursor_bounds: bool = has_model_backed_cursor_inputs(entry.cursor_input_relations)
+    runtime_cursor_bounds: CursorBounds | None = None
+    resolved_sql: str = entry.resolved_sql
 
     try:
         statement_recorder.record_many(render_hooks(hooks=entry.pre_hook, phase_label="pre_hook"))
@@ -74,6 +82,21 @@ def execute_incremental_entry(
         )
 
     try:
+        if runtime_owned_cursor_bounds:
+            if entry.cursor_column is None:
+                raise ValueError("runtime-owned cursor resolution requires cursor_column")
+            runtime_cursor_bounds = resolve_runtime_cursor_bounds(
+                adapter=adapter,
+                connection=connection,
+                target_relation=target_qualified,
+                cursor_column=entry.cursor_column,
+                cursor_input_relations=entry.cursor_input_relations,
+            )
+            if runtime_cursor_bounds is None:
+                raise ValueError(f"runtime cursor bounds could not be resolved for '{entry.name}'")
+            resolved_sql = substitute_cursor_sentinels(
+                sql=entry.resolved_sql, bounds=runtime_cursor_bounds
+            )
         with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="create_delta"):
             adapter.drop(
                 connection,
@@ -84,7 +107,7 @@ def execute_incremental_entry(
             adapter.create_table_as(
                 connection,
                 target=delta_qualified,
-                sql=entry.resolved_sql,
+                sql=resolved_sql,
                 statement_recorder=statement_recorder,
             )
     except Exception as exc:
@@ -195,8 +218,9 @@ def execute_incremental_entry(
             statement_recorder=statement_recorder,
         )
 
-    cursor_start: str | None = entry.cursor_bounds.start if entry.cursor_bounds else None
-    cursor_end: str | None = entry.cursor_bounds.end if entry.cursor_bounds else None
+    effective_bounds: CursorBounds | None = runtime_cursor_bounds or entry.cursor_bounds
+    cursor_start: str | None = effective_bounds.start if effective_bounds else None
+    cursor_end: str | None = effective_bounds.end if effective_bounds else None
 
     try:
         with diagnostics_context(sqlbuild_phase="dml", sqlbuild_action_name="apply"):

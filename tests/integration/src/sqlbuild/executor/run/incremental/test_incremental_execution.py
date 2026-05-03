@@ -24,6 +24,37 @@ from tests.integration.src.sqlbuild.executor.run.incremental.helpers import (
 
 SUCCESS_TEST_CASES: list[IncrementalSuccessTestCase] = [
     IncrementalSuccessTestCase(
+        description="model-backed cursor input resolves runtime bounds for normal incremental",
+        setup_sql=(
+            "CREATE TABLE main.fact_orders ("
+            "order_id INTEGER, customer_id INTEGER, order_status VARCHAR, "
+            "ordered_at TIMESTAMP, line_total_cents INTEGER)",
+            "INSERT INTO main.fact_orders VALUES "
+            "(1, 10, 'completed', '2026-01-01 00:30:00', 100), "
+            "(2, 11, 'completed', '2026-01-01 01:30:00', 200)",
+            "CREATE TABLE main.order_status_index ("
+            "order_id INTEGER, customer_id INTEGER, order_status VARCHAR, "
+            "ordered_at TIMESTAMP, line_total_cents INTEGER)",
+        ),
+        model_sql=(
+            "SELECT order_id, customer_id, order_status, ordered_at, line_total_cents "
+            "FROM main.fact_orders"
+        ),
+        target_schema="main",
+        target_name="order_status_index",
+        incremental_strategy="delete_insert",
+        cursor_column="order_id",
+        cursor_input_relations=(("main.fact_orders", "order_id"),),
+        cursor_inputs_model_backed=True,
+        expected_row_count=2,
+        expected_query_results=(
+            (
+                "SELECT order_id, customer_id FROM main.order_status_index ORDER BY order_id",
+                ((1, 10), (2, 11)),
+            ),
+        ),
+    ),
+    IncrementalSuccessTestCase(
         description="append strategy adds new rows to existing table",
         setup_sql=(
             "CREATE TABLE main.orders (id INTEGER, name VARCHAR)",

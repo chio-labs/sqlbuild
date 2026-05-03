@@ -7,8 +7,12 @@ from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledRelationTarget,
 )
+from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
 from sqlbuild.compiler.planner.helpers.resolve.helpers.config import get_config_str
 from sqlbuild.compiler.planner.helpers.resolve.helpers.cursor import compute_cursor_bounds
+from sqlbuild.compiler.planner.helpers.resolve.helpers.cursor_inputs import (
+    has_model_backed_cursor_inputs,
+)
 from sqlbuild.compiler.planner.helpers.resolve.helpers.refs import (
     resolve_dbt_ref_references,
     resolve_ref_references,
@@ -44,13 +48,6 @@ def resolve_model_sql(
 
     query_sql: str = model.query_sql
 
-    query_sql = resolve_source_references(
-        query_sql=query_sql,
-        source_map=source_map,
-        source_warehouse_columns=source_warehouse_columns,
-        star_exclude_keyword=star_exclude_keyword,
-    )
-
     cursor_bounds: CursorBounds | None = _compute_model_cursor_bounds(
         model=model,
         snapshot=snapshot,
@@ -58,9 +55,20 @@ def resolve_model_sql(
         full_refresh=full_refresh,
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
+        model_targets=model_targets,
+        seed_targets=seed_targets,
     )
 
     cursor_inputs: dict[str, str] = _get_cursor_inputs(model)
+
+    query_sql = resolve_source_references(
+        query_sql=query_sql,
+        source_map=source_map,
+        source_warehouse_columns=source_warehouse_columns,
+        star_exclude_keyword=star_exclude_keyword,
+        cursor_bounds=cursor_bounds,
+        cursor_inputs=cursor_inputs,
+    )
 
     query_sql = resolve_ref_references(
         query_sql=query_sql,
@@ -83,6 +91,8 @@ def _compute_model_cursor_bounds(
     full_refresh: bool,
     start_cursor_override: str | None,
     end_cursor_override: str | None,
+    model_targets: dict[str, CompiledRelationTarget],
+    seed_targets: dict[str, CompiledRelationTarget],
 ) -> CursorBounds | None:
     """Compute cursor bounds for a model if it is incremental with a cursor."""
 
@@ -91,6 +101,14 @@ def _compute_model_cursor_bounds(
 
     if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
         return None
+
+    if has_model_backed_cursor_inputs(
+        model=model,
+        model_targets=model_targets,
+        seed_targets=seed_targets,
+        cursor_inputs=_get_cursor_inputs(model),
+    ):
+        return CursorBounds(start=MICROBATCH_START_SENTINEL, end=MICROBATCH_END_SENTINEL)
 
     if full_refresh:
         return None

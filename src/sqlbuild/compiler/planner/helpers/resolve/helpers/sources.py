@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 
 _SOURCE_PATTERN: re.Pattern[str] = re.compile(r'__source\("([^"]+)"\)')
@@ -16,6 +17,8 @@ def resolve_source_references(
     source_map: dict[str, SourceEntry],
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
     star_exclude_keyword: str,
+    cursor_bounds: CursorBounds | None,
+    cursor_inputs: dict[str, str],
 ) -> str:
     """Replace all __source() calls in query SQL with resolved names or CAST subqueries."""
 
@@ -25,16 +28,24 @@ def resolve_source_references(
         if source_entry is None:
             return match.group(0)
         qualified_name: str = _build_source_qualified_name(source_entry)
-        if not source_entry.type_enforcement:
-            return qualified_name
+        resolved_source: str = qualified_name
         warehouse_cols: tuple[ColumnInfo, ...] | None = source_warehouse_columns.get(source_name)
-        if warehouse_cols is None or not warehouse_cols:
-            return qualified_name
-        return _build_cast_subquery(
-            qualified_name=qualified_name,
-            declared_columns=source_entry.columns,
-            warehouse_columns=warehouse_cols,
-            star_exclude_keyword=star_exclude_keyword,
+        if source_entry.type_enforcement and warehouse_cols is not None and warehouse_cols:
+            resolved_source = _build_cast_subquery(
+                qualified_name=qualified_name,
+                declared_columns=source_entry.columns,
+                warehouse_columns=warehouse_cols,
+                star_exclude_keyword=star_exclude_keyword,
+            )
+        if cursor_bounds is None:
+            return resolved_source
+        cursor_column: str | None = cursor_inputs.get(source_name)
+        if cursor_column is None:
+            return resolved_source
+        return _build_cursor_subquery(
+            resolved_source=resolved_source,
+            cursor_column=cursor_column,
+            bounds=cursor_bounds,
         )
 
     return _SOURCE_PATTERN.sub(_replace_source, query_sql)
@@ -85,4 +96,19 @@ def _build_cast_subquery(
     exclude_list: str = ", ".join(cast_names)
     return (
         f"(SELECT * {star_exclude_keyword} ({exclude_list}), {cast_clause} FROM {qualified_name})"
+    )
+
+
+def _build_cursor_subquery(
+    *,
+    resolved_source: str,
+    cursor_column: str,
+    bounds: CursorBounds,
+) -> str:
+    """Wrap a resolved source relation in a cursor-filtered subquery."""
+
+    return (
+        f"(SELECT * FROM {resolved_source}"
+        f" WHERE {cursor_column} >= '{bounds.start}'"
+        f" AND {cursor_column} < '{bounds.end}')"
     )

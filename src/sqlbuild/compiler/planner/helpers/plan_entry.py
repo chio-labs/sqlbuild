@@ -17,6 +17,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import SqlReferenceKind
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
 from sqlbuild.compiler.planner.helpers.changes.main import detect_model_changes
 from sqlbuild.compiler.planner.helpers.cursor_type_check import (
     check_cursor_type_consistency,
@@ -123,14 +124,6 @@ def plan_model(
     unique_key: tuple[str, ...] = _get_unique_key(model)
     warehouse_columns: tuple[ColumnInfo, ...] = snapshot.existing_columns.get(model.name, ())
 
-    cursor_bounds: CursorBounds | None = _compute_plan_cursor_bounds(
-        model=model,
-        snapshot=snapshot,
-        backfill=backfill,
-        full_refresh=full_refresh,
-        start_cursor_override=start_cursor_override,
-        end_cursor_override=end_cursor_override,
-    )
     materialization_type: MaterializationType = get_materialization_type(model)
 
     warnings: tuple[PlanWarning, ...] = build_model_warnings(
@@ -151,6 +144,16 @@ def plan_model(
         seed_targets=seed_targets,
         source_map=source_map,
         cursor_column=cursor_column,
+    )
+    runtime_owned_cursor_bounds: bool = _has_model_backed_cursor_inputs(cursor_input_relations)
+    cursor_bounds: CursorBounds | None = _compute_plan_cursor_bounds(
+        model=model,
+        snapshot=snapshot,
+        backfill=backfill,
+        full_refresh=full_refresh,
+        start_cursor_override=start_cursor_override,
+        end_cursor_override=end_cursor_override,
+        runtime_owned_cursor_bounds=runtime_owned_cursor_bounds,
     )
 
     cursor_type_warning: PlanWarning | None = check_cursor_type_consistency(
@@ -173,6 +176,7 @@ def plan_model(
         backfill=backfill,
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
+        runtime_owned_cursor_bounds=runtime_owned_cursor_bounds,
     )
 
     fingerprint: Fingerprint | None = snapshot.fingerprints.get(model.name)
@@ -193,7 +197,11 @@ def plan_model(
         if isinstance(raw_placeholders, dict):
             custom_placeholders = {str(k): str(v) for k, v in raw_placeholders.items()}
 
-    ddl_cursor_bounds: CursorBounds | None = microbatch_range if microbatch_range else cursor_bounds
+    ddl_cursor_bounds: CursorBounds | None = (
+        _build_runtime_placeholder_bounds()
+        if runtime_owned_cursor_bounds and cursor_column is not None
+        else (microbatch_range if microbatch_range else cursor_bounds)
+    )
     logical_ddl: str = _build_logical_ddl_from_adapter(
         adapter=adapter,
         action=action,
@@ -429,6 +437,7 @@ def _compute_microbatch_range(
     backfill: BackfillResult,
     start_cursor_override: str | None,
     end_cursor_override: str | None,
+    runtime_owned_cursor_bounds: bool,
 ) -> CursorBounds | None:
     """Compute the real overall cursor range for microbatch batch splitting."""
 
@@ -437,6 +446,8 @@ def _compute_microbatch_range(
         return None
     incremental_mode: str | None = _get_config_str(model, "incremental_mode")
     if incremental_mode != IncrementalMode.MICROBATCH:
+        return None
+    if runtime_owned_cursor_bounds:
         return None
     cursor_column: str | None = _get_config_str(model, "cursor")
     if cursor_column is None:
@@ -483,12 +494,15 @@ def _compute_plan_cursor_bounds(
     full_refresh: bool,
     start_cursor_override: str | None,
     end_cursor_override: str | None,
+    runtime_owned_cursor_bounds: bool,
 ) -> CursorBounds | None:
     """Compute cursor bounds for inclusion on the plan entry."""
 
     materialized: str | None = _get_config_str(model, "materialized")
     cursor_column: str | None = _get_config_str(model, "cursor")
     if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
+        return None
+    if runtime_owned_cursor_bounds:
         return None
     if full_refresh:
         return None
@@ -583,12 +597,7 @@ def _build_cursor_input_relations(
     """Build cursor-bearing input relation metadata for runtime range discovery."""
 
     materialized: str | None = _get_config_str(model, "materialized")
-    incremental_mode: str | None = _get_config_str(model, "incremental_mode")
-    if (
-        materialized != MaterializationType.INCREMENTAL
-        or incremental_mode != IncrementalMode.MICROBATCH
-        or cursor_column is None
-    ):
+    if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
         return ()
 
     cursor_inputs: dict[str, str] = _get_cursor_inputs(model=model, cursor_column=cursor_column)
@@ -606,9 +615,29 @@ def _build_cursor_input_relations(
         )
         if relation is not None:
             relations.append(
-                CursorInputRelation(relation=relation, cursor_column=input_cursor_column)
+                CursorInputRelation(
+                    relation=relation,
+                    cursor_column=input_cursor_column,
+                    is_model_backed=(
+                        ref.ref_kind == SqlReferenceKind.REF and ref.ref_name in model_targets
+                    ),
+                )
             )
     return tuple(relations)
+
+
+def _has_model_backed_cursor_inputs(
+    cursor_input_relations: tuple[CursorInputRelation, ...],
+) -> bool:
+    """Return whether any cursor input relation is backed by another model."""
+
+    return any(relation.is_model_backed for relation in cursor_input_relations)
+
+
+def _build_runtime_placeholder_bounds() -> CursorBounds:
+    """Return placeholder cursor bounds for runtime-owned models."""
+
+    return CursorBounds(start=MICROBATCH_START_SENTINEL, end=MICROBATCH_END_SENTINEL)
 
 
 def _resolve_cursor_input_relation(

@@ -110,6 +110,7 @@ class CursorInputRelation:
 
     relation: str
     cursor_column: str
+    is_model_backed: bool = False
 
 
 @dataclass(frozen=True)

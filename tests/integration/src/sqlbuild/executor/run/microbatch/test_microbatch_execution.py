@@ -58,6 +58,41 @@ _INT_MODEL_SQL: str = (
 
 SUCCESS_TEST_CASES: list[MicrobatchSuccessTestCase] = [
     MicrobatchSuccessTestCase(
+        description="model-backed cursor input resolves runtime range for microbatch",
+        setup_sql=(
+            "CREATE TABLE main.fact_orders (id INTEGER, ordered_at TIMESTAMP, payload VARCHAR)",
+            "INSERT INTO main.fact_orders VALUES "
+            "(1, '2026-01-01 00:30:00', 'a'), "
+            "(2, '2026-01-01 01:30:00', 'b')",
+            "CREATE TABLE main.orders (id INTEGER, activity_hour TIMESTAMP, payload VARCHAR)",
+        ),
+        model_sql=(
+            "SELECT id, DATE_TRUNC('hour', ordered_at) AS activity_hour, payload "
+            "FROM main.fact_orders "
+            f"WHERE ordered_at >= '{MICROBATCH_START_SENTINEL}' "
+            f"AND ordered_at < '{MICROBATCH_END_SENTINEL}'"
+        ),
+        target_schema="main",
+        target_name="orders",
+        incremental_strategy="delete_insert",
+        cursor_column="activity_hour",
+        cursor_type="timestamp",
+        batch_size="1h",
+        microbatch_start="2026-01-01T00:00:00",
+        microbatch_end="2026-01-01T02:00:00",
+        use_plan_microbatch_range=False,
+        cursor_input_relations=(("main.fact_orders", "ordered_at"),),
+        cursor_inputs_model_backed=True,
+        unique_key=("id",),
+        expected_row_count=2,
+        expected_query_results=(
+            (
+                "SELECT id, payload FROM main.orders ORDER BY id",
+                ((1, "a"), (2, "b")),
+            ),
+        ),
+    ),
+    MicrobatchSuccessTestCase(
         description="timestamp microbatch appends 3 hourly batches",
         setup_sql=(
             _TS_SOURCE_SQL,

@@ -24,6 +24,10 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import CursorType, IncrementalStrategy, OnSchemaChange
 from sqlbuild.executor.auditing.main import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.run.helpers.cursor_bounds import (
+    has_model_backed_cursor_inputs,
+    resolve_runtime_cursor_bounds,
+)
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.incremental import (
@@ -72,6 +76,7 @@ def execute_microbatch_entry(
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
     statement_recorder: StatementRecorder = StatementRecorder()
+    runtime_owned_cursor_bounds: bool = has_model_backed_cursor_inputs(entry.cursor_input_relations)
 
     try:
         statement_recorder.record_many(render_hooks(hooks=entry.pre_hook, phase_label="pre_hook"))
@@ -93,7 +98,34 @@ def execute_microbatch_entry(
         )
 
     microbatch_range: CursorBounds | None = entry.microbatch_range
-    if is_full_refresh:
+    if runtime_owned_cursor_bounds:
+        if entry.cursor_column is None:
+            return build_failed_result(
+                entry=entry,
+                phase=ExecutionPhase.STAGING,
+                error="runtime-owned cursor resolution requires cursor_column",
+                warnings=warnings,
+                audit_results=audit_results,
+                statement_recorder=statement_recorder,
+            )
+        try:
+            microbatch_range = resolve_runtime_cursor_bounds(
+                adapter=adapter,
+                connection=connection,
+                target_relation=target_qualified,
+                cursor_column=entry.cursor_column,
+                cursor_input_relations=entry.cursor_input_relations,
+            )
+        except Exception as exc:
+            return build_failed_result(
+                entry=entry,
+                phase=ExecutionPhase.STAGING,
+                error=f"failed to discover runtime microbatch cursor range: {exc}",
+                warnings=warnings,
+                audit_results=audit_results,
+                statement_recorder=statement_recorder,
+            )
+    elif is_full_refresh:
         try:
             microbatch_range = _discover_cursor_range(
                 adapter=adapter,

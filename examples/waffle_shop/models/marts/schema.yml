@@ -44,3 +44,16 @@ models:
           name: orders placed is non-negative
           expression: "orders_placed >= 0"
           run_scope: delta_and_final
+
+  - name: daily_activity_rollup
+    description: Downstream daily microbatch rollup with a wider batch size than its hourly upstream.
+    columns:
+      - name: activity_day
+        audits:
+          - not_null:
+              run_scope: delta_and_final
+    audits:
+      - expression_is_true:
+          name: daily orders placed is non-negative
+          expression: "orders_placed >= 0"
+          run_scope: delta_and_final

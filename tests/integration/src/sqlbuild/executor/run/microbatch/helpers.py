@@ -64,11 +64,15 @@ def build_microbatch_plan_entry(
             start=test_case.microbatch_start,
             end=test_case.microbatch_end,
         )
-        if not test_case.is_full_refresh
+        if not test_case.is_full_refresh and test_case.use_plan_microbatch_range
         else None
     )
     cursor_input_relations: tuple[CursorInputRelation, ...] = tuple(
-        CursorInputRelation(relation=relation, cursor_column=cursor_column)
+        CursorInputRelation(
+            relation=relation,
+            cursor_column=cursor_column,
+            is_model_backed=test_case.cursor_inputs_model_backed,
+        )
         for relation, cursor_column in test_case.cursor_input_relations
     )
 
