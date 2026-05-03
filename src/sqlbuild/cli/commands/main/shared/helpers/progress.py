@@ -8,12 +8,6 @@ from dataclasses import dataclass
 
 from sqlbuild.adapter.shared.models import LifeCycleEvent
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
-from sqlbuild.cli.commands.main.shared.helpers.colors import (
-    blue_dim,
-    colorize_completion,
-    colorize_status,
-    dim,
-)
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.planner.types import MaterializationType
@@ -24,6 +18,7 @@ from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.shared.helpers.colors import blue_dim, colorize_completion, colorize_status, dim
 
 _TYPE_WIDTH: int = 10
 _MAX_NAME_WIDTH: int = 60
@@ -54,6 +49,7 @@ class BuildProgressCallbacks:
         plan: PlanOutput,
         use_color: bool,
         verbose: bool = False,
+        debug: bool = False,
     ) -> None:
         self._model_entry_map: dict[str, ModelPlanEntry] = {
             entry.name: entry for entry in plan.model_entries
@@ -63,7 +59,9 @@ class BuildProgressCallbacks:
         self._counter: int = 0
         self._use_color: bool = use_color
         self._verbose: bool = verbose
-        self._is_tty: bool = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+        self._debug: bool = debug
+        self._is_tty: bool = hasattr(sys.stdout, "isatty") and sys.stdout.isatty() and not debug
+        self._stream = sys.stderr if debug else sys.stdout
         self._start_time: float = time.monotonic()
         self._current_node_name: str = ""
         self._current_node_type: str = ""
@@ -94,18 +92,18 @@ class BuildProgressCallbacks:
     def _write_sql_block(self, sql: str) -> None:
         """Write a SQL block with minimal indent and dim styling."""
 
-        sys.stdout.write("\n")
+        self._stream.write("\n")
         sql_line: str
         for sql_line in _format_display_sql(sql).split("\n"):
             styled: str = dim(f"    {sql_line}") if self._use_color else f"    {sql_line}"
-            sys.stdout.write(f"{styled}\n")
-        sys.stdout.write("\n")
+            self._stream.write(f"{styled}\n")
+        self._stream.write("\n")
 
     def _write_log_block(self, message: str) -> None:
         """Write a log message with indent and muted styling."""
 
         styled: str = blue_dim(f"    log  {message}") if self._use_color else f"    log  {message}"
-        sys.stdout.write(f"\n{styled}\n")
+        self._stream.write(f"\n{styled}\n")
 
     def on_node_start(self, name: str, materialization_type: str) -> None:
         self._current_node_name = name
@@ -130,8 +128,8 @@ class BuildProgressCallbacks:
             )
         nw: int = self._name_width
         line: str = f"  {ctr}  {display_type:<{_TYPE_WIDTH}}{name_display:<{nw}} {status}"
-        sys.stdout.write(f"\r\033[K{line}")
-        sys.stdout.flush()
+        self._stream.write(f"\r\033[K{line}")
+        self._stream.flush()
 
     def on_node_complete(self, node_result: object) -> None:
         if isinstance(node_result, SqlTestExecutionResult):
@@ -142,7 +140,7 @@ class BuildProgressCallbacks:
             return
 
         if self._is_tty:
-            sys.stdout.write("\r\033[K")
+            self._stream.write("\r\033[K")
 
         self._counter += 1
         ctr: str = f"{self._counter}/{self._total}".rjust(len(str(self._total)) * 2 + 1)
@@ -155,10 +153,10 @@ class BuildProgressCallbacks:
             duration: str = _format_duration(node_result.duration_ms)
             seed_name: str = _truncate_name(node_result.seed_name, self._name_width)
             nw: int = self._name_width
-            sys.stdout.write(
+            self._stream.write(
                 f"  {ctr}  {'seed':<{_TYPE_WIDTH}}{seed_name:<{nw}} {status:<6} {duration}\n"
             )
-            sys.stdout.flush()
+            self._stream.flush()
             return
 
         if isinstance(node_result, ModelExecutionResult):
@@ -191,7 +189,7 @@ class BuildProgressCallbacks:
             f"  {ctr}  {display_type:<{_TYPE_WIDTH}}{name_display:<{nw}}"
             f" {status:<6} {duration}{detail}\n"
         )
-        sys.stdout.write(line)
+        self._stream.write(line)
 
         if self._verbose:
             event: LifeCycleEvent
@@ -216,7 +214,7 @@ class BuildProgressCallbacks:
                 use_color=self._use_color,
             )
             test_name: str = _truncate_name(test_result.test_name, sub_nw)
-            sys.stdout.write(
+            self._stream.write(
                 f"{sub_pad}{'test':<{_TYPE_WIDTH}}{test_name:<{sub_nw}} {test_status}\n"
             )
 
@@ -240,12 +238,12 @@ class BuildProgressCallbacks:
                 f"{sub_pad}{entry.label:<{_TYPE_WIDTH}}{audit_name:<{sub_nw}}"
                 f" {audit_status}{audit_detail}\n"
             )
-            sys.stdout.write(audit_line)
+            self._stream.write(audit_line)
 
             if self._verbose and entry.executed_sql is not None:
                 self._write_sql_block(entry.executed_sql)
 
-        sys.stdout.flush()
+        self._stream.flush()
 
 
 def format_build_header(*, command: str, target: str | None, concurrency: int) -> str:

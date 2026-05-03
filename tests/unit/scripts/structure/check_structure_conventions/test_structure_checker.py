@@ -789,6 +789,33 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=(),
     ),
     CheckPathsTestCase(
+        description="allows imports from top-level shared boundary",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/shared/__init__.py": '"""Shared."""\n',
+            "src/sqlbuild/shared/helpers/__init__.py": '"""Shared helpers."""\n',
+            "src/sqlbuild/shared/helpers/colors.py": dedent(
+                """
+                def blue(text: str) -> str:
+                    return text
+                """
+            ).strip()
+            + "\n",
+            "src/sqlbuild/example/discovery/__init__.py": '"""Discovery."""\n',
+            "src/sqlbuild/example/discovery/main.py": dedent(
+                """
+                from sqlbuild.shared.helpers.colors import blue
+
+
+                def discover_name() -> str:
+                    return blue("demo")
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=(),
+    ),
+    CheckPathsTestCase(
         description="allows integrations client module with a single public class",
         repo_files=compliant_repo_files()
         | {

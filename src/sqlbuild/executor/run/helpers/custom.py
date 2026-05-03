@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import Any
 
@@ -20,6 +21,7 @@ from sqlbuild.executor.run.helpers.results import build_failed_result
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.helpers.naming import build_qualified_name
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -54,12 +56,13 @@ def execute_custom_entry(
     statement_recorder: StatementRecorder = StatementRecorder()
 
     try:
-        execute_hooks(
-            connection=connection,
-            adapter=adapter,
-            hooks=entry.pre_hook,
-            phase_label="pre_hook",
-        )
+        with diagnostics_context(sqlbuild_phase="pre_hook", sqlbuild_action_name="run"):
+            execute_hooks(
+                connection=connection,
+                adapter=adapter,
+                hooks=entry.pre_hook,
+                phase_label="pre_hook",
+            )
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -110,11 +113,13 @@ def execute_custom_entry(
         schema_findings=schema_findings,
         run_audits=run_audits_fn,
         on_progress=on_progress,
+        logger=logging.getLogger(f"sqlbuild.materialization.{entry.name}"),
         statement_recorder=statement_recorder,
     )
 
     try:
-        result: MaterializationResult = materialize_fn(ctx)
+        with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="custom"):
+            result: MaterializationResult = materialize_fn(ctx)
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -177,12 +182,13 @@ def execute_custom_entry(
             )
 
     try:
-        execute_hooks(
-            connection=connection,
-            adapter=adapter,
-            hooks=entry.post_hook,
-            phase_label="post_hook",
-        )
+        with diagnostics_context(sqlbuild_phase="post_hook", sqlbuild_action_name="run"):
+            execute_hooks(
+                connection=connection,
+                adapter=adapter,
+                hooks=entry.post_hook,
+                phase_label="post_hook",
+            )
     except Exception as exc:
         _cleanup_relations(
             adapter=adapter,

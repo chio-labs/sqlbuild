@@ -14,6 +14,7 @@ from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from sqlbuild.compiler.compile.models import CompiledRelationTarget
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import PlanReason
+from sqlbuild.diagnostics.main import configure_diagnostics
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
@@ -72,13 +73,20 @@ _PROJECT_YML: str = (
                 "checking partition state",
                 "building initial partition range",
             ),
+            expected_diagnostic_fragments=(
+                "DEBUG materialization.test_model "
+                "checking partition state table=main.partition_state",
+            ),
         ),
     ],
     ids=["first run builds all partitions and populates tracking table"],
 )
 def test_given_partition_tracked_materialization_when_first_run_then_builds_all_partitions(
     test_case: PartitionTrackingTestCase,
+    tmp_path: Path,
 ) -> None:
+    target_dir: Path = tmp_path / "target"
+    configure_diagnostics(target_dir=target_dir, debug=False)
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
     sql_stmt: str
@@ -140,6 +148,11 @@ def test_given_partition_tracked_materialization_when_first_run_then_builds_all_
             event.kind == LifeCycleEventKind.LOG and log_fragment in event.content
             for event in result.lifecycle_events
         ), f"expected '{log_fragment}' in lifecycle_events"
+
+    diagnostic_output: str = (target_dir / "sqlbuild.log").read_text(encoding="utf-8")
+    diagnostic_fragment: str
+    for diagnostic_fragment in test_case.expected_diagnostic_fragments:
+        assert diagnostic_fragment in diagnostic_output
 
 
 # --- Existing relation detection tests ---

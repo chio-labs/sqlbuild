@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from sqlbuild.adapter.shared.models import ColumnInfo, CursorValue
+from sqlbuild.shared.helpers.diagnostics_logging import log_sql
 
 
 def build_attach_sql(attach_entry: dict[str, object]) -> str:
@@ -30,16 +32,18 @@ def build_attach_sql(attach_entry: dict[str, object]) -> str:
 def describe_relation(connection: Any, relation: str) -> tuple[ColumnInfo, ...]:
     """Return column metadata for a relation using DESCRIBE."""
 
-    rows: list[tuple[Any, ...]] = connection.execute(f"DESCRIBE {relation}").fetchall()
+    sql: str = f"DESCRIBE {relation}"
+    log_sql(logger=logging.getLogger("sqlbuild.adapter.duckdb"), sql=sql)
+    rows: list[tuple[Any, ...]] = connection.execute(sql).fetchall()
     return tuple(ColumnInfo(name=row[0], type=row[1]) for row in rows)
 
 
 def query_column_names(connection: Any, sql: str) -> list[str]:
     """Return column names produced by a SQL query without materializing rows."""
 
-    rows: list[tuple[Any, ...]] = connection.execute(
-        f"DESCRIBE SELECT * FROM ({sql}) AS __describe_source"
-    ).fetchall()
+    describe_sql: str = f"DESCRIBE SELECT * FROM ({sql}) AS __describe_source"
+    log_sql(logger=logging.getLogger("sqlbuild.adapter.duckdb"), sql=describe_sql)
+    rows: list[tuple[Any, ...]] = connection.execute(describe_sql).fetchall()
     return [row[0] for row in rows]
 
 

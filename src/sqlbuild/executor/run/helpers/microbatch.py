@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -34,10 +35,12 @@ from sqlbuild.executor.run.helpers.type_enforcement import enforce_types_staged
 from sqlbuild.executor.run.models import BatchWindow, ModelExecutionResult
 from sqlbuild.executor.shared.helpers.naming import build_qualified_name
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context, log_debug_event
 from sqlbuild.spec.models.source import SourceEntry
 
 _DEFAULT_ON_SCHEMA_CHANGE: OnSchemaChange = OnSchemaChange.APPEND_NEW_COLUMNS
 _DURATION_PATTERN_STR: str = r"^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$"
+_DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 
 
 def execute_microbatch_entry(
@@ -72,12 +75,13 @@ def execute_microbatch_entry(
 
     try:
         statement_recorder.record_many(render_hooks(hooks=entry.pre_hook, phase_label="pre_hook"))
-        execute_hooks(
-            connection=connection,
-            adapter=adapter,
-            hooks=entry.pre_hook,
-            phase_label="pre_hook",
-        )
+        with diagnostics_context(sqlbuild_phase="pre_hook", sqlbuild_action_name="run"):
+            execute_hooks(
+                connection=connection,
+                adapter=adapter,
+                hooks=entry.pre_hook,
+                phase_label="pre_hook",
+            )
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -159,12 +163,13 @@ def execute_microbatch_entry(
 
     if is_full_refresh:
         try:
-            adapter.drop(
-                connection,
-                target=target_qualified,
-                if_exists=True,
-                statement_recorder=statement_recorder,
-            )
+            with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_target"):
+                adapter.drop(
+                    connection,
+                    target=target_qualified,
+                    if_exists=True,
+                    statement_recorder=statement_recorder,
+                )
         except Exception as exc:
             return build_failed_result(
                 entry=entry,
@@ -179,6 +184,16 @@ def execute_microbatch_entry(
     completed_batches: int = 0
     batch: BatchWindow
     for batch in batches:
+        window_text: str = f"{batch.start}..{batch.end}"
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "",
+            sqlbuild_subject="model",
+            sqlbuild_name=entry.name,
+            sqlbuild_event="batch_start",
+            sqlbuild_phase="batch",
+            sqlbuild_window=window_text,
+        )
         batch_sql: str = _substitute_sentinels(
             sql=entry.resolved_sql,
             batch_start=batch.start,
@@ -186,18 +201,23 @@ def execute_microbatch_entry(
         )
 
         try:
-            adapter.drop(
-                connection,
-                target=delta_qualified,
-                if_exists=True,
-                statement_recorder=statement_recorder,
-            )
-            adapter.create_table_as(
-                connection,
-                target=delta_qualified,
-                sql=batch_sql,
-                statement_recorder=statement_recorder,
-            )
+            with diagnostics_context(
+                sqlbuild_phase="materialize",
+                sqlbuild_action_name="create_delta",
+                sqlbuild_window=window_text,
+            ):
+                adapter.drop(
+                    connection,
+                    target=delta_qualified,
+                    if_exists=True,
+                    statement_recorder=statement_recorder,
+                )
+                adapter.create_table_as(
+                    connection,
+                    target=delta_qualified,
+                    sql=batch_sql,
+                    statement_recorder=statement_recorder,
+                )
         except Exception as exc:
             return build_failed_result(
                 entry=entry,
@@ -211,28 +231,33 @@ def execute_microbatch_entry(
 
         if not schema_checked and not is_full_refresh:
             try:
-                delta_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
-                    connection,
-                    database=target_database,
-                    schema=target_schema,
-                    name=delta_table,
-                )
-                target_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
-                    connection,
-                    database=target_database,
-                    schema=target_schema,
-                    name=target_table,
-                )
-                _apply_schema_change(
-                    adapter=adapter,
-                    connection=connection,
-                    target_qualified=target_qualified,
-                    target_columns=target_columns,
-                    delta_columns=delta_columns,
-                    on_schema_change=entry.on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE,
-                    warnings=warnings,
-                    statement_recorder=statement_recorder,
-                )
+                with diagnostics_context(
+                    sqlbuild_phase="schema_change",
+                    sqlbuild_action_name="inspect",
+                    sqlbuild_window=window_text,
+                ):
+                    delta_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
+                        connection,
+                        database=target_database,
+                        schema=target_schema,
+                        name=delta_table,
+                    )
+                    target_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
+                        connection,
+                        database=target_database,
+                        schema=target_schema,
+                        name=target_table,
+                    )
+                    _apply_schema_change(
+                        adapter=adapter,
+                        connection=connection,
+                        target_qualified=target_qualified,
+                        target_columns=target_columns,
+                        delta_columns=delta_columns,
+                        on_schema_change=entry.on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE,
+                        warnings=warnings,
+                        statement_recorder=statement_recorder,
+                    )
             except Exception as exc:
                 return build_failed_result(
                     entry=entry,
@@ -247,16 +272,21 @@ def execute_microbatch_entry(
 
         if entry.type_enforcement and declared_columns:
             try:
-                enforce_types_staged(
-                    adapter=adapter,
-                    connection=connection,
-                    staging_qualified=delta_qualified,
-                    staging_database=target_database,
-                    staging_schema=target_schema,
-                    staging_table=delta_table,
-                    declared_columns=declared_columns,
-                    statement_recorder=statement_recorder,
-                )
+                with diagnostics_context(
+                    sqlbuild_phase="type_enforcement",
+                    sqlbuild_action_name="rebuild_delta",
+                    sqlbuild_window=window_text,
+                ):
+                    enforce_types_staged(
+                        adapter=adapter,
+                        connection=connection,
+                        staging_qualified=delta_qualified,
+                        staging_database=target_database,
+                        staging_schema=target_schema,
+                        staging_table=delta_table,
+                        declared_columns=declared_columns,
+                        statement_recorder=statement_recorder,
+                    )
             except Exception as exc:
                 return build_failed_result(
                     entry=entry,
@@ -299,43 +329,48 @@ def execute_microbatch_entry(
             )
 
         try:
-            target_columns_for_dml: tuple[ColumnInfo, ...] = (
-                adapter.get_columns(
+            with diagnostics_context(
+                sqlbuild_phase="dml",
+                sqlbuild_action_name="apply",
+                sqlbuild_window=window_text,
+            ):
+                target_columns_for_dml: tuple[ColumnInfo, ...] = (
+                    adapter.get_columns(
+                        connection,
+                        database=target_database,
+                        schema=target_schema,
+                        name=target_table,
+                    )
+                    if not is_full_refresh or completed_batches > 0
+                    else ()
+                )
+                delta_columns_for_dml: tuple[ColumnInfo, ...] = adapter.get_columns(
                     connection,
                     database=target_database,
                     schema=target_schema,
-                    name=target_table,
+                    name=delta_table,
                 )
-                if not is_full_refresh or completed_batches > 0
-                else ()
-            )
-            delta_columns_for_dml: tuple[ColumnInfo, ...] = adapter.get_columns(
-                connection,
-                database=target_database,
-                schema=target_schema,
-                name=delta_table,
-            )
-            _validate_cursor_output_columns(entry=entry, delta_columns=delta_columns_for_dml)
-            if is_full_refresh and completed_batches == 0:
-                adapter.create_table_as(
-                    connection,
-                    target=target_qualified,
-                    sql=f"SELECT * FROM {delta_qualified}",
-                    statement_recorder=statement_recorder,
-                )
-            else:
-                _execute_dml(
-                    adapter=adapter,
-                    connection=connection,
-                    target_qualified=target_qualified,
-                    delta_qualified=delta_qualified,
-                    target_columns=target_columns_for_dml,
-                    delta_columns=delta_columns_for_dml,
-                    entry=entry,
-                    cursor_start=batch.start,
-                    cursor_end=batch.end,
-                    statement_recorder=statement_recorder,
-                )
+                _validate_cursor_output_columns(entry=entry, delta_columns=delta_columns_for_dml)
+                if is_full_refresh and completed_batches == 0:
+                    adapter.create_table_as(
+                        connection,
+                        target=target_qualified,
+                        sql=f"SELECT * FROM {delta_qualified}",
+                        statement_recorder=statement_recorder,
+                    )
+                else:
+                    _execute_dml(
+                        adapter=adapter,
+                        connection=connection,
+                        target_qualified=target_qualified,
+                        delta_qualified=delta_qualified,
+                        target_columns=target_columns_for_dml,
+                        delta_columns=delta_columns_for_dml,
+                        entry=entry,
+                        cursor_start=batch.start,
+                        cursor_end=batch.end,
+                        statement_recorder=statement_recorder,
+                    )
         except Exception as exc:
             return build_failed_result(
                 entry=entry,
@@ -347,11 +382,26 @@ def execute_microbatch_entry(
                 statement_recorder=statement_recorder,
             )
 
-        adapter.drop(
-            connection,
-            target=delta_qualified,
-            if_exists=True,
-            statement_recorder=statement_recorder,
+        with diagnostics_context(
+            sqlbuild_phase="cleanup",
+            sqlbuild_action_name="drop_delta",
+            sqlbuild_window=window_text,
+        ):
+            adapter.drop(
+                connection,
+                target=delta_qualified,
+                if_exists=True,
+                statement_recorder=statement_recorder,
+            )
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "",
+            sqlbuild_subject="model",
+            sqlbuild_name=entry.name,
+            sqlbuild_event="batch_complete",
+            sqlbuild_phase="batch",
+            sqlbuild_window=window_text,
+            sqlbuild_status="ok",
         )
         completed_batches += 1
 
@@ -384,12 +434,13 @@ def execute_microbatch_entry(
 
     try:
         statement_recorder.record_many(render_hooks(hooks=entry.post_hook, phase_label="post_hook"))
-        execute_hooks(
-            connection=connection,
-            adapter=adapter,
-            hooks=entry.post_hook,
-            phase_label="post_hook",
-        )
+        with diagnostics_context(sqlbuild_phase="post_hook", sqlbuild_action_name="run"):
+            execute_hooks(
+                connection=connection,
+                adapter=adapter,
+                hooks=entry.post_hook,
+                phase_label="post_hook",
+            )
     except Exception as exc:
         return build_failed_result(
             entry=entry,

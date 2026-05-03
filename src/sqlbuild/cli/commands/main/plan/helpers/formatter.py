@@ -6,14 +6,6 @@ import difflib
 import re
 from collections import Counter
 
-from sqlbuild.cli.commands.main.shared.helpers.colors import (
-    blue_bold,
-    green,
-    green_bold,
-    red,
-    yellow,
-    yellow_bold,
-)
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
     ModelPlanEntry,
@@ -30,6 +22,7 @@ from sqlbuild.compiler.planner.types import (
     SchemaChangeKind,
     WarningSeverity,
 )
+from sqlbuild.shared.helpers.colors import blue_bold, green, green_bold, red, yellow, yellow_bold
 
 _REASON_GROUP_ORDER: tuple[PlanReason, ...] = (
     PlanReason.QUERY_CHANGED,

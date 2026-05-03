@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -37,6 +38,7 @@ class MaterializationContext:
     schema_findings: tuple[SchemaFinding, ...]
     run_audits: Callable[[str], tuple[AuditExecutionResult, ...]]
     on_progress: Callable[[str], None] | None
+    logger: logging.Logger
     statement_recorder: StatementRecorder = field(default_factory=StatementRecorder)
 
     def execute_sql(self, sql: str) -> Any:

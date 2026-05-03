@@ -34,6 +34,7 @@ from sqlbuild.executor.shared.types import (
     ExecutionStatus,
     TablePromotionMode,
 )
+from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -69,12 +70,13 @@ def execute_table_entry(
 
     try:
         statement_recorder.record_many(render_hooks(hooks=entry.pre_hook, phase_label="pre_hook"))
-        execute_hooks(
-            connection=connection,
-            adapter=adapter,
-            hooks=entry.pre_hook,
-            phase_label="pre_hook",
-        )
+        with diagnostics_context(sqlbuild_phase="pre_hook", sqlbuild_action_name="run"):
+            execute_hooks(
+                connection=connection,
+                adapter=adapter,
+                hooks=entry.pre_hook,
+                phase_label="pre_hook",
+            )
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -151,18 +153,21 @@ def _staged_lifecycle(
     """Staged table lifecycle: CTAS staging, type enforce, audit, promote."""
 
     try:
-        adapter.drop(
-            connection,
-            target=staging_qualified,
-            if_exists=True,
-            statement_recorder=statement_recorder,
-        )
-        adapter.create_table_as(
-            connection,
-            target=staging_qualified,
-            sql=entry.resolved_sql,
-            statement_recorder=statement_recorder,
-        )
+        with diagnostics_context(
+            sqlbuild_phase="materialize", sqlbuild_action_name="create_staging"
+        ):
+            adapter.drop(
+                connection,
+                target=staging_qualified,
+                if_exists=True,
+                statement_recorder=statement_recorder,
+            )
+            adapter.create_table_as(
+                connection,
+                target=staging_qualified,
+                sql=entry.resolved_sql,
+                statement_recorder=statement_recorder,
+            )
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -176,16 +181,19 @@ def _staged_lifecycle(
 
     if entry.type_enforcement and declared_columns:
         try:
-            enforce_types_staged(
-                adapter=adapter,
-                connection=connection,
-                staging_qualified=staging_qualified,
-                staging_database=target_database,
-                staging_schema=target_schema,
-                staging_table=staging_table,
-                declared_columns=declared_columns,
-                statement_recorder=statement_recorder,
-            )
+            with diagnostics_context(
+                sqlbuild_phase="type_enforcement", sqlbuild_action_name="rebuild_staging"
+            ):
+                enforce_types_staged(
+                    adapter=adapter,
+                    connection=connection,
+                    staging_qualified=staging_qualified,
+                    staging_database=target_database,
+                    staging_schema=target_schema,
+                    staging_table=staging_table,
+                    declared_columns=declared_columns,
+                    statement_recorder=statement_recorder,
+                )
         except Exception as exc:
             return build_failed_result(
                 entry=entry,
@@ -227,32 +235,35 @@ def _staged_lifecycle(
         )
 
     try:
-        existing: bool = adapter.relation_exists(
-            connection,
-            database=target_database,
-            schema=target_schema,
-            name=target_table,
-        )
+        with diagnostics_context(sqlbuild_phase="promote", sqlbuild_action_name="check_existing"):
+            existing: bool = adapter.relation_exists(
+                connection,
+                database=target_database,
+                schema=target_schema,
+                name=target_table,
+            )
         if existing:
-            adapter.swap(
-                connection,
-                left=target_qualified,
-                right=staging_qualified,
-                statement_recorder=statement_recorder,
-            )
-            adapter.drop(
-                connection,
-                target=staging_qualified,
-                if_exists=True,
-                statement_recorder=statement_recorder,
-            )
+            with diagnostics_context(sqlbuild_phase="promote", sqlbuild_action_name="swap"):
+                adapter.swap(
+                    connection,
+                    left=target_qualified,
+                    right=staging_qualified,
+                    statement_recorder=statement_recorder,
+                )
+                adapter.drop(
+                    connection,
+                    target=staging_qualified,
+                    if_exists=True,
+                    statement_recorder=statement_recorder,
+                )
         else:
-            adapter.rename(
-                connection,
-                source=staging_qualified,
-                target=target_qualified,
-                statement_recorder=statement_recorder,
-            )
+            with diagnostics_context(sqlbuild_phase="promote", sqlbuild_action_name="rename"):
+                adapter.rename(
+                    connection,
+                    source=staging_qualified,
+                    target=target_qualified,
+                    statement_recorder=statement_recorder,
+                )
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -266,12 +277,13 @@ def _staged_lifecycle(
 
     try:
         statement_recorder.record_many(render_hooks(hooks=entry.post_hook, phase_label="post_hook"))
-        execute_hooks(
-            connection=connection,
-            adapter=adapter,
-            hooks=entry.post_hook,
-            phase_label="post_hook",
-        )
+        with diagnostics_context(sqlbuild_phase="post_hook", sqlbuild_action_name="run"):
+            execute_hooks(
+                connection=connection,
+                adapter=adapter,
+                hooks=entry.post_hook,
+                phase_label="post_hook",
+            )
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -336,12 +348,13 @@ def _direct_lifecycle(
         )
 
     try:
-        adapter.create_table_as(
-            connection,
-            target=target_qualified,
-            sql=entry.resolved_sql,
-            statement_recorder=statement_recorder,
-        )
+        with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="create_table"):
+            adapter.create_table_as(
+                connection,
+                target=target_qualified,
+                sql=entry.resolved_sql,
+                statement_recorder=statement_recorder,
+            )
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -382,12 +395,13 @@ def _direct_lifecycle(
 
     try:
         statement_recorder.record_many(render_hooks(hooks=entry.post_hook, phase_label="post_hook"))
-        execute_hooks(
-            connection=connection,
-            adapter=adapter,
-            hooks=entry.post_hook,
-            phase_label="post_hook",
-        )
+        with diagnostics_context(sqlbuild_phase="post_hook", sqlbuild_action_name="run"):
+            execute_hooks(
+                connection=connection,
+                adapter=adapter,
+                hooks=entry.post_hook,
+                phase_label="post_hook",
+            )
     except Exception as exc:
         return build_failed_result(
             entry=entry,

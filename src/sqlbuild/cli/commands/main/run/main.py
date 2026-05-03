@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.colors import blue_bold, dim, supports_color
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.plan_format import format_plan
 from sqlbuild.cli.commands.main.shared.helpers.progress import (
@@ -24,6 +24,7 @@ from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.pipeline.main import run_build_pipeline
+from sqlbuild.shared.helpers.colors import blue_bold, dim, supports_color
 
 
 def run_run(
@@ -38,6 +39,7 @@ def run_run(
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     verbose: bool = False,
+    debug: bool = False,
 ) -> int:
     """Execute the run command."""
 
@@ -69,8 +71,9 @@ def run_run(
     sys.stdout.write("\n" + plan_text + "\n\n")
 
     callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
-        plan=plan_output, use_color=use_color, verbose=verbose
+        plan=plan_output, use_color=use_color, verbose=verbose, debug=debug
     )
+    progress_stream: TextIO = sys.stderr if debug else sys.stdout
     effective_concurrency: int = (
         concurrency
         if concurrency is not None
@@ -81,8 +84,8 @@ def run_run(
     )
     execution_label: str = blue_bold("Execution") if use_color else "Execution"
     header_detail: str = dim(header) if use_color else header
-    sys.stdout.write(f"{execution_label}  {header_detail}\n\n")
-    sys.stdout.flush()
+    progress_stream.write(f"{execution_label}  {header_detail}\n\n")
+    progress_stream.flush()
 
     result: BuildExecutionResult = run_build_pipeline(
         plan=plan_output,
@@ -106,7 +109,7 @@ def run_run(
     )
 
     footer: str = format_build_footer(result=result, elapsed=callbacks.elapsed, use_color=use_color)
-    sys.stdout.write("\n" + footer + "\n")
-    sys.stdout.flush()
+    progress_stream.write("\n" + footer + "\n")
+    progress_stream.flush()
 
     return 0 if result.status == BuildStatus.SUCCESS else 1

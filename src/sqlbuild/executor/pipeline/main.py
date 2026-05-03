@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import Any
 
@@ -48,10 +49,13 @@ def run_build_pipeline(
 
     promotion_mode: TablePromotionMode = resolve_promotion_mode(settings=settings, adapter=adapter)
     effective_concurrency: int = max(1, max_concurrency)
+    logger: logging.Logger = logging.getLogger("sqlbuild.executor.pipeline")
+    logger.debug("open scheduler connection")
     scheduler_connection: Any = adapter.connect(connection_config)
     worker_connections: list[Any] = []
     _i: int
     for _i in range(effective_concurrency):
+        logger.debug("open worker connection index=%s", _i)
         worker_connections.append(adapter.connect(connection_config))
     try:
         return execute_build_plan(
@@ -75,6 +79,8 @@ def run_build_pipeline(
         )
     finally:
         conn: Any
-        for conn in worker_connections:
+        for _i, conn in enumerate(worker_connections):
+            logger.debug("close worker connection index=%s", _i)
             adapter.close(conn)
+        logger.debug("close scheduler connection")
         adapter.close(scheduler_connection)

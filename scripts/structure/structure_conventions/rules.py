@@ -64,6 +64,8 @@ def check_top_level_domain_role_placement(repo_root: Path, file_path: Path) -> l
     relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
     if len(relative_parts) < 4 or relative_parts[:2] != ("src", "sqlbuild"):
         return []
+    if relative_parts[2] == "shared":
+        return []
 
     direct_child_name = relative_parts[3]
     if len(relative_parts) == 4 and direct_child_name in {
@@ -1050,7 +1052,7 @@ def check_cross_package_internal_imports(
                 )
             continue
 
-        if imported_domain in {"spec", "adapter"}:
+        if imported_domain in {"spec", "adapter", "shared"}:
             continue
 
         if len(imported_parts) >= 4:

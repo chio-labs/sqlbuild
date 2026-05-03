@@ -14,6 +14,7 @@ from sqlbuild.compiler.auditing.types import (
 from sqlbuild.compiler.compile.models import CompiledRelationTarget
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -38,8 +39,13 @@ def execute_audit(
         relation_overrides=relation_overrides,
     )
 
-    cursor: Any = adapter.execute(connection, executed_sql)
-    rows: list[Any] = cursor.fetchall()
+    with diagnostics_context(
+        sqlbuild_phase="audit",
+        sqlbuild_audit_name=audit.name,
+        sqlbuild_column_name=audit.attached_column_name,
+    ):
+        cursor: Any = adapter.execute(connection, executed_sql)
+        rows: list[Any] = cursor.fetchall()
     row_count: int = len(rows)
 
     outcome: AuditOutcome

@@ -8,12 +8,6 @@ from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.colors import (
-    bold,
-    colorize_status,
-    green_bold,
-    supports_color,
-)
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_connection_config
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.discovery.main import discover_project_inputs
@@ -22,6 +16,7 @@ from sqlbuild.compiler.pipeline.main import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.pipeline.main import run_audit_pipeline
+from sqlbuild.shared.helpers.colors import bold, colorize_status, green_bold, supports_color
 
 
 def run_audit(

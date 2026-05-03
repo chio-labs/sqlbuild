@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import logging
 import queue
 import time
 from collections import deque
@@ -42,6 +43,9 @@ from sqlbuild.executor.shared.types import ExecutionStatus, TablePromotionMode
 from sqlbuild.executor.testing.main import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context, log_debug_event
+
+_DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 
 
 class BuildScheduler:
@@ -319,14 +323,38 @@ class BuildScheduler:
         if self._on_node_start is not None:
             self._on_node_start(seed_entry.name, MaterializationType.SEED)
         start: float = time.monotonic()
-        result: SeedExecutionResult = execute_seed(
-            seed_entry=seed_entry,
-            adapter=self._adapter,
-            connection=connection,
-            statement_recorder=StatementRecorder(),
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "",
+            sqlbuild_subject="seed",
+            sqlbuild_name=seed_entry.name,
+            sqlbuild_event="start",
+            sqlbuild_kind="seed",
         )
+        with diagnostics_context(
+            sqlbuild_subject="seed",
+            sqlbuild_name=seed_entry.name,
+            sqlbuild_phase="load",
+            sqlbuild_kind="seed",
+        ):
+            result: SeedExecutionResult = execute_seed(
+                seed_entry=seed_entry,
+                adapter=self._adapter,
+                connection=connection,
+                statement_recorder=StatementRecorder(),
+            )
         duration: int = int((time.monotonic() - start) * 1000)
-        return dataclasses.replace(result, duration_ms=duration)
+        completed_result: SeedExecutionResult = dataclasses.replace(result, duration_ms=duration)
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "",
+            sqlbuild_subject="seed",
+            sqlbuild_name=seed_entry.name,
+            sqlbuild_event="complete",
+            sqlbuild_status=completed_result.status.lower(),
+            sqlbuild_duration_ms=duration,
+        )
+        return completed_result
 
     def _execute_test_node(self, key: CompiledObjectKey, connection: Any) -> SqlTestExecutionResult:
         test_entry: SqlTestPlanEntry | None = self._indexes.test_entries_by_key.get(key)
@@ -338,7 +366,33 @@ class BuildScheduler:
             )
         if self._on_progress is not None:
             self._on_progress(f"test: {test_entry.name}")
-        return execute_sql_test(test_entry=test_entry, adapter=self._adapter, connection=connection)
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "",
+            sqlbuild_subject="test",
+            sqlbuild_name=test_entry.name,
+            sqlbuild_event="start",
+        )
+        start: float = time.monotonic()
+        with diagnostics_context(
+            sqlbuild_subject="test",
+            sqlbuild_name=test_entry.name,
+            sqlbuild_phase="run",
+        ):
+            result: SqlTestExecutionResult = execute_sql_test(
+                test_entry=test_entry, adapter=self._adapter, connection=connection
+            )
+        duration: int = int((time.monotonic() - start) * 1000)
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "",
+            sqlbuild_subject="test",
+            sqlbuild_name=test_entry.name,
+            sqlbuild_event="complete",
+            sqlbuild_status=result.outcome.lower(),
+            sqlbuild_duration_ms=duration,
+        )
+        return result
 
     def _execute_model_node(self, key: CompiledObjectKey, connection: Any) -> ModelExecutionResult:
         model_entry: ModelPlanEntry | None = self._indexes.model_entries_by_key.get(key)
@@ -356,23 +410,46 @@ class BuildScheduler:
         )
 
         start: float = time.monotonic()
-        result: ModelExecutionResult = _dispatch_model(
-            entry=model_entry,
-            adapter=self._adapter,
-            connection=connection,
-            plan=self._plan,
-            model_audits=model_audits,
-            promotion_mode=self._promotion_mode,
-            run_id=self._run_id,
-            fingerprint_schema=self._fingerprint_schema,
-            custom_materializations=self._custom_materializations,
-            environment=self._environment,
-            effective_vars=self._effective_vars,
-            warehouse_relations=self._warehouse_relations,
-            on_progress=self._on_sub_progress,
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "",
+            sqlbuild_subject="model",
+            sqlbuild_name=model_entry.name,
+            sqlbuild_event="start",
+            sqlbuild_kind=model_entry.materialization_type,
         )
+        with diagnostics_context(
+            sqlbuild_subject="model",
+            sqlbuild_name=model_entry.name,
+            sqlbuild_kind=model_entry.materialization_type,
+        ):
+            result: ModelExecutionResult = _dispatch_model(
+                entry=model_entry,
+                adapter=self._adapter,
+                connection=connection,
+                plan=self._plan,
+                model_audits=model_audits,
+                promotion_mode=self._promotion_mode,
+                run_id=self._run_id,
+                fingerprint_schema=self._fingerprint_schema,
+                custom_materializations=self._custom_materializations,
+                environment=self._environment,
+                effective_vars=self._effective_vars,
+                warehouse_relations=self._warehouse_relations,
+                on_progress=self._on_sub_progress,
+            )
         duration: int = int((time.monotonic() - start) * 1000)
-        return dataclasses.replace(result, duration_ms=duration)
+        completed_result: ModelExecutionResult = dataclasses.replace(result, duration_ms=duration)
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "",
+            sqlbuild_subject="model",
+            sqlbuild_name=model_entry.name,
+            sqlbuild_event="complete",
+            sqlbuild_status=completed_result.status.lower(),
+            sqlbuild_duration_ms=duration,
+        )
+        return completed_result
 
     def _handle_completion(
         self,

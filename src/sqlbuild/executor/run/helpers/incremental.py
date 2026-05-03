@@ -19,6 +19,7 @@ from sqlbuild.executor.run.helpers.type_enforcement import enforce_types_staged
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.helpers.naming import build_qualified_name
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
 from sqlbuild.spec.models.source import SourceEntry
 
 _DEFAULT_ON_SCHEMA_CHANGE: OnSchemaChange = OnSchemaChange.APPEND_NEW_COLUMNS
@@ -55,12 +56,13 @@ def execute_incremental_entry(
 
     try:
         statement_recorder.record_many(render_hooks(hooks=entry.pre_hook, phase_label="pre_hook"))
-        execute_hooks(
-            connection=connection,
-            adapter=adapter,
-            hooks=entry.pre_hook,
-            phase_label="pre_hook",
-        )
+        with diagnostics_context(sqlbuild_phase="pre_hook", sqlbuild_action_name="run"):
+            execute_hooks(
+                connection=connection,
+                adapter=adapter,
+                hooks=entry.pre_hook,
+                phase_label="pre_hook",
+            )
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -72,18 +74,19 @@ def execute_incremental_entry(
         )
 
     try:
-        adapter.drop(
-            connection,
-            target=delta_qualified,
-            if_exists=True,
-            statement_recorder=statement_recorder,
-        )
-        adapter.create_table_as(
-            connection,
-            target=delta_qualified,
-            sql=entry.resolved_sql,
-            statement_recorder=statement_recorder,
-        )
+        with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="create_delta"):
+            adapter.drop(
+                connection,
+                target=delta_qualified,
+                if_exists=True,
+                statement_recorder=statement_recorder,
+            )
+            adapter.create_table_as(
+                connection,
+                target=delta_qualified,
+                sql=entry.resolved_sql,
+                statement_recorder=statement_recorder,
+            )
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -96,34 +99,35 @@ def execute_incremental_entry(
         )
 
     try:
-        delta_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
-            connection,
-            database=target_database,
-            schema=target_schema,
-            name=delta_table,
-        )
-        target_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
-            connection,
-            database=target_database,
-            schema=target_schema,
-            name=target_table,
-        )
-        _apply_schema_change(
-            adapter=adapter,
-            connection=connection,
-            target_qualified=target_qualified,
-            target_columns=target_columns,
-            delta_columns=delta_columns,
-            on_schema_change=entry.on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE,
-            warnings=warnings,
-            statement_recorder=statement_recorder,
-        )
-        target_columns = adapter.get_columns(
-            connection,
-            database=target_database,
-            schema=target_schema,
-            name=target_table,
-        )
+        with diagnostics_context(sqlbuild_phase="schema_change", sqlbuild_action_name="inspect"):
+            delta_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
+                connection,
+                database=target_database,
+                schema=target_schema,
+                name=delta_table,
+            )
+            target_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
+                connection,
+                database=target_database,
+                schema=target_schema,
+                name=target_table,
+            )
+            _apply_schema_change(
+                adapter=adapter,
+                connection=connection,
+                target_qualified=target_qualified,
+                target_columns=target_columns,
+                delta_columns=delta_columns,
+                on_schema_change=entry.on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE,
+                warnings=warnings,
+                statement_recorder=statement_recorder,
+            )
+            target_columns = adapter.get_columns(
+                connection,
+                database=target_database,
+                schema=target_schema,
+                name=target_table,
+            )
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -137,16 +141,19 @@ def execute_incremental_entry(
 
     if entry.type_enforcement and declared_columns:
         try:
-            enforce_types_staged(
-                adapter=adapter,
-                connection=connection,
-                staging_qualified=delta_qualified,
-                staging_database=target_database,
-                staging_schema=target_schema,
-                staging_table=delta_table,
-                declared_columns=declared_columns,
-                statement_recorder=statement_recorder,
-            )
+            with diagnostics_context(
+                sqlbuild_phase="type_enforcement", sqlbuild_action_name="rebuild_delta"
+            ):
+                enforce_types_staged(
+                    adapter=adapter,
+                    connection=connection,
+                    staging_qualified=delta_qualified,
+                    staging_database=target_database,
+                    staging_schema=target_schema,
+                    staging_table=delta_table,
+                    declared_columns=declared_columns,
+                    statement_recorder=statement_recorder,
+                )
         except Exception as exc:
             return build_failed_result(
                 entry=entry,
@@ -192,18 +199,19 @@ def execute_incremental_entry(
     cursor_end: str | None = entry.cursor_bounds.end if entry.cursor_bounds else None
 
     try:
-        _execute_dml(
-            adapter=adapter,
-            connection=connection,
-            target_qualified=target_qualified,
-            delta_qualified=delta_qualified,
-            target_columns=target_columns,
-            delta_columns=delta_columns,
-            entry=entry,
-            cursor_start=cursor_start,
-            cursor_end=cursor_end,
-            statement_recorder=statement_recorder,
-        )
+        with diagnostics_context(sqlbuild_phase="dml", sqlbuild_action_name="apply"):
+            _execute_dml(
+                adapter=adapter,
+                connection=connection,
+                target_qualified=target_qualified,
+                delta_qualified=delta_qualified,
+                target_columns=target_columns,
+                delta_columns=delta_columns,
+                entry=entry,
+                cursor_start=cursor_start,
+                cursor_end=cursor_end,
+                statement_recorder=statement_recorder,
+            )
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -245,12 +253,13 @@ def execute_incremental_entry(
 
     try:
         statement_recorder.record_many(render_hooks(hooks=entry.post_hook, phase_label="post_hook"))
-        execute_hooks(
-            connection=connection,
-            adapter=adapter,
-            hooks=entry.post_hook,
-            phase_label="post_hook",
-        )
+        with diagnostics_context(sqlbuild_phase="post_hook", sqlbuild_action_name="run"):
+            execute_hooks(
+                connection=connection,
+                adapter=adapter,
+                hooks=entry.post_hook,
+                phase_label="post_hook",
+            )
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -272,12 +281,13 @@ def execute_incremental_entry(
         warnings=warnings,
     )
 
-    adapter.drop(
-        connection,
-        target=delta_qualified,
-        if_exists=True,
-        statement_recorder=statement_recorder,
-    )
+    with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_delta"):
+        adapter.drop(
+            connection,
+            target=delta_qualified,
+            if_exists=True,
+            statement_recorder=statement_recorder,
+        )
 
     return ModelExecutionResult(
         model_name=entry.name,

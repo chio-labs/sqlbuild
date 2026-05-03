@@ -279,6 +279,7 @@ def build_partition_tracking_fn() -> Callable[[MaterializationContext], Material
         tracking_table: str = str(ctx.config["tracking_table"])
         partition_col: str = str(ctx.config["partition_column"])
 
+        ctx.logger.debug("checking partition state table=%s", tracking_table)
         ctx.log("checking partition state")
         ctx.execute_sql(
             f"CREATE TABLE IF NOT EXISTS {tracking_table} (partition_value VARCHAR, run_id VARCHAR)"
