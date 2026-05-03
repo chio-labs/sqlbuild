@@ -11,5 +11,5 @@ defaults:
   materialized: table
 
 path_defaults:
-  models/staging:
+  staging:
     materialized: view
