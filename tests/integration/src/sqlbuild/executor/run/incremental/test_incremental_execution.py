@@ -308,6 +308,33 @@ SUCCESS_TEST_CASES: list[IncrementalSuccessTestCase] = [
         expected_row_count=2,
         expected_warning_count=1,
     ),
+    IncrementalSuccessTestCase(
+        description="cursor delete_insert uses cursor range over unique_key",
+        setup_sql=(
+            "CREATE TABLE main.orders (id INTEGER, event_time TIMESTAMP, payload VARCHAR)",
+            "INSERT INTO main.orders VALUES "
+            "(1, '2026-01-01 00:30:00', 'a'), "
+            "(2, '2026-01-01 00:45:00', 'b'), "
+            "(3, '2026-01-01 01:30:00', 'c')",
+        ),
+        model_sql=(
+            "SELECT 1 AS id, '2026-01-01 00:30:00'::TIMESTAMP AS event_time, 'new_a' AS payload"
+        ),
+        target_schema="main",
+        target_name="orders",
+        incremental_strategy="delete_insert",
+        unique_key=("id",),
+        cursor_column="event_time",
+        cursor_start="2026-01-01T00:00:00",
+        cursor_end="2026-01-01T01:00:00",
+        expected_row_count=2,
+        expected_query_results=(
+            (
+                "SELECT id, payload FROM main.orders ORDER BY id",
+                ((1, "new_a"), (3, "c")),
+            ),
+        ),
+    ),
 ]
 
 FAILURE_TEST_CASES: list[IncrementalFailureTestCase] = [

@@ -97,10 +97,10 @@ def validate_incremental_config(
         raise CompileInputError(
             f"model '{model_name}': batch_size is only valid with incremental_mode=microbatch"
         )
-    if batch_concurrency is not None and incremental_mode != IncrementalMode.MICROBATCH:
+    if batch_concurrency is not None:
         raise CompileInputError(
-            f"model '{model_name}': batch_concurrency is only valid with "
-            f"incremental_mode=microbatch"
+            f"model '{model_name}': batch_concurrency is not supported; "
+            f"microbatch processes batches serially"
         )
 
 

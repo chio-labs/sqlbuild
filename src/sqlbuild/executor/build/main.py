@@ -15,6 +15,7 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     SeedPlanEntry,
 )
+from sqlbuild.compiler.planner.types import IncrementalMode, MaterializationType, PlanAction
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
 from sqlbuild.executor.build.helpers.blocking import block_downstream
@@ -28,7 +29,11 @@ from sqlbuild.executor.build.models import (
     SeedExecutionResult,
 )
 from sqlbuild.executor.build.types import BuildStatus
-from sqlbuild.executor.run.main import execute_incremental_entry, execute_table_entry
+from sqlbuild.executor.run.main import (
+    execute_incremental_entry,
+    execute_microbatch_entry,
+    execute_table_entry,
+)
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus, TablePromotionMode
 
@@ -131,8 +136,42 @@ def execute_build_plan(
                 indexes.model_audits_by_model.get(model_entry.name, ()) if run_audits else ()
             )
 
+            is_microbatch: bool = model_entry.incremental_mode == IncrementalMode.MICROBATCH
+            is_full_refresh_microbatch: bool = (
+                is_microbatch
+                and model_entry.action == PlanAction.CREATE_TABLE
+                and model_entry.materialization_type == MaterializationType.INCREMENTAL
+            )
+
             model_result: ModelExecutionResult
-            if model_entry.action in INCREMENTAL_ACTIONS:
+            if is_microbatch and model_entry.action in INCREMENTAL_ACTIONS:
+                model_result = execute_microbatch_entry(
+                    entry=model_entry,
+                    adapter=adapter,
+                    connection=connection,
+                    model_targets=plan.model_targets,
+                    seed_targets=plan.seed_targets,
+                    source_map=plan.source_map,
+                    model_audits=model_audits,
+                    declared_columns=model_entry.declared_columns,
+                    run_id=run_id,
+                    fingerprint_schema=fingerprint_schema,
+                )
+            elif is_full_refresh_microbatch:
+                model_result = execute_microbatch_entry(
+                    entry=model_entry,
+                    adapter=adapter,
+                    connection=connection,
+                    model_targets=plan.model_targets,
+                    seed_targets=plan.seed_targets,
+                    source_map=plan.source_map,
+                    model_audits=model_audits,
+                    declared_columns=model_entry.declared_columns,
+                    run_id=run_id,
+                    fingerprint_schema=fingerprint_schema,
+                    is_full_refresh=True,
+                )
+            elif model_entry.action in INCREMENTAL_ACTIONS:
                 model_result = execute_incremental_entry(
                     entry=model_entry,
                     adapter=adapter,

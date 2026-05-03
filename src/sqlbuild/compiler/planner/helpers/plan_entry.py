@@ -158,6 +158,15 @@ def plan_model(
 
     incremental_strategy: str | None = _get_config_str(model, "incremental_strategy")
     incremental_mode: str | None = _get_config_str(model, "incremental_mode")
+    batch_size: str | None = _get_config_str(model, "batch_size")
+
+    microbatch_range: CursorBounds | None = _compute_microbatch_range(
+        model=model,
+        snapshot=snapshot,
+        backfill=backfill,
+        start_cursor_override=start_cursor_override,
+        end_cursor_override=end_cursor_override,
+    )
 
     fingerprint: Fingerprint | None = snapshot.fingerprints.get(model.name)
     previous_query_sql: str | None = fingerprint.query_sql if fingerprint is not None else None
@@ -177,6 +186,8 @@ def plan_model(
         cursor_column=cursor_column,
         cursor_type=cursor_type,
         cursor_bounds=cursor_bounds,
+        batch_size=batch_size,
+        microbatch_range=microbatch_range,
         unique_key=unique_key,
         on_schema_change=on_schema_change,
         type_enforcement=type_enforcement,
@@ -383,6 +394,44 @@ def _get_unique_key(model: CompiledModel) -> tuple[str, ...]:
     if isinstance(raw, list):
         return tuple(k for k in raw if isinstance(k, str))
     return ()
+
+
+def _compute_microbatch_range(
+    *,
+    model: CompiledModel,
+    snapshot: WarehouseSnapshot,
+    backfill: BackfillResult,
+    start_cursor_override: str | None,
+    end_cursor_override: str | None,
+) -> CursorBounds | None:
+    """Compute the real overall cursor range for microbatch batch splitting."""
+
+    materialized: str | None = _get_config_str(model, "materialized")
+    if materialized != MaterializationType.INCREMENTAL:
+        return None
+    incremental_mode: str | None = _get_config_str(model, "incremental_mode")
+    if incremental_mode != IncrementalMode.MICROBATCH:
+        return None
+    cursor_column: str | None = _get_config_str(model, "cursor")
+    if cursor_column is None:
+        return None
+    cursor_snapshot: ModelCursorSnapshot | None = snapshot.cursor_snapshots.get(model.name)
+    if cursor_snapshot is None:
+        return None
+
+    lookback: str | None = _get_config_str(model, "lookback")
+    backfill_duration: str | None = None
+    if backfill.action == BackfillAction.BOUNDED:
+        backfill_duration = backfill.duration
+
+    return compute_cursor_bounds(
+        cursor_snapshot=cursor_snapshot,
+        lookback=lookback,
+        backfill_duration=backfill_duration,
+        start_cursor_override=start_cursor_override,
+        end_cursor_override=end_cursor_override,
+        is_microbatch=False,
+    )
 
 
 def _compute_plan_cursor_bounds(

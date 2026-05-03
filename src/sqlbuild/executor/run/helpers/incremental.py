@@ -169,6 +169,9 @@ def execute_incremental_entry(
             audit_results=audit_results,
         )
 
+    cursor_start: str | None = entry.cursor_bounds.start if entry.cursor_bounds else None
+    cursor_end: str | None = entry.cursor_bounds.end if entry.cursor_bounds else None
+
     try:
         _execute_dml(
             adapter=adapter,
@@ -178,6 +181,8 @@ def execute_incremental_entry(
             target_columns=target_columns,
             delta_columns=delta_columns,
             entry=entry,
+            cursor_start=cursor_start,
+            cursor_end=cursor_end,
         )
     except Exception as exc:
         return build_failed_result(
@@ -359,6 +364,8 @@ def _execute_dml(
     target_columns: tuple[ColumnInfo, ...],
     delta_columns: tuple[ColumnInfo, ...],
     entry: ModelPlanEntry,
+    cursor_start: str | None = None,
+    cursor_end: str | None = None,
 ) -> None:
     """Execute the incremental DML strategy from delta into target."""
 
@@ -385,13 +392,31 @@ def _execute_dml(
         return
 
     if strategy == IncrementalStrategy.DELETE_INSERT:
-        adapter.delete_insert(
-            connection,
-            target=target_qualified,
-            sql=dml_sql,
-            unique_key=unique_key,
-            columns=dml_columns,
-        )
+        cursor_column: str | None = entry.cursor_column
+        if cursor_column is not None:
+            if cursor_start is None or cursor_end is None:
+                raise ValueError(
+                    f"cursor-based delete_insert for '{entry.name}' requires both "
+                    f"cursor_start and cursor_end but got "
+                    f"cursor_start={cursor_start}, cursor_end={cursor_end}"
+                )
+            adapter.delete_insert_cursor(
+                connection,
+                target=target_qualified,
+                sql=dml_sql,
+                cursor_column=cursor_column,
+                cursor_start=cursor_start,
+                cursor_end=cursor_end,
+                columns=dml_columns,
+            )
+        else:
+            adapter.delete_insert(
+                connection,
+                target=target_qualified,
+                sql=dml_sql,
+                unique_key=unique_key,
+                columns=dml_columns,
+            )
         return
 
     if strategy == IncrementalStrategy.MERGE:

@@ -201,6 +201,8 @@ class ModelPlanEntry:
     cursor_column: str | None = None
     cursor_type: str | None = None
     cursor_bounds: CursorBounds | None = None
+    batch_size: str | None = None
+    microbatch_range: CursorBounds | None = None
     unique_key: tuple[str, ...] = field(default_factory=tuple)
     on_schema_change: OnSchemaChange | None = None
     type_enforcement: bool = False

@@ -183,6 +183,24 @@ class BaseAdapter(StrictAdapter):
         )
         self.append(connection, target=target, sql=sql, columns=columns)
 
+    def delete_insert_cursor(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        sql: str,
+        cursor_column: str,
+        cursor_start: str,
+        cursor_end: str,
+        columns: tuple[str, ...] | None = None,
+    ) -> None:
+        connection.execute(
+            f"DELETE FROM {target} "
+            f"WHERE {cursor_column} >= '{cursor_start}' "
+            f"AND {cursor_column} < '{cursor_end}'"
+        )
+        self.append(connection, target=target, sql=sql, columns=columns)
+
     def merge(
         self,
         connection: Any,

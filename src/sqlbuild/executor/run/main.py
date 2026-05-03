@@ -16,6 +16,9 @@ from sqlbuild.executor.run.helpers.hooks import execute_hooks
 from sqlbuild.executor.run.helpers.incremental import (
     execute_incremental_entry as execute_incremental_entry,
 )
+from sqlbuild.executor.run.helpers.microbatch import (
+    execute_microbatch_entry as execute_microbatch_entry,
+)
 from sqlbuild.executor.run.helpers.results import build_failed_result
 from sqlbuild.executor.run.helpers.type_enforcement import enforce_types_staged
 from sqlbuild.executor.run.models import ModelExecutionResult

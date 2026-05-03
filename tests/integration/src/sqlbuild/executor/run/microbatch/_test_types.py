@@ -6,8 +6,8 @@ from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 
 
 @dataclass(frozen=True)
-class IncrementalSuccessTestCase:
-    """Test case where incremental execution succeeds."""
+class MicrobatchSuccessTestCase:
+    """Test case where microbatch execution succeeds."""
 
     description: str
     setup_sql: tuple[str, ...]
@@ -15,15 +15,16 @@ class IncrementalSuccessTestCase:
     target_schema: str | None
     target_name: str
     incremental_strategy: str
+    cursor_column: str
+    cursor_type: str
+    batch_size: str
+    microbatch_start: str
+    microbatch_end: str
     expected_row_count: int
     expected_status: ExecutionStatus = ExecutionStatus.SUCCESS
     unique_key: tuple[str, ...] = field(default_factory=tuple)
     on_schema_change: OnSchemaChange | None = None
-    cursor_column: str | None = None
-    cursor_start: str | None = None
-    cursor_end: str | None = None
-    type_enforcement: bool = False
-    declared_columns: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    is_full_refresh: bool = False
     pre_hook: object = None
     post_hook: object = None
     audit_sql: str | None = None
@@ -40,8 +41,8 @@ class IncrementalSuccessTestCase:
 
 
 @dataclass(frozen=True)
-class IncrementalFailureTestCase:
-    """Test case where incremental execution fails at a specific phase."""
+class MicrobatchFailureTestCase:
+    """Test case where microbatch execution fails."""
 
     description: str
     setup_sql: tuple[str, ...]
@@ -49,14 +50,15 @@ class IncrementalFailureTestCase:
     target_schema: str | None
     target_name: str
     incremental_strategy: str
+    cursor_column: str
+    cursor_type: str
+    batch_size: str
+    microbatch_start: str
+    microbatch_end: str
     expected_failed_phase: ExecutionPhase
     unique_key: tuple[str, ...] = field(default_factory=tuple)
     on_schema_change: OnSchemaChange | None = None
-    cursor_column: str | None = None
-    cursor_start: str | None = None
-    cursor_end: str | None = None
-    type_enforcement: bool = False
-    declared_columns: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    is_full_refresh: bool = False
     pre_hook: object = None
     post_hook: object = None
     audit_sql: str | None = None
@@ -64,9 +66,8 @@ class IncrementalFailureTestCase:
     audit_run_scope: AuditRunScope = AuditRunScope.FINAL
     expected_audit_count: int = 0
     expected_error_fragment: str | None = None
-    expected_staging_relation: str | None = None
-    expected_promoted_relation: str | None = None
     expected_row_count: int | None = None
     expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...] = field(
         default_factory=tuple
     )
+    expected_delta_retained: bool = False

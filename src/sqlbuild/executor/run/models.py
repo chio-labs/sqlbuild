@@ -9,6 +9,15 @@ from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 
 
 @dataclass(frozen=True)
+class BatchWindow:
+    """One batch window with start (inclusive) and end (exclusive) bounds."""
+
+    start: str
+    end: str
+    index: int
+
+
+@dataclass(frozen=True)
 class ModelExecutionResult:
     """Outcome of one model materialization lifecycle."""
 

@@ -96,6 +96,21 @@ class MaterializationMixin:
         ...
 
     @abstractmethod
+    def delete_insert_cursor(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        sql: str,
+        cursor_column: str,
+        cursor_start: str,
+        cursor_end: str,
+        columns: tuple[str, ...] | None = None,
+    ) -> None:
+        """Delete rows by cursor range then insert from a SELECT statement."""
+        ...
+
+    @abstractmethod
     def merge(
         self,
         connection: Any,
