@@ -20,6 +20,11 @@ from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 
+_TYPE_WIDTH: int = 10
+_MAX_NAME_WIDTH: int = 60
+_MIN_NAME_WIDTH: int = 20
+_NAME_PADDING: int = 2
+
 
 class BuildProgressCallbacks:
     """Encapsulates live build progress output state and callbacks."""
@@ -43,6 +48,24 @@ class BuildProgressCallbacks:
         self._current_node_type: str = ""
         self._current_sub_message: str = ""
 
+        ctr_width: int = len(str(self._total)) * 2 + 1
+        self._prefix_width: int = 2 + ctr_width + 2
+
+        max_name_len: int = 0
+        entry: ModelPlanEntry
+        for entry in plan.model_entries:
+            annotation: str = _resolve_annotation(entry)
+            display_name: str = entry.name
+            if annotation:
+                display_name = f"{entry.name}  ({annotation})"
+            max_name_len = max(max_name_len, len(display_name))
+        seed_entry: object
+        for seed_entry in plan.seed_entries:
+            max_name_len = max(max_name_len, len(getattr(seed_entry, "name", str(seed_entry))))
+        self._name_width: int = max(
+            min(max_name_len + _NAME_PADDING, _MAX_NAME_WIDTH), _MIN_NAME_WIDTH
+        )
+
     @property
     def elapsed(self) -> float:
         return time.monotonic() - self._start_time
@@ -63,10 +86,13 @@ class BuildProgressCallbacks:
         ctr: str = f"{self._counter + 1}/{self._total}".rjust(len(str(self._total)) * 2 + 1)
         display_type: str = _materialization_type_display(self._current_node_type)
         status: str = colorize_status("...", use_color=self._use_color)
-        name_display: str = self._current_node_name
+        name_display: str = _truncate_name(self._current_node_name, self._name_width)
         if self._current_sub_message:
-            name_display = f"{self._current_node_name}  {self._current_sub_message}"
-        line: str = f"  {ctr}  {display_type:<8}{name_display:<40} {status}"
+            name_display = _truncate_name(
+                f"{self._current_node_name}  {self._current_sub_message}", self._name_width
+            )
+        nw: int = self._name_width
+        line: str = f"  {ctr}  {display_type:<{_TYPE_WIDTH}}{name_display:<{nw}} {status}"
         sys.stdout.write(f"\r\033[K{line}")
         sys.stdout.flush()
 
@@ -90,8 +116,10 @@ class BuildProgressCallbacks:
                 use_color=self._use_color,
             )
             duration: str = _format_duration(node_result.duration_ms)
+            seed_name: str = _truncate_name(node_result.seed_name, self._name_width)
+            nw: int = self._name_width
             sys.stdout.write(
-                f"  {ctr}  {'seed':<8}{node_result.seed_name:<40} {status:<6} {duration}\n"
+                f"  {ctr}  {'seed':<{_TYPE_WIDTH}}{seed_name:<{nw}} {status:<6} {duration}\n"
             )
             sys.stdout.flush()
             return
@@ -108,6 +136,7 @@ class BuildProgressCallbacks:
         name_display: str = model_result.model_name
         if annotation:
             name_display = f"{model_result.model_name}  ({annotation})"
+        name_display = _truncate_name(name_display, self._name_width)
 
         status: str = colorize_status(
             _execution_status_display(model_result.status),
@@ -120,9 +149,15 @@ class BuildProgressCallbacks:
         elif model_result.status == ExecutionStatus.SKIPPED:
             duration = ""
 
-        sys.stdout.write(
-            f"  {ctr}  {display_type:<8}{name_display:<40} {status:<6} {duration}{detail}\n"
+        nw: int = self._name_width
+        line: str = (
+            f"  {ctr}  {display_type:<{_TYPE_WIDTH}}{name_display:<{nw}}"
+            f" {status:<6} {duration}{detail}\n"
         )
+        sys.stdout.write(line)
+
+        pad: str = " " * self._prefix_width
+        nw: int = self._name_width
 
         test_result: SqlTestExecutionResult | None = self._test_results_by_model.get(
             model_result.model_name
@@ -132,7 +167,8 @@ class BuildProgressCallbacks:
                 _test_outcome_display(test_result.outcome),
                 use_color=self._use_color,
             )
-            sys.stdout.write(f"{'':>10}  {'test':<8}{test_result.test_name:<35} {test_status}\n")
+            test_name: str = _truncate_name(test_result.test_name, nw)
+            sys.stdout.write(f"{pad}{'test':<{_TYPE_WIDTH}}{test_name:<{nw}} {test_status}\n")
 
         audit: AuditExecutionResult
         for audit in model_result.audit_results:
@@ -142,12 +178,13 @@ class BuildProgressCallbacks:
             audit_name: str = audit.audit_name
             if audit.attached_column_name is not None:
                 audit_name = f"{audit.audit_name} ({audit.attached_column_name})"
+            audit_name = _truncate_name(audit_name, nw)
             audit_detail: str = ""
             if audit.outcome != AuditOutcome.PASS and audit.row_count > 0:
                 row_label: str = "row" if audit.row_count == 1 else "rows"
                 audit_detail = f"  {audit.row_count} {row_label}"
             sys.stdout.write(
-                f"{'':>10}  {'audit':<8}{audit_name:<35} {audit_status}{audit_detail}\n"
+                f"{pad}{'audit':<{_TYPE_WIDTH}}{audit_name:<{nw}} {audit_status}{audit_detail}\n"
             )
 
         sys.stdout.flush()
@@ -366,3 +403,11 @@ def _resolve_annotation(plan_entry: ModelPlanEntry | None) -> str:
     if plan_entry.incremental_strategy:
         parts.append(plan_entry.incremental_strategy)
     return ", ".join(parts)
+
+
+def _truncate_name(name: str, width: int) -> str:
+    """Truncate a display name to fit within the given width."""
+
+    if len(name) <= width:
+        return name
+    return name[: width - 3] + "..."
