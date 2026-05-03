@@ -230,6 +230,57 @@ seeds:
         },
         expected_error_fragment="Duplicate schema.yml seed declaration found for 'country_codes'",
     ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when a declared seed has no matching csv file",
+        repo_files=base_repo_files()
+        | {
+            "seeds/schema.yml": """
+seeds:
+  - name: country_codes
+    columns:
+      - name: country_code
+        type: VARCHAR
+""".strip()
+            + "\n",
+        },
+        expected_error_fragment="has no matching CSV file under seeds/",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when a seed csv header does not match declared columns",
+        repo_files=base_repo_files()
+        | {
+            "seeds/schema.yml": """
+seeds:
+  - name: country_codes
+    columns:
+      - name: country_code
+        type: VARCHAR
+      - name: country_name
+        type: VARCHAR
+""".strip()
+            + "\n",
+            "seeds/country_codes.csv": "country_name,country_code\nUS,United States\n",
+        },
+        expected_error_fragment="does not match declared seed columns",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when a seed csv has duplicate header columns",
+        repo_files=base_repo_files()
+        | {
+            "seeds/schema.yml": """
+seeds:
+  - name: country_codes
+    columns:
+      - name: country_code
+        type: VARCHAR
+      - name: country_name
+        type: VARCHAR
+""".strip()
+            + "\n",
+            "seeds/country_codes.csv": "country_code,country_code\nUS,United States\n",
+        },
+        expected_error_fragment="contains duplicate CSV header column 'country_code'",
+    ),
 ]
 
 

@@ -31,3 +31,7 @@ class SourceParseError(DiscoveryError):
 
 class DiscoveryConflictError(DiscoveryError):
     """Raised when discovered project inputs conflict across files."""
+
+
+class SeedDiscoveryError(DiscoveryError):
+    """Raised when declared seed metadata does not match local seed files."""
