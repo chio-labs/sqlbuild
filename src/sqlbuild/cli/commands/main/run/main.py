@@ -18,7 +18,7 @@ from sqlbuild.cli.commands.main.shared.helpers.progress import (
 from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import write_runtime_target
 from sqlbuild.compiler.discovery.main import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main import run_compile_pipeline
+from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.executor.build.models import BuildExecutionResult

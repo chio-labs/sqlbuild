@@ -20,10 +20,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.helpers.audit_entry import plan_audit
 from sqlbuild.compiler.planner.helpers.buildability import check_buildability
-from sqlbuild.compiler.planner.helpers.cascade import (
-    build_self_cascade,
-    resolve_cascade,
-)
+from sqlbuild.compiler.planner.helpers.cascade import build_self_cascade, resolve_cascade
 from sqlbuild.compiler.planner.helpers.graph import (
     build_downstream_deps,
     build_upstream_deps,
@@ -47,9 +44,7 @@ from sqlbuild.compiler.planner.helpers.resolve.helpers.refs import (
 )
 from sqlbuild.compiler.planner.helpers.selectors import resolve_selectors
 from sqlbuild.compiler.planner.helpers.sql_test_assembly import plan_test
-from sqlbuild.compiler.planner.helpers.warehouse_snapshot import (
-    gather_warehouse_snapshot,
-)
+from sqlbuild.compiler.planner.helpers.warehouse_snapshot import gather_warehouse_snapshot
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     CascadeResult,
@@ -80,8 +75,6 @@ def build_execution_plan(
     deferred_targets: dict[str, CompiledRelationTarget] | None = None,
     deferred_relations: dict[str, RelationInfo] | None = None,
 ) -> PlanOutput:
-    """Build a complete execution plan from compiled project and warehouse state."""
-
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_upstream_deps(
         project
     )
@@ -275,10 +268,7 @@ def build_execution_plan(
             continue
         test_entry: SqlTestPlanEntry
         test_warnings: tuple[PlanWarning, ...]
-        test_entry, test_warnings = plan_test(
-            test=sql_test,
-            project=project,
-        )
+        test_entry, test_warnings = plan_test(test=sql_test, project=project)
         test_entries.append(test_entry)
         all_warnings.extend(test_warnings)
 
@@ -307,8 +297,6 @@ def build_execution_plan(
 
 
 def _build_all_keys(project: CompiledProject) -> dict[str, CompiledObjectKey]:
-    """Build a name-to-key lookup for all project resources."""
-
     keys: dict[str, CompiledObjectKey] = {}
     model: CompiledModel
     for model in project.models:
@@ -323,8 +311,6 @@ def _build_all_keys(project: CompiledProject) -> dict[str, CompiledObjectKey]:
 
 
 def _find_model(project: CompiledProject, name: str) -> CompiledModel | None:
-    """Find a compiled model by name."""
-
     model: CompiledModel
     for model in project.models:
         if model.name == name:

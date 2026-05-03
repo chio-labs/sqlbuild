@@ -105,6 +105,57 @@ def test_given_compile_command_arguments_when_running_with_dependencies_then_it_
     "test_case",
     [
         MainTestCase(
+            description="dispatches clone command through injected handler",
+            argv=["clone", "--from", "prod", "--to", "dev", "--select", "orders"],
+            expected_exit_code=8,
+        )
+    ],
+    ids=["dispatches clone command through injected handler"],
+)
+def test_given_clone_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[
+        tuple[Path | None, bool, bool, str, str, bool, tuple[str, ...], tuple[str, ...]]
+    ] = []
+
+    def run_clone(
+        project_dir: Path | None,
+        no_color: bool,
+        no_sql_validation: bool,
+        from_environment: str,
+        to_environment: str,
+        hard_copy: bool,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+    ) -> int:
+        received_args.append(
+            (
+                project_dir,
+                no_color,
+                no_sql_validation,
+                from_environment,
+                to_environment,
+                hard_copy,
+                select,
+                exclude,
+            )
+        )
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_clone=run_clone),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [(None, False, False, "prod", "dev", False, ("orders",), ())]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
             description="passes no sql validation flag to compile handler",
             argv=["compile", "--no-sql-validation"],
             expected_exit_code=3,

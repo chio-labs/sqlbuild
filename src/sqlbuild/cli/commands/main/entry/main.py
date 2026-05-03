@@ -72,7 +72,13 @@ def _build_parser() -> argparse.ArgumentParser:
     seed_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.SEED)
     add_select_args(seed_parser)
 
-    subparsers.add_parser(CliCommand.CLONE)
+    clone_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.CLONE)
+    clone_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    clone_parser.add_argument("--from", dest="from_environment", required=True)
+    clone_parser.add_argument("--to", dest="to_environment", required=True)
+    clone_parser.add_argument("--hard-copy", action="store_true", default=False)
+    add_select_args(clone_parser)
+
     subparsers.add_parser(CliCommand.DIFF)
     subparsers.add_parser(CliCommand.CLEAN)
     subparsers.add_parser(CliCommand.JANITOR)
@@ -85,6 +91,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     from sqlbuild.cli.commands.main.audit.main import run_audit
     from sqlbuild.cli.commands.main.build.main import run_build
+    from sqlbuild.cli.commands.main.clone.main import run_clone
     from sqlbuild.cli.commands.main.compile.main import run_compile
     from sqlbuild.cli.commands.main.plan.main import run_plan
     from sqlbuild.cli.commands.main.run.main import run_run
@@ -99,6 +106,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_test=run_test,
         run_audit=run_audit,
         run_seed=run_seed,
+        run_clone=run_clone,
     )
     return _main_with_dependencies(argv=argv, handlers=handlers)
 
@@ -216,6 +224,19 @@ def _main_with_dependencies(
             return handlers.run_seed(
                 project_dir,
                 args.no_color,
+                tuple(args.select),
+                tuple(args.exclude),
+            )
+        if args.command == CliCommand.CLONE:
+            if args.from_environment is None or args.to_environment is None:
+                raise CliUserError("clone requires --from and --to")
+            return handlers.run_clone(
+                project_dir,
+                args.no_color,
+                args.no_sql_validation,
+                args.from_environment,
+                args.to_environment,
+                args.hard_copy,
                 tuple(args.select),
                 tuple(args.exclude),
             )

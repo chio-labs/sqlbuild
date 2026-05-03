@@ -23,6 +23,9 @@ class BaseAdapter(StrictAdapter):
     Override only the methods your engine requires.
     """
 
+    def supports_zero_copy_clone(self) -> bool:
+        return False
+
     def relation_exists(
         self,
         connection: Any,

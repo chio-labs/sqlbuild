@@ -25,7 +25,7 @@ from sqlbuild.compiler.pipeline.helpers.deferred_targets import (
 from sqlbuild.compiler.pipeline.helpers.materializations import load_custom_materializations
 from sqlbuild.compiler.pipeline.helpers.target_defaults import apply_target_defaults
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.planner.main import build_execution_plan
+from sqlbuild.compiler.planner.main.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.spec.models.project import EnvironmentConfig
 
@@ -78,8 +78,6 @@ def _build_result(
     cursor_overrides: CursorOverrides | None = None,
     full_refresh: bool = False,
 ) -> CompilePipelineResult:
-    """Build the complete pipeline result with an open connection."""
-
     compile_inputs: CompileProjectInputs = build_compile_inputs(
         discovered_inputs,
         no_sql_validation=no_sql_validation,

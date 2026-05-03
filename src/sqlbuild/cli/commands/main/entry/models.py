@@ -17,6 +17,9 @@ class CliNamespace:
     project_dir: str | None = None
     no_sql_validation: bool = False
     defer_to: str | None = None
+    from_environment: str | None = None
+    to_environment: str | None = None
+    hard_copy: bool = False
     json: bool = False
     start_cursor_ts: str | None = None
     end_cursor_ts: str | None = None
@@ -90,3 +93,7 @@ class CliEntrypointHandlers:
         [Path | None, bool, str | None, bool, tuple[str, ...], tuple[str, ...]], int
     ]
     run_seed: Callable[[Path | None, bool, tuple[str, ...], tuple[str, ...]], int]
+    run_clone: Callable[
+        [Path | None, bool, bool, str, str, bool, tuple[str, ...], tuple[str, ...]],
+        int,
+    ]

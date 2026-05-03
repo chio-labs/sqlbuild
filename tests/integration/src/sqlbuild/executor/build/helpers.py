@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlbuild.compiler.discovery.main import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main import run_compile_pipeline
+from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.main import execute_build_plan

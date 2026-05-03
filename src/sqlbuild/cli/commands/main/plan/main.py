@@ -10,7 +10,7 @@ from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_connect
 from sqlbuild.cli.commands.main.shared.helpers.json_output import format_plan_json
 from sqlbuild.compiler.discovery.main import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main import run_compile_pipeline
+from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.shared.helpers.colors import supports_color
