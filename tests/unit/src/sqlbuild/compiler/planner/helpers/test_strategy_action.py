@@ -4,12 +4,14 @@ import pytest
 
 from sqlbuild.compiler.compile.models import CompiledModel
 from sqlbuild.compiler.planner.helpers.strategy import resolve_model_plan_action
-from sqlbuild.compiler.planner.models import ChangeDetectionResult
+from sqlbuild.compiler.planner.models import ChangeDetectionResult, SchemaFinding
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
     ChangeKind,
     PlanAction,
     PlanReason,
+    SchemaChangeKind,
+    SchemaColumnSource,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     ResolveModelPlanActionTestCase,
@@ -186,6 +188,60 @@ RESOLVE_ACTION_TEST_CASES: list[ResolveModelPlanActionTestCase] = [
         full_refresh=False,
         expected_action=PlanAction.CREATE_TABLE,
         expected_reason=PlanReason.SCHEMA_CHANGED,
+    ),
+    ResolveModelPlanActionTestCase(
+        description="view with query change returns query changed reason",
+        materialized="view",
+        incremental_strategy=None,
+        change_kind=ChangeKind.QUERY_CHANGED,
+        query_changed=True,
+        backfill_action=BackfillAction.WARN_ONLY,
+        full_refresh=False,
+        expected_action=PlanAction.CREATE_VIEW,
+        expected_reason=PlanReason.QUERY_CHANGED,
+    ),
+    ResolveModelPlanActionTestCase(
+        description="view with schema change returns schema changed reason",
+        materialized="view",
+        incremental_strategy=None,
+        change_kind=ChangeKind.SCHEMA_CHANGED,
+        query_changed=False,
+        backfill_action=BackfillAction.WARN_ONLY,
+        full_refresh=False,
+        expected_action=PlanAction.CREATE_VIEW,
+        expected_reason=PlanReason.SCHEMA_CHANGED,
+    ),
+    ResolveModelPlanActionTestCase(
+        description=(
+            "incremental with full backfill from schema change creates table with schema reason"
+        ),
+        materialized="incremental",
+        incremental_strategy="append",
+        change_kind=ChangeKind.SCHEMA_CHANGED,
+        query_changed=False,
+        backfill_action=BackfillAction.FULL,
+        full_refresh=False,
+        expected_action=PlanAction.CREATE_TABLE,
+        expected_reason=PlanReason.SCHEMA_CHANGED,
+        schema_findings=(
+            SchemaFinding(
+                kind=SchemaChangeKind.COLUMN_ADDED,
+                column_name="status",
+                source=SchemaColumnSource.YML,
+                expected_type="VARCHAR",
+            ),
+        ),
+    ),
+    ResolveModelPlanActionTestCase(
+        description="missing materialized config defaults to table behavior",
+        materialized="unknown_custom_thing",
+        incremental_strategy=None,
+        change_kind=ChangeKind.FIRST_RUN,
+        query_changed=False,
+        backfill_action=BackfillAction.FULL,
+        full_refresh=False,
+        expected_action=PlanAction.CREATE_TABLE,
+        expected_reason=PlanReason.FIRST_RUN,
     ),
 ]
 

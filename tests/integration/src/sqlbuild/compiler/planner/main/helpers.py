@@ -9,9 +9,12 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationTarget,
+    CompiledSeed,
     CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.discovery.models import DiscoveredSchemaFile, DiscoveredSeedFile
+from sqlbuild.spec.models.schema import SchemaSeedEntry
 from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     BuildExecutionPlanTestCase,
 )
@@ -48,10 +51,43 @@ def build_project_from_test_case(
             )
         )
 
+    seeds: list[CompiledSeed] = []
+    seed_name: str
+    for seed_name, target_schema in test_case.seed_targets.items():
+        seeds.append(
+            CompiledSeed(
+                key=CompiledObjectKey(
+                    resource_type=CompiledResourceType.SEED,
+                    name=seed_name,
+                ),
+                deps=(),
+                name=seed_name,
+                seed_file=DiscoveredSeedFile(
+                    file_path=Path(f"seeds/{seed_name}.csv"),
+                    relative_path=Path(f"seeds/{seed_name}.csv"),
+                ),
+                schema_entry=SchemaSeedEntry(name=seed_name, columns=()),
+                schema_file=DiscoveredSchemaFile(
+                    file_path=Path("seeds/schema.yml"),
+                    relative_path=Path("seeds/schema.yml"),
+                    contents="",
+                    model_entries=(),
+                    seed_entries=(),
+                ),
+                target=CompiledRelationTarget(
+                    database=None,
+                    schema=target_schema,
+                    name=seed_name,
+                    qualified_name=f"{target_schema}.{seed_name}",
+                ),
+            )
+        )
+
     return CompiledProject(
         run_id="test_run",
         effective_environment_name=None,
         effective_connection={},
         effective_vars={},
         models=tuple(models),
+        seeds=tuple(seeds),
     )

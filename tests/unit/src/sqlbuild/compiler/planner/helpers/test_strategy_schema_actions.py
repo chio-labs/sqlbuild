@@ -100,6 +100,12 @@ RESOLVE_SCHEMA_ACTIONS_TEST_CASES: list[ResolveSchemaActionsTestCase] = [
         on_schema_change=OnSchemaChange.SYNC_ALL_COLUMNS,
         expected_actions=(),
     ),
+    ResolveSchemaActionsTestCase(
+        description=("append_new_columns ignores type changes and removals"),
+        schema_findings=(_REMOVED_FINDING, _TYPE_CHANGED_FINDING),
+        on_schema_change=OnSchemaChange.APPEND_NEW_COLUMNS,
+        expected_actions=(),
+    ),
 ]
 
 

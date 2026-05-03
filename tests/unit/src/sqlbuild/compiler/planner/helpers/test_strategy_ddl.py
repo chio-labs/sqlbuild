@@ -129,6 +129,35 @@ BUILD_DDL_TEST_CASES: list[BuildLogicalDdlTestCase] = [
         warehouse_columns=(),
         expected_ddl_fragment="WHERE (order_id, line_id) IN",
     ),
+    BuildLogicalDdlTestCase(
+        description="load_seed action produces empty ddl",
+        action=PlanAction.LOAD_SEED,
+        resolved_sql=_SIMPLE_SQL,
+        qualified_name="staging.orders",
+        unique_key=(),
+        warehouse_columns=(),
+        expected_ddl_fragment="",
+    ),
+    BuildLogicalDdlTestCase(
+        description="merge with composite key joins on both columns",
+        action=PlanAction.INCREMENTAL_MERGE,
+        resolved_sql=_SIMPLE_SQL,
+        qualified_name="staging.orders",
+        unique_key=("order_id", "line_id"),
+        warehouse_columns=_WAREHOUSE_COLUMNS,
+        expected_ddl_fragment=(
+            "ON target.order_id = __source.order_id AND target.line_id = __source.line_id"
+        ),
+    ),
+    BuildLogicalDdlTestCase(
+        description=("falls back to target name when qualified name is none"),
+        action=PlanAction.CREATE_TABLE,
+        resolved_sql=_SIMPLE_SQL,
+        qualified_name=None,
+        unique_key=(),
+        warehouse_columns=(),
+        expected_ddl_fragment="CREATE TABLE orders AS",
+    ),
 ]
 
 

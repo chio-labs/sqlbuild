@@ -149,7 +149,7 @@ class BuildLogicalDdlTestCase:
     description: str
     action: PlanAction
     resolved_sql: str
-    qualified_name: str
+    qualified_name: str | None
     unique_key: tuple[str, ...]
     warehouse_columns: tuple[ColumnInfo, ...]
     expected_ddl_fragment: str
@@ -168,3 +168,4 @@ class BuildModelWarningsTestCase:
     type_enforcement: bool
     expected_severity: WarningSeverity | None
     expected_warning_count: int
+    expected_severities: tuple[WarningSeverity, ...] = field(default_factory=tuple)

@@ -84,6 +84,39 @@ BUILD_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
             "fact_orders": PlanReason.FIRST_RUN,
         },
     ),
+    BuildExecutionPlanTestCase(
+        description="seed appears in plan output seed entries",
+        setup_sql=(),
+        model_targets={"orders": "staging"},
+        model_configs={"orders": {"materialized": "table"}},
+        model_queries={"orders": "SELECT 1 AS id"},
+        seed_targets={"country_codes": "staging"},
+        full_refresh=False,
+        expected_action={"orders": PlanAction.CREATE_TABLE},
+        expected_reason={"orders": PlanReason.FIRST_RUN},
+        expected_seed_names=("country_codes",),
+    ),
+    BuildExecutionPlanTestCase(
+        description="select filters plan to selected models only",
+        setup_sql=(),
+        model_targets={
+            "stg_orders": "staging",
+            "fact_orders": "staging",
+        },
+        model_configs={
+            "stg_orders": {"materialized": "view"},
+            "fact_orders": {"materialized": "table"},
+        },
+        model_queries={
+            "stg_orders": "SELECT 1 AS id",
+            "fact_orders": "SELECT 1 AS id",
+        },
+        full_refresh=False,
+        select=("stg_orders",),
+        expected_action={"stg_orders": PlanAction.CREATE_VIEW},
+        expected_reason={"stg_orders": PlanReason.FIRST_RUN},
+        expected_model_count=1,
+    ),
 ]
 
 
@@ -108,6 +141,7 @@ def test_given_project_when_building_plan_then_produces_expected_output(
         adapter=adapter,
         connection=connection,
         full_refresh=test_case.full_refresh,
+        select=test_case.select,
     )
 
     entry_map: dict[str, ModelPlanEntry] = {e.name: e for e in plan.model_entries}
@@ -124,3 +158,11 @@ def test_given_project_when_building_plan_then_produces_expected_output(
     expected_fragment: str
     for model_name, expected_fragment in test_case.expected_ddl_fragments.items():
         assert expected_fragment in entry_map[model_name].logical_ddl
+
+    seed_names: tuple[str, ...] = tuple(e.name for e in plan.seed_entries)
+    expected_seed_name: str
+    for expected_seed_name in test_case.expected_seed_names:
+        assert expected_seed_name in seed_names
+
+    expected_count: int = test_case.expected_model_count or len(test_case.expected_action)
+    assert len(plan.model_entries) == expected_count

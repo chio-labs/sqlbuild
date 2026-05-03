@@ -55,6 +55,13 @@ _ADDED_SQLGLOT_FINDING: SchemaFinding = SchemaFinding(
     expected_type="VARCHAR",
 )
 
+_REMOVED_FINDING: SchemaFinding = SchemaFinding(
+    kind=SchemaChangeKind.COLUMN_REMOVED,
+    column_name="old_col",
+    source=SchemaColumnSource.YML,
+    actual_type="INTEGER",
+)
+
 _ADD_ACTION: SchemaAction = SchemaAction(
     kind=SchemaActionKind.ADD_COLUMN,
     column_name="status",
@@ -166,6 +173,51 @@ BUILD_WARNINGS_TEST_CASES: list[BuildModelWarningsTestCase] = [
         expected_severity=None,
         expected_warning_count=0,
     ),
+    BuildModelWarningsTestCase(
+        description="column removed finding produces no warning",
+        model_name="orders",
+        change_kind=ChangeKind.SCHEMA_CHANGED,
+        query_changed=False,
+        backfill_action=BackfillAction.WARN_ONLY,
+        schema_findings=(_REMOVED_FINDING,),
+        schema_actions=(),
+        on_schema_change=OnSchemaChange.APPEND_NEW_COLUMNS,
+        type_enforcement=False,
+        expected_severity=None,
+        expected_warning_count=0,
+    ),
+    BuildModelWarningsTestCase(
+        description=(
+            "enforced type mismatch and query change produce two warnings with mixed severities"
+        ),
+        model_name="orders",
+        change_kind=ChangeKind.QUERY_CHANGED,
+        query_changed=True,
+        backfill_action=BackfillAction.WARN_ONLY,
+        schema_findings=(_TYPE_CHANGED_YML_FINDING,),
+        schema_actions=(),
+        on_schema_change=OnSchemaChange.APPEND_NEW_COLUMNS,
+        type_enforcement=True,
+        expected_severity=None,
+        expected_warning_count=2,
+        expected_severities=(
+            WarningSeverity.WARNING,
+            WarningSeverity.WARNING,
+        ),
+    ),
+    BuildModelWarningsTestCase(
+        description=("enforced yml column added does not produce type mismatch warning"),
+        model_name="orders",
+        change_kind=ChangeKind.SCHEMA_CHANGED,
+        query_changed=False,
+        backfill_action=BackfillAction.WARN_ONLY,
+        schema_findings=(_ADDED_FINDING,),
+        schema_actions=(_ADD_ACTION,),
+        on_schema_change=OnSchemaChange.APPEND_NEW_COLUMNS,
+        type_enforcement=True,
+        expected_severity=None,
+        expected_warning_count=0,
+    ),
 ]
 
 
@@ -188,6 +240,11 @@ def test_given_model_state_when_building_warnings_then_matches_expected(
     )
 
     assert len(result) == test_case.expected_warning_count
-    warning: PlanWarning
-    for warning in result:
-        assert warning.severity == test_case.expected_severity
+    actual_severities: tuple[WarningSeverity, ...] = tuple(w.severity for w in result)
+    expected: tuple[WarningSeverity, ...]
+    expected = test_case.expected_severities or (
+        (test_case.expected_severity,) * test_case.expected_warning_count
+        if test_case.expected_severity is not None
+        else ()
+    )
+    assert actual_severities == expected
