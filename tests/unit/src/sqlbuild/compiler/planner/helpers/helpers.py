@@ -14,8 +14,9 @@ from sqlbuild.compiler.compile.models import (
     CompiledSeed,
     CompiledSource,
     CompileModelConfig,
+    CompileSqlReference,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledResourceType, SqlReferenceKind
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
@@ -28,10 +29,12 @@ from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     WarehouseSnapshot,
 )
+from sqlbuild.compiler.planner.types import BackfillAction
 from sqlbuild.spec.models.schema import SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     BuildModelWarningsTestCase,
+    IncrementalStrategyErrorTestCase,
     PlanAuditTestCase,
     ResolveModelPlanActionTestCase,
 )
@@ -167,6 +170,8 @@ def build_strategy_model(test_case: ResolveModelPlanActionTestCase) -> CompiledM
     config_values: dict[str, object] = {"materialized": test_case.materialized}
     if test_case.incremental_strategy is not None:
         config_values["incremental_strategy"] = test_case.incremental_strategy
+    if test_case.enabled is not None:
+        config_values["enabled"] = test_case.enabled
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="test_model"),
         deps=(),
@@ -197,6 +202,42 @@ def build_strategy_change_result(
             action=test_case.backfill_action,
             duration=test_case.backfill_duration,
         ),
+    )
+
+
+def build_strategy_error_model(test_case: IncrementalStrategyErrorTestCase) -> CompiledModel:
+    """Build a CompiledModel from a strategy error test case."""
+
+    config_values: dict[str, object] = {"materialized": test_case.materialized}
+    if test_case.incremental_strategy is not None:
+        config_values["incremental_strategy"] = test_case.incremental_strategy
+    return CompiledModel(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="test_model"),
+        deps=(),
+        name="test_model",
+        relative_path=Path("models/test_model.sql"),
+        query_sql="SELECT 1",
+        config=CompileModelConfig(values=config_values),
+        target=CompiledRelationTarget(
+            database=None,
+            schema="staging",
+            name="test_model",
+            qualified_name="staging.test_model",
+        ),
+    )
+
+
+def build_strategy_error_change_result(
+    test_case: IncrementalStrategyErrorTestCase,
+) -> ChangeDetectionResult:
+    """Build a ChangeDetectionResult from a strategy error test case."""
+
+    return ChangeDetectionResult(
+        model_name="test_model",
+        change_kind=test_case.change_kind,
+        query_changed=False,
+        schema_findings=(),
+        backfill=BackfillResult(action=BackfillAction.WARN_ONLY),
     )
 
 
@@ -273,6 +314,59 @@ def build_audit_source_map(
             table=parts[2],
         )
         for name, parts in entries.items()
+    }
+
+
+def build_cursor_ref(ref_name: str) -> CompileSqlReference:
+    """Build a ref-type SQL reference for cursor resolution tests."""
+
+    return CompileSqlReference(
+        ref_kind=SqlReferenceKind.REF,
+        ref_name=ref_name,
+    )
+
+
+def build_cursor_model_map(
+    ref_name: str,
+    qualified_name: str | None,
+) -> dict[str, CompiledModel]:
+    """Build a model map with one entry for cursor resolution tests."""
+
+    if qualified_name is None:
+        return {}
+    return {
+        ref_name: CompiledModel(
+            key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=ref_name),
+            deps=(),
+            name=ref_name,
+            relative_path=Path(f"models/{ref_name}.sql"),
+            query_sql="SELECT 1",
+            config=CompileModelConfig(),
+            target=CompiledRelationTarget(
+                database=None,
+                schema=None,
+                name=ref_name,
+                qualified_name=qualified_name,
+            ),
+        ),
+    }
+
+
+def build_cursor_deferred_targets(
+    ref_name: str,
+    qualified_name: str | None,
+) -> dict[str, CompiledRelationTarget] | None:
+    """Build deferred targets dict with one entry, or None."""
+
+    if qualified_name is None:
+        return None
+    return {
+        ref_name: CompiledRelationTarget(
+            database=None,
+            schema=None,
+            name=ref_name,
+            qualified_name=qualified_name,
+        ),
     }
 
 

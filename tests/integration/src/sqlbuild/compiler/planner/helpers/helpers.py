@@ -155,3 +155,19 @@ def build_project_with_targets(
         sources=tuple(sources),
         seeds=tuple(seeds),
     )
+
+
+def build_deferred_targets_from_map(
+    targets: dict[str, str],
+) -> dict[str, CompiledRelationTarget]:
+    """Build deferred targets from a name -> qualified_name mapping."""
+
+    return {
+        name: CompiledRelationTarget(
+            database=None,
+            schema=qualified.rsplit(".", 1)[0] if "." in qualified else None,
+            name=name,
+            qualified_name=qualified,
+        )
+        for name, qualified in targets.items()
+    }

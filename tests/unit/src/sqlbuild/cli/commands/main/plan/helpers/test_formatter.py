@@ -4,10 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.cli.commands.main.plan.helpers.formatter import (
-    format_plan_compact,
-    format_plan_verbose,
-)
+from sqlbuild.cli.commands.main.plan.helpers.formatter import format_plan
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
     PlanAction,
@@ -25,28 +22,16 @@ from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers.helpers import (
     build_warning,
 )
 
-COMPACT_TEST_CASES: list[FormatPlanTestCase] = [
+TEST_CASES: list[FormatPlanTestCase] = [
     FormatPlanTestCase(
-        description="compact output shows plan ready and model counts",
+        description="first run models do not show action detail",
         plan_output=build_plan_output(
             model_entries=(build_model_entry(name="orders", action=PlanAction.CREATE_TABLE),),
         ),
-        expected_fragments=("Plan ready", "Selected models: 1", "Will run: 1", "orders"),
+        unexpected_fragments=("rebuild", "policy:", "cursor:"),
     ),
     FormatPlanTestCase(
-        description="compact output hides skipped models from will-run section",
-        plan_output=build_plan_output(
-            model_entries=(
-                build_model_entry(
-                    name="orders", action=PlanAction.SKIP, reason=PlanReason.NO_CHANGE
-                ),
-            ),
-        ),
-        expected_fragments=("Will run: 0",),
-        unexpected_fragments=("Will run\n",),
-    ),
-    FormatPlanTestCase(
-        description="compact output shows reason and action for running models",
+        description="query changed group shows action and policy inline",
         plan_output=build_plan_output(
             model_entries=(
                 build_model_entry(
@@ -55,73 +40,28 @@ COMPACT_TEST_CASES: list[FormatPlanTestCase] = [
                     reason=PlanReason.QUERY_CHANGED,
                     backfill_action=BackfillAction.BOUNDED,
                     backfill_duration="30d",
+                    previous_query_sql="SELECT order_id FROM raw",
                 ),
             ),
         ),
         expected_fragments=(
+            "Query changed (1)",
             "fact_orders",
-            "reason: query changed",
-            "action: bounded backfill (30d)",
+            "rebuild last 30d",
             "policy: query_change_backfill=bounded(30d)",
+            "query diff:",
         ),
     ),
     FormatPlanTestCase(
-        description="compact output shows warnings section when warnings exist",
+        description="schema changed group shows schema diff and action",
         plan_output=build_plan_output(
             model_entries=(
                 build_model_entry(
-                    name="orders", action=PlanAction.SKIP, reason=PlanReason.NO_CHANGE
-                ),
-            ),
-            warnings=(
-                build_warning(
-                    model_name="stg_customers",
-                    message="type change detected",
-                    severity=WarningSeverity.WARNING,
-                ),
-            ),
-        ),
-        expected_fragments=("Warnings: 1", "stg_customers", "type change detected"),
-    ),
-    FormatPlanTestCase(
-        description="compact output shows diffs available hint when previous sql exists",
-        plan_output=build_plan_output(
-            model_entries=(
-                build_model_entry(
-                    name="orders",
-                    action=PlanAction.CREATE_TABLE,
-                    reason=PlanReason.QUERY_CHANGED,
-                    previous_query_sql="SELECT 1",
-                ),
-            ),
-        ),
-        expected_fragments=("Diffs available for:", "orders", "sqb plan --verbose"),
-    ),
-]
-
-VERBOSE_TEST_CASES: list[FormatPlanTestCase] = [
-    FormatPlanTestCase(
-        description="verbose output shows query diff between previous and current sql",
-        plan_output=build_plan_output(
-            model_entries=(
-                build_model_entry(
-                    name="orders",
-                    action=PlanAction.CREATE_TABLE,
-                    reason=PlanReason.QUERY_CHANGED,
-                    previous_query_sql="SELECT order_id\nFROM raw_orders",
-                ),
-            ),
-        ),
-        expected_fragments=("query diff:", "previous", "current"),
-    ),
-    FormatPlanTestCase(
-        description="verbose output shows schema diff for schema change findings",
-        plan_output=build_plan_output(
-            model_entries=(
-                build_model_entry(
-                    name="orders",
+                    name="dim_customers",
                     action=PlanAction.CREATE_TABLE,
                     reason=PlanReason.SCHEMA_CHANGED,
+                    backfill_action=BackfillAction.BOUNDED,
+                    backfill_duration="7d",
                     schema_findings=(
                         build_schema_finding(
                             kind=SchemaChangeKind.COLUMN_ADDED,
@@ -132,29 +72,69 @@ VERBOSE_TEST_CASES: list[FormatPlanTestCase] = [
                 ),
             ),
         ),
-        expected_fragments=("schema diff:", "+ discount", "added"),
+        expected_fragments=(
+            "Schema changed (1)",
+            "dim_customers",
+            "rebuild last 7d, add column",
+            "schema diff:",
+            "+ discount",
+            "added",
+        ),
     ),
     FormatPlanTestCase(
-        description="verbose output shows no previous fingerprint for first run models",
+        description="normal models shown as count in header not listed",
         plan_output=build_plan_output(
             model_entries=(
                 build_model_entry(
-                    name="new_model",
+                    name="stg_orders",
                     action=PlanAction.CREATE_TABLE,
-                    reason=PlanReason.FIRST_RUN,
+                    reason=PlanReason.NO_CHANGE,
+                ),
+                build_model_entry(
+                    name="fact_orders",
+                    action=PlanAction.CREATE_TABLE,
+                    reason=PlanReason.QUERY_CHANGED,
+                    backfill_action=BackfillAction.BOUNDED,
+                    backfill_duration="30d",
                 ),
             ),
         ),
-        expected_fragments=("new_model", "new model", "no previous fingerprint"),
+        expected_fragments=("Normal: 1", "Query changed (1)"),
+        unexpected_fragments=("stg_orders",),
     ),
     FormatPlanTestCase(
-        description="verbose output shows schema diff in warnings for warning models",
+        description="warnings section shows warning messages",
         plan_output=build_plan_output(
             model_entries=(
                 build_model_entry(
-                    name="stg_customers",
+                    name="orders",
                     action=PlanAction.SKIP,
                     reason=PlanReason.NO_CHANGE,
+                ),
+            ),
+            warnings=(
+                build_warning(
+                    model_name="stg_customers",
+                    message="type change detected, no on_schema_change configured",
+                    severity=WarningSeverity.WARNING,
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "Warnings (1)",
+            "stg_customers",
+            "type change detected",
+        ),
+    ),
+    FormatPlanTestCase(
+        description="schema changed with full rebuild shows type change suffix",
+        plan_output=build_plan_output(
+            model_entries=(
+                build_model_entry(
+                    name="stg_payments",
+                    action=PlanAction.CREATE_TABLE,
+                    reason=PlanReason.SCHEMA_CHANGED,
+                    backfill_action=BackfillAction.FULL,
                     schema_findings=(
                         build_schema_finding(
                             kind=SchemaChangeKind.COLUMN_TYPE_CHANGED,
@@ -165,21 +145,13 @@ VERBOSE_TEST_CASES: list[FormatPlanTestCase] = [
                     ),
                 ),
             ),
-            warnings=(
-                build_warning(
-                    model_name="stg_customers",
-                    message="type change detected",
-                ),
-            ),
         ),
         expected_fragments=(
-            "stg_customers",
-            "type change detected",
-            "schema diff:",
+            "stg_payments",
+            "full rebuild, type change",
             "~ customer_id",
             "VARCHAR",
             "INTEGER",
-            "type changed",
         ),
     ),
 ]
@@ -187,33 +159,16 @@ VERBOSE_TEST_CASES: list[FormatPlanTestCase] = [
 
 @pytest.mark.parametrize(
     "test_case",
-    COMPACT_TEST_CASES,
-    ids=[case.description for case in COMPACT_TEST_CASES],
+    TEST_CASES,
+    ids=[case.description for case in TEST_CASES],
 )
-def test_given_plan_output_when_formatting_compact_then_contains_expected_fragments(
+def test_given_plan_output_when_formatting_then_contains_expected_fragments(
     test_case: FormatPlanTestCase,
 ) -> None:
-    result: str = format_plan_compact(test_case.plan_output)
+    result: str = format_plan(test_case.plan_output)
 
     fragment: str
     for fragment in test_case.expected_fragments:
-        assert fragment in result, f"Expected '{fragment}' in compact output"
+        assert fragment in result, f"Expected '{fragment}' in output:\n{result}"
     for fragment in test_case.unexpected_fragments:
-        assert fragment not in result, f"Did not expect '{fragment}' in compact output"
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    VERBOSE_TEST_CASES,
-    ids=[case.description for case in VERBOSE_TEST_CASES],
-)
-def test_given_plan_output_when_formatting_verbose_then_contains_expected_fragments(
-    test_case: FormatPlanTestCase,
-) -> None:
-    result: str = format_plan_verbose(test_case.plan_output)
-
-    fragment: str
-    for fragment in test_case.expected_fragments:
-        assert fragment in result, f"Expected '{fragment}' in verbose output"
-    for fragment in test_case.unexpected_fragments:
-        assert fragment not in result, f"Did not expect '{fragment}' in verbose output"
+        assert fragment not in result, f"Did not expect '{fragment}' in output:\n{result}"

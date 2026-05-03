@@ -37,6 +37,8 @@ class GatherCursorSnapshotTestCase:
     expected_cursor_model_names: frozenset[str]
     expected_cursor_snapshots: dict[str, ModelCursorSnapshot] = field(default_factory=dict)
     expected_progress_calls: int = 0
+    deferred_targets: dict[str, str] | None = None
+    extra_model_targets: dict[str, str | None] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

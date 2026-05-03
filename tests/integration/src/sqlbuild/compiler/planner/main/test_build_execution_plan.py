@@ -28,14 +28,15 @@ BUILD_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
         expected_ddl_fragments={"orders": "CREATE TABLE staging.orders AS"},
     ),
     BuildExecutionPlanTestCase(
-        description="existing table with no change skips",
+        description="existing table with no change always rebuilds",
         setup_sql=("CREATE TABLE staging.orders AS SELECT 1 AS id",),
         model_targets={"orders": "staging"},
         model_configs={"orders": {"materialized": "table"}},
         model_queries={"orders": "SELECT 1 AS id"},
         full_refresh=False,
-        expected_action={"orders": PlanAction.SKIP},
+        expected_action={"orders": PlanAction.CREATE_TABLE},
         expected_reason={"orders": PlanReason.NO_CHANGE},
+        expected_ddl_fragments={"orders": "CREATE TABLE staging.orders AS"},
     ),
     BuildExecutionPlanTestCase(
         description="full refresh forces create_table on existing table",

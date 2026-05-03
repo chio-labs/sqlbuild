@@ -5,7 +5,11 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models import (
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationTarget,
+)
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
@@ -19,6 +23,7 @@ from tests.integration.src.sqlbuild.compiler.planner.helpers._test_types import 
 )
 from tests.integration.src.sqlbuild.compiler.planner.helpers.helpers import (
     _IncrementalModelSpec,
+    build_deferred_targets_from_map,
     build_project_with_targets,
 )
 
@@ -31,6 +36,10 @@ _INCREMENTAL_MODEL: _IncrementalModelSpec = _IncrementalModelSpec(
 
 _SELECTED_KEY: CompiledObjectKey = CompiledObjectKey(
     resource_type=CompiledResourceType.MODEL, name="fact_orders"
+)
+
+_ORDERS_KEY: CompiledObjectKey = CompiledObjectKey(
+    resource_type=CompiledResourceType.MODEL, name="raw_orders"
 )
 
 GATHER_SNAPSHOT_TEST_CASES: list[GatherWarehouseSnapshotTestCase] = [
@@ -266,6 +275,109 @@ def test_given_incremental_models_when_gathering_cursor_snapshots_then_returns_e
         start_cursor_override=test_case.start_cursor_override,
         end_cursor_override=test_case.end_cursor_override,
         on_progress=_track_progress,
+    )
+
+    assert frozenset(snapshot.cursor_snapshots.keys()) == test_case.expected_cursor_model_names
+    model_name: str
+    expected_snap: ModelCursorSnapshot
+    for model_name, expected_snap in test_case.expected_cursor_snapshots.items():
+        assert snapshot.cursor_snapshots[model_name] == expected_snap
+    assert len(progress_calls) == test_case.expected_progress_calls
+
+
+DEFERRED_CURSOR_TEST_CASES: list[GatherCursorSnapshotTestCase] = [
+    GatherCursorSnapshotTestCase(
+        description="selected upstream reads cursor from current env not deferred",
+        setup_sql=(
+            "CREATE SCHEMA prod",
+            "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
+            "INSERT INTO staging.raw_orders VALUES (1, '2024-01-01'), (2, '2024-03-01')",
+            "CREATE TABLE prod.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
+            "INSERT INTO prod.raw_orders VALUES (1, '2024-01-01'), (2, '2024-06-01')",
+        ),
+        selected_keys=frozenset({_SELECTED_KEY, _ORDERS_KEY}),
+        full_refresh=False,
+        start_cursor_override=None,
+        end_cursor_override=None,
+        deferred_targets={"raw_orders": "prod.raw_orders"},
+        expected_cursor_model_names=frozenset({"fact_orders"}),
+        expected_cursor_snapshots={
+            "fact_orders": ModelCursorSnapshot(
+                target_max=None,
+                upstream_mins=("2024-01-01 00:00:00",),
+                upstream_maxes=("2024-03-01 00:00:00",),
+            ),
+        },
+        expected_progress_calls=1,
+    ),
+    GatherCursorSnapshotTestCase(
+        description="non-selected upstream reads cursor from deferred env",
+        setup_sql=(
+            "CREATE SCHEMA prod",
+            "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
+            "INSERT INTO staging.raw_orders VALUES (1, '2024-01-01'), (2, '2024-03-01')",
+            "CREATE TABLE prod.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
+            "INSERT INTO prod.raw_orders VALUES (1, '2024-01-01'), (2, '2024-06-01')",
+        ),
+        selected_keys=frozenset({_SELECTED_KEY}),
+        full_refresh=False,
+        start_cursor_override=None,
+        end_cursor_override=None,
+        deferred_targets={"raw_orders": "prod.raw_orders"},
+        expected_cursor_model_names=frozenset({"fact_orders"}),
+        expected_cursor_snapshots={
+            "fact_orders": ModelCursorSnapshot(
+                target_max=None,
+                upstream_mins=("2024-01-01 00:00:00",),
+                upstream_maxes=("2024-06-01 00:00:00",),
+            ),
+        },
+        expected_progress_calls=1,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    DEFERRED_CURSOR_TEST_CASES,
+    ids=[case.description for case in DEFERRED_CURSOR_TEST_CASES],
+)
+def test_given_deferred_targets_when_gathering_cursor_snapshots_then_resolves_correct_env(
+    test_case: GatherCursorSnapshotTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+    execute: Any,
+) -> None:
+    statement: str
+    for statement in test_case.setup_sql:
+        connection.execute(statement)
+
+    progress_calls: list[str] = []
+
+    def _track_progress(message: str) -> None:
+        progress_calls.append(message)
+
+    deferred: dict[str, CompiledRelationTarget] | None = (
+        build_deferred_targets_from_map(test_case.deferred_targets)
+        if test_case.deferred_targets is not None
+        else None
+    )
+
+    project: CompiledProject = build_project_with_targets(
+        model_targets={"raw_orders": "staging"},
+        incremental_models=(_INCREMENTAL_MODEL,),
+    )
+    snapshot: WarehouseSnapshot = gather_warehouse_snapshot(
+        project=project,
+        adapter=adapter,
+        connection=connection,
+        execute=execute,
+        selected_keys=test_case.selected_keys,
+        full_refresh=test_case.full_refresh,
+        start_cursor_override=test_case.start_cursor_override,
+        end_cursor_override=test_case.end_cursor_override,
+        on_progress=_track_progress,
+        deferred_targets=deferred,
     )
 
     assert frozenset(snapshot.cursor_snapshots.keys()) == test_case.expected_cursor_model_names

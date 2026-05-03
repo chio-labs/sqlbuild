@@ -14,10 +14,13 @@ from sqlbuild.compiler.planner.types import (
     SchemaColumnSource,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
+    IncrementalStrategyErrorTestCase,
     ResolveModelPlanActionTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     build_strategy_change_result,
+    build_strategy_error_change_result,
+    build_strategy_error_model,
     build_strategy_model,
 )
 
@@ -78,14 +81,14 @@ RESOLVE_ACTION_TEST_CASES: list[ResolveModelPlanActionTestCase] = [
         expected_reason=PlanReason.FIRST_RUN,
     ),
     ResolveModelPlanActionTestCase(
-        description="table with no change skips",
+        description="table with no change always rebuilds",
         materialized="table",
         incremental_strategy=None,
         change_kind=ChangeKind.NO_CHANGE,
         query_changed=False,
         backfill_action=BackfillAction.WARN_ONLY,
         full_refresh=False,
-        expected_action=PlanAction.SKIP,
+        expected_action=PlanAction.CREATE_TABLE,
         expected_reason=PlanReason.NO_CHANGE,
     ),
     ResolveModelPlanActionTestCase(
@@ -157,15 +160,15 @@ RESOLVE_ACTION_TEST_CASES: list[ResolveModelPlanActionTestCase] = [
         expected_reason=PlanReason.SCHEMA_CHANGED,
     ),
     ResolveModelPlanActionTestCase(
-        description="incremental with no change skips",
+        description="incremental append with no change always runs",
         materialized="incremental",
         incremental_strategy="append",
         change_kind=ChangeKind.NO_CHANGE,
         query_changed=False,
         backfill_action=BackfillAction.WARN_ONLY,
         full_refresh=False,
-        expected_action=PlanAction.SKIP,
-        expected_reason=PlanReason.NO_CHANGE,
+        expected_action=PlanAction.INCREMENTAL_APPEND,
+        expected_reason=PlanReason.NORMAL_INCREMENTAL,
     ),
     ResolveModelPlanActionTestCase(
         description="incremental with full refresh creates table regardless of strategy",
@@ -243,6 +246,52 @@ RESOLVE_ACTION_TEST_CASES: list[ResolveModelPlanActionTestCase] = [
         expected_action=PlanAction.CREATE_TABLE,
         expected_reason=PlanReason.FIRST_RUN,
     ),
+    ResolveModelPlanActionTestCase(
+        description="disabled model returns skip with disabled reason",
+        materialized="table",
+        incremental_strategy=None,
+        change_kind=ChangeKind.FIRST_RUN,
+        query_changed=False,
+        backfill_action=BackfillAction.FULL,
+        full_refresh=False,
+        expected_action=PlanAction.SKIP,
+        expected_reason=PlanReason.DISABLED,
+        enabled=False,
+    ),
+    ResolveModelPlanActionTestCase(
+        description="disabled incremental model returns skip regardless of strategy",
+        materialized="incremental",
+        incremental_strategy="delete_insert",
+        change_kind=ChangeKind.QUERY_CHANGED,
+        query_changed=True,
+        backfill_action=BackfillAction.BOUNDED,
+        full_refresh=False,
+        expected_action=PlanAction.SKIP,
+        expected_reason=PlanReason.DISABLED,
+        enabled=False,
+    ),
+    ResolveModelPlanActionTestCase(
+        description="incremental delete_insert with no change always runs",
+        materialized="incremental",
+        incremental_strategy="delete_insert",
+        change_kind=ChangeKind.NO_CHANGE,
+        query_changed=False,
+        backfill_action=BackfillAction.WARN_ONLY,
+        full_refresh=False,
+        expected_action=PlanAction.INCREMENTAL_DELETE_INSERT,
+        expected_reason=PlanReason.NORMAL_INCREMENTAL,
+    ),
+    ResolveModelPlanActionTestCase(
+        description="incremental merge with no change always runs",
+        materialized="incremental",
+        incremental_strategy="merge",
+        change_kind=ChangeKind.NO_CHANGE,
+        query_changed=False,
+        backfill_action=BackfillAction.WARN_ONLY,
+        full_refresh=False,
+        expected_action=PlanAction.INCREMENTAL_MERGE,
+        expected_reason=PlanReason.NORMAL_INCREMENTAL,
+    ),
 ]
 
 
@@ -267,3 +316,42 @@ def test_given_model_and_changes_when_resolving_action_then_returns_expected(
 
     assert action == test_case.expected_action
     assert reason == test_case.expected_reason
+
+
+STRATEGY_ERROR_TEST_CASES: list[IncrementalStrategyErrorTestCase] = [
+    IncrementalStrategyErrorTestCase(
+        description="incremental without strategy raises",
+        materialized="incremental",
+        incremental_strategy=None,
+        change_kind=ChangeKind.NO_CHANGE,
+        expected_error_type=ValueError,
+        expected_error_fragment="missing required incremental_strategy",
+    ),
+    IncrementalStrategyErrorTestCase(
+        description="incremental with unknown strategy raises",
+        materialized="incremental",
+        incremental_strategy="upsert",
+        change_kind=ChangeKind.QUERY_CHANGED,
+        expected_error_type=ValueError,
+        expected_error_fragment="unknown strategy 'upsert'",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    STRATEGY_ERROR_TEST_CASES,
+    ids=[case.description for case in STRATEGY_ERROR_TEST_CASES],
+)
+def test_given_incremental_with_bad_strategy_when_resolving_action_then_raises(
+    test_case: IncrementalStrategyErrorTestCase,
+) -> None:
+    model: CompiledModel = build_strategy_error_model(test_case)
+    change_result: ChangeDetectionResult = build_strategy_error_change_result(test_case)
+
+    with pytest.raises(test_case.expected_error_type, match=test_case.expected_error_fragment):
+        resolve_model_plan_action(
+            model=model,
+            change_result=change_result,
+            full_refresh=False,
+        )

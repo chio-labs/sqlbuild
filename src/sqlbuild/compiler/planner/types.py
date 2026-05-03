@@ -66,6 +66,7 @@ class PlanReason(StrEnum):
     SCHEMA_CHANGED = "schema_changed"
     NORMAL_INCREMENTAL = "normal_incremental"
     NO_CHANGE = "no_change"
+    DISABLED = "disabled"
 
 
 class MaterializationType(StrEnum):

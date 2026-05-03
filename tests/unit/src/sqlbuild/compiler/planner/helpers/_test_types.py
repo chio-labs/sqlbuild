@@ -136,6 +136,17 @@ class ResolveModelPlanActionTestCase:
     expected_reason: PlanReason
     schema_findings: tuple[SchemaFinding, ...] = field(default_factory=tuple)
     backfill_duration: str | None = None
+    enabled: bool | None = None
+
+
+@dataclass(frozen=True)
+class IncrementalStrategyErrorTestCase:
+    description: str
+    materialized: str
+    incremental_strategy: str | None
+    change_kind: ChangeKind
+    expected_error_type: type[Exception]
+    expected_error_fragment: str
 
 
 @dataclass(frozen=True)
@@ -198,3 +209,13 @@ class ApplyDeferredTargetsTestCase:
     selected_key_names: tuple[str, ...]
     expected_model_qualified_names: dict[str, str | None]
     expected_seed_qualified_names: dict[str, str | None]
+
+
+@dataclass(frozen=True)
+class CursorUpstreamResolutionTestCase:
+    description: str
+    ref_name: str
+    model_qualified_name: str | None
+    deferred_qualified_name: str | None
+    selected_names: frozenset[str] | None
+    expected_qualified_name: str | None

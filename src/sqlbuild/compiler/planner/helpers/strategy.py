@@ -36,6 +36,9 @@ def resolve_model_plan_action(
 ) -> tuple[PlanAction, PlanReason]:
     """Determine the plan action and reason for a single model."""
 
+    if _is_disabled(model):
+        return PlanAction.SKIP, PlanReason.DISABLED
+
     materialization: MaterializationType = _get_materialization_type(model)
 
     if materialization == MaterializationType.VIEW:
@@ -226,6 +229,15 @@ def build_model_warnings(
     return tuple(warnings)
 
 
+def _is_disabled(model: CompiledModel) -> bool:
+    """Check whether a model is explicitly disabled."""
+
+    raw: object | None = model.config.values.get("enabled")
+    if isinstance(raw, bool):
+        return not raw
+    return False
+
+
 def _get_materialization_type(model: CompiledModel) -> MaterializationType:
     """Extract the materialization type from model config."""
 
@@ -271,7 +283,7 @@ def _table_action(
         return PlanAction.CREATE_TABLE, PlanReason.QUERY_CHANGED
     if change_result.change_kind == ChangeKind.SCHEMA_CHANGED:
         return PlanAction.CREATE_TABLE, PlanReason.SCHEMA_CHANGED
-    return PlanAction.SKIP, PlanReason.NO_CHANGE
+    return PlanAction.CREATE_TABLE, PlanReason.NO_CHANGE
 
 
 def _incremental_action(
@@ -281,7 +293,10 @@ def _incremental_action(
     """Determine action for an incremental materialization."""
 
     raw_strategy: object | None = model.config.values.get("incremental_strategy")
-    strategy: str = raw_strategy if isinstance(raw_strategy, str) else "append"
+    if not isinstance(raw_strategy, str):
+        raise ValueError(
+            f"incremental model '{model.name}' is missing required incremental_strategy"
+        )
 
     reason: PlanReason
     if change_result.change_kind == ChangeKind.QUERY_CHANGED:
@@ -291,15 +306,14 @@ def _incremental_action(
     else:
         reason = PlanReason.NORMAL_INCREMENTAL
 
-    if change_result.change_kind == ChangeKind.NO_CHANGE:
-        return PlanAction.SKIP, PlanReason.NO_CHANGE
-
     action_map: dict[str, PlanAction] = {
         "append": PlanAction.INCREMENTAL_APPEND,
         "delete_insert": PlanAction.INCREMENTAL_DELETE_INSERT,
         "merge": PlanAction.INCREMENTAL_MERGE,
     }
-    action: PlanAction = action_map.get(strategy, PlanAction.INCREMENTAL_APPEND)
+    action: PlanAction | None = action_map.get(raw_strategy)
+    if action is None:
+        raise ValueError(f"incremental model '{model.name}' has unknown strategy '{raw_strategy}'")
 
     return action, reason
 

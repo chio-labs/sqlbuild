@@ -243,6 +243,9 @@ def _collect_cursor_models(
 ) -> list[_CursorModelInfo]:
     """Identify selected incremental models and pre-resolve their cursor metadata."""
 
+    selected_names: frozenset[str] | None = (
+        frozenset(k.name for k in selected_keys) if selected_keys is not None else None
+    )
     cursor_models: list[_CursorModelInfo] = []
     model: CompiledModel
     for model in project.models:
@@ -277,6 +280,7 @@ def _collect_cursor_models(
                 model_map=model_map,
                 source_map=source_map,
                 deferred_targets=deferred_targets,
+                selected_names=selected_names,
             )
             if upstream_relation is None:
                 continue
@@ -461,11 +465,13 @@ def _resolve_upstream_qualified_name(
     model_map: dict[str, CompiledModel],
     source_map: dict[str, CompiledSource],
     deferred_targets: dict[str, CompiledRelationTarget] | None = None,
+    selected_names: frozenset[str] | None = None,
 ) -> str | None:
     """Resolve a reference to a qualified relation name for cursor reads."""
 
     if ref.ref_kind == SqlReferenceKind.REF:
-        if deferred_targets is not None and ref.ref_name in deferred_targets:
+        is_selected: bool = selected_names is not None and ref.ref_name in selected_names
+        if deferred_targets is not None and ref.ref_name in deferred_targets and not is_selected:
             return deferred_targets[ref.ref_name].qualified_name
         upstream_model: CompiledModel | None = model_map.get(ref.ref_name)
         if upstream_model is not None:

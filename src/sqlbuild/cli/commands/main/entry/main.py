@@ -31,7 +31,6 @@ def _build_parser() -> argparse.ArgumentParser:
     plan_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PLAN)
     plan_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     plan_parser.add_argument("--defer-to", default=None)
-    plan_parser.add_argument("--verbose", action="store_true", default=False)
     build_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.BUILD)
     build_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     build_parser.add_argument("--defer-to", default=None)
@@ -79,9 +78,7 @@ def _main_with_dependencies(
         if args.command == CliCommand.COMPILE:
             return handlers.run_compile(project_dir, args.no_sql_validation, args.defer_to)
         if args.command == CliCommand.PLAN:
-            return handlers.run_plan(
-                project_dir, args.no_sql_validation, args.defer_to, args.verbose
-            )
+            return handlers.run_plan(project_dir, args.no_sql_validation, args.defer_to)
         return 0
     except CliUserError as error:
         print(str(error), file=sys.stderr)

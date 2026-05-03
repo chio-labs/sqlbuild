@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.cli.commands.main.plan.helpers.formatter import (
-    format_plan_compact,
-    format_plan_verbose,
-)
+from sqlbuild.cli.commands.main.plan.helpers.formatter import format_plan
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.compiler.discovery.main import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -20,7 +17,6 @@ def run_plan(
     project_dir: Path | None,
     no_sql_validation: bool = False,
     defer_to: str | None = None,
-    verbose: bool = False,
 ) -> int:
     """Execute the plan command."""
 
@@ -36,14 +32,5 @@ def run_plan(
     )
 
     plan_output: PlanOutput = pipeline_result.plan_output
-    output: str = _format_output(plan_output=plan_output, verbose=verbose)
-    print(output)
+    print(format_plan(plan_output))
     return 0
-
-
-def _format_output(*, plan_output: PlanOutput, verbose: bool) -> str:
-    """Select and run the appropriate formatter."""
-
-    if verbose:
-        return format_plan_verbose(plan_output)
-    return format_plan_compact(plan_output)
