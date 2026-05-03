@@ -39,6 +39,7 @@ def run_build_pipeline(
     on_node_start: Callable[[str, str], None] | None = None,
     on_node_complete: Callable[[object], None] | None = None,
     on_progress: Callable[[str], None] | None = None,
+    on_sub_progress: Callable[[str], None] | None = None,
     custom_materializations: dict[str, Callable[..., MaterializationResult]] | None = None,
     environment: str = "",
     effective_vars: dict[str, str] | None = None,
@@ -70,6 +71,7 @@ def run_build_pipeline(
             custom_materializations=custom_materializations,
             environment=environment,
             effective_vars=effective_vars,
+            on_sub_progress=on_sub_progress,
         )
     finally:
         conn: Any

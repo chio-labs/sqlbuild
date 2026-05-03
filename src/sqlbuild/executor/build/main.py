@@ -40,6 +40,7 @@ def execute_build_plan(
     environment: str = "",
     effective_vars: dict[str, str] | None = None,
     warehouse_relations: dict[str, RelationInfo] | None = None,
+    on_sub_progress: Callable[[str], None] | None = None,
 ) -> BuildExecutionResult:
     """Execute a full build plan using the DAG scheduler."""
 
@@ -63,6 +64,7 @@ def execute_build_plan(
         environment=environment,
         effective_vars=effective_vars,
         warehouse_relations=warehouse_relations,
+        on_sub_progress=on_sub_progress,
     )
 
     model_results: tuple[ModelExecutionResult, ...]

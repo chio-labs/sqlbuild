@@ -23,7 +23,12 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
         BuildE2ETestCase(
             description="build materializes all tables views and seeds with correct data",
             expected_exit_code=0,
-            expected_table_names=("daily_revenue", "dim_customers", "fact_orders"),
+            expected_table_names=(
+                "daily_order_partitioned",
+                "daily_revenue",
+                "dim_customers",
+                "fact_orders",
+            ),
             expected_view_names=("stg_customers", "stg_orders", "stg_payments"),
             expected_seed_names=("waffle_types",),
             expected_fact_orders_data=(
@@ -57,6 +62,12 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 ("2026-04-01", 3, 6, 7100),
                 ("2026-04-02", 3, 3, 2550),
                 ("2026-04-03", 1, 1, 950),
+            ),
+            expected_daily_order_partitioned_data=(
+                ("2026-04-01", 3, 6, 2),
+                ("2026-04-02", 3, 3, 2),
+                ("2026-04-03", 2, 3, 2),
+                ("2026-04-04", 2, 6, 2),
             ),
         ),
     ],
@@ -117,3 +128,13 @@ def test_given_waffle_shop_project_when_running_build_then_warehouse_state_match
     )
     revenue_rows: list[tuple[Any, ...]] = query_duckdb(db_path=db_path, sql=revenue_sql)
     assert tuple(tuple(r) for r in revenue_rows) == test_case.expected_daily_revenue_data
+
+    partitioned_sql: str = (
+        "SELECT CAST(order_date AS VARCHAR), order_count, "
+        "waffles_ordered, unique_customers "
+        "FROM main.daily_order_partitioned ORDER BY order_date"
+    )
+    partitioned_rows: list[tuple[Any, ...]] = query_duckdb(db_path=db_path, sql=partitioned_sql)
+    assert (
+        tuple(tuple(r) for r in partitioned_rows) == test_case.expected_daily_order_partitioned_data
+    )

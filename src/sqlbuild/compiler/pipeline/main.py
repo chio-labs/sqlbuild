@@ -22,6 +22,7 @@ from sqlbuild.compiler.pipeline.helpers.deferred_targets import (
     gather_deferred_relations,
     resolve_deferred_env,
 )
+from sqlbuild.compiler.pipeline.helpers.materializations import load_custom_materializations
 from sqlbuild.compiler.pipeline.helpers.target_defaults import apply_target_defaults
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.main import build_execution_plan
@@ -128,8 +129,13 @@ def _build_result(
         downstream_deps=plan_output.downstream_deps,
     )
 
+    custom_materializations: dict[str, Any] = load_custom_materializations(
+        discovered_inputs.materialization_files
+    )
+
     return CompilePipelineResult(
         project=project,
         plan_output=plan_output,
         manifest=manifest,
+        custom_materializations=custom_materializations,
     )

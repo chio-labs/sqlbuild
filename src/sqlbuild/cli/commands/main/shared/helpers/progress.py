@@ -39,19 +39,36 @@ class BuildProgressCallbacks:
         self._use_color: bool = use_color
         self._is_tty: bool = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
         self._start_time: float = time.monotonic()
+        self._current_node_name: str = ""
+        self._current_node_type: str = ""
+        self._current_sub_message: str = ""
 
     @property
     def elapsed(self) -> float:
         return time.monotonic() - self._start_time
 
     def on_node_start(self, name: str, materialization_type: str) -> None:
+        self._current_node_name = name
+        self._current_node_type = materialization_type
+        self._current_sub_message = ""
         if self._is_tty:
-            ctr: str = f"{self._counter + 1}/{self._total}".rjust(len(str(self._total)) * 2 + 1)
-            display_type: str = _materialization_type_display(materialization_type)
-            status: str = colorize_status("...", use_color=self._use_color)
-            line: str = f"  {ctr}  {display_type:<6} {name:<40} {status}"
-            sys.stdout.write(f"\r{line}")
-            sys.stdout.flush()
+            self._write_spinner_line()
+
+    def on_sub_progress(self, message: str) -> None:
+        self._current_sub_message = message
+        if self._is_tty:
+            self._write_spinner_line()
+
+    def _write_spinner_line(self) -> None:
+        ctr: str = f"{self._counter + 1}/{self._total}".rjust(len(str(self._total)) * 2 + 1)
+        display_type: str = _materialization_type_display(self._current_node_type)
+        status: str = colorize_status("...", use_color=self._use_color)
+        name_display: str = self._current_node_name
+        if self._current_sub_message:
+            name_display = f"{self._current_node_name}  {self._current_sub_message}"
+        line: str = f"  {ctr}  {display_type:<6} {name_display:<40} {status}"
+        sys.stdout.write(f"\r\033[K{line}")
+        sys.stdout.flush()
 
     def on_node_complete(self, node_result: object) -> None:
         if isinstance(node_result, SqlTestExecutionResult):
@@ -329,6 +346,8 @@ def _materialization_type_display(materialization_type: str) -> str:
         return "view"
     if materialization_type == MaterializationType.SEED:
         return "seed"
+    if materialization_type == MaterializationType.CUSTOM:
+        return "custom"
     return "table"
 
 

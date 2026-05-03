@@ -20,3 +20,14 @@ models:
       - expression_is_true:
           name: revenue is non-negative
           expression: "total_revenue_cents >= 0"
+
+  - name: daily_order_partitioned
+    description: Partition-tracked daily order summary using custom materialization.
+    columns:
+      - name: order_date
+        audits:
+          - not_null
+    audits:
+      - expression_is_true:
+          name: waffles ordered is positive
+          expression: "waffles_ordered > 0"

@@ -90,6 +90,8 @@ def run_build(
         max_concurrency=effective_concurrency,
         on_node_start=callbacks.on_node_start,
         on_node_complete=callbacks.on_node_complete,
+        on_sub_progress=callbacks.on_sub_progress,
+        custom_materializations=pipeline_result.custom_materializations,
     )
 
     footer: str = format_build_footer(result=result, elapsed=callbacks.elapsed, use_color=use_color)

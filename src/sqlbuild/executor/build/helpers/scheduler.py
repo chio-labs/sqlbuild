@@ -68,6 +68,7 @@ class BuildScheduler:
         environment: str = "",
         effective_vars: dict[str, str] | None = None,
         warehouse_relations: dict[str, RelationInfo] | None = None,
+        on_sub_progress: Callable[[str], None] | None = None,
     ) -> None:
         self._plan: PlanOutput = plan
         self._indexes: BuildIndexes = indexes
@@ -89,6 +90,7 @@ class BuildScheduler:
         self._environment: str = environment
         self._effective_vars: dict[str, str] = effective_vars or {}
         self._warehouse_relations: dict[str, RelationInfo] = warehouse_relations or {}
+        self._on_sub_progress: Callable[[str], None] | None = on_sub_progress
 
         self._max_concurrency: int = len(connections)
         self._blocked_keys: set[CompiledObjectKey] = set()
@@ -364,7 +366,7 @@ class BuildScheduler:
             environment=self._environment,
             effective_vars=self._effective_vars,
             warehouse_relations=self._warehouse_relations,
-            on_progress=self._on_progress,
+            on_progress=self._on_sub_progress,
         )
         duration: int = int((time.monotonic() - start) * 1000)
         return dataclasses.replace(result, duration_ms=duration)

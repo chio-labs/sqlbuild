@@ -18,3 +18,6 @@ class BuildE2ETestCase:
     expected_dim_customers_data: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
     expected_waffle_types_data: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
     expected_daily_revenue_data: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
+    expected_daily_order_partitioned_data: tuple[tuple[object, ...], ...] = field(
+        default_factory=tuple
+    )
