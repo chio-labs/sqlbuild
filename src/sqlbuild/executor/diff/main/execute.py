@@ -89,9 +89,11 @@ def execute_diff(
                 name=name,
                 left_relation=left_relation,
                 right_relation=right_relation,
+                unique_key=unique_key if not schema_only else (),
                 schema_result=schema_result,
                 row_result=row_result,
                 bounded_fallback=bounded_fallback,
+                excluded_columns=excluded_columns if not schema_only else (),
             )
         )
     return DiffExecutionResult(model_results=tuple(results))

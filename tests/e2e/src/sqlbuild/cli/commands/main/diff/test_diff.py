@@ -36,7 +36,7 @@ DIFF_COMMAND_E2E_TEST_CASES: list[DiffCommandE2ETestCase] = [
         expected_stdout_fragments=(
             "orders_snapshot",
             "schema differences: 0",
-            "equal=3 unequal=0",
+            "No changed columns.",
         ),
     ),
     DiffCommandE2ETestCase(
@@ -57,8 +57,10 @@ DIFF_COMMAND_E2E_TEST_CASES: list[DiffCommandE2ETestCase] = [
         ),
         expected_exit_code=1,
         expected_stdout_fragments=(
-            "equal=2 unequal=1",
-            "column mismatches: amount_cents=1",
+            "joined: 3",
+            "unequal",
+            "amount_cents",
+            "mismatches=1",
         ),
     ),
     DiffCommandE2ETestCase(
@@ -96,8 +98,9 @@ DIFF_COMMAND_E2E_TEST_CASES: list[DiffCommandE2ETestCase] = [
         ),
         expected_exit_code=0,
         expected_stdout_fragments=(
-            "bounded diff: no cursor configured; used full row diff",
-            "equal=2 unequal=0",
+            "Fallback",
+            "no cursor configured; used full row diff",
+            "No changed columns.",
         ),
     ),
     DiffCommandE2ETestCase(

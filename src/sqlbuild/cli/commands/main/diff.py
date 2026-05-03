@@ -87,5 +87,16 @@ def run_diff(
     finally:
         adapter.close(connection)
 
-    print(render_diff_output(result=result))
+    mode_label: str = (
+        "schema-only" if schema_only else (f"bounded {bounded}" if bounded else "full")
+    )
+    print(
+        render_diff_output(
+            result=result,
+            from_label=from_environment,
+            to_label=to_environment,
+            mode_label=mode_label,
+            use_color=not no_color,
+        )
+    )
     return 1 if has_diff_failures(result) else 0

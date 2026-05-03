@@ -15,8 +15,10 @@ class ModelDiffResult:
     left_relation: str
     right_relation: str
     schema_result: SchemaDiffResult
+    unique_key: tuple[str, ...] = field(default_factory=tuple)
     row_result: RowDiffResult | None = None
     bounded_fallback: bool = False
+    excluded_columns: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
