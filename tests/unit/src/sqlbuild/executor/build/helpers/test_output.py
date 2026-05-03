@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.auditing.types import AuditOutcome
+from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.compiler.planner.types import (
     MaterializationType,
@@ -371,6 +371,76 @@ TEST_CASES: list[BuildOutputTestCase] = [
         result=BuildExecutionResult(status=BuildStatus.SUCCESS),
         elapsed_seconds=2.34,
         expected_output_fragments=("(2.34s)",),
+    ),
+    BuildOutputTestCase(
+        description="delta_and_final audits show phase labels and batch count",
+        result=BuildExecutionResult(
+            status=BuildStatus.SUCCESS,
+            model_results=(
+                ModelExecutionResult(
+                    model_name="orders",
+                    status=ExecutionStatus.SUCCESS,
+                    duration_ms=100,
+                    audit_results=(
+                        build_audit_result(
+                            name="not_null",
+                            outcome=AuditOutcome.PASS,
+                            column_name="id",
+                            run_scope_phase=AuditRunScope.DELTA_AND_FINAL,
+                        ),
+                        build_audit_result(
+                            name="not_null",
+                            outcome=AuditOutcome.PASS,
+                            column_name="id",
+                            run_scope_phase=AuditRunScope.DELTA_AND_FINAL,
+                        ),
+                        build_audit_result(
+                            name="not_null",
+                            outcome=AuditOutcome.PASS,
+                            column_name="id",
+                            run_scope_phase=AuditRunScope.FINAL,
+                        ),
+                    ),
+                ),
+            ),
+            success_count=1,
+        ),
+        expected_output_fragments=(
+            "audit (d)",
+            "audit (f)",
+            "not_null (id)",
+            "2/2",
+        ),
+    ),
+    BuildOutputTestCase(
+        description="final-only audits show plain audit label without batch count",
+        result=BuildExecutionResult(
+            status=BuildStatus.SUCCESS,
+            model_results=(
+                ModelExecutionResult(
+                    model_name="orders",
+                    status=ExecutionStatus.SUCCESS,
+                    duration_ms=100,
+                    audit_results=(
+                        build_audit_result(
+                            name="not_null",
+                            outcome=AuditOutcome.PASS,
+                            column_name="id",
+                        ),
+                    ),
+                ),
+            ),
+            success_count=1,
+        ),
+        expected_output_fragments=(
+            "audit",
+            "not_null (id)",
+            "PASS",
+        ),
+        expected_absent_fragments=(
+            "audit (d)",
+            "audit (f)",
+        ),
     ),
 ]
 

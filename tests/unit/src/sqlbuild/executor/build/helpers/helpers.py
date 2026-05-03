@@ -63,6 +63,7 @@ def build_audit_result(
     outcome: AuditOutcome,
     row_count: int = 0,
     column_name: str | None = None,
+    run_scope_phase: AuditRunScope = AuditRunScope.FINAL,
 ) -> AuditExecutionResult:
     return AuditExecutionResult(
         audit_name=name,
@@ -71,7 +72,7 @@ def build_audit_result(
         outcome=outcome,
         row_count=row_count,
         executed_sql="SELECT 1",
-        run_scope_phase=AuditRunScope.FINAL,
+        run_scope_phase=run_scope_phase,
         attached_target_name="test_model",
         attached_column_name=column_name,
     )
