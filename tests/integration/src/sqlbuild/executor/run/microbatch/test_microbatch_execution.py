@@ -123,11 +123,48 @@ SUCCESS_TEST_CASES: list[MicrobatchSuccessTestCase] = [
         microbatch_start="2026-01-01T00:00:00",
         microbatch_end="2026-01-01T03:00:00",
         is_full_refresh=True,
+        cursor_input_relations=(("main.raw_events", "event_time"),),
         expected_row_count=3,
         expected_query_results=(
             (
                 "SELECT id, payload FROM main.orders ORDER BY id",
                 ((1, "a"), (2, "b"), (3, "c")),
+            ),
+        ),
+    ),
+    MicrobatchSuccessTestCase(
+        description="full-refresh discovers range from input when output groups away cursor",
+        setup_sql=(
+            _TS_SOURCE_SQL,
+            _TS_SOURCE_DATA,
+        ),
+        model_sql=(
+            "SELECT DATE_TRUNC('hour', event_time) AS event_hour, COUNT(*) AS event_count "
+            "FROM main.raw_events "
+            f"WHERE event_time >= '{MICROBATCH_START_SENTINEL}' "
+            f"AND event_time < '{MICROBATCH_END_SENTINEL}' "
+            "GROUP BY DATE_TRUNC('hour', event_time)"
+        ),
+        target_schema="main",
+        target_name="order_activity",
+        incremental_strategy="append",
+        cursor_column="event_time",
+        cursor_type="timestamp",
+        batch_size="1h",
+        microbatch_start="2026-01-01T00:00:00",
+        microbatch_end="2026-01-01T03:00:00",
+        is_full_refresh=True,
+        cursor_input_relations=(("main.raw_events", "event_time"),),
+        expected_row_count=3,
+        expected_query_results=(
+            (
+                "SELECT CAST(event_hour AS VARCHAR), event_count "
+                "FROM main.order_activity ORDER BY event_hour",
+                (
+                    ("2026-01-01 00:00:00", 1),
+                    ("2026-01-01 01:00:00", 1),
+                    ("2026-01-01 02:00:00", 1),
+                ),
             ),
         ),
     ),
@@ -435,6 +472,7 @@ FAILURE_TEST_CASES: list[MicrobatchFailureTestCase] = [
         microbatch_start="2026-01-01T00:00:00",
         microbatch_end="2026-01-01T02:00:00",
         is_full_refresh=True,
+        cursor_input_relations=(("main.raw_events", "event_time"),),
         audit_sql='SELECT id FROM __ref("orders") WHERE id = 2',
         audit_severity="error",
         audit_run_scope=AuditRunScope.DELTA_AND_FINAL,
@@ -449,6 +487,32 @@ FAILURE_TEST_CASES: list[MicrobatchFailureTestCase] = [
             ),
         ),
         expected_delta_retained=True,
+    ),
+    MicrobatchFailureTestCase(
+        description="full-refresh delete_insert fails clearly when output omits cursor",
+        setup_sql=(
+            _TS_SOURCE_SQL,
+            _TS_SOURCE_DATA,
+        ),
+        model_sql=(
+            "SELECT DATE_TRUNC('hour', event_time) AS event_hour, COUNT(*) AS event_count "
+            "FROM main.raw_events "
+            f"WHERE event_time >= '{MICROBATCH_START_SENTINEL}' "
+            f"AND event_time < '{MICROBATCH_END_SENTINEL}' "
+            "GROUP BY DATE_TRUNC('hour', event_time)"
+        ),
+        target_schema="main",
+        target_name="order_activity",
+        incremental_strategy="delete_insert",
+        cursor_column="event_time",
+        cursor_type="timestamp",
+        batch_size="1h",
+        microbatch_start="2026-01-01T00:00:00",
+        microbatch_end="2026-01-01T03:00:00",
+        is_full_refresh=True,
+        cursor_input_relations=(("main.raw_events", "event_time"),),
+        expected_failed_phase=ExecutionPhase.DML,
+        expected_error_fragment="microbatch cursor column 'event_time' is not produced",
     ),
     MicrobatchFailureTestCase(
         description="schema change fail rejects before any batch DML in microbatch",

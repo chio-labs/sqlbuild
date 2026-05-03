@@ -24,6 +24,7 @@ class CliNamespace:
     end_cursor_int: str | None = None
     no_color: bool = False
     fail_fast: bool = False
+    full_refresh: bool = False
     concurrency: int | None = None
     select: list[str] = field(default_factory=list)
     exclude: list[str] = field(default_factory=list)
@@ -34,13 +35,14 @@ class CliEntrypointHandlers:
     """Injected command handlers for the CLI entrypoint."""
 
     run_compile: Callable[[Path | None, bool, str | None, bool], int]
-    run_plan: Callable[[Path | None, bool, str | None, CursorOverrides | None, bool], int]
+    run_plan: Callable[[Path | None, bool, str | None, CursorOverrides | None, bool, bool], int]
     run_build: Callable[
         [
             Path | None,
             bool,
             str | None,
             CursorOverrides | None,
+            bool,
             bool,
             bool,
             int | None,
@@ -55,6 +57,7 @@ class CliEntrypointHandlers:
             bool,
             str | None,
             CursorOverrides | None,
+            bool,
             bool,
             bool,
             int | None,

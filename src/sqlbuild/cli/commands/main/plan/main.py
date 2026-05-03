@@ -21,6 +21,7 @@ def run_plan(
     defer_to: str | None = None,
     cursor_overrides: CursorOverrides | None = None,
     json_output: bool = False,
+    full_refresh: bool = False,
 ) -> int:
     """Execute the plan command."""
 
@@ -34,6 +35,7 @@ def run_plan(
         no_sql_validation=no_sql_validation,
         defer_to=defer_to,
         cursor_overrides=cursor_overrides,
+        full_refresh=full_refresh,
         connection_config=resolve_connection_config(
             raw_config=discovered_inputs.project_config.connection,
             project_dir=effective_project_dir,
@@ -46,5 +48,5 @@ def run_plan(
         print(format_plan_json(plan_output))
         return 0
 
-    print(format_plan(plan_output))
+    print(format_plan(plan_output, full_refresh=full_refresh))
     return 0

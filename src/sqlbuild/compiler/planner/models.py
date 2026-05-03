@@ -105,6 +105,14 @@ class CursorBounds:
 
 
 @dataclass(frozen=True)
+class CursorInputRelation:
+    """One cursor-bearing input relation for runtime range discovery."""
+
+    relation: str
+    cursor_column: str
+
+
+@dataclass(frozen=True)
 class WarehouseSnapshot:
     """Frozen point-in-time picture of warehouse state for planning."""
 
@@ -201,6 +209,7 @@ class ModelPlanEntry:
     cursor_column: str | None = None
     cursor_type: str | None = None
     cursor_bounds: CursorBounds | None = None
+    cursor_input_relations: tuple[CursorInputRelation, ...] = field(default_factory=tuple)
     batch_size: str | None = None
     microbatch_range: CursorBounds | None = None
     unique_key: tuple[str, ...] = field(default_factory=tuple)

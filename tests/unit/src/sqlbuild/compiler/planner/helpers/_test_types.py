@@ -241,6 +241,15 @@ class CursorOverrideResolutionTestCase:
 
 
 @dataclass(frozen=True)
+class MicrobatchLookbackTestCase:
+    description: str
+    incremental_strategy: str
+    batch_size: str
+    lookback: str | None
+    expected_lookback: str | None
+
+
+@dataclass(frozen=True)
 class CursorOverridesValidationTestCase:
     description: str
     start_ts: str | None = None

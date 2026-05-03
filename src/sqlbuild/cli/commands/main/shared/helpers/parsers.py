@@ -19,6 +19,7 @@ def add_execution_args(parser: argparse.ArgumentParser) -> None:
 
     parser.add_argument("--no-color", action="store_true", default=False)
     parser.add_argument("--fail-fast", action="store_true", default=False)
+    parser.add_argument("--full-refresh", action="store_true", default=False)
     parser.add_argument("--concurrency", type=int, default=None)
 
 

@@ -13,7 +13,9 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationTarget,
     CompiledSeed,
     CompiledSource,
+    CompileSqlReference,
 )
+from sqlbuild.compiler.compile.types import SqlReferenceKind
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.helpers.changes.main import detect_model_changes
 from sqlbuild.compiler.planner.helpers.cursor_type_check import (
@@ -34,6 +36,7 @@ from sqlbuild.compiler.planner.models import (
     BackfillResult,
     ChangeDetectionResult,
     CursorBounds,
+    CursorInputRelation,
     CursorOverrides,
     ModelCursorSnapshot,
     ModelPlanEntry,
@@ -45,6 +48,7 @@ from sqlbuild.compiler.planner.types import (
     BackfillAction,
     CursorType,
     IncrementalMode,
+    IncrementalStrategy,
     MaterializationType,
     OnSchemaChange,
     PlanAction,
@@ -54,6 +58,9 @@ from sqlbuild.spec.models.schema import SchemaColumn
 from sqlbuild.spec.models.source import SourceEntry
 
 _MODELS_DIR_PREFIX: str = "models/"
+_IDEMPOTENT_MICROBATCH_STRATEGIES: frozenset[IncrementalStrategy] = frozenset(
+    (IncrementalStrategy.DELETE_INSERT, IncrementalStrategy.MERGE)
+)
 
 
 def plan_model(
@@ -146,6 +153,13 @@ def plan_model(
     post_hook: object = model.config.values.get("post_hook")
     cursor_column: str | None = _get_config_str(model, "cursor")
     cursor_type: str | None = _get_config_str(model, "cursor_type")
+    cursor_input_relations: tuple[CursorInputRelation, ...] = _build_cursor_input_relations(
+        model=model,
+        model_targets=model_targets,
+        seed_targets=seed_targets,
+        source_map=source_map,
+        cursor_column=cursor_column,
+    )
 
     cursor_type_warning: PlanWarning | None = check_cursor_type_consistency(
         model_name=model.name,
@@ -202,6 +216,7 @@ def plan_model(
         cursor_column=cursor_column,
         cursor_type=cursor_type,
         cursor_bounds=cursor_bounds,
+        cursor_input_relations=cursor_input_relations,
         batch_size=batch_size,
         microbatch_range=microbatch_range,
         unique_key=unique_key,
@@ -426,7 +441,7 @@ def _compute_microbatch_range(
     if cursor_snapshot is None:
         return None
 
-    lookback: str | None = _get_config_str(model, "lookback")
+    lookback: str | None = resolve_microbatch_lookback(model)
     backfill_duration: str | None = None
     if backfill.action == BackfillAction.BOUNDED:
         backfill_duration = backfill.duration
@@ -439,6 +454,21 @@ def _compute_microbatch_range(
         end_cursor_override=end_cursor_override,
         is_microbatch=False,
     )
+
+
+def resolve_microbatch_lookback(model: CompiledModel) -> str | None:
+    """Resolve explicit or default lookback for one microbatch model."""
+
+    lookback: str | None = _get_config_str(model, "lookback")
+    if lookback is not None:
+        return lookback
+    raw_strategy: str | None = _get_config_str(model, "incremental_strategy")
+    strategy: IncrementalStrategy | None = (
+        IncrementalStrategy(raw_strategy) if raw_strategy is not None else None
+    )
+    if strategy not in _IDEMPOTENT_MICROBATCH_STRATEGIES:
+        return None
+    return _get_config_str(model, "batch_size")
 
 
 def _compute_plan_cursor_bounds(
@@ -479,6 +509,83 @@ def _compute_plan_cursor_bounds(
         end_cursor_override=end_cursor_override,
         is_microbatch=is_microbatch,
     )
+
+
+def _build_cursor_input_relations(
+    *,
+    model: CompiledModel,
+    model_targets: dict[str, CompiledRelationTarget],
+    seed_targets: dict[str, CompiledRelationTarget],
+    source_map: dict[str, SourceEntry],
+    cursor_column: str | None,
+) -> tuple[CursorInputRelation, ...]:
+    """Build cursor-bearing input relation metadata for runtime range discovery."""
+
+    materialized: str | None = _get_config_str(model, "materialized")
+    incremental_mode: str | None = _get_config_str(model, "incremental_mode")
+    if (
+        materialized != MaterializationType.INCREMENTAL
+        or incremental_mode != IncrementalMode.MICROBATCH
+        or cursor_column is None
+    ):
+        return ()
+
+    cursor_inputs: dict[str, str] = _get_cursor_inputs(model=model, cursor_column=cursor_column)
+    relations: list[CursorInputRelation] = []
+    ref: CompileSqlReference
+    for ref in model.references:
+        input_cursor_column: str | None = cursor_inputs.get(ref.ref_name)
+        if input_cursor_column is None:
+            continue
+        relation: str | None = _resolve_cursor_input_relation(
+            ref=ref,
+            model_targets=model_targets,
+            seed_targets=seed_targets,
+            source_map=source_map,
+        )
+        if relation is not None:
+            relations.append(
+                CursorInputRelation(relation=relation, cursor_column=input_cursor_column)
+            )
+    return tuple(relations)
+
+
+def _resolve_cursor_input_relation(
+    *,
+    ref: CompileSqlReference,
+    model_targets: dict[str, CompiledRelationTarget],
+    seed_targets: dict[str, CompiledRelationTarget],
+    source_map: dict[str, SourceEntry],
+) -> str | None:
+    """Resolve one cursor input reference to a qualified relation name."""
+
+    if ref.ref_kind == SqlReferenceKind.REF:
+        target: CompiledRelationTarget | None = model_targets.get(ref.ref_name)
+        if target is None:
+            target = seed_targets.get(ref.ref_name)
+        return target.qualified_name if target is not None else None
+    if ref.ref_kind == SqlReferenceKind.SOURCE:
+        source: SourceEntry | None = source_map.get(ref.ref_name)
+        if source is None:
+            return None
+        parts: list[str] = []
+        if source.database is not None:
+            parts.append(source.database)
+        if source.schema is not None:
+            parts.append(source.schema)
+        table_name: str = source.table if source.table is not None else source.name
+        parts.append(table_name)
+        return ".".join(parts)
+    return None
+
+
+def _get_cursor_inputs(model: CompiledModel, cursor_column: str) -> dict[str, str]:
+    """Resolve cursor column mapping per input reference."""
+
+    raw: object | None = model.config.values.get("cursor_inputs")
+    if isinstance(raw, dict):
+        return {k: v for k, v in raw.items() if isinstance(k, str) and isinstance(v, str)}
+    return {ref.ref_name: cursor_column for ref in model.references}
 
 
 def scope_overlaps(

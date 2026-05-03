@@ -32,6 +32,7 @@ def run_build(
     cursor_overrides: CursorOverrides | None = None,
     no_color: bool = False,
     fail_fast: bool = False,
+    full_refresh: bool = False,
     concurrency: int | None = None,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
@@ -55,13 +56,14 @@ def run_build(
         cursor_overrides=cursor_overrides,
         select=select,
         exclude=exclude,
+        full_refresh=full_refresh,
         connection_config=connection_config,
     )
 
     plan_output: PlanOutput = pipeline_result.plan_output
     use_color: bool = not no_color and supports_color()
 
-    plan_text: str = format_plan(plan_output, use_color=use_color)
+    plan_text: str = format_plan(plan_output, full_refresh=full_refresh, use_color=use_color)
     sys.stdout.write(plan_text + "\n\n")
 
     callbacks: BuildProgressCallbacks = BuildProgressCallbacks(

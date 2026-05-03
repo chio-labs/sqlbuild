@@ -14,8 +14,13 @@ from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
 )
-from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorBounds, ModelPlanEntry
-from sqlbuild.compiler.planner.types import CursorType, OnSchemaChange
+from sqlbuild.compiler.planner.models import (
+    AuditPlanEntry,
+    CursorBounds,
+    CursorInputRelation,
+    ModelPlanEntry,
+)
+from sqlbuild.compiler.planner.types import CursorType, IncrementalStrategy, OnSchemaChange
 from sqlbuild.executor.auditing.main import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
@@ -86,8 +91,7 @@ def execute_microbatch_entry(
             microbatch_range = _discover_cursor_range(
                 adapter=adapter,
                 connection=connection,
-                resolved_sql=entry.resolved_sql,
-                cursor_column=entry.cursor_column,
+                cursor_input_relations=entry.cursor_input_relations,
             )
         except Exception as exc:
             return build_failed_result(
@@ -281,6 +285,7 @@ def execute_microbatch_entry(
                 schema=target_schema,
                 name=delta_table,
             )
+            _validate_cursor_output_columns(entry=entry, delta_columns=delta_columns_for_dml)
             if is_full_refresh and completed_batches == 0:
                 adapter.create_table_as(
                     connection,
@@ -406,20 +411,20 @@ def _discover_cursor_range(
     *,
     adapter: BaseAdapter,
     connection: Any,
-    resolved_sql: str,
-    cursor_column: str | None,
+    cursor_input_relations: tuple[CursorInputRelation, ...],
 ) -> CursorBounds | None:
-    """Discover MIN/MAX cursor range from the model SQL for full-refresh microbatch."""
+    """Discover MIN/MAX cursor range from cursor-bearing input relations."""
 
-    if cursor_column is None:
+    if not cursor_input_relations:
         return None
-    clean_sql: str = resolved_sql.replace(
-        f"'{MICROBATCH_START_SENTINEL}'", "'1970-01-01T00:00:00'"
-    ).replace(f"'{MICROBATCH_END_SENTINEL}'", "'2999-12-31T23:59:59'")
-    discovery_sql: str = (
-        f"SELECT MIN({cursor_column}), MAX({cursor_column}) "
-        f"FROM ({clean_sql}) AS __cursor_discovery"
-    )
+    parts: list[str] = []
+    cursor_input: CursorInputRelation
+    for cursor_input in cursor_input_relations:
+        parts.append(
+            f"SELECT MIN({cursor_input.cursor_column}) AS _min, "
+            f"MAX({cursor_input.cursor_column}) AS _max FROM {cursor_input.relation}"
+        )
+    discovery_sql: str = "SELECT MIN(_min), MAX(_max) FROM (" + " UNION ALL ".join(parts) + ")"
     cursor: Any = adapter.execute(connection, discovery_sql)
     row: Any = cursor.fetchone()
     if row is None or row[0] is None or row[1] is None:
@@ -434,6 +439,28 @@ def _discover_cursor_range(
     else:
         max_val = str(raw_max)
     return CursorBounds(start=min_val, end=max_val)
+
+
+def _validate_cursor_output_columns(
+    *,
+    entry: ModelPlanEntry,
+    delta_columns: tuple[ColumnInfo, ...],
+) -> None:
+    """Validate cursor-based microbatch DML can address the model output cursor."""
+
+    if entry.incremental_strategy != IncrementalStrategy.DELETE_INSERT:
+        return
+    cursor_column: str | None = entry.cursor_column
+    if cursor_column is None:
+        return
+    delta_names: frozenset[str] = frozenset(column.name.lower() for column in delta_columns)
+    if cursor_column.lower() in delta_names:
+        return
+    raise ValueError(
+        f"microbatch cursor column '{cursor_column}' is not produced by model output; "
+        "use cursor_inputs for upstream cursor columns and set cursor to the target output "
+        "cursor column"
+    )
 
 
 def _compute_timestamp_batches(

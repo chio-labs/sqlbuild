@@ -13,6 +13,7 @@ class MainTestCase:
     expected_exit_code: int
     expected_project_dir: Path | None = None
     expected_no_sql_validation: bool = False
+    expected_full_refresh: bool = False
 
 
 @dataclass(frozen=True)

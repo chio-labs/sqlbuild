@@ -39,6 +39,7 @@ def run_compile_pipeline(
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     cursor_overrides: CursorOverrides | None = None,
+    full_refresh: bool = False,
     connection_config: dict[str, object] | None = None,
 ) -> CompilePipelineResult:
     """Run compile inputs, assembly, planning, and manifest generation."""
@@ -59,6 +60,7 @@ def run_compile_pipeline(
             select=select,
             exclude=exclude,
             cursor_overrides=cursor_overrides,
+            full_refresh=full_refresh,
         )
     finally:
         adapter.close(connection)
@@ -74,6 +76,7 @@ def _build_result(
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     cursor_overrides: CursorOverrides | None = None,
+    full_refresh: bool = False,
 ) -> CompilePipelineResult:
     """Build the complete pipeline result with an open connection."""
 
@@ -117,6 +120,7 @@ def _build_result(
         deferred_targets=deferred_targets,
         deferred_relations=deferred_relations,
         cursor_overrides=cursor_overrides,
+        full_refresh=full_refresh,
     )
     loaded_macros: dict[str, LoadedMacro] = load_macros(discovered_inputs.macro_files)
     manifest: dict[str, object] = build_manifest(

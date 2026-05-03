@@ -285,6 +285,11 @@ def _collect_cursor_models(
             )
             if upstream_relation is None:
                 continue
+            upstream_exists: bool = ref.ref_name in existing_relations or (
+                ref.ref_kind == SqlReferenceKind.SOURCE
+            )
+            if not upstream_exists:
+                continue
             upstreams.append(
                 _UpstreamCursorInfo(
                     tag_min=f"{model.name}__{ref.ref_name}__min",
@@ -402,7 +407,10 @@ def _execute_cursor_batch(
             )
         sql = " UNION ALL ".join(parts)
 
-    result: Any = execute(connection, sql)
+    try:
+        result: Any = execute(connection, sql)
+    except Exception:
+        return {}
     rows: list[Any] = result.fetchall()
     output: dict[str, str] = {}
     row: Any

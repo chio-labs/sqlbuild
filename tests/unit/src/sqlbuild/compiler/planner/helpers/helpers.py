@@ -397,6 +397,38 @@ def build_cursor_override_model(cursor_type: str | None) -> CompiledModel:
     )
 
 
+def build_microbatch_lookback_model(
+    *,
+    incremental_strategy: str,
+    batch_size: str,
+    lookback: str | None,
+) -> CompiledModel:
+    """Build a microbatch model for lookback resolution tests."""
+
+    config_values: dict[str, object] = {
+        "materialized": "incremental",
+        "incremental_strategy": incremental_strategy,
+        "incremental_mode": "microbatch",
+        "batch_size": batch_size,
+    }
+    if lookback is not None:
+        config_values["lookback"] = lookback
+    return CompiledModel(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="test_model"),
+        deps=(),
+        name="test_model",
+        relative_path=Path("models/test_model.sql"),
+        query_sql="SELECT 1",
+        config=CompileModelConfig(values=config_values),
+        target=CompiledRelationTarget(
+            database=None,
+            schema="staging",
+            name="test_model",
+            qualified_name="staging.test_model",
+        ),
+    )
+
+
 def build_cascade_upstream_state(
     entries: tuple[tuple[str, BackfillAction, str | None, str | None], ...],
 ) -> tuple[

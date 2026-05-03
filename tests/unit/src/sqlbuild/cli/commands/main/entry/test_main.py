@@ -128,6 +128,105 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
 
 @pytest.mark.parametrize(
     "test_case",
+    [
+        MainTestCase(
+            description="passes full refresh flag to build handler",
+            argv=["build", "--full-refresh"],
+            expected_exit_code=5,
+            expected_full_refresh=True,
+        )
+    ],
+    ids=["passes full refresh flag to build handler"],
+)
+def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[tuple[bool, bool]] = []
+
+    def run_build(
+        project_dir: Path | None,
+        no_sql_validation: bool,
+        defer_to: str | None,
+        cursor_overrides: object,
+        no_color: bool,
+        fail_fast: bool,
+        full_refresh: bool,
+        concurrency: int | None,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+    ) -> int:
+        del project_dir
+        del no_sql_validation
+        del defer_to
+        del cursor_overrides
+        del no_color
+        del concurrency
+        del select
+        del exclude
+        received_args.append((fail_fast, full_refresh))
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_build=run_build),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [(False, test_case.expected_full_refresh)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="passes full refresh flag to run handler",
+            argv=["run", "--full-refresh"],
+            expected_exit_code=6,
+            expected_full_refresh=True,
+        )
+    ],
+    ids=["passes full refresh flag to run handler"],
+)
+def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[bool] = []
+
+    def run_run(
+        project_dir: Path | None,
+        no_sql_validation: bool,
+        defer_to: str | None,
+        cursor_overrides: object,
+        no_color: bool,
+        fail_fast: bool,
+        full_refresh: bool,
+        concurrency: int | None,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+    ) -> int:
+        del project_dir
+        del no_sql_validation
+        del defer_to
+        del cursor_overrides
+        del no_color
+        del fail_fast
+        del concurrency
+        del select
+        del exclude
+        received_args.append(full_refresh)
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_run=run_run),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [test_case.expected_full_refresh]
+
+
+@pytest.mark.parametrize(
+    "test_case",
     ERROR_RENDERING_TEST_CASES,
     ids=[case.description for case in ERROR_RENDERING_TEST_CASES],
 )

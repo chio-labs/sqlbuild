@@ -22,6 +22,7 @@ class MicrobatchSuccessTestCase:
     microbatch_end: str
     expected_row_count: int
     expected_status: ExecutionStatus = ExecutionStatus.SUCCESS
+    cursor_input_relations: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     unique_key: tuple[str, ...] = field(default_factory=tuple)
     on_schema_change: OnSchemaChange | None = None
     is_full_refresh: bool = False
@@ -56,6 +57,7 @@ class MicrobatchFailureTestCase:
     microbatch_start: str
     microbatch_end: str
     expected_failed_phase: ExecutionPhase
+    cursor_input_relations: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     unique_key: tuple[str, ...] = field(default_factory=tuple)
     on_schema_change: OnSchemaChange | None = None
     is_full_refresh: bool = False

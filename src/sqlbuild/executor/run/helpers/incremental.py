@@ -333,8 +333,6 @@ def _apply_schema_change(
                 f"append_new_columns does not support type changes: "
                 f"{', '.join(c.name for c in type_changed)}"
             )
-        if removed:
-            warnings.append(f"target columns no longer produced by model: {', '.join(removed)}")
         return
 
     if on_schema_change == OnSchemaChange.SYNC_ALL_COLUMNS:

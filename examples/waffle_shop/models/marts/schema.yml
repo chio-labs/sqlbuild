@@ -31,3 +31,14 @@ models:
       - expression_is_true:
           name: waffles ordered is positive
           expression: "waffles_ordered > 0"
+
+  - name: hourly_order_activity
+    description: Hourly order activity aggregated via microbatch incremental.
+    columns:
+      - name: activity_hour
+        audits:
+          - not_null
+    audits:
+      - expression_is_true:
+          name: orders placed is non-negative
+          expression: "orders_placed >= 0"

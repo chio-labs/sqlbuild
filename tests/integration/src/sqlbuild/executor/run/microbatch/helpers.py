@@ -15,7 +15,12 @@ from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
 )
-from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorBounds, ModelPlanEntry
+from sqlbuild.compiler.planner.models import (
+    AuditPlanEntry,
+    CursorBounds,
+    CursorInputRelation,
+    ModelPlanEntry,
+)
 from sqlbuild.compiler.planner.types import (
     IncrementalMode,
     IncrementalStrategy,
@@ -62,6 +67,10 @@ def build_microbatch_plan_entry(
         if not test_case.is_full_refresh
         else None
     )
+    cursor_input_relations: tuple[CursorInputRelation, ...] = tuple(
+        CursorInputRelation(relation=relation, cursor_column=cursor_column)
+        for relation, cursor_column in test_case.cursor_input_relations
+    )
 
     return ModelPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),
@@ -83,6 +92,7 @@ def build_microbatch_plan_entry(
         cursor_column=test_case.cursor_column,
         cursor_type=test_case.cursor_type,
         cursor_bounds=CursorBounds(start=MICROBATCH_START_SENTINEL, end=MICROBATCH_END_SENTINEL),
+        cursor_input_relations=cursor_input_relations,
         batch_size=test_case.batch_size,
         microbatch_range=microbatch_range,
         unique_key=test_case.unique_key,

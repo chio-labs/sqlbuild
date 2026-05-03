@@ -100,7 +100,7 @@ SUCCESS_TEST_CASES: list[IncrementalSuccessTestCase] = [
         ),
     ),
     IncrementalSuccessTestCase(
-        description="append_new_columns with removed column warns and uses intersection",
+        description="append_new_columns with removed column uses intersection",
         setup_sql=(
             "CREATE TABLE main.orders (id INTEGER, name VARCHAR, old_col VARCHAR)",
             "INSERT INTO main.orders VALUES (1, 'alice', 'old_value')",
@@ -111,7 +111,7 @@ SUCCESS_TEST_CASES: list[IncrementalSuccessTestCase] = [
         incremental_strategy="append",
         on_schema_change=OnSchemaChange.APPEND_NEW_COLUMNS,
         expected_row_count=2,
-        expected_warning_count=1,
+        expected_warning_count=0,
         expected_query_results=(
             (
                 "SELECT id, name, old_col FROM main.orders ORDER BY id",
@@ -214,7 +214,7 @@ SUCCESS_TEST_CASES: list[IncrementalSuccessTestCase] = [
         ),
     ),
     IncrementalSuccessTestCase(
-        description="merge with removed column preserves target-only values on matched rows",
+        description="merge with removed column preserves target-only values quietly",
         setup_sql=(
             "CREATE TABLE main.orders (id INTEGER, name VARCHAR, old_col VARCHAR)",
             "INSERT INTO main.orders VALUES (1, 'alice', 'preserved'), (2, 'bob', 'also_kept')",
@@ -226,7 +226,7 @@ SUCCESS_TEST_CASES: list[IncrementalSuccessTestCase] = [
         unique_key=("id",),
         on_schema_change=OnSchemaChange.APPEND_NEW_COLUMNS,
         expected_row_count=2,
-        expected_warning_count=1,
+        expected_warning_count=0,
         expected_query_results=(
             (
                 "SELECT id, name, old_col FROM main.orders ORDER BY id",
