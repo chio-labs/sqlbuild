@@ -16,17 +16,19 @@ from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
 LOCAL_CONFIG_TEST_CASES: list[LoadLocalConfigTestCase] = [
     LoadLocalConfigTestCase(
         description="defaults cleanly when local file is missing",
-        local_file_contents=None,
+        repo_files={},
         expected_environment=None,
         expected_vars={},
     ),
     LoadLocalConfigTestCase(
         description="loads environment and vars from local config",
-        local_file_contents="""
+        repo_files={
+            "sqlbuild_local.yml": """
 environment: dev
 vars:
   user: kevin
-""".strip(),
+""".strip()
+        },
         expected_environment="dev",
         expected_vars={"user": "kevin"},
     ),
@@ -122,9 +124,12 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
     test_case: LoadLocalConfigTestCase,
     tmp_path: Path,
 ) -> None:
-    if test_case.local_file_contents is not None:
-        local_file: Path = tmp_path / "sqlbuild_local.yml"
-        local_file.write_text(test_case.local_file_contents, encoding="utf-8")
+    relative_path: str
+    contents: str
+    for relative_path, contents in test_case.repo_files.items():
+        file_path: Path = tmp_path / relative_path
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(contents, encoding="utf-8")
 
     config: object = load_local_config(project_dir=tmp_path)
 

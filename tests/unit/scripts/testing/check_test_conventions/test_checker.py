@@ -48,7 +48,7 @@ TEST_CASES: list[CheckPathsTestCase] = [
             ).strip()
             + "\n",
             "tests/unit/scripts/example_tool/test_parse_name.py": dedent(
-                """
+                f"""
                 import pytest
 
                 from tests.unit.scripts.example_tool._test_types import ParseNameTestCase
@@ -66,7 +66,10 @@ TEST_CASES: list[CheckPathsTestCase] = [
                     ],
                     ids=["strips surrounding whitespace"],
                 )
-                def test_given_name_with_surrounding_whitespace_when_parsing_then_returns_trimmed_name(
+                def {
+                    "test_given_name_with_surrounding_whitespace_when_parsing_then_returns_"
+                    "trimmed_name"
+                }(
                     test_case: ParseNameTestCase,
                 ) -> None:
                     result = normalize_name(test_case.raw_name)
@@ -350,6 +353,54 @@ TEST_CASES: list[CheckPathsTestCase] = [
             + "\n",
         },
         expected_violation_codes=("TC027",),
+    ),
+    CheckPathsTestCase(
+        description="reports if statements inside test functions",
+        repo_files=base_repo_files()
+        | {
+            "tests/unit/scripts/example_tool/_test_types.py": dedent(
+                """
+                from dataclasses import dataclass
+
+
+                @dataclass(frozen=True)
+                class ExampleTestCase:
+                    description: str
+                    raw_name: str
+                    expected_result: str
+                """
+            ).strip()
+            + "\n",
+            "tests/unit/scripts/example_tool/test_parse_name.py": dedent(
+                """
+                import pytest
+
+                from tests.unit.scripts.example_tool._test_types import ExampleTestCase
+
+
+                @pytest.mark.parametrize(
+                    "test_case",
+                    [
+                        ExampleTestCase(
+                            description="strips surrounding whitespace",
+                            raw_name="  alice  ",
+                            expected_result="alice",
+                        )
+                    ],
+                    ids=["strips surrounding whitespace"],
+                )
+                def test_given_name_with_whitespace_when_parsing_then_reports_conditional_logic(
+                    test_case: ExampleTestCase,
+                ) -> None:
+                    result = test_case.raw_name.strip()
+
+                    if result == "alice":
+                        assert result == test_case.expected_result
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("TC036",),
     ),
     CheckPathsTestCase(
         description="reports invalid test scope",

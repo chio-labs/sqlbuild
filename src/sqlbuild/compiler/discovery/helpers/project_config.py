@@ -6,7 +6,9 @@ from pathlib import Path
 from typing import cast
 
 import yaml
+from yaml import YAMLError
 
+from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.spec.models.project import (
     ClonePolicy,
     DefaultsConfig,
@@ -74,18 +76,21 @@ def load_local_config(*, project_dir: Path) -> LocalConfig:
 
 def _load_yaml_mapping(*, file_path: Path) -> dict[str, object]:
     contents: str = file_path.read_text(encoding="utf-8")
-    payload: object = yaml.safe_load(contents)
+    try:
+        payload: object = yaml.safe_load(contents)
+    except YAMLError as error:
+        raise ProjectConfigError(f"{file_path} contains invalid YAML: {error}") from error
     if payload is None:
         return {}
     if not isinstance(payload, dict):
-        raise ValueError(f"{file_path} must contain a top-level mapping")
+        raise ProjectConfigError(f"{file_path} must contain a top-level mapping")
     return cast(dict[str, object], payload)
 
 
 def _require_str(*, payload: dict[str, object], key: str, file_path: Path) -> str:
     value: object | None = payload.get(key)
     if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{file_path} must define non-empty string '{key}'")
+        raise ProjectConfigError(f"{file_path} must define non-empty string '{key}'")
     return value.strip()
 
 
@@ -94,7 +99,7 @@ def _optional_str(*, payload: dict[str, object], key: str) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"Expected '{key}' to be a non-empty string when provided")
+        raise ProjectConfigError(f"Expected '{key}' to be a non-empty string when provided")
     return value.strip()
 
 
@@ -103,7 +108,7 @@ def _optional_mapping(*, payload: dict[str, object], key: str) -> dict[str, obje
     if value is None:
         return {}
     if not isinstance(value, dict):
-        raise ValueError(f"Expected '{key}' to be a mapping when provided")
+        raise ProjectConfigError(f"Expected '{key}' to be a mapping when provided")
     return cast(dict[str, object], value)
 
 
@@ -158,7 +163,7 @@ def _load_path_defaults(*, payload: object, file_path: Path) -> dict[str, dict[s
     path_value: object
     for path_key, path_value in mapping.items():
         if not isinstance(path_value, dict):
-            raise ValueError(f"{file_path} path_defaults['{path_key}'] must be a mapping")
+            raise ProjectConfigError(f"{file_path} path_defaults['{path_key}'] must be a mapping")
         path_defaults[path_key] = cast(dict[str, object], path_value)
     return path_defaults
 
@@ -218,7 +223,7 @@ def _load_string_mapping(*, payload: object, file_path: Path) -> dict[str, str]:
     value: object
     for key, value in mapping.items():
         if not isinstance(value, str):
-            raise ValueError(f"{file_path} expected string value for '{key}'")
+            raise ProjectConfigError(f"{file_path} expected string value for '{key}'")
         result[key] = value
     return result
 
@@ -227,12 +232,12 @@ def _load_string_sequence(*, payload: object, label: str, file_path: Path) -> li
     if payload is None:
         return []
     if not isinstance(payload, list):
-        raise ValueError(f"{file_path} {label} must be a list of strings")
+        raise ProjectConfigError(f"{file_path} {label} must be a list of strings")
     values: list[str] = []
     item: object
     for item in payload:
         if not isinstance(item, str):
-            raise ValueError(f"{file_path} {label} must contain only strings")
+            raise ProjectConfigError(f"{file_path} {label} must contain only strings")
         values.append(item)
     return values
 
@@ -241,7 +246,7 @@ def _coerce_mapping(*, payload: object, label: str, file_path: Path) -> dict[str
     if payload is None:
         return {}
     if not isinstance(payload, dict):
-        raise ValueError(f"{file_path} {label} must be a mapping")
+        raise ProjectConfigError(f"{file_path} {label} must be a mapping")
     return cast(dict[str, object], payload)
 
 
@@ -250,7 +255,7 @@ def _optional_bool(*, mapping: dict[str, object], key: str, default: bool) -> bo
     if value is None:
         return default
     if not isinstance(value, bool):
-        raise ValueError(f"Expected '{key}' to be a boolean when provided")
+        raise ProjectConfigError(f"Expected '{key}' to be a boolean when provided")
     return value
 
 
@@ -259,7 +264,7 @@ def _optional_int(*, mapping: dict[str, object], key: str, default: int) -> int:
     if value is None:
         return default
     if not isinstance(value, int):
-        raise ValueError(f"Expected '{key}' to be an integer when provided")
+        raise ProjectConfigError(f"Expected '{key}' to be an integer when provided")
     return value
 
 
@@ -269,4 +274,4 @@ def _optional_scalar_batch_size(*, mapping: dict[str, object], key: str) -> str 
         return None
     if isinstance(value, (str, int)):
         return value
-    raise ValueError(f"Expected '{key}' to be a string or integer when provided")
+    raise ProjectConfigError(f"Expected '{key}' to be a string or integer when provided")

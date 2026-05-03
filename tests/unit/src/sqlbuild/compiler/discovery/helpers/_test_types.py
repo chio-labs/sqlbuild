@@ -22,6 +22,37 @@ class LoadProjectConfigTestCase:
 @dataclass(frozen=True)
 class LoadLocalConfigTestCase:
     description: str
-    local_file_contents: str | None
+    repo_files: dict[str, str]
     expected_environment: str | None
     expected_vars: dict[str, str]
+
+
+@dataclass(frozen=True)
+class ParseModelSqlHeaderTestCase:
+    description: str
+    contents: str
+    expected_header_values: dict[str, object]
+    expected_query: str
+
+
+@dataclass(frozen=True)
+class ParseModelSqlErrorTestCase:
+    description: str
+    contents: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ParseSqlTestFileTestCase:
+    description: str
+    contents: str
+    expected_names: tuple[str | None, ...]
+    expected_sql_bodies: tuple[str, ...]
+    expected_test_indexes: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class ParseSqlTestFileErrorTestCase:
+    description: str
+    contents: str
+    expected_error_fragment: str

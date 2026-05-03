@@ -8,14 +8,14 @@ from textwrap import dedent
 import pytest
 
 from scripts.type_annotations.check_type_annotation_conventions import main
-from tests.unit.scripts.type_annotations.check_type_annotation_conventions._test_types import (
-    CheckCliMainTestCase,
-    CheckPathsTestCase,
-)
 from tests.unit.scripts.type_annotations.check_type_annotation_conventions._test_helpers import (
     collect_violation_codes,
     compliant_repo_files,
     write_repo_files,
+)
+from tests.unit.scripts.type_annotations.check_type_annotation_conventions._test_types import (
+    CheckCliMainTestCase,
+    CheckPathsTestCase,
 )
 
 TEST_CASES: list[CheckPathsTestCase] = [

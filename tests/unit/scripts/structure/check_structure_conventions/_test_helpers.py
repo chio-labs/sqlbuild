@@ -6,6 +6,7 @@ from pathlib import Path
 from textwrap import dedent
 
 from scripts.structure.structure_conventions.checker import main
+from scripts.structure.structure_conventions.models import Violation
 
 
 def base_repo_files() -> dict[str, str]:
@@ -86,7 +87,7 @@ def collect_violation_messages(repo_root: Path) -> tuple[str, ...]:
         os.chdir(repo_root)
         from scripts.structure.structure_conventions.checker import check_paths
 
-        raw_violations: list[object] = check_paths(
+        raw_violations: list[Violation] = check_paths(
             [repo_root / "src/sqlbuild", repo_root / "scripts"]
         )
         violations = [violation.format(repo_root) for violation in raw_violations]

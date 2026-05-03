@@ -446,6 +446,7 @@ def _check_test_function(
         )
 
     violations.extend(_check_parametrize_shape(file_path, function_node, parametrize, context))
+    violations.extend(_check_no_if_statements(file_path, function_node))
 
     if not _references_expected_field(function_node):
         violations.append(
@@ -456,6 +457,30 @@ def _check_test_function(
                 message="tests must assert against at least one 'test_case.expected_' field",
             )
         )
+
+    return violations
+
+
+def _check_no_if_statements(
+    file_path: Path,
+    function_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> list[Violation]:
+    violations: list[Violation] = []
+
+    node: ast.AST
+    for node in ast.walk(function_node):
+        if isinstance(node, ast.If):
+            violations.append(
+                Violation(
+                    code="TC036",
+                    path=file_path,
+                    line=node.lineno,
+                    message=(
+                        "test functions must not contain if statements; split scenarios into "
+                        "separate tests or parametrized cases"
+                    ),
+                )
+            )
 
     return violations
 
