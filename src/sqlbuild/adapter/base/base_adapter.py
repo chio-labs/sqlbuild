@@ -171,6 +171,16 @@ class BaseAdapter(StrictAdapter):
             *self.render_rename(source=staging, target=right),
         )
 
+    def render_clone(
+        self,
+        *,
+        source: str,
+        target: str,
+        hard_copy: bool = False,
+    ) -> tuple[str, ...]:
+        del hard_copy
+        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+
     def render_add_columns(
         self, *, target: str, columns: tuple[ColumnInfo, ...]
     ) -> tuple[str, ...]:
@@ -289,12 +299,15 @@ class BaseAdapter(StrictAdapter):
         hard_copy: bool = False,
         statement_recorder: StatementRecorder,
     ) -> None:
-        self.create_table_as(
-            connection,
+        statements: tuple[str, ...] = self.render_clone(
+            source=source,
             target=target,
-            sql=f"SELECT * FROM {source}",
-            statement_recorder=statement_recorder,
+            hard_copy=hard_copy,
         )
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            connection.execute(stmt)
 
     def load_seed(
         self,
