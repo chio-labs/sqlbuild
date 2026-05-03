@@ -21,8 +21,12 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.executor.run.main import execute_table_entry
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
-from tests.integration.src.sqlbuild.executor.run._test_types import ExecuteTableEntryTestCase
+from tests.integration.src.sqlbuild.executor.run._test_types import (
+    TableFailureTestCase,
+    TableSuccessTestCase,
+)
 
 
 def build_table_plan_entry(
@@ -89,13 +93,87 @@ def build_declared_columns(
     return tuple(ColumnInfo(name=name, type=col_type) for name, col_type in columns)
 
 
-def execute_table_test_case(
+def run_success_test(
     *,
-    test_case: ExecuteTableEntryTestCase,
+    test_case: TableSuccessTestCase,
     adapter: DuckDbAdapter,
     connection: Any,
 ) -> ModelExecutionResult:
-    """Set up and execute a table entry test case, returning the result."""
+    """Execute a success test case and return the result."""
+
+    result: ModelExecutionResult = _execute_test(
+        test_case=test_case, adapter=adapter, connection=connection
+    )
+    assert result.status == ExecutionStatus.SUCCESS
+    return result
+
+
+def run_failure_test(
+    *,
+    test_case: TableFailureTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> ModelExecutionResult:
+    """Execute a failure test case and return the result."""
+
+    result: ModelExecutionResult = _execute_test(
+        test_case=test_case, adapter=adapter, connection=connection
+    )
+    assert result.status == ExecutionStatus.FAILED
+    return result
+
+
+def verify_success_warehouse_state(
+    *,
+    result: ModelExecutionResult,
+    test_case: TableSuccessTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    """Verify warehouse state for a successful execution."""
+
+    target_qualified: str = _build_target_qualified(
+        target_schema=test_case.target_schema, target_name=test_case.target_name
+    )
+    query_result: Any = connection.execute(f"SELECT * FROM {target_qualified}")
+    rows: list[Any] = query_result.fetchall()
+    assert len(rows) == test_case.expected_row_count
+    assert len(result.audit_results) == test_case.expected_audit_count
+    _verify_column_names(
+        connection=connection, target_qualified=target_qualified, test_case=test_case
+    )
+    _verify_column_types(
+        adapter=adapter,
+        connection=connection,
+        test_case=test_case,
+    )
+    _verify_warning_fragment(result=result, test_case=test_case)
+
+
+def verify_failure_warehouse_state(
+    *,
+    result: ModelExecutionResult,
+    test_case: TableFailureTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    """Verify result fields and warehouse state for a failed execution."""
+
+    assert result.failed_phase == test_case.expected_failed_phase
+    assert len(result.audit_results) == test_case.expected_audit_count
+    assert result.staging_relation == test_case.expected_staging_relation
+    assert result.promoted_relation == test_case.expected_promoted_relation
+    _verify_error_fragment(result=result, test_case=test_case)
+    _verify_failure_row_count(connection=connection, test_case=test_case)
+
+
+def _execute_test(
+    *,
+    test_case: TableSuccessTestCase | TableFailureTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> ModelExecutionResult:
+    """Set up and execute a table entry test case."""
 
     sql: str
     for sql in test_case.setup_sql:
@@ -113,7 +191,9 @@ def execute_table_test_case(
 
     model_audits: tuple[AuditPlanEntry, ...] = _build_model_audits(test_case)
     declared_columns: tuple[ColumnInfo, ...] = build_declared_columns(test_case.declared_columns)
-    target_qualified: str = _build_target_qualified(test_case)
+    target_qualified: str = _build_target_qualified(
+        target_schema=test_case.target_schema, target_name=test_case.target_name
+    )
     model_targets: dict[str, CompiledRelationTarget] = {
         "orders": CompiledRelationTarget(
             database=None,
@@ -122,6 +202,10 @@ def execute_table_test_case(
             qualified_name=target_qualified,
         ),
     }
+
+    fingerprint_schema: str | None = (
+        test_case.fingerprint_schema if isinstance(test_case, TableSuccessTestCase) else None
+    )
 
     return execute_table_entry(
         entry=entry,
@@ -134,12 +218,12 @@ def execute_table_test_case(
         declared_columns=declared_columns,
         promotion_mode=test_case.promotion_mode,
         run_id="test_run",
-        fingerprint_schema=test_case.fingerprint_schema,
+        fingerprint_schema=fingerprint_schema,
     )
 
 
 def _build_model_audits(
-    test_case: ExecuteTableEntryTestCase,
+    test_case: TableSuccessTestCase | TableFailureTestCase,
 ) -> tuple[AuditPlanEntry, ...]:
     """Build model audits from test case audit config."""
 
@@ -166,91 +250,17 @@ def _build_model_audits(
     return tuple(audits)
 
 
-def _build_target_qualified(test_case: ExecuteTableEntryTestCase) -> str:
-    """Build qualified target name from test case."""
-
-    if test_case.target_schema:
-        return f"{test_case.target_schema}.{test_case.target_name}"
-    return test_case.target_name
-
-
-def verify_table_test_warehouse_state(
-    *,
-    result: ModelExecutionResult,
-    test_case: ExecuteTableEntryTestCase,
-    adapter: DuckDbAdapter,
-    connection: Any,
-) -> None:
-    """Verify warehouse state and result fields beyond status."""
-
-    target_qualified: str = _build_target_qualified(test_case)
-
-    _verify_row_count(connection=connection, target_qualified=target_qualified, test_case=test_case)
-    _verify_error_message(result=result, test_case=test_case)
-    _verify_promoted_relation(result=result, test_case=test_case)
-    _verify_warning_fragment(result=result, test_case=test_case)
-    _verify_column_names(
-        connection=connection, target_qualified=target_qualified, test_case=test_case
-    )
-    _verify_column_types(
-        adapter=adapter,
-        connection=connection,
-        target_qualified=target_qualified,
-        test_case=test_case,
-    )
-    _verify_audit_count(result=result, test_case=test_case)
-
-
-def _verify_row_count(
-    *,
-    connection: Any,
-    target_qualified: str,
-    test_case: ExecuteTableEntryTestCase,
-) -> None:
-    if test_case.expected_row_count is None:
-        return
-    query_result: Any = connection.execute(f"SELECT * FROM {target_qualified}")
-    rows: list[Any] = query_result.fetchall()
-    assert len(rows) == test_case.expected_row_count
-
-
-def _verify_error_message(
-    *,
-    result: ModelExecutionResult,
-    test_case: ExecuteTableEntryTestCase,
-) -> None:
-    if test_case.expected_error_fragment is None:
-        return
-    assert result.error_message is not None
-    assert test_case.expected_error_fragment in result.error_message
-
-
-def _verify_promoted_relation(
-    *,
-    result: ModelExecutionResult,
-    test_case: ExecuteTableEntryTestCase,
-) -> None:
-    if test_case.expected_promoted_relation is None:
-        return
-    assert result.promoted_relation == test_case.expected_promoted_relation
-
-
-def _verify_warning_fragment(
-    *,
-    result: ModelExecutionResult,
-    test_case: ExecuteTableEntryTestCase,
-) -> None:
-    if test_case.expected_warning_fragment is None:
-        return
-    all_warnings: str = " ".join(result.warning_messages)
-    assert test_case.expected_warning_fragment in all_warnings
+def _build_target_qualified(*, target_schema: str | None, target_name: str) -> str:
+    if target_schema:
+        return f"{target_schema}.{target_name}"
+    return target_name
 
 
 def _verify_column_names(
     *,
     connection: Any,
     target_qualified: str,
-    test_case: ExecuteTableEntryTestCase,
+    test_case: TableSuccessTestCase,
 ) -> None:
     if not test_case.expected_column_names:
         return
@@ -263,8 +273,7 @@ def _verify_column_types(
     *,
     adapter: DuckDbAdapter,
     connection: Any,
-    target_qualified: str,
-    test_case: ExecuteTableEntryTestCase,
+    test_case: TableSuccessTestCase,
 ) -> None:
     if not test_case.expected_column_types:
         return
@@ -281,9 +290,38 @@ def _verify_column_types(
     assert tuple(enforced_types) == test_case.expected_column_types
 
 
-def _verify_audit_count(
+def _verify_warning_fragment(
     *,
     result: ModelExecutionResult,
-    test_case: ExecuteTableEntryTestCase,
+    test_case: TableSuccessTestCase,
 ) -> None:
-    assert len(result.audit_results) == test_case.expected_audit_count
+    if test_case.expected_warning_fragment is None:
+        return
+    all_warnings: str = " ".join(result.warning_messages)
+    assert test_case.expected_warning_fragment in all_warnings
+
+
+def _verify_error_fragment(
+    *,
+    result: ModelExecutionResult,
+    test_case: TableFailureTestCase,
+) -> None:
+    if test_case.expected_error_fragment is None:
+        return
+    assert result.error_message is not None
+    assert test_case.expected_error_fragment in result.error_message
+
+
+def _verify_failure_row_count(
+    *,
+    connection: Any,
+    test_case: TableFailureTestCase,
+) -> None:
+    if test_case.expected_row_count is None:
+        return
+    target_qualified: str = _build_target_qualified(
+        target_schema=test_case.target_schema, target_name=test_case.target_name
+    )
+    query_result: Any = connection.execute(f"SELECT * FROM {target_qualified}")
+    rows: list[Any] = query_result.fetchall()
+    assert len(rows) == test_case.expected_row_count
