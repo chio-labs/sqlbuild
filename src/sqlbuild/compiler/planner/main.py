@@ -31,6 +31,7 @@ from sqlbuild.compiler.planner.helpers.plan_entry import (
     gather_source_columns,
     is_settings_flag,
     plan_model,
+    resolve_cursor_overrides,
     scope_overlaps,
 )
 from sqlbuild.compiler.planner.helpers.resolve.helpers.refs import (
@@ -45,6 +46,7 @@ from sqlbuild.compiler.planner.helpers.warehouse_snapshot import (
 )
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
+    CursorOverrides,
     MissingUpstream,
     ModelPlanEntry,
     PlanOutput,
@@ -66,6 +68,7 @@ def build_execution_plan(
     full_refresh: bool = False,
     start_cursor_override: str | None = None,
     end_cursor_override: str | None = None,
+    cursor_overrides: CursorOverrides | None = None,
     on_progress: Callable[[str], None] | None = None,
     deferred_targets: dict[str, CompiledRelationTarget] | None = None,
     deferred_relations: dict[str, RelationInfo] | None = None,
@@ -154,6 +157,14 @@ def build_execution_plan(
         if model is None:
             continue
 
+        resolved_start: str | None
+        resolved_end: str | None
+        resolved_start, resolved_end = resolve_cursor_overrides(
+            model=model,
+            cursor_overrides=cursor_overrides,
+            start_cursor_override=start_cursor_override,
+            end_cursor_override=end_cursor_override,
+        )
         entry: ModelPlanEntry
         warnings: tuple[PlanWarning, ...]
         entry, warnings = plan_model(
@@ -167,8 +178,8 @@ def build_execution_plan(
             sqlglot_enabled=sqlglot_enabled,
             query_change_tracking=query_change_tracking,
             full_refresh=full_refresh,
-            start_cursor_override=start_cursor_override,
-            end_cursor_override=end_cursor_override,
+            start_cursor_override=resolved_start,
+            end_cursor_override=resolved_end,
         )
         model_entries.append(entry)
         all_warnings.extend(warnings)

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo
@@ -20,6 +22,44 @@ from sqlbuild.compiler.planner.types import (
     SelectorKind,
     WarningSeverity,
 )
+
+
+@dataclass(frozen=True)
+class CursorOverrides:
+    """Typed cursor override values from CLI flags."""
+
+    start_ts: str | None = None
+    end_ts: str | None = None
+    start_int: str | None = None
+    end_int: str | None = None
+
+    def __post_init__(self) -> None:
+        field_name: str
+        value: str | None
+        for field_name, value in (
+            ("--start-cursor-ts", self.start_ts),
+            ("--end-cursor-ts", self.end_ts),
+        ):
+            if value is not None:
+                try:
+                    datetime.fromisoformat(value)
+                except (ValueError, TypeError) as error:
+                    raise ValueError(
+                        f"{field_name} value '{value}' is not a valid ISO timestamp: {error}"
+                    ) from None
+        for field_name, value in (
+            ("--start-cursor-int", self.start_int),
+            ("--end-cursor-int", self.end_int),
+        ):
+            if value is not None:
+                try:
+                    decimal_value: Decimal = Decimal(value)
+                    if decimal_value != int(decimal_value):
+                        raise ValueError(f"{field_name} value '{value}' is not a whole number")
+                except InvalidOperation:
+                    raise ValueError(
+                        f"{field_name} value '{value}' is not a valid integer"
+                    ) from None
 
 
 @dataclass(frozen=True)
@@ -131,6 +171,7 @@ class ModelPlanEntry:
     resolved_sql: str
     logical_ddl: str
     cursor_column: str | None = None
+    cursor_type: str | None = None
     cursor_bounds: CursorBounds | None = None
     type_enforcement: bool = False
     pre_hook: object = None

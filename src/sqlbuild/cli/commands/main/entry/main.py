@@ -9,8 +9,10 @@ from pathlib import Path
 
 from sqlbuild.cli.commands.main.entry.models import CliEntrypointHandlers, CliNamespace
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
+from sqlbuild.cli.commands.main.shared.helpers.parsers import add_cursor_override_args
 from sqlbuild.cli.commands.main.shared.types import CliCommand
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
+from sqlbuild.compiler.planner.models import CursorOverrides
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -28,12 +30,15 @@ def _build_parser() -> argparse.ArgumentParser:
     run_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.RUN)
     run_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     run_parser.add_argument("--defer-to", default=None)
+    add_cursor_override_args(run_parser)
     plan_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PLAN)
     plan_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     plan_parser.add_argument("--defer-to", default=None)
+    add_cursor_override_args(plan_parser)
     build_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.BUILD)
     build_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     build_parser.add_argument("--defer-to", default=None)
+    add_cursor_override_args(build_parser)
     subparsers.add_parser(CliCommand.TEST)
     subparsers.add_parser(CliCommand.AUDIT)
     subparsers.add_parser(CliCommand.SEED)
@@ -78,7 +83,15 @@ def _main_with_dependencies(
         if args.command == CliCommand.COMPILE:
             return handlers.run_compile(project_dir, args.no_sql_validation, args.defer_to)
         if args.command == CliCommand.PLAN:
-            return handlers.run_plan(project_dir, args.no_sql_validation, args.defer_to)
+            cursor_overrides: CursorOverrides = CursorOverrides(
+                start_ts=args.start_cursor_ts,
+                end_ts=args.end_cursor_ts,
+                start_int=args.start_cursor_int,
+                end_int=args.end_cursor_int,
+            )
+            return handlers.run_plan(
+                project_dir, args.no_sql_validation, args.defer_to, cursor_overrides
+            )
         return 0
     except CliUserError as error:
         print(str(error), file=sys.stderr)

@@ -22,6 +22,7 @@ from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.planner.models import ModelCursorSnapshot, WarehouseSnapshot
+from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.spec.models.source import SourceEntry
 
 _CURSOR_BATCH_SIZE: int = 100
@@ -258,7 +259,7 @@ def _collect_cursor_models(
 
         cursor_column: str | None = _get_config_str(model, "cursor")
         materialized: str | None = _get_config_str(model, "materialized")
-        if materialized != "incremental" or cursor_column is None:
+        if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
             continue
 
         cursor_inputs: dict[str, str] = _get_cursor_inputs(model, cursor_column)

@@ -106,3 +106,44 @@ class ValidateSqlSyntaxTestCase:
     query_sql: str
     expected_valid: bool
     expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
+class IncrementalConfigValidTestCase:
+    description: str
+    config_values: dict[str, object]
+    ref_count: int
+    expected_valid: bool = True
+
+
+@dataclass(frozen=True)
+class IncrementalConfigErrorTestCase:
+    description: str
+    config_values: dict[str, object]
+    ref_count: int
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class SubstituteSqlVarsTestCase:
+    description: str
+    sql: str
+    effective_vars: dict[str, str]
+    expected_sql: str
+
+
+@dataclass(frozen=True)
+class SubstituteSqlVarsErrorTestCase:
+    description: str
+    sql: str
+    effective_vars: dict[str, str]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class VarMacroCollisionTestCase:
+    description: str
+    var_names: tuple[str, ...]
+    macro_names: tuple[str, ...]
+    expected_valid: bool
+    expected_error_fragment: str | None = None

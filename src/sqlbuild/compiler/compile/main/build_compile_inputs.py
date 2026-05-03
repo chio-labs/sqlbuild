@@ -64,7 +64,10 @@ def build_compile_inputs(
     )
     seed_inputs: tuple[CompileSeedInput, ...] = build_seed_inputs(discovered_inputs)
     source_inputs: tuple[CompileSourceInput, ...] = build_source_inputs(discovered_inputs)
-    test_inputs: tuple[CompileSqlTestInput, ...] = build_test_inputs(discovered_inputs)
+    test_inputs: tuple[CompileSqlTestInput, ...] = build_test_inputs(
+        discovered_inputs,
+        effective_vars=effective_vars,
+    )
     audit_inputs: tuple[CompileAuditInput, ...] = build_audit_inputs(
         discovered_inputs,
         model_inputs=model_inputs,

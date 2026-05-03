@@ -13,6 +13,7 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
     ChangeKind,
+    IncrementalStrategy,
     MaterializationType,
     OnSchemaChange,
     PlanAction,
@@ -307,9 +308,9 @@ def _incremental_action(
         reason = PlanReason.NORMAL_INCREMENTAL
 
     action_map: dict[str, PlanAction] = {
-        "append": PlanAction.INCREMENTAL_APPEND,
-        "delete_insert": PlanAction.INCREMENTAL_DELETE_INSERT,
-        "merge": PlanAction.INCREMENTAL_MERGE,
+        IncrementalStrategy.APPEND: PlanAction.INCREMENTAL_APPEND,
+        IncrementalStrategy.DELETE_INSERT: PlanAction.INCREMENTAL_DELETE_INSERT,
+        IncrementalStrategy.MERGE: PlanAction.INCREMENTAL_MERGE,
     }
     action: PlanAction | None = action_map.get(raw_strategy)
     if action is None:

@@ -219,3 +219,28 @@ class CursorUpstreamResolutionTestCase:
     deferred_qualified_name: str | None
     selected_names: frozenset[str] | None
     expected_qualified_name: str | None
+
+
+@dataclass(frozen=True)
+class CursorOverrideResolutionTestCase:
+    description: str
+    cursor_type: str | None
+    start_ts: str | None
+    end_ts: str | None
+    start_int: str | None
+    end_int: str | None
+    generic_start: str | None
+    generic_end: str | None
+    expected_start: str | None
+    expected_end: str | None
+
+
+@dataclass(frozen=True)
+class CursorOverridesValidationTestCase:
+    description: str
+    start_ts: str | None = None
+    end_ts: str | None = None
+    start_int: str | None = None
+    end_int: str | None = None
+    expected_valid: bool = True
+    expected_error_fragment: str | None = None

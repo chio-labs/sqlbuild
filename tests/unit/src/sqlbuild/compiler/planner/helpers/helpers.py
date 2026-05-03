@@ -370,6 +370,28 @@ def build_cursor_deferred_targets(
     }
 
 
+def build_cursor_override_model(cursor_type: str | None) -> CompiledModel:
+    """Build a minimal model with optional cursor_type for override resolution tests."""
+
+    config_values: dict[str, object] = {"materialized": "incremental"}
+    if cursor_type is not None:
+        config_values["cursor_type"] = cursor_type
+    return CompiledModel(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="test_model"),
+        deps=(),
+        name="test_model",
+        relative_path=Path("models/test_model.sql"),
+        query_sql="SELECT 1",
+        config=CompileModelConfig(values=config_values),
+        target=CompiledRelationTarget(
+            database=None,
+            schema="staging",
+            name="test_model",
+            qualified_name="staging.test_model",
+        ),
+    )
+
+
 def _stub_schema_file() -> DiscoveredSchemaFile:
     """Return a minimal schema file stub for seed construction."""
 

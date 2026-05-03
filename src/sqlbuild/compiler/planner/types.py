@@ -69,6 +69,22 @@ class PlanReason(StrEnum):
     DISABLED = "disabled"
 
 
+class IncrementalStrategy(StrEnum):
+    APPEND = "append"
+    DELETE_INSERT = "delete_insert"
+    MERGE = "merge"
+
+
+class IncrementalMode(StrEnum):
+    FULL = "full"
+    MICROBATCH = "microbatch"
+
+
+class CursorType(StrEnum):
+    TIMESTAMP = "timestamp"
+    INTEGER = "integer"
+
+
 class MaterializationType(StrEnum):
     VIEW = "view"
     TABLE = "table"

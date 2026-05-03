@@ -10,13 +10,14 @@ from sqlbuild.compiler.discovery.main import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 
 
 def run_plan(
     project_dir: Path | None,
     no_sql_validation: bool = False,
     defer_to: str | None = None,
+    cursor_overrides: CursorOverrides | None = None,
 ) -> int:
     """Execute the plan command."""
 
@@ -29,6 +30,7 @@ def run_plan(
         adapter=resolve_adapter(discovered_inputs.project_config.adapter),
         no_sql_validation=no_sql_validation,
         defer_to=defer_to,
+        cursor_overrides=cursor_overrides,
     )
 
     plan_output: PlanOutput = pipeline_result.plan_output

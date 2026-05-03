@@ -29,6 +29,7 @@ from sqlbuild.compiler.planner.models import (
     BackfillResult,
     ChangeDetectionResult,
     CursorBounds,
+    CursorOverrides,
     ModelCursorSnapshot,
     ModelPlanEntry,
     PlanWarning,
@@ -37,6 +38,8 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
+    CursorType,
+    IncrementalMode,
     MaterializationType,
     OnSchemaChange,
     PlanAction,
@@ -135,6 +138,7 @@ def plan_model(
     pre_hook: object = model.config.values.get("pre_hook")
     post_hook: object = model.config.values.get("post_hook")
     cursor_column: str | None = _get_config_str(model, "cursor")
+    cursor_type: str | None = _get_config_str(model, "cursor_type")
 
     fingerprint: Fingerprint | None = snapshot.fingerprints.get(model.name)
     previous_query_sql: str | None = fingerprint.query_sql if fingerprint is not None else None
@@ -150,6 +154,7 @@ def plan_model(
         resolved_sql=resolved_sql,
         logical_ddl=logical_ddl,
         cursor_column=cursor_column,
+        cursor_type=cursor_type,
         cursor_bounds=cursor_bounds,
         type_enforcement=type_enforcement,
         pre_hook=pre_hook,
@@ -161,6 +166,40 @@ def plan_model(
     )
 
     return entry, warnings
+
+
+def resolve_cursor_overrides(
+    *,
+    model: CompiledModel,
+    cursor_overrides: CursorOverrides | None,
+    start_cursor_override: str | None,
+    end_cursor_override: str | None,
+) -> tuple[str | None, str | None]:
+    """Resolve typed cursor overrides to generic start/end for one model.
+
+    If cursor_overrides is provided, the model's cursor_type determines which
+    typed field applies. Generic overrides serve as fallback.
+    """
+
+    if cursor_overrides is None:
+        return start_cursor_override, end_cursor_override
+
+    cursor_type: str | None = _get_config_str(model, "cursor_type")
+    resolved_start: str | None = start_cursor_override
+    resolved_end: str | None = end_cursor_override
+
+    if cursor_type == CursorType.TIMESTAMP:
+        if cursor_overrides.start_ts is not None:
+            resolved_start = cursor_overrides.start_ts
+        if cursor_overrides.end_ts is not None:
+            resolved_end = cursor_overrides.end_ts
+    elif cursor_type == CursorType.INTEGER:
+        if cursor_overrides.start_int is not None:
+            resolved_start = cursor_overrides.start_int
+        if cursor_overrides.end_int is not None:
+            resolved_end = cursor_overrides.end_int
+
+    return resolved_start, resolved_end
 
 
 def build_tag_index(
@@ -311,7 +350,7 @@ def _compute_plan_cursor_bounds(
 
     materialized: str | None = _get_config_str(model, "materialized")
     cursor_column: str | None = _get_config_str(model, "cursor")
-    if materialized != "incremental" or cursor_column is None:
+    if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
         return None
     if full_refresh:
         return None
@@ -322,7 +361,7 @@ def _compute_plan_cursor_bounds(
 
     lookback: str | None = _get_config_str(model, "lookback")
     incremental_mode: str | None = _get_config_str(model, "incremental_mode")
-    is_microbatch: bool = incremental_mode == "microbatch"
+    is_microbatch: bool = incremental_mode == IncrementalMode.MICROBATCH
 
     backfill_duration: str | None = None
     if backfill.action == BackfillAction.BOUNDED:

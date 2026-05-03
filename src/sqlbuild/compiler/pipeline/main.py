@@ -25,7 +25,7 @@ from sqlbuild.compiler.pipeline.helpers.deferred_targets import (
 from sqlbuild.compiler.pipeline.helpers.target_defaults import apply_target_defaults
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.main import build_execution_plan
-from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.spec.models.project import EnvironmentConfig
 
 
@@ -37,6 +37,7 @@ def run_compile_pipeline(
     defer_to: str | None = None,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
+    cursor_overrides: CursorOverrides | None = None,
 ) -> CompilePipelineResult:
     """Run compile inputs, assembly, planning, and manifest generation."""
 
@@ -50,6 +51,7 @@ def run_compile_pipeline(
             defer_to=defer_to,
             select=select,
             exclude=exclude,
+            cursor_overrides=cursor_overrides,
         )
     finally:
         adapter.close(connection)
@@ -64,6 +66,7 @@ def _build_result(
     defer_to: str | None = None,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
+    cursor_overrides: CursorOverrides | None = None,
 ) -> CompilePipelineResult:
     """Build the complete pipeline result with an open connection."""
 
@@ -106,6 +109,7 @@ def _build_result(
         exclude=exclude,
         deferred_targets=deferred_targets,
         deferred_relations=deferred_relations,
+        cursor_overrides=cursor_overrides,
     )
     loaded_macros: dict[str, LoadedMacro] = load_macros(discovered_inputs.macro_files)
     manifest: dict[str, object] = build_manifest(

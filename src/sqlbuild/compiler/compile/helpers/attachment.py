@@ -20,7 +20,14 @@ from sqlbuild.compiler.compile.helpers.macros import (
     expand_sql_macros,
     load_project_macros,
 )
+from sqlbuild.compiler.compile.helpers.model_config_validation import (
+    validate_incremental_config,
+)
 from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
+from sqlbuild.compiler.compile.helpers.sql_vars import (
+    substitute_sql_vars,
+    validate_var_macro_collision,
+)
 from sqlbuild.compiler.compile.helpers.sqlglot_validation import validate_sql_syntax
 from sqlbuild.compiler.compile.helpers.templating import (
     expand_effective_vars,
@@ -82,6 +89,7 @@ def build_model_inputs(
     """Attach schema metadata to discovered model files."""
 
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
+    validate_var_macro_collision(effective_vars=effective_vars, loaded_macros=loaded_macros)
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
     model_inputs: list[CompileModelInput] = []
@@ -102,8 +110,13 @@ def build_model_inputs(
             effective_environment_name=effective_environment_name,
             run_id=run_id,
         )
-        expanded_query_sql: str = expand_sql_macros(
+        var_substituted_sql: str = substitute_sql_vars(
             sql=model_file.query_sql,
+            file_path=model_file.file_path,
+            effective_vars=effective_vars,
+        )
+        expanded_query_sql: str = expand_sql_macros(
+            sql=var_substituted_sql,
             file_path=model_file.file_path,
             loaded_macros=loaded_macros,
         )
@@ -123,6 +136,11 @@ def build_model_inputs(
             known_model_names=known_model_names,
             known_source_names=known_source_names,
             has_dbt_manifest=discovered_inputs.dbt_manifest_file is not None,
+        )
+        validate_incremental_config(
+            config=effective_config,
+            model_name=model_file.file_path.stem,
+            ref_count=len(references),
         )
         expanded_config: CompileModelConfig = CompileModelConfig(
             values=expand_model_hook_macros(
@@ -230,10 +248,13 @@ def build_source_inputs(
 
 def build_test_inputs(
     discovered_inputs: DiscoveredProjectInputs,
+    *,
+    effective_vars: dict[str, str] | None = None,
 ) -> tuple[CompileSqlTestInput, ...]:
     """Build compile-time test inputs from discovered SQL-native test blocks."""
 
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
+    vars_for_substitution: dict[str, str] = effective_vars or {}
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
     test_inputs: list[CompileSqlTestInput] = []
@@ -241,8 +262,13 @@ def build_test_inputs(
     for test_file in discovered_inputs.test_files:
         test_block: DiscoveredSqlTestBlock
         for test_block in test_file.blocks:
-            expanded_sql_body: str = expand_sql_macros(
+            var_substituted_body: str = substitute_sql_vars(
                 sql=test_block.sql_body,
+                file_path=test_file.file_path,
+                effective_vars=vars_for_substitution,
+            )
+            expanded_sql_body: str = expand_sql_macros(
+                sql=var_substituted_body,
                 file_path=test_file.file_path,
                 loaded_macros=loaded_macros,
             )

@@ -69,6 +69,10 @@ vars:
             "models/staging/nested/orders_enriched.sql": """
 MODEL (
   materialized: incremental,
+  incremental_strategy: delete_insert,
+  cursor: event_time,
+  cursor_type: timestamp,
+  incremental_mode: microbatch,
   batch_size: 30m,
 );
 
@@ -107,7 +111,15 @@ sources:
         run_id=None,
         expected_model_schema_names=(None, "orders"),
         expected_model_config_values=(
-            {"materialized": "incremental", "schema": "nested", "batch_size": "30m"},
+            {
+                "materialized": "incremental",
+                "schema": "nested",
+                "incremental_strategy": "delete_insert",
+                "cursor": "event_time",
+                "cursor_type": "timestamp",
+                "incremental_mode": "microbatch",
+                "batch_size": "30m",
+            },
             {"materialized": "view", "schema": "staging", "batch_size": "1h"},
         ),
         expected_model_query_sqls=("select 1", "select 1"),
@@ -471,7 +483,12 @@ defaults:
     - run_id
 """.strip()
             + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            "models/staging/orders.sql": (
+                'MODEL (\n  unique_key: "order_id",'
+                "\n  cursor: event_time,"
+                "\n  cursor_type: timestamp,"
+                "\n);\n\nselect 1\n"
+            ),
         },
         selected_environment=None,
         cli_vars=None,
@@ -484,6 +501,9 @@ defaults:
                 "schema": "marts",
                 "incremental_strategy": "merge",
                 "incremental_mode": "microbatch",
+                "unique_key": "order_id",
+                "cursor": "event_time",
+                "cursor_type": "timestamp",
                 "lookback": "1d",
                 "batch_size": "1h",
                 "query_change_backfill": "bounded(30d)",
