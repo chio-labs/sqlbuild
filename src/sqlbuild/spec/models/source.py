@@ -26,6 +26,7 @@ class SourceEntry:
     database: str | None = None
     schema: str | None = None
     table: str | None = None
+    expression: str | None = None
     description: str | None = None
     type_enforcement: bool | None = None
     meta: dict[str, object] = field(default_factory=dict)

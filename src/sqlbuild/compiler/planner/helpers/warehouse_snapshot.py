@@ -23,6 +23,7 @@ from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.planner.models import ModelCursorSnapshot, WarehouseSnapshot
 from sqlbuild.compiler.planner.types import MaterializationType
+from sqlbuild.compiler.shared.helpers.sources import render_source_relation
 from sqlbuild.spec.models.source import SourceEntry
 
 _CURSOR_BATCH_SIZE: int = 100
@@ -489,14 +490,7 @@ def _resolve_upstream_qualified_name(
         source: CompiledSource | None = source_map.get(ref.ref_name)
         if source is not None:
             entry: SourceEntry = source.source_entry
-            parts: list[str] = []
-            if entry.database is not None:
-                parts.append(entry.database)
-            if entry.schema is not None:
-                parts.append(entry.schema)
-            table_name: str = entry.table if entry.table is not None else entry.name
-            parts.append(table_name)
-            return ".".join(parts)
+            return render_source_relation(entry)
     return None
 
 

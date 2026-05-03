@@ -45,8 +45,29 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
         expected_source_names=("raw_orders", "raw_customers"),
         expected_column_names=(("order_id", "created_at"), ()),
         expected_type_enforcement_values=(True, None),
+        expected_expressions=(None, None),
         expected_source_audit_names=(("source_freshness",), ()),
         expected_column_audit_names=((("not_null",), ("recency",)), ()),
+    ),
+    ParseSourcesYamlTestCase(
+        description="parses source expression escape hatch",
+        contents="""
+        sources:
+          - name: raw_orders
+            expression: |
+              SELECT 1 AS order_id, 'placed' AS status
+            columns:
+              - name: order_id
+                type: INTEGER
+              - name: status
+                type: VARCHAR
+        """,
+        expected_source_names=("raw_orders",),
+        expected_column_names=(("order_id", "status"),),
+        expected_type_enforcement_values=(None,),
+        expected_expressions=("SELECT 1 AS order_id, 'placed' AS status\n",),
+        expected_source_audit_names=((),),
+        expected_column_audit_names=(((), ()),),
     ),
     ParseSourcesYamlTestCase(
         description="allows empty sources files with no declarations",
@@ -54,6 +75,7 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
         expected_source_names=(),
         expected_column_names=(),
         expected_type_enforcement_values=(),
+        expected_expressions=(),
         expected_source_audit_names=(),
         expected_column_audit_names=(),
     ),
@@ -81,6 +103,7 @@ def test_given_sources_yaml_variants_when_parsing_then_it_returns_expected_raw_m
         tuple(entry.type_enforcement for entry in source_entries)
         == test_case.expected_type_enforcement_values
     )
+    assert tuple(entry.expression for entry in source_entries) == test_case.expected_expressions
     assert (
         tuple(tuple(audit.definition_name for audit in entry.audits) for entry in source_entries)
         == test_case.expected_source_audit_names
@@ -158,6 +181,37 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
             table: ""
         """,
         expected_error_fragment="source 'table' must be a non-empty string",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source expression is blank",
+        contents="""
+        sources:
+          - name: raw_orders
+            expression: ""
+        """,
+        expected_error_fragment="source 'expression' must be a non-empty string",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source expression is mixed with relation fields",
+        contents="""
+        sources:
+          - name: raw_orders
+            schema: main
+            expression: SELECT 1 AS order_id
+        """,
+        expected_error_fragment="source 'raw_orders' cannot define expression with schema",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when expression source enforces types without typed columns",
+        contents="""
+        sources:
+          - name: raw_orders
+            expression: SELECT 1 AS order_id
+            type_enforcement: true
+        """,
+        expected_error_fragment=(
+            "source 'raw_orders' uses expression with type_enforcement but has no typed columns"
+        ),
     ),
     ParseSourcesYamlErrorTestCase(
         description="raises when source type enforcement is not a boolean",

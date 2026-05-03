@@ -6,6 +6,7 @@ import re
 
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.planner.models import CursorBounds
+from sqlbuild.compiler.shared.helpers.sources import render_source_relation
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 
 _SOURCE_PATTERN: re.Pattern[str] = re.compile(r'__source\("([^"]+)"\)')
@@ -27,16 +28,21 @@ def resolve_source_references(
         source_entry: SourceEntry | None = source_map.get(source_name)
         if source_entry is None:
             return match.group(0)
-        qualified_name: str = _build_source_qualified_name(source_entry)
-        resolved_source: str = qualified_name
+        resolved_source: str = render_source_relation(source_entry)
         warehouse_cols: tuple[ColumnInfo, ...] | None = source_warehouse_columns.get(source_name)
-        if source_entry.type_enforcement and warehouse_cols is not None and warehouse_cols:
-            resolved_source = _build_cast_subquery(
-                qualified_name=qualified_name,
-                declared_columns=source_entry.columns,
-                warehouse_columns=warehouse_cols,
-                star_exclude_keyword=star_exclude_keyword,
-            )
+        if source_entry.type_enforcement:
+            if source_entry.expression is not None:
+                resolved_source = _build_expression_cast_subquery(
+                    source_relation=resolved_source,
+                    declared_columns=source_entry.columns,
+                )
+            elif warehouse_cols is not None and warehouse_cols:
+                resolved_source = _build_relation_cast_subquery(
+                    qualified_name=resolved_source,
+                    declared_columns=source_entry.columns,
+                    warehouse_columns=warehouse_cols,
+                    star_exclude_keyword=star_exclude_keyword,
+                )
         if cursor_bounds is None:
             return resolved_source
         cursor_column: str | None = cursor_inputs.get(source_name)
@@ -51,20 +57,7 @@ def resolve_source_references(
     return _SOURCE_PATTERN.sub(_replace_source, query_sql)
 
 
-def _build_source_qualified_name(entry: SourceEntry) -> str:
-    """Build a qualified relation name from a source entry."""
-
-    parts: list[str] = []
-    if entry.database is not None:
-        parts.append(entry.database)
-    if entry.schema is not None:
-        parts.append(entry.schema)
-    table_name: str = entry.table if entry.table is not None else entry.name
-    parts.append(table_name)
-    return ".".join(parts)
-
-
-def _build_cast_subquery(
+def _build_relation_cast_subquery(
     *,
     qualified_name: str,
     declared_columns: tuple[SourceColumnEntry, ...],
@@ -97,6 +90,24 @@ def _build_cast_subquery(
     return (
         f"(SELECT * {star_exclude_keyword} ({exclude_list}), {cast_clause} FROM {qualified_name})"
     )
+
+
+def _build_expression_cast_subquery(
+    *,
+    source_relation: str,
+    declared_columns: tuple[SourceColumnEntry, ...],
+) -> str:
+    """Build a CAST projection for expression sources using declared columns only."""
+
+    cast_expressions: list[str] = [
+        f"CAST({col.name} AS {col.type}) AS {col.name}"
+        for col in declared_columns
+        if col.type is not None
+    ]
+    if not cast_expressions:
+        return source_relation
+    cast_clause: str = ", ".join(cast_expressions)
+    return f"(SELECT {cast_clause} FROM {source_relation})"
 
 
 def _build_cursor_subquery(

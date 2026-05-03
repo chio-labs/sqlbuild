@@ -55,6 +55,49 @@ TEST_CASES: list[SourceResolutionTestCase] = [
         expected_sql="SELECT * FROM raw.public.orders",
     ),
     SourceResolutionTestCase(
+        description="wraps query expression source as subquery",
+        query_sql='SELECT * FROM __source("raw_orders")',
+        star_exclude_keyword="EXCLUDE",
+        source_map={
+            "raw_orders": SourceEntry(
+                name="raw_orders",
+                expression="SELECT 1 AS order_id, 'placed' AS status",
+            ),
+        },
+        source_warehouse_columns={},
+        expected_sql="SELECT * FROM (SELECT 1 AS order_id, 'placed' AS status)",
+    ),
+    SourceResolutionTestCase(
+        description="keeps table function expression source unwrapped",
+        query_sql='SELECT * FROM __source("raw_orders")',
+        star_exclude_keyword="EXCLUDE",
+        source_map={"raw_orders": SourceEntry(name="raw_orders", expression="range(3)")},
+        source_warehouse_columns={},
+        expected_sql="SELECT * FROM range(3)",
+    ),
+    SourceResolutionTestCase(
+        description="casts expression source declared typed columns",
+        query_sql='SELECT * FROM __source("raw_orders")',
+        star_exclude_keyword="EXCLUDE",
+        source_map={
+            "raw_orders": SourceEntry(
+                name="raw_orders",
+                expression="SELECT '1' AS order_id, 12 AS amount",
+                type_enforcement=True,
+                columns=(
+                    SourceColumnEntry(name="order_id", type="INTEGER"),
+                    SourceColumnEntry(name="amount", type="DECIMAL"),
+                ),
+            ),
+        },
+        source_warehouse_columns={},
+        expected_sql=(
+            "SELECT * FROM (SELECT CAST(order_id AS INTEGER) AS order_id, "
+            "CAST(amount AS DECIMAL) AS amount "
+            "FROM (SELECT '1' AS order_id, 12 AS amount))"
+        ),
+    ),
+    SourceResolutionTestCase(
         description="replaces source with CAST subquery when enforcement enabled",
         query_sql='SELECT * FROM __source("raw_orders")',
         star_exclude_keyword="EXCLUDE",

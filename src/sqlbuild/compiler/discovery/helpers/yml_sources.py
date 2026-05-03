@@ -51,7 +51,7 @@ def _load_sources_payload(*, contents: str, file_path: Path) -> dict[str, object
 
 
 def _parse_source_entry(*, entry: dict[str, object], file_path: Path) -> SourceEntry:
-    return SourceEntry(
+    source_entry: SourceEntry = SourceEntry(
         name=require_non_empty_string(
             entry=entry,
             key="name",
@@ -76,6 +76,13 @@ def _parse_source_entry(*, entry: dict[str, object], file_path: Path) -> SourceE
         table=optional_non_empty_string(
             entry=entry,
             key="table",
+            file_path=file_path,
+            label="source",
+            error_class=SourceParseError,
+        ),
+        expression=optional_non_empty_string(
+            entry=entry,
+            key="expression",
             file_path=file_path,
             label="source",
             error_class=SourceParseError,
@@ -106,6 +113,34 @@ def _parse_source_entry(*, entry: dict[str, object], file_path: Path) -> SourceE
             entry=entry, file_path=file_path, label="source", error_class=SourceParseError
         ),
     )
+    _validate_source_entry(entry=source_entry, file_path=file_path)
+    return source_entry
+
+
+def _validate_source_entry(entry: SourceEntry, file_path: Path) -> None:
+    relation_keys: tuple[str, ...] = tuple(
+        key
+        for key, value in (
+            ("database", entry.database),
+            ("schema", entry.schema),
+            ("table", entry.table),
+        )
+        if value is not None
+    )
+    if entry.expression is not None and relation_keys:
+        keys: str = ", ".join(relation_keys)
+        raise SourceParseError(
+            f"{file_path} source '{entry.name}' cannot define expression with {keys}"
+        )
+    if entry.expression is not None and entry.type_enforcement:
+        typed_columns: tuple[SourceColumnEntry, ...] = tuple(
+            column for column in entry.columns if column.type is not None
+        )
+        if not typed_columns:
+            raise SourceParseError(
+                f"{file_path} source '{entry.name}' uses expression with type_enforcement "
+                "but has no typed columns"
+            )
 
 
 def _parse_columns(*, entry: dict[str, object], file_path: Path) -> tuple[SourceColumnEntry, ...]:

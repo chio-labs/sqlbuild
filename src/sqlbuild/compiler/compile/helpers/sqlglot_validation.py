@@ -108,6 +108,24 @@ def validate_hook_sql_syntax(
             )
 
 
+def validate_source_expression_syntax(
+    *,
+    expression: str,
+    source_name: str,
+    file_path: Path,
+) -> None:
+    """Validate that a source expression is parseable as a FROM target."""
+
+    from sqlbuild.compiler.shared.helpers.sources import render_source_relation
+    from sqlbuild.spec.models.source import SourceEntry
+
+    rendered: str = render_source_relation(SourceEntry(name=source_name, expression=expression))
+    _validate_sql_syntax_with_message(
+        query_sql=f"SELECT * FROM {rendered}",
+        error_prefix=f"SQL syntax error in source expression '{source_name}' ({file_path})",
+    )
+
+
 def _validate_sql_syntax_with_message(
     *,
     query_sql: str,

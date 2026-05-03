@@ -37,6 +37,19 @@ class ModelBackedCursorBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class ExpressionSourceBuildE2ETestCase:
+    """Test case for expression-backed source build coverage."""
+
+    description: str
+    repo_files: dict[str, str]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_table_names: tuple[str, ...]
+    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
+    expected_runtime_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class QueryChangeTrackingBuildE2ETestCase:
     """Test case for query-change tracking e2e regression coverage."""
 

@@ -133,6 +133,45 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
             "expected one of: fact_orders",
         ),
     ),
+    CliFailureBuildE2ETestCase(
+        description="invalid source expression fails with sql validation enabled",
+        repo_files={
+            "sqlbuild_project.yml": dedent(
+                """
+                name: source_expression_validation_project
+                adapter: duckdb
+
+                connection:
+                  database: validation.duckdb
+                """
+            ).strip()
+            + "\n",
+            "seed_raw_data.sql": "",
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_orders
+                    expression: SELECT FROM
+                """
+            ).strip()
+            + "\n",
+            "models/orders.sql": dedent(
+                """
+                MODEL (materialized: table);
+
+                SELECT * FROM __source("raw_orders")
+                """
+            ).strip()
+            + "\n",
+        },
+        command=("build", "--no-color"),
+        expected_exit_code=1,
+        expected_stderr_fragments=(
+            "SQL syntax error in source expression 'raw_orders'",
+            "To disable project-wide, set `settings.sql_validation: false`",
+            "To skip for this run, use `--no-sql-validation`.",
+        ),
+    ),
 ]
 
 

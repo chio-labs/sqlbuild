@@ -6,6 +6,7 @@ import re
 
 from sqlbuild.compiler.auditing.constants import REF_PATTERN, SOURCE_PATTERN
 from sqlbuild.compiler.compile.models import CompiledRelationTarget
+from sqlbuild.compiler.shared.helpers.sources import render_source_relation
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -75,13 +76,6 @@ def _render_sources(
         entry: SourceEntry | None = source_map.get(source_name)
         if entry is None:
             return match.group(0)
-        parts: list[str] = []
-        if entry.database is not None:
-            parts.append(entry.database)
-        if entry.schema is not None:
-            parts.append(entry.schema)
-        table_name: str = entry.table if entry.table is not None else entry.name
-        parts.append(table_name)
-        return ".".join(parts)
+        return render_source_relation(entry)
 
     return SOURCE_PATTERN.sub(_replace, sql)

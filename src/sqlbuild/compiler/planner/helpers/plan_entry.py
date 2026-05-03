@@ -54,6 +54,7 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
+from sqlbuild.compiler.shared.helpers.sources import render_source_relation
 from sqlbuild.spec.models.schema import SchemaColumn
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -355,6 +356,8 @@ def gather_source_columns(
     source: CompiledSource
     for source in project.sources:
         entry: SourceEntry = source.source_entry
+        if entry.expression is not None:
+            continue
         schema: str | None = entry.schema
         if schema is None:
             continue
@@ -373,6 +376,8 @@ def gather_source_columns(
         source_iter: CompiledSource
         for source_iter in project.sources:
             entry_iter: SourceEntry = source_iter.source_entry
+            if entry_iter.expression is not None:
+                continue
             table_name: str = entry_iter.table if entry_iter.table is not None else entry_iter.name
             cols: tuple[ColumnInfo, ...] | None = all_columns.get(table_name)
             if cols is not None:
@@ -669,14 +674,7 @@ def _resolve_cursor_input_relation(
         source: SourceEntry | None = source_map.get(ref.ref_name)
         if source is None:
             return None
-        parts: list[str] = []
-        if source.database is not None:
-            parts.append(source.database)
-        if source.schema is not None:
-            parts.append(source.schema)
-        table_name: str = source.table if source.table is not None else source.name
-        parts.append(table_name)
-        return ".".join(parts)
+        return render_source_relation(source)
     return None
 
 

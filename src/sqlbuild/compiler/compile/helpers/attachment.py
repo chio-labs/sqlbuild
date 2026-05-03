@@ -33,6 +33,7 @@ from sqlbuild.compiler.compile.helpers.sql_vars import (
 )
 from sqlbuild.compiler.compile.helpers.sqlglot_validation import (
     validate_hook_sql_syntax,
+    validate_source_expression_syntax,
     validate_sql_syntax,
 )
 from sqlbuild.compiler.compile.helpers.templating import (
@@ -274,14 +275,29 @@ def build_seed_inputs(discovered_inputs: DiscoveredProjectInputs) -> tuple[Compi
 
 def build_source_inputs(
     discovered_inputs: DiscoveredProjectInputs,
+    *,
+    no_sql_validation: bool = False,
 ) -> tuple[CompileSourceInput, ...]:
     """Normalize discovered source declarations into one collection."""
 
     source_inputs: list[CompileSourceInput] = []
+    sql_validation_enabled: bool = (
+        discovered_inputs.project_config.settings.sql_validation and not no_sql_validation
+    )
     source_file: DiscoveredSourceFile
     for source_file in discovered_inputs.source_files:
         source_entry: SourceEntry
         for source_entry in source_file.source_entries:
+            source_expression: str | None = source_entry.expression
+            should_validate_expression: bool = (
+                source_expression is not None and sql_validation_enabled
+            )
+            if should_validate_expression and source_expression is not None:
+                validate_source_expression_syntax(
+                    expression=source_expression,
+                    source_name=source_entry.name,
+                    file_path=source_file.file_path,
+                )
             source_inputs.append(
                 CompileSourceInput(
                     source_entry=source_entry,
