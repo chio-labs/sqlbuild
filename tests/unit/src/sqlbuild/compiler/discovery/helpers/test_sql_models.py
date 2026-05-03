@@ -22,15 +22,19 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
         expected_query="SELECT 1 AS order_id",
     ),
     ParseModelSqlHeaderTestCase(
-        description="accepts mixed block and inline header mappings",
+        description="accepts nested map and list header values",
         contents="""
         MODEL (
-          materialized: "incremental",
-          unique_key: ["order_id"],
-          config:
-            cluster_by: ["event_day"]
-            transient: true,
-          schema_change_backfill: {add_column: "bounded(30d)", type_change: "full"},
+          materialized incremental,
+          unique_key [order_id],
+          config (
+            cluster_by [event_day],
+            transient true,
+          ),
+          schema_change_backfill (
+            add_column bounded-30d,
+            type_change full,
+          ),
         );
 
         SELECT order_id, event_day FROM raw_orders
@@ -43,7 +47,7 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
                 "transient": True,
             },
             "schema_change_backfill": {
-                "add_column": "bounded(30d)",
+                "add_column": "bounded-30d",
                 "type_change": "full",
             },
         },
@@ -54,10 +58,10 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
         contents="""
 
         MODEL (
-            materialized: "table",
+            materialized table,
 
-            tags: ["core"],
-            enabled: true,
+            tags [core],
+            enabled true,
         );
 
         SELECT 1
@@ -70,13 +74,13 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
         expected_query="SELECT 1",
     ),
     ParseModelSqlHeaderTestCase(
-        description="accepts quoted and unquoted plain string scalars",
+        description="accepts quoted and unquoted string scalars",
         contents="""
         MODEL (
-          materialized: table,
-          schema: "analytics",
-          database: preserve,
-          query_change_backfill: bounded(30d),
+          materialized table,
+          schema analytics,
+          database preserve,
+          query_change_backfill bounded-30d,
         );
 
         SELECT 1
@@ -85,7 +89,7 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
             "materialized": "table",
             "schema": "analytics",
             "database": "preserve",
-            "query_change_backfill": "bounded(30d)",
+            "query_change_backfill": "bounded-30d",
         },
         expected_query="SELECT 1",
     ),
@@ -93,8 +97,8 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
         description="accepts quoted, unquoted, and mixed string lists",
         contents="""
         MODEL (
-          tags: [core, "finance", marts],
-          unique_key: ["order_id", customer_id],
+          tags [core, 'finance', marts],
+          unique_key [order_id, customer_id],
         );
 
         SELECT 1
@@ -109,9 +113,9 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
         description="accepts template-like strings when quoted",
         contents="""
         MODEL (
-          schema: "dev_${user}",
-          database: "ci_${ENV:GITHUB_RUN_ID}_${CTX:schema}",
-          alias: "fact_orders",
+          schema 'dev_${user}',
+          database 'ci_${ENV:GITHUB_RUN_ID}_${CTX:schema}',
+          alias fact_orders,
         );
 
         SELECT 1
@@ -124,18 +128,24 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
         expected_query="SELECT 1",
     ),
     ParseModelSqlHeaderTestCase(
-        description="accepts nested inline mappings with mixed quoted and unquoted strings",
+        description="accepts nested maps with mixed quoted and unquoted strings",
         contents="""
         MODEL (
-          schema_change_backfill: {add_column: bounded(30d), type_change: "full"},
-          config: {cluster_by: [event_day, "region"], transient: true},
+          schema_change_backfill (
+            add_column bounded-30d,
+            type_change full,
+          ),
+          config (
+            cluster_by [event_day, 'region'],
+            transient true,
+          ),
         );
 
         SELECT 1
         """,
         expected_header_values={
             "schema_change_backfill": {
-                "add_column": "bounded(30d)",
+                "add_column": "bounded-30d",
                 "type_change": "full",
             },
             "config": {
@@ -146,14 +156,14 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
         expected_query="SELECT 1",
     ),
     ParseModelSqlHeaderTestCase(
-        description="accepts booleans and integers from unquoted YAML scalars",
+        description="accepts booleans and integers from unquoted scalars",
         contents="""
         MODEL (
-          enabled: false,
-          batch_concurrency: 4,
-          config: {
-            transient: true,
-          },
+          enabled false,
+          batch_concurrency 4,
+          config (
+            transient true,
+          ),
         );
 
         SELECT 1
@@ -198,24 +208,35 @@ MODEL_SQL_ERROR_TEST_CASES: list[ParseModelSqlErrorTestCase] = [
         expected_error_fragment="must contain SQL after MODEL(...)",
     ),
     ParseModelSqlErrorTestCase(
-        description="raises when the model header is not a mapping",
+        description="raises when the model header does not start with a key",
         contents="""
         MODEL ([core, finance]);
 
         SELECT 1
         """,
-        expected_error_fragment="must define a mapping of key: value pairs",
+        expected_error_fragment="expected key",
     ),
     ParseModelSqlErrorTestCase(
-        description="raises when the model header contains malformed YAML",
+        description="raises when the model header contains old colon syntax",
         contents="""
         MODEL (
-          tags: [core, finance
+          tags: [core, finance]
         );
 
         SELECT 1
         """,
-        expected_error_fragment="while parsing",
+        expected_error_fragment="use SQLBuild syntax 'tags value'",
+    ),
+    ParseModelSqlErrorTestCase(
+        description="raises when the model header contains an unterminated list",
+        contents="""
+        MODEL (
+          tags [core, finance
+        );
+
+        SELECT 1
+        """,
+        expected_error_fragment="expected value",
     ),
 ]
 

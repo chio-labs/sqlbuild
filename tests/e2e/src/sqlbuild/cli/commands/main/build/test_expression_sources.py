@@ -62,7 +62,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 + "\n",
                 "models/fact_orders.sql": dedent(
                     """
-                    MODEL (materialized: table);
+                    MODEL (materialized table);
 
                     SELECT
                       order_id,

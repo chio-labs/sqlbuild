@@ -1,16 +1,16 @@
 MODEL (
-  materialized: incremental,
-  incremental_strategy: delete_insert,
-  cursor: "activity_day",
-  cursor_type: timestamp,
-  cursor_grain: day,
-  cursor_inputs: {
-    hourly_order_activity: "activity_hour"
-  },
-  incremental_mode: microbatch,
-  batch_size: "2d",
-  query_change_backfill: "bounded(14d)",
-  tags: ["marts", "acceptance"]
+  materialized incremental,
+  incremental_strategy delete_insert,
+  cursor activity_day,
+  cursor_type timestamp,
+  cursor_grain day,
+  cursor_inputs (
+    hourly_order_activity activity_hour,
+  ),
+  incremental_mode microbatch,
+  batch_size 2d,
+  query_change_backfill bounded-14d,
+  tags [marts, acceptance],
 );
 
 SELECT

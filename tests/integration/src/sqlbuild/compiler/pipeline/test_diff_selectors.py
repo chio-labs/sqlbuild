@@ -24,21 +24,19 @@ _PROJECT_FILES: dict[str, str] = {
         "environments:\n  dev:\n    schema: dev_schema\n"
     ),
     "models/staging/stg_orders.sql": (
-        "MODEL (materialized: table\ntags: [staging]);\n\nSELECT 1 AS order_id"
+        "MODEL (materialized table\ntags [staging]);\n\nSELECT 1 AS order_id"
     ),
     "models/staging/stg_customers.sql": (
-        "MODEL (materialized: table\ntags: [staging]);\n\nSELECT 1 AS customer_id"
+        "MODEL (materialized table\ntags [staging]);\n\nSELECT 1 AS customer_id"
     ),
     "models/intermediate/int_orders.sql": (
-        'MODEL (materialized: table\ntags: [core]);\n\nSELECT order_id FROM __ref("stg_orders")'
+        'MODEL (materialized table\ntags [core]);\n\nSELECT order_id FROM __ref("stg_orders")'
     ),
     "models/marts/fact_orders.sql": (
-        "MODEL (materialized: table\ntags: [core, mart]);\n\n"
-        'SELECT order_id FROM __ref("int_orders")'
+        'MODEL (materialized table\ntags [core, mart]);\n\nSELECT order_id FROM __ref("int_orders")'
     ),
     "models/marts/dim_customers.sql": (
-        "MODEL (materialized: table\ntags: [mart]);\n\n"
-        'SELECT customer_id FROM __ref("stg_customers")'
+        'MODEL (materialized table\ntags [mart]);\n\nSELECT customer_id FROM __ref("stg_customers")'
     ),
 }
 

@@ -60,7 +60,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 + "\n",
                 "models/fact_orders.sql": dedent(
                     """
-                    MODEL (materialized: table);
+                    MODEL (materialized table);
 
                     SELECT order_id, amount_cents FROM __source("raw_orders")
                     """
@@ -68,7 +68,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 + "\n",
                 "models/orders_enriched.sql": dedent(
                     """
-                    MODEL (materialized: view);
+                    MODEL (materialized view);
 
                     SELECT order_id, amount_cents, amount_cents * 2 AS doubled_cents
                     FROM __ref("fact_orders")
@@ -77,7 +77,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 + "\n",
                 "models/missing_snapshot.sql": dedent(
                     """
-                    MODEL (materialized: table);
+                    MODEL (materialized table);
 
                     SELECT 1 AS id
                     """

@@ -20,8 +20,8 @@ TEST_CASES: list[SchemaBackfillBuildE2ETestCase] = [
     SchemaBackfillBuildE2ETestCase(
         description="add column mutation reports bounded schema backfill",
         mutate_model_file="models/intermediate/order_status_index.sql",
-        model_before_text="on_schema_change: append_new_columns",
-        model_after_text="on_schema_change: append_new_columns",
+        model_before_text="on_schema_change append_new_columns",
+        model_after_text="on_schema_change append_new_columns",
         mutate_schema_file="models/intermediate/schema.yml",
         schema_before_text=(
             "      - name: order_id\n        audits:\n          - not_null\n          - unique\n"
@@ -44,8 +44,8 @@ TEST_CASES: list[SchemaBackfillBuildE2ETestCase] = [
     SchemaBackfillBuildE2ETestCase(
         description="add column mutation with on_schema_change fail reports error warning",
         mutate_model_file="models/intermediate/order_status_index.sql",
-        model_before_text="on_schema_change: append_new_columns",
-        model_after_text="on_schema_change: fail",
+        model_before_text="on_schema_change append_new_columns",
+        model_after_text="on_schema_change fail",
         mutate_schema_file="models/intermediate/schema.yml",
         schema_before_text=(
             "      - name: order_id\n        audits:\n          - not_null\n          - unique\n"
@@ -70,8 +70,8 @@ TEST_CASES: list[SchemaBackfillBuildE2ETestCase] = [
     SchemaBackfillBuildE2ETestCase(
         description="add column mutation with on_schema_change ignore reports info warning",
         mutate_model_file="models/intermediate/order_status_index.sql",
-        model_before_text="on_schema_change: append_new_columns",
-        model_after_text="on_schema_change: ignore",
+        model_before_text="on_schema_change append_new_columns",
+        model_after_text="on_schema_change ignore",
         mutate_schema_file="models/intermediate/schema.yml",
         schema_before_text=(
             "      - name: order_id\n        audits:\n          - not_null\n          - unique\n"

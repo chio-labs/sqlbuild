@@ -1,15 +1,15 @@
 MODEL (
-  materialized: incremental,
-  incremental_strategy: delete_insert,
-  cursor: "activity_hour",
-  cursor_type: timestamp,
-  cursor_grain: hour,
-  cursor_inputs: {
-    fact_orders: "ordered_at"
-  },
-  incremental_mode: microbatch,
-  batch_size: "1d",
-  tags: ["marts"]
+  materialized incremental,
+  incremental_strategy delete_insert,
+  cursor activity_hour,
+  cursor_type timestamp,
+  cursor_grain hour,
+  cursor_inputs (
+    fact_orders ordered_at,
+  ),
+  incremental_mode microbatch,
+  batch_size 1d,
+  tags [marts],
 );
 
 SELECT

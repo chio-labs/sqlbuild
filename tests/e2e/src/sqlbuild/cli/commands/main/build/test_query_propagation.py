@@ -59,7 +59,7 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
             + "\n",
             "models/staging/stg_orders.sql": dedent(
                 """
-                MODEL (materialized: view);
+                MODEL (materialized view);
 
                 SELECT id AS order_id, ordered_at, amount_cents FROM __source("raw_orders")
                 """
@@ -67,7 +67,7 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
             + "\n",
             "models/marts/fact_orders.sql": dedent(
                 """
-                MODEL (materialized: table);
+                MODEL (materialized table);
 
                 SELECT order_id, ordered_at, amount_cents AS line_total_cents
                 FROM __ref("stg_orders")
@@ -77,16 +77,16 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
             "models/marts/hourly_order_activity.sql": dedent(
                 """
                 MODEL (
-                  materialized: incremental,
-                  incremental_strategy: delete_insert,
-                  cursor: "activity_hour",
-                  cursor_type: timestamp,
-                  cursor_grain: hour,
-                  cursor_inputs: {
-                    fact_orders: "ordered_at"
-                  },
-                  incremental_mode: microbatch,
-                  batch_size: "1d"
+                  materialized incremental,
+                  incremental_strategy delete_insert,
+                  cursor activity_hour,
+                  cursor_type timestamp,
+                  cursor_grain hour,
+                  cursor_inputs (
+                    fact_orders ordered_at,
+                  ),
+                  incremental_mode microbatch,
+                  batch_size 1d,
                 );
 
                 SELECT
@@ -101,17 +101,17 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
             "models/marts/daily_activity_rollup.sql": dedent(
                 """
                 MODEL (
-                  materialized: incremental,
-                  incremental_strategy: delete_insert,
-                  cursor: "activity_day",
-                  cursor_type: timestamp,
-                  cursor_grain: day,
-                  cursor_inputs: {
-                    hourly_order_activity: "activity_hour"
-                  },
-                  incremental_mode: microbatch,
-                  batch_size: "2d",
-                  query_change_backfill: "bounded(14d)"
+                  materialized incremental,
+                  incremental_strategy delete_insert,
+                  cursor activity_day,
+                  cursor_type timestamp,
+                  cursor_grain day,
+                  cursor_inputs (
+                    hourly_order_activity activity_hour,
+                  ),
+                  incremental_mode microbatch,
+                  batch_size 2d,
+                  query_change_backfill bounded-14d
                 );
 
                 SELECT
@@ -176,7 +176,7 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
             + "\n",
             "models/staging/stg_orders.sql": dedent(
                 """
-                MODEL (materialized: view);
+                MODEL (materialized view);
 
                 SELECT id AS order_id, ordered_at, amount_cents FROM __source("raw_orders")
                 """
@@ -184,7 +184,7 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
             + "\n",
             "models/marts/fact_orders.sql": dedent(
                 """
-                MODEL (materialized: table);
+                MODEL (materialized table);
 
                 SELECT order_id, ordered_at, amount_cents AS line_total_cents
                 FROM __ref("stg_orders")
@@ -194,17 +194,17 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
             "models/marts/hourly_order_activity.sql": dedent(
                 """
                 MODEL (
-                  materialized: incremental,
-                  incremental_strategy: delete_insert,
-                  cursor: "activity_hour",
-                  cursor_type: timestamp,
-                  cursor_grain: hour,
-                  cursor_inputs: {
-                    fact_orders: "ordered_at"
-                  },
-                  incremental_mode: microbatch,
-                  batch_size: "1d",
-                  query_change_backfill: "bounded(14d)"
+                  materialized incremental,
+                  incremental_strategy delete_insert,
+                  cursor activity_hour,
+                  cursor_type timestamp,
+                  cursor_grain hour,
+                  cursor_inputs (
+                    fact_orders ordered_at,
+                  ),
+                  incremental_mode microbatch,
+                  batch_size 1d,
+                  query_change_backfill bounded-14d
                 );
 
                 SELECT
@@ -219,17 +219,17 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
             "models/marts/daily_activity_rollup.sql": dedent(
                 """
                 MODEL (
-                  materialized: incremental,
-                  incremental_strategy: delete_insert,
-                  cursor: "activity_day",
-                  cursor_type: timestamp,
-                  cursor_grain: day,
-                  cursor_inputs: {
-                    hourly_order_activity: "activity_hour"
-                  },
-                  incremental_mode: microbatch,
-                  batch_size: "2d",
-                  query_change_backfill: "bounded(14d)"
+                  materialized incremental,
+                  incremental_strategy delete_insert,
+                  cursor activity_day,
+                  cursor_type timestamp,
+                  cursor_grain day,
+                  cursor_inputs (
+                    hourly_order_activity activity_hour,
+                  ),
+                  incremental_mode microbatch,
+                  batch_size 2d,
+                  query_change_backfill bounded-14d
                 );
 
                 SELECT

@@ -1,8 +1,8 @@
 MODEL (
-  materialized: table,
-  unique_key: ["customer_id"],
-  row_diff_exclude_columns: ["email"],
-  tags: ["marts"]
+  materialized table,
+  unique_key [customer_id],
+  row_diff_exclude_columns [email],
+  tags [marts],
 );
 
 SELECT

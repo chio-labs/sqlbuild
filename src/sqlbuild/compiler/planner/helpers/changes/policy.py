@@ -11,7 +11,7 @@ from sqlbuild.compiler.planner.types import (
     SchemaChangeKind,
 )
 
-_BOUNDED_PATTERN: re.Pattern[str] = re.compile(r"^bounded\((.+)\)$")
+_BOUNDED_PATTERN: re.Pattern[str] = re.compile(r"^bounded-(.+)$")
 
 _ACTION_PRIORITY: dict[BackfillAction, int] = {
     BackfillAction.WARN_ONLY: 0,

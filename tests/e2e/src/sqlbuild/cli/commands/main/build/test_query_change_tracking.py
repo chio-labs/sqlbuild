@@ -66,7 +66,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 "models/staging/stg_orders.sql": dedent(
                     """
                     MODEL (
-                      materialized: view
+                      materialized view
                     );
 
                     SELECT
@@ -81,7 +81,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 "models/marts/fact_orders.sql": dedent(
                     """
                     MODEL (
-                      materialized: table
+                      materialized table
                     );
 
                     SELECT

@@ -323,10 +323,10 @@ SCHEDULER_ROUTING_TEST_CASES: list[SchedulerRoutingTestCase] = [
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
             "models/regular.sql": (
-                "MODEL (materialized: table);\n\nSELECT 1 AS id, 'regular' AS name"
+                "MODEL (materialized table);\n\nSELECT 1 AS id, 'regular' AS name"
             ),
             "models/custom_model.sql": (
-                "MODEL (materialized: test_custom);\n\nSELECT 2 AS id, 'custom' AS name"
+                "MODEL (materialized test_custom);\n\nSELECT 2 AS id, 'custom' AS name"
             ),
         },
         expected_status=BuildStatus.SUCCESS,
@@ -344,10 +344,10 @@ SCHEDULER_ROUTING_TEST_CASES: list[SchedulerRoutingTestCase] = [
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
             "models/upstream.sql": (
-                "MODEL (materialized: table);\n\nSELECT 10 AS id, 'upstream' AS origin"
+                "MODEL (materialized table);\n\nSELECT 10 AS id, 'upstream' AS origin"
             ),
             "models/downstream_custom.sql": (
-                'MODEL (materialized: test_custom);\n\nSELECT id, origin FROM __ref("upstream")'
+                'MODEL (materialized test_custom);\n\nSELECT id, origin FROM __ref("upstream")'
             ),
         },
         expected_status=BuildStatus.SUCCESS,

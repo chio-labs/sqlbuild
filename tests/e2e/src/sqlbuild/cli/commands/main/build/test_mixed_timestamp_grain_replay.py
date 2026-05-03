@@ -69,7 +69,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 + "\n",
                 "models/staging/stg_orders.sql": dedent(
                     """
-                MODEL (materialized: view);
+                MODEL (materialized view);
 
                 SELECT
                   id AS order_id,
@@ -82,7 +82,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 + "\n",
                 "models/marts/fact_orders.sql": dedent(
                     """
-                MODEL (materialized: table);
+                MODEL (materialized table);
 
                 SELECT order_id, quantity, ordered_at, line_total_cents
                 FROM __ref("stg_orders")
@@ -92,16 +92,16 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 "models/marts/hourly_order_activity.sql": dedent(
                     """
                 MODEL (
-                  materialized: incremental,
-                  incremental_strategy: delete_insert,
-                  cursor: "activity_hour",
-                  cursor_type: timestamp,
-                  cursor_grain: hour,
-                  cursor_inputs: {
-                    fact_orders: "ordered_at"
-                  },
-                  incremental_mode: microbatch,
-                  batch_size: "1d"
+                  materialized incremental,
+                  incremental_strategy delete_insert,
+                  cursor activity_hour,
+                  cursor_type timestamp,
+                  cursor_grain hour,
+                  cursor_inputs (
+                    fact_orders ordered_at,
+                  ),
+                  incremental_mode microbatch,
+                  batch_size 1d,
                 );
 
                 SELECT
@@ -117,16 +117,16 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 "models/marts/daily_activity_rollup.sql": dedent(
                     """
                 MODEL (
-                  materialized: incremental,
-                  incremental_strategy: delete_insert,
-                  cursor: "activity_day",
-                  cursor_type: timestamp,
-                  cursor_grain: day,
-                  cursor_inputs: {
-                    hourly_order_activity: "activity_hour"
-                  },
-                  incremental_mode: microbatch,
-                  batch_size: "2d"
+                  materialized incremental,
+                  incremental_strategy delete_insert,
+                  cursor activity_day,
+                  cursor_type timestamp,
+                  cursor_grain day,
+                  cursor_inputs (
+                    hourly_order_activity activity_hour,
+                  ),
+                  incremental_mode microbatch,
+                  batch_size 2d,
                 );
 
                 SELECT
@@ -142,16 +142,16 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 "models/marts/hourly_activity_with_daily_context.sql": dedent(
                     """
                 MODEL (
-                  materialized: incremental,
-                  incremental_strategy: delete_insert,
-                  cursor: "activity_hour",
-                  cursor_type: timestamp,
-                  cursor_grain: hour,
-                  cursor_inputs: {
-                    daily_activity_rollup: "activity_day"
-                  },
-                  incremental_mode: microbatch,
-                  batch_size: "6h"
+                  materialized incremental,
+                  incremental_strategy delete_insert,
+                  cursor activity_hour,
+                  cursor_type timestamp,
+                  cursor_grain hour,
+                  cursor_inputs (
+                    daily_activity_rollup activity_day,
+                  ),
+                  incremental_mode microbatch,
+                  batch_size 6h,
                 );
 
                 SELECT

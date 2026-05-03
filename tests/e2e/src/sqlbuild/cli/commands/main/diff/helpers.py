@@ -55,7 +55,7 @@ def prepare_diff_project(tmp_path: Path) -> Path:
             + "\n",
             "models/staging/stg_orders.sql": dedent(
                 """
-                MODEL (materialized: view);
+                MODEL (materialized view);
 
                 SELECT
                   order_id,
@@ -70,15 +70,18 @@ def prepare_diff_project(tmp_path: Path) -> Path:
             "models/intermediate/orders_snapshot.sql": dedent(
                 """
                 MODEL (
-                  materialized: table,
-                  unique_key: ["order_id"],
-                  cursor: "ordered_at",
-                  cursor_type: timestamp,
-                  row_diff_exclude_columns: ["status"],
-                  row_diff_tolerances:
-                    by_column:
-                      amount_cents:
-                        absolute: 1
+                  materialized table,
+                  unique_key [order_id],
+                  cursor ordered_at,
+                  cursor_type timestamp,
+                  row_diff_exclude_columns [status],
+                  row_diff_tolerances (
+                    by_column (
+                      amount_cents (
+                        absolute 1,
+                      ),
+                    ),
+                  ),
                 );
 
                 SELECT
@@ -94,8 +97,8 @@ def prepare_diff_project(tmp_path: Path) -> Path:
             "models/intermediate/customer_totals.sql": dedent(
                 """
                 MODEL (
-                  materialized: table,
-                  unique_key: ["customer_id"]
+                  materialized table,
+                  unique_key [customer_id]
                 );
 
                 SELECT
@@ -110,8 +113,8 @@ def prepare_diff_project(tmp_path: Path) -> Path:
             "models/intermediate/orders_sparse.sql": dedent(
                 """
                 MODEL (
-                  materialized: table,
-                  unique_key: ["order_id"]
+                  materialized table,
+                  unique_key [order_id]
                 );
 
                 SELECT
@@ -124,7 +127,7 @@ def prepare_diff_project(tmp_path: Path) -> Path:
             + "\n",
             "models/marts/daily_revenue.sql": dedent(
                 """
-                MODEL (materialized: table);
+                MODEL (materialized table);
 
                 SELECT
                   CAST(ordered_at AS DATE) AS revenue_date,

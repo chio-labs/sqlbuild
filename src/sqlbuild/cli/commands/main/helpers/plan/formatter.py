@@ -344,7 +344,7 @@ def _backfill_value(action: BackfillAction, duration: str) -> str:
     """Format a backfill action as a policy value string."""
 
     if action == BackfillAction.BOUNDED:
-        return f"bounded({duration})"
+        return f"bounded-{duration}"
     return str(action)
 
 

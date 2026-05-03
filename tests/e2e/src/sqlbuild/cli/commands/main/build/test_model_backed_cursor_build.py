@@ -67,7 +67,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 "models/staging/stg_orders.sql": dedent(
                     """
                     MODEL (
-                      materialized: view
+                      materialized view
                     );
 
                     SELECT
@@ -84,7 +84,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 "models/marts/fact_orders.sql": dedent(
                     """
                     MODEL (
-                      materialized: table
+                      materialized table
                     );
 
                     SELECT
@@ -101,13 +101,13 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 "models/intermediate/order_status_index.sql": dedent(
                     """
                     MODEL (
-                      materialized: incremental,
-                      incremental_strategy: delete_insert,
-                      cursor: "order_id",
-                      cursor_type: integer,
-                      cursor_inputs: {
-                        fact_orders: "order_id"
-                      }
+                      materialized incremental,
+                      incremental_strategy delete_insert,
+                      cursor order_id,
+                      cursor_type integer,
+                      cursor_inputs (
+                        fact_orders order_id,
+                      ),
                     );
 
                     SELECT
@@ -123,16 +123,16 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 "models/marts/hourly_order_activity.sql": dedent(
                     """
                     MODEL (
-                      materialized: incremental,
-                      incremental_strategy: delete_insert,
-                      cursor: "activity_hour",
-                      cursor_type: timestamp,
-                      cursor_grain: hour,
-                      cursor_inputs: {
-                        fact_orders: "ordered_at"
-                      },
-                      incremental_mode: microbatch,
-                      batch_size: "1d"
+                      materialized incremental,
+                      incremental_strategy delete_insert,
+                      cursor activity_hour,
+                      cursor_type timestamp,
+                      cursor_grain hour,
+                      cursor_inputs (
+                        fact_orders ordered_at,
+                      ),
+                      incremental_mode microbatch,
+                      batch_size 1d,
                     );
 
                     SELECT

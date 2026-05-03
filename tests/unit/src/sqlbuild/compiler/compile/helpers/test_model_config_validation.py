@@ -284,7 +284,7 @@ NON_INCREMENTAL_VALID_TEST_CASES: list[NonIncrementalConfigValidTestCase] = [
         description="incremental model with schema_change_backfill passes",
         config_values={
             "materialized": "incremental",
-            "schema_change_backfill": {"add_column": "bounded(30d)"},
+            "schema_change_backfill": {"add_column": "bounded-30d"},
         },
     ),
 ]

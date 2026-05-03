@@ -82,9 +82,9 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         description="two independent models both succeed",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
-            "models/orders.sql": "MODEL (materialized: table);\n\nSELECT 1 AS id, 'alice' AS name",
+            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id, 'alice' AS name",
             "models/payments.sql": (
-                "MODEL (materialized: table);\n\nSELECT 10 AS payment_id, 500 AS amount"
+                "MODEL (materialized table);\n\nSELECT 10 AS payment_id, 500 AS amount"
             ),
         },
         expected_status=BuildStatus.SUCCESS,
@@ -103,10 +103,10 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
             "models/stg_orders.sql": (
-                "MODEL (materialized: table);\n\nSELECT 42 AS id, 'bob' AS name"
+                "MODEL (materialized table);\n\nSELECT 42 AS id, 'bob' AS name"
             ),
             "models/orders.sql": (
-                "MODEL (materialized: table);\n\n"
+                "MODEL (materialized table);\n\n"
                 'SELECT id, name FROM __ref("stg_orders") WHERE id = 42'
             ),
         },
@@ -135,7 +135,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
                 "    schema: dev_schema\n"
             ),
             "sqlbuild_local.yml": "environment: dev\n",
-            "models/orders.sql": "MODEL (materialized: table);\n\nSELECT 1 AS id, 'alice' AS name",
+            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id, 'alice' AS name",
         },
         expected_status=BuildStatus.SUCCESS,
         expected_success_count=1,
@@ -146,7 +146,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         description="run_audits false skips all audits but tables still built",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
-            "models/orders.sql": "MODEL (materialized: table);\n\nSELECT 1 AS id",
+            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id",
             "models/schema.yml": (
                 "models:\n"
                 "  - name: orders\n"
@@ -167,7 +167,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         description="passing model audit does not block and table is promoted",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
-            "models/orders.sql": "MODEL (materialized: table);\n\nSELECT 1 AS id",
+            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id",
             "models/schema.yml": (
                 "models:\n"
                 "  - name: orders\n"
@@ -187,7 +187,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         description="warn audit records warning but build succeeds",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML_WARN,
-            "models/orders.sql": "MODEL (materialized: table);\n\nSELECT NULL AS id",
+            "models/orders.sql": "MODEL (materialized table);\n\nSELECT NULL AS id",
             "models/schema.yml": (
                 "models:\n"
                 "  - name: orders\n"
@@ -209,7 +209,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML_WARN,
             "models/orders.sql": (
-                'MODEL (materialized: table);\n\nSELECT id FROM __source("raw_orders")'
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")'
             ),
             "sources/raw.yml": (
                 "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
@@ -229,8 +229,8 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         description="end audit warn succeeds build with warning",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML_WARN,
-            "models/orders.sql": ("MODEL (materialized: table);\n\nSELECT 1 AS id"),
-            "models/payments.sql": ("MODEL (materialized: table);\n\nSELECT 2 AS payment_id"),
+            "models/orders.sql": ("MODEL (materialized table);\n\nSELECT 1 AS id"),
+            "models/payments.sql": ("MODEL (materialized table);\n\nSELECT 2 AS payment_id"),
             "audits/singular/cross_check.sql": (
                 'AUDIT ();\n\nSELECT o.id FROM __ref("orders") o CROSS JOIN __ref("payments") p'
             ),
@@ -249,9 +249,9 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
             "models/orders.sql": (
-                'MODEL (materialized: table);\n\nSELECT id FROM __source("raw_orders")'
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")'
             ),
-            "models/payments.sql": ("MODEL (materialized: table);\n\nSELECT 1 AS payment_id"),
+            "models/payments.sql": ("MODEL (materialized table);\n\nSELECT 1 AS payment_id"),
             "models/schema.yml": (
                 "models:\n"
                 "  - name: orders\n"
@@ -295,7 +295,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
                 "  default_audit_severity: warn\n"
                 "  table_promotion_mode: direct\n"
             ),
-            "models/orders.sql": "MODEL (materialized: table);\n\nSELECT NULL AS id",
+            "models/orders.sql": "MODEL (materialized table);\n\nSELECT NULL AS id",
             "models/schema.yml": (
                 "models:\n"
                 "  - name: orders\n"
@@ -316,7 +316,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         description="build writes fingerprints when query tracking is enabled",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
-            "models/orders.sql": "MODEL (materialized: table);\n\nSELECT 1 AS id",
+            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id",
         },
         expected_status=BuildStatus.SUCCESS,
         expected_success_count=1,
@@ -332,7 +332,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         description="direct mode with passing audit creates table",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML_DIRECT,
-            "models/orders.sql": "MODEL (materialized: table);\n\nSELECT 5 AS id",
+            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 5 AS id",
             "models/schema.yml": (
                 "models:\n"
                 "  - name: orders\n"
@@ -356,10 +356,10 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
             "models/stg_orders.sql": (
-                "MODEL (materialized: table);\n\nSELECT * FROM nonexistent_table"
+                "MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"
             ),
             "models/orders.sql": (
-                'MODEL (materialized: table);\n\nSELECT id FROM __ref("stg_orders")'
+                'MODEL (materialized table);\n\nSELECT id FROM __ref("stg_orders")'
             ),
         },
         expected_status=BuildStatus.FAILED,
@@ -376,13 +376,13 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
             "models/stg_orders.sql": (
-                "MODEL (materialized: table);\n\nSELECT * FROM nonexistent_table"
+                "MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"
             ),
             "models/orders.sql": (
-                'MODEL (materialized: table);\n\nSELECT id FROM __ref("stg_orders")'
+                'MODEL (materialized table);\n\nSELECT id FROM __ref("stg_orders")'
             ),
             "models/payments.sql": (
-                "MODEL (materialized: table);\n\nSELECT 99 AS payment_id, 750 AS amount"
+                "MODEL (materialized table);\n\nSELECT 99 AS payment_id, 750 AS amount"
             ),
         },
         expected_status=BuildStatus.FAILED,
@@ -401,7 +401,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         description="failing error audit blocks promotion and table has no final data",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
-            "models/orders.sql": "MODEL (materialized: table);\n\nSELECT NULL AS id",
+            "models/orders.sql": "MODEL (materialized table);\n\nSELECT NULL AS id",
             "models/schema.yml": (
                 "models:\n"
                 "  - name: orders\n"
@@ -422,10 +422,8 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         description="end audit error fails build but completed tables are preserved",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
-            "models/orders.sql": (
-                "MODEL (materialized: table);\n\nSELECT 7 AS id, 'carol' AS name"
-            ),
-            "models/payments.sql": ("MODEL (materialized: table);\n\nSELECT 1 AS payment_id"),
+            "models/orders.sql": ("MODEL (materialized table);\n\nSELECT 7 AS id, 'carol' AS name"),
+            "models/payments.sql": ("MODEL (materialized table);\n\nSELECT 1 AS payment_id"),
             "audits/singular/cross_check.sql": (
                 'AUDIT ();\n\nSELECT o.id FROM __ref("orders") o CROSS JOIN __ref("payments") p'
             ),
@@ -443,9 +441,9 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
             "models/aaa_broken.sql": (
-                "MODEL (materialized: table);\n\nSELECT * FROM nonexistent_table"
+                "MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"
             ),
-            "models/zzz_healthy.sql": ("MODEL (materialized: table);\n\nSELECT 1 AS id"),
+            "models/zzz_healthy.sql": ("MODEL (materialized table);\n\nSELECT 1 AS id"),
         },
         fail_fast=True,
         expected_status=BuildStatus.FAILED,
@@ -459,7 +457,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
             "models/orders.sql": (
-                'MODEL (materialized: table);\n\nSELECT id FROM __source("raw_orders")'
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")'
             ),
             "sources/raw.yml": (
                 "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
@@ -481,10 +479,10 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
             "models/stg_orders.sql": (
-                'MODEL (materialized: table);\n\nSELECT id FROM __source("raw_orders")'
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")'
             ),
             "models/orders.sql": (
-                'MODEL (materialized: table);\n\nSELECT id FROM __ref("stg_orders")'
+                'MODEL (materialized table);\n\nSELECT id FROM __ref("stg_orders")'
             ),
             "sources/raw.yml": (
                 "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
@@ -508,7 +506,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         description="direct mode failing audit leaves target updated but build fails",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML_DIRECT,
-            "models/orders.sql": "MODEL (materialized: table);\n\nSELECT NULL AS id",
+            "models/orders.sql": "MODEL (materialized table);\n\nSELECT NULL AS id",
             "models/schema.yml": (
                 "models:\n"
                 "  - name: orders\n"
@@ -530,11 +528,11 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
             "models/stg_orders.sql": (
-                'MODEL (\n  materialized: table\n  pre_hook: "INVALID SQL STATEMENT"\n);\n\n'
+                "MODEL (\n  materialized table\n  pre_hook 'INVALID SQL STATEMENT'\n);\n\n"
                 "SELECT 1 AS id"
             ),
             "models/orders.sql": (
-                'MODEL (materialized: table);\n\nSELECT id FROM __ref("stg_orders")'
+                'MODEL (materialized table);\n\nSELECT id FROM __ref("stg_orders")'
             ),
         },
         expected_status=BuildStatus.FAILED,
@@ -551,11 +549,11 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
             "models/stg_orders.sql": (
-                'MODEL (\n  materialized: table\n  post_hook: "INVALID SQL STATEMENT"\n);\n\n'
+                "MODEL (\n  materialized table\n  post_hook 'INVALID SQL STATEMENT'\n);\n\n"
                 "SELECT 88 AS id"
             ),
             "models/orders.sql": (
-                'MODEL (materialized: table);\n\nSELECT id FROM __ref("stg_orders")'
+                'MODEL (materialized table);\n\nSELECT id FROM __ref("stg_orders")'
             ),
         },
         expected_status=BuildStatus.FAILED,
@@ -572,8 +570,8 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         description="two independent failures both recorded in non fail_fast",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
-            "models/broken_a.sql": ("MODEL (materialized: table);\n\nSELECT * FROM nonexistent_a"),
-            "models/broken_b.sql": ("MODEL (materialized: table);\n\nSELECT * FROM nonexistent_b"),
+            "models/broken_a.sql": ("MODEL (materialized table);\n\nSELECT * FROM nonexistent_a"),
+            "models/broken_b.sql": ("MODEL (materialized table);\n\nSELECT * FROM nonexistent_b"),
         },
         expected_status=BuildStatus.FAILED,
         expected_failure_count=2,
@@ -588,7 +586,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         description="staged audit failure preserves existing target with old data",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
-            "models/orders.sql": "MODEL (materialized: table);\n\nSELECT NULL AS id",
+            "models/orders.sql": "MODEL (materialized table);\n\nSELECT NULL AS id",
             "models/schema.yml": (
                 "models:\n"
                 "  - name: orders\n"
@@ -641,10 +639,10 @@ VIEW_SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
             "models/stg_orders.sql": (
-                "MODEL (materialized: view);\n\nSELECT 1 AS id, 'alice' AS name"
+                "MODEL (materialized view);\n\nSELECT 1 AS id, 'alice' AS name"
             ),
             "models/dim_orders.sql": (
-                'MODEL (materialized: table);\n\nSELECT id, name FROM __ref("stg_orders")'
+                'MODEL (materialized table);\n\nSELECT id, name FROM __ref("stg_orders")'
             ),
         },
         expected_status=BuildStatus.SUCCESS,
@@ -660,7 +658,7 @@ VIEW_SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
             "models/stg_orders.sql": (
-                "MODEL (materialized: view);\n\nSELECT 1 AS id, 'alice' AS name"
+                "MODEL (materialized view);\n\nSELECT 1 AS id, 'alice' AS name"
             ),
             "models/schema.yml": (
                 "models:\n"
@@ -711,10 +709,10 @@ def test_given_view_build_plan_when_executing_then_succeeds(
             project_files={
                 "sqlbuild_project.yml": _PROJECT_YML,
                 "models/bad_view.sql": (
-                    "MODEL (materialized: view);\n\nSELECT * FROM nonexistent_source_table"
+                    "MODEL (materialized view);\n\nSELECT * FROM nonexistent_source_table"
                 ),
                 "models/downstream.sql": (
-                    'MODEL (materialized: table);\n\nSELECT * FROM __ref("bad_view")'
+                    'MODEL (materialized table);\n\nSELECT * FROM __ref("bad_view")'
                 ),
             },
             expected_status=BuildStatus.FAILED,
@@ -756,7 +754,7 @@ def test_given_view_build_plan_when_executing_then_fails(
             project_files={
                 "sqlbuild_project.yml": _PROJECT_YML,
                 "models/stg_orders.sql": (
-                    "MODEL (materialized: view);\n\nSELECT 1 AS id, 'alice' AS name"
+                    "MODEL (materialized view);\n\nSELECT 1 AS id, 'alice' AS name"
                 ),
                 "models/schema.yml": (
                     "models:\n"
@@ -827,7 +825,7 @@ SQL_TEST_BUILD_TEST_CASES: list[BuildExecutionTestCase] = [
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
             "models/stg_orders.sql": (
-                "MODEL (materialized: table);\n\nSELECT 1 AS id, 'alice' AS name"
+                "MODEL (materialized table);\n\nSELECT 1 AS id, 'alice' AS name"
             ),
             "tests/unit/test_stg_orders.sql": _PASSING_TEST_SQL,
         },
@@ -842,7 +840,7 @@ SQL_TEST_BUILD_TEST_CASES: list[BuildExecutionTestCase] = [
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
             "models/stg_orders.sql": (
-                "MODEL (materialized: table);\n\nSELECT 1 AS id, 'alice' AS name"
+                "MODEL (materialized table);\n\nSELECT 1 AS id, 'alice' AS name"
             ),
             "tests/unit/test_stg_orders.sql": _FAILING_TEST_SQL,
         },
@@ -858,7 +856,7 @@ SQL_TEST_BUILD_TEST_CASES: list[BuildExecutionTestCase] = [
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
             "models/stg_orders.sql": (
-                "MODEL (materialized: table);\n\nSELECT 1 AS id, 'alice' AS name"
+                "MODEL (materialized table);\n\nSELECT 1 AS id, 'alice' AS name"
             ),
             "tests/unit/test_stg_orders.sql": _FAILING_TEST_SQL,
         },
@@ -874,10 +872,10 @@ SQL_TEST_BUILD_TEST_CASES: list[BuildExecutionTestCase] = [
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
             "models/stg_orders.sql": (
-                "MODEL (materialized: table);\n\nSELECT 1 AS id, 'alice' AS name"
+                "MODEL (materialized table);\n\nSELECT 1 AS id, 'alice' AS name"
             ),
             "models/dim_orders.sql": (
-                'MODEL (materialized: table);\n\nSELECT id, name FROM __ref("stg_orders")'
+                'MODEL (materialized table);\n\nSELECT id, name FROM __ref("stg_orders")'
             ),
             "tests/unit/test_stg_orders.sql": _FAILING_TEST_SQL,
         },

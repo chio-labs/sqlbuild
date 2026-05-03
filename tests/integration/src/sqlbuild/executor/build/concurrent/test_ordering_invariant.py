@@ -48,16 +48,16 @@ _PROJECT_YML: str = (
             max_concurrency=3,
             project_files={
                 "sqlbuild_project.yml": _PROJECT_YML,
-                "models/staging/stg_a.sql": ("MODEL (materialized: view);\n\nSELECT 1 AS id"),
-                "models/staging/stg_b.sql": ("MODEL (materialized: view);\n\nSELECT 2 AS id"),
+                "models/staging/stg_a.sql": ("MODEL (materialized view);\n\nSELECT 1 AS id"),
+                "models/staging/stg_b.sql": ("MODEL (materialized view);\n\nSELECT 2 AS id"),
                 "models/mid_a.sql": (
-                    'MODEL (materialized: table);\n\nSELECT id FROM __ref("stg_a")'
+                    'MODEL (materialized table);\n\nSELECT id FROM __ref("stg_a")'
                 ),
                 "models/mid_b.sql": (
-                    'MODEL (materialized: table);\n\nSELECT id FROM __ref("stg_b")'
+                    'MODEL (materialized table);\n\nSELECT id FROM __ref("stg_b")'
                 ),
                 "models/final.sql": (
-                    "MODEL (materialized: table);\n\n"
+                    "MODEL (materialized table);\n\n"
                     "SELECT a.id AS a_id, b.id AS b_id "
                     'FROM __ref("mid_a") a '
                     'CROSS JOIN __ref("mid_b") b'

@@ -119,7 +119,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "mode: microbatch",
             "2026-03-26",
             "2026-04-25",
-            "policy: query_change_backfill=bounded(30d)",
+            "policy: query_change_backfill=bounded-30d",
             "query diff:",
         ),
     ),

@@ -33,25 +33,25 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
                 "(customer_id INTEGER, last_ordered_at TIMESTAMP);\n"
             ),
             "models/stg_orders.sql": (
-                "MODEL (materialized: view);\n\n"
+                "MODEL (materialized view);\n\n"
                 "SELECT id AS order_id, ordered_at FROM main.raw_orders\n"
             ),
             "models/fact_orders.sql": (
-                "MODEL (materialized: table);\n\n"
+                "MODEL (materialized table);\n\n"
                 'SELECT order_id, ordered_at FROM __ref("stg_orders")\n'
             ),
             "models/customer_status_snapshot.sql": dedent(
                 """
                 MODEL (
-                  materialized: incremental,
-                  incremental_strategy: merge,
-                  unique_key: ["customer_id"],
-                  cursor: "last_ordered_at",
-                  cursor_type: timestamp,
-                  cursor_grain: second,
-                  cursor_inputs: {
-                    fact_orders: "missing_column"
-                  }
+                  materialized incremental,
+                  incremental_strategy merge,
+                  unique_key [customer_id],
+                  cursor last_ordered_at,
+                  cursor_type timestamp,
+                  cursor_grain second,
+                  cursor_inputs (
+                    fact_orders missing_column,
+                  ),
                 );
 
                 SELECT 1 AS customer_id, MAX(ordered_at) AS last_ordered_at
@@ -80,15 +80,15 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
             "models/customer_status_snapshot.sql": dedent(
                 """
                 MODEL (
-                  materialized: incremental,
-                  incremental_strategy: merge,
-                  unique_key: ["customer_id"],
-                  cursor: "last_ordered_at",
-                  cursor_type: timestamp,
-                  cursor_grain: second,
-                  cursor_inputs: {
-                    missing_orders: "ordered_at"
-                  }
+                  materialized incremental,
+                  incremental_strategy merge,
+                  unique_key [customer_id],
+                  cursor last_ordered_at,
+                  cursor_type timestamp,
+                  cursor_grain second,
+                  cursor_inputs (
+                    missing_orders ordered_at,
+                  ),
                 );
 
                 SELECT 1 AS customer_id, MAX(ordered_at) AS last_ordered_at

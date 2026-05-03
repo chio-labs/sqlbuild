@@ -21,7 +21,7 @@ RESOLVE_QUERY_BACKFILL_TEST_CASES: list[ResolveBackfillTestCase] = [
     ),
     ResolveBackfillTestCase(
         description="returns bounded with duration for bounded policy",
-        raw_value="bounded(30d)",
+        raw_value="bounded-30d",
         expected_result=BackfillResult(action=BackfillAction.BOUNDED, duration="30d"),
     ),
     ResolveBackfillTestCase(
@@ -39,7 +39,7 @@ RESOLVE_QUERY_BACKFILL_TEST_CASES: list[ResolveBackfillTestCase] = [
 RESOLVE_SCHEMA_BACKFILL_TEST_CASES: list[ResolveSchemaBackfillTestCase] = [
     ResolveSchemaBackfillTestCase(
         description="resolves add column policy from schema change backfill",
-        schema_change_backfill={"add_column": "bounded(7d)"},
+        schema_change_backfill={"add_column": "bounded-7d"},
         findings=(
             SchemaFinding(
                 kind=SchemaChangeKind.COLUMN_ADDED,
@@ -52,7 +52,7 @@ RESOLVE_SCHEMA_BACKFILL_TEST_CASES: list[ResolveSchemaBackfillTestCase] = [
     ),
     ResolveSchemaBackfillTestCase(
         description="picks most aggressive across multiple findings",
-        schema_change_backfill={"add_column": "bounded(7d)", "type_change": "full"},
+        schema_change_backfill={"add_column": "bounded-7d", "type_change": "full"},
         findings=(
             SchemaFinding(
                 kind=SchemaChangeKind.COLUMN_ADDED,

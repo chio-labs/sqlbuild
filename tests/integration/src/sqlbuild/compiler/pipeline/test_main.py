@@ -26,7 +26,7 @@ PIPELINE_TEST_CASES: list[RunCompilePipelineIntegrationTestCase] = [
         description="single table model with no schema defaults to adapter schema",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
-            "models/orders.sql": ("MODEL (materialized: table);\n\nSELECT 1 AS order_id"),
+            "models/orders.sql": ("MODEL (materialized table);\n\nSELECT 1 AS order_id"),
         },
         expected_models={
             "orders": ExpectedModelEntry(
@@ -45,7 +45,7 @@ PIPELINE_TEST_CASES: list[RunCompilePipelineIntegrationTestCase] = [
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
             "models/active_orders.sql": (
-                "MODEL (materialized: view);\n\nSELECT order_id FROM orders WHERE status = 'active'"
+                "MODEL (materialized view);\n\nSELECT order_id FROM orders WHERE status = 'active'"
             ),
         },
         expected_models={
@@ -65,8 +65,8 @@ PIPELINE_TEST_CASES: list[RunCompilePipelineIntegrationTestCase] = [
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
             "models/orders.sql": (
-                'MODEL (\n  materialized: table\n  schema: "analytics"\n'
-                '  database: "warehouse"\n);\n\n'
+                "MODEL (\n  materialized table\n  schema analytics\n"
+                "  database warehouse\n);\n\n"
                 "SELECT 1 AS order_id"
             ),
         },
@@ -86,9 +86,9 @@ PIPELINE_TEST_CASES: list[RunCompilePipelineIntegrationTestCase] = [
         description="two models with ref dependency resolves ref to qualified name",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
-            "models/stg_orders.sql": ("MODEL (materialized: table);\n\nSELECT 1 AS order_id"),
+            "models/stg_orders.sql": ("MODEL (materialized table);\n\nSELECT 1 AS order_id"),
             "models/fact_orders.sql": (
-                'MODEL (materialized: table);\n\nSELECT order_id FROM __ref("stg_orders")'
+                'MODEL (materialized table);\n\nSELECT order_id FROM __ref("stg_orders")'
             ),
         },
         expected_models={
@@ -117,7 +117,7 @@ PIPELINE_TEST_CASES: list[RunCompilePipelineIntegrationTestCase] = [
                 "sources:\n  - name: raw_payments\n    schema: main\n    table: payments\n"
             ),
             "models/stg_payments.sql": (
-                'MODEL (materialized: table);\n\nSELECT payment_id FROM __source("raw_payments")'
+                'MODEL (materialized table);\n\nSELECT payment_id FROM __source("raw_payments")'
             ),
         },
         expected_models={
@@ -136,11 +136,9 @@ PIPELINE_TEST_CASES: list[RunCompilePipelineIntegrationTestCase] = [
         description="multiple models in subdirectories preserves relative paths",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
-            "models/staging/stg_orders.sql": (
-                "MODEL (materialized: view);\n\nSELECT 1 AS order_id"
-            ),
+            "models/staging/stg_orders.sql": ("MODEL (materialized view);\n\nSELECT 1 AS order_id"),
             "models/marts/fact_orders.sql": (
-                'MODEL (materialized: table);\n\nSELECT order_id FROM __ref("stg_orders")'
+                'MODEL (materialized table);\n\nSELECT order_id FROM __ref("stg_orders")'
             ),
         },
         expected_models={
@@ -219,9 +217,9 @@ def test_given_project_files_when_running_compile_pipeline_then_produces_valid_o
                     "  prod:\n"
                     "    schema: prod_schema\n"
                 ),
-                "models/stg_orders.sql": ("MODEL (materialized: table);\n\nSELECT 1 AS order_id"),
+                "models/stg_orders.sql": ("MODEL (materialized table);\n\nSELECT 1 AS order_id"),
                 "models/fact_orders.sql": (
-                    'MODEL (materialized: table);\n\nSELECT order_id FROM __ref("stg_orders")'
+                    'MODEL (materialized table);\n\nSELECT order_id FROM __ref("stg_orders")'
                 ),
             },
             defer_to="prod",

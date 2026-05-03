@@ -34,8 +34,8 @@ SUCCESS_TEST_CASES: list[ConcurrentBuildTestCase] = [
         max_concurrency=2,
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
-            "models/alpha.sql": ("MODEL (materialized: table);\n\nSELECT 1 AS id, 'alpha' AS name"),
-            "models/beta.sql": ("MODEL (materialized: table);\n\nSELECT 2 AS id, 'beta' AS name"),
+            "models/alpha.sql": ("MODEL (materialized table);\n\nSELECT 1 AS id, 'alpha' AS name"),
+            "models/beta.sql": ("MODEL (materialized table);\n\nSELECT 2 AS id, 'beta' AS name"),
         },
         expected_status=BuildStatus.SUCCESS,
         expected_success_count=2,
@@ -56,18 +56,18 @@ SUCCESS_TEST_CASES: list[ConcurrentBuildTestCase] = [
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
             "models/staging/stg_raw.sql": (
-                "MODEL (materialized: view);\n\nSELECT 10 AS id, 'row' AS val"
+                "MODEL (materialized view);\n\nSELECT 10 AS id, 'row' AS val"
             ),
             "models/branch_a.sql": (
-                "MODEL (materialized: table);\n\n"
+                "MODEL (materialized table);\n\n"
                 "SELECT id, val || '_a' AS val FROM __ref(\"stg_raw\")"
             ),
             "models/branch_b.sql": (
-                "MODEL (materialized: table);\n\n"
+                "MODEL (materialized table);\n\n"
                 "SELECT id, val || '_b' AS val FROM __ref(\"stg_raw\")"
             ),
             "models/merged.sql": (
-                "MODEL (materialized: table);\n\n"
+                "MODEL (materialized table);\n\n"
                 "SELECT a.id, a.val AS a_val, b.val AS b_val "
                 'FROM __ref("branch_a") a '
                 'JOIN __ref("branch_b") b ON a.id = b.id'
@@ -87,12 +87,12 @@ SUCCESS_TEST_CASES: list[ConcurrentBuildTestCase] = [
         max_concurrency=2,
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
-            "models/layer_1.sql": ("MODEL (materialized: table);\n\nSELECT 100 AS val"),
+            "models/layer_1.sql": ("MODEL (materialized table);\n\nSELECT 100 AS val"),
             "models/layer_2.sql": (
-                'MODEL (materialized: table);\n\nSELECT val * 2 AS val FROM __ref("layer_1")'
+                'MODEL (materialized table);\n\nSELECT val * 2 AS val FROM __ref("layer_1")'
             ),
             "models/layer_3.sql": (
-                'MODEL (materialized: table);\n\nSELECT val + 1 AS val FROM __ref("layer_2")'
+                'MODEL (materialized table);\n\nSELECT val + 1 AS val FROM __ref("layer_2")'
             ),
         },
         expected_status=BuildStatus.SUCCESS,
@@ -109,10 +109,8 @@ FAILURE_TEST_CASES: list[ConcurrentBuildTestCase] = [
         max_concurrency=2,
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
-            "models/broken.sql": (
-                "MODEL (materialized: table);\n\nSELECT * FROM nonexistent_table"
-            ),
-            "models/healthy.sql": ("MODEL (materialized: table);\n\nSELECT 42 AS val"),
+            "models/broken.sql": ("MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"),
+            "models/healthy.sql": ("MODEL (materialized table);\n\nSELECT 42 AS val"),
         },
         expected_status=BuildStatus.FAILED,
         expected_success_count=1,
@@ -131,13 +129,11 @@ FAILURE_TEST_CASES: list[ConcurrentBuildTestCase] = [
         max_concurrency=2,
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
-            "models/broken.sql": (
-                "MODEL (materialized: table);\n\nSELECT * FROM nonexistent_table"
-            ),
+            "models/broken.sql": ("MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"),
             "models/downstream.sql": (
-                'MODEL (materialized: table);\n\nSELECT 1 AS id FROM __ref("broken")'
+                'MODEL (materialized table);\n\nSELECT 1 AS id FROM __ref("broken")'
             ),
-            "models/independent.sql": ("MODEL (materialized: table);\n\nSELECT 99 AS val"),
+            "models/independent.sql": ("MODEL (materialized table);\n\nSELECT 99 AS val"),
         },
         expected_status=BuildStatus.FAILED,
         expected_success_count=1,
@@ -160,9 +156,9 @@ FAILURE_TEST_CASES: list[ConcurrentBuildTestCase] = [
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
             "models/aaa_broken.sql": (
-                "MODEL (materialized: table);\n\nSELECT * FROM nonexistent_table"
+                "MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"
             ),
-            "models/zzz_independent.sql": ("MODEL (materialized: table);\n\nSELECT 1 AS id"),
+            "models/zzz_independent.sql": ("MODEL (materialized table);\n\nSELECT 1 AS id"),
         },
         fail_fast=True,
         expected_status=BuildStatus.FAILED,

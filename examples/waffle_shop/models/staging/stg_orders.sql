@@ -1,6 +1,6 @@
 MODEL (
-  materialized: view,
-  tags: ["staging"]
+  materialized view,
+  tags [staging],
 );
 
 SELECT

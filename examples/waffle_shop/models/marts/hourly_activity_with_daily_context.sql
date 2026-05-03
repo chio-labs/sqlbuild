@@ -1,15 +1,15 @@
 MODEL (
-  materialized: incremental,
-  incremental_strategy: delete_insert,
-  cursor: "activity_hour",
-  cursor_type: timestamp,
-  cursor_grain: hour,
-  cursor_inputs: {
-    daily_activity_rollup: "activity_day"
-  },
-  incremental_mode: microbatch,
-  batch_size: "6h",
-  tags: ["marts", "acceptance"]
+  materialized incremental,
+  incremental_strategy delete_insert,
+  cursor activity_hour,
+  cursor_type timestamp,
+  cursor_grain hour,
+  cursor_inputs (
+    daily_activity_rollup activity_day,
+  ),
+  incremental_mode microbatch,
+  batch_size 6h,
+  tags [marts, acceptance],
 );
 
 SELECT

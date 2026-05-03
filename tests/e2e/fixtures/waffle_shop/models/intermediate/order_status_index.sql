@@ -1,13 +1,14 @@
 MODEL (
-  materialized: incremental,
-  incremental_strategy: delete_insert,
-  cursor: "order_id",
-  cursor_type: integer,
-  on_schema_change: append_new_columns,
-  schema_change_backfill:
-    add_column: "bounded(7d)"
-    type_change: "full",
-  tags: ["intermediate", "acceptance"]
+  materialized incremental,
+  incremental_strategy delete_insert,
+  cursor order_id,
+  cursor_type integer,
+  on_schema_change append_new_columns,
+  schema_change_backfill (
+    add_column bounded-7d,
+    type_change full,
+  ),
+  tags [intermediate, acceptance],
 );
 
 SELECT

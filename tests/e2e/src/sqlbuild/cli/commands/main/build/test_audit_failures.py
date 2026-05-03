@@ -58,9 +58,9 @@ TEST_CASES: list[AuditFailureBuildE2ETestCase] = [
             "models/orders.sql": dedent(
                 """
                 MODEL (
-                  materialized: incremental,
-                  incremental_strategy: merge,
-                  unique_key: ["id"]
+                  materialized incremental,
+                  incremental_strategy merge,
+                  unique_key [id]
                 );
 
                 SELECT id, ordered_at, amount_cents FROM main.raw_orders
@@ -137,9 +137,9 @@ TEST_CASES: list[AuditFailureBuildE2ETestCase] = [
             "models/orders.sql": dedent(
                 """
                 MODEL (
-                  materialized: incremental,
-                  incremental_strategy: merge,
-                  unique_key: ["id"]
+                  materialized incremental,
+                  incremental_strategy merge,
+                  unique_key [id]
                 );
 
                 SELECT id, ordered_at, amount_cents FROM main.raw_orders

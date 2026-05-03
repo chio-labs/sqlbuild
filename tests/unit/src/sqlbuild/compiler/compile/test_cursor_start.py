@@ -26,8 +26,8 @@ from tests.unit.src.sqlbuild.compiler.compile._test_types import (
                     "path_defaults:\n  models/events:\n    cursor_start: 20\n"
                 ),
                 "models/events/orders.sql": (
-                    "MODEL (\nmaterialized: incremental\nincremental_strategy: delete_insert\n"
-                    "cursor: id\ncursor_type: integer\ncursor_start: 30\n);\n\nSELECT 1 AS id"
+                    "MODEL (\nmaterialized incremental\nincremental_strategy delete_insert\n"
+                    "cursor id\ncursor_type integer\ncursor_start 30\n);\n\nSELECT 1 AS id"
                 ),
             },
             expected_cursor_start=30,
@@ -57,8 +57,8 @@ ERROR_TEST_CASES: list[CursorStartCompileErrorTestCase] = [
         repo_files={
             "sqlbuild_project.yml": "name: demo\nadapter: duckdb\n",
             "models/orders.sql": (
-                "MODEL (\nmaterialized: incremental\nincremental_strategy: merge\n"
-                "cursor_type: integer\ncursor_start: 100\n);\n\nSELECT 1 AS id"
+                "MODEL (\nmaterialized incremental\nincremental_strategy merge\n"
+                "cursor_type integer\ncursor_start 100\n);\n\nSELECT 1 AS id"
             ),
         },
         expected_error_fragment="cursor_start requires cursor",
@@ -68,9 +68,9 @@ ERROR_TEST_CASES: list[CursorStartCompileErrorTestCase] = [
         repo_files={
             "sqlbuild_project.yml": "name: demo\nadapter: duckdb\n",
             "models/orders.sql": (
-                "MODEL (\nmaterialized: incremental\nincremental_strategy: merge\ncursor: id\n"
-                'cursor_type: integer\nunique_key: ["id"]\n'
-                'cursor_start: "3.14"\n);\n\nSELECT 1 AS id'
+                "MODEL (\nmaterialized incremental\nincremental_strategy merge\ncursor id\n"
+                "cursor_type integer\nunique_key [id]\n"
+                "cursor_start '3.14'\n);\n\nSELECT 1 AS id"
             ),
         },
         expected_error_fragment="cursor_start value '3.14' is not a whole number",

@@ -34,8 +34,8 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
             "models/orders.sql": dedent(
                 """
                 MODEL (
-                  materialized: table,
-                  pre_hook: "THIS IS NOT VALID SQL"
+                  materialized table,
+                  pre_hook 'THIS IS NOT VALID SQL'
                 );
 
                 SELECT 1 AS id
@@ -90,7 +90,7 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
             + "\n",
             "models/staging/stg_orders.sql": dedent(
                 """
-                MODEL (materialized: view);
+                MODEL (materialized view);
 
                 SELECT
                   id AS order_id,
@@ -101,7 +101,7 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
             + "\n",
             "models/marts/fact_orders.sql": dedent(
                 """
-                MODEL (materialized: table);
+                MODEL (materialized table);
 
                 SELECT order_id, ordered_at FROM __ref("stg_orders")
                 """
@@ -110,15 +110,15 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
             "models/marts/customer_status_snapshot.sql": dedent(
                 """
                 MODEL (
-                  materialized: incremental,
-                  incremental_strategy: merge,
-                  unique_key: ["order_id"],
-                  cursor: "ordered_at",
-                  cursor_type: timestamp,
-                  cursor_grain: second,
-                  cursor_inputs: {
-                    missing_relation: "ordered_at"
-                  }
+                  materialized incremental,
+                  incremental_strategy merge,
+                  unique_key [order_id],
+                  cursor ordered_at,
+                  cursor_type timestamp,
+                  cursor_grain second,
+                  cursor_inputs (
+                    missing_relation ordered_at,
+                  ),
                 );
 
                 SELECT order_id, ordered_at FROM __ref("fact_orders")
@@ -157,7 +157,7 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
             + "\n",
             "models/orders.sql": dedent(
                 """
-                MODEL (materialized: table);
+                MODEL (materialized table);
 
                 SELECT * FROM __source("raw_orders")
                 """

@@ -68,13 +68,13 @@ vars:
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
             "models/staging/nested/orders_enriched.sql": """
 MODEL (
-  materialized: incremental,
-  incremental_strategy: delete_insert,
-  cursor: event_time,
-  cursor_type: timestamp,
-  cursor_grain: second,
-  incremental_mode: microbatch,
-  batch_size: 30m,
+  materialized incremental,
+  incremental_strategy delete_insert,
+  cursor event_time,
+  cursor_type timestamp,
+  cursor_grain second,
+  incremental_mode microbatch,
+  batch_size 30m,
 );
 
 select 1
@@ -476,9 +476,9 @@ defaults:
   incremental_mode: microbatch
   lookback: 1d
   batch_size: 1h
-  query_change_backfill: bounded(30d)
+  query_change_backfill: bounded-30d
   schema_change_backfill:
-    add_column: bounded(7d)
+    add_column: bounded-7d
     type_change: full
   row_diff_exclude_columns:
     - loaded_at
@@ -490,10 +490,10 @@ defaults:
 """.strip()
             + "\n",
             "models/staging/orders.sql": (
-                'MODEL (\n  unique_key: "order_id",'
-                "\n  cursor: event_time,"
-                "\n  cursor_type: timestamp,"
-                "\n  cursor_grain: second,"
+                "MODEL (\n  unique_key [order_id],"
+                "\n  cursor event_time,"
+                "\n  cursor_type timestamp,"
+                "\n  cursor_grain second,"
                 "\n);\n\nselect 1\n"
             ),
         },
@@ -508,15 +508,15 @@ defaults:
                 "schema": "marts",
                 "incremental_strategy": "merge",
                 "incremental_mode": "microbatch",
-                "unique_key": "order_id",
+                "unique_key": ["order_id"],
                 "cursor": "event_time",
                 "cursor_type": "timestamp",
                 "cursor_grain": "second",
                 "lookback": "1d",
                 "batch_size": "1h",
-                "query_change_backfill": "bounded(30d)",
+                "query_change_backfill": "bounded-30d",
                 "schema_change_backfill": {
-                    "add_column": "bounded(7d)",
+                    "add_column": "bounded-7d",
                     "type_change": "full",
                 },
                 "row_diff_exclude_columns": ("loaded_at", "run_id"),
@@ -559,15 +559,20 @@ defaults:
             + "\n",
             "models/staging/orders.sql": """
 MODEL (
-  row_diff_exclude_columns: [run_id, loaded_at],
-  row_diff_tolerances:
-    by_type:
-      float:
-        relative: 0.00001
-    by_column:
-      conversion_rate:
-        relative: 0.001
-        absolute: 0.0001
+  row_diff_exclude_columns [run_id, loaded_at],
+  row_diff_tolerances (
+    by_type (
+      float (
+        relative 0.00001,
+      ),
+    ),
+    by_column (
+      conversion_rate (
+        relative 0.001,
+        absolute 0.0001,
+      ),
+    ),
+  ),
 );
 
 select 1
@@ -638,15 +643,16 @@ environments:
             + "\n",
             "models/staging/orders.sql": """
 MODEL (
-  alias: "${CTX:model.name}_${CTX:run.environment}",
-  config:
-    cluster_by: ["${schema_prefix}_day"]
-    run_label: "${CTX:run.id}"
-    logical_alias: "${CTX:model.alias}"
-    target_table: "${CTX:target.table}"
-    target_schema: "${CTX:target.schema}"
-    target_database: "${CTX:target.database}"
-    target_qualified: "${CTX:target.qualified}"
+  alias '${CTX:model.name}_${CTX:run.environment}',
+  config (
+    cluster_by ['${schema_prefix}_day'],
+    run_label '${CTX:run.id}',
+    logical_alias '${CTX:model.alias}',
+    target_table '${CTX:target.table}',
+    target_schema '${CTX:target.schema}',
+    target_database '${CTX:target.database}',
+    target_qualified '${CTX:target.qualified}',
+  ),
 );
 
 select 1
@@ -661,7 +667,7 @@ select 1
             {
                 "database": "dev_analytics_kevin",
                 "schema": "dev_kevin_marts",
-                "query_change_backfill": "bounded(30d)",
+                "query_change_backfill": "bounded-30d",
                 "row_diff_exclude_columns": ("analytics_kevin_loaded_at",),
                 "alias": "orders_dev",
                 "config": {
@@ -688,7 +694,7 @@ select 1
             "user": "kevin",
             "schema_prefix": "analytics_kevin",
         },
-        environment_variables={"USER": "kevin", "BACKFILL_POLICY": "bounded(30d)"},
+        environment_variables={"USER": "kevin", "BACKFILL_POLICY": "bounded-30d"},
         expected_model_references=((),),
         expected_audit_references=(),
     ),
@@ -709,10 +715,11 @@ environments:
             + "\n",
             "models/staging/orders.sql": """
 MODEL (
-  alias: "orders_${CTX:run.environment}",
-  config:
-    run_label: "${CTX:run.id}"
-    target_qualified: "${CTX:target.qualified}"
+  alias 'orders_${CTX:run.environment}',
+  config (
+    run_label '${CTX:run.id}',
+    target_qualified '${CTX:target.qualified}',
+  ),
 );
 
 select 1
@@ -829,8 +836,8 @@ environments:
             + "\n",
             "models/staging/orders.sql": """
 MODEL (
-  alias: orders_dev,
-  post_hook: ["@grant_target('${CTX:target.qualified}')"]
+  alias orders_dev,
+  post_hook ['@grant_target(\\'${CTX:target.qualified}\\')'],
 );
 
 select @project_columns() from __source("raw_orders")
@@ -1556,7 +1563,7 @@ def dynamic_schema() -> str:
             + "\n",
             "models/staging/orders.sql": """
 MODEL (
-  schema: "@dynamic_schema()",
+  schema '@dynamic_schema()',
 );
 
 select 1
@@ -1680,7 +1687,7 @@ adapter: duckdb
             + "\n",
             "models/staging/orders.sql": """
 MODEL (
-  schema: "${CTX:this}",
+  schema '${CTX:this}',
 );
 
 select 1
@@ -1811,7 +1818,7 @@ connection:
         repo_files=base_repo_files()
         | {
             "models/staging/broken.sql": (
-                'MODEL (pre_hook: "THIS IS NOT VALID SQL");\n\nSELECT 1 AS id\n'
+                "MODEL (pre_hook 'THIS IS NOT VALID SQL');\n\nSELECT 1 AS id\n"
             ),
         },
         selected_environment=None,
@@ -1823,7 +1830,7 @@ connection:
         repo_files=base_repo_files()
         | {
             "models/staging/broken.sql": (
-                'MODEL (post_hook: "THIS IS NOT VALID SQL");\n\nSELECT 1 AS id\n'
+                "MODEL (post_hook 'THIS IS NOT VALID SQL');\n\nSELECT 1 AS id\n"
             ),
         },
         selected_environment=None,
@@ -1834,7 +1841,7 @@ connection:
         description="raises when model header tags is a string instead of list",
         repo_files=base_repo_files()
         | {
-            "models/staging/orders.sql": 'MODEL (tags: "nightly");\n\nSELECT 1\n',
+            "models/staging/orders.sql": "MODEL (tags nightly);\n\nSELECT 1\n",
         },
         selected_environment=None,
         run_id=None,

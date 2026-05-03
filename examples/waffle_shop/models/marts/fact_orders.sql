@@ -1,6 +1,6 @@
 MODEL (
-  materialized: table,
-  tags: ["marts"]
+  materialized table,
+  tags [marts],
 );
 
 SELECT

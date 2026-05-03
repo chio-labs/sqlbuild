@@ -1,14 +1,16 @@
 MODEL (
-  materialized: "partition_tracked",
-  tags: ["marts"],
-  placeholders:
-    partition_start: "'2026-04-01'"
-    partition_end: "'2026-04-05'"
-  config:
-    tracking_table: "main.partition_state"
-    partition_column: "order_date"
-    date_range_start: "2026-04-01"
-    date_range_end: "2026-04-05"
+  materialized partition_tracked,
+  tags [marts],
+  placeholders (
+    partition_start '\'2026-04-01\'',
+    partition_end '\'2026-04-05\'',
+  ),
+  config (
+    tracking_table main.partition_state,
+    partition_column order_date,
+    date_range_start 2026-04-01,
+    date_range_end 2026-04-05,
+  ),
 );
 
 SELECT
