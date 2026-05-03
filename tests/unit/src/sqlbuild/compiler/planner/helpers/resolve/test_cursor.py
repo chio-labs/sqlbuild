@@ -211,6 +211,8 @@ def test_given_snapshot_and_config_when_computing_cursor_bounds_then_returns_exp
 ) -> None:
     result: CursorBounds | None = compute_cursor_bounds(
         cursor_snapshot=test_case.cursor_snapshot,
+        cursor_type=test_case.cursor_type,
+        cursor_start=test_case.cursor_start,
         lookback=test_case.lookback,
         backfill_duration=test_case.backfill_duration,
         start_cursor_override=test_case.start_cursor_override,

@@ -20,3 +20,15 @@ class BuildFailedResultTestCase:
     expected_model_name: str
     expected_error_message: str
     expected_lifecycle_events: tuple[LifeCycleEvent, ...]
+
+
+@dataclass(frozen=True)
+class RuntimeCursorStartTestCase:
+    description: str
+    target_max: object | None
+    upstream_min: object
+    upstream_max: object
+    cursor_type: str
+    cursor_start: str | None
+    expected_start: str
+    expected_end: str

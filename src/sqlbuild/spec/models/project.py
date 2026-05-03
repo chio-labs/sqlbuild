@@ -46,6 +46,7 @@ class DefaultsConfig:
     schema: str | None = None
     incremental_strategy: str | None = None
     incremental_mode: str | None = None
+    cursor_start: object | None = None
     lookback: str | None = None
     batch_size: str | int | None = None
     query_change_backfill: str | None = None

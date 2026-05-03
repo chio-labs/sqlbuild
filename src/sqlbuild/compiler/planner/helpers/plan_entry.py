@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -142,6 +143,7 @@ def plan_model(
     cursor_column: str | None = _get_config_str(model, "cursor")
     cursor_type: str | None = _get_config_str(model, "cursor_type")
     cursor_grain: str | None = _get_config_str(model, "cursor_grain")
+    cursor_start: str | None = _get_cursor_start(model)
     cursor_input_relations: tuple[CursorInputRelation, ...] = _build_cursor_input_relations(
         model=model,
         model_targets=model_targets,
@@ -234,6 +236,7 @@ def plan_model(
         cursor_column=cursor_column,
         cursor_type=cursor_type,
         cursor_grain=cursor_grain,
+        cursor_start=cursor_start,
         cursor_bounds=cursor_bounds,
         cursor_input_relations=cursor_input_relations,
         batch_size=batch_size,
@@ -468,12 +471,15 @@ def _compute_microbatch_range(
         return None
 
     lookback: str | None = resolve_microbatch_lookback(model)
+    cursor_start: str | None = _get_cursor_start(model)
     backfill_duration: str | None = None
     if backfill.action == BackfillAction.BOUNDED:
         backfill_duration = backfill.duration
 
     return compute_cursor_bounds(
         cursor_snapshot=cursor_snapshot,
+        cursor_type=_get_config_str(model, "cursor_type"),
+        cursor_start=cursor_start,
         lookback=lookback,
         backfill_duration=backfill_duration,
         start_cursor_override=start_cursor_override,
@@ -523,6 +529,7 @@ def _compute_plan_cursor_bounds(
         return None
 
     lookback: str | None = _get_config_str(model, "lookback")
+    cursor_start: str | None = _get_cursor_start(model)
     incremental_mode: str | None = _get_config_str(model, "incremental_mode")
     is_microbatch: bool = incremental_mode == IncrementalMode.MICROBATCH
 
@@ -532,6 +539,8 @@ def _compute_plan_cursor_bounds(
 
     return compute_cursor_bounds(
         cursor_snapshot=cursor_snapshot,
+        cursor_type=_get_config_str(model, "cursor_type"),
+        cursor_start=cursor_start,
         lookback=lookback,
         backfill_duration=backfill_duration,
         start_cursor_override=start_cursor_override,
@@ -737,3 +746,18 @@ def _get_config_str(model: CompiledModel, key: str) -> str | None:
 
     raw: object | None = model.config.values.get(key)
     return raw if isinstance(raw, str) else None
+
+
+def _get_cursor_start(model: CompiledModel) -> str | None:
+    """Extract cursor_start as a normalized string value."""
+
+    raw: object | None = model.config.values.get("cursor_start")
+    if raw is None:
+        return None
+    if isinstance(raw, datetime):
+        return raw.isoformat()
+    if isinstance(raw, date):
+        return raw.isoformat()
+    if isinstance(raw, str):
+        return raw
+    return str(raw)

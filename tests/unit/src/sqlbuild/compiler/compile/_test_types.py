@@ -48,3 +48,17 @@ class SeedRefRegressionTestCase:
     description: str
     repo_files: dict[str, str]
     expected_model_count: int
+
+
+@dataclass(frozen=True)
+class CursorStartCompileInputsTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_cursor_start: str | int
+
+
+@dataclass(frozen=True)
+class CursorStartCompileErrorTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_error_fragment: str

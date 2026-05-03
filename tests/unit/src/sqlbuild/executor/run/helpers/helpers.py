@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationTarget
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -27,3 +28,8 @@ def build_result_model_plan_entry() -> ModelPlanEntry:
         resolved_sql="SELECT 1 AS id",
         logical_ddl="CREATE TABLE analytics.orders AS SELECT 1 AS id",
     )
+
+
+class FakeCursorAdapter:
+    def execute(self, connection: Any, sql: str) -> Any:
+        return connection.execute(sql)

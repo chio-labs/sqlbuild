@@ -213,6 +213,7 @@ def build_execution_plan(
                 cursor_column=entry.cursor_column,
                 cursor_type=entry.cursor_type,
                 cursor_grain=entry.cursor_grain,
+                cursor_start=entry.cursor_start,
                 cursor_bounds=entry.cursor_bounds,
                 type_enforcement=entry.type_enforcement,
                 pre_hook=entry.pre_hook,

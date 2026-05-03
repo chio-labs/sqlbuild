@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
+
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileModelConfig
 from sqlbuild.compiler.planner.types import (
@@ -55,6 +58,7 @@ def validate_incremental_config(
     strategy: str | None = _str(config, "incremental_strategy")
     cursor: str | None = _str(config, "cursor")
     cursor_type: str | None = _str(config, "cursor_type")
+    cursor_start: object | None = config.values.get("cursor_start")
     unique_key: object | None = config.values.get("unique_key")
     has_unique_key: bool = unique_key is not None and unique_key != () and unique_key != []
     lookback: str | None = _str(config, "lookback")
@@ -97,6 +101,14 @@ def validate_incremental_config(
             f"model '{model_name}': cursor_type=timestamp requires cursor_grain "
             f"(valid values: {', '.join(sorted(_VALID_CURSOR_GRAINS))})"
         )
+    if cursor_start is not None and cursor is None:
+        raise CompileInputError(f"model '{model_name}': cursor_start requires cursor")
+    if cursor_start is not None and cursor_type is None:
+        raise CompileInputError(f"model '{model_name}': cursor_start requires cursor_type")
+    if cursor_start is not None and cursor_type == CursorType.TIMESTAMP:
+        _validate_timestamp_cursor_start(cursor_start=cursor_start, model_name=model_name)
+    if cursor_start is not None and cursor_type == CursorType.INTEGER:
+        _validate_integer_cursor_start(cursor_start=cursor_start, model_name=model_name)
     if strategy == IncrementalStrategy.APPEND and cursor is not None:
         raise CompileInputError(f"model '{model_name}': cursor is not allowed with append strategy")
 
@@ -243,3 +255,45 @@ def _str(config: CompileModelConfig, key: str) -> str | None:
 
     raw: object | None = config.values.get(key)
     return raw if isinstance(raw, str) else None
+
+
+def _validate_timestamp_cursor_start(*, cursor_start: object, model_name: str) -> None:
+    if isinstance(cursor_start, datetime | date):
+        return
+    if isinstance(cursor_start, str):
+        try:
+            datetime.fromisoformat(cursor_start)
+        except ValueError as error:
+            raise CompileInputError(
+                f"model '{model_name}': cursor_start value '{cursor_start}' "
+                f"is not a valid ISO timestamp: {error}"
+            ) from None
+        return
+    raise CompileInputError(
+        f"model '{model_name}': cursor_start for cursor_type=timestamp must be "
+        "a string or date-like value"
+    )
+
+
+def _validate_integer_cursor_start(*, cursor_start: object, model_name: str) -> None:
+    if isinstance(cursor_start, bool):
+        raise CompileInputError(
+            f"model '{model_name}': cursor_start for cursor_type=integer must be an integer"
+        )
+    if isinstance(cursor_start, int):
+        return
+    if isinstance(cursor_start, str):
+        try:
+            decimal_value: Decimal = Decimal(cursor_start)
+        except InvalidOperation:
+            raise CompileInputError(
+                f"model '{model_name}': cursor_start value '{cursor_start}' is not a valid integer"
+            ) from None
+        if decimal_value != int(decimal_value):
+            raise CompileInputError(
+                f"model '{model_name}': cursor_start value '{cursor_start}' is not a whole number"
+            )
+        return
+    raise CompileInputError(
+        f"model '{model_name}': cursor_start for cursor_type=integer must be a string or integer"
+    )

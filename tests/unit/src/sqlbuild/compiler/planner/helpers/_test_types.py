@@ -264,6 +264,22 @@ class CursorOverridesValidationTestCase:
 
 
 @dataclass(frozen=True)
+class CursorStartBoundsTestCase:
+    description: str
+    target_max: str | None
+    upstream_mins: tuple[str, ...]
+    upstream_maxes: tuple[str, ...]
+    cursor_type: str
+    cursor_start: str | None
+    lookback: str | None
+    backfill_duration: str | None
+    start_cursor_override: str | None
+    end_cursor_override: str | None
+    expected_start: str | None
+    expected_end: str | None
+
+
+@dataclass(frozen=True)
 class CursorTypeCheckTestCase:
     description: str
     cursor_column: str | None

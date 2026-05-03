@@ -92,6 +92,7 @@ def execute_table_entry(
             cursor_column=entry.cursor_column,
             cursor_type=entry.cursor_type,
             cursor_grain=entry.cursor_grain,
+            cursor_start=entry.cursor_start,
             cursor_input_relations=entry.cursor_input_relations,
         )
         if runtime_bounds is None:

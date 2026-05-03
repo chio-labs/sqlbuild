@@ -8,7 +8,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationTarget,
 )
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
-from sqlbuild.compiler.planner.helpers.resolve.config import get_config_str
+from sqlbuild.compiler.planner.helpers.resolve.config import get_config_cursor_start, get_config_str
 from sqlbuild.compiler.planner.helpers.resolve.cursor import compute_cursor_bounds
 from sqlbuild.compiler.planner.helpers.resolve.cursor_inputs import (
     has_model_backed_cursor_inputs,
@@ -118,6 +118,7 @@ def _compute_model_cursor_bounds(
         return None
 
     lookback: str | None = get_config_str(model, "lookback")
+    cursor_start: str | None = get_config_cursor_start(model)
     incremental_mode: str | None = get_config_str(model, "incremental_mode")
     is_microbatch: bool = incremental_mode == IncrementalMode.MICROBATCH
 
@@ -127,6 +128,8 @@ def _compute_model_cursor_bounds(
 
     return compute_cursor_bounds(
         cursor_snapshot=cursor_snapshot,
+        cursor_type=get_config_str(model, "cursor_type"),
+        cursor_start=cursor_start,
         lookback=lookback,
         backfill_duration=backfill_duration,
         start_cursor_override=start_cursor_override,

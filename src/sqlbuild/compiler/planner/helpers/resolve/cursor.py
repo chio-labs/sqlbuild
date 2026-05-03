@@ -11,6 +11,7 @@ from sqlbuild.compiler.planner.helpers.resolve.constants import (
     MICROBATCH_START_SENTINEL,
 )
 from sqlbuild.compiler.planner.models import CursorBounds, ModelCursorSnapshot
+from sqlbuild.compiler.planner.types import CursorType
 
 _DURATION_PATTERN: re.Pattern[str] = re.compile(r"^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$")
 
@@ -18,6 +19,8 @@ _DURATION_PATTERN: re.Pattern[str] = re.compile(r"^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+
 def compute_cursor_bounds(
     *,
     cursor_snapshot: ModelCursorSnapshot,
+    cursor_type: str | None,
+    cursor_start: str | None,
     lookback: str | None,
     backfill_duration: str | None,
     start_cursor_override: str | None,
@@ -54,6 +57,12 @@ def compute_cursor_bounds(
         adjusted_lookback: str | None = _subtract_duration(raw_start, lookback)
         if adjusted_lookback is not None:
             raw_start = adjusted_lookback
+
+    raw_start = _apply_cursor_start_floor(
+        current_start=raw_start,
+        cursor_start=cursor_start,
+        cursor_type=cursor_type,
+    )
 
     return CursorBounds(start=raw_start, end=raw_end)
 
@@ -120,7 +129,7 @@ def _try_parse_timestamp(value: str) -> datetime | None:
 
     try:
         return datetime.fromisoformat(value)
-    except ValueError, TypeError:
+    except (ValueError, TypeError):
         return None
 
 
@@ -131,6 +140,28 @@ def _try_parse_integer(value: str) -> int | None:
         decimal_value: Decimal = Decimal(value)
         if decimal_value == int(decimal_value):
             return int(decimal_value)
-    except InvalidOperation, ValueError, OverflowError:
+    except (InvalidOperation, ValueError, OverflowError):
         pass
     return None
+
+
+def _apply_cursor_start_floor(
+    *,
+    current_start: str,
+    cursor_start: str | None,
+    cursor_type: str | None,
+) -> str:
+    if cursor_start is None:
+        return current_start
+    if cursor_type == CursorType.TIMESTAMP:
+        current_timestamp: datetime | None = _try_parse_timestamp(current_start)
+        floor_timestamp: datetime | None = _try_parse_timestamp(cursor_start)
+        if current_timestamp is not None and floor_timestamp is not None:
+            return max(current_timestamp, floor_timestamp).isoformat()
+        return current_start
+    if cursor_type == CursorType.INTEGER:
+        current_integer: int | None = _try_parse_integer(current_start)
+        floor_integer: int | None = _try_parse_integer(cursor_start)
+        if current_integer is not None and floor_integer is not None:
+            return str(max(current_integer, floor_integer))
+    return current_start

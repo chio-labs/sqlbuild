@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime
 from pathlib import Path
 from typing import cast
 
@@ -179,6 +180,7 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
         schema=_optional_str(payload=mapping, key="schema"),
         incremental_strategy=_optional_str(payload=mapping, key="incremental_strategy"),
         incremental_mode=_optional_str(payload=mapping, key="incremental_mode"),
+        cursor_start=_optional_cursor_start(mapping=mapping, key="cursor_start"),
         lookback=_optional_str(payload=mapping, key="lookback"),
         batch_size=_optional_scalar_batch_size(mapping=mapping, key="batch_size"),
         query_change_backfill=_optional_str(payload=mapping, key="query_change_backfill"),
@@ -333,6 +335,17 @@ def _optional_scalar_batch_size(*, mapping: dict[str, object], key: str) -> str 
     if isinstance(value, (str, int)):
         return value
     raise ProjectConfigError(f"Expected '{key}' to be a string or integer when provided")
+
+
+def _optional_cursor_start(*, mapping: dict[str, object], key: str) -> object | None:
+    value: object | None = mapping.get(key)
+    if value is None:
+        return None
+    if isinstance(value, str | int | date | datetime):
+        return value
+    raise ProjectConfigError(
+        f"Expected '{key}' to be a string, integer, or date-like value when provided"
+    )
 
 
 def _validate_path_default_tags(

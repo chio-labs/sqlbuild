@@ -36,6 +36,7 @@ def resolve_runtime_cursor_bounds(
     cursor_column: str,
     cursor_type: str | None,
     cursor_grain: str | None,
+    cursor_start: str | None,
     cursor_input_relations: tuple[CursorInputRelation, ...],
 ) -> CursorBounds | None:
     """Resolve concrete runtime cursor bounds from target and upstream relations."""
@@ -90,6 +91,11 @@ def resolve_runtime_cursor_bounds(
         end: str | None = _normalize_bound(row[1], is_end=True)
     if start is None or end is None:
         return None
+    start = _apply_cursor_start_floor(
+        current_start=start,
+        cursor_start=cursor_start,
+        cursor_type=cursor_type,
+    )
     return CursorBounds(start=start, end=end)
 
 
@@ -185,3 +191,39 @@ def _normalize_bound(value: object, *, is_end: bool) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _apply_cursor_start_floor(
+    *,
+    current_start: str,
+    cursor_start: str | None,
+    cursor_type: str | None,
+) -> str:
+    if cursor_start is None:
+        return current_start
+    if cursor_type == CursorType.TIMESTAMP:
+        current_timestamp: datetime | None = _try_parse_timestamp(current_start)
+        floor_timestamp: datetime | None = _try_parse_timestamp(cursor_start)
+        if current_timestamp is not None and floor_timestamp is not None:
+            return max(current_timestamp, floor_timestamp).isoformat()
+        return current_start
+    if cursor_type == CursorType.INTEGER:
+        current_integer: int | None = _try_parse_integer(current_start)
+        floor_integer: int | None = _try_parse_integer(cursor_start)
+        if current_integer is not None and floor_integer is not None:
+            return str(max(current_integer, floor_integer))
+    return current_start
+
+
+def _try_parse_timestamp(value: str) -> datetime | None:
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _try_parse_integer(value: str) -> int | None:
+    try:
+        return int(value)
+    except ValueError:
+        return None

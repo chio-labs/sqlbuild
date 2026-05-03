@@ -222,6 +222,7 @@ class ModelPlanEntry:
     cursor_column: str | None = None
     cursor_type: str | None = None
     cursor_grain: str | None = None
+    cursor_start: str | None = None
     cursor_bounds: CursorBounds | None = None
     cursor_input_relations: tuple[CursorInputRelation, ...] = field(default_factory=tuple)
     batch_size: str | None = None

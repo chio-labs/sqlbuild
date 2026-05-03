@@ -124,6 +124,7 @@ def execute_microbatch_entry(
                 cursor_column=entry.cursor_column,
                 cursor_type=entry.cursor_type,
                 cursor_grain=entry.cursor_grain,
+                cursor_start=entry.cursor_start,
                 cursor_input_relations=entry.cursor_input_relations,
             )
         except Exception as exc:
@@ -140,6 +141,8 @@ def execute_microbatch_entry(
             microbatch_range = _discover_cursor_range(
                 adapter=adapter,
                 connection=connection,
+                cursor_type=entry.cursor_type,
+                cursor_start=entry.cursor_start,
                 cursor_input_relations=entry.cursor_input_relations,
             )
         except Exception as exc:
@@ -565,6 +568,8 @@ def _discover_cursor_range(
     *,
     adapter: BaseAdapter,
     connection: Any,
+    cursor_type: str | None,
+    cursor_start: str | None,
     cursor_input_relations: tuple[CursorInputRelation, ...],
 ) -> CursorBounds | None:
     """Discover MIN/MAX cursor range from cursor-bearing input relations."""
@@ -592,6 +597,13 @@ def _discover_cursor_range(
         max_val = str(raw_max + 1)
     else:
         max_val = str(raw_max)
+    if cursor_start is not None:
+        if cursor_type == CursorType.TIMESTAMP:
+            start_dt: datetime = datetime.fromisoformat(min_val)
+            floor_dt: datetime = datetime.fromisoformat(cursor_start)
+            min_val = max(start_dt, floor_dt).isoformat()
+        elif cursor_type == CursorType.INTEGER:
+            min_val = str(max(int(min_val), int(cursor_start)))
     return CursorBounds(start=min_val, end=max_val)
 
 
@@ -643,7 +655,7 @@ def _compute_timestamp_batches(
     try:
         start_dt: datetime = datetime.fromisoformat(start)
         end_dt: datetime = datetime.fromisoformat(end)
-    except ValueError, TypeError:
+    except (ValueError, TypeError):
         return ()
 
     if start_dt >= end_dt:
@@ -688,7 +700,7 @@ def _compute_integer_batches(
         start_int: int = int(Decimal(start))
         end_int: int = int(Decimal(end))
         size_int: int = int(Decimal(batch_size))
-    except InvalidOperation, ValueError, OverflowError:
+    except (InvalidOperation, ValueError, OverflowError):
         return ()
 
     if size_int <= 0 or start_int >= end_int:

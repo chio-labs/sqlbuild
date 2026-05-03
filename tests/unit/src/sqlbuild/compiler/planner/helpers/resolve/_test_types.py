@@ -19,6 +19,8 @@ class CursorBoundsTestCase:
     end_cursor_override: str | None
     is_microbatch: bool
     expected_bounds: CursorBounds | None
+    cursor_type: str | None = None
+    cursor_start: str | None = None
 
 
 @dataclass(frozen=True)
