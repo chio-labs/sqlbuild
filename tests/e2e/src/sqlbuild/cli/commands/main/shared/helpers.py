@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
@@ -43,14 +44,24 @@ def prepare_inline_project(
     return project_dir
 
 
-def run_sqb(*, command: tuple[str, ...], project_dir: Path) -> subprocess.CompletedProcess[str]:
+def run_sqb(
+    *,
+    command: tuple[str, ...],
+    project_dir: Path,
+    env: Mapping[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     """Run an sqb CLI command via subprocess and return the result."""
+
+    process_env: dict[str, str] = dict(os.environ)
+    if env is not None:
+        process_env.update(env)
 
     return subprocess.run(
         ["uv", "run", "sqb", "--project-dir", str(project_dir), *command],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        env=process_env,
         check=False,
     )
 
