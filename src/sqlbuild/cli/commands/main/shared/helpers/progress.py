@@ -25,6 +25,7 @@ _TYPE_WIDTH: int = 10
 _MAX_NAME_WIDTH: int = 60
 _MIN_NAME_WIDTH: int = 20
 _NAME_PADDING: int = 2
+_SUB_INDENT: int = 2
 
 
 @dataclass(frozen=True)
@@ -169,8 +170,8 @@ class BuildProgressCallbacks:
         )
         sys.stdout.write(line)
 
-        pad: str = " " * self._prefix_width
-        nw: int = self._name_width
+        sub_pad: str = " " * (self._prefix_width + _SUB_INDENT)
+        sub_nw: int = self._name_width - _SUB_INDENT
 
         test_result: SqlTestExecutionResult | None = self._test_results_by_model.get(
             model_result.model_name
@@ -180,8 +181,10 @@ class BuildProgressCallbacks:
                 _test_outcome_display(test_result.outcome),
                 use_color=self._use_color,
             )
-            test_name: str = _truncate_name(test_result.test_name, nw)
-            sys.stdout.write(f"{pad}{'test':<{_TYPE_WIDTH}}{test_name:<{nw}} {test_status}\n")
+            test_name: str = _truncate_name(test_result.test_name, sub_nw)
+            sys.stdout.write(
+                f"{sub_pad}{'test':<{_TYPE_WIDTH}}{test_name:<{sub_nw}} {test_status}\n"
+            )
 
         display_audits: list[_AuditDisplayEntry] = _aggregate_audit_results(
             model_result.audit_results
@@ -192,7 +195,7 @@ class BuildProgressCallbacks:
             audit_status: str = colorize_status(
                 _audit_outcome_display(entry.outcome), use_color=self._use_color
             )
-            audit_name: str = _truncate_name(entry.display_name, nw)
+            audit_name: str = _truncate_name(entry.display_name, sub_nw)
             audit_detail: str = ""
             if entry.outcome != AuditOutcome.PASS and entry.total_row_count > 0:
                 row_label: str = "row" if entry.total_row_count == 1 else "rows"
@@ -200,7 +203,7 @@ class BuildProgressCallbacks:
             if entry.batch_total > 1:
                 audit_detail = f"  {entry.batch_pass}/{entry.batch_total}" + audit_detail
             audit_line: str = (
-                f"{pad}{entry.label:<{_TYPE_WIDTH}}{audit_name:<{nw}}"
+                f"{sub_pad}{entry.label:<{_TYPE_WIDTH}}{audit_name:<{sub_nw}}"
                 f" {audit_status}{audit_detail}\n"
             )
             sys.stdout.write(audit_line)
