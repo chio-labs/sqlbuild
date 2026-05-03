@@ -53,7 +53,10 @@ def run_test(
 
     use_color: bool = not no_color and supports_color()
     test_count: int = len(pipeline_result.plan_output.test_entries)
-    header: str = f"Test ({test_count} selected)"
+    model_count: int = len(
+        {step.model_name for e in pipeline_result.plan_output.test_entries for step in e.chain}
+    )
+    header: str = f"Test ({test_count} selected, {model_count} models)"
     styled_header: str = green_bold(header) if use_color else header
     sys.stdout.write(f"\n{styled_header}\n")
     sys.stdout.flush()

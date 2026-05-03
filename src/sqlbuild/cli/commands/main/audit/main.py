@@ -55,7 +55,14 @@ def run_audit(
 
     use_color: bool = not no_color and supports_color()
     audit_count: int = len(pipeline_result.plan_output.audit_entries)
-    header: str = f"Audit ({audit_count} selected)"
+    model_count: int = len(
+        {
+            e.attached_target_name
+            for e in pipeline_result.plan_output.audit_entries
+            if e.attached_target_name
+        }
+    )
+    header: str = f"Audit ({audit_count} selected, {model_count} models)"
     styled_header: str = green_bold(header) if use_color else header
     sys.stdout.write(f"\n{styled_header}\n")
     sys.stdout.flush()
