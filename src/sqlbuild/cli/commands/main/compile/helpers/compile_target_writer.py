@@ -21,7 +21,7 @@ _MANIFEST_FILE: str = "manifest.json"
 _SQL_FILE_SUFFIX: str = ".sql"
 
 
-def write_target(
+def write_compile_target(
     *,
     target_dir: Path,
     plan_output: PlanOutput,
@@ -49,21 +49,16 @@ def _clean_target(target_dir: Path) -> None:
     """Remove generated compile output directories from target/."""
 
     compiled_dir: Path = target_dir / _COMPILED_DIR
-    run_dir: Path = target_dir / _RUN_DIR
     if compiled_dir.exists():
         shutil.rmtree(compiled_dir)
-    if run_dir.exists():
-        shutil.rmtree(run_dir)
 
 
 def _write_models(*, target_dir: Path, plan_output: PlanOutput) -> None:
-    """Write model resolved SQL and logical DDL."""
+    """Write model resolved SQL."""
 
     for entry in plan_output.model_entries:
-        compiled_path: Path = target_dir / _COMPILED_DIR / _MODELS_DIR / entry.relative_path
-        run_path: Path = target_dir / _RUN_DIR / _MODELS_DIR / entry.relative_path
+        compiled_path: Path = target_dir / _COMPILED_DIR / _model_output_path(entry.relative_path)
         _write_sql(path=compiled_path, sql=entry.resolved_sql)
-        _write_sql(path=run_path, sql=entry.logical_ddl)
 
 
 def _write_audits(*, target_dir: Path, plan_output: PlanOutput) -> None:
@@ -99,6 +94,13 @@ def _write_sql(*, path: Path, sql: str) -> None:
 
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(sql.rstrip() + "\n", encoding="utf-8")
+
+
+def _model_output_path(relative_path: Path) -> Path:
+    parts: tuple[str, ...] = relative_path.parts
+    if parts and parts[0] == _MODELS_DIR:
+        return Path(*parts)
+    return Path(_MODELS_DIR) / relative_path
 
 
 def _audit_folder(entry: AuditPlanEntry) -> Path:

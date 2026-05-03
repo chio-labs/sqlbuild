@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.cli.commands.main.compile.helpers.target_writer import write_target
+from sqlbuild.cli.commands.main.compile.helpers.compile_target_writer import write_compile_target
 from sqlbuild.cli.commands.main.compile.models import WrittenTarget
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_connection_config
@@ -40,7 +40,7 @@ def run_compile(
     )
 
     plan_output: PlanOutput = pipeline_result.plan_output
-    written: WrittenTarget = write_target(
+    written: WrittenTarget = write_compile_target(
         target_dir=effective_project_dir / "target",
         plan_output=plan_output,
         manifest=pipeline_result.manifest,
@@ -60,7 +60,6 @@ def _print_summary(*, written: WrittenTarget, plan_output: PlanOutput) -> None:
     print(written.summary_line())
     print()
     print(f"{'target/compiled/':20s} resolved SQL")
-    print(f"{'target/run/':20s} executable DDL")
     print("target/manifest.json")
 
     if len(plan_output.model_entries) == 1:

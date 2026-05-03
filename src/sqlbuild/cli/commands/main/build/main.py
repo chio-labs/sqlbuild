@@ -15,6 +15,7 @@ from sqlbuild.cli.commands.main.shared.helpers.progress import (
     format_build_footer,
     format_build_header,
 )
+from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import write_runtime_target
 from sqlbuild.compiler.discovery.main import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main import run_compile_pipeline
@@ -97,6 +98,11 @@ def run_build(
         on_node_complete=callbacks.on_node_complete,
         on_sub_progress=callbacks.on_sub_progress,
         custom_materializations=pipeline_result.custom_materializations,
+    )
+    write_runtime_target(
+        target_dir=effective_project_dir / "target",
+        plan_output=plan_output,
+        result=result,
     )
 
     footer: str = format_build_footer(result=result, elapsed=callbacks.elapsed, use_color=use_color)

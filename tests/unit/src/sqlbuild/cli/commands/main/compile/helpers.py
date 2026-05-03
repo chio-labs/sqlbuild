@@ -18,6 +18,10 @@ from sqlbuild.compiler.planner.models import (
     SqlTestPlanEntry,
 )
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
+from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.executor.build.types import BuildStatus
+from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.shared.types import ExecutionStatus
 
 
 def build_target_writer_plan_output() -> PlanOutput:
@@ -110,3 +114,20 @@ def read_target_files(target_dir: Path, expected_files: dict[str, str]) -> dict[
         relative_path: (target_dir / relative_path).read_text(encoding="utf-8")
         for relative_path in expected_files
     }
+
+
+def build_runtime_target_execution_result() -> BuildExecutionResult:
+    return BuildExecutionResult(
+        status=BuildStatus.SUCCESS,
+        model_results=(
+            ModelExecutionResult(
+                model_name="orders",
+                status=ExecutionStatus.SUCCESS,
+                executed_statements=(
+                    "DROP TABLE IF EXISTS analytics.orders__staging",
+                    "CREATE OR REPLACE TABLE analytics.orders__staging AS SELECT 1 AS order_id",
+                ),
+            ),
+        ),
+        success_count=1,
+    )

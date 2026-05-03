@@ -53,6 +53,11 @@ def test_given_waffle_shop_project_when_running_run_then_warehouse_state_matches
     )
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    run_sql_path: Path = project_dir / "target" / "run" / "models" / "marts" / "fact_orders.sql"
+    assert run_sql_path.exists()
+    run_sql: str = run_sql_path.read_text(encoding="utf-8")
+    assert "CREATE OR REPLACE TABLE main.fact_orders__staging AS" in run_sql
+    assert "ALTER TABLE main.fact_orders__staging RENAME TO fact_orders;" in run_sql
 
     table_name: str
     for table_name in test_case.expected_table_names:
