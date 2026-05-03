@@ -16,6 +16,7 @@ from tests.unit.src.sqlbuild.compiler.compile._test_helpers import (
 from tests.unit.src.sqlbuild.compiler.compile._test_types import (
     BuildCompileInputsErrorTestCase,
     BuildCompileInputsTestCase,
+    SeedRefRegressionTestCase,
 )
 
 TEST_CASES: list[BuildCompileInputsTestCase] = [
@@ -1739,3 +1740,42 @@ def test_given_attachment_conflicts_when_building_compile_inputs_then_it_raises_
             selected_environment=test_case.selected_environment,
             run_id=test_case.run_id,
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SeedRefRegressionTestCase(
+            description="model referencing a seed via __ref does not raise unknown model error",
+            repo_files=base_repo_files()
+            | {
+                "seeds/waffle_types.csv": "waffle_type_id,waffle_name\n1,Classic\n",
+                "seeds/schema.yml": (
+                    "seeds:\n"
+                    "  - name: waffle_types\n"
+                    "    columns:\n"
+                    "      - name: waffle_type_id\n"
+                    "        type: INTEGER\n"
+                    "      - name: waffle_name\n"
+                    "        type: VARCHAR\n"
+                ),
+                "models/orders.sql": (
+                    'MODEL ();\n\nSELECT waffle_type_id FROM __ref("waffle_types")'
+                ),
+            },
+            expected_model_count=1,
+        ),
+    ],
+    ids=["model referencing a seed via __ref does not raise unknown model error"],
+)
+def test_given_model_referencing_seed_when_building_compile_inputs_then_succeeds(
+    test_case: SeedRefRegressionTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.repo_files)
+
+    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+    compile_inputs: CompileProjectInputs = build_compile_inputs(discovered_inputs)
+
+    assert len(compile_inputs.model_inputs) == test_case.expected_model_count

@@ -32,13 +32,18 @@ def assemble_compiled_project(inputs: CompileProjectInputs) -> CompiledProject:
     """Convert attached compile inputs into the planner-ready project view."""
 
     sqlglot_enabled: bool = inputs.project_config.settings.sqlglot
+    seed_names: frozenset[str] = frozenset(
+        seed_input.schema_entry.name for seed_input in inputs.seed_inputs
+    )
     return CompiledProject(
         run_id=inputs.run_id,
         effective_environment_name=inputs.effective_environment_name,
         effective_connection=inputs.effective_connection,
         effective_vars=inputs.effective_vars,
         models=tuple(
-            _assemble_compiled_model(model_input, sqlglot_enabled=sqlglot_enabled)
+            _assemble_compiled_model(
+                model_input, sqlglot_enabled=sqlglot_enabled, seed_names=seed_names
+            )
             for model_input in inputs.model_inputs
         ),
         sources=tuple(
@@ -53,7 +58,10 @@ def assemble_compiled_project(inputs: CompileProjectInputs) -> CompiledProject:
 
 
 def _assemble_compiled_model(
-    model_input: CompileModelInput, *, sqlglot_enabled: bool
+    model_input: CompileModelInput,
+    *,
+    sqlglot_enabled: bool,
+    seed_names: frozenset[str] = frozenset(),
 ) -> CompiledModel:
     model_name: str = model_input.model_file.file_path.stem
     inferred_columns: tuple[InferredColumn, ...] | None = None
@@ -61,7 +69,7 @@ def _assemble_compiled_model(
         inferred_columns = infer_columns_with_sqlglot(query_sql=model_input.query_sql)
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=model_name),
-        deps=model_build_deps(references=model_input.references),
+        deps=model_build_deps(references=model_input.references, seed_names=seed_names),
         name=model_name,
         relative_path=model_input.model_file.relative_path,
         query_sql=model_input.query_sql,

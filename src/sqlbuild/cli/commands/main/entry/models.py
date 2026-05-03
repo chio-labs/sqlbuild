@@ -15,6 +15,7 @@ class CliNamespace:
     project_dir: str | None = None
     no_sql_validation: bool = False
     defer_to: str | None = None
+    verbose: bool = False
 
 
 @dataclass(frozen=True)
@@ -22,3 +23,4 @@ class CliEntrypointHandlers:
     """Injected command handlers for the CLI entrypoint."""
 
     run_compile: Callable[[Path | None, bool, str | None], int]
+    run_plan: Callable[[Path | None, bool, str | None, bool], int]

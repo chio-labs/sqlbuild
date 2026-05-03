@@ -41,3 +41,10 @@ class BuildCompileInputsErrorTestCase:
     run_id: str | None
     expected_error_fragment: str
     environment_variables: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class SeedRefRegressionTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_model_count: int

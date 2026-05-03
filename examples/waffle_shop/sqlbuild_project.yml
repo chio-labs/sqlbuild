@@ -1,0 +1,12 @@
+name: waffle_shop
+adapter: duckdb
+
+connection:
+  database: waffle_shop.duckdb
+
+defaults:
+  materialized: table
+
+path_defaults:
+  models/staging:
+    materialized: view

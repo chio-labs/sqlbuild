@@ -83,7 +83,8 @@ def test_given_compile_command_arguments_when_running_with_dependencies_then_it_
         handlers=CliEntrypointHandlers(
             run_compile=lambda project_dir, no_sql_validation, defer_to: (
                 test_case.expected_exit_code
-            )
+            ),
+            run_plan=lambda project_dir, no_sql_validation, defer_to, verbose: 0,
         ),
     )
 
@@ -114,7 +115,10 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
 
     exit_code: int = _main_with_dependencies(
         argv=test_case.argv,
-        handlers=CliEntrypointHandlers(run_compile=run_compile),
+        handlers=CliEntrypointHandlers(
+            run_compile=run_compile,
+            run_plan=lambda project_dir, no_sql_validation, defer_to, verbose: 0,
+        ),
     )
 
     assert exit_code == test_case.expected_exit_code
@@ -140,7 +144,10 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
 
     exit_code: int = _main_with_dependencies(
         argv=test_case.argv,
-        handlers=CliEntrypointHandlers(run_compile=run_compile),
+        handlers=CliEntrypointHandlers(
+            run_compile=run_compile,
+            run_plan=lambda project_dir, no_sql_validation, defer_to, verbose: 0,
+        ),
     )
     rendered_stderr: str = capsys.readouterr().err
 

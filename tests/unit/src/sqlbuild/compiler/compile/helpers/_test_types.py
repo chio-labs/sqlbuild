@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompileSqlReference, InferredColumn
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
@@ -56,6 +56,7 @@ class ModelBuildDepsTestCase:
     description: str
     references: tuple[CompileSqlReference, ...]
     expected_deps: tuple[CompiledObjectKey, ...]
+    seed_names: frozenset[str] = field(default_factory=frozenset)
 
 
 @dataclass(frozen=True)

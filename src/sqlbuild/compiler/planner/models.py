@@ -130,10 +130,12 @@ class ModelPlanEntry:
     target: CompiledRelationTarget
     resolved_sql: str
     logical_ddl: str
+    cursor_column: str | None = None
     cursor_bounds: CursorBounds | None = None
     type_enforcement: bool = False
     pre_hook: object = None
     post_hook: object = None
+    previous_query_sql: str | None = None
     schema_actions: tuple[SchemaAction, ...] = field(default_factory=tuple)
     schema_findings: tuple[SchemaFinding, ...] = field(default_factory=tuple)
     backfill: BackfillResult = field(

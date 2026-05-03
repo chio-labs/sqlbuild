@@ -41,6 +41,18 @@ MODEL_BUILD_DEPS_TEST_CASES: list[ModelBuildDepsTestCase] = [
             CompiledObjectKey(resource_type=CompiledResourceType.SOURCE, name="raw_orders"),
         ),
     ),
+    ModelBuildDepsTestCase(
+        description="ref to a seed produces a SEED typed dep key",
+        references=(
+            CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="stg_orders"),
+            CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="waffle_types"),
+        ),
+        seed_names=frozenset({"waffle_types"}),
+        expected_deps=(
+            CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="stg_orders"),
+            CompiledObjectKey(resource_type=CompiledResourceType.SEED, name="waffle_types"),
+        ),
+    ),
 ]
 
 AUDIT_SCOPE_DEPS_TEST_CASES: list[AuditScopeDepsTestCase] = [
@@ -92,7 +104,9 @@ SQL_TEST_SCOPE_DEPS_TEST_CASES: list[SqlTestScopeDepsTestCase] = [
 def test_given_sql_references_when_deriving_model_build_deps_then_returns_typed_object_keys(
     test_case: ModelBuildDepsTestCase,
 ) -> None:
-    deps: tuple[CompiledObjectKey, ...] = model_build_deps(references=test_case.references)
+    deps: tuple[CompiledObjectKey, ...] = model_build_deps(
+        references=test_case.references, seed_names=test_case.seed_names
+    )
 
     assert deps == test_case.expected_deps
 

@@ -1,0 +1,21 @@
+MODEL (
+  materialized: table,
+  tags: ["marts"]
+);
+
+SELECT
+  o.order_id,
+  o.customer_id,
+  o.waffle_type_id,
+  w.waffle_name,
+  w.category AS waffle_category,
+  o.quantity,
+  w.price_cents * o.quantity AS line_total_cents,
+  o.ordered_at,
+  o.status AS order_status,
+  p.payment_method,
+  p.payment_status,
+  p.amount_cents AS payment_amount_cents
+FROM __ref("stg_orders") o
+LEFT JOIN __ref("waffle_types") w ON o.waffle_type_id = w.waffle_type_id
+LEFT JOIN __ref("stg_payments") p ON o.order_id = p.order_id

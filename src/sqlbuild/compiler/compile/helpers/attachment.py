@@ -82,15 +82,8 @@ def build_model_inputs(
     """Attach schema metadata to discovered model files."""
 
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
-    known_model_names: set[str] = {
-        discovered_model_file.file_path.stem
-        for discovered_model_file in discovered_inputs.model_files
-    }
-    known_source_names: set[str] = {
-        source_entry.name
-        for source_file in discovered_inputs.source_files
-        for source_entry in source_file.source_entries
-    }
+    known_model_names: set[str] = build_known_ref_names(discovered_inputs)
+    known_source_names: set[str] = build_known_source_names(discovered_inputs)
     model_inputs: list[CompileModelInput] = []
     model_file: DiscoveredSqlModelFile
     for model_file in discovered_inputs.model_files:
@@ -241,15 +234,8 @@ def build_test_inputs(
     """Build compile-time test inputs from discovered SQL-native test blocks."""
 
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
-    known_model_names: set[str] = {
-        discovered_model_file.file_path.stem
-        for discovered_model_file in discovered_inputs.model_files
-    }
-    known_source_names: set[str] = {
-        source_entry.name
-        for source_file in discovered_inputs.source_files
-        for source_entry in source_file.source_entries
-    }
+    known_model_names: set[str] = build_known_ref_names(discovered_inputs)
+    known_source_names: set[str] = build_known_source_names(discovered_inputs)
     test_inputs: list[CompileSqlTestInput] = []
     test_file: DiscoveredSqlTestFile
     for test_file in discovered_inputs.test_files:
@@ -323,15 +309,8 @@ def build_audit_inputs(
     """Build compile-time audit inputs from discovered SQL audit blocks."""
 
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
-    known_model_names: set[str] = {
-        discovered_model_file.file_path.stem
-        for discovered_model_file in discovered_inputs.model_files
-    }
-    known_source_names: set[str] = {
-        source_entry.name
-        for source_file in discovered_inputs.source_files
-        for source_entry in source_file.source_entries
-    }
+    known_model_names: set[str] = build_known_ref_names(discovered_inputs)
+    known_source_names: set[str] = build_known_source_names(discovered_inputs)
     generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]] = (
         index_generic_audit_definitions(discovered_inputs.audit_files)
     )
@@ -813,6 +792,29 @@ def build_effective_connection(
             preserve_unknown_context=False,
         ),
     )
+
+
+def build_known_ref_names(discovered_inputs: DiscoveredProjectInputs) -> set[str]:
+    """Build the set of names valid as __ref() targets (models + seeds)."""
+
+    return {
+        discovered_model_file.file_path.stem
+        for discovered_model_file in discovered_inputs.model_files
+    } | {
+        seed_entry.name
+        for schema_file in discovered_inputs.schema_files
+        for seed_entry in schema_file.seed_entries
+    }
+
+
+def build_known_source_names(discovered_inputs: DiscoveredProjectInputs) -> set[str]:
+    """Build the set of names valid as __source() targets."""
+
+    return {
+        source_entry.name
+        for source_file in discovered_inputs.source_files
+        for source_entry in source_file.source_entries
+    }
 
 
 def build_effective_vars(

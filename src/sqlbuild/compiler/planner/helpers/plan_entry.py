@@ -13,6 +13,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationTarget,
     CompiledSource,
 )
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.helpers.changes.main import detect_model_changes
 from sqlbuild.compiler.planner.helpers.resolve.helpers.cursor import (
     compute_cursor_bounds,
@@ -133,6 +134,10 @@ def plan_model(
 
     pre_hook: object = model.config.values.get("pre_hook")
     post_hook: object = model.config.values.get("post_hook")
+    cursor_column: str | None = _get_config_str(model, "cursor")
+
+    fingerprint: Fingerprint | None = snapshot.fingerprints.get(model.name)
+    previous_query_sql: str | None = fingerprint.query_sql if fingerprint is not None else None
 
     entry: ModelPlanEntry = ModelPlanEntry(
         key=model.key,
@@ -144,10 +149,12 @@ def plan_model(
         target=model.target,
         resolved_sql=resolved_sql,
         logical_ddl=logical_ddl,
+        cursor_column=cursor_column,
         cursor_bounds=cursor_bounds,
         type_enforcement=type_enforcement,
         pre_hook=pre_hook,
         post_hook=post_hook,
+        previous_query_sql=previous_query_sql,
         schema_actions=schema_actions,
         schema_findings=change_result.schema_findings,
         backfill=backfill,

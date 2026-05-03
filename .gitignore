@@ -42,6 +42,8 @@ Thumbs.db
 
 # Local databases and data
 *.db
+*.duckdb
+*.duckdb.wal
 *.sqlite
 *.sqlite3
 data/

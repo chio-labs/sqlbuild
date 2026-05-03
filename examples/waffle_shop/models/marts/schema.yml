@@ -1,0 +1,22 @@
+models:
+  - name: dim_customers
+    description: Customer dimension with lifetime metrics.
+    columns:
+      - name: customer_id
+        audits:
+          - not_null
+          - unique
+
+  - name: fact_orders
+    description: Order fact table with waffle and payment details.
+    columns:
+      - name: order_id
+        audits:
+          - not_null
+
+  - name: daily_revenue
+    description: Daily revenue aggregation.
+    audits:
+      - expression_is_true:
+          name: revenue is non-negative
+          expression: "total_revenue_cents >= 0"

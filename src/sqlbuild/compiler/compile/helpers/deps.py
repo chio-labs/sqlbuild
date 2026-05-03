@@ -13,11 +13,15 @@ from sqlbuild.compiler.compile.types import (
 
 
 def model_build_deps(
-    *, references: tuple[CompileSqlReference, ...]
+    *,
+    references: tuple[CompileSqlReference, ...],
+    seed_names: frozenset[str] = frozenset(),
 ) -> tuple[CompiledObjectKey, ...]:
     """Return build graph dependencies implied by model SQL references."""
 
-    return _dedupe_object_keys(_reference_dep(reference=reference) for reference in references)
+    return _dedupe_object_keys(
+        _reference_dep(reference=reference, seed_names=seed_names) for reference in references
+    )
 
 
 def audit_scope_deps(
@@ -59,7 +63,9 @@ def sql_test_scope_deps(*, expected_model_names: tuple[str, ...]) -> tuple[Compi
     )
 
 
-def _reference_dep(*, reference: CompileSqlReference) -> CompiledObjectKey:
+def _reference_dep(
+    *, reference: CompileSqlReference, seed_names: frozenset[str] = frozenset()
+) -> CompiledObjectKey:
     if reference.ref_kind == SqlReferenceKind.SOURCE:
         return CompiledObjectKey(
             resource_type=CompiledResourceType.SOURCE,
@@ -68,6 +74,11 @@ def _reference_dep(*, reference: CompileSqlReference) -> CompiledObjectKey:
     if reference.ref_kind == SqlReferenceKind.DBT_REF:
         return CompiledObjectKey(
             resource_type=CompiledResourceType.DBT_REF,
+            name=reference.ref_name,
+        )
+    if reference.ref_name in seed_names:
+        return CompiledObjectKey(
+            resource_type=CompiledResourceType.SEED,
             name=reference.ref_name,
         )
     return CompiledObjectKey(
