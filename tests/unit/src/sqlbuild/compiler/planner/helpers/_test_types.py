@@ -17,6 +17,7 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
     ChangeKind,
+    MaterializationType,
     OnSchemaChange,
     PlanAction,
     PlanReason,
@@ -178,6 +179,7 @@ class BuildLogicalDdlTestCase:
 class BuildModelWarningsTestCase:
     description: str
     model_name: str
+    materialization_type: MaterializationType
     change_kind: ChangeKind
     query_changed: bool
     backfill_action: BackfillAction

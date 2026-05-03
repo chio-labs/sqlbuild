@@ -11,6 +11,7 @@ from sqlbuild.compiler.planner.models import (
     PlanWarning,
     SeedPlanEntry,
 )
+from sqlbuild.compiler.planner.types import PlanReason
 
 
 def format_plan_json(plan: PlanOutput) -> str:
@@ -62,12 +63,15 @@ def format_compile_json(plan: PlanOutput) -> str:
 def _serialize_model_entry(entry: ModelPlanEntry) -> dict[str, object]:
     """Serialize one ModelPlanEntry for plan JSON output."""
 
+    effective_reason: PlanReason = (
+        PlanReason.UPSTREAM_CHANGED if entry.cascade is not None else entry.reason
+    )
     model: dict[str, object] = {
         "name": entry.name,
         "relative_path": str(entry.relative_path),
         "materialization_type": entry.materialization_type.value,
         "action": entry.action.value,
-        "reason": entry.reason.value,
+        "reason": effective_reason.value,
     }
 
     if entry.incremental_strategy is not None:

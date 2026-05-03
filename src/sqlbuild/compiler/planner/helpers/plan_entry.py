@@ -128,6 +128,7 @@ def plan_model(
 
     warnings: tuple[PlanWarning, ...] = build_model_warnings(
         model_name=model.name,
+        materialization_type=materialization_type,
         change_result=change_result,
         schema_actions=schema_actions,
         on_schema_change=on_schema_change,

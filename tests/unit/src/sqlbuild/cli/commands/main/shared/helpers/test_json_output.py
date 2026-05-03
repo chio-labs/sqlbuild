@@ -79,6 +79,7 @@ PLAN_JSON_TEST_CASES: list[JsonOutputTestCase] = [
         ),
         expected_keys=("selected_count", "models"),
         expected_fragments=(
+            '"reason": "upstream_changed"',
             '"cascade"',
             '"root_cause": "fact_orders"',
             '"effective_duration": "90d"',

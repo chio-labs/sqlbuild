@@ -12,6 +12,7 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
     ChangeKind,
+    MaterializationType,
     OnSchemaChange,
     SchemaActionKind,
     SchemaChangeKind,
@@ -72,6 +73,7 @@ BUILD_WARNINGS_TEST_CASES: list[BuildModelWarningsTestCase] = [
     BuildModelWarningsTestCase(
         description="on_schema_change fail with findings produces error",
         model_name="orders",
+        materialization_type=MaterializationType.INCREMENTAL,
         change_kind=ChangeKind.SCHEMA_CHANGED,
         query_changed=False,
         backfill_action=BackfillAction.WARN_ONLY,
@@ -85,6 +87,7 @@ BUILD_WARNINGS_TEST_CASES: list[BuildModelWarningsTestCase] = [
     BuildModelWarningsTestCase(
         description="enforced type mismatch produces warning",
         model_name="orders",
+        materialization_type=MaterializationType.INCREMENTAL,
         change_kind=ChangeKind.SCHEMA_CHANGED,
         query_changed=False,
         backfill_action=BackfillAction.WARN_ONLY,
@@ -98,6 +101,7 @@ BUILD_WARNINGS_TEST_CASES: list[BuildModelWarningsTestCase] = [
     BuildModelWarningsTestCase(
         description="sqlglot type change produces info warning",
         model_name="orders",
+        materialization_type=MaterializationType.INCREMENTAL,
         change_kind=ChangeKind.SCHEMA_CHANGED,
         query_changed=False,
         backfill_action=BackfillAction.WARN_ONLY,
@@ -111,6 +115,7 @@ BUILD_WARNINGS_TEST_CASES: list[BuildModelWarningsTestCase] = [
     BuildModelWarningsTestCase(
         description="query changed without backfill policy produces warning",
         model_name="orders",
+        materialization_type=MaterializationType.INCREMENTAL,
         change_kind=ChangeKind.QUERY_CHANGED,
         query_changed=True,
         backfill_action=BackfillAction.WARN_ONLY,
@@ -124,6 +129,7 @@ BUILD_WARNINGS_TEST_CASES: list[BuildModelWarningsTestCase] = [
     BuildModelWarningsTestCase(
         description="on_schema_change ignore with findings produces info",
         model_name="orders",
+        materialization_type=MaterializationType.INCREMENTAL,
         change_kind=ChangeKind.SCHEMA_CHANGED,
         query_changed=False,
         backfill_action=BackfillAction.WARN_ONLY,
@@ -137,6 +143,7 @@ BUILD_WARNINGS_TEST_CASES: list[BuildModelWarningsTestCase] = [
     BuildModelWarningsTestCase(
         description="no findings and no query change produces no warnings",
         model_name="orders",
+        materialization_type=MaterializationType.INCREMENTAL,
         change_kind=ChangeKind.NO_CHANGE,
         query_changed=False,
         backfill_action=BackfillAction.WARN_ONLY,
@@ -150,6 +157,7 @@ BUILD_WARNINGS_TEST_CASES: list[BuildModelWarningsTestCase] = [
     BuildModelWarningsTestCase(
         description="sqlglot added column produces info warning",
         model_name="orders",
+        materialization_type=MaterializationType.INCREMENTAL,
         change_kind=ChangeKind.SCHEMA_CHANGED,
         query_changed=False,
         backfill_action=BackfillAction.WARN_ONLY,
@@ -163,6 +171,7 @@ BUILD_WARNINGS_TEST_CASES: list[BuildModelWarningsTestCase] = [
     BuildModelWarningsTestCase(
         description="query changed with configured backfill produces no warning",
         model_name="orders",
+        materialization_type=MaterializationType.INCREMENTAL,
         change_kind=ChangeKind.QUERY_CHANGED,
         query_changed=True,
         backfill_action=BackfillAction.BOUNDED,
@@ -174,8 +183,23 @@ BUILD_WARNINGS_TEST_CASES: list[BuildModelWarningsTestCase] = [
         expected_warning_count=0,
     ),
     BuildModelWarningsTestCase(
+        description="query changed on table model produces no warn-only policy warning",
+        model_name="orders",
+        materialization_type=MaterializationType.TABLE,
+        change_kind=ChangeKind.QUERY_CHANGED,
+        query_changed=True,
+        backfill_action=BackfillAction.WARN_ONLY,
+        schema_findings=(),
+        schema_actions=(),
+        on_schema_change=None,
+        type_enforcement=False,
+        expected_severity=None,
+        expected_warning_count=0,
+    ),
+    BuildModelWarningsTestCase(
         description="column removed finding produces no warning",
         model_name="orders",
+        materialization_type=MaterializationType.INCREMENTAL,
         change_kind=ChangeKind.SCHEMA_CHANGED,
         query_changed=False,
         backfill_action=BackfillAction.WARN_ONLY,
@@ -191,6 +215,7 @@ BUILD_WARNINGS_TEST_CASES: list[BuildModelWarningsTestCase] = [
             "enforced type mismatch and query change produce two warnings with mixed severities"
         ),
         model_name="orders",
+        materialization_type=MaterializationType.INCREMENTAL,
         change_kind=ChangeKind.QUERY_CHANGED,
         query_changed=True,
         backfill_action=BackfillAction.WARN_ONLY,
@@ -208,6 +233,7 @@ BUILD_WARNINGS_TEST_CASES: list[BuildModelWarningsTestCase] = [
     BuildModelWarningsTestCase(
         description=("enforced yml column added does not produce type mismatch warning"),
         model_name="orders",
+        materialization_type=MaterializationType.INCREMENTAL,
         change_kind=ChangeKind.SCHEMA_CHANGED,
         query_changed=False,
         backfill_action=BackfillAction.WARN_ONLY,
@@ -233,6 +259,7 @@ def test_given_model_state_when_building_warnings_then_matches_expected(
 
     result: tuple[PlanWarning, ...] = build_model_warnings(
         model_name=test_case.model_name,
+        materialization_type=test_case.materialization_type,
         change_result=change_result,
         schema_actions=test_case.schema_actions,
         on_schema_change=test_case.on_schema_change,

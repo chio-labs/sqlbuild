@@ -65,6 +65,7 @@ class PlanReason(StrEnum):
     FULL_REFRESH = "full_refresh"
     QUERY_CHANGED = "query_changed"
     SCHEMA_CHANGED = "schema_changed"
+    UPSTREAM_CHANGED = "upstream_changed"
     NORMAL_INCREMENTAL = "normal_incremental"
     NO_CHANGE = "no_change"
     DISABLED = "disabled"

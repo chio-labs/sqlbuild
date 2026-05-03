@@ -158,6 +158,7 @@ def build_logical_ddl(
 def build_model_warnings(
     *,
     model_name: str,
+    materialization_type: MaterializationType,
     change_result: ChangeDetectionResult,
     schema_actions: tuple[SchemaAction, ...],
     on_schema_change: OnSchemaChange | None,
@@ -207,12 +208,22 @@ def build_model_warnings(
                     )
                 )
 
-    if change_result.query_changed and change_result.backfill.action == BackfillAction.WARN_ONLY:
+    if (
+        materialization_type == MaterializationType.INCREMENTAL
+        and change_result.query_changed
+        and change_result.backfill.action == BackfillAction.WARN_ONLY
+    ):
         warnings.append(
             PlanWarning(
                 model_name=model_name,
                 severity=WarningSeverity.WARNING,
-                message="query changed but no query_change_backfill policy configured",
+                message=(
+                    f"query changed for '{model_name}'; incremental history will not be "
+                    "rebuilt unless you set query_change_backfill. Use "
+                    "query_change_backfill: full or bounded(...) to rebuild history, "
+                    "or set settings.query_change_tracking: false in sqlbuild_project.yml "
+                    "to disable query-change warnings."
+                ),
             )
         )
 
