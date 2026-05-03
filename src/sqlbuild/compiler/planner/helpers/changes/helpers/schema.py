@@ -13,30 +13,60 @@ def detect_schema_changes(
     yml_columns: tuple[ColumnInfo, ...],
     inferred_columns: tuple[InferredColumn, ...] | None,
     warehouse_columns: tuple[ColumnInfo, ...],
+    type_enforcement: bool,
 ) -> tuple[SchemaFinding, ...]:
-    """Compare yml and inferred columns against warehouse columns and return findings."""
+    """Compare yml and inferred columns against warehouse columns and return findings.
+
+    When type_enforcement is True, yml types take precedence over inferred types
+    for overlapping columns. When False, inferred types take precedence since yml
+    types may be stale.
+    """
 
     warehouse_map: dict[str, str] = {col.name: col.type for col in warehouse_columns}
     findings: list[SchemaFinding] = []
 
     seen_names: set[str] = set()
 
-    findings.extend(_compare_yml_columns(yml_columns=yml_columns, warehouse_map=warehouse_map))
-    col: ColumnInfo
-    for col in yml_columns:
-        seen_names.add(col.name)
+    if type_enforcement:
+        findings.extend(_compare_yml_columns(yml_columns=yml_columns, warehouse_map=warehouse_map))
+        col: ColumnInfo
+        for col in yml_columns:
+            seen_names.add(col.name)
 
-    if inferred_columns is not None:
+        if inferred_columns is not None:
+            findings.extend(
+                _compare_inferred_columns(
+                    inferred_columns=inferred_columns,
+                    warehouse_map=warehouse_map,
+                    seen_names=seen_names,
+                )
+            )
+            inferred_col: InferredColumn
+            for inferred_col in inferred_columns:
+                seen_names.add(inferred_col.name)
+    else:
+        if inferred_columns is not None:
+            findings.extend(
+                _compare_inferred_columns(
+                    inferred_columns=inferred_columns,
+                    warehouse_map=warehouse_map,
+                    seen_names=seen_names,
+                )
+            )
+            inferred_col_ne: InferredColumn
+            for inferred_col_ne in inferred_columns:
+                seen_names.add(inferred_col_ne.name)
+
         findings.extend(
-            _compare_inferred_columns(
-                inferred_columns=inferred_columns,
+            _compare_yml_columns_non_enforced(
+                yml_columns=yml_columns,
                 warehouse_map=warehouse_map,
                 seen_names=seen_names,
             )
         )
-        inferred_col: InferredColumn
-        for inferred_col in inferred_columns:
-            seen_names.add(inferred_col.name)
+        col_ne: ColumnInfo
+        for col_ne in yml_columns:
+            seen_names.add(col_ne.name)
 
     col_name: str
     col_type: str
@@ -64,6 +94,45 @@ def _compare_yml_columns(
     findings: list[SchemaFinding] = []
     col: ColumnInfo
     for col in yml_columns:
+        if col.name not in warehouse_map:
+            findings.append(
+                SchemaFinding(
+                    kind=SchemaChangeKind.COLUMN_ADDED,
+                    column_name=col.name,
+                    source=SchemaColumnSource.YML,
+                    expected_type=col.type,
+                )
+            )
+        elif warehouse_map[col.name] != col.type:
+            findings.append(
+                SchemaFinding(
+                    kind=SchemaChangeKind.COLUMN_TYPE_CHANGED,
+                    column_name=col.name,
+                    source=SchemaColumnSource.YML,
+                    expected_type=col.type,
+                    actual_type=warehouse_map[col.name],
+                )
+            )
+    return findings
+
+
+def _compare_yml_columns_non_enforced(
+    *,
+    yml_columns: tuple[ColumnInfo, ...],
+    warehouse_map: dict[str, str],
+    seen_names: set[str],
+) -> list[SchemaFinding]:
+    """Compare yml columns against warehouse when type enforcement is off.
+
+    Only covers columns not already seen by inferred. For overlapping columns,
+    inferred takes precedence via seen_names.
+    """
+
+    findings: list[SchemaFinding] = []
+    col: ColumnInfo
+    for col in yml_columns:
+        if col.name in seen_names:
+            continue
         if col.name not in warehouse_map:
             findings.append(
                 SchemaFinding(

@@ -22,6 +22,7 @@ class DetectSchemaChangesTestCase:
     yml_columns: tuple[ColumnInfo, ...]
     inferred_columns: tuple[InferredColumn, ...] | None
     warehouse_columns: tuple[ColumnInfo, ...]
+    type_enforcement: bool
     expected_findings: tuple[SchemaFinding, ...]
 
 

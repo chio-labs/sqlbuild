@@ -79,11 +79,13 @@ def detect_model_changes(
     has_expected: bool = bool(yml_columns) or (
         inferred_columns is not None and bool(inferred_columns)
     )
+    type_enforcement: bool = _get_type_enforcement(model)
     if warehouse_columns is not None and has_expected:
         schema_findings = detect_schema_changes(
             yml_columns=yml_columns,
             inferred_columns=inferred_columns,
             warehouse_columns=warehouse_columns,
+            type_enforcement=type_enforcement,
         )
         if schema_findings:
             raw_schema_policy: dict[str, str] = _get_config_dict(model, "schema_change_backfill")
@@ -109,6 +111,14 @@ def detect_model_changes(
         schema_findings=schema_findings,
         backfill=backfill,
     )
+
+
+def _get_type_enforcement(model: CompiledModel) -> bool:
+    """Resolve whether type enforcement is active for a model."""
+
+    if model.schema_entry is not None and model.schema_entry.type_enforcement is not None:
+        return model.schema_entry.type_enforcement
+    return False
 
 
 def _build_yml_columns(model: CompiledModel) -> tuple[ColumnInfo, ...]:
