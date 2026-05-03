@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.auditing.types import AuditOutcome
+from dataclasses import dataclass
+
+from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.auditing.models import AuditExecutionResult
@@ -14,6 +16,18 @@ from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
+
+
+@dataclass(frozen=True)
+class _AuditDisplayEntry:
+    """Aggregated audit result for display."""
+
+    label: str
+    display_name: str
+    outcome: AuditOutcome
+    total_row_count: int
+    batch_pass: int
+    batch_total: int
 
 
 def format_build_output(
@@ -81,9 +95,12 @@ def format_build_output(
                 )
             )
 
-        audit_result: AuditExecutionResult
-        for audit_result in model_result.audit_results:
-            lines.append(_format_audit_sub_line(audit_result, use_color=use_color))
+        audit_entries: list[_AuditDisplayEntry] = _aggregate_audit_results(
+            model_result.audit_results
+        )
+        audit_entry: _AuditDisplayEntry
+        for audit_entry in audit_entries:
+            lines.append(_format_audit_sub_line(audit_entry, use_color=use_color))
 
     lines.append("")
     lines.append(
@@ -164,17 +181,19 @@ def _format_sub_line(*, sub_type: str, name: str, status: str, use_color: bool) 
     return f"{padding}  {sub_type:<6} {name:<40} {colored_status}"
 
 
-def _format_audit_sub_line(audit_result: AuditExecutionResult, *, use_color: bool) -> str:
-    name: str = audit_result.audit_name
-    if audit_result.attached_column_name is not None:
-        name = f"{audit_result.audit_name} ({audit_result.attached_column_name})"
-    status: str = _audit_outcome_to_display(audit_result.outcome)
+def _format_audit_sub_line(entry: _AuditDisplayEntry, *, use_color: bool) -> str:
+    status: str = _audit_outcome_to_display(entry.outcome)
     detail: str = ""
-    if audit_result.outcome != AuditOutcome.PASS and audit_result.row_count > 0:
-        row_label: str = "row" if audit_result.row_count == 1 else "rows"
-        detail = f"  {audit_result.row_count} {row_label}"
+    if entry.outcome != AuditOutcome.PASS and entry.total_row_count > 0:
+        row_label: str = "row" if entry.total_row_count == 1 else "rows"
+        detail = f"  {entry.total_row_count} {row_label}"
+    if entry.batch_total > 1:
+        detail = f"  {entry.batch_pass}/{entry.batch_total}" + detail
     return _format_sub_line(
-        sub_type="audit", name=name, status=f"{status}{detail}", use_color=use_color
+        sub_type=entry.label,
+        name=entry.display_name,
+        status=f"{status}{detail}",
+        use_color=use_color,
     )
 
 
@@ -380,6 +399,69 @@ def _execution_status_to_display(status: ExecutionStatus) -> str:
     if status == ExecutionStatus.SKIPPED:
         return "SKIP"
     return str(status)
+
+
+def _aggregate_audit_results(
+    audit_results: tuple[AuditExecutionResult, ...],
+) -> list[_AuditDisplayEntry]:
+    """Aggregate per-batch delta audit results into single display entries."""
+
+    has_delta: bool = any(a.run_scope_phase == AuditRunScope.DELTA_AND_FINAL for a in audit_results)
+
+    groups: dict[tuple[str, str | None, str], list[AuditExecutionResult]] = {}
+    audit: AuditExecutionResult
+    for audit in audit_results:
+        key: tuple[str, str | None, str] = (
+            audit.audit_name,
+            audit.attached_column_name,
+            audit.run_scope_phase,
+        )
+        groups.setdefault(key, []).append(audit)
+
+    entries: list[_AuditDisplayEntry] = []
+    results: list[AuditExecutionResult]
+    for (_name, _col, _phase), results in groups.items():
+        display_name: str = _name
+        if _col is not None:
+            display_name = f"{_name} ({_col})"
+        worst: AuditOutcome = _worst_audit_outcome(results)
+        total_rows: int = sum(r.row_count for r in results)
+        pass_count: int = sum(1 for r in results if r.outcome == AuditOutcome.PASS)
+        label: str = _phase_label(_phase, has_delta_audits=has_delta)
+        entries.append(
+            _AuditDisplayEntry(
+                label=label,
+                display_name=display_name,
+                outcome=worst,
+                total_row_count=total_rows,
+                batch_pass=pass_count,
+                batch_total=len(results),
+            )
+        )
+
+    return entries
+
+
+def _worst_audit_outcome(results: list[AuditExecutionResult]) -> AuditOutcome:
+    """Return the worst outcome from a list of audit results."""
+
+    has_error: bool = any(r.outcome == AuditOutcome.ERROR for r in results)
+    if has_error:
+        return AuditOutcome.ERROR
+    has_warn: bool = any(r.outcome == AuditOutcome.WARN for r in results)
+    if has_warn:
+        return AuditOutcome.WARN
+    return AuditOutcome.PASS
+
+
+def _phase_label(phase: str, *, has_delta_audits: bool) -> str:
+    """Return the audit type label, annotated with phase when delta audits are present."""
+
+    if not has_delta_audits:
+        return "audit"
+    if phase == AuditRunScope.DELTA_AND_FINAL:
+        return "audit (d)"
+    return "audit (f)"
 
 
 def _audit_outcome_to_display(outcome: AuditOutcome) -> str:

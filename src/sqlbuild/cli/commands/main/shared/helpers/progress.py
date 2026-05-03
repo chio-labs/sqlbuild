@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import sys
 import time
+from dataclasses import dataclass
 
 from sqlbuild.cli.commands.main.shared.helpers.colors import (
     colorize_completion,
     colorize_status,
 )
-from sqlbuild.compiler.auditing.types import AuditOutcome
+from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.auditing.models import AuditExecutionResult
@@ -24,6 +25,18 @@ _TYPE_WIDTH: int = 10
 _MAX_NAME_WIDTH: int = 60
 _MIN_NAME_WIDTH: int = 20
 _NAME_PADDING: int = 2
+
+
+@dataclass(frozen=True)
+class _AuditDisplayEntry:
+    """Aggregated audit result for display."""
+
+    label: str
+    display_name: str
+    outcome: AuditOutcome
+    total_row_count: int
+    batch_pass: int
+    batch_total: int
 
 
 class BuildProgressCallbacks:
@@ -170,22 +183,27 @@ class BuildProgressCallbacks:
             test_name: str = _truncate_name(test_result.test_name, nw)
             sys.stdout.write(f"{pad}{'test':<{_TYPE_WIDTH}}{test_name:<{nw}} {test_status}\n")
 
-        audit: AuditExecutionResult
-        for audit in model_result.audit_results:
+        display_audits: list[_AuditDisplayEntry] = _aggregate_audit_results(
+            model_result.audit_results
+        )
+
+        entry: _AuditDisplayEntry
+        for entry in display_audits:
             audit_status: str = colorize_status(
-                _audit_outcome_display(audit.outcome), use_color=self._use_color
+                _audit_outcome_display(entry.outcome), use_color=self._use_color
             )
-            audit_name: str = audit.audit_name
-            if audit.attached_column_name is not None:
-                audit_name = f"{audit.audit_name} ({audit.attached_column_name})"
-            audit_name = _truncate_name(audit_name, nw)
+            audit_name: str = _truncate_name(entry.display_name, nw)
             audit_detail: str = ""
-            if audit.outcome != AuditOutcome.PASS and audit.row_count > 0:
-                row_label: str = "row" if audit.row_count == 1 else "rows"
-                audit_detail = f"  {audit.row_count} {row_label}"
-            sys.stdout.write(
-                f"{pad}{'audit':<{_TYPE_WIDTH}}{audit_name:<{nw}} {audit_status}{audit_detail}\n"
+            if entry.outcome != AuditOutcome.PASS and entry.total_row_count > 0:
+                row_label: str = "row" if entry.total_row_count == 1 else "rows"
+                audit_detail = f"  {entry.total_row_count} {row_label}"
+            if entry.batch_total > 1:
+                audit_detail = f"  {entry.batch_pass}/{entry.batch_total}" + audit_detail
+            audit_line: str = (
+                f"{pad}{entry.label:<{_TYPE_WIDTH}}{audit_name:<{nw}}"
+                f" {audit_status}{audit_detail}\n"
             )
+            sys.stdout.write(audit_line)
 
         sys.stdout.flush()
 
@@ -403,6 +421,69 @@ def _resolve_annotation(plan_entry: ModelPlanEntry | None) -> str:
     if plan_entry.incremental_strategy:
         parts.append(plan_entry.incremental_strategy)
     return ", ".join(parts)
+
+
+def _aggregate_audit_results(
+    audit_results: tuple[AuditExecutionResult, ...],
+) -> list[_AuditDisplayEntry]:
+    """Aggregate per-batch delta audit results into single display entries."""
+
+    has_delta: bool = any(a.run_scope_phase == AuditRunScope.DELTA_AND_FINAL for a in audit_results)
+
+    groups: dict[tuple[str, str | None, str], list[AuditExecutionResult]] = {}
+    audit: AuditExecutionResult
+    for audit in audit_results:
+        key: tuple[str, str | None, str] = (
+            audit.audit_name,
+            audit.attached_column_name,
+            audit.run_scope_phase,
+        )
+        groups.setdefault(key, []).append(audit)
+
+    entries: list[_AuditDisplayEntry] = []
+    results: list[AuditExecutionResult]
+    for (_name, _col, _phase), results in groups.items():
+        display_name: str = _name
+        if _col is not None:
+            display_name = f"{_name} ({_col})"
+        worst: AuditOutcome = _worst_audit_outcome(results)
+        total_rows: int = sum(r.row_count for r in results)
+        pass_count: int = sum(1 for r in results if r.outcome == AuditOutcome.PASS)
+        label: str = _phase_label(_phase, has_delta_audits=has_delta, batch_count=len(results))
+        entries.append(
+            _AuditDisplayEntry(
+                label=label,
+                display_name=display_name,
+                outcome=worst,
+                total_row_count=total_rows,
+                batch_pass=pass_count,
+                batch_total=len(results),
+            )
+        )
+
+    return entries
+
+
+def _worst_audit_outcome(results: list[AuditExecutionResult]) -> AuditOutcome:
+    """Return the worst outcome from a list of audit results."""
+
+    has_error: bool = any(r.outcome == AuditOutcome.ERROR for r in results)
+    if has_error:
+        return AuditOutcome.ERROR
+    has_warn: bool = any(r.outcome == AuditOutcome.WARN for r in results)
+    if has_warn:
+        return AuditOutcome.WARN
+    return AuditOutcome.PASS
+
+
+def _phase_label(phase: str, *, has_delta_audits: bool, batch_count: int) -> str:
+    """Return the audit type label, annotated with phase when delta audits are present."""
+
+    if not has_delta_audits:
+        return "audit"
+    if phase == AuditRunScope.DELTA_AND_FINAL:
+        return "audit (d)"
+    return "audit (f)"
 
 
 def _truncate_name(name: str, width: int) -> str:
