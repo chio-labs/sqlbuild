@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.planner.models import ParsedSelector
 
 
 @dataclass(frozen=True)
@@ -64,4 +65,34 @@ class FindPathKeysErrorTestCase:
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
     start: CompiledObjectKey
     end: CompiledObjectKey
+    expected_error_type: type[Exception]
+
+
+@dataclass(frozen=True)
+class ParseSelectorTestCase:
+    description: str
+    raw: str
+    expected_result: ParsedSelector | tuple[str, str]
+
+
+@dataclass(frozen=True)
+class ParseSelectorErrorTestCase:
+    description: str
+    raw: str
+    expected_error_type: type[Exception]
+
+
+@dataclass(frozen=True)
+class ResolveSelectorTestCase:
+    description: str
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    expected_names: frozenset[str]
+
+
+@dataclass(frozen=True)
+class ResolveSelectorErrorTestCase:
+    description: str
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
     expected_error_type: type[Exception]
