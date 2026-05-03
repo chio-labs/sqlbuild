@@ -72,3 +72,22 @@ class ParseSqlAuditFileErrorTestCase:
     description: str
     contents: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ParseSchemaYamlTestCase:
+    description: str
+    contents: str
+    expected_model_names: tuple[str, ...]
+    expected_seed_names: tuple[str, ...]
+    expected_model_column_names: tuple[tuple[str, ...], ...]
+    expected_seed_column_names: tuple[tuple[str, ...], ...]
+    expected_model_audit_names: tuple[tuple[str, ...], ...]
+    expected_column_audit_names: tuple[tuple[tuple[str, ...], ...], ...]
+
+
+@dataclass(frozen=True)
+class ParseSchemaYamlErrorTestCase:
+    description: str
+    contents: str
+    expected_error_fragment: str

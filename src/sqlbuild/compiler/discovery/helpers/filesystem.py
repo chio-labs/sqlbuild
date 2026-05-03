@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.compiler.discovery.helpers.model_sql import parse_model_sql
+from sqlbuild.compiler.discovery.helpers.schema_yaml import parse_schema_yaml
 from sqlbuild.compiler.discovery.helpers.sql_audits import parse_sql_audit_file
 from sqlbuild.compiler.discovery.helpers.sql_tests import parse_sql_test_file
 from sqlbuild.compiler.discovery.models import (
@@ -18,6 +19,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlModelFile,
     DiscoveredSqlTestFile,
 )
+from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
 
 
 def discover_model_files(*, project_dir: Path) -> tuple[DiscoveredSqlModelFile, ...]:
@@ -59,14 +61,23 @@ def discover_schema_files(*, project_dir: Path) -> tuple[DiscoveredSchemaFile, .
         schema_paths.append(seeds_root / "schema.yml")
 
     deduped_paths: tuple[Path, ...] = tuple(dict.fromkeys(schema_paths))
-    return tuple(
-        DiscoveredSchemaFile(
-            file_path=file_path,
-            relative_path=file_path.relative_to(project_dir),
-            contents=file_path.read_text(encoding="utf-8"),
+    discovered_schema_files: list[DiscoveredSchemaFile] = []
+    file_path: Path
+    for file_path in deduped_paths:
+        contents: str = file_path.read_text(encoding="utf-8")
+        model_entries: tuple[SchemaModelEntry, ...]
+        seed_entries: tuple[SchemaSeedEntry, ...]
+        model_entries, seed_entries = parse_schema_yaml(contents, file_path)
+        discovered_schema_files.append(
+            DiscoveredSchemaFile(
+                file_path=file_path,
+                relative_path=file_path.relative_to(project_dir),
+                contents=contents,
+                model_entries=model_entries,
+                seed_entries=seed_entries,
+            )
         )
-        for file_path in deduped_paths
-    )
+    return tuple(discovered_schema_files)
 
 
 def discover_source_files(*, project_dir: Path) -> tuple[DiscoveredSourceFile, ...]:

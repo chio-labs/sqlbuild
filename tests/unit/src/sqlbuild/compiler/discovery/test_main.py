@@ -37,6 +37,8 @@ from tests.unit.src.sqlbuild.compiler.discovery._test_types import (
             expected_model_header_values=({},),
             expected_model_query_sql=("select 1",),
             expected_schema_paths=("models/staging/schema.yml", "seeds/schema.yml"),
+            expected_schema_model_names=((), ()),
+            expected_schema_seed_names=((), ()),
             expected_source_paths=("sources/raw.yml",),
             expected_seed_paths=("seeds/country_codes.csv",),
             expected_test_paths=("tests/unit/orders.sql",),
@@ -77,6 +79,20 @@ def test_given_project_repo_slice_when_discovering_inputs_then_it_returns_expect
     assert (
         tuple(str(schema_file.relative_path) for schema_file in discovered_inputs.schema_files)
         == test_case.expected_schema_paths
+    )
+    assert (
+        tuple(
+            tuple(model_entry.name for model_entry in schema_file.model_entries)
+            for schema_file in discovered_inputs.schema_files
+        )
+        == test_case.expected_schema_model_names
+    )
+    assert (
+        tuple(
+            tuple(seed_entry.name for seed_entry in schema_file.seed_entries)
+            for schema_file in discovered_inputs.schema_files
+        )
+        == test_case.expected_schema_seed_names
     )
     assert (
         tuple(str(source_file.relative_path) for source_file in discovered_inputs.source_files)

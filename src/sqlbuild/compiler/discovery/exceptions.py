@@ -19,3 +19,7 @@ class SqlTestParseError(DiscoveryError):
 
 class SqlAuditParseError(DiscoveryError):
     """Raised when an authored SQL audit file has an invalid shape."""
+
+
+class SchemaParseError(DiscoveryError):
+    """Raised when a schema.yml file has an invalid shape."""

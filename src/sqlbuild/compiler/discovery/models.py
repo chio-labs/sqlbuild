@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
+from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,8 @@ class DiscoveredSchemaFile:
     file_path: Path
     relative_path: Path
     contents: str
+    model_entries: tuple[SchemaModelEntry, ...]
+    seed_entries: tuple[SchemaSeedEntry, ...]
 
 
 @dataclass(frozen=True)

@@ -9,6 +9,8 @@ class DiscoverProjectInputsTestCase:
     expected_model_header_values: tuple[dict[str, object], ...]
     expected_model_query_sql: tuple[str, ...]
     expected_schema_paths: tuple[str, ...]
+    expected_schema_model_names: tuple[tuple[str, ...], ...]
+    expected_schema_seed_names: tuple[tuple[str, ...], ...]
     expected_source_paths: tuple[str, ...]
     expected_seed_paths: tuple[str, ...]
     expected_test_paths: tuple[str, ...]
