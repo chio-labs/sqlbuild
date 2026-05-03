@@ -79,6 +79,11 @@ PARSE_SELECTOR_TEST_CASES: list[ParseSelectorTestCase] = [
         expected_result=ParsedSelector(kind=SelectorKind.PATH, value="staging"),
     ),
     ParseSelectorTestCase(
+        description="parses leading bare slash as path selector",
+        raw="/staging",
+        expected_result=ParsedSelector(kind=SelectorKind.PATH, value="staging"),
+    ),
+    ParseSelectorTestCase(
         description="parses nested bare slash as path selector",
         raw="staging/orders/",
         expected_result=ParsedSelector(kind=SelectorKind.PATH, value="staging/orders"),
@@ -374,6 +379,12 @@ RESOLVE_PATH_SELECTOR_TEST_CASES: list[ResolveSelectorTestCase] = [
     ResolveSelectorTestCase(
         description="selects models by bare slash convention",
         select=("staging/",),
+        exclude=(),
+        expected_names=frozenset({"stg_orders", "stg_customers", "stg_deep"}),
+    ),
+    ResolveSelectorTestCase(
+        description="selects models by leading bare slash convention",
+        select=("/staging",),
         exclude=(),
         expected_names=frozenset({"stg_orders", "stg_customers", "stg_deep"}),
     ),

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 class TargetWriterTestCase:
     description: str
     expected_files: dict[str, str] = field(default_factory=dict)
+    initial_files: dict[str, str] = field(default_factory=dict)
     expected_summary_line: str = ""
 
 

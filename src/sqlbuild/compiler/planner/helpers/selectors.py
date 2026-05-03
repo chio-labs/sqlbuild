@@ -66,7 +66,7 @@ def parse_selector(raw: str) -> ParsedSelector | tuple[str, str]:
         return ParsedSelector(kind=kind, value=value, upstream=upstream, downstream=downstream)
 
     if "/" in name:
-        folder_value: str = name.rstrip("/")
+        folder_value: str = name.strip("/")
         return ParsedSelector(
             kind=SelectorKind.PATH, value=folder_value, upstream=upstream, downstream=downstream
         )

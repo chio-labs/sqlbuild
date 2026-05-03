@@ -66,9 +66,11 @@ def run_run(
 
     plan_output: PlanOutput = pipeline_result.plan_output
     use_color: bool = not no_color and supports_color()
+    plan_stream: TextIO = sys.stderr if debug else sys.stdout
 
     plan_text: str = format_plan(plan_output, full_refresh=full_refresh, use_color=use_color)
-    sys.stdout.write("\n" + plan_text + "\n\n")
+    plan_stream.write("\n" + plan_text + "\n\n")
+    plan_stream.flush()
 
     callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
         plan=plan_output, use_color=use_color, verbose=verbose, debug=debug

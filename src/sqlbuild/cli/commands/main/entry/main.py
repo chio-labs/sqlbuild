@@ -42,8 +42,10 @@ def _build_parser() -> argparse.ArgumentParser:
     plan_parser.add_argument("--defer-to", default=None)
     plan_parser.add_argument("--json", action="store_true", default=False)
     plan_parser.add_argument("--full-refresh", action="store_true", default=False)
+    plan_parser.add_argument("--no-color", action="store_true", default=False)
     plan_parser.add_argument("--debug", action="store_true", default=False)
     add_cursor_override_args(plan_parser)
+    add_select_args(plan_parser)
 
     build_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.BUILD)
     build_parser.add_argument("--no-sql-validation", action="store_true", default=False)
@@ -156,6 +158,9 @@ def _main_with_dependencies(
                 cursor_overrides,
                 args.json,
                 args.full_refresh,
+                args.no_color,
+                tuple(args.select),
+                tuple(args.exclude),
             )
         if args.command == CliCommand.BUILD:
             cursor_overrides = CursorOverrides(

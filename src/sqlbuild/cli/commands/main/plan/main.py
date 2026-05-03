@@ -13,6 +13,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
+from sqlbuild.shared.helpers.colors import supports_color
 
 
 def run_plan(
@@ -22,6 +23,9 @@ def run_plan(
     cursor_overrides: CursorOverrides | None = None,
     json_output: bool = False,
     full_refresh: bool = False,
+    no_color: bool = False,
+    select: tuple[str, ...] = (),
+    exclude: tuple[str, ...] = (),
 ) -> int:
     """Execute the plan command."""
 
@@ -36,6 +40,8 @@ def run_plan(
         defer_to=defer_to,
         cursor_overrides=cursor_overrides,
         full_refresh=full_refresh,
+        select=select,
+        exclude=exclude,
         connection_config=resolve_connection_config(
             raw_config=discovered_inputs.project_config.connection,
             project_dir=effective_project_dir,
@@ -48,5 +54,6 @@ def run_plan(
         print(format_plan_json(plan_output))
         return 0
 
-    print("\n" + format_plan(plan_output, full_refresh=full_refresh))
+    use_color: bool = not no_color and supports_color()
+    print("\n" + format_plan(plan_output, full_refresh=full_refresh, use_color=use_color))
     return 0

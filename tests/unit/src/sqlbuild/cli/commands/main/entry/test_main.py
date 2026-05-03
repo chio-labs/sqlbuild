@@ -235,6 +235,70 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
 
 @pytest.mark.parametrize(
     "test_case",
+    [
+        MainTestCase(
+            description="passes plan select exclude and no color flags to plan handler",
+            argv=["plan", "--no-color", "--select", "orders", "--exclude", "customers"],
+            expected_exit_code=4,
+        )
+    ],
+    ids=["passes plan select exclude and no color flags to plan handler"],
+)
+def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[
+        tuple[
+            Path | None,
+            bool,
+            str | None,
+            object,
+            bool,
+            bool,
+            bool,
+            tuple[str, ...],
+            tuple[str, ...],
+        ]
+    ] = []
+
+    def run_plan(
+        project_dir: Path | None,
+        no_sql_validation: bool,
+        defer_to: str | None,
+        cursor_overrides: object,
+        json_output: bool,
+        full_refresh: bool,
+        no_color: bool,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+    ) -> int:
+        received_args.append(
+            (
+                project_dir,
+                no_sql_validation,
+                defer_to,
+                cursor_overrides,
+                json_output,
+                full_refresh,
+                no_color,
+                select,
+                exclude,
+            )
+        )
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_plan=run_plan),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert len(received_args) == 1
+    assert received_args[0][4:] == (False, False, True, ("orders",), ("customers",))
+
+
+@pytest.mark.parametrize(
+    "test_case",
     ERROR_RENDERING_TEST_CASES,
     ids=[case.description for case in ERROR_RENDERING_TEST_CASES],
 )

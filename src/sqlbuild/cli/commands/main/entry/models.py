@@ -37,7 +37,20 @@ class CliEntrypointHandlers:
     """Injected command handlers for the CLI entrypoint."""
 
     run_compile: Callable[[Path | None, bool, str | None, bool], int]
-    run_plan: Callable[[Path | None, bool, str | None, CursorOverrides | None, bool, bool], int]
+    run_plan: Callable[
+        [
+            Path | None,
+            bool,
+            str | None,
+            CursorOverrides | None,
+            bool,
+            bool,
+            bool,
+            tuple[str, ...],
+            tuple[str, ...],
+        ],
+        int,
+    ]
     run_build: Callable[
         [
             Path | None,

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 from sqlbuild.adapter.shared.models import LifeCycleEvent
@@ -24,8 +23,6 @@ def write_runtime_target(
     """Write executed model lifecycle SQL under target/run."""
 
     run_dir: Path = target_dir / _RUN_DIR
-    if run_dir.exists():
-        shutil.rmtree(run_dir)
 
     model_entry_map: dict[str, ModelPlanEntry] = {
         entry.name: entry for entry in plan_output.model_entries
