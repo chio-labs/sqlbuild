@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
@@ -47,7 +48,7 @@ from sqlbuild.spec.models.source import SourceEntry
 def build_execution_plan(
     *,
     project: CompiledProject,
-    adapter: Any,
+    adapter: BaseAdapter,
     connection: Any,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),

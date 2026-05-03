@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
@@ -59,7 +60,7 @@ class _CursorModelInfo:
 def gather_warehouse_snapshot(
     *,
     project: CompiledProject,
-    adapter: Any,
+    adapter: BaseAdapter,
     connection: Any,
     execute: Any,
     selected_keys: frozenset[CompiledObjectKey] | None = None,
@@ -138,7 +139,7 @@ def _collect_target_schemas(project: CompiledProject) -> tuple[str, ...]:
 
 def _gather_relations(
     *,
-    adapter: Any,
+    adapter: BaseAdapter,
     connection: Any,
     database: str | None,
     schemas: tuple[str, ...],
@@ -159,7 +160,7 @@ def _gather_relations(
 
 def _gather_columns(
     *,
-    adapter: Any,
+    adapter: BaseAdapter,
     connection: Any,
     database: str | None,
     schemas: tuple[str, ...],

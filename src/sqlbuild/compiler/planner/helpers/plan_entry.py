@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
@@ -155,7 +156,7 @@ def plan_model(
 def gather_source_columns(
     *,
     project: CompiledProject,
-    adapter: Any,
+    adapter: BaseAdapter,
     connection: Any,
 ) -> dict[str, tuple[ColumnInfo, ...]]:
     """Gather warehouse columns for all declared sources."""
