@@ -19,6 +19,12 @@ class BuildCompileInputsTestCase:
     expected_model_query_sqls: tuple[str, ...] = field(default_factory=tuple)
     expected_test_sql_bodies: tuple[str, ...] = field(default_factory=tuple)
     expected_audit_sql_bodies: tuple[str, ...] = field(default_factory=tuple)
+    expected_model_references: tuple[tuple[tuple[str, str], ...], ...] = field(
+        default_factory=tuple
+    )
+    expected_audit_references: tuple[tuple[tuple[str, str], ...], ...] = field(
+        default_factory=tuple
+    )
     environment_variables: dict[str, str] = field(default_factory=dict)
 
 

@@ -122,6 +122,8 @@ sources:
             "local_only": "present",
             "cli_only": "present",
         },
+        expected_model_references=((), ()),
+        expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
         description="allows models with no matching schema metadata",
@@ -138,6 +140,8 @@ sources:
         expected_effective_environment_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
+        expected_model_references=((),),
+        expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
         description="prefers selected environment over local and project defaults",
@@ -194,6 +198,8 @@ vars:
             "role": "transformer",
         },
         expected_effective_vars={"shared": "local", "prod_only": "present"},
+        expected_model_references=((),),
+        expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
         description="prefers local environment over project default when cli is absent",
@@ -238,6 +244,8 @@ environment: dev
         expected_effective_environment_name="dev",
         expected_effective_connection={"path": "base.db", "warehouse": "dev_wh"},
         expected_effective_vars={"active": "dev"},
+        expected_model_references=((),),
+        expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
         description="returns no effective environment when none is configured anywhere",
@@ -277,6 +285,8 @@ vars:
             "local_only": "present",
             "cli_only": "present",
         },
+        expected_model_references=((),),
+        expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
         description="preserves project connection when environment has no connection override",
@@ -311,6 +321,8 @@ environments:
         expected_effective_environment_name="dev",
         expected_effective_connection={"path": "base.db", "warehouse": "default_wh"},
         expected_effective_vars={"active": "dev"},
+        expected_model_references=((),),
+        expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
         description="preserves non environment vars when selected environment defines none",
@@ -353,6 +365,8 @@ vars:
             "local_only": "present",
             "cli_only": "present",
         },
+        expected_model_references=((),),
+        expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
         description="allows environment only connection when project connection is empty",
@@ -384,6 +398,8 @@ environments:
         expected_effective_environment_name="dev",
         expected_effective_connection={"path": "env.db", "warehouse": "dev_wh"},
         expected_effective_vars={},
+        expected_model_references=((),),
+        expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
         description="allows env local and cli vars when project vars are empty",
@@ -426,6 +442,8 @@ vars:
             "local_only": "present",
             "cli_only": "present",
         },
+        expected_model_references=((),),
+        expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
         description="maps every supported project default into compile model config",
@@ -482,6 +500,8 @@ defaults:
         expected_effective_environment_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
+        expected_model_references=((),),
+        expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
         description="expands vars env connection model config and environment overrides",
@@ -566,6 +586,8 @@ select 1
             "schema_prefix": "analytics_kevin",
         },
         environment_variables={"USER": "kevin", "BACKFILL_POLICY": "bounded(30d)"},
+        expected_model_references=((),),
+        expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
         description="resolves run context before late target context",
@@ -616,6 +638,8 @@ select 1
         expected_effective_environment_name="ci",
         expected_effective_connection={},
         expected_effective_vars={},
+        expected_model_references=((),),
+        expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
         description="supports multi hop var expansion and preserve environment overrides",
@@ -669,6 +693,8 @@ environments:
             "stage_one": "analytics_team",
             "stage_two": "analytics_team_prod",
         },
+        expected_model_references=((),),
+        expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
         description="expands macros in model query and hook sql strings",
@@ -701,7 +727,7 @@ MODEL (
   post_hook: ["@grant_target('${CTX:target.qualified}')"]
 );
 
-select @project_columns() from raw_orders
+select @project_columns() from __source("raw_orders")
 """.strip()
             + "\n",
             "tests/unit/orders.sql": """
@@ -713,7 +739,13 @@ SELECT @project_columns() FROM raw_orders
             "audits/orders.sql": """
 AUDIT ();
 
-SELECT @project_columns() FROM raw_orders
+SELECT @project_columns() FROM __source("raw_orders")
+""".strip()
+            + "\n",
+            "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    table: orders
 """.strip()
             + "\n",
         },
@@ -731,13 +763,15 @@ SELECT @project_columns() FROM raw_orders
         ),
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
-        expected_source_names=(),
+        expected_source_names=("raw_orders",),
         expected_test_sql_bodies=("SELECT order_id, customer_id FROM raw_orders",),
-        expected_audit_sql_bodies=("SELECT order_id, customer_id FROM raw_orders",),
+        expected_audit_sql_bodies=('SELECT order_id, customer_id FROM __source("raw_orders")',),
         expected_effective_environment_name="dev",
         expected_effective_connection={},
         expected_effective_vars={},
-        expected_model_query_sqls=("select order_id, customer_id from raw_orders",),
+        expected_model_query_sqls=('select order_id, customer_id from __source("raw_orders")',),
+        expected_model_references=((("source", "raw_orders"),),),
+        expected_audit_references=((("source", "raw_orders"),),),
     ),
     BuildCompileInputsTestCase(
         description="expands macros across multi block tests and audits",
@@ -790,6 +824,8 @@ SELECT @project_columns() FROM raw_customers
             "SELECT order_id FROM raw_orders;",
             "SELECT order_id FROM raw_customers",
         ),
+        expected_model_references=((),),
+        expected_audit_references=((), ()),
     ),
     BuildCompileInputsTestCase(
         description="generates clickstate style run ids when none are provided",
@@ -806,6 +842,8 @@ SELECT @project_columns() FROM raw_customers
         expected_effective_environment_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
+        expected_model_references=((),),
+        expected_audit_references=(),
     ),
 ]
 
@@ -873,6 +911,20 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
         == test_case.expected_audit_sql_bodies
     )
     assert (
+        tuple(
+            tuple((reference.ref_kind, reference.ref_name) for reference in model_input.references)
+            for model_input in compile_inputs.model_inputs
+        )
+        == test_case.expected_model_references
+    )
+    assert (
+        tuple(
+            tuple((reference.ref_kind, reference.ref_name) for reference in audit_input.references)
+            for audit_input in compile_inputs.audit_inputs
+        )
+        == test_case.expected_audit_references
+    )
+    assert (
         compile_inputs.effective_environment_name == test_case.expected_effective_environment_name
     )
     assert compile_inputs.effective_connection == test_case.expected_effective_connection
@@ -885,6 +937,53 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
 
 
 COMPILE_ERROR_TEST_CASES: list[BuildCompileInputsErrorTestCase] = [
+    BuildCompileInputsErrorTestCase(
+        description="raises when a model references an unknown source",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/orders.sql": """
+MODEL ();
+
+SELECT * FROM __source("missing_source")
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="references unknown source 'missing_source'",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when an audit references an unknown source",
+        repo_files=base_repo_files()
+        | {
+            "audits/orders.sql": """
+AUDIT ();
+
+SELECT * FROM __source("missing_source")
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="references unknown source 'missing_source'",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when an audit uses dbt refs",
+        repo_files=base_repo_files()
+        | {
+            "audits/orders.sql": """
+AUDIT ();
+
+SELECT * FROM __dbt_ref("stg_orders")
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment=(
+            r"Audit file audits/orders\.sql may not use __dbt_ref\('stg_orders'\) right now"
+        ),
+    ),
     BuildCompileInputsErrorTestCase(
         description="raises when a compiled test body references an unknown macro",
         repo_files=base_repo_files()

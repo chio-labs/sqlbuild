@@ -13,6 +13,7 @@ from sqlbuild.compiler.compile.helpers.macros import (
     expand_sql_macros,
     load_project_macros,
 )
+from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
 from sqlbuild.compiler.compile.helpers.templating import (
     expand_effective_vars,
     expand_template_data,
@@ -23,6 +24,7 @@ from sqlbuild.compiler.compile.models import (
     CompileModelInput,
     CompileSeedInput,
     CompileSourceInput,
+    CompileSqlReference,
     CompileSqlTestInput,
     LoadedMacro,
 )
@@ -58,6 +60,15 @@ def build_model_inputs(
     """Attach schema metadata to discovered model files."""
 
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
+    known_model_names: set[str] = {
+        discovered_model_file.file_path.stem
+        for discovered_model_file in discovered_inputs.model_files
+    }
+    known_source_names: set[str] = {
+        source_entry.name
+        for source_file in discovered_inputs.source_files
+        for source_entry in source_file.source_entries
+    }
     model_inputs: list[CompileModelInput] = []
     model_file: DiscoveredSqlModelFile
     for model_file in discovered_inputs.model_files:
@@ -81,6 +92,14 @@ def build_model_inputs(
             file_path=model_file.file_path,
             loaded_macros=loaded_macros,
         )
+        references: tuple[CompileSqlReference, ...] = extract_sql_references(expanded_query_sql)
+        validate_model_references(
+            references=references,
+            model_file=model_file,
+            known_model_names=known_model_names,
+            known_source_names=known_source_names,
+            has_dbt_manifest=discovered_inputs.dbt_manifest_file is not None,
+        )
         expanded_config: CompileModelConfig = CompileModelConfig(
             values=expand_model_hook_macros(
                 values=effective_config.values,
@@ -101,6 +120,7 @@ def build_model_inputs(
                     model_file=model_file,
                     config=expanded_config,
                     query_sql=expanded_query_sql,
+                    references=references,
                 )
             )
             continue
@@ -112,6 +132,7 @@ def build_model_inputs(
                 model_file=model_file,
                 config=expanded_config,
                 query_sql=expanded_query_sql,
+                references=references,
                 schema_entry=schema_entry,
                 schema_file=schema_file,
             )
@@ -211,23 +232,98 @@ def build_audit_inputs(
     """Build compile-time audit inputs from discovered SQL audit blocks."""
 
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
+    known_model_names: set[str] = {
+        discovered_model_file.file_path.stem
+        for discovered_model_file in discovered_inputs.model_files
+    }
+    known_source_names: set[str] = {
+        source_entry.name
+        for source_file in discovered_inputs.source_files
+        for source_entry in source_file.source_entries
+    }
     audit_inputs: list[CompileAuditInput] = []
     audit_file: DiscoveredAuditFile
     for audit_file in discovered_inputs.audit_files:
         audit_block: DiscoveredAuditBlock
         for audit_block in audit_file.blocks:
+            expanded_sql_body: str = expand_sql_macros(
+                sql=audit_block.sql_body,
+                file_path=audit_file.file_path,
+                loaded_macros=loaded_macros,
+            )
+            references: tuple[CompileSqlReference, ...] = extract_sql_references(expanded_sql_body)
+            validate_audit_references(
+                references=references,
+                audit_file=audit_file,
+                known_model_names=known_model_names,
+                known_source_names=known_source_names,
+            )
             audit_inputs.append(
                 CompileAuditInput(
                     audit_file=audit_file,
                     audit_block=audit_block,
-                    sql_body=expand_sql_macros(
-                        sql=audit_block.sql_body,
-                        file_path=audit_file.file_path,
-                        loaded_macros=loaded_macros,
-                    ),
+                    sql_body=expanded_sql_body,
+                    references=references,
                 )
             )
     return tuple(audit_inputs)
+
+
+def validate_model_references(
+    *,
+    references: tuple[CompileSqlReference, ...],
+    model_file: DiscoveredSqlModelFile,
+    known_model_names: set[str],
+    known_source_names: set[str],
+    has_dbt_manifest: bool,
+) -> None:
+    """Validate extracted model refs against discovered project inputs."""
+
+    reference: CompileSqlReference
+    for reference in references:
+        if reference.ref_kind == "ref" and reference.ref_name not in known_model_names:
+            raise CompileInputError(
+                f"Model file {model_file.relative_path} references unknown model "
+                f"'{reference.ref_name}'"
+            )
+        if reference.ref_kind == "source" and reference.ref_name not in known_source_names:
+            raise CompileInputError(
+                f"Model file {model_file.relative_path} references unknown source "
+                f"'{reference.ref_name}'"
+            )
+        if reference.ref_kind == "dbt_ref" and not has_dbt_manifest:
+            raise CompileInputError(
+                f"Model file {model_file.relative_path} uses __dbt_ref('{reference.ref_name}') "
+                "but no dbt manifest.json was discovered"
+            )
+
+
+def validate_audit_references(
+    *,
+    references: tuple[CompileSqlReference, ...],
+    audit_file: DiscoveredAuditFile,
+    known_model_names: set[str],
+    known_source_names: set[str],
+) -> None:
+    """Validate extracted audit refs against discovered project inputs."""
+
+    reference: CompileSqlReference
+    for reference in references:
+        if reference.ref_kind == "dbt_ref":
+            raise CompileInputError(
+                f"Audit file {audit_file.relative_path} may not use "
+                f"__dbt_ref('{reference.ref_name}') right now"
+            )
+        if reference.ref_kind == "ref" and reference.ref_name not in known_model_names:
+            raise CompileInputError(
+                f"Audit file {audit_file.relative_path} references unknown model "
+                f"'{reference.ref_name}'"
+            )
+        if reference.ref_kind == "source" and reference.ref_name not in known_source_names:
+            raise CompileInputError(
+                f"Audit file {audit_file.relative_path} references unknown source "
+                f"'{reference.ref_name}'"
+            )
 
 
 def resolve_environment_name(

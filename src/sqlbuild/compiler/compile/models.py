@@ -40,12 +40,21 @@ class LoadedMacro:
 
 
 @dataclass(frozen=True)
+class CompileSqlReference:
+    """One logical SQL reference discovered from compiled SQL text."""
+
+    ref_kind: str
+    ref_name: str
+
+
+@dataclass(frozen=True)
 class CompileModelInput:
     """One discovered model file with its attached schema metadata, if any."""
 
     model_file: DiscoveredSqlModelFile
     config: CompileModelConfig = field(default_factory=CompileModelConfig)
     query_sql: str = ""
+    references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
     schema_entry: SchemaModelEntry | None = None
     schema_file: DiscoveredSchemaFile | None = None
 
@@ -83,6 +92,7 @@ class CompileAuditInput:
     audit_file: DiscoveredAuditFile
     audit_block: DiscoveredAuditBlock
     sql_body: str
+    references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
