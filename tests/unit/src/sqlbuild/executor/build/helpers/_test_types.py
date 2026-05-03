@@ -16,3 +16,4 @@ class BuildOutputTestCase:
     target: str | None = None
     concurrency: int = 1
     elapsed_seconds: float = 1.5
+    verbose: bool = False

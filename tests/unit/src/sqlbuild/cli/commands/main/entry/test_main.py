@@ -154,6 +154,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         concurrency: int | None,
         select: tuple[str, ...],
         exclude: tuple[str, ...],
+        verbose: bool = False,
     ) -> int:
         del project_dir
         del no_sql_validation
@@ -163,6 +164,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         del concurrency
         del select
         del exclude
+        del verbose
         received_args.append((fail_fast, full_refresh))
         return test_case.expected_exit_code
 
@@ -203,6 +205,7 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
         concurrency: int | None,
         select: tuple[str, ...],
         exclude: tuple[str, ...],
+        verbose: bool = False,
     ) -> int:
         del project_dir
         del no_sql_validation
@@ -213,6 +216,7 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
         del concurrency
         del select
         del exclude
+        del verbose
         received_args.append(full_refresh)
         return test_case.expected_exit_code
 

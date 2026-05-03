@@ -26,6 +26,7 @@ class CliNamespace:
     fail_fast: bool = False
     full_refresh: bool = False
     concurrency: int | None = None
+    verbose: bool = False
     select: list[str] = field(default_factory=list)
     exclude: list[str] = field(default_factory=list)
 
@@ -48,6 +49,7 @@ class CliEntrypointHandlers:
             int | None,
             tuple[str, ...],
             tuple[str, ...],
+            bool,
         ],
         int,
     ]
@@ -63,6 +65,7 @@ class CliEntrypointHandlers:
             int | None,
             tuple[str, ...],
             tuple[str, ...],
+            bool,
         ],
         int,
     ]

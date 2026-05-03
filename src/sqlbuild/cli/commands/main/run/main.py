@@ -36,6 +36,7 @@ def run_run(
     concurrency: int | None = None,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
+    verbose: bool = False,
 ) -> int:
     """Execute the run command."""
 
@@ -67,7 +68,7 @@ def run_run(
     sys.stdout.write("\n" + plan_text + "\n\n")
 
     callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
-        plan=plan_output, use_color=use_color
+        plan=plan_output, use_color=use_color, verbose=verbose
     )
     effective_concurrency: int = (
         concurrency

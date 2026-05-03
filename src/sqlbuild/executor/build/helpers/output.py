@@ -28,6 +28,7 @@ class _AuditDisplayEntry:
     total_row_count: int
     batch_pass: int
     batch_total: int
+    executed_sql: str | None = None
 
 
 def format_build_output(
@@ -38,6 +39,7 @@ def format_build_output(
     concurrency: int = 1,
     elapsed_seconds: float = 0.0,
     use_color: bool = False,
+    verbose: bool = False,
 ) -> str:
     """Format the complete build execution output."""
 
@@ -82,6 +84,9 @@ def format_build_output(
             )
         )
 
+        if verbose and plan_entry is not None:
+            lines.extend(_format_sql_block(plan_entry.logical_ddl))
+
         test_result: SqlTestExecutionResult | None = test_results_by_model.get(
             model_result.model_name
         )
@@ -101,6 +106,8 @@ def format_build_output(
         audit_entry: _AuditDisplayEntry
         for audit_entry in audit_entries:
             lines.append(_format_audit_sub_line(audit_entry, use_color=use_color))
+            if verbose and audit_entry.executed_sql is not None:
+                lines.extend(_format_sql_block(audit_entry.executed_sql))
 
     lines.append("")
     lines.append(
@@ -173,6 +180,17 @@ def _format_model_line(
         f"{colored_status:<6} {duration}{detail}"
     )
     return line
+
+
+def _format_sql_block(sql: str) -> list[str]:
+    """Format a SQL block with minimal indent for verbose output."""
+
+    lines: list[str] = [""]
+    sql_line: str
+    for sql_line in sql.split("\n"):
+        lines.append(f"    {sql_line}")
+    lines.append("")
+    return lines
 
 
 def _format_sub_line(*, sub_type: str, name: str, status: str, use_color: bool) -> str:
@@ -436,6 +454,7 @@ def _aggregate_audit_results(
                 total_row_count=total_rows,
                 batch_pass=pass_count,
                 batch_total=len(results),
+                executed_sql=results[0].executed_sql if results else None,
             )
         )
 

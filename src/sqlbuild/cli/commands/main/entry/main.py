@@ -155,6 +155,7 @@ def _main_with_dependencies(
                 args.concurrency,
                 tuple(args.select),
                 tuple(args.exclude),
+                args.verbose,
             )
         if args.command == CliCommand.RUN:
             cursor_overrides = CursorOverrides(
@@ -174,6 +175,7 @@ def _main_with_dependencies(
                 args.concurrency,
                 tuple(args.select),
                 tuple(args.exclude),
+                args.verbose,
             )
         if args.command == CliCommand.TEST:
             return handlers.run_test(

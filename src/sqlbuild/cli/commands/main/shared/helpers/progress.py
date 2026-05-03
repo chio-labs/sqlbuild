@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from sqlbuild.cli.commands.main.shared.helpers.colors import (
     colorize_completion,
     colorize_status,
+    dim,
 )
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
@@ -38,6 +39,7 @@ class _AuditDisplayEntry:
     total_row_count: int
     batch_pass: int
     batch_total: int
+    executed_sql: str | None = None
 
 
 class BuildProgressCallbacks:
@@ -48,6 +50,7 @@ class BuildProgressCallbacks:
         *,
         plan: PlanOutput,
         use_color: bool,
+        verbose: bool = False,
     ) -> None:
         self._model_entry_map: dict[str, ModelPlanEntry] = {
             entry.name: entry for entry in plan.model_entries
@@ -56,6 +59,7 @@ class BuildProgressCallbacks:
         self._total: int = len(plan.model_entries) + len(plan.seed_entries)
         self._counter: int = 0
         self._use_color: bool = use_color
+        self._verbose: bool = verbose
         self._is_tty: bool = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
         self._start_time: float = time.monotonic()
         self._current_node_name: str = ""
@@ -83,6 +87,16 @@ class BuildProgressCallbacks:
     @property
     def elapsed(self) -> float:
         return time.monotonic() - self._start_time
+
+    def _write_sql_block(self, sql: str) -> None:
+        """Write a SQL block with minimal indent and dim styling."""
+
+        sys.stdout.write("\n")
+        sql_line: str
+        for sql_line in sql.split("\n"):
+            styled: str = dim(f"    {sql_line}") if self._use_color else f"    {sql_line}"
+            sys.stdout.write(f"{styled}\n")
+        sys.stdout.write("\n")
 
     def on_node_start(self, name: str, materialization_type: str) -> None:
         self._current_node_name = name
@@ -170,6 +184,9 @@ class BuildProgressCallbacks:
         )
         sys.stdout.write(line)
 
+        if self._verbose and plan_entry is not None:
+            self._write_sql_block(plan_entry.logical_ddl)
+
         sub_pad: str = " " * (self._prefix_width + _SUB_INDENT)
         sub_nw: int = self._name_width - _SUB_INDENT
 
@@ -207,6 +224,9 @@ class BuildProgressCallbacks:
                 f" {audit_status}{audit_detail}\n"
             )
             sys.stdout.write(audit_line)
+
+            if self._verbose and entry.executed_sql is not None:
+                self._write_sql_block(entry.executed_sql)
 
         sys.stdout.flush()
 
@@ -461,6 +481,7 @@ def _aggregate_audit_results(
                 total_row_count=total_rows,
                 batch_pass=pass_count,
                 batch_total=len(results),
+                executed_sql=results[0].executed_sql if results else None,
             )
         )
 

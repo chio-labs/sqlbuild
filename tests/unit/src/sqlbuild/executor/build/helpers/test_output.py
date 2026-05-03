@@ -442,6 +442,54 @@ TEST_CASES: list[BuildOutputTestCase] = [
             "audit (f)",
         ),
     ),
+    BuildOutputTestCase(
+        description="verbose mode shows model DDL and audit SQL",
+        result=BuildExecutionResult(
+            status=BuildStatus.SUCCESS,
+            model_results=(
+                ModelExecutionResult(
+                    model_name="orders",
+                    status=ExecutionStatus.SUCCESS,
+                    duration_ms=100,
+                    audit_results=(
+                        build_audit_result(
+                            name="not_null",
+                            outcome=AuditOutcome.PASS,
+                            column_name="id",
+                        ),
+                    ),
+                ),
+            ),
+            success_count=1,
+        ),
+        verbose=True,
+        expected_output_fragments=(
+            "CREATE TABLE main.orders AS SELECT 1",
+            "SELECT 1",
+            "orders",
+            "OK",
+        ),
+    ),
+    BuildOutputTestCase(
+        description="non-verbose mode omits model DDL",
+        result=BuildExecutionResult(
+            status=BuildStatus.SUCCESS,
+            model_results=(
+                ModelExecutionResult(
+                    model_name="orders",
+                    status=ExecutionStatus.SUCCESS,
+                    duration_ms=100,
+                ),
+            ),
+            success_count=1,
+        ),
+        verbose=False,
+        expected_output_fragments=(
+            "orders",
+            "OK",
+        ),
+        expected_absent_fragments=("CREATE TABLE",),
+    ),
 ]
 
 
@@ -486,6 +534,7 @@ def test_given_build_result_when_formatting_output_then_contains_expected_fragme
         concurrency=test_case.concurrency,
         elapsed_seconds=test_case.elapsed_seconds,
         use_color=False,
+        verbose=test_case.verbose,
     )
 
     expected_fragment: str
