@@ -8,6 +8,7 @@ import pytest
 from sqlbuild.cli.commands.main.helpers.compile.models import WrittenTarget
 from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compile_target
 from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import TargetWriterTestCase
 from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
     build_target_writer_plan_output,
@@ -25,9 +26,6 @@ from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
                 "compiled/audits/generic/orders/not_null__order_id.sql": (
                     "SELECT order_id FROM analytics.orders WHERE order_id IS NULL\n"
                 ),
-                "compiled/tests/_chain_/orders__stg_orders/orders_chain.sql": (
-                    "SELECT 1 AS order_id\n\nSELECT order_id FROM stg_orders\n"
-                ),
             },
             expected_summary_line="Compiled 1 model, 1 seed, 1 audit, 1 test",
         )
@@ -39,7 +37,11 @@ def test_given_plan_output_when_writing_target_then_expected_files_are_written(
     tmp_path: Path,
 ) -> None:
     plan_output: PlanOutput = build_target_writer_plan_output()
+    expected_test_sql: str = build_sql_test_comparison_sql(plan_output.test_entries[0]) + "\n"
     manifest: dict[str, object] = {"metadata": {"project_name": "demo"}}
+
+    expected_files: dict[str, str] = dict(test_case.expected_files)
+    expected_files["compiled/tests/_chain_/orders__stg_orders/orders_chain.sql"] = expected_test_sql
 
     written: WrittenTarget = write_compile_target(
         target_dir=tmp_path / "target",
@@ -48,8 +50,6 @@ def test_given_plan_output_when_writing_target_then_expected_files_are_written(
     )
 
     assert written.summary_line() == test_case.expected_summary_line
-    assert (
-        read_target_files(tmp_path / "target", test_case.expected_files) == test_case.expected_files
-    )
+    assert read_target_files(tmp_path / "target", expected_files) == expected_files
     assert json.loads((tmp_path / "target" / "manifest.json").read_text()) == manifest
     assert not (tmp_path / "target" / "run").exists()

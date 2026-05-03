@@ -14,6 +14,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredSchemaFile, DiscoveredSeedFile
+from sqlbuild.spec.models.project import SettingsConfig
 from sqlbuild.spec.models.schema import SchemaSeedEntry
 from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     BuildExecutionPlanTestCase,
@@ -93,9 +94,21 @@ def build_project_from_test_case(
         effective_environment_name=None,
         effective_connection=test_case.effective_connection,
         effective_vars={},
+        settings=SettingsConfig(
+            sqlglot=_settings_bool(test_case.effective_connection, "sqlglot", default=False)
+        ),
         models=tuple(models),
         seeds=tuple(seeds),
     )
+
+
+def _settings_bool(settings: dict[str, object], key: str, *, default: bool) -> bool:
+    """Read a boolean setting from legacy test-case settings dictionaries."""
+
+    raw_value: object | None = settings.get(key)
+    if isinstance(raw_value, bool):
+        return raw_value
+    return default
 
 
 def build_project_from_format_test_case(

@@ -6,6 +6,7 @@ from typing import cast
 
 import pytest
 
+from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compile_target
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
@@ -14,6 +15,7 @@ from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     DeferToIntegrationTestCase,
     ExpectedModelEntry,
     RunCompilePipelineIntegrationTestCase,
+    SqlglotChainCompileTargetIntegrationTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
     run_compile_pipeline_for_project,
@@ -264,6 +266,92 @@ def test_given_project_with_defer_to_when_compiling_then_resolves_refs_to_deferr
     expected_fragment: str
     for model_name, expected_fragment in test_case.expected_resolved_sql_fragments.items():
         assert expected_fragment in entry_map[model_name].resolved_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlglotChainCompileTargetIntegrationTestCase(
+            description="chain test compile target uses flat generated ctes",
+            project_files={
+                "sqlbuild_project.yml": (
+                    "name: demo\n"
+                    "adapter: duckdb\n"
+                    "connection:\n"
+                    "  database: ':memory:'\n"
+                    "settings:\n"
+                    "  sqlglot: true\n"
+                ),
+                "models/stg_orders.sql": (
+                    'MODEL (materialized table);\n\nSELECT id, amount FROM __source("raw")'
+                ),
+                "models/fact_orders.sql": (
+                    "MODEL (materialized table);\n\n"
+                    "WITH local_helper AS (SELECT 1 AS one) "
+                    'SELECT id, amount + one AS adjusted FROM __ref("stg_orders") '
+                    "CROSS JOIN local_helper"
+                ),
+                "sources/raw.yml": "sources:\n  - name: raw\n    schema: main\n    table: raw\n",
+                "tests/test_chain.sql": (
+                    "TEST();\n\n"
+                    "WITH\n"
+                    "__source__raw AS (SELECT 1 AS id, 100 AS amount),\n"
+                    "__expected__stg_orders AS (SELECT 1 AS id, 100 AS amount),\n"
+                    "__expected__fact_orders AS (SELECT 1 AS id, 101 AS adjusted)\n"
+                    "SELECT 1\n"
+                ),
+            },
+            compiled_test_path=(
+                "target/compiled/tests/_chain_/fact_orders__stg_orders/test_chain.sql"
+            ),
+            expected_fragments=(
+                "WITH __source__raw AS (",
+                "__ref__stg_orders AS (",
+                "FROM __source__raw",
+                "local_helper AS (",
+                "__actual__fact_orders AS (",
+                "FROM __ref__stg_orders",
+                "'stg_orders' AS model_name",
+            ),
+            unexpected_fragments=(
+                "__ref__stg_orders AS (WITH",
+                "__REF(",
+                "__SOURCE(",
+                "\n\nWITH",
+                "__actual_0 AS (WITH",
+                "__actual_0 AS (\n  WITH",
+                "__actual_1 AS (\n  WITH",
+                "__actual_0",
+            ),
+        )
+    ],
+    ids=["chain test compile target uses flat generated ctes"],
+)
+def test_given_sqlglot_enabled_chain_test_when_writing_compile_target_then_uses_ctes(
+    test_case: SqlglotChainCompileTargetIntegrationTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    result: CompilePipelineResult = run_compile_pipeline_for_project(
+        project_dir=tmp_path,
+        adapter=DuckDbAdapter(),
+    )
+    write_compile_target(
+        target_dir=tmp_path / "target",
+        plan_output=result.plan_output,
+        manifest=result.manifest,
+    )
+
+    compiled_test_sql: str = (tmp_path / test_case.compiled_test_path).read_text(encoding="utf-8")
+
+    expected_fragment: str
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in compiled_test_sql
+    unexpected_fragment: str
+    for unexpected_fragment in test_case.unexpected_fragments:
+        assert unexpected_fragment not in compiled_test_sql
 
 
 APPEND_CURSOR_PIPELINE_TEST_CASES: list[AppendCursorPipelineIntegrationTestCase] = [

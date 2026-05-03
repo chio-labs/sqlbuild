@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -281,6 +282,15 @@ class ChainStep:
     model_name: str
     resolved_sql: str
     expected_cte_sql: str
+
+
+@dataclass(frozen=True)
+class SqlglotResolvedTestSql:
+    """SQLGlot-resolved test SQL plus reusable CTE state for downstream refs."""
+
+    resolved_sql: str
+    cte_body_sql: str
+    generated_ctes: OrderedDict[str, str]
 
 
 @dataclass(frozen=True)

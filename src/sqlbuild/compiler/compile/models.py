@@ -22,7 +22,12 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
-from sqlbuild.spec.models.project import EnvironmentConfig, LocalConfig, ProjectConfig
+from sqlbuild.spec.models.project import (
+    EnvironmentConfig,
+    LocalConfig,
+    ProjectConfig,
+    SettingsConfig,
+)
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -274,6 +279,7 @@ class CompiledProject:
     effective_environment_name: str | None
     effective_connection: dict[str, object]
     effective_vars: dict[str, str]
+    settings: SettingsConfig = field(default_factory=SettingsConfig)
     models: tuple[CompiledModel, ...] = field(default_factory=tuple)
     sources: tuple[CompiledSource, ...] = field(default_factory=tuple)
     seeds: tuple[CompiledSeed, ...] = field(default_factory=tuple)

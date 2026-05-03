@@ -32,7 +32,6 @@ from sqlbuild.compiler.planner.helpers.plan_entry import (
     build_tag_index,
     extract_seed_columns,
     gather_source_columns,
-    is_settings_flag,
     plan_model,
     resolve_cursor_overrides,
     scope_overlaps,
@@ -141,8 +140,8 @@ def build_execution_plan(
         project=project, adapter=adapter, connection=connection
     )
 
-    sqlglot_enabled: bool = is_settings_flag(project, "sqlglot", default=False)
-    query_change_tracking: bool = is_settings_flag(project, "query_change_tracking", default=True)
+    sqlglot_enabled: bool = project.settings.sqlglot
+    query_change_tracking: bool = project.settings.query_change_tracking
 
     model_entries: list[ModelPlanEntry] = []
     all_warnings: list[PlanWarning] = []
@@ -269,7 +268,11 @@ def build_execution_plan(
             continue
         test_entry: SqlTestPlanEntry
         test_warnings: tuple[PlanWarning, ...]
-        test_entry, test_warnings = plan_test(test=sql_test, project=project)
+        test_entry, test_warnings = plan_test(
+            test=sql_test,
+            project=project,
+            sqlglot_enabled=sqlglot_enabled,
+        )
         test_entries.append(test_entry)
         all_warnings.extend(test_warnings)
 

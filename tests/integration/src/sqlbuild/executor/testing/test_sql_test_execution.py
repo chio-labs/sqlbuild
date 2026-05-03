@@ -6,13 +6,16 @@ from typing import Any
 
 import pytest
 
+from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.executor.testing._test_types import (
+    SqlTestComparisonSqlTestCase,
     SqlTestExecutionTestCase,
 )
 from tests.integration.src.sqlbuild.executor.testing.helpers import (
+    build_sql_test_plan_entry,
     run_sql_test,
     verify_test_result,
 )
@@ -21,6 +24,56 @@ from tests.integration.src.sqlbuild.executor.testing.helpers import (
 class TinySqlLimitDuckDbAdapter(DuckDbAdapter):
     def recommended_max_sql_length(self) -> int | None:
         return 80
+
+
+COMPARISON_SQL_TEST_CASES: list[SqlTestComparisonSqlTestCase] = [
+    SqlTestComparisonSqlTestCase(
+        description="uses readable sanitized model names for comparison ctes",
+        chain_steps=(
+            (
+                "stg-orders",
+                "SELECT 1 AS id",
+                "SELECT 1 AS id",
+            ),
+            (
+                "1 fact.orders",
+                "SELECT 1 AS id",
+                "SELECT 1 AS id",
+            ),
+        ),
+        expected_fragments=(
+            "__actual__stg_orders AS (",
+            "__expected__stg_orders AS (",
+            "__actual__model_1_fact_orders AS (",
+            "__expected__model_1_fact_orders AS (",
+        ),
+        unexpected_fragments=(
+            "__actual_0",
+            "__expected_0",
+        ),
+    ),
+    SqlTestComparisonSqlTestCase(
+        description="adds suffixes when sanitized model names collide",
+        chain_steps=(
+            (
+                "orders-v1",
+                "SELECT 1 AS id",
+                "SELECT 1 AS id",
+            ),
+            (
+                "orders.v1",
+                "SELECT 1 AS id",
+                "SELECT 1 AS id",
+            ),
+        ),
+        expected_fragments=(
+            "__actual__orders_v1 AS (",
+            "__expected__orders_v1 AS (",
+            "__actual__orders_v1_2 AS (",
+            "__expected__orders_v1_2 AS (",
+        ),
+    ),
+]
 
 
 SUCCESS_TEST_CASES: list[SqlTestExecutionTestCase] = [
@@ -140,6 +193,29 @@ FAILURE_TEST_CASES: list[SqlTestExecutionTestCase] = [
         expected_error_fragment="dim_customers",
     ),
 ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    COMPARISON_SQL_TEST_CASES,
+    ids=[case.description for case in COMPARISON_SQL_TEST_CASES],
+)
+def test_given_sql_test_chain_when_building_comparison_sql_then_uses_readable_ctes(
+    test_case: SqlTestComparisonSqlTestCase,
+) -> None:
+    comparison_sql: str = build_sql_test_comparison_sql(
+        build_sql_test_plan_entry(
+            name="test_model",
+            chain_steps=test_case.chain_steps,
+        )
+    )
+
+    expected_fragment: str
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in comparison_sql
+    unexpected_fragment: str
+    for unexpected_fragment in test_case.unexpected_fragments:
+        assert unexpected_fragment not in comparison_sql
 
 
 @pytest.mark.parametrize(

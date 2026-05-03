@@ -221,3 +221,59 @@ def test_given_chain_when_executing_resolved_sql_then_produces_expected_rows(
         rows: list[Any] = result.fetchall()
         actual: tuple[tuple[object, ...], ...] = tuple(tuple(row) for row in rows)
         assert expected_rows is None or actual == expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExecuteChainTestCase(
+            description="sqlglot path produces executable planned chain step sql",
+            model_queries={
+                "stg_orders": 'SELECT id, amount FROM __source("raw")',
+                "fact_orders": (
+                    "WITH local_helper AS (SELECT 1 AS one) "
+                    "SELECT id, amount + one AS adjusted "
+                    'FROM __ref("stg_orders") CROSS JOIN local_helper'
+                ),
+            },
+            mock_ref_ctes={},
+            mock_source_ctes={"raw": "SELECT 1 AS id, 100 AS amount"},
+            helper_ctes={},
+            expected_model_names=("stg_orders", "fact_orders"),
+            expected_cte_bodies={
+                "stg_orders": "SELECT 1 AS id, 100 AS amount",
+                "fact_orders": "SELECT 1 AS id, 101 AS adjusted",
+            },
+            expected_chain_length=2,
+            expected_results={
+                "stg_orders": ((1, 100),),
+                "fact_orders": ((1, 101),),
+            },
+        )
+    ],
+    ids=["sqlglot path produces executable planned chain step sql"],
+)
+def test_given_sqlglot_enabled_when_planning_chain_then_step_sql_remains_executable(
+    test_case: ExecuteChainTestCase,
+    connection: Any,
+) -> None:
+    compiled_test: CompiledSqlTest
+    project: CompiledProject
+    compiled_test, project = build_test_and_project(test_case)
+
+    entry: SqlTestPlanEntry
+    entry, _ = plan_test(test=compiled_test, project=project, sqlglot_enabled=True)
+
+    assert len(entry.chain) == test_case.expected_chain_length
+
+    step: ChainStep
+    for step in entry.chain:
+        assert "__REF(" not in step.resolved_sql
+        assert "__SOURCE(" not in step.resolved_sql
+        expected_rows: tuple[tuple[object, ...], ...] | None = test_case.expected_results.get(
+            step.model_name
+        )
+        result: Any = connection.execute(step.resolved_sql)
+        rows: list[Any] = result.fetchall()
+        actual: tuple[tuple[object, ...], ...] = tuple(tuple(row) for row in rows)
+        assert expected_rows is None or actual == expected_rows

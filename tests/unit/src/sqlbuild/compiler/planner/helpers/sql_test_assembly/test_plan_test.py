@@ -287,3 +287,89 @@ def test_given_test_and_project_when_planning_then_produces_expected_chain(
     expected_sev: WarningSeverity | None = test_case.expected_warning_severity
     actual_sevs: tuple[WarningSeverity, ...] = tuple(w.severity for w in warnings)
     assert (expected_sev is None) or all(s == expected_sev for s in actual_sevs)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PlanTestChainTestCase(
+            description="sqlglot path lifts refs and sources into readable top-level ctes",
+            model_queries={
+                "stg_orders": 'SELECT id, amount FROM __source("raw")',
+                "fact_orders": (
+                    "WITH local_helper AS (SELECT 1 AS one) "
+                    "SELECT id, amount + one AS adjusted "
+                    'FROM __ref("stg_orders") CROSS JOIN local_helper'
+                ),
+            },
+            mock_ref_ctes={},
+            mock_source_ctes={"raw": "SELECT 1 AS id, 100 AS amount"},
+            helper_ctes={},
+            expected_model_names=("stg_orders", "fact_orders"),
+            expected_chain_length=2,
+            expected_cte_bodies={
+                "stg_orders": "SELECT 1 AS id, 100 AS amount",
+                "fact_orders": "SELECT 1 AS id, 101 AS adjusted",
+            },
+        )
+    ],
+    ids=["sqlglot path lifts refs and sources into readable top-level ctes"],
+)
+def test_given_sqlglot_enabled_when_planning_test_then_it_uses_top_level_generated_ctes(
+    test_case: PlanTestChainTestCase,
+) -> None:
+    compiled_test: CompiledSqlTest
+    project: CompiledProject
+    compiled_test, project = build_test_and_project(test_case)
+
+    entry: SqlTestPlanEntry
+    warnings: tuple[PlanWarning, ...]
+    entry, warnings = plan_test(test=compiled_test, project=project, sqlglot_enabled=True)
+
+    assert not warnings
+    assert len(entry.chain) == test_case.expected_chain_length
+    step_map: dict[str, ChainStep] = {step.model_name: step for step in entry.chain}
+    assert (
+        "WITH __source__raw AS (SELECT 1 AS id, 100 AS amount)"
+        in step_map["stg_orders"].resolved_sql
+    )
+    assert "FROM __source__raw" in step_map["stg_orders"].resolved_sql
+    assert (
+        "WITH __source__raw AS (SELECT 1 AS id, 100 AS amount), "
+        "__ref__stg_orders AS (SELECT id, amount FROM __source__raw)"
+        in step_map["fact_orders"].resolved_sql
+    )
+    assert "__ref__stg_orders AS (WITH" not in step_map["fact_orders"].resolved_sql
+    assert "local_helper AS (SELECT 1 AS one)" in step_map["fact_orders"].resolved_sql
+    assert "FROM __ref__stg_orders CROSS JOIN local_helper" in step_map["fact_orders"].resolved_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PlanTestChainTestCase(
+            description="sqlglot path errors on generated cte name collision",
+            model_queries={
+                "orders": 'WITH __source__raw AS (SELECT 9 AS id) SELECT id FROM __source("raw")',
+            },
+            mock_ref_ctes={},
+            mock_source_ctes={"raw": "SELECT 1 AS id"},
+            helper_ctes={},
+            expected_model_names=("orders",),
+            expected_chain_length=1,
+            expected_error_fragment="conflicts with the generated source CTE",
+            expected_cte_bodies={"orders": "SELECT 1 AS id"},
+        )
+    ],
+    ids=["sqlglot path errors on generated cte name collision"],
+)
+def test_given_sqlglot_enabled_when_generated_cte_name_conflicts_then_it_raises_clear_error(
+    test_case: PlanTestChainTestCase,
+) -> None:
+    compiled_test: CompiledSqlTest
+    project: CompiledProject
+    compiled_test, project = build_test_and_project(test_case)
+
+    assert test_case.expected_error_fragment is not None
+    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+        plan_test(test=compiled_test, project=project, sqlglot_enabled=True)

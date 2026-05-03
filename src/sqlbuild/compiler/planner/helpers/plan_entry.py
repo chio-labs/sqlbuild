@@ -724,15 +724,6 @@ def scope_overlaps(
     return False
 
 
-def is_settings_flag(project: CompiledProject, key: str, *, default: bool) -> bool:
-    """Check a boolean setting from project effective connection."""
-
-    raw: object | None = project.effective_connection.get(key)
-    if isinstance(raw, bool):
-        return raw
-    return default
-
-
 def build_model_materializations(
     model_entries: tuple[ModelPlanEntry, ...],
 ) -> dict[str, str]:

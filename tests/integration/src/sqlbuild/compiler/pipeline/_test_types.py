@@ -44,3 +44,12 @@ class AppendCursorPipelineIntegrationTestCase:
     description: str
     append_cursor_inclusive: bool
     expected_resolved_sql_fragment: str
+
+
+@dataclass(frozen=True)
+class SqlglotChainCompileTargetIntegrationTestCase:
+    description: str
+    project_files: dict[str, str]
+    compiled_test_path: str
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...]

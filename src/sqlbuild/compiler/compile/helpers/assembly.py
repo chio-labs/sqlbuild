@@ -40,6 +40,7 @@ def assemble_compiled_project(inputs: CompileProjectInputs) -> CompiledProject:
         effective_environment_name=inputs.effective_environment_name,
         effective_connection=inputs.effective_connection,
         effective_vars=inputs.effective_vars,
+        settings=inputs.project_config.settings,
         models=tuple(
             _assemble_compiled_model(
                 model_input, sqlglot_enabled=sqlglot_enabled, seed_names=seed_names

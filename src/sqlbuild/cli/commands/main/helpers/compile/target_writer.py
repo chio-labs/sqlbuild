@@ -8,6 +8,7 @@ from pathlib import Path
 
 from sqlbuild.cli.commands.main.helpers.compile.models import WrittenTarget
 from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput, SqlTestPlanEntry
+from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 
 _COMPILED_DIR: str = "compiled"
 _RUN_DIR: str = "run"
@@ -78,8 +79,7 @@ def _write_tests(*, target_dir: Path, plan_output: PlanOutput) -> None:
         test_path: Path = (
             target_dir / _COMPILED_DIR / _TESTS_DIR / _test_folder(entry) / f"{entry.name}.sql"
         )
-        step_sql: list[str] = [step.resolved_sql for step in entry.chain]
-        _write_sql(path=test_path, sql="\n\n".join(step_sql))
+        _write_sql(path=test_path, sql=build_sql_test_comparison_sql(entry))
 
 
 def _write_manifest(*, target_dir: Path, manifest: dict[str, object]) -> None:

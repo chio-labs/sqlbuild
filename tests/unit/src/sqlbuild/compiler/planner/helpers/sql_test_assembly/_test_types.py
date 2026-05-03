@@ -15,5 +15,6 @@ class PlanTestChainTestCase:
     expected_sql_fragments: dict[str, str] = field(default_factory=dict)
     expected_warning_count: int = 0
     expected_warning_severity: WarningSeverity | None = None
+    expected_error_fragment: str | None = None
     sql_body: str = ""
     expected_cte_bodies: dict[str, str] = field(default_factory=dict)

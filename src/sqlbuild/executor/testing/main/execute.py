@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
+from sqlbuild.compiler.planner.models import SqlTestPlanEntry
+from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from sqlbuild.executor.testing.main.sql_length import (
     validate_unit_test_sql_length,
 )
@@ -19,28 +20,63 @@ def execute_sql_test(
     adapter: BaseAdapter,
     connection: Any,
 ) -> SqlTestExecutionResult:
-    """Execute one SQL unit test through its chain steps."""
+    """Execute one SQL unit test as a single comparison query."""
 
-    step_results: list[StepResult] = []
-    overall_outcome: SqlTestOutcome = SqlTestOutcome.PASS
-
-    step: ChainStep
-    for step in test_entry.chain:
-        step_result: StepResult = _execute_chain_step(
-            step=step, adapter=adapter, connection=connection
+    comparison_sql: str = build_sql_test_comparison_sql(test_entry)
+    error_model_name: str = test_entry.chain[0].model_name if test_entry.chain else test_entry.name
+    try:
+        validate_unit_test_sql_length(
+            sql=comparison_sql,
+            adapter=adapter,
+            test_name=test_entry.name,
         )
-        step_results.append(step_result)
-        if step_result.outcome == SqlTestOutcome.ERROR:
-            overall_outcome = SqlTestOutcome.ERROR
-            return SqlTestExecutionResult(
-                test_name=test_entry.name,
-                outcome=overall_outcome,
-                step_results=tuple(step_results),
-                error_message=(
-                    step_result.error_message
-                    or f"step '{step.model_name}' encountered an execution error"
+    except Exception:
+        error_message: str = (
+            f"Combined unit test SQL for '{test_entry.name}' including '{error_model_name}' "
+            f"is {len(comparison_sql)} "
+            f"characters, which exceeds the recommended maximum of "
+            f"{adapter.recommended_max_sql_length()} for this adapter. This test is too "
+            "large for a single lightweight unit query. Consider splitting it into smaller "
+            "unit tests or moving it to a scenario test."
+        )
+        return SqlTestExecutionResult(
+            test_name=test_entry.name,
+            outcome=SqlTestOutcome.ERROR,
+            step_results=(
+                StepResult(
+                    model_name=error_model_name,
+                    outcome=SqlTestOutcome.ERROR,
+                    error_message=error_message,
                 ),
-            )
+            ),
+            error_message=error_message,
+        )
+
+    try:
+        cursor: Any = adapter.execute(connection, comparison_sql)
+        rows: list[Any] = cursor.fetchall()
+    except Exception:
+        error_message = (
+            f"test '{test_entry.name}' encountered an execution error while running "
+            f"'{error_model_name}'"
+        )
+        return SqlTestExecutionResult(
+            test_name=test_entry.name,
+            outcome=SqlTestOutcome.ERROR,
+            step_results=(
+                StepResult(
+                    model_name=error_model_name,
+                    outcome=SqlTestOutcome.ERROR,
+                    error_message=error_message,
+                ),
+            ),
+            error_message=error_message,
+        )
+
+    step_results: list[StepResult] = _build_step_results(rows)
+    overall_outcome: SqlTestOutcome = SqlTestOutcome.PASS
+    step_result: StepResult
+    for step_result in step_results:
         if step_result.outcome == SqlTestOutcome.FAIL:
             overall_outcome = SqlTestOutcome.FAIL
 
@@ -59,66 +95,28 @@ def execute_sql_test(
     )
 
 
-def _execute_chain_step(
-    *,
-    step: ChainStep,
-    adapter: BaseAdapter,
-    connection: Any,
-) -> StepResult:
-    """Execute one chain step by comparing actual vs expected results."""
+def _build_step_results(rows: list[Any]) -> list[StepResult]:
+    """Convert comparison query rows into per-model step results."""
 
-    comparison_sql: str = (
-        f"WITH __actual AS ({step.resolved_sql}), "
-        f"__expected AS ({step.expected_cte_sql}) "
-        f"SELECT "
-        f"(SELECT COUNT(*) FROM __actual) AS actual_count, "
-        f"(SELECT COUNT(*) FROM __expected) AS expected_count, "
-        f"(SELECT COUNT(*) FROM ("
-        f"SELECT * FROM __actual EXCEPT SELECT * FROM __expected"
-        f")) AS mismatched_count"
-    )
-
-    try:
-        validate_unit_test_sql_length(
-            sql=comparison_sql,
-            adapter=adapter,
-            test_name=step.model_name,
+    step_results: list[StepResult] = []
+    row: Any
+    for row in sorted(rows, key=lambda item: int(item[0])):
+        model_name: str = str(row[1])
+        actual_count: int = int(row[2])
+        expected_count: int = int(row[3])
+        mismatched_count: int = int(row[4])
+        outcome: SqlTestOutcome
+        if mismatched_count == 0 and actual_count == expected_count:
+            outcome = SqlTestOutcome.PASS
+        else:
+            outcome = SqlTestOutcome.FAIL
+        step_results.append(
+            StepResult(
+                model_name=model_name,
+                outcome=outcome,
+                actual_row_count=actual_count,
+                expected_row_count=expected_count,
+                mismatched_row_count=mismatched_count,
+            )
         )
-    except Exception:
-        return StepResult(
-            model_name=step.model_name,
-            outcome=SqlTestOutcome.ERROR,
-            error_message=(
-                f"Combined unit test SQL for '{step.model_name}' is {len(comparison_sql)} "
-                f"characters, which exceeds the recommended maximum of "
-                f"{adapter.recommended_max_sql_length()} for this adapter. This test is too "
-                "large for a single lightweight unit query. Consider splitting it into smaller "
-                "unit tests or moving it to a scenario test."
-            ),
-        )
-
-    try:
-        cursor: Any = adapter.execute(connection, comparison_sql)
-        row: Any = cursor.fetchone()
-        actual_count: int = int(row[0])
-        expected_count: int = int(row[1])
-        mismatched_count: int = int(row[2])
-    except Exception:
-        return StepResult(
-            model_name=step.model_name,
-            outcome=SqlTestOutcome.ERROR,
-        )
-
-    outcome: SqlTestOutcome
-    if mismatched_count == 0 and actual_count == expected_count:
-        outcome = SqlTestOutcome.PASS
-    else:
-        outcome = SqlTestOutcome.FAIL
-
-    return StepResult(
-        model_name=step.model_name,
-        outcome=outcome,
-        actual_row_count=actual_count,
-        expected_row_count=expected_count,
-        mismatched_row_count=mismatched_count,
-    )
+    return step_results

@@ -15,9 +15,13 @@ from sqlbuild.compiler.compile.models import (
     CompiledSqlTest,
     CompileSqlTestCte,
 )
+from sqlbuild.compiler.planner.helpers.sqlglot_sql_test_assembly import (
+    try_resolve_test_model_sql_with_sqlglot,
+)
 from sqlbuild.compiler.planner.models import (
     ChainStep,
     PlanWarning,
+    SqlglotResolvedTestSql,
     SqlTestPlanEntry,
 )
 from sqlbuild.compiler.planner.types import WarningSeverity
@@ -30,6 +34,7 @@ def plan_test(
     *,
     test: CompiledSqlTest,
     project: CompiledProject,
+    sqlglot_enabled: bool = False,
 ) -> tuple[SqlTestPlanEntry, tuple[PlanWarning, ...]]:
     """Build a test plan entry with chained resolution."""
 
@@ -48,6 +53,7 @@ def plan_test(
     warnings: list[PlanWarning] = []
     reachable_mocks: set[str] = set()
     resolved: dict[str, str] = {}
+    sqlglot_resolved: dict[str, SqlglotResolvedTestSql] = {}
 
     chain_steps: list[ChainStep] = []
     model_name: str
@@ -73,6 +79,21 @@ def plan_test(
             resolved_chain=resolved,
             reachable_mocks=reachable_mocks,
         )
+        resolved_value: str = f"({step_sql})"
+        if sqlglot_enabled:
+            sqlglot_sql: SqlglotResolvedTestSql | None = try_resolve_test_model_sql_with_sqlglot(
+                query_sql=model.query_sql,
+                mock_refs=mock_refs,
+                mock_sources=mock_sources,
+                helper_ctes=helper_ctes,
+                resolved_chain=sqlglot_resolved,
+                reachable_mocks=reachable_mocks,
+                file_label=str(test.test_file.relative_path),
+            )
+            if sqlglot_sql is not None:
+                step_sql = sqlglot_sql.resolved_sql
+                resolved_value = sqlglot_sql.resolved_sql
+                sqlglot_resolved[model_name] = sqlglot_sql
 
         unresolved_warnings: tuple[PlanWarning, ...] = _validate_resolved_sql(
             resolved_sql=step_sql,
@@ -81,7 +102,7 @@ def plan_test(
         )
         warnings.extend(unresolved_warnings)
 
-        resolved[model_name] = f"({step_sql})"
+        resolved[model_name] = resolved_value
 
         expected_cte_sql: str = expected_map.get(model_name, "")
         chain_steps.append(
