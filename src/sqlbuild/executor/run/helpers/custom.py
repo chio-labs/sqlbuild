@@ -18,6 +18,7 @@ from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.helpers.hooks import execute_hooks
 from sqlbuild.executor.run.helpers.results import build_failed_result
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.shared.classes.statement_recorder import StatementRecorder
 from sqlbuild.executor.shared.helpers.naming import build_qualified_name
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.spec.models.source import SourceEntry
@@ -51,6 +52,7 @@ def execute_custom_entry(
     )
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
+    statement_recorder: StatementRecorder = StatementRecorder()
 
     try:
         execute_hooks(
@@ -66,6 +68,7 @@ def execute_custom_entry(
             error=str(exc),
             warnings=warnings,
             audit_results=audit_results,
+            statement_recorder=statement_recorder,
         )
 
     config_dict: dict[str, Any] = dict(entry.custom_config)
@@ -119,6 +122,7 @@ def execute_custom_entry(
             error=str(exc),
             warnings=warnings,
             audit_results=audit_results,
+            statement_recorder=statement_recorder,
         )
 
     if result.failed:
@@ -131,6 +135,7 @@ def execute_custom_entry(
             error=result.error or "custom materialization reported failure",
             warnings=warnings,
             audit_results=user_audit_results,
+            statement_recorder=statement_recorder,
         )
 
     if result.audit_results is not None:
@@ -167,6 +172,7 @@ def execute_custom_entry(
                 promoted_relation=result.relation,
                 warnings=warnings,
                 audit_results=audit_results,
+                statement_recorder=statement_recorder,
             )
 
     try:
@@ -187,6 +193,7 @@ def execute_custom_entry(
             promoted_relation=result.relation,
             warnings=warnings,
             audit_results=audit_results,
+            statement_recorder=statement_recorder,
         )
 
     try_write_fingerprint(
@@ -208,6 +215,7 @@ def execute_custom_entry(
         promoted_relation=result.relation,
         audit_results=tuple(audit_results),
         warning_messages=tuple(warnings),
+        executed_statements=statement_recorder.snapshot(),
     )
 
 

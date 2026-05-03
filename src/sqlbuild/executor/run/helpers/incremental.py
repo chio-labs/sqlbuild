@@ -17,6 +17,7 @@ from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.results import build_failed_result
 from sqlbuild.executor.run.helpers.type_enforcement import enforce_types_staged
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.shared.classes.statement_recorder import StatementRecorder
 from sqlbuild.executor.shared.helpers.naming import build_qualified_name
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.spec.models.source import SourceEntry
@@ -51,10 +52,10 @@ def execute_incremental_entry(
     )
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
-    executed_statements: list[str] = []
+    statement_recorder: StatementRecorder = StatementRecorder()
 
     try:
-        executed_statements.extend(render_hooks(hooks=entry.pre_hook, phase_label="pre_hook"))
+        statement_recorder.record_many(render_hooks(hooks=entry.pre_hook, phase_label="pre_hook"))
         execute_hooks(
             connection=connection,
             adapter=adapter,
@@ -68,12 +69,12 @@ def execute_incremental_entry(
             error=str(exc),
             warnings=warnings,
             audit_results=audit_results,
-            executed_statements=executed_statements,
+            statement_recorder=statement_recorder,
         )
 
     try:
-        executed_statements.extend(adapter.render_drop(target=delta_qualified, if_exists=True))
-        executed_statements.extend(
+        statement_recorder.record_many(adapter.render_drop(target=delta_qualified, if_exists=True))
+        statement_recorder.record_many(
             adapter.render_create_table_as(target=delta_qualified, sql=entry.resolved_sql)
         )
         adapter.drop(connection, target=delta_qualified, if_exists=True)
@@ -86,7 +87,7 @@ def execute_incremental_entry(
             staging_relation=delta_qualified,
             warnings=warnings,
             audit_results=audit_results,
-            executed_statements=executed_statements,
+            statement_recorder=statement_recorder,
         )
 
     try:
@@ -111,7 +112,7 @@ def execute_incremental_entry(
             on_schema_change=entry.on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE,
             warnings=warnings,
         )
-        executed_statements.extend(schema_change_statements)
+        statement_recorder.record_many(schema_change_statements)
         target_columns = adapter.get_columns(
             connection,
             database=target_database,
@@ -126,7 +127,7 @@ def execute_incremental_entry(
             staging_relation=delta_qualified,
             warnings=warnings,
             audit_results=audit_results,
-            executed_statements=executed_statements,
+            statement_recorder=statement_recorder,
         )
 
     if entry.type_enforcement and declared_columns:
@@ -140,7 +141,7 @@ def execute_incremental_entry(
                 staging_table=delta_table,
                 declared_columns=declared_columns,
             )
-            executed_statements.extend(type_enforcement_statements)
+            statement_recorder.record_many(type_enforcement_statements)
         except Exception as exc:
             return build_failed_result(
                 entry=entry,
@@ -149,7 +150,7 @@ def execute_incremental_entry(
                 staging_relation=delta_qualified,
                 warnings=warnings,
                 audit_results=audit_results,
-                executed_statements=executed_statements,
+                statement_recorder=statement_recorder,
             )
 
     delta_overrides: dict[str, str] = {entry.name: delta_qualified}
@@ -179,7 +180,7 @@ def execute_incremental_entry(
             staging_relation=delta_qualified,
             warnings=warnings,
             audit_results=audit_results,
-            executed_statements=executed_statements,
+            statement_recorder=statement_recorder,
         )
 
     cursor_start: str | None = entry.cursor_bounds.start if entry.cursor_bounds else None
@@ -197,7 +198,7 @@ def execute_incremental_entry(
             cursor_start=cursor_start,
             cursor_end=cursor_end,
         )
-        executed_statements.extend(dml_statements)
+        statement_recorder.record_many(dml_statements)
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -206,7 +207,7 @@ def execute_incremental_entry(
             staging_relation=delta_qualified,
             warnings=warnings,
             audit_results=audit_results,
-            executed_statements=executed_statements,
+            statement_recorder=statement_recorder,
         )
 
     final_audit_error: bool = False
@@ -234,11 +235,11 @@ def execute_incremental_entry(
             promoted_relation=target_qualified,
             warnings=warnings,
             audit_results=audit_results,
-            executed_statements=executed_statements,
+            statement_recorder=statement_recorder,
         )
 
     try:
-        executed_statements.extend(render_hooks(hooks=entry.post_hook, phase_label="post_hook"))
+        statement_recorder.record_many(render_hooks(hooks=entry.post_hook, phase_label="post_hook"))
         execute_hooks(
             connection=connection,
             adapter=adapter,
@@ -254,7 +255,7 @@ def execute_incremental_entry(
             promoted_relation=target_qualified,
             warnings=warnings,
             audit_results=audit_results,
-            executed_statements=executed_statements,
+            statement_recorder=statement_recorder,
         )
 
     try_write_fingerprint(
@@ -266,7 +267,7 @@ def execute_incremental_entry(
         warnings=warnings,
     )
 
-    executed_statements.extend(adapter.render_drop(target=delta_qualified, if_exists=True))
+    statement_recorder.record_many(adapter.render_drop(target=delta_qualified, if_exists=True))
     adapter.drop(connection, target=delta_qualified, if_exists=True)
 
     return ModelExecutionResult(
@@ -275,7 +276,7 @@ def execute_incremental_entry(
         promoted_relation=target_qualified,
         audit_results=tuple(audit_results),
         warning_messages=tuple(warnings),
-        executed_statements=tuple(executed_statements),
+        executed_statements=statement_recorder.snapshot(),
     )
 
 

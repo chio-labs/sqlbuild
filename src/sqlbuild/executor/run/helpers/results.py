@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.shared.classes.statement_recorder import StatementRecorder
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 
 
@@ -17,7 +18,7 @@ def build_failed_result(
     promoted_relation: str | None = None,
     warnings: list[str],
     audit_results: list[AuditExecutionResult],
-    executed_statements: list[str] | None = None,
+    statement_recorder: StatementRecorder,
 ) -> ModelExecutionResult:
     """Build a failed ModelExecutionResult for a specific phase."""
 
@@ -29,6 +30,6 @@ def build_failed_result(
         promoted_relation=promoted_relation,
         audit_results=tuple(audit_results),
         warning_messages=tuple(warnings),
-        executed_statements=tuple(executed_statements or ()),
+        executed_statements=statement_recorder.snapshot(),
         error_message=error,
     )
