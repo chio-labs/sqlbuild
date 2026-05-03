@@ -9,6 +9,9 @@ from sqlbuild.compiler.compile.constants import (
     SOURCE_TEST_CTE_PREFIX,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.helpers.sqlglot_tests import (
+    extract_expected_branch_column_names_with_sqlglot,
+)
 from sqlbuild.compiler.compile.models import CompileSqlTestCte, CompileSqlTestCtes
 
 
@@ -144,6 +147,11 @@ def _validate_expected_cte_query(*, cte: CompileSqlTestCte, file_label: str) -> 
 def _extract_expected_branch_column_names(
     *, sql: str, file_label: str
 ) -> tuple[tuple[str, ...], ...]:
+    sqlglot_column_names: tuple[tuple[str, ...], ...] | None = (
+        extract_expected_branch_column_names_with_sqlglot(sql=sql, file_label=file_label)
+    )
+    if sqlglot_column_names is not None:
+        return sqlglot_column_names
     branches: tuple[str, ...] = _split_set_operation_branches(sql)
     return tuple(
         _extract_expected_select_column_names(branch_sql=branch, file_label=file_label)

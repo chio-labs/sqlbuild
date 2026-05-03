@@ -32,3 +32,17 @@ class ExtractSqlTestCtesErrorTestCase:
     description: str
     sql: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ExtractSqlglotExpectedBranchesTestCase:
+    description: str
+    sql: str
+    expected_branch_column_names: tuple[tuple[str, ...], ...]
+
+
+@dataclass(frozen=True)
+class ExtractSqlglotExpectedBranchesErrorTestCase:
+    description: str
+    sql: str
+    expected_error_fragment: str
