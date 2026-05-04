@@ -22,21 +22,38 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake.helpers import (
     write_local_environment_override,
 )
 
+SNOWFLAKE_QUERY_E2E_TEST_CASES: list[SnowflakeCliTestCase] = [
+    SnowflakeCliTestCase(
+        description="query command uses snowflake local override",
+        command=(
+            "query",
+            "SELECT CURRENT_DATABASE() AS database_name, CURRENT_SCHEMA() AS schema_name",
+        ),
+        expected_stdout_fragments=("DATABASE_NAME | SQB_DB", "SCHEMA_NAME   |"),
+        expected_schema_fragment="SQLBUILD_E2E_",
+    ),
+    SnowflakeCliTestCase(
+        description="query command renders json output",
+        command=("query", "SELECT 1 AS id, 'alice' AS name", "--format", "json"),
+        expected_stdout_fragments=('"ID": 1', '"NAME": "alice"'),
+    ),
+    SnowflakeCliTestCase(
+        description="query command renders csv output",
+        command=("query", "SELECT 1 AS id, 'alice' AS name", "--format", "csv"),
+        expected_stdout_fragments=("ID,NAME", "1,alice"),
+    ),
+    SnowflakeCliTestCase(
+        description="query command prints ok for ddl statements",
+        command=("query", "CREATE OR REPLACE TEMP TABLE __sqb_query_temp (id INTEGER)"),
+        expected_stdout_fragments=("OK",),
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        SnowflakeCliTestCase(
-            description="query command uses snowflake local override",
-            command=(
-                "query",
-                "SELECT CURRENT_DATABASE() AS database_name, CURRENT_SCHEMA() AS schema_name",
-            ),
-            expected_stdout_fragments=("DATABASE_NAME | SQB_DB", "SCHEMA_NAME   |"),
-            expected_schema_fragment="SQLBUILD_E2E_",
-        )
-    ],
-    ids=["query command uses snowflake local override"],
+    SNOWFLAKE_QUERY_E2E_TEST_CASES,
+    ids=[case.description for case in SNOWFLAKE_QUERY_E2E_TEST_CASES],
 )
 def test_given_snowflake_local_config_when_running_query_then_outputs_expected_rows(
     tmp_path: Path,
@@ -139,6 +156,63 @@ SNOWFLAKE_DIFF_E2E_TEST_CASES: list[SnowflakeDiffE2ETestCase] = [
             "stg_orders",
         ),
         expected_stdout_fragments=("amount_cents", "mismatches=1", "order_id=1 | 100 -> 105"),
+        expected_return_code=1,
+    ),
+    SnowflakeDiffE2ETestCase(
+        description="verbose diff shows changed row examples",
+        mutation_sql=("UPDATE stg_orders SET amount_cents = amount_cents + 5 WHERE order_id = 1",),
+        command=(
+            "--no-color",
+            "diff",
+            "--from",
+            "prod",
+            "--to",
+            "dev",
+            "--full",
+            "--verbose",
+            "--select",
+            "stg_orders",
+        ),
+        expected_stdout_fragments=("Examples", "order_id=1 | 100 -> 105"),
+        expected_return_code=1,
+    ),
+    SnowflakeDiffE2ETestCase(
+        description="verbose diff shows side only examples",
+        mutation_sql=(
+            "DELETE FROM stg_orders WHERE order_id = 1",
+            "INSERT INTO stg_orders (order_id, customer_id, amount_cents) VALUES (3, 3, 999)",
+        ),
+        command=(
+            "--no-color",
+            "diff",
+            "--from",
+            "prod",
+            "--to",
+            "dev",
+            "--full",
+            "--verbose",
+            "--select",
+            "stg_orders",
+        ),
+        expected_stdout_fragments=("prod only", "order_id=1", "dev only", "order_id=3"),
+        expected_return_code=1,
+    ),
+    SnowflakeDiffE2ETestCase(
+        description="bounded diff reports mismatch inside bounded window",
+        mutation_sql=("UPDATE stg_orders SET amount_cents = amount_cents + 5 WHERE order_id = 2",),
+        command=(
+            "--no-color",
+            "diff",
+            "--from",
+            "prod",
+            "--to",
+            "dev",
+            "--bounded",
+            "7d",
+            "--select",
+            "stg_orders",
+        ),
+        expected_stdout_fragments=("amount_cents", "mismatches=1", "order_id=2 | 200 -> 205"),
         expected_return_code=1,
     ),
 ]

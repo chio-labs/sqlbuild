@@ -7,14 +7,19 @@ from typing import cast
 import pytest
 
 from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compile_target
+from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
+from sqlbuild.integrations.snowflake.client import SnowflakeAdapter
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     AppendCursorPipelineIntegrationTestCase,
     DeferToIntegrationTestCase,
     ExpectedModelEntry,
     RunCompilePipelineIntegrationTestCase,
+    SnowflakeTargetValidationIntegrationTestCase,
     SqlglotChainCompileTargetIntegrationTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
@@ -200,6 +205,48 @@ def test_given_project_files_when_running_compile_pipeline_then_produces_valid_o
         assert expected.expected_manifest_compiled_code_fragment in compiled_code
 
     validate_manifest_against_dbt_schema(result.manifest)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeTargetValidationIntegrationTestCase(
+            description="snowflake compile requires explicit target database and schema",
+            project_files={
+                "sqlbuild_project.yml": (
+                    "name: demo\nadapter: duckdb\nconnection:\n  database: demo.duckdb\n"
+                ),
+                "sqlbuild_local.yml": (
+                    "adapter: snowflake\n"
+                    "connection:\n"
+                    "  account: ${ENV:TEST_ACCOUNT}\n"
+                    "  warehouse: TEST_WH\n"
+                    "  database: TEST_DB\n"
+                    "  schema: TEST_SCHEMA\n"
+                ),
+                "models/stg_orders.sql": "MODEL (materialized view);\n\nSELECT 1 AS order_id\n",
+            },
+            expected_error_fragment="snowflake execution requires explicit target database, schema",
+        )
+    ],
+    ids=["snowflake compile requires explicit target database and schema"],
+)
+def test_given_snowflake_local_override_without_target_namespace_when_compiling_then_it_fails_early(
+    test_case: SnowflakeTargetValidationIntegrationTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TEST_ACCOUNT", "test-account")
+    write_repo_files(tmp_path, test_case.project_files)
+    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+
+    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+        compile_project(
+            discovered_inputs=discovered_inputs,
+            adapter=SnowflakeAdapter(),
+            no_sql_validation=True,
+        )
 
 
 @pytest.mark.parametrize(
