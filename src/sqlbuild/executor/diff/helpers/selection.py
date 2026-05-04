@@ -4,19 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.executor.shared.helpers.naming import build_qualified_name
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
 
 
-def qualified_name(model: Any) -> str:
+def qualified_name(*, adapter: BaseAdapter, model: Any) -> str:
     """Return a compiled model's relation name."""
 
-    if model.target.qualified_name is not None:
-        return model.target.qualified_name
-    return build_qualified_name(
-        database=model.target.database,
-        schema=model.target.schema,
-        name=model.target.name,
-    )
+    return resolve_target_qualified_name(adapter=adapter, target=model.target)
 
 
 def get_unique_key(model: Any) -> tuple[str, ...]:

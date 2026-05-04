@@ -18,6 +18,7 @@ from sqlbuild.adapter.shared.models import (
     SchemaDiffResult,
     StatementRecorder,
 )
+from sqlbuild.adapter.shared.types import CursorKind, FrameworkType
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 
 
@@ -216,7 +217,7 @@ class BaseAdapter(StrictAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            connection.execute(stmt)
+            self.execute(connection, stmt)
 
     def render_create_table_as(self, *, target: str, sql: str) -> tuple[str, ...]:
         return (f"CREATE OR REPLACE TABLE {target} AS {sql}",)
@@ -341,7 +342,7 @@ class BaseAdapter(StrictAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            connection.execute(stmt)
+            self.execute(connection, stmt)
 
     def create_view_as(
         self,
@@ -355,7 +356,7 @@ class BaseAdapter(StrictAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            connection.execute(stmt)
+            self.execute(connection, stmt)
 
     def drop(
         self,
@@ -369,7 +370,7 @@ class BaseAdapter(StrictAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            connection.execute(stmt)
+            self.execute(connection, stmt)
 
     def rename(
         self,
@@ -398,7 +399,7 @@ class BaseAdapter(StrictAdapter):
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
-                connection.execute(stmt)
+                self.execute(connection, stmt)
 
     def clone(
         self,
@@ -417,7 +418,7 @@ class BaseAdapter(StrictAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            connection.execute(stmt)
+            self.execute(connection, stmt)
 
     def load_seed(
         self,
@@ -445,7 +446,7 @@ class BaseAdapter(StrictAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            connection.execute(stmt)
+            self.execute(connection, stmt)
 
     def delete_insert(
         self,
@@ -465,7 +466,7 @@ class BaseAdapter(StrictAdapter):
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
-                connection.execute(stmt)
+                self.execute(connection, stmt)
 
     def delete_insert_cursor(
         self,
@@ -491,7 +492,7 @@ class BaseAdapter(StrictAdapter):
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
-                connection.execute(stmt)
+                self.execute(connection, stmt)
 
     def merge(
         self,
@@ -732,6 +733,49 @@ class BaseAdapter(StrictAdapter):
     def star_exclude_keyword(self) -> str:
         """Return the SQL keyword for SELECT * EXCLUDE/EXCEPT syntax."""
         return "EXCLUDE"
+
+    def render_qualified_name(
+        self,
+        *,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> str | None:
+        """Render a dot-separated qualified relation name from resolved parts."""
+
+        if database is not None and schema is not None:
+            return f"{database}.{schema}.{name}"
+        if schema is not None:
+            return f"{schema}.{name}"
+        return None
+
+    def render_framework_type(self, type_name: FrameworkType) -> str:
+        """Render one framework-internal logical type using generic SQL defaults."""
+
+        match type_name:
+            case FrameworkType.STRING:
+                return "VARCHAR"
+            case FrameworkType.TIMESTAMP:
+                return "TIMESTAMP"
+
+    def render_set_difference_operator(self) -> str:
+        """Render the generic SQL set-difference operator."""
+
+        return "EXCEPT"
+
+    def sqlglot_dialect(self) -> str | None:
+        """Return no adapter-specific SQLGlot dialect by default."""
+
+        return None
+
+    def render_cursor_bound_literal(self, value: str, cursor_type: str | None) -> str:
+        """Render one generic cursor bound literal from a normalized string value."""
+
+        if cursor_type == CursorKind.INTEGER:
+            return value
+        if cursor_type == CursorKind.TIMESTAMP:
+            return f"TIMESTAMP '{value}'"
+        return f"'{value}'"
 
     def default_table_promotion_mode(self) -> str:
         """Return staged as the generic default promotion mode."""

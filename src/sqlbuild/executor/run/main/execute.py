@@ -33,13 +33,16 @@ from sqlbuild.executor.run.helpers.view import (
     execute_view_entry as execute_view_entry,
 )
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.shared.helpers.naming import build_qualified_name
 from sqlbuild.executor.shared.types import (
     ExecutionPhase,
     ExecutionStatus,
     TablePromotionMode,
 )
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
+from sqlbuild.shared.helpers.naming import (
+    resolve_qualified_name_parts,
+    resolve_target_qualified_name,
+)
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -62,12 +65,13 @@ def execute_table_entry(
     target_database: str | None = entry.target.database
     target_schema: str | None = entry.target.schema
     target_table: str = entry.target.name
-    target_qualified: str = build_qualified_name(
-        database=target_database, schema=target_schema, name=target_table
-    )
+    target_qualified: str = resolve_target_qualified_name(adapter=adapter, target=entry.target)
     staging_table: str = f"{target_table}__staging"
-    staging_qualified: str = build_qualified_name(
-        database=target_database, schema=target_schema, name=staging_table
+    staging_qualified: str = resolve_qualified_name_parts(
+        adapter=adapter,
+        database=target_database,
+        schema=target_schema,
+        name=staging_table,
     )
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []

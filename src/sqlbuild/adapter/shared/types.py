@@ -8,6 +8,7 @@ from enum import StrEnum
 class BuiltinAdapter(StrEnum):
     DUCKDB = "duckdb"
     SNOWFLAKE = "snowflake"
+    BIGQUERY = "bigquery"
 
 
 class CursorKind(StrEnum):
@@ -24,3 +25,8 @@ class PromotionStrategy(StrEnum):
 class LifeCycleEventKind(StrEnum):
     SQL = "sql"
     LOG = "log"
+
+
+class FrameworkType(StrEnum):
+    STRING = "string"
+    TIMESTAMP = "timestamp"

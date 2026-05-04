@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 
+from sqlbuild.adapter.shared.types import FrameworkType
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.main.shared.helpers.sql import (
     build_create_table_sql,
@@ -9,12 +12,16 @@ from sqlbuild.compiler.fingerprints.main.shared.helpers.sql import (
     build_qualified_table_name,
     build_read_all_sql,
 )
+from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.unit.src.sqlbuild.compiler.fingerprints.main.shared.helpers._test_types import (
     BuildCreateTableSqlTestCase,
     BuildInsertSqlTestCase,
     BuildQualifiedTableNameTestCase,
     BuildReadAllSqlTestCase,
 )
+
+RENDER_QUALIFIED_NAME: Callable[..., str | None] = DuckDbAdapter().render_qualified_name
+RENDER_FRAMEWORK_TYPE: Callable[[FrameworkType], str] = DuckDbAdapter().render_framework_type
 
 QUALIFIED_TABLE_NAME_TEST_CASES: list[BuildQualifiedTableNameTestCase] = [
     BuildQualifiedTableNameTestCase(
@@ -84,7 +91,7 @@ INSERT_SQL_TEST_CASES: list[BuildInsertSqlTestCase] = [
             "'abc123'",
             "'def456'",
             "'ghi789'",
-            "'SELECT id FROM orders'",
+            "'U0VMRUNUIGlkIEZST00gb3JkZXJz'",
             "'2026-01-15T12:00:00'",
         ),
     ),
@@ -118,7 +125,7 @@ INSERT_SQL_TEST_CASES: list[BuildInsertSqlTestCase] = [
         schema_fingerprint="ghi789",
         query_sql="SELECT * FROM t WHERE name = 'alice'",
         ts="2026-01-15T12:00:00",
-        expected_contains=("name = ''alice''",),
+        expected_contains=("U0VMRUNUICogRlJPTSB0IFdIRVJFIG5hbWUgPSAnYWxpY2Un",),
     ),
 ]
 
@@ -131,7 +138,11 @@ INSERT_SQL_TEST_CASES: list[BuildInsertSqlTestCase] = [
 def test_given_schema_when_building_qualified_name_then_returns_expected(
     test_case: BuildQualifiedTableNameTestCase,
 ) -> None:
-    result: str = build_qualified_table_name(database=test_case.database, schema=test_case.schema)
+    result: str = build_qualified_table_name(
+        database=test_case.database,
+        schema=test_case.schema,
+        render_qualified_name=RENDER_QUALIFIED_NAME,
+    )
 
     assert result == test_case.expected_name
 
@@ -164,7 +175,12 @@ def test_given_schema_when_building_qualified_name_then_returns_expected(
 def test_given_schema_when_building_create_table_sql_then_contains_expected_fragments(
     test_case: BuildCreateTableSqlTestCase,
 ) -> None:
-    result: str = build_create_table_sql(database=test_case.database, schema=test_case.schema)
+    result: str = build_create_table_sql(
+        database=test_case.database,
+        schema=test_case.schema,
+        render_qualified_name=RENDER_QUALIFIED_NAME,
+        render_framework_type=RENDER_FRAMEWORK_TYPE,
+    )
 
     fragment: str
     for fragment in test_case.expected_contains:
@@ -179,7 +195,11 @@ def test_given_schema_when_building_create_table_sql_then_contains_expected_frag
 def test_given_schema_when_building_read_all_sql_then_contains_expected_fragments(
     test_case: BuildReadAllSqlTestCase,
 ) -> None:
-    result: str = build_read_all_sql(database=test_case.database, schema=test_case.schema)
+    result: str = build_read_all_sql(
+        database=test_case.database,
+        schema=test_case.schema,
+        render_qualified_name=RENDER_QUALIFIED_NAME,
+    )
 
     fragment: str
     for fragment in test_case.expected_contains:
@@ -207,6 +227,7 @@ def test_given_fingerprint_values_when_building_insert_sql_then_contains_expecte
         schema_fingerprint=test_case.schema_fingerprint,
         query_sql=test_case.query_sql,
         ts=test_case.ts,
+        render_qualified_name=RENDER_QUALIFIED_NAME,
     )
 
     fragment: str

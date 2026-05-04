@@ -61,6 +61,7 @@ norecursedirs = [".venv", "dist", "*.egg-info", ".git", ".tox"]
 markers = [
   "real_warehouse: tests that require live external warehouse credentials",
   "snowflake: tests that require a live Snowflake warehouse",
+  "bigquery: tests that require a live BigQuery warehouse",
 ]
 
 [tool.ruff]

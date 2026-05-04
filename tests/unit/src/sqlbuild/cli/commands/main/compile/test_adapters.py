@@ -26,17 +26,24 @@ EFFECTIVE_ADAPTER_TEST_CASES: list[ResolveEffectiveAdapterNameTestCase] = [
     ),
 ]
 
+RESOLVE_ADAPTER_TEST_CASES: list[ResolveAdapterTestCase] = [
+    ResolveAdapterTestCase(
+        description="resolves duckdb adapter lazily",
+        adapter_name="duckdb",
+        expected_adapter_class_name="DuckDbAdapter",
+    ),
+    ResolveAdapterTestCase(
+        description="resolves bigquery adapter lazily",
+        adapter_name="bigquery",
+        expected_adapter_class_name="BigQueryAdapter",
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        ResolveAdapterTestCase(
-            description="resolves duckdb adapter lazily",
-            adapter_name="duckdb",
-            expected_adapter_class_name="DuckDbAdapter",
-        )
-    ],
-    ids=["resolves duckdb adapter lazily"],
+    RESOLVE_ADAPTER_TEST_CASES,
+    ids=[case.description for case in RESOLVE_ADAPTER_TEST_CASES],
 )
 def test_given_adapter_name_when_resolving_adapter_then_returns_expected_adapter(
     test_case: ResolveAdapterTestCase,

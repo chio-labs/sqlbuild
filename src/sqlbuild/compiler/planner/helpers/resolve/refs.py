@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
@@ -23,6 +24,8 @@ def resolve_ref_references(
     seed_targets: dict[str, CompiledRelationTarget],
     cursor_bounds: CursorBounds | None,
     cursor_inputs: dict[str, str],
+    adapter: BaseAdapter,
+    cursor_type: str | None,
     lower_bound_inclusive: bool,
 ) -> str:
     """Replace all __ref() calls with qualified names or cursor-filtered subqueries."""
@@ -44,6 +47,8 @@ def resolve_ref_references(
             qualified_name=qualified_name,
             cursor_column=cursor_column,
             bounds=cursor_bounds,
+            adapter=adapter,
+            cursor_type=cursor_type,
             lower_bound_inclusive=lower_bound_inclusive,
         )
 
@@ -66,15 +71,19 @@ def _build_cursor_subquery(
     qualified_name: str,
     cursor_column: str,
     bounds: CursorBounds,
+    adapter: BaseAdapter,
+    cursor_type: str | None,
     lower_bound_inclusive: bool,
 ) -> str:
     """Wrap a qualified name in a cursor-filtered subquery."""
 
     lower_operator: str = ">=" if lower_bound_inclusive else ">"
+    start_literal: str = adapter.render_cursor_bound_literal(bounds.start, cursor_type)
+    end_literal: str = adapter.render_cursor_bound_literal(bounds.end, cursor_type)
     return (
         f"(SELECT * FROM {qualified_name}"
-        f" WHERE {cursor_column} {lower_operator} '{bounds.start}'"
-        f" AND {cursor_column} < '{bounds.end}')"
+        f" WHERE {cursor_column} {lower_operator} {start_literal}"
+        f" AND {cursor_column} < {end_literal})"
     )
 
 

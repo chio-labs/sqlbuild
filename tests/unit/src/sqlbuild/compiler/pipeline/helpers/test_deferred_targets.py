@@ -6,6 +6,7 @@ import pytest
 
 from sqlbuild.compiler.compile.models import CompiledProject, CompiledRelationTarget
 from sqlbuild.compiler.pipeline.helpers.deferred_targets import build_deferred_targets
+from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from sqlbuild.spec.models.project import EnvironmentConfig
 from tests.unit.src.sqlbuild.compiler.pipeline.helpers._test_types import (
     DeferredTargetTestCase,
@@ -121,6 +122,7 @@ def test_given_deferred_env_when_building_targets_then_resolves_expected_naming(
         effective_vars=test_case.effective_vars,
         default_schema=test_case.default_schema,
         default_database=test_case.default_database,
+        render_qualified_name=DuckDbAdapter().render_qualified_name,
     )
 
     result: CompiledRelationTarget = targets["test_model"]

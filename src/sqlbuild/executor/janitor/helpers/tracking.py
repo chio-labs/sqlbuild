@@ -31,6 +31,7 @@ def collect_tracked_relation_keys(
                 execute=adapter.execute,
                 database=database,
                 schema=schema,
+                render_qualified_name=adapter.render_qualified_name,
             )
         except Exception:
             continue

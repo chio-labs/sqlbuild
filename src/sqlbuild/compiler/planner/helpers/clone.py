@@ -104,6 +104,7 @@ def build_clone_model_entries(
         resolved_sql: str = ""
         if materialization_type == MaterializationType.VIEW:
             resolved_sql = resolve_model_sql(
+                adapter=adapter,
                 model=model,
                 snapshot=WarehouseSnapshot(),
                 model_targets=model_targets,

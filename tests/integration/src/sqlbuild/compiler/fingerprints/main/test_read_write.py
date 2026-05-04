@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
 import pytest
 
+from sqlbuild.adapter.shared.types import FrameworkType
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
+from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.compiler.fingerprints.main._test_types import (
     LatestResolutionTestCase,
     NullAstHashTestCase,
@@ -16,6 +19,9 @@ from tests.integration.src.sqlbuild.compiler.fingerprints.main._test_types impor
     WriteAndReadTestCase,
     WriteCreatesTableTestCase,
 )
+
+RENDER_QUALIFIED_NAME: Callable[..., str | None] = DuckDbAdapter().render_qualified_name
+RENDER_FRAMEWORK_TYPE: Callable[[FrameworkType], str] = DuckDbAdapter().render_framework_type
 
 WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
     WriteAndReadTestCase(
@@ -95,6 +101,8 @@ def test_given_fingerprints_when_writing_and_reading_then_returns_expected(
             database=test_case.database,
             schema=test_case.schema,
             fingerprint=fp,
+            render_qualified_name=RENDER_QUALIFIED_NAME,
+            render_framework_type=RENDER_FRAMEWORK_TYPE,
         )
 
     result: FingerprintSet = read_latest_fingerprints(
@@ -102,6 +110,7 @@ def test_given_fingerprints_when_writing_and_reading_then_returns_expected(
         execute=execute,
         database=test_case.database,
         schema=test_case.schema,
+        render_qualified_name=RENDER_QUALIFIED_NAME,
     )
 
     assert tuple(sorted(result.fingerprints.keys())) == test_case.expected_model_names
@@ -136,6 +145,7 @@ def test_given_no_table_when_reading_then_returns_empty_set(
         execute=execute,
         database=test_case.database,
         schema=test_case.schema,
+        render_qualified_name=RENDER_QUALIFIED_NAME,
     )
 
     assert len(result.fingerprints) == test_case.expected_model_count
@@ -176,6 +186,8 @@ def test_given_no_table_when_writing_then_creates_table(
         database=test_case.database,
         schema=test_case.schema,
         fingerprint=test_case.fingerprint,
+        render_qualified_name=RENDER_QUALIFIED_NAME,
+        render_framework_type=RENDER_FRAMEWORK_TYPE,
     )
 
     row: Any = connection.execute(
@@ -239,6 +251,8 @@ def test_given_multiple_fingerprints_when_reading_then_resolves_latest(
             database=test_case.database,
             schema=test_case.schema,
             fingerprint=fp,
+            render_qualified_name=RENDER_QUALIFIED_NAME,
+            render_framework_type=RENDER_FRAMEWORK_TYPE,
         )
 
     result: FingerprintSet = read_latest_fingerprints(
@@ -246,6 +260,7 @@ def test_given_multiple_fingerprints_when_reading_then_resolves_latest(
         execute=execute,
         database=test_case.database,
         schema=test_case.schema,
+        render_qualified_name=RENDER_QUALIFIED_NAME,
     )
     latest: Fingerprint = result.fingerprints["orders"]
 
@@ -289,6 +304,8 @@ def test_given_null_ast_hash_when_writing_and_reading_then_ast_hash_is_none(
         database=test_case.database,
         schema=test_case.schema,
         fingerprint=test_case.fingerprint,
+        render_qualified_name=RENDER_QUALIFIED_NAME,
+        render_framework_type=RENDER_FRAMEWORK_TYPE,
     )
 
     result: FingerprintSet = read_latest_fingerprints(
@@ -296,6 +313,7 @@ def test_given_null_ast_hash_when_writing_and_reading_then_ast_hash_is_none(
         execute=execute,
         database=test_case.database,
         schema=test_case.schema,
+        render_qualified_name=RENDER_QUALIFIED_NAME,
     )
     latest: Fingerprint = result.fingerprints["orders"]
 

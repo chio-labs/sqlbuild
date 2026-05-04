@@ -30,14 +30,19 @@ def lift_step_ctes(sql: str, lifted_ctes: OrderedDict[str, str]) -> str:
     return body_sql
 
 
-def format_sql(sql: str) -> str:
+def format_sql(sql: str, *, sqlglot_dialect: str | None = None) -> str:
     """Format generated comparison SQL when SQLGlot is available."""
 
     sqlglot_module: Any | None = _import_sqlglot()
     if sqlglot_module is None:
         return sql
     try:
-        return sqlglot_module.parse_one(sql).sql(pretty=True)
+        if sqlglot_dialect is None:
+            return sqlglot_module.parse_one(sql).sql(pretty=True)
+        return sqlglot_module.parse_one(sql, read=sqlglot_dialect).sql(
+            pretty=True,
+            dialect=sqlglot_dialect,
+        )
     except Exception:
         return sql
 

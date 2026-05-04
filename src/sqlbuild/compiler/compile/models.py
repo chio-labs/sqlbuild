@@ -62,6 +62,16 @@ class LoadedMacro:
 
 
 @dataclass(frozen=True)
+class MacroContext:
+    """Compile-time context passed to adapter-aware SQL macros."""
+
+    adapter_name: str
+    sqlglot_enabled: bool
+    environment_name: str | None
+    vars: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class CompileSqlReference:
     """One logical SQL reference discovered from compiled SQL text."""
 

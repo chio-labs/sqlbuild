@@ -387,6 +387,7 @@ def test_given_sqlglot_enabled_chain_test_when_writing_compile_target_then_uses_
     )
     write_compile_target(
         target_dir=tmp_path / "target",
+        adapter=DuckDbAdapter(),
         plan_output=result.plan_output,
         manifest=result.manifest,
     )
