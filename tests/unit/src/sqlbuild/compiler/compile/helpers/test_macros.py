@@ -12,6 +12,13 @@ from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
 )
 from tests.unit.src.sqlbuild.compiler.compile.helpers.helpers import build_loaded_macros
 
+_MACRO_CONTEXT: MacroContext = MacroContext(
+    adapter_name="bigquery",
+    sqlglot_enabled=True,
+    environment_name="dev",
+    vars={"project_name": "demo"},
+)
+
 TEST_CASES: list[ExpandSqlMacrosTestCase] = [
     ExpandSqlMacrosTestCase(
         description="uses macro override text instead of loaded macro function",
@@ -188,18 +195,23 @@ def test_given_sql_macro_variants_when_expanding_then_it_returns_expected_sql(
         file_path=tmp_path / "models" / "orders.sql",
         loaded_macros=loaded_macros,
         macro_overrides=test_case.macro_overrides,
-        macro_context=MacroContext(
-            adapter_name="bigquery",
-            sqlglot_enabled=True,
-            environment_name="dev",
-            vars={"project_name": "demo"},
-        ),
+        macro_context=_MACRO_CONTEXT,
     )
 
     assert expanded_sql == test_case.expected_sql
 
 
 ERROR_TEST_CASES: list[ExpandSqlMacrosErrorTestCase] = [
+    ExpandSqlMacrosErrorTestCase(
+        description="raises when a ctx-aware macro is called with reserved ctx kwarg",
+        macro_file_contents="""
+def adapter_name(ctx) -> str:
+    return ctx.adapter_name
+""".strip()
+        + "\n",
+        sql="SELECT @adapter_name(ctx='manual') FROM raw_orders",
+        expected_error_fragment="reserved for injected macro context",
+    ),
     ExpandSqlMacrosErrorTestCase(
         description="raises when a top level macro returns a non string",
         macro_file_contents="""
@@ -246,4 +258,5 @@ def test_given_invalid_sql_macro_usage_when_expanding_then_it_raises_clear_error
             sql=test_case.sql,
             file_path=tmp_path / "models" / "orders.sql",
             loaded_macros=loaded_macros,
+            macro_context=_MACRO_CONTEXT,
         )
