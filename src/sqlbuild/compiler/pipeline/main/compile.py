@@ -6,14 +6,11 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
-from sqlbuild.compiler.compile.main.assemble_project import assemble_project
-from sqlbuild.compiler.compile.main.build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.compile.main.load_macros import load_macros
 from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompiledRelationTarget,
-    CompileProjectInputs,
     LoadedMacro,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -24,8 +21,7 @@ from sqlbuild.compiler.pipeline.helpers.deferred_targets import (
     resolve_deferred_env,
 )
 from sqlbuild.compiler.pipeline.helpers.materializations import load_custom_materializations
-from sqlbuild.compiler.pipeline.helpers.target_defaults import apply_target_defaults
-from sqlbuild.compiler.pipeline.helpers.target_validation import validate_project_targets
+from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.main.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
@@ -80,21 +76,10 @@ def _build_result(
     cursor_overrides: CursorOverrides | None = None,
     full_refresh: bool = False,
 ) -> CompilePipelineResult:
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
-        discovered_inputs,
+    project: CompiledProject = build_compiled_project(
+        discovered_inputs=discovered_inputs,
+        adapter=adapter,
         no_sql_validation=no_sql_validation,
-    )
-    project: CompiledProject = apply_target_defaults(
-        assemble_project(compile_inputs),
-        default_schema=adapter.default_schema(),
-        default_database=adapter.default_database(),
-    )
-    validate_project_targets(
-        adapter_name=resolve_effective_adapter_name(
-            project_config=discovered_inputs.project_config,
-            local_config=discovered_inputs.local_config,
-        ),
-        project=project,
     )
 
     deferred_targets: dict[str, CompiledRelationTarget] | None = None
@@ -103,7 +88,7 @@ def _build_result(
         deferred_env: EnvironmentConfig = resolve_deferred_env(
             discovered_inputs=discovered_inputs,
             defer_to=defer_to,
-            current_env_name=compile_inputs.effective_environment_name,
+            current_env_name=project.effective_environment_name,
         )
         deferred_targets = build_deferred_targets(
             project=project,
