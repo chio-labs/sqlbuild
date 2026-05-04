@@ -72,6 +72,21 @@ class BaseAdapter(StrictAdapter):
             clauses.append(f"{cursor_column} < '{end_cursor.value}'")
         return " AND ".join(clauses)
 
+    def schema_exists(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> bool:
+        """Return whether the named schema exists in the warehouse."""
+
+        query: str = f"SELECT 1 FROM information_schema.schemata WHERE schema_name = '{schema}'"
+        if database is not None:
+            query += f" AND catalog_name = '{database}'"
+        cursor: Any = self.execute(connection, query)
+        return cursor.fetchone() is not None
+
     def query(self, connection: Any, sql: str, *, limit: int | None) -> QueryResult:
         """Execute SQL and return normalized rows for ad hoc query output."""
 
