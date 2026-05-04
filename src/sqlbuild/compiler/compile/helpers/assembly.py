@@ -9,6 +9,7 @@ from sqlbuild.compiler.compile.helpers.deps import (
 )
 from sqlbuild.compiler.compile.helpers.macros import expand_sql_macros
 from sqlbuild.compiler.compile.helpers.sqlglot_columns import infer_columns_with_sqlglot
+from sqlbuild.compiler.compile.helpers.templating import expand_template_data
 from sqlbuild.compiler.compile.models import (
     CompileAuditInput,
     CompiledAudit,
@@ -25,9 +26,14 @@ from sqlbuild.compiler.compile.models import (
     CompileSourceInput,
     CompileSqlTestInput,
     InferredColumn,
+    MacroContext,
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledResourceType
-from sqlbuild.spec.models.project import DefaultsConfig, EnvironmentConfig
+from sqlbuild.spec.models.project import (
+    DefaultsConfig,
+    EnvironmentConfig,
+    resolve_effective_adapter_name,
+)
 
 
 def assemble_compiled_project(inputs: CompileProjectInputs) -> CompiledProject:
@@ -57,6 +63,7 @@ def assemble_compiled_project(inputs: CompileProjectInputs) -> CompiledProject:
                 seed_input,
                 defaults=inputs.project_config.defaults,
                 environment_config=inputs.effective_environment,
+                effective_vars=inputs.effective_vars,
             )
             for seed_input in inputs.seed_inputs
         ),
@@ -117,11 +124,13 @@ def _assemble_compiled_seed(
     *,
     defaults: DefaultsConfig,
     environment_config: EnvironmentConfig | None,
+    effective_vars: dict[str, str],
 ) -> CompiledSeed:
     target: CompiledRelationTarget = _build_seed_relation_target(
         seed_name=seed_input.schema_entry.name,
         defaults=defaults,
         environment_config=environment_config,
+        effective_vars=effective_vars,
     )
     return CompiledSeed(
         key=CompiledObjectKey(
@@ -198,6 +207,15 @@ def _build_test_model_query_overrides(
 
     if not test_input.macro_mocks:
         return {}
+    macro_context: MacroContext = MacroContext(
+        adapter_name=resolve_effective_adapter_name(
+            project_config=inputs.project_config,
+            local_config=inputs.local_config,
+        ),
+        sqlglot_enabled=inputs.effective_settings.sqlglot,
+        environment_name=inputs.effective_environment_name,
+        vars=inputs.effective_vars,
+    )
     overrides: dict[str, str] = {}
     model_input: CompileModelInput
     for model_input in model_inputs:
@@ -208,6 +226,7 @@ def _build_test_model_query_overrides(
             file_path=model_input.model_file.file_path,
             loaded_macros=inputs.loaded_macros,
             macro_overrides=test_input.macro_mocks,
+            macro_context=macro_context,
         )
     return overrides
 
@@ -237,11 +256,7 @@ def _build_model_relation_target(
         database=database,
         schema=schema,
         name=name,
-        qualified_name=_build_qualified_relation_name(
-            database=database,
-            schema=schema,
-            name=name,
-        ),
+        qualified_name=None,
         logical_schema=model_input.config.logical_schema,
         logical_database=model_input.config.logical_database,
     )
@@ -252,20 +267,18 @@ def _build_seed_relation_target(
     seed_name: str,
     defaults: DefaultsConfig,
     environment_config: EnvironmentConfig | None,
+    effective_vars: dict[str, str],
 ) -> CompiledRelationTarget:
     database, schema = _resolve_target_namespace(
         defaults=defaults,
         environment_config=environment_config,
+        effective_vars=effective_vars,
     )
     return CompiledRelationTarget(
         database=database,
         schema=schema,
         name=seed_name,
-        qualified_name=_build_qualified_relation_name(
-            database=database,
-            schema=schema,
-            name=seed_name,
-        ),
+        qualified_name=None,
     )
 
 
@@ -273,25 +286,39 @@ def _resolve_target_namespace(
     *,
     defaults: DefaultsConfig,
     environment_config: EnvironmentConfig | None,
+    effective_vars: dict[str, str],
 ) -> tuple[str | None, str | None]:
     database: str | None = defaults.database
     schema: str | None = defaults.schema
     if environment_config is not None:
         if environment_config.database is not None:
-            database = environment_config.database
+            database = _expand_seed_environment_value(
+                raw_value=environment_config.database,
+                effective_vars=effective_vars,
+                context_label="environment database",
+            )
         if environment_config.schema is not None:
-            schema = environment_config.schema
+            schema = _expand_seed_environment_value(
+                raw_value=environment_config.schema,
+                effective_vars=effective_vars,
+                context_label="environment schema",
+            )
     return database, schema
 
 
-def _build_qualified_relation_name(
-    *,
-    database: str | None,
-    schema: str | None,
-    name: str,
+def _expand_seed_environment_value(
+    *, raw_value: str, effective_vars: dict[str, str], context_label: str
 ) -> str | None:
-    if database is not None and schema is not None:
-        return f"{database}.{schema}.{name}"
-    if schema is not None:
-        return f"{schema}.{name}"
-    return None
+    if raw_value == "preserve":
+        return None
+    return str(
+        expand_template_data(
+            raw_value,
+            variables=effective_vars,
+            context_values={},
+            context_label=context_label,
+            allow_context=False,
+            preserve_context_tokens=False,
+            preserve_unknown_context=False,
+        )
+    )

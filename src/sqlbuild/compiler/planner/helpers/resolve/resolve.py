@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
@@ -36,6 +37,7 @@ from sqlbuild.spec.models.source import SourceEntry
 
 def resolve_model_sql(
     *,
+    adapter: BaseAdapter,
     model: CompiledModel,
     snapshot: WarehouseSnapshot,
     model_targets: dict[str, CompiledRelationTarget],
@@ -51,6 +53,7 @@ def resolve_model_sql(
     """Resolve all references in a model's query SQL to produce executable SQL."""
 
     query_sql: str = model.query_sql
+    cursor_type: str | None = get_config_str(model, "cursor_type")
 
     cursor_bounds: CursorBounds | None = _compute_model_cursor_bounds(
         model=model,
@@ -73,6 +76,8 @@ def resolve_model_sql(
         star_exclude_keyword=star_exclude_keyword,
         cursor_bounds=cursor_bounds,
         cursor_inputs=cursor_inputs,
+        adapter=adapter,
+        cursor_type=cursor_type,
         lower_bound_inclusive=lower_bound_inclusive,
     )
 
@@ -82,6 +87,8 @@ def resolve_model_sql(
         seed_targets=seed_targets,
         cursor_bounds=cursor_bounds,
         cursor_inputs=cursor_inputs,
+        adapter=adapter,
+        cursor_type=cursor_type,
         lower_bound_inclusive=lower_bound_inclusive,
     )
 

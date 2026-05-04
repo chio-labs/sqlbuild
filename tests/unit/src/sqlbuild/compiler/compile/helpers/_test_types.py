@@ -96,6 +96,9 @@ class AssembleCompiledProjectTestCase:
     expected_test_names: tuple[str, ...]
     expected_test_scope_deps: tuple[tuple[CompiledObjectKey, ...], ...]
     expected_test_expected_model_names: tuple[tuple[str, ...], ...]
+    expected_seed_target_schemas: tuple[str | None, ...] = field(default_factory=tuple)
+    expected_seed_target_databases: tuple[str | None, ...] = field(default_factory=tuple)
+    expected_seed_target_qualified_names: tuple[str | None, ...] = field(default_factory=tuple)
     expected_audit_attached_target_kinds: tuple[AttachedAuditTargetKind | None, ...] = ()
 
 

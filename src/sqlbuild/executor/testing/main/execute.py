@@ -22,7 +22,11 @@ def execute_sql_test(
 ) -> SqlTestExecutionResult:
     """Execute one SQL unit test as a single comparison query."""
 
-    comparison_sql: str = build_sql_test_comparison_sql(test_entry)
+    comparison_sql: str = build_sql_test_comparison_sql(
+        test_entry,
+        set_difference_operator=adapter.render_set_difference_operator(),
+        sqlglot_dialect=adapter.sqlglot_dialect(),
+    )
     error_model_name: str = test_entry.chain[0].model_name if test_entry.chain else test_entry.name
     try:
         validate_unit_test_sql_length(
@@ -55,10 +59,10 @@ def execute_sql_test(
     try:
         cursor: Any = adapter.execute(connection, comparison_sql)
         rows: list[Any] = cursor.fetchall()
-    except Exception:
+    except Exception as error:
         error_message = (
             f"test '{test_entry.name}' encountered an execution error while running "
-            f"'{error_model_name}'"
+            f"'{error_model_name}': {error}"
         )
         return SqlTestExecutionResult(
             test_name=test_entry.name,

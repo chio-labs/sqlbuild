@@ -12,7 +12,12 @@ from sqlbuild.executor.testing.main.helpers.comparison_sql import (
 )
 
 
-def build_sql_test_comparison_sql(test_entry: SqlTestPlanEntry) -> str:
+def build_sql_test_comparison_sql(
+    test_entry: SqlTestPlanEntry,
+    *,
+    set_difference_operator: str = "EXCEPT",
+    sqlglot_dialect: str | None = None,
+) -> str:
     """Build the single SQL statement used to execute a SQL unit test."""
 
     if not test_entry.chain:
@@ -41,13 +46,13 @@ def build_sql_test_comparison_sql(test_entry: SqlTestPlanEntry) -> str:
             f"(SELECT COUNT(*) FROM {actual_cte}) AS actual_count, "
             f"(SELECT COUNT(*) FROM {expected_cte}) AS expected_count, "
             f"(SELECT COUNT(*) FROM ("
-            f"SELECT * FROM {actual_cte} EXCEPT SELECT * FROM {expected_cte}"
+            f"SELECT * FROM {actual_cte} {set_difference_operator} SELECT * FROM {expected_cte}"
             f")) AS mismatched_count"
         )
     cte_parts: list[str] = [f"{name} AS ({sql})" for name, sql in lifted_ctes.items()]
     cte_parts.extend(comparison_ctes)
     comparison_sql: str = f"WITH {', '.join(cte_parts)} " + " UNION ALL ".join(select_parts)
-    return format_sql(comparison_sql)
+    return format_sql(comparison_sql, sqlglot_dialect=sqlglot_dialect)
 
 
 def _escape_sql_string(value: str) -> str:

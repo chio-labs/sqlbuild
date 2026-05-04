@@ -96,6 +96,7 @@ def _build_result(
             effective_vars=project.effective_vars,
             default_schema=adapter.default_schema(),
             default_database=adapter.default_database(),
+            render_qualified_name=adapter.render_qualified_name,
         )
         deferred_relations = gather_deferred_relations(
             adapter=adapter,

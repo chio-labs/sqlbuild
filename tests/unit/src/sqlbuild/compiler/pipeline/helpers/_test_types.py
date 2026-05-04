@@ -8,6 +8,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class DeferredTargetTestCase:
     description: str
+    adapter_name: str
     logical_schema: str | None
     logical_database: str | None
     env_schema: str | None

@@ -273,7 +273,7 @@ def test_given_mismatching_sql_when_executing_test_then_fails(
             ),
             expected_outcome=SqlTestOutcome.ERROR,
             expected_step_count=1,
-            expected_error_fragment="bad_model",
+            expected_error_fragment="nonexistent_table_xyz",
         ),
     ],
     ids=["error on invalid SQL stops chain early"],

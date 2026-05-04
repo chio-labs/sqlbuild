@@ -52,6 +52,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlTestCtes,
     CompileSqlTestInput,
     LoadedMacro,
+    MacroContext,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
@@ -97,6 +98,7 @@ def build_model_inputs(
     environment_config: EnvironmentConfig | None,
     effective_environment_name: str | None,
     run_id: str,
+    macro_context: MacroContext,
     no_sql_validation: bool = False,
 ) -> tuple[CompileModelInput, ...]:
     """Attach schema metadata to discovered model files."""
@@ -135,6 +137,7 @@ def build_model_inputs(
             sql=var_substituted_sql,
             file_path=model_file.file_path,
             loaded_macros=loaded_macros,
+            macro_context=macro_context,
         )
         raw_placeholders: object | None = effective_config.values.get("placeholders")
         sql_validation_placeholders: dict[str, str] | None = (
@@ -186,6 +189,7 @@ def build_model_inputs(
                 values=effective_config.values,
                 file_path=model_file.file_path,
                 loaded_macros=loaded_macros,
+                macro_context=macro_context,
             ),
             matched_path_default=effective_config.matched_path_default,
         )
@@ -318,6 +322,7 @@ def build_test_inputs(
     discovered_inputs: DiscoveredProjectInputs,
     *,
     effective_vars: dict[str, str] | None = None,
+    macro_context: MacroContext,
 ) -> tuple[CompileSqlTestInput, ...]:
     """Build compile-time test inputs from discovered SQL-native test blocks."""
 
@@ -339,6 +344,7 @@ def build_test_inputs(
                 sql=var_substituted_body,
                 file_path=test_file.file_path,
                 loaded_macros=loaded_macros,
+                macro_context=macro_context,
             )
             test_ctes: CompileSqlTestCtes = extract_sql_test_ctes(
                 sql=expanded_sql_body,
@@ -409,6 +415,7 @@ def build_audit_inputs(
     effective_settings: SettingsConfig,
     model_inputs: tuple[CompileModelInput, ...],
     source_inputs: tuple[CompileSourceInput, ...],
+    macro_context: MacroContext,
 ) -> tuple[CompileAuditInput, ...]:
     """Build compile-time audit inputs from discovered SQL audit blocks."""
 
@@ -431,6 +438,7 @@ def build_audit_inputs(
                 sql=audit_block.sql_body,
                 file_path=audit_file.file_path,
                 loaded_macros=loaded_macros,
+                macro_context=macro_context,
             )
             references: tuple[CompileSqlReference, ...] = extract_sql_references(expanded_sql_body)
             validate_audit_references(
@@ -474,6 +482,7 @@ def build_audit_inputs(
                 known_source_names=known_source_names,
                 default_audit_severity=default_audit_severity,
                 default_audit_run_scope=default_audit_run_scope,
+                macro_context=macro_context,
             )
         )
     source_input: CompileSourceInput
@@ -487,6 +496,7 @@ def build_audit_inputs(
                 known_source_names=known_source_names,
                 default_audit_severity=default_audit_severity,
                 default_audit_run_scope=default_audit_run_scope,
+                macro_context=macro_context,
             )
         )
     return tuple(audit_inputs)
@@ -502,6 +512,7 @@ def build_model_attached_audit_inputs(
     known_source_names: set[str],
     default_audit_severity: str | None,
     default_audit_run_scope: str | None,
+    macro_context: MacroContext,
 ) -> tuple[CompileAuditInput, ...]:
     """Render schema-attached model audits into compile audit inputs."""
 
@@ -523,6 +534,7 @@ def build_model_attached_audit_inputs(
                 known_source_names=known_source_names,
                 default_audit_severity=default_audit_severity,
                 default_audit_run_scope=default_audit_run_scope,
+                macro_context=macro_context,
             )
         )
     column_entry: SchemaColumn
@@ -545,6 +557,7 @@ def build_model_attached_audit_inputs(
                     known_source_names=known_source_names,
                     default_audit_severity=default_audit_severity,
                     default_audit_run_scope=default_audit_run_scope,
+                    macro_context=macro_context,
                 )
             )
     return tuple(attached_audit_inputs)
@@ -559,6 +572,7 @@ def build_source_attached_audit_inputs(
     known_source_names: set[str],
     default_audit_severity: str | None,
     default_audit_run_scope: str | None,
+    macro_context: MacroContext,
 ) -> tuple[CompileAuditInput, ...]:
     """Render source-attached audits into compile audit inputs."""
 
@@ -579,6 +593,7 @@ def build_source_attached_audit_inputs(
                 known_source_names=known_source_names,
                 default_audit_severity=default_audit_severity,
                 default_audit_run_scope=default_audit_run_scope,
+                macro_context=macro_context,
             )
         )
     column_entry: SourceColumnEntry
@@ -601,6 +616,7 @@ def build_source_attached_audit_inputs(
                     known_source_names=known_source_names,
                     default_audit_severity=default_audit_severity,
                     default_audit_run_scope=default_audit_run_scope,
+                    macro_context=macro_context,
                 )
             )
     return tuple(attached_audit_inputs)
@@ -620,6 +636,7 @@ def build_attached_audit_input(
     known_source_names: set[str],
     default_audit_severity: str | None,
     default_audit_run_scope: str | None,
+    macro_context: MacroContext,
 ) -> CompileAuditInput:
     """Render one attached generic audit instance into a compile audit input."""
 
@@ -646,6 +663,7 @@ def build_attached_audit_input(
         sql=rendered_sql_body,
         file_path=definition[0].file_path,
         loaded_macros=loaded_macros,
+        macro_context=macro_context,
     )
     references: tuple[CompileSqlReference, ...] = extract_sql_references(expanded_sql_body)
     validate_audit_references(
@@ -1136,6 +1154,7 @@ def expand_model_hook_macros(
     values: dict[str, object],
     file_path: Path,
     loaded_macros: dict[str, LoadedMacro],
+    macro_context: MacroContext,
 ) -> dict[str, object]:
     """Expand macros only within executable hook SQL strings."""
 
@@ -1149,23 +1168,34 @@ def expand_model_hook_macros(
             value=raw_hook_value,
             file_path=file_path,
             loaded_macros=loaded_macros,
+            macro_context=macro_context,
         )
     return expanded_values
 
 
 def expand_sql_macros_in_value(
-    *, value: object, file_path: Path, loaded_macros: dict[str, LoadedMacro]
+    *,
+    value: object,
+    file_path: Path,
+    loaded_macros: dict[str, LoadedMacro],
+    macro_context: MacroContext,
 ) -> object:
     """Recursively expand macros inside supported SQL hook container shapes."""
 
     if isinstance(value, str):
-        return expand_sql_macros(sql=value, file_path=file_path, loaded_macros=loaded_macros)
+        return expand_sql_macros(
+            sql=value,
+            file_path=file_path,
+            loaded_macros=loaded_macros,
+            macro_context=macro_context,
+        )
     if isinstance(value, list):
         return [
             expand_sql_macros_in_value(
                 value=item,
                 file_path=file_path,
                 loaded_macros=loaded_macros,
+                macro_context=macro_context,
             )
             for item in value
         ]
@@ -1175,6 +1205,7 @@ def expand_sql_macros_in_value(
                 value=item,
                 file_path=file_path,
                 loaded_macros=loaded_macros,
+                macro_context=macro_context,
             )
             for item in value
         )

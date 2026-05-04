@@ -156,6 +156,8 @@ def test_given_warehouse_state_when_gathering_snapshot_then_returns_expected(
             database=None,
             schema=fp_entry[0],
             fingerprint=fp_entry[1],
+            render_qualified_name=adapter.render_qualified_name,
+            render_framework_type=adapter.render_framework_type,
         )
 
     project: CompiledProject = build_project_with_targets(

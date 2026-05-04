@@ -6,7 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.helpers.attachment import resolve_environment_config
+from sqlbuild.compiler.compile.helpers.attachment import (
+    resolve_environment_config,
+)
 from sqlbuild.compiler.compile.main.build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import CompileProjectInputs
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs

@@ -9,7 +9,7 @@ from sqlbuild.compiler.compile.models import CompiledProject, CompiledRelationTa
 def validate_project_targets(*, adapter_name: str, project: CompiledProject) -> None:
     """Validate compiled model and seed targets for the effective adapter."""
 
-    if adapter_name != BuiltinAdapter.SNOWFLAKE:
+    if adapter_name not in {BuiltinAdapter.SNOWFLAKE, BuiltinAdapter.BIGQUERY}:
         return
     _validate_required_target_parts(
         adapter_name=adapter_name,

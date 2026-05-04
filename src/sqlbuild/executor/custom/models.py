@@ -11,7 +11,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo, StatementRecorder
 from sqlbuild.compiler.planner.models import SchemaFinding
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.shared.helpers.naming import build_qualified_name
+from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
 
 
 @dataclass(frozen=True)
@@ -62,7 +62,8 @@ class MaterializationContext:
 
         if "." in name:
             return name
-        return build_qualified_name(
+        return resolve_qualified_name_parts(
+            adapter=self.adapter,
             database=self.target_database if database is None else database,
             schema=self.target_schema if schema is None else schema,
             name=name,
