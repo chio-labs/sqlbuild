@@ -55,6 +55,8 @@ def try_write_fingerprint(
             database=entry.target.database,
             schema=target_schema,
             fingerprint=fingerprint,
+            render_qualified_name=adapter.render_qualified_name,
+            render_framework_type=adapter.render_framework_type,
         )
     except Exception as exc:
         warnings.append(

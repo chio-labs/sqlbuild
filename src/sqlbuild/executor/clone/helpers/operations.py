@@ -9,7 +9,7 @@ from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.executor.clone.models import CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
-from sqlbuild.executor.shared.helpers.naming import build_qualified_name
+from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
 
 
 def clone_relation(
@@ -30,8 +30,8 @@ def clone_relation(
         )
 
     recorder: StatementRecorder = StatementRecorder()
-    target_qualified: str = qualified_name(target_entry)
-    source_qualified: str = qualified_name(source_entry)
+    target_qualified: str = qualified_name(adapter=adapter, entry=target_entry)
+    source_qualified: str = qualified_name(adapter=adapter, entry=source_entry)
     try:
         adapter.drop(
             target_connection,
@@ -88,7 +88,7 @@ def recreate_view(
     try:
         adapter.create_view_as(
             target_connection,
-            target=qualified_name(target_entry),
+            target=qualified_name(adapter=adapter, entry=target_entry),
             sql=target_entry.resolved_sql,
             statement_recorder=recorder,
         )
@@ -122,9 +122,5 @@ def relation_exists(
     )
 
 
-def qualified_name(entry: SeedPlanEntry | ModelPlanEntry) -> str:
-    return build_qualified_name(
-        database=entry.target.database,
-        schema=entry.target.schema,
-        name=entry.target.name,
-    )
+def qualified_name(*, adapter: BaseAdapter, entry: SeedPlanEntry | ModelPlanEntry) -> str:
+    return resolve_target_qualified_name(adapter=adapter, target=entry.target)

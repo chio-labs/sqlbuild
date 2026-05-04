@@ -49,6 +49,7 @@ def run_compile(
     plan_output: PlanOutput = pipeline_result.plan_output
     written: WrittenTarget = write_compile_target(
         target_dir=effective_project_dir / "target",
+        adapter=adapter,
         plan_output=plan_output,
         manifest=pipeline_result.manifest,
     )

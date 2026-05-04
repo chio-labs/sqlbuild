@@ -15,9 +15,9 @@ from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.results import build_failed_result
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.shared.helpers.naming import build_qualified_name
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
+from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -37,10 +37,7 @@ def execute_view_entry(
 
     target_database: str | None = entry.target.database
     target_schema: str | None = entry.target.schema
-    target_name: str = entry.target.name
-    target_qualified: str = build_qualified_name(
-        database=target_database, schema=target_schema, name=target_name
-    )
+    target_qualified: str = resolve_target_qualified_name(adapter=adapter, target=entry.target)
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
     statement_recorder: StatementRecorder = StatementRecorder()

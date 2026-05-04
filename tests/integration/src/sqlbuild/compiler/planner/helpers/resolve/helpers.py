@@ -18,6 +18,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType, SqlReferenceKi
 from sqlbuild.compiler.planner.helpers.resolve.resolve import resolve_model_sql
 from sqlbuild.compiler.planner.models import BackfillResult, WarehouseSnapshot
 from sqlbuild.compiler.planner.types import BackfillAction
+from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -77,6 +78,7 @@ def resolve_and_execute(
     """Resolve model SQL and execute it against a real connection."""
 
     resolved_sql: str = resolve_model_sql(
+        adapter=DuckDbAdapter(),
         model=model,
         snapshot=snapshot,
         model_targets=model_targets,

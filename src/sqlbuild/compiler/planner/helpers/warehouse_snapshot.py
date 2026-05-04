@@ -100,7 +100,11 @@ def gather_warehouse_snapshot(
         names=metadata_names,
     )
     fingerprints: dict[str, Fingerprint] = _gather_fingerprints(
-        connection=connection, execute=execute, database=database, schemas=schemas
+        adapter=adapter,
+        connection=connection,
+        execute=execute,
+        database=database,
+        schemas=schemas,
     )
 
     skip_cursors: bool = full_refresh or (
@@ -254,6 +258,7 @@ def _gather_columns(
 
 def _gather_fingerprints(
     *,
+    adapter: BaseAdapter,
     connection: Any,
     execute: Any,
     database: str | None,
@@ -265,7 +270,11 @@ def _gather_fingerprints(
     schema: str
     for schema in schemas:
         fingerprint_set: FingerprintSet = read_latest_fingerprints(
-            connection=connection, execute=execute, database=database, schema=schema
+            connection=connection,
+            execute=execute,
+            database=database,
+            schema=schema,
+            render_qualified_name=adapter.render_qualified_name,
         )
         merged.update(fingerprint_set.fingerprints)
     return merged

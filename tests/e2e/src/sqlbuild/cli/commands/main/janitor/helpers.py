@@ -8,6 +8,7 @@ from textwrap import dedent, indent
 
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_inline_project
 
 
@@ -82,6 +83,8 @@ def create_janitor_demo_relations(*, db_path: Path) -> None:
                 query_sql="SELECT 1 AS id",
                 ts=datetime(2026, 1, 15, 12, 0, 0),
             ),
+            render_qualified_name=DuckDbAdapter().render_qualified_name,
+            render_framework_type=DuckDbAdapter().render_framework_type,
         )
     finally:
         connection.close()

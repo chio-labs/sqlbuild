@@ -387,6 +387,7 @@ def test_given_sqlglot_enabled_chain_test_when_writing_compile_target_then_uses_
     )
     write_compile_target(
         target_dir=tmp_path / "target",
+        adapter=DuckDbAdapter(),
         plan_output=result.plan_output,
         manifest=result.manifest,
     )
@@ -405,12 +406,12 @@ APPEND_CURSOR_PIPELINE_TEST_CASES: list[AppendCursorPipelineIntegrationTestCase]
     AppendCursorPipelineIntegrationTestCase(
         description="append cursor defaults to inclusive lower bound in resolved sql",
         append_cursor_inclusive=True,
-        expected_resolved_sql_fragment="WHERE ordered_at >= '2026-01-01 00:00:00'",
+        expected_resolved_sql_fragment="WHERE ordered_at >= TIMESTAMP '2026-01-01 00:00:00'",
     ),
     AppendCursorPipelineIntegrationTestCase(
         description="append cursor can use exclusive lower bound in resolved sql",
         append_cursor_inclusive=False,
-        expected_resolved_sql_fragment="WHERE ordered_at > '2026-01-01 00:00:00'",
+        expected_resolved_sql_fragment="WHERE ordered_at > TIMESTAMP '2026-01-01 00:00:00'",
     ),
 ]
 

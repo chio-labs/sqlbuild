@@ -9,6 +9,7 @@ from sqlbuild.cli.commands.main.helpers.compile.models import WrittenTarget
 from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compile_target
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
+from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import TargetWriterTestCase
 from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
     build_target_writer_plan_output,
@@ -45,6 +46,7 @@ def test_given_plan_output_when_writing_target_then_expected_files_are_written(
 
     written: WrittenTarget = write_compile_target(
         target_dir=tmp_path / "target",
+        adapter=DuckDbAdapter(),
         plan_output=plan_output,
         manifest=manifest,
     )

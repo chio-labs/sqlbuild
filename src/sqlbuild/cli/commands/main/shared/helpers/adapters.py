@@ -18,6 +18,10 @@ def resolve_adapter(adapter_name: str) -> BaseAdapter:
             from sqlbuild.integrations.snowflake.client import SnowflakeAdapter
 
             return SnowflakeAdapter()
+        case BuiltinAdapter.BIGQUERY:
+            from sqlbuild.integrations.bigquery.client import BigQueryAdapter
+
+            return BigQueryAdapter()
         case _:
             available: str = ", ".join(a.value for a in BuiltinAdapter)
             raise ValueError(

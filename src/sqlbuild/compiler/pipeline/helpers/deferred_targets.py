@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -28,6 +29,7 @@ def build_deferred_targets(
     effective_vars: dict[str, str],
     default_schema: str | None,
     default_database: str | None,
+    render_qualified_name: Callable[..., str | None],
 ) -> dict[str, CompiledRelationTarget]:
     """Build physical targets for all models and seeds under a deferred environment."""
 
@@ -40,6 +42,7 @@ def build_deferred_targets(
             effective_vars=effective_vars,
             default_schema=default_schema,
             default_database=default_database,
+            render_qualified_name=render_qualified_name,
         )
     seed: CompiledSeed
     for seed in project.seeds:
@@ -49,6 +52,7 @@ def build_deferred_targets(
             effective_vars=effective_vars,
             default_schema=default_schema,
             default_database=default_database,
+            render_qualified_name=render_qualified_name,
         )
     return targets
 
@@ -102,6 +106,7 @@ def _resolve_deferred_target(
     effective_vars: dict[str, str],
     default_schema: str | None,
     default_database: str | None,
+    render_qualified_name: Callable[..., str | None],
 ) -> CompiledRelationTarget:
     """Resolve one target under the deferred environment's naming rules."""
 
@@ -121,7 +126,11 @@ def _resolve_deferred_target(
     if database is None:
         database = default_database
 
-    qualified_name: str | None = _build_qualified_name(database, schema, target.name)
+    qualified_name: str | None = render_qualified_name(
+        database=database,
+        schema=schema,
+        name=target.name,
+    )
     return CompiledRelationTarget(
         database=database,
         schema=schema,
@@ -160,13 +169,3 @@ def _resolve_env_field(
     result = _VAR_PATTERN.sub(_replace_var, result)
 
     return result
-
-
-def _build_qualified_name(database: str | None, schema: str | None, name: str) -> str | None:
-    """Build a qualified relation name from resolved parts."""
-
-    if database is not None and schema is not None:
-        return f"{database}.{schema}.{name}"
-    if schema is not None:
-        return f"{schema}.{name}"
-    return None

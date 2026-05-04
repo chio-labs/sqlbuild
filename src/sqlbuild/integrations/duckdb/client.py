@@ -22,6 +22,7 @@ from sqlbuild.adapter.shared.models import (
     SchemaDiffResult,
     StatementRecorder,
 )
+from sqlbuild.adapter.shared.types import CursorKind, FrameworkType
 from sqlbuild.shared.helpers.diagnostics_logging import log_sql
 
 
@@ -36,6 +37,45 @@ class DuckDbAdapter(BaseAdapter):
     def default_schema(self) -> str:
         """DuckDB uses 'main' as its default schema."""
         return "main"
+
+    def render_qualified_name(
+        self,
+        *,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> str | None:
+        """Render DuckDB relation names using generic dot qualification."""
+
+        if database is not None and schema is not None:
+            return f"{database}.{schema}.{name}"
+        if schema is not None:
+            return f"{schema}.{name}"
+        return None
+
+    def render_framework_type(self, type_name: FrameworkType) -> str:
+        """Render DuckDB internal framework types explicitly."""
+
+        match type_name:
+            case FrameworkType.STRING:
+                return "VARCHAR"
+            case FrameworkType.TIMESTAMP:
+                return "TIMESTAMP"
+
+    def render_set_difference_operator(self) -> str:
+        """Render DuckDB set-difference operator explicitly."""
+
+        return "EXCEPT"
+
+    def sqlglot_dialect(self) -> str | None:
+        return "duckdb"
+
+    def render_cursor_bound_literal(self, value: str, cursor_type: str | None) -> str:
+        if cursor_type == CursorKind.INTEGER:
+            return value
+        if cursor_type == CursorKind.TIMESTAMP:
+            return f"TIMESTAMP '{value}'"
+        return f"'{value}'"
 
     def connect(self, config: dict[str, Any]) -> Any:
         """Open a DuckDB connection from the resolved connection config."""

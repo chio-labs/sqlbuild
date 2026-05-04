@@ -99,6 +99,7 @@ def plan_model(
     backfill: BackfillResult = change_result.backfill
 
     resolved_sql: str = resolve_model_sql(
+        adapter=adapter,
         model=model,
         snapshot=snapshot,
         model_targets=model_targets,

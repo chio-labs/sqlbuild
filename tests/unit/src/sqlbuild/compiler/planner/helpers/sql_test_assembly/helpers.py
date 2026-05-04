@@ -20,6 +20,7 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     CompileSqlTestCte,
     LoadedMacro,
+    MacroContext,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import (
@@ -41,6 +42,13 @@ _STUB_TEST_BLOCK: DiscoveredSqlTestBlock = DiscoveredSqlTestBlock(
     test_index=0,
     header_values={},
     sql_body="",
+)
+
+_MACRO_CONTEXT: MacroContext = MacroContext(
+    adapter_name="duckdb",
+    sqlglot_enabled=True,
+    environment_name=None,
+    vars={},
 )
 
 
@@ -156,6 +164,7 @@ def _build_model_query_overrides(
             file_path=Path(f"models/{model_name}.sql"),
             loaded_macros=loaded_macros,
             macro_overrides=test_case.macro_mocks,
+            macro_context=_MACRO_CONTEXT,
         )
     return overrides
 

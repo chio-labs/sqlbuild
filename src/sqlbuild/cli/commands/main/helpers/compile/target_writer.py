@@ -6,6 +6,7 @@ import json
 import shutil
 from pathlib import Path
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.compile.models import WrittenTarget
 from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
@@ -25,6 +26,7 @@ _SQL_FILE_SUFFIX: str = ".sql"
 def write_compile_target(
     *,
     target_dir: Path,
+    adapter: BaseAdapter,
     plan_output: PlanOutput,
     manifest: dict[str, object],
 ) -> WrittenTarget:
@@ -34,7 +36,7 @@ def write_compile_target(
     target_dir.mkdir(parents=True, exist_ok=True)
     _write_models(target_dir=target_dir, plan_output=plan_output)
     _write_audits(target_dir=target_dir, plan_output=plan_output)
-    _write_tests(target_dir=target_dir, plan_output=plan_output)
+    _write_tests(target_dir=target_dir, adapter=adapter, plan_output=plan_output)
     _write_manifest(target_dir=target_dir, manifest=manifest)
 
     return WrittenTarget(
@@ -72,14 +74,21 @@ def _write_audits(*, target_dir: Path, plan_output: PlanOutput) -> None:
         _write_sql(path=audit_path, sql=entry.resolved_sql)
 
 
-def _write_tests(*, target_dir: Path, plan_output: PlanOutput) -> None:
+def _write_tests(*, target_dir: Path, adapter: BaseAdapter, plan_output: PlanOutput) -> None:
     """Write resolved SQL-native test SQL."""
 
     for entry in plan_output.test_entries:
         test_path: Path = (
             target_dir / _COMPILED_DIR / _TESTS_DIR / _test_folder(entry) / f"{entry.name}.sql"
         )
-        _write_sql(path=test_path, sql=build_sql_test_comparison_sql(entry))
+        _write_sql(
+            path=test_path,
+            sql=build_sql_test_comparison_sql(
+                entry,
+                set_difference_operator=adapter.render_set_difference_operator(),
+                sqlglot_dialect=adapter.sqlglot_dialect(),
+            ),
+        )
 
 
 def _write_manifest(*, target_dir: Path, manifest: dict[str, object]) -> None:

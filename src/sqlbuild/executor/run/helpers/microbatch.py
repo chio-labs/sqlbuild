@@ -43,9 +43,12 @@ from sqlbuild.executor.run.helpers.incremental import (
 from sqlbuild.executor.run.helpers.results import build_failed_result
 from sqlbuild.executor.run.helpers.type_enforcement import enforce_types_staged
 from sqlbuild.executor.run.models import BatchWindow, ModelExecutionResult
-from sqlbuild.executor.shared.helpers.naming import build_qualified_name
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context, log_debug_event
+from sqlbuild.shared.helpers.naming import (
+    resolve_qualified_name_parts,
+    resolve_target_qualified_name,
+)
 from sqlbuild.spec.models.source import SourceEntry
 
 _DEFAULT_ON_SCHEMA_CHANGE: OnSchemaChange = OnSchemaChange.APPEND_NEW_COLUMNS
@@ -74,12 +77,13 @@ def execute_microbatch_entry(
     target_database: str | None = entry.target.database
     target_schema: str | None = entry.target.schema
     target_table: str = entry.target.name
-    target_qualified: str = build_qualified_name(
-        database=target_database, schema=target_schema, name=target_table
-    )
+    target_qualified: str = resolve_target_qualified_name(adapter=adapter, target=entry.target)
     delta_table: str = f"{target_table}__delta"
-    delta_qualified: str = build_qualified_name(
-        database=target_database, schema=target_schema, name=delta_table
+    delta_qualified: str = resolve_qualified_name_parts(
+        adapter=adapter,
+        database=target_database,
+        schema=target_schema,
+        name=delta_table,
     )
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
