@@ -41,3 +41,11 @@ class BigQueryConnectErrorTestCase:
     description: str
     config: dict[str, object]
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class BigQueryRenderCursorBoundLiteralTestCase:
+    description: str
+    value: str
+    cursor_type: str | None
+    expected_literal: str

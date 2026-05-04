@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 
 from sqlbuild.compiler.compile.models import CompiledProject, CompiledRelationTarget
 from sqlbuild.compiler.pipeline.helpers.deferred_targets import build_deferred_targets
+from sqlbuild.integrations.bigquery.client import BigQueryAdapter
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from sqlbuild.spec.models.project import EnvironmentConfig
 from tests.unit.src.sqlbuild.compiler.pipeline.helpers._test_types import (
@@ -18,6 +21,7 @@ from tests.unit.src.sqlbuild.compiler.pipeline.helpers.helpers import (
 DEFERRED_TARGET_TEST_CASES: list[DeferredTargetTestCase] = [
     DeferredTargetTestCase(
         description="preserve schema returns logical schema",
+        adapter_name="duckdb",
         logical_schema="analytics",
         logical_database=None,
         env_schema="preserve",
@@ -31,6 +35,7 @@ DEFERRED_TARGET_TEST_CASES: list[DeferredTargetTestCase] = [
     ),
     DeferredTargetTestCase(
         description="literal env schema overrides logical schema",
+        adapter_name="duckdb",
         logical_schema="analytics",
         logical_database=None,
         env_schema="prod_analytics",
@@ -44,6 +49,7 @@ DEFERRED_TARGET_TEST_CASES: list[DeferredTargetTestCase] = [
     ),
     DeferredTargetTestCase(
         description="template env schema resolves CTX with logical value",
+        adapter_name="duckdb",
         logical_schema="analytics",
         logical_database=None,
         env_schema="prod_${CTX:schema}",
@@ -57,6 +63,7 @@ DEFERRED_TARGET_TEST_CASES: list[DeferredTargetTestCase] = [
     ),
     DeferredTargetTestCase(
         description="template env schema resolves vars",
+        adapter_name="duckdb",
         logical_schema=None,
         logical_database=None,
         env_schema="dev_${user}",
@@ -70,6 +77,7 @@ DEFERRED_TARGET_TEST_CASES: list[DeferredTargetTestCase] = [
     ),
     DeferredTargetTestCase(
         description="none env schema falls through to adapter default",
+        adapter_name="duckdb",
         logical_schema=None,
         logical_database=None,
         env_schema=None,
@@ -83,6 +91,7 @@ DEFERRED_TARGET_TEST_CASES: list[DeferredTargetTestCase] = [
     ),
     DeferredTargetTestCase(
         description="database and schema both resolve for three-part name",
+        adapter_name="duckdb",
         logical_schema="analytics",
         logical_database="warehouse",
         env_schema="preserve",
@@ -93,6 +102,20 @@ DEFERRED_TARGET_TEST_CASES: list[DeferredTargetTestCase] = [
         expected_schema="analytics",
         expected_database="prod_warehouse",
         expected_qualified_name="prod_warehouse.analytics.test_model",
+    ),
+    DeferredTargetTestCase(
+        description="bigquery deferred targets use adapter-qualified names",
+        adapter_name="bigquery",
+        logical_schema="analytics",
+        logical_database="warehouse",
+        env_schema="prod",
+        env_database="example-project",
+        effective_vars={},
+        default_schema="main",
+        default_database=None,
+        expected_schema="prod",
+        expected_database="example-project",
+        expected_qualified_name="`example-project.prod.test_model`",
     ),
 ]
 
@@ -116,13 +139,18 @@ def test_given_deferred_env_when_building_targets_then_resolves_expected_naming(
         database=test_case.env_database,
     )
 
+    render_qualified_name: Callable[..., str | None] = (
+        BigQueryAdapter().render_qualified_name
+        if test_case.adapter_name == "bigquery"
+        else DuckDbAdapter().render_qualified_name
+    )
     targets: dict[str, CompiledRelationTarget] = build_deferred_targets(
         project=project,
         deferred_env=deferred_env,
         effective_vars=test_case.effective_vars,
         default_schema=test_case.default_schema,
         default_database=test_case.default_database,
-        render_qualified_name=DuckDbAdapter().render_qualified_name,
+        render_qualified_name=render_qualified_name,
     )
 
     result: CompiledRelationTarget = targets["test_model"]

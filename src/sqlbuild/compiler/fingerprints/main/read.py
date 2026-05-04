@@ -68,12 +68,9 @@ def _row_to_fingerprint(row: tuple[Any, ...]) -> Fingerprint:
     raw_target_schema: Any = row[2]
     raw_target_name: Any = row[3]
     query_sql_storage: str = str(row[8])
-    try:
-        query_sql: str = base64.b64decode(query_sql_storage.encode("ascii"), validate=True).decode(
-            "utf-8"
-        )
-    except Exception:
-        query_sql = query_sql_storage
+    query_sql: str = base64.b64decode(query_sql_storage.encode("ascii"), validate=True).decode(
+        "utf-8"
+    )
     return Fingerprint(
         model_name=str(row[0]),
         target_database=str(raw_target_database) if raw_target_database is not None else None,

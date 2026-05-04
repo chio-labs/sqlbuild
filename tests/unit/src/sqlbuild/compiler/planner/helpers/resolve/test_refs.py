@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.adapter.shared.types import CursorKind
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationTarget
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.helpers.resolve.refs import (
@@ -69,9 +70,10 @@ WITH_CURSOR_TEST_CASES: list[RefResolutionTestCase] = [
         query_sql='SELECT * FROM __ref("orders")',
         expected_sql=(
             "SELECT * FROM (SELECT * FROM staging.orders"
-            " WHERE event_time >= '2024-01-15'"
-            " AND event_time < '2024-02-01')"
+            " WHERE event_time >= TIMESTAMP '2024-01-15'"
+            " AND event_time < TIMESTAMP '2024-02-01')"
         ),
+        cursor_type=CursorKind.TIMESTAMP,
     ),
     RefResolutionTestCase(
         description="only wraps refs that have cursor inputs",
@@ -80,14 +82,26 @@ WITH_CURSOR_TEST_CASES: list[RefResolutionTestCase] = [
         ),
         expected_sql=(
             "SELECT a.*, b.* FROM (SELECT * FROM staging.orders"
-            " WHERE event_time >= '2024-01-15'"
-            " AND event_time < '2024-02-01') a "
+            " WHERE event_time >= TIMESTAMP '2024-01-15'"
+            " AND event_time < TIMESTAMP '2024-02-01') a "
             "JOIN staging.customers b ON a.id = b.id"
         ),
+        cursor_type=CursorKind.TIMESTAMP,
+    ),
+    RefResolutionTestCase(
+        description="renders integer cursor bounds without quotes",
+        query_sql='SELECT * FROM __ref("orders")',
+        expected_sql=(
+            "SELECT * FROM (SELECT * FROM staging.orders"
+            " WHERE event_time >= 10"
+            " AND event_time < 20)"
+        ),
+        cursor_type=CursorKind.INTEGER,
     ),
 ]
 
 _CURSOR_BOUNDS: CursorBounds = CursorBounds(start="2024-01-15", end="2024-02-01")
+_INTEGER_CURSOR_BOUNDS: CursorBounds = CursorBounds(start="10", end="20")
 _CURSOR_INPUTS: dict[str, str] = {"orders": "event_time"}
 
 
@@ -125,10 +139,14 @@ def test_given_refs_with_cursor_when_resolving_then_returns_expected_sql(
         query_sql=test_case.query_sql,
         model_targets=_MODEL_TARGETS,
         seed_targets=_SEED_TARGETS,
-        cursor_bounds=_CURSOR_BOUNDS,
+        cursor_bounds=(
+            _INTEGER_CURSOR_BOUNDS
+            if test_case.cursor_type == CursorKind.INTEGER
+            else _CURSOR_BOUNDS
+        ),
         cursor_inputs=_CURSOR_INPUTS,
         adapter=DuckDbAdapter(),
-        cursor_type=None,
+        cursor_type=test_case.cursor_type,
         lower_bound_inclusive=True,
     )
 
@@ -143,9 +161,10 @@ def test_given_refs_with_cursor_when_resolving_then_returns_expected_sql(
             query_sql='SELECT * FROM __ref("orders")',
             expected_sql=(
                 "SELECT * FROM (SELECT * FROM staging.orders"
-                " WHERE event_time > '2024-01-15'"
-                " AND event_time < '2024-02-01')"
+                " WHERE event_time > TIMESTAMP '2024-01-15'"
+                " AND event_time < TIMESTAMP '2024-02-01')"
             ),
+            cursor_type=CursorKind.TIMESTAMP,
         )
     ],
     ids=["wraps ref in exclusive cursor-filtered subquery for append"],
@@ -160,7 +179,7 @@ def test_given_refs_with_exclusive_cursor_when_resolving_then_returns_expected_s
         cursor_bounds=_CURSOR_BOUNDS,
         cursor_inputs=_CURSOR_INPUTS,
         adapter=DuckDbAdapter(),
-        cursor_type=None,
+        cursor_type=test_case.cursor_type,
         lower_bound_inclusive=False,
     )
 

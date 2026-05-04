@@ -80,7 +80,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
             command=("--no-color", "build"),
             expected_exit_code=0,
             expected_runtime_sql_fragment=(
-                "WHERE ordered_at >= '2026-01-01 00:00:00' AND ordered_at < '2026-01-01 02:00:00'"
+                "WHERE ordered_at >= TIMESTAMP '2026-01-01 00:00:00' "
+                "AND ordered_at < TIMESTAMP '2026-01-01 02:00:00'"
             ),
             expected_query_results=(
                 (

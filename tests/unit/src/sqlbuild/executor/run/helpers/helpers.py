@@ -5,6 +5,8 @@ from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
+from sqlbuild.integrations.bigquery.client import BigQueryAdapter
+from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 
 
 def build_result_model_plan_entry() -> ModelPlanEntry:
@@ -33,3 +35,9 @@ def build_result_model_plan_entry() -> ModelPlanEntry:
 class FakeCursorAdapter:
     def execute(self, connection: Any, sql: str) -> Any:
         return connection.execute(sql)
+
+
+def build_name_test_adapter(adapter_name: str) -> DuckDbAdapter | BigQueryAdapter:
+    if adapter_name == "bigquery":
+        return BigQueryAdapter()
+    return DuckDbAdapter()

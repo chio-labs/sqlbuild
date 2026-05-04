@@ -174,6 +174,20 @@ def adapter_name(ctx) -> str:
         sql="SELECT @adapter_name() AS adapter_name",
         expected_sql="SELECT bigquery AS adapter_name",
     ),
+    ExpandSqlMacrosTestCase(
+        description="passes full compile macro context fields to ctx-aware macros",
+        macro_file_contents="""
+def context_summary(ctx) -> str:
+    summary = (
+        f"{ctx.adapter_name}|{ctx.sqlglot_enabled}|"
+        f"{ctx.environment_name}|{ctx.vars['project_name']}"
+    )
+    return f"SELECT '{summary}'"
+""".strip()
+        + "\n",
+        sql="@context_summary()",
+        expected_sql="SELECT 'bigquery|True|dev|demo'",
+    ),
 ]
 
 

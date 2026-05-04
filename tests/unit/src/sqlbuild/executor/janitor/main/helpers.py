@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from pathlib import Path
 from typing import Any, cast
 
@@ -80,7 +81,7 @@ class FakeJanitorAdapter(BaseAdapter):
                     "query_hash",
                     None,
                     "schema_hash",
-                    "SELECT 1",
+                    base64.b64encode(b"SELECT 1").decode("ascii"),
                     "2026-01-15T12:00:00",
                 )
             )

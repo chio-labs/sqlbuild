@@ -1,0 +1,1 @@
+"""BigQuery adapter unit tests."""

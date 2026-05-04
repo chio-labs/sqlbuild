@@ -80,6 +80,28 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
         expected_latest_query_hashes={"orders": "hash_a", "customers": "hash_b"},
         expected_latest_target_names={"orders": "orders", "customers": "customers"},
     ),
+    WriteAndReadTestCase(
+        description="writes and reads multiline query sql with quotes and backslashes",
+        database=None,
+        schema="test_schema",
+        fingerprints=(
+            Fingerprint(
+                model_name="orders",
+                target_database=None,
+                target_schema=None,
+                target_name="orders",
+                run_id="run_001",
+                query_hash="hash_a",
+                ast_hash="ast_a",
+                schema_fingerprint="schema_a",
+                query_sql="SELECT '\\n' AS slash_n\nFROM orders\nWHERE note = 'line\\nvalue'",
+                ts=datetime(2026, 1, 15, 12, 0, 0),
+            ),
+        ),
+        expected_model_names=("orders",),
+        expected_latest_query_hashes={"orders": "hash_a"},
+        expected_latest_target_names={"orders": "orders"},
+    ),
 ]
 
 
@@ -121,6 +143,9 @@ def test_given_fingerprints_when_writing_and_reading_then_returns_expected(
     expected_target_name: str | None
     for model_name, expected_target_name in test_case.expected_latest_target_names.items():
         assert result.fingerprints[model_name].target_name == expected_target_name
+    fp: Fingerprint
+    for fp in test_case.fingerprints:
+        assert result.fingerprints[fp.model_name].query_sql == fp.query_sql
 
 
 @pytest.mark.parametrize(
