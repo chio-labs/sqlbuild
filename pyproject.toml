@@ -25,7 +25,7 @@ bigquery = [
   "google-cloud-bigquery>=3.37.0",
 ]
 databricks = [
-  "databricks-sql-connector>=4.1.2",
+  "databricks-sql-connector[pyarrow]>=4.1.2",
 ]
 
 [project.scripts]
@@ -62,6 +62,7 @@ markers = [
   "real_warehouse: tests that require live external warehouse credentials",
   "snowflake: tests that require a live Snowflake warehouse",
   "bigquery: tests that require a live BigQuery warehouse",
+  "databricks: tests that require a live Databricks warehouse",
 ]
 
 [tool.ruff]

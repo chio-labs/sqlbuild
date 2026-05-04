@@ -6,11 +6,9 @@ from typing import Any
 
 import pytest
 
+from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.shared.types import (
-    ExecutionPhase,
-    TablePromotionMode,
-)
+from sqlbuild.executor.shared.types import ExecutionPhase
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.executor.run._test_types import (
     TableFailureTestCase,

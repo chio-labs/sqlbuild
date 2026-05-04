@@ -1,9 +1,7 @@
 from dataclasses import dataclass, field
 
-from sqlbuild.executor.shared.types import (
-    ExecutionPhase,
-    TablePromotionMode,
-)
+from sqlbuild.adapter.shared.types import TablePromotionMode
+from sqlbuild.executor.shared.types import ExecutionPhase
 
 
 @dataclass(frozen=True)
