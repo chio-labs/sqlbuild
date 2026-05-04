@@ -13,7 +13,9 @@ from sqlbuild.cli.commands.main.helpers.clone.output import (
 from sqlbuild.cli.commands.main.helpers.clone.validation import validate_clone_request
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_connection_config
+from sqlbuild.cli.commands.main.shared.helpers.connection import (
+    resolve_environment_connection_config,
+)
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.clone import run_clone_pipeline
@@ -50,21 +52,15 @@ def run_clone(
     )
     adapter: BaseAdapter = resolve_adapter(effective_adapter_name)
 
-    source_connection_config: dict[str, object] = resolve_connection_config(
-        raw_config={
-            **discovered_inputs.project_config.connection,
-            **discovered_inputs.project_config.environments[from_environment].connection,
-        },
+    source_connection_config: dict[str, object] = resolve_environment_connection_config(
+        discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
-        adapter_name=effective_adapter_name,
+        environment_name=from_environment,
     )
-    target_connection_config: dict[str, object] = resolve_connection_config(
-        raw_config={
-            **discovered_inputs.project_config.connection,
-            **discovered_inputs.project_config.environments[to_environment].connection,
-        },
+    target_connection_config: dict[str, object] = resolve_environment_connection_config(
+        discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
-        adapter_name=effective_adapter_name,
+        environment_name=to_environment,
     )
     source_connection: Any = adapter.connect(source_connection_config)
     target_connection: Any = adapter.connect(target_connection_config)

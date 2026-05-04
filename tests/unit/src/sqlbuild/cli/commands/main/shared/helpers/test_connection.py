@@ -7,12 +7,14 @@ import pytest
 from sqlbuild.adapter.shared.types import BuiltinAdapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import (
     resolve_connection_config,
+    resolve_environment_connection_config,
     resolve_project_connection_config,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.models.project import EnvironmentConfig, LocalConfig, ProjectConfig
 from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import (
     ResolveConnectionConfigWarningTestCase,
+    ResolveEnvironmentConnectionConfigTestCase,
     ResolveProjectConnectionConfigTestCase,
 )
 
@@ -107,3 +109,52 @@ def test_given_adapter_connection_when_resolving_then_emits_expected_warning(
     captured_err: str = capsys.readouterr().err
     assert connection == test_case.expected_connection
     assert captured_err == test_case.expected_warning
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ResolveEnvironmentConnectionConfigTestCase(
+            description=(
+                "resolves environment connection with expanded env vars and local overrides"
+            ),
+            environment_name="prod",
+            expected_connection={
+                "account": "test-account",
+                "warehouse": "local_wh",
+                "database": "analytics",
+                "schema": "prod_schema",
+            },
+        )
+    ],
+    ids=["resolves environment connection with expanded env vars and local overrides"],
+)
+def test_given_environment_connection_when_resolving_then_it_expands_effective_config(
+    test_case: ResolveEnvironmentConnectionConfigTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TEST_ACCOUNT", "test-account")
+    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
+        project_config=ProjectConfig(
+            name="demo",
+            adapter="snowflake",
+            connection={
+                "account": "${ENV:TEST_ACCOUNT}",
+                "warehouse": "base_wh",
+                "database": "analytics",
+            },
+            environments={
+                "prod": EnvironmentConfig(connection={"schema": "prod_schema"}),
+            },
+        ),
+        local_config=LocalConfig(connection={"warehouse": "local_wh"}),
+    )
+
+    connection: dict[str, object] = resolve_environment_connection_config(
+        discovered_inputs=discovered_inputs,
+        project_dir=tmp_path,
+        environment_name=test_case.environment_name,
+    )
+
+    assert connection == test_case.expected_connection

@@ -9,13 +9,17 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
 from tests.e2e.src.sqlbuild.cli.commands.main.snowflake._test_types import (
     SnowflakeBuildE2ETestCase,
     SnowflakeCliTestCase,
+    SnowflakeDiffE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.snowflake.helpers import (
     cleanup_snowflake_schema,
     ensure_query_schema_ready,
+    execute_snowflake_sql,
     fetch_snowflake_rows,
+    prepare_snowflake_diff_project,
     prepare_snowflake_waffle_shop,
     relation_name,
+    write_local_environment_override,
 )
 
 
@@ -100,3 +104,94 @@ def test_given_waffle_shop_when_running_full_build_on_snowflake_then_expected_ta
         assert row_count == test_case.expected_row_count
     finally:
         cleanup_snowflake_schema(schema_name=schema_name)
+
+
+SNOWFLAKE_DIFF_E2E_TEST_CASES: list[SnowflakeDiffE2ETestCase] = [
+    SnowflakeDiffE2ETestCase(
+        description="schema only diff reports clean identical schemas",
+        mutation_sql=(),
+        command=(
+            "--no-color",
+            "diff",
+            "--from",
+            "prod",
+            "--to",
+            "dev",
+            "--schema-only",
+            "--select",
+            "stg_orders",
+        ),
+        expected_stdout_fragments=("stg_orders", "No schema differences."),
+        expected_return_code=0,
+    ),
+    SnowflakeDiffE2ETestCase(
+        description="full diff reports row mismatch",
+        mutation_sql=("UPDATE stg_orders SET amount_cents = amount_cents + 5 WHERE order_id = 1",),
+        command=(
+            "--no-color",
+            "diff",
+            "--from",
+            "prod",
+            "--to",
+            "dev",
+            "--full",
+            "--select",
+            "stg_orders",
+        ),
+        expected_stdout_fragments=("amount_cents", "mismatches=1", "order_id=1 | 100 -> 105"),
+        expected_return_code=1,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SNOWFLAKE_DIFF_E2E_TEST_CASES,
+    ids=[case.description for case in SNOWFLAKE_DIFF_E2E_TEST_CASES],
+)
+def test_given_snowflake_project_when_running_diff_then_outputs_expected_summary(
+    tmp_path: Path,
+    test_case: SnowflakeDiffE2ETestCase,
+) -> None:
+    project_dir: Path
+    prod_schema: str
+    dev_schema: str
+    project_dir, prod_schema, dev_schema = prepare_snowflake_diff_project(tmp_path=tmp_path)
+
+    try:
+        write_local_environment_override(project_dir=project_dir, environment="prod")
+        prod_build: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "build"),
+            project_dir=project_dir,
+        )
+        assert prod_build.returncode == 0, prod_build.stdout + prod_build.stderr
+
+        write_local_environment_override(project_dir=project_dir, environment="dev")
+        dev_build: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "build"),
+            project_dir=project_dir,
+        )
+        assert dev_build.returncode == 0, dev_build.stdout + dev_build.stderr
+
+        statement: str
+        for statement in test_case.mutation_sql:
+            execute_snowflake_sql(
+                schema_name=dev_schema,
+                sql=statement.replace(
+                    "stg_orders",
+                    relation_name(schema_name=dev_schema, name="stg_orders"),
+                ),
+            )
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=test_case.command,
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
+        fragment: str
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in result.stdout
+    finally:
+        cleanup_snowflake_schema(schema_name=prod_schema)
+        cleanup_snowflake_schema(schema_name=dev_schema)
