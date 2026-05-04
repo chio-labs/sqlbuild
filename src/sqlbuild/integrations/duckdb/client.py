@@ -22,6 +22,7 @@ from sqlbuild.adapter.shared.models import (
     SchemaDiffResult,
     StatementRecorder,
 )
+from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
 from sqlbuild.adapter.shared.types import CursorKind, FrameworkType
 from sqlbuild.shared.helpers.diagnostics_logging import log_sql
 
@@ -666,7 +667,11 @@ class DuckDbAdapter(BaseAdapter):
         for col_name, col_type in right_map.items():
             if col_name not in left_map:
                 added.append(ColumnInfo(name=col_name, type=col_type))
-            elif left_map[col_name] != col_type:
+            elif not types_equal(
+                left=left_map[col_name],
+                right=col_type,
+                dialect=self.sqlglot_dialect(),
+            ):
                 type_changed.append(
                     (
                         ColumnInfo(name=col_name, type=left_map[col_name]),
@@ -1079,14 +1084,7 @@ class DuckDbAdapter(BaseAdapter):
             )
 
     def normalize_row_diff_numeric_type(self, column_type: str) -> str | None:
-        normalized: str = column_type.upper()
-        if any(token in normalized for token in ("DOUBLE", "FLOAT", "REAL")):
-            return "float"
-        if any(token in normalized for token in ("DECIMAL", "NUMERIC")):
-            return "decimal"
-        if "INT" in normalized:
-            return "integer"
-        return None
+        return normalize_numeric_family(type_sql=column_type, dialect=self.sqlglot_dialect())
 
     def format_row_diff_decimal_sql(self, value: Decimal) -> str:
         return format(value, "f")

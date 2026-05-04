@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 
-from sqlbuild.adapter.shared.types import CursorKind, LifeCycleEventKind
+from sqlbuild.adapter.shared.types import CursorKind, LifeCycleEventKind, TypeFamily
 
 
 @dataclass(frozen=True)
@@ -27,6 +27,18 @@ class ColumnInfo:
 
     name: str
     type: str
+
+
+@dataclass(frozen=True)
+class NormalizedType:
+    """Semantic type shape used for schema comparison and numeric-family checks."""
+
+    # Dialect-local representative spelling, not a closed enum of warehouse types.
+    normalized_name: str
+    family: TypeFamily
+    precision: int | None = None
+    scale: int | None = None
+    length: int | None = None
 
 
 @dataclass(frozen=True)
