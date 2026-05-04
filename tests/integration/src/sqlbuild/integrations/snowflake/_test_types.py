@@ -22,9 +22,11 @@ class SnowflakeSchemaIntrospectionTestCase:
     description: str
     setup_sql: tuple[str, ...]
     expected_relation_exists: bool
+    expected_schema_exists: bool
     expected_relation_names: tuple[str, ...]
     expected_columns: tuple[ColumnInfo, ...]
     expected_all_columns: dict[str, tuple[ColumnInfo, ...]]
+    expected_query_column_names: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

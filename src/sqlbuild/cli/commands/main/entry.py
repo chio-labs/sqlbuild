@@ -92,7 +92,6 @@ def _build_parser() -> argparse.ArgumentParser:
     add_select_args(diff_parser)
     query_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.QUERY)
     query_parser.add_argument("query_sql", nargs="?", metavar="sql")
-    query_parser.add_argument("--file", dest="query_file", default=None)
     query_parser.add_argument(
         "--format",
         dest="query_format",
@@ -294,7 +293,6 @@ def _main_with_dependencies(
             return handlers.run_query(
                 project_dir,
                 args.query_sql,
-                args.query_file,
                 args.query_format,
                 query_limit,
             )

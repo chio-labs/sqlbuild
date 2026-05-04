@@ -168,6 +168,7 @@ def test_given_sql_when_querying_then_returns_expected_result(
                 "CREATE OR REPLACE VIEW orders_view AS SELECT id, amount FROM orders",
             ),
             expected_relation_exists=True,
+            expected_schema_exists=True,
             expected_relation_names=("orders", "orders_view"),
             expected_columns=(
                 ColumnInfo(name="id", type="NUMBER(38,0)"),
@@ -179,6 +180,7 @@ def test_given_sql_when_querying_then_returns_expected_result(
                     ColumnInfo(name="amount", type="NUMBER(10,2)"),
                 )
             },
+            expected_query_column_names=("ORDER_ID", "STATUS"),
         )
     ],
     ids=["discovers created table and view metadata"],
@@ -214,6 +216,11 @@ def test_given_relations_when_introspecting_then_returns_expected_metadata(
         schema=snowflake_schema,
         name="orders",
     )
+    schema_exists: bool = adapter.schema_exists(
+        connection,
+        database=snowflake_database,
+        schema=snowflake_schema,
+    )
     relation_names: tuple[str, ...] = tuple(
         relation.name
         for relation in adapter.list_relations(
@@ -234,11 +241,21 @@ def test_given_relations_when_introspecting_then_returns_expected_metadata(
         schemas=(snowflake_schema,),
         names=("orders",),
     )
+    query_column_names: tuple[str, ...] = adapter.query_column_names(
+        connection,
+        "SELECT * FROM (SELECT 1 AS order_id, 'ok' AS status) AS named_rows",
+    )
+    described_columns: tuple[ColumnInfo, ...] = adapter.describe_relation(
+        connection, orders_relation
+    )
 
     assert relation_exists == test_case.expected_relation_exists
+    assert schema_exists == test_case.expected_schema_exists
     assert tuple(sorted(relation_names)) == tuple(sorted(test_case.expected_relation_names))
     assert columns == test_case.expected_columns
     assert all_columns == test_case.expected_all_columns
+    assert query_column_names == test_case.expected_query_column_names
+    assert described_columns == test_case.expected_columns
 
 
 @pytest.mark.parametrize(
