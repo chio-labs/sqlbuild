@@ -42,6 +42,13 @@ class ResolveProjectConnectionConfigTestCase:
 
 
 @dataclass(frozen=True)
+class ResolveEnvironmentConnectionConfigTestCase:
+    description: str
+    environment_name: str
+    expected_connection: dict[str, object]
+
+
+@dataclass(frozen=True)
 class ResolveConnectionConfigWarningTestCase:
     description: str
     raw_config: dict[str, object]

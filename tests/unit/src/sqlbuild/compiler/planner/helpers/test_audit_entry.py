@@ -46,13 +46,6 @@ PLAN_AUDIT_TEST_CASES: list[PlanAuditTestCase] = [
         ),
     ),
     PlanAuditTestCase(
-        description="unknown ref left as-is",
-        sql_body=('SELECT id FROM __ref("missing") WHERE id IS NULL'),
-        model_targets={},
-        source_map_entries={},
-        expected_sql_fragment='__ref("missing")',
-    ),
-    PlanAuditTestCase(
         description=("source with database includes database in qualified name"),
         sql_body='SELECT id FROM __source("raw_orders")',
         model_targets={},
@@ -89,3 +82,38 @@ def test_given_audit_when_planning_then_resolves_sql(
     )
 
     assert test_case.expected_sql_fragment in result.resolved_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PlanAuditTestCase(
+            description="unknown ref raises clear error",
+            sql_body=('SELECT id FROM __ref("missing") WHERE id IS NULL'),
+            model_targets={},
+            source_map_entries={},
+            expected_sql_fragment="",
+            expected_error_fragment=r"still contains unresolved __ref\(\) markers",
+        )
+    ],
+    ids=["unknown ref raises clear error"],
+)
+def test_given_audit_with_unresolved_marker_when_planning_then_it_raises_clear_error(
+    test_case: PlanAuditTestCase,
+) -> None:
+    audit: CompiledAudit = build_audit_from_test_case(test_case)
+    model_targets: dict[str, CompiledRelationTarget] = build_audit_model_targets(
+        test_case.model_targets
+    )
+    source_map: dict[str, SourceEntry] = build_audit_source_map(test_case.source_map_entries)
+
+    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+        plan_audit(
+            audit=audit,
+            model_targets=model_targets,
+            seed_targets={},
+            source_map=source_map,
+            upstream_deps={},
+            downstream_deps={},
+            model_materializations={},
+        )
