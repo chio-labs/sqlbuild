@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild.adapter.shared.types import FrameworkType
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
 
@@ -21,11 +22,17 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
     partition_col: str = str(ctx.config["partition_column"])
     date_start: str = str(ctx.config["date_range_start"])
     date_end: str = str(ctx.config["date_range_end"])
-    staging: str = f"{ctx.target}__staging"
+    staging: str = ctx.qualify_in_target_schema(f"{ctx.target_name}__staging")
+    string_type: str = ctx.adapter.render_framework_type(FrameworkType.STRING)
+    timestamp_type: str = ctx.adapter.render_framework_type(FrameworkType.TIMESTAMP)
+    built_at_default: str = ""
+    if ctx.adapter.sqlglot_dialect() != "databricks":
+        built_at_default = " DEFAULT CURRENT_TIMESTAMP"
 
     ctx.execute_sql(
         f"CREATE TABLE IF NOT EXISTS {tracking_table} "
-        f"(partition_value VARCHAR, run_id VARCHAR, built_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+        f"(partition_value {string_type}, run_id {string_type}, "
+        f"built_at {timestamp_type}{built_at_default})"
     )
 
     if ctx.is_full_refresh:
@@ -97,8 +104,8 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
             ctx.log("promoting partition into target")
             ctx.execute_sql(
                 f"DELETE FROM {ctx.target} "
-                f"WHERE CAST({partition_col} AS VARCHAR) >= '{partition_value}' "
-                f"AND CAST({partition_col} AS VARCHAR) < '{next_day}'"
+                f"WHERE CAST({partition_col} AS DATE) >= CAST('{partition_value}' AS DATE) "
+                f"AND CAST({partition_col} AS DATE) < CAST('{next_day}' AS DATE)"
             )
             ctx.execute_sql(f"INSERT INTO {ctx.target} SELECT * FROM {staging}")
 

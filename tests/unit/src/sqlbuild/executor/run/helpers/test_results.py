@@ -36,6 +36,10 @@ from tests.unit.src.sqlbuild.executor.run.helpers.helpers import build_result_mo
                     kind=LifeCycleEventKind.SQL,
                     content="CREATE TABLE analytics.orders__staging AS SELECT 1 AS id",
                 ),
+                LifeCycleEvent(
+                    kind=LifeCycleEventKind.LOG,
+                    content="model orders failed phase=staging error=materialization failed",
+                ),
             ),
         )
     ],

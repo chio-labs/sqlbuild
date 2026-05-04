@@ -8,7 +8,7 @@ from sqlbuild.adapter.shared.classes.connection import ConnectionMixin
 from sqlbuild.adapter.shared.classes.diff import DiffMixin
 from sqlbuild.adapter.shared.classes.materialization import MaterializationMixin
 from sqlbuild.adapter.shared.classes.schema import SchemaMixin
-from sqlbuild.adapter.shared.types import FrameworkType
+from sqlbuild.adapter.shared.types import FrameworkType, PromotionStrategy, TablePromotionMode
 
 
 class StrictAdapter(
@@ -71,6 +71,11 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def default_table_promotion_mode(self) -> str:
+    def default_table_promotion_mode(self) -> TablePromotionMode:
         """Return the adapter default table promotion mode."""
+        ...
+
+    @abstractmethod
+    def default_promotion_strategy(self) -> PromotionStrategy:
+        """Return the adapter default staged table promotion strategy."""
         ...

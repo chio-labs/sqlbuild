@@ -25,11 +25,14 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
     staging: str = ctx.qualify_in_target_schema(f"{ctx.target_name}__staging")
     string_type: str = ctx.adapter.render_framework_type(FrameworkType.STRING)
     timestamp_type: str = ctx.adapter.render_framework_type(FrameworkType.TIMESTAMP)
+    built_at_default: str = ""
+    if ctx.adapter.sqlglot_dialect() != "databricks":
+        built_at_default = " DEFAULT CURRENT_TIMESTAMP"
 
     ctx.execute_sql(
         f"CREATE TABLE IF NOT EXISTS {tracking_table} "
         f"(partition_value {string_type}, run_id {string_type}, "
-        f"built_at {timestamp_type} DEFAULT CURRENT_TIMESTAMP)"
+        f"built_at {timestamp_type}{built_at_default})"
     )
 
     if ctx.is_full_refresh:
