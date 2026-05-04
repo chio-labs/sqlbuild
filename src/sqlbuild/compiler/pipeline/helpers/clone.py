@@ -10,8 +10,10 @@ from sqlbuild.compiler.compile.main.build_compile_inputs import build_compile_in
 from sqlbuild.compiler.compile.models import CompiledProject, CompileProjectInputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.helpers.target_defaults import apply_target_defaults
+from sqlbuild.compiler.pipeline.helpers.target_validation import validate_project_targets
 from sqlbuild.compiler.pipeline.models import ClonePipelineResult
 from sqlbuild.compiler.planner.main.clone import run_clone_planning
+from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
 def prepare_clone_pipeline(
@@ -74,8 +76,16 @@ def _compile_project_for_environment(
         selected_environment=environment_name,
         no_sql_validation=no_sql_validation,
     )
-    return apply_target_defaults(
+    project: CompiledProject = apply_target_defaults(
         assemble_project(compile_inputs),
         default_schema=adapter.default_schema(),
         default_database=adapter.default_database(),
     )
+    validate_project_targets(
+        adapter_name=resolve_effective_adapter_name(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+        ),
+        project=project,
+    )
+    return project

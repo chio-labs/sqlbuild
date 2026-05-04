@@ -4,7 +4,8 @@ import pytest
 
 from sqlbuild.adapter.shared.models import CursorValue
 from sqlbuild.adapter.shared.types import CursorKind
-from sqlbuild.integrations.duckdb.helpers.sql import build_attach_sql, build_cursor_filter
+from sqlbuild.integrations.duckdb.client import DuckDbAdapter
+from sqlbuild.integrations.duckdb.helpers.sql import build_attach_sql
 from tests.integration.src.sqlbuild.integrations.duckdb.helpers._test_types import (
     BuildAttachSqlTestCase,
     BuildCursorFilterTestCase,
@@ -96,7 +97,7 @@ def test_given_attach_entry_when_building_sql_then_returns_expected_statement(
 def test_given_cursor_params_when_building_filter_then_returns_expected_clause(
     test_case: BuildCursorFilterTestCase,
 ) -> None:
-    result: str = build_cursor_filter(
+    result: str = DuckDbAdapter().build_cursor_filter(
         cursor_column=test_case.cursor_column,
         start_cursor=test_case.start_cursor,
         end_cursor=test_case.end_cursor,

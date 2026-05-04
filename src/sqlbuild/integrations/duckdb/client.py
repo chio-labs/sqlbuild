@@ -24,9 +24,6 @@ from sqlbuild.adapter.shared.models import (
 )
 from sqlbuild.integrations.duckdb.helpers.sql import (
     build_attach_sql,
-    build_cursor_filter,
-    describe_relation,
-    query_column_names,
 )
 from sqlbuild.shared.helpers.diagnostics_logging import log_sql
 
@@ -94,6 +91,35 @@ class DuckDbAdapter(BaseAdapter):
             columns=columns,
             rows=tuple(fetched_rows[:limit]),
             truncated=len(fetched_rows) > limit,
+        )
+
+    def describe_relation(self, connection: Any, relation: str) -> tuple[ColumnInfo, ...]:
+        """Return column metadata for a relation using DuckDB DESCRIBE."""
+
+        cursor: Any = self.execute(connection, f"DESCRIBE {relation}")
+        return tuple(ColumnInfo(name=row[0], type=row[1]) for row in cursor.fetchall())
+
+    def query_column_names(self, connection: Any, sql: str) -> tuple[str, ...]:
+        """Return DuckDB query column names using DESCRIBE SELECT."""
+
+        cursor: Any = self.execute(
+            connection, f"DESCRIBE SELECT * FROM ({sql}) AS __describe_source"
+        )
+        return tuple(str(row[0]) for row in cursor.fetchall())
+
+    def build_cursor_filter(
+        self,
+        *,
+        cursor_column: str | None,
+        start_cursor: CursorValue | None,
+        end_cursor: CursorValue | None,
+    ) -> str:
+        """Build a DuckDB cursor filter clause."""
+
+        return super().build_cursor_filter(
+            cursor_column=cursor_column,
+            start_cursor=start_cursor,
+            end_cursor=end_cursor,
         )
 
     def close(self, connection: Any) -> None:
@@ -471,7 +497,7 @@ class DuckDbAdapter(BaseAdapter):
         statement_recorder: StatementRecorder,
     ) -> None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        source_columns: tuple[str, ...] = tuple(query_column_names(connection, sql))
+        source_columns: tuple[str, ...] = self.query_column_names(connection, sql)
         statements: tuple[str, ...] = self.render_merge(
             target=target, sql=sql, unique_key=keys, source_columns=source_columns
         )
@@ -570,8 +596,8 @@ class DuckDbAdapter(BaseAdapter):
     ) -> SchemaDiffResult:
         """Compare column metadata between two DuckDB relations."""
 
-        left_columns: tuple[ColumnInfo, ...] = describe_relation(connection, left)
-        right_columns: tuple[ColumnInfo, ...] = describe_relation(connection, right)
+        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, left)
+        right_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, right)
         left_map: dict[str, str] = {col.name: col.type for col in left_columns}
         right_map: dict[str, str] = {col.name: col.type for col in right_columns}
 
@@ -617,14 +643,14 @@ class DuckDbAdapter(BaseAdapter):
         """Compare row-level data between two DuckDB relations."""
 
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        left_columns: tuple[ColumnInfo, ...] = describe_relation(connection, left)
+        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, left)
         compare_columns: tuple[str, ...] = tuple(
             col.name
             for col in left_columns
             if col.name not in keys and col.name not in excluded_columns
         )
         left_columns_by_name: dict[str, ColumnInfo] = {col.name: col for col in left_columns}
-        cursor_filter: str = build_cursor_filter(
+        cursor_filter: str = self.build_cursor_filter(
             cursor_column=cursor_column,
             start_cursor=start_cursor,
             end_cursor=end_cursor,
@@ -724,7 +750,7 @@ class DuckDbAdapter(BaseAdapter):
         start_cursor: CursorValue | None = None,
         end_cursor: CursorValue | None = None,
     ) -> int:
-        cursor_filter: str = build_cursor_filter(
+        cursor_filter: str = self.build_cursor_filter(
             cursor_column=cursor_column,
             start_cursor=start_cursor,
             end_cursor=end_cursor,
@@ -750,14 +776,14 @@ class DuckDbAdapter(BaseAdapter):
         limit: int = 20,
     ) -> tuple[RowDiffSampleRow, ...]:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        left_columns: tuple[ColumnInfo, ...] = describe_relation(connection, left)
+        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, left)
         compare_columns: tuple[str, ...] = tuple(
             col.name
             for col in left_columns
             if col.name not in keys and col.name not in excluded_columns
         )
         left_columns_by_name: dict[str, ColumnInfo] = {col.name: col for col in left_columns}
-        cursor_filter: str = build_cursor_filter(
+        cursor_filter: str = self.build_cursor_filter(
             cursor_column=cursor_column,
             start_cursor=start_cursor,
             end_cursor=end_cursor,
@@ -855,7 +881,7 @@ class DuckDbAdapter(BaseAdapter):
         limit: int = 20,
     ) -> tuple[tuple[tuple[str, object], ...], ...]:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        cursor_filter: str = build_cursor_filter(
+        cursor_filter: str = self.build_cursor_filter(
             cursor_column=cursor_column,
             start_cursor=start_cursor,
             end_cursor=end_cursor,

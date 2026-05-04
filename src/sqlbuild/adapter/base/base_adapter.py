@@ -39,6 +39,39 @@ class BaseAdapter(StrictAdapter):
 
         return 256_000
 
+    def describe_relation(self, connection: Any, relation: str) -> tuple[ColumnInfo, ...]:
+        """Return relation column metadata using a generic DESCRIBE statement."""
+
+        cursor: Any = self.execute(connection, f"DESCRIBE {relation}")
+        return tuple(ColumnInfo(name=row[0], type=row[1]) for row in cursor.fetchall())
+
+    def query_column_names(self, connection: Any, sql: str) -> tuple[str, ...]:
+        """Return column names produced by a SQL query without materializing full rows."""
+
+        cursor: Any = self.execute(
+            connection, f"SELECT * FROM ({sql}) AS __describe_source LIMIT 0"
+        )
+        description: Any | None = getattr(cursor, "description", None)
+        if description is None:
+            return ()
+        return tuple(str(column[0]) for column in description)
+
+    def build_cursor_filter(
+        self,
+        *,
+        cursor_column: str | None,
+        start_cursor: CursorValue | None,
+        end_cursor: CursorValue | None,
+    ) -> str:
+        """Build a WHERE clause fragment for cursor-bounded queries."""
+
+        if cursor_column is None or start_cursor is None:
+            return ""
+        clauses: list[str] = [f"{cursor_column} >= '{start_cursor.value}'"]
+        if end_cursor is not None:
+            clauses.append(f"{cursor_column} < '{end_cursor.value}'")
+        return " AND ".join(clauses)
+
     def query(self, connection: Any, sql: str, *, limit: int | None) -> QueryResult:
         """Execute SQL and return normalized rows for ad hoc query output."""
 
