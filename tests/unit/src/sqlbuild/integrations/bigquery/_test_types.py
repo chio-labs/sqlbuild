@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from sqlbuild.adapter.shared.models import RowDiffResult, RowDiffSampleRow, SchemaDiffResult
+
 
 @dataclass(frozen=True)
 class BigQueryQueryTestCase:
@@ -49,3 +51,29 @@ class BigQueryRenderCursorBoundLiteralTestCase:
     value: str
     cursor_type: str | None
     expected_literal: str
+
+
+@dataclass(frozen=True)
+class BigQuerySchemaDiffTestCase:
+    description: str
+    expected_result: SchemaDiffResult
+
+
+@dataclass(frozen=True)
+class BigQueryRowDiffTestCase:
+    description: str
+    expected_result: RowDiffResult
+
+
+@dataclass(frozen=True)
+class BigQuerySampleRowsTestCase:
+    description: str
+    expected_unequal_samples: tuple[RowDiffSampleRow, ...]
+    expected_side_only_samples: tuple[tuple[tuple[str, object], ...], ...]
+
+
+@dataclass(frozen=True)
+class BigQueryCountRowsTestCase:
+    description: str
+    expected_count: int
+    expected_sql: str

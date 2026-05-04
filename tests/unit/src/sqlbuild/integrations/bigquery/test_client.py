@@ -1,21 +1,41 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 import pytest
 
-from sqlbuild.adapter.shared.models import QueryResult
+from sqlbuild.adapter.shared.models import (
+    ColumnInfo,
+    CursorValue,
+    QueryResult,
+    RowDiffColumnResult,
+    RowDiffResult,
+    RowDiffSampleCell,
+    RowDiffSampleRow,
+    SchemaDiffResult,
+)
 from sqlbuild.adapter.shared.types import CursorKind
 from sqlbuild.integrations.bigquery.client import BigQueryAdapter, _BigQueryConnection
 from tests.unit.src.sqlbuild.integrations.bigquery._test_types import (
     BigQueryConnectErrorTestCase,
+    BigQueryCountRowsTestCase,
     BigQueryQueryTestCase,
     BigQueryRenderCursorBoundLiteralTestCase,
     BigQueryRenderQualifiedNameTestCase,
     BigQueryRenderSchemaTestCase,
+    BigQueryRowDiffTestCase,
+    BigQuerySampleRowsTestCase,
+    BigQuerySchemaDiffTestCase,
     BigQuerySchemaExistsTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.bigquery.helpers import (
     FakeBigQueryClient,
     FakeBigQueryRows,
+    build_count_rows_execute,
+    build_row_diff_execute,
+    build_sample_rows_execute,
+    fake_row_diff_describe_relation,
+    fake_schema_diff_describe_relation,
 )
 
 BIGQUERY_QUERY_TEST_CASES: list[BigQueryQueryTestCase] = [
@@ -229,3 +249,158 @@ def test_given_cursor_bounds_when_rendering_then_bigquery_returns_expected_liter
     result: str = adapter.render_cursor_bound_literal(test_case.value, test_case.cursor_type)
 
     assert result == test_case.expected_literal
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQuerySchemaDiffTestCase(
+            description="detects added removed and changed column types",
+            expected_result=SchemaDiffResult(
+                added_columns=(ColumnInfo(name="new_col", type="DATE"),),
+                removed_columns=(ColumnInfo(name="status", type="STRING"),),
+                type_changed_columns=(
+                    (ColumnInfo(name="id", type="INT64"), ColumnInfo(name="id", type="STRING")),
+                ),
+            ),
+        )
+    ],
+    ids=["detects added removed and changed column types"],
+)
+def test_given_bigquery_relations_when_diffing_schema_then_returns_expected_result(
+    test_case: BigQuerySchemaDiffTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter: BigQueryAdapter = BigQueryAdapter()
+    monkeypatch.setattr(adapter, "describe_relation", fake_schema_diff_describe_relation)
+
+    result: SchemaDiffResult = adapter.diff_schema(
+        connection=object(),
+        left="left_relation",
+        right="right_relation",
+    )
+
+    assert result == test_case.expected_result
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryRowDiffTestCase(
+            description="returns row diff counts and column mismatch counts",
+            expected_result=RowDiffResult(
+                left_count=3,
+                right_count=3,
+                joined_count=4,
+                equal_count=1,
+                unequal_count=1,
+                left_only_count=1,
+                right_only_count=1,
+                column_results=(
+                    RowDiffColumnResult(name="val", mismatched_count=1, tolerance=None),
+                ),
+            ),
+        )
+    ],
+    ids=["returns row diff counts and column mismatch counts"],
+)
+def test_given_bigquery_relations_when_diffing_rows_then_returns_expected_result(
+    test_case: BigQueryRowDiffTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter: BigQueryAdapter = BigQueryAdapter()
+    executed_sql: list[str] = []
+
+    monkeypatch.setattr(adapter, "describe_relation", fake_row_diff_describe_relation)
+    monkeypatch.setattr(adapter, "execute", build_row_diff_execute(executed_sql))
+
+    result: RowDiffResult = adapter.diff_rows(
+        connection=object(),
+        left="left_relation",
+        right="right_relation",
+        unique_key="id",
+    )
+
+    assert result == test_case.expected_result
+    assert any("FULL OUTER JOIN" in sql for sql in executed_sql)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQuerySampleRowsTestCase(
+            description="returns unequal and side-only samples",
+            expected_unequal_samples=(
+                RowDiffSampleRow(
+                    key_values=(("id", 1),),
+                    changed_cells=(RowDiffSampleCell(name="val", left_value="a", right_value="x"),),
+                ),
+            ),
+            expected_side_only_samples=((("id", 1),),),
+        )
+    ],
+    ids=["returns unequal and side-only samples"],
+)
+def test_given_bigquery_relations_when_sampling_rows_then_returns_expected_examples(
+    test_case: BigQuerySampleRowsTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter: BigQueryAdapter = BigQueryAdapter()
+
+    monkeypatch.setattr(adapter, "describe_relation", fake_row_diff_describe_relation)
+    monkeypatch.setattr(adapter, "execute", build_sample_rows_execute())
+
+    unequal_samples: tuple[RowDiffSampleRow, ...] = adapter.sample_unequal_rows(
+        connection=object(),
+        left="left_relation",
+        right="right_relation",
+        unique_key="id",
+        limit=5,
+    )
+    side_only_samples: tuple[tuple[tuple[str, object], ...], ...] = adapter.sample_side_only_rows(
+        connection=object(),
+        left="left_relation",
+        right="right_relation",
+        unique_key="id",
+        side="left",
+        limit=5,
+    )
+
+    assert unequal_samples == test_case.expected_unequal_samples
+    assert side_only_samples == test_case.expected_side_only_samples
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryCountRowsTestCase(
+            description="uses typed timestamp cursor filter",
+            expected_count=2,
+            expected_sql=(
+                "SELECT COUNT(*) FROM left_relation WHERE updated_at >= "
+                "TIMESTAMP '2026-04-01 00:00:00' AND updated_at < "
+                "TIMESTAMP '2026-04-02 00:00:00'"
+            ),
+        )
+    ],
+    ids=["uses typed timestamp cursor filter"],
+)
+def test_given_timestamp_cursor_when_counting_rows_then_bigquery_uses_typed_filter(
+    test_case: BigQueryCountRowsTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter: BigQueryAdapter = BigQueryAdapter()
+    executed_sql: list[str] = []
+
+    monkeypatch.setattr(adapter, "execute", build_count_rows_execute(executed_sql))
+
+    result: int = adapter.count_rows(
+        connection=object(),
+        relation="left_relation",
+        cursor_column="updated_at",
+        start_cursor=CursorValue(kind=CursorKind.TIMESTAMP, value=datetime(2026, 4, 1, 0, 0, 0)),
+        end_cursor=CursorValue(kind=CursorKind.TIMESTAMP, value=datetime(2026, 4, 2, 0, 0, 0)),
+    )
+
+    assert result == test_case.expected_count
+    assert executed_sql == [test_case.expected_sql]
