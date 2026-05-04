@@ -104,3 +104,72 @@ def relation_name(*, schema_name: str, name: str) -> str:
 
     database_name: str = str(build_snowflake_connection_config(schema=schema_name)["database"])
     return qualified_name(database=database_name, schema=schema_name, name=name)
+
+
+def prepare_snowflake_diff_project(*, tmp_path: Path) -> tuple[Path, str, str]:
+    """Prepare a Snowflake-backed diff project with explicit prod/dev target schemas."""
+
+    project_dir: Path = tmp_path / "snowflake_diff_project"
+    prod_schema: str = build_unique_schema_name(prefix="sqlbuild_diff_prod")
+    dev_schema: str = build_unique_schema_name(prefix="sqlbuild_diff_dev")
+    database_name: str = str(build_snowflake_connection_config(schema=dev_schema)["database"])
+    project_contents: str = (
+        "name: snowflake_diff_project\n"
+        "adapter: snowflake\n\n"
+        "default_environment: dev\n\n"
+        "connection:\n"
+        "  account: ${ENV:SQB_TEST_SNOWFLAKE_ACCOUNT}\n"
+        "  user: ${ENV:SQB_TEST_SNOWFLAKE_USER}\n"
+        "  authenticator: ${ENV:SQB_TEST_SNOWFLAKE_AUTHENTICATOR}\n"
+        "  token: ${ENV:SQB_TEST_SNOWFLAKE_PAT}\n"
+        "  role: ${ENV:SQB_TEST_SNOWFLAKE_ROLE}\n"
+        "  warehouse: ${ENV:SQB_TEST_SNOWFLAKE_WAREHOUSE}\n"
+        "  database: ${ENV:SQB_TEST_SNOWFLAKE_DATABASE}\n\n"
+        "environments:\n"
+        f"  dev:\n    database: {database_name}\n    schema: {dev_schema}\n"
+        f"  prod:\n    database: {database_name}\n    schema: {prod_schema}\n\n"
+        "defaults:\n"
+        "  materialized: table\n\n"
+        "models/staging/stg_orders.sql: invalid\n"
+    )
+    project_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "sqlbuild_project.yml").write_text(
+        project_contents.replace(
+            "models/staging/stg_orders.sql: invalid\n",
+            "",
+        ),
+        encoding="utf-8",
+    )
+    models_dir: Path = project_dir / "models"
+    staging_dir: Path = models_dir / "staging"
+    staging_dir.mkdir(parents=True, exist_ok=True)
+    (staging_dir / "stg_orders.sql").write_text(
+        "MODEL (materialized table, unique_key [order_id]);\n\n"
+        "SELECT * FROM ("
+        "SELECT 1 AS order_id, 1 AS customer_id, 100 AS amount_cents UNION ALL "
+        "SELECT 2 AS order_id, 2 AS customer_id, 200 AS amount_cents"
+        ")",
+        encoding="utf-8",
+    )
+    return project_dir, prod_schema, dev_schema
+
+
+def execute_snowflake_sql(*, schema_name: str, sql: str) -> None:
+    """Execute mutating SQL against a Snowflake schema."""
+
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+    config: dict[str, object] = build_snowflake_connection_config(schema=schema_name)
+    connection: Any = adapter.connect(config)
+    try:
+        adapter.execute(connection, sql)
+    finally:
+        adapter.close(connection)
+
+
+def write_local_environment_override(*, project_dir: Path, environment: str) -> None:
+    """Write a local environment override for Snowflake CLI e2e commands."""
+
+    (project_dir / "sqlbuild_local.yml").write_text(
+        f"environment: {environment}\n",
+        encoding="utf-8",
+    )

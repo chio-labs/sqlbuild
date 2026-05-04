@@ -1,6 +1,12 @@
 from dataclasses import dataclass, field
 
-from sqlbuild.adapter.shared.models import ColumnInfo, QueryResult, RowDiffResult, SchemaDiffResult
+from sqlbuild.adapter.shared.models import (
+    ColumnInfo,
+    QueryResult,
+    RowDiffResult,
+    RowDiffSampleRow,
+    SchemaDiffResult,
+)
 
 
 @dataclass(frozen=True)
@@ -36,6 +42,19 @@ class SnowflakeRowDiffTestCase:
     right_sql: str
     unique_key: str | tuple[str, ...]
     expected_result: RowDiffResult
+
+
+@dataclass(frozen=True)
+class SnowflakeRowDiffSampleTestCase:
+    description: str
+    left_sql: str
+    right_sql: str
+    unique_key: str | tuple[str, ...]
+    side: str
+    expected_unequal_samples: tuple[RowDiffSampleRow, ...] = field(default_factory=tuple)
+    expected_side_only_samples: tuple[tuple[tuple[str, object], ...], ...] = field(
+        default_factory=tuple
+    )
 
 
 @dataclass(frozen=True)

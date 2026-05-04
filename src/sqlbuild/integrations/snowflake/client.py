@@ -14,6 +14,8 @@ from sqlbuild.adapter.shared.models import (
     QueryResult,
     RowDiffColumnResult,
     RowDiffResult,
+    RowDiffSampleCell,
+    RowDiffSampleRow,
     RowDiffTolerance,
     RowDiffTolerances,
     SchemaDiffResult,
@@ -603,6 +605,165 @@ class SnowflakeAdapter(BaseAdapter):
             query += f" WHERE {cursor_filter}"
         result: Any = self.execute(connection, query).fetchone()
         return int(result[0])
+
+    def sample_unequal_rows(
+        self,
+        connection: Any,
+        *,
+        left: str,
+        right: str,
+        unique_key: str | tuple[str, ...],
+        excluded_columns: tuple[str, ...] = (),
+        tolerances: RowDiffTolerances | None = None,
+        cursor_column: str | None = None,
+        start_cursor: Any | None = None,
+        end_cursor: Any | None = None,
+        limit: int = 20,
+    ) -> tuple[RowDiffSampleRow, ...]:
+        keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
+        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, left)
+        compare_columns: tuple[str, ...] = tuple(
+            col.name
+            for col in left_columns
+            if col.name not in keys and col.name not in excluded_columns
+        )
+        left_columns_by_name: dict[str, ColumnInfo] = {col.name: col for col in left_columns}
+        cursor_filter: str = self.build_cursor_filter(
+            cursor_column=cursor_column,
+            start_cursor=start_cursor,
+            end_cursor=end_cursor,
+        )
+        left_cte: str = f"SELECT * FROM {left}"
+        right_cte: str = f"SELECT * FROM {right}"
+        if cursor_filter:
+            left_cte += f" WHERE {cursor_filter}"
+            right_cte += f" WHERE {cursor_filter}"
+        self.validate_row_diff_keys(
+            connection,
+            relation_sql=left_cte,
+            relation_label="left",
+            keys=keys,
+        )
+        self.validate_row_diff_keys(
+            connection,
+            relation_sql=right_cte,
+            relation_label="right",
+            keys=keys,
+        )
+        column_equal_expressions: dict[str, str] = {
+            col: self.build_row_diff_equal_expression(
+                column=col,
+                column_info=left_columns_by_name[col],
+                tolerances=tolerances,
+            )
+            for col in compare_columns
+        }
+        unequal_condition: str = "FALSE"
+        if compare_columns:
+            unequal_condition = " OR ".join(
+                f"NOT ({expression})" for expression in column_equal_expressions.values()
+            )
+        key_select_sql: str = ", ".join(
+            f"COALESCE(__left.{key}, __right.{key}) AS __key_{key}" for key in keys
+        )
+        compare_select_sql: str = ", ".join(
+            f"__left.{column} AS __left_{column}, __right.{column} AS __right_{column}"
+            for column in compare_columns
+        )
+        if compare_select_sql:
+            compare_select_sql = ", " + compare_select_sql
+        join_condition: str = " AND ".join(f"__left.{key} = __right.{key}" for key in keys)
+        sample_sql: str = (
+            f"WITH __left AS ({left_cte}), __right AS ({right_cte}) "
+            f"SELECT {key_select_sql}{compare_select_sql} "
+            f"FROM __left FULL OUTER JOIN __right ON {join_condition} "
+            f"WHERE __left.{keys[0]} IS NOT NULL AND __right.{keys[0]} IS NOT NULL "
+            f"AND ({unequal_condition}) "
+            f"ORDER BY {', '.join(f'__key_{key}' for key in keys)} LIMIT {limit}"
+        )
+        rows: list[tuple[Any, ...]] = self.execute(connection, sample_sql).fetchall()
+        samples: list[RowDiffSampleRow] = []
+        row: tuple[Any, ...]
+        for row in rows:
+            key_values: tuple[tuple[str, object], ...] = tuple(
+                (key, row[index]) for index, key in enumerate(keys)
+            )
+            changed_cells: list[RowDiffSampleCell] = []
+            column_index: int
+            column: str
+            for column_index, column in enumerate(compare_columns):
+                left_value_index: int = len(keys) + (column_index * 2)
+                right_value_index: int = left_value_index + 1
+                left_value: object = row[left_value_index]
+                right_value: object = row[right_value_index]
+                if left_value != right_value:
+                    changed_cells.append(
+                        RowDiffSampleCell(
+                            name=column,
+                            left_value=left_value,
+                            right_value=right_value,
+                        )
+                    )
+            samples.append(
+                RowDiffSampleRow(key_values=key_values, changed_cells=tuple(changed_cells))
+            )
+        return tuple(samples)
+
+    def sample_side_only_rows(
+        self,
+        connection: Any,
+        *,
+        left: str,
+        right: str,
+        unique_key: str | tuple[str, ...],
+        side: str,
+        cursor_column: str | None = None,
+        start_cursor: Any | None = None,
+        end_cursor: Any | None = None,
+        limit: int = 20,
+    ) -> tuple[tuple[tuple[str, object], ...], ...]:
+        keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
+        cursor_filter: str = self.build_cursor_filter(
+            cursor_column=cursor_column,
+            start_cursor=start_cursor,
+            end_cursor=end_cursor,
+        )
+        left_cte: str = f"SELECT * FROM {left}"
+        right_cte: str = f"SELECT * FROM {right}"
+        if cursor_filter:
+            left_cte += f" WHERE {cursor_filter}"
+            right_cte += f" WHERE {cursor_filter}"
+        self.validate_row_diff_keys(
+            connection,
+            relation_sql=left_cte,
+            relation_label="left",
+            keys=keys,
+        )
+        self.validate_row_diff_keys(
+            connection,
+            relation_sql=right_cte,
+            relation_label="right",
+            keys=keys,
+        )
+        join_condition: str = " AND ".join(f"__left.{key} = __right.{key}" for key in keys)
+        key_select_sql: str = ", ".join(
+            f"COALESCE(__left.{key}, __right.{key}) AS __key_{key}" for key in keys
+        )
+        if side == "left":
+            side_condition: str = f"__left.{keys[0]} IS NOT NULL AND __right.{keys[0]} IS NULL"
+        elif side == "right":
+            side_condition = f"__right.{keys[0]} IS NOT NULL AND __left.{keys[0]} IS NULL"
+        else:
+            raise ValueError("sample_side_only_rows side must be 'left' or 'right'")
+        sample_sql: str = (
+            f"WITH __left AS ({left_cte}), __right AS ({right_cte}) "
+            f"SELECT {key_select_sql} "
+            f"FROM __left FULL OUTER JOIN __right ON {join_condition} "
+            f"WHERE {side_condition} "
+            f"ORDER BY {', '.join(f'__key_{key}' for key in keys)} LIMIT {limit}"
+        )
+        rows: list[tuple[Any, ...]] = self.execute(connection, sample_sql).fetchall()
+        return tuple(tuple((key, row[index]) for index, key in enumerate(keys)) for row in rows)
 
     def describe_relation(self, connection: Any, relation: str) -> tuple[ColumnInfo, ...]:
         """Return Snowflake relation metadata using DESCRIBE TABLE."""

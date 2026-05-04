@@ -9,6 +9,8 @@ from sqlbuild.adapter.shared.models import (
     ColumnInfo,
     QueryResult,
     RowDiffResult,
+    RowDiffSampleCell,
+    RowDiffSampleRow,
     SchemaDiffResult,
     StatementRecorder,
 )
@@ -17,6 +19,7 @@ from tests.integration.src.sqlbuild.integrations.snowflake._test_types import (
     SnowflakeBuildFlowTestCase,
     SnowflakeMergeTestCase,
     SnowflakeQueryTestCase,
+    SnowflakeRowDiffSampleTestCase,
     SnowflakeRowDiffTestCase,
     SnowflakeSchemaDiffTestCase,
     SnowflakeSchemaIntrospectionTestCase,
@@ -100,6 +103,42 @@ ROW_DIFF_TEST_CASES: list[SnowflakeRowDiffTestCase] = [
             left_only_count=0,
             right_only_count=0,
         ),
+    ),
+]
+
+ROW_DIFF_SAMPLE_TEST_CASES: list[SnowflakeRowDiffSampleTestCase] = [
+    SnowflakeRowDiffSampleTestCase(
+        description="returns unequal row samples for changed values",
+        left_sql=(
+            "CREATE OR REPLACE TABLE left_t AS "
+            "SELECT * FROM (SELECT 1 AS id, 'a' AS val UNION ALL SELECT 2 AS id, 'b' AS val)"
+        ),
+        right_sql=(
+            "CREATE OR REPLACE TABLE right_t AS "
+            "SELECT * FROM (SELECT 1 AS id, 'x' AS val UNION ALL SELECT 2 AS id, 'b' AS val)"
+        ),
+        unique_key="id",
+        side="left",
+        expected_unequal_samples=(
+            RowDiffSampleRow(
+                key_values=(("id", 1),),
+                changed_cells=(RowDiffSampleCell(name="val", left_value="a", right_value="x"),),
+            ),
+        ),
+    ),
+    SnowflakeRowDiffSampleTestCase(
+        description="returns side only key samples",
+        left_sql=(
+            "CREATE OR REPLACE TABLE left_t AS "
+            "SELECT * FROM (SELECT 1 AS id, 'a' AS val UNION ALL SELECT 2 AS id, 'b' AS val)"
+        ),
+        right_sql=(
+            "CREATE OR REPLACE TABLE right_t AS "
+            "SELECT * FROM (SELECT 2 AS id, 'b' AS val UNION ALL SELECT 3 AS id, 'c' AS val)"
+        ),
+        unique_key="id",
+        side="left",
+        expected_side_only_samples=((("id", 1),),),
     ),
 ]
 
@@ -295,6 +334,118 @@ def test_given_relations_when_diffing_rows_then_returns_expected_result(
     assert result.unequal_count == test_case.expected_result.unequal_count
     assert result.left_only_count == test_case.expected_result.left_only_count
     assert result.right_only_count == test_case.expected_result.right_only_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeRowDiffSampleTestCase(
+            description="returns unequal row samples for changed values",
+            left_sql=(
+                "CREATE OR REPLACE TABLE left_t AS "
+                "SELECT * FROM (SELECT 1 AS id, 'a' AS val UNION ALL SELECT 2 AS id, 'b' AS val)"
+            ),
+            right_sql=(
+                "CREATE OR REPLACE TABLE right_t AS "
+                "SELECT * FROM (SELECT 1 AS id, 'x' AS val UNION ALL SELECT 2 AS id, 'b' AS val)"
+            ),
+            unique_key="id",
+            side="left",
+            expected_unequal_samples=(
+                RowDiffSampleRow(
+                    key_values=(("id", 1),),
+                    changed_cells=(RowDiffSampleCell(name="val", left_value="a", right_value="x"),),
+                ),
+            ),
+        )
+    ],
+    ids=["returns unequal row samples for changed values"],
+)
+def test_given_relations_when_sampling_unequal_rows_then_returns_expected_examples(
+    test_case: SnowflakeRowDiffSampleTestCase,
+    adapter: SnowflakeAdapter,
+    connection: Any,
+    snowflake_database: str,
+    snowflake_schema: str,
+) -> None:
+    left_name: str = qualified_name(
+        database=snowflake_database, schema=snowflake_schema, name="left_t"
+    )
+    right_name: str = qualified_name(
+        database=snowflake_database, schema=snowflake_schema, name="right_t"
+    )
+    execute_statements(
+        adapter=adapter,
+        connection=connection,
+        statements=(
+            test_case.left_sql.replace("left_t", left_name),
+            test_case.right_sql.replace("right_t", right_name),
+        ),
+    )
+
+    unequal_samples: tuple[RowDiffSampleRow, ...] = adapter.sample_unequal_rows(
+        connection,
+        left=left_name,
+        right=right_name,
+        unique_key=test_case.unique_key,
+        limit=5,
+    )
+
+    assert unequal_samples == test_case.expected_unequal_samples
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeRowDiffSampleTestCase(
+            description="returns side only key samples",
+            left_sql=(
+                "CREATE OR REPLACE TABLE left_t AS "
+                "SELECT * FROM (SELECT 1 AS id, 'a' AS val UNION ALL SELECT 2 AS id, 'b' AS val)"
+            ),
+            right_sql=(
+                "CREATE OR REPLACE TABLE right_t AS "
+                "SELECT * FROM (SELECT 2 AS id, 'b' AS val UNION ALL SELECT 3 AS id, 'c' AS val)"
+            ),
+            unique_key="id",
+            side="left",
+            expected_side_only_samples=((("id", 1),),),
+        )
+    ],
+    ids=["returns side only key samples"],
+)
+def test_given_relations_when_sampling_side_only_rows_then_returns_expected_examples(
+    test_case: SnowflakeRowDiffSampleTestCase,
+    adapter: SnowflakeAdapter,
+    connection: Any,
+    snowflake_database: str,
+    snowflake_schema: str,
+) -> None:
+    left_name: str = qualified_name(
+        database=snowflake_database, schema=snowflake_schema, name="left_t"
+    )
+    right_name: str = qualified_name(
+        database=snowflake_database, schema=snowflake_schema, name="right_t"
+    )
+    execute_statements(
+        adapter=adapter,
+        connection=connection,
+        statements=(
+            test_case.left_sql.replace("left_t", left_name),
+            test_case.right_sql.replace("right_t", right_name),
+        ),
+    )
+
+    side_only_samples: tuple[tuple[tuple[str, object], ...], ...] = adapter.sample_side_only_rows(
+        connection,
+        left=left_name,
+        right=right_name,
+        unique_key=test_case.unique_key,
+        side=test_case.side,
+        limit=5,
+    )
+
+    assert side_only_samples == test_case.expected_side_only_samples
 
 
 @pytest.mark.parametrize(

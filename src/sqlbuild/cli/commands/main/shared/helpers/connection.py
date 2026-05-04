@@ -70,3 +70,24 @@ def resolve_project_connection_config(
             local_config=discovered_inputs.local_config,
         ),
     )
+
+
+def resolve_environment_connection_config(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    project_dir: Path,
+    environment_name: str,
+) -> dict[str, object]:
+    """Resolve the effective connection config for one named environment."""
+
+    return resolve_connection_config(
+        raw_config=build_effective_connection_config(
+            discovered_inputs=discovered_inputs,
+            selected_environment=environment_name,
+        ),
+        project_dir=project_dir,
+        adapter_name=resolve_effective_adapter_name(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+        ),
+    )

@@ -18,3 +18,12 @@ class SnowflakeBuildE2ETestCase:
     command: tuple[str, ...] = field(default_factory=tuple)
     expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
     expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class SnowflakeDiffE2ETestCase:
+    description: str
+    mutation_sql: tuple[str, ...]
+    command: tuple[str, ...]
+    expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_return_code: int = 0
