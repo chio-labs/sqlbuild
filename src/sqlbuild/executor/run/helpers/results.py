@@ -22,6 +22,10 @@ def build_failed_result(
 ) -> ModelExecutionResult:
     """Build a failed ModelExecutionResult for a specific phase."""
 
+    statement_recorder.log(f"model {entry.name} failed phase={phase.value} error={error}")
+    if staging_relation is not None:
+        statement_recorder.log(f"staging relation kept for inspection: {staging_relation}")
+
     return ModelExecutionResult(
         model_name=entry.name,
         status=ExecutionStatus.FAILED,

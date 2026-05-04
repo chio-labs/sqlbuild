@@ -120,6 +120,16 @@ def test_given_bigquery_local_config_when_running_query_then_outputs_expected_ro
             command=("--no-color", "build", "--concurrency", "4"),
             expected_table_name="fact_orders",
             expected_row_count=10,
+            expected_fact_order_rows=(
+                (1, "Classic Belgian", "sweet", 1700, "completed", "success"),
+                (3, "Chicken and Waffle", "savory", 4350, "completed", "success"),
+                (10, "Classic Belgian", "sweet", 3400, "placed", None),
+            ),
+            expected_daily_revenue_rows=(
+                ("2026-04-01", 3, 6, 7100),
+                ("2026-04-02", 3, 3, 2550),
+                ("2026-04-03", 1, 1, 950),
+            ),
             expected_stdout_fragments=("Execution", "OK"),
         )
     ],
@@ -153,6 +163,26 @@ def test_given_waffle_shop_when_running_full_build_on_bigquery_then_expected_tab
         row_count: object = rows[0][0]
         assert isinstance(row_count, int)
         assert row_count == test_case.expected_row_count
+        fact_order_rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
+            dataset_name=dataset_name,
+            sql=(
+                "SELECT order_id, waffle_name, waffle_category, line_total_cents, "
+                "order_status, payment_status FROM "
+                f"{relation_name(dataset_name=dataset_name, name='fact_orders')} "
+                "WHERE order_id IN (1, 3, 10) ORDER BY order_id"
+            ),
+        )
+        assert fact_order_rows == test_case.expected_fact_order_rows
+        daily_revenue_rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
+            dataset_name=dataset_name,
+            sql=(
+                "SELECT CAST(revenue_date AS STRING), order_count, waffles_sold, "
+                "total_revenue_cents FROM "
+                f"{relation_name(dataset_name=dataset_name, name='daily_revenue')} "
+                "ORDER BY revenue_date"
+            ),
+        )
+        assert daily_revenue_rows == test_case.expected_daily_revenue_rows
         run_dir: Path = project_dir / "target" / "run" / "models"
         hourly_sql: str = (run_dir / "marts" / "hourly_order_activity.sql").read_text(
             encoding="utf-8"

@@ -9,6 +9,7 @@ class BuiltinAdapter(StrEnum):
     DUCKDB = "duckdb"
     SNOWFLAKE = "snowflake"
     BIGQUERY = "bigquery"
+    DATABRICKS = "databricks"
 
 
 class CursorKind(StrEnum):
@@ -20,6 +21,11 @@ class PromotionStrategy(StrEnum):
     ATOMIC_SWAP = "atomic_swap"
     ATOMIC_REPLACE = "atomic_replace"
     CREATE_NEW = "create_new"
+
+
+class TablePromotionMode(StrEnum):
+    DIRECT = "direct"
+    STAGED = "staged"
 
 
 class LifeCycleEventKind(StrEnum):

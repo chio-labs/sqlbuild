@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild.adapter.shared.types import FrameworkType
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
 
@@ -21,11 +22,17 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
     partition_col: str = str(ctx.config["partition_column"])
     date_start: str = str(ctx.config["date_range_start"])
     date_end: str = str(ctx.config["date_range_end"])
-    staging: str = f"{ctx.target}__staging"
+    staging: str = ctx.qualify_in_target_schema(f"{ctx.target_name}__staging")
+    string_type: str = ctx.adapter.render_framework_type(FrameworkType.STRING)
+    timestamp_type: str = ctx.adapter.render_framework_type(FrameworkType.TIMESTAMP)
+    built_at_default: str = ""
+    if ctx.adapter.sqlglot_dialect() != "databricks":
+        built_at_default = " DEFAULT CURRENT_TIMESTAMP"
 
     ctx.execute_sql(
         f"CREATE TABLE IF NOT EXISTS {tracking_table} "
-        f"(partition_value VARCHAR, run_id VARCHAR, built_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+        f"(partition_value {string_type}, run_id {string_type}, "
+        f"built_at {timestamp_type}{built_at_default})"
     )
 
     if ctx.is_full_refresh:
@@ -34,7 +41,7 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
 
     all_partitions: list[str] = _generate_date_range(date_start, date_end)
     ctx.log("checking for stale partitions")
-    stale: list[str] = _find_untracked(ctx, tracking_table, all_partitions)
+    stale: list[str] = _find_stale_partitions(ctx, tracking_table, all_partitions)
 
     if not stale:
         if ctx.on_progress is not None:
@@ -97,14 +104,20 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
             ctx.log("promoting partition into target")
             ctx.execute_sql(
                 f"DELETE FROM {ctx.target} "
-                f"WHERE CAST({partition_col} AS VARCHAR) >= '{partition_value}' "
-                f"AND CAST({partition_col} AS VARCHAR) < '{next_day}'"
+                f"WHERE CAST({partition_col} AS DATE) >= CAST('{partition_value}' AS DATE) "
+                f"AND CAST({partition_col} AS DATE) < CAST('{next_day}' AS DATE)"
             )
             ctx.execute_sql(f"INSERT INTO {ctx.target} SELECT * FROM {staging}")
 
-        ctx.execute_sql(
-            f"INSERT INTO {tracking_table} (partition_value, run_id) "
-            f"VALUES ('{partition_value}', '{ctx.run_id}')"
+        ctx.adapter.merge(
+            ctx.connection,
+            target=tracking_table,
+            sql=(
+                f"SELECT '{partition_value}' AS partition_value, "
+                f"'{ctx.run_id}' AS run_id, CURRENT_TIMESTAMP AS built_at"
+            ),
+            unique_key="partition_value",
+            statement_recorder=ctx.statement_recorder,
         )
 
     ctx.adapter.drop(
@@ -117,14 +130,21 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
     )
 
 
-def _find_untracked(
+def _find_stale_partitions(
     ctx: MaterializationContext,
     tracking_table: str,
     all_partitions: list[str],
 ) -> list[str]:
+    if not all_partitions:
+        return []
+
     cursor: Any = ctx.execute_sql(f"SELECT partition_value FROM {tracking_table}")
     tracked: set[str] = {str(row[0]) for row in cursor.fetchall()}
-    return [p for p in all_partitions if p not in tracked]
+    stale: list[str] = [p for p in all_partitions if p not in tracked]
+    latest_partition: str = all_partitions[-1]
+    if latest_partition not in stale:
+        stale.append(latest_partition)
+    return stale
 
 
 def _generate_date_range(start: str, end: str) -> list[str]:

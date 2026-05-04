@@ -23,7 +23,7 @@ from sqlbuild.adapter.shared.models import (
     StatementRecorder,
 )
 from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
-from sqlbuild.adapter.shared.types import CursorKind, FrameworkType
+from sqlbuild.adapter.shared.types import CursorKind, FrameworkType, TablePromotionMode
 from sqlbuild.shared.helpers.diagnostics_logging import log_sql
 
 
@@ -218,8 +218,8 @@ class BigQueryAdapter(BaseAdapter):
             return f"TIMESTAMP '{value}'"
         return f"'{value}'"
 
-    def default_table_promotion_mode(self) -> str:
-        return "direct"
+    def default_table_promotion_mode(self) -> TablePromotionMode:
+        return TablePromotionMode.DIRECT
 
     def render_create_schema(self, *, database: str | None, schema: str) -> tuple[str, ...]:
         target: str = f"{database}.{schema}" if database is not None else schema

@@ -18,7 +18,12 @@ from sqlbuild.adapter.shared.models import (
     SchemaDiffResult,
     StatementRecorder,
 )
-from sqlbuild.adapter.shared.types import CursorKind, FrameworkType
+from sqlbuild.adapter.shared.types import (
+    CursorKind,
+    FrameworkType,
+    PromotionStrategy,
+    TablePromotionMode,
+)
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 
 
@@ -213,7 +218,10 @@ class BaseAdapter(StrictAdapter):
     ) -> None:
         if schema is None:
             return
-        statements: tuple[str, ...] = self.render_create_schema(database=database, schema=schema)
+        statements: tuple[str, ...] = self.render_create_schema(
+            database=database,
+            schema=schema,
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -290,6 +298,9 @@ class BaseAdapter(StrictAdapter):
         hard_copy: bool = False,
     ) -> tuple[str, ...]:
         del hard_copy
+        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+
+    def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:
         return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
 
     def render_add_columns(
@@ -414,6 +425,23 @@ class BaseAdapter(StrictAdapter):
             source=source,
             target=target,
             hard_copy=hard_copy,
+        )
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def replace_table_from_relation(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        source: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_replace_table_from_relation(
+            target=target,
+            source=source,
         )
         statement_recorder.record_many(statements)
         stmt: str
@@ -777,11 +805,13 @@ class BaseAdapter(StrictAdapter):
             return f"TIMESTAMP '{value}'"
         return f"'{value}'"
 
-    def default_table_promotion_mode(self) -> str:
+    def default_table_promotion_mode(self) -> TablePromotionMode:
         """Return staged as the generic default promotion mode."""
-        from sqlbuild.executor.shared.types import TablePromotionMode
-
         return TablePromotionMode.STAGED
+
+    def default_promotion_strategy(self) -> PromotionStrategy:
+        """Return atomic swap as the generic staged promotion strategy."""
+        return PromotionStrategy.ATOMIC_SWAP
 
 
 def _build_schemas_filter(schemas: tuple[str, ...] | None) -> str:

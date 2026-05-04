@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
+from sqlbuild.adapter.shared.types import PromotionStrategy, TablePromotionMode
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models import CompiledRelationTarget
 from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorBounds, ModelPlanEntry
@@ -33,11 +34,7 @@ from sqlbuild.executor.run.helpers.view import (
     execute_view_entry as execute_view_entry,
 )
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.shared.types import (
-    ExecutionPhase,
-    ExecutionStatus,
-    TablePromotionMode,
-)
+from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
 from sqlbuild.shared.helpers.naming import (
     resolve_qualified_name_parts,
@@ -296,8 +293,9 @@ def _staged_lifecycle(
                 schema=target_schema,
                 name=target_table,
             )
-        if existing:
-            with diagnostics_context(sqlbuild_phase="promote", sqlbuild_action_name="swap"):
+        promotion_strategy: PromotionStrategy = adapter.default_promotion_strategy()
+        if existing and promotion_strategy == PromotionStrategy.ATOMIC_SWAP:
+            with diagnostics_context(sqlbuild_phase="promote", sqlbuild_action_name="atomic_swap"):
                 adapter.swap(
                     connection,
                     left=target_qualified,
@@ -310,6 +308,25 @@ def _staged_lifecycle(
                     if_exists=True,
                     statement_recorder=statement_recorder,
                 )
+        elif existing and promotion_strategy == PromotionStrategy.ATOMIC_REPLACE:
+            with diagnostics_context(
+                sqlbuild_phase="promote",
+                sqlbuild_action_name="atomic_replace",
+            ):
+                adapter.replace_table_from_relation(
+                    connection,
+                    target=target_qualified,
+                    source=staging_qualified,
+                    statement_recorder=statement_recorder,
+                )
+                adapter.drop(
+                    connection,
+                    target=staging_qualified,
+                    if_exists=True,
+                    statement_recorder=statement_recorder,
+                )
+        elif existing:
+            raise ValueError(f"Unsupported promotion strategy: {promotion_strategy}")
         else:
             with diagnostics_context(sqlbuild_phase="promote", sqlbuild_action_name="rename"):
                 adapter.rename(

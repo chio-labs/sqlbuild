@@ -16,6 +16,7 @@ from sqlbuild.adapter.shared.models import (
     SchemaDiffResult,
     StatementRecorder,
 )
+from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
@@ -55,8 +56,8 @@ class FakeJanitorAdapter(BaseAdapter):
     def star_exclude_keyword(self) -> str:
         return "EXCLUDE"
 
-    def default_table_promotion_mode(self) -> str:
-        return "swap"
+    def default_table_promotion_mode(self) -> TablePromotionMode:
+        return TablePromotionMode.STAGED
 
     def connect(self, config: dict[str, Any]) -> object:
         return object()

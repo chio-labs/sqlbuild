@@ -383,6 +383,7 @@ def run_scheduler_build(
 ) -> tuple[Any, Any]:
     """Run a full build through the scheduler with custom materializations."""
 
+    from sqlbuild.adapter.shared.types import TablePromotionMode
     from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
     from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
     from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
@@ -390,7 +391,6 @@ def run_scheduler_build(
     from sqlbuild.compiler.planner.models import PlanOutput
     from sqlbuild.executor.build.main.execute import execute_build_plan
     from sqlbuild.executor.build.models import BuildExecutionResult
-    from sqlbuild.executor.shared.types import TablePromotionMode
 
     config: dict[str, object] = {"database": str(db_path)}
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
