@@ -22,6 +22,10 @@ def resolve_adapter(adapter_name: str) -> BaseAdapter:
             from sqlbuild.integrations.bigquery.client import BigQueryAdapter
 
             return BigQueryAdapter()
+        case BuiltinAdapter.DATABRICKS:
+            from sqlbuild.integrations.databricks.client import DatabricksAdapter
+
+            return DatabricksAdapter()
         case _:
             available: str = ", ".join(a.value for a in BuiltinAdapter)
             raise ValueError(

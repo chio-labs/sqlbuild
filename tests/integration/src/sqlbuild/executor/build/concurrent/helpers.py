@@ -6,6 +6,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
@@ -14,7 +15,6 @@ from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.main.execute import execute_build_plan
 from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.shared.types import TablePromotionMode
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.executor.build.concurrent._test_types import (
     ConcurrentBuildTestCase,

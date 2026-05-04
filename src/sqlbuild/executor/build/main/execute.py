@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
+from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
@@ -16,7 +17,7 @@ from sqlbuild.executor.build.models import BuildExecutionResult, BuildIndexes, S
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.custom.models import MaterializationResult
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.shared.types import ExecutionStatus, TablePromotionMode
+from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 

@@ -13,6 +13,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo, StatementRecorder
+from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (
@@ -39,7 +40,7 @@ from sqlbuild.executor.run.main.execute import (
 )
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.seed.main.execute import execute_seed
-from sqlbuild.executor.shared.types import ExecutionStatus, TablePromotionMode
+from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.executor.testing.main.execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome

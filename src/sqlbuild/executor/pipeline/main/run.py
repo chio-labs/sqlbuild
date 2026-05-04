@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.main.execute import execute_build_plan
 from sqlbuild.executor.build.models import BuildExecutionResult
@@ -21,7 +22,6 @@ from sqlbuild.executor.pipeline.helpers.settings import resolve_promotion_mode
 from sqlbuild.executor.pipeline.helpers.testing import (
     run_test_pipeline as run_test_pipeline,
 )
-from sqlbuild.executor.shared.types import TablePromotionMode
 from sqlbuild.spec.models.project import SettingsConfig
 
 
