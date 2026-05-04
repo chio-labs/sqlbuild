@@ -12,6 +12,7 @@ from sqlbuild.compiler.fingerprints.main.shared.helpers.sql import (
     build_qualified_table_name,
     build_read_all_sql,
 )
+from sqlbuild.integrations.bigquery.client import BigQueryAdapter
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.unit.src.sqlbuild.compiler.fingerprints.main.shared.helpers._test_types import (
     BuildCreateTableSqlTestCase,
@@ -35,6 +36,12 @@ QUALIFIED_TABLE_NAME_TEST_CASES: list[BuildQualifiedTableNameTestCase] = [
         database="warehouse",
         schema="analytics",
         expected_name=f"warehouse.analytics.{FINGERPRINT_TABLE_NAME}",
+    ),
+    BuildQualifiedTableNameTestCase(
+        description="bigquery fingerprint table naming remains adapter-qualified",
+        database="example-project",
+        schema="dev",
+        expected_name=f"`example-project.dev.{FINGERPRINT_TABLE_NAME}`",
     ),
 ]
 
@@ -127,6 +134,24 @@ INSERT_SQL_TEST_CASES: list[BuildInsertSqlTestCase] = [
         ts="2026-01-15T12:00:00",
         expected_contains=("U0VMRUNUICogRlJPTSB0IFdIRVJFIG5hbWUgPSAnYWxpY2Un",),
     ),
+    BuildInsertSqlTestCase(
+        description="stores multiline query sql as base64",
+        database=None,
+        schema="marts",
+        model_name="orders",
+        target_database=None,
+        target_schema="marts",
+        target_name="orders",
+        run_id="run_001",
+        query_hash="abc123",
+        ast_hash=None,
+        schema_fingerprint="ghi789",
+        query_sql="SELECT '\\n' AS slash_n\nFROM orders\nWHERE note = 'line\\nvalue'",
+        ts="2026-01-15T12:00:00",
+        expected_contains=(
+            "U0VMRUNUICdcbicgQVMgc2xhc2hfbgpGUk9NIG9yZGVycwpXSEVSRSBub3RlID0gJ2xpbmVcbnZhbHVlJw==",
+        ),
+    ),
 ]
 
 
@@ -138,10 +163,15 @@ INSERT_SQL_TEST_CASES: list[BuildInsertSqlTestCase] = [
 def test_given_schema_when_building_qualified_name_then_returns_expected(
     test_case: BuildQualifiedTableNameTestCase,
 ) -> None:
+    render_qualified_name: Callable[..., str | None] = (
+        BigQueryAdapter().render_qualified_name
+        if test_case.database == "example-project"
+        else RENDER_QUALIFIED_NAME
+    )
     result: str = build_qualified_table_name(
         database=test_case.database,
         schema=test_case.schema,
-        render_qualified_name=RENDER_QUALIFIED_NAME,
+        render_qualified_name=render_qualified_name,
     )
 
     assert result == test_case.expected_name

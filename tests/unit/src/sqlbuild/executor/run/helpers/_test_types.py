@@ -6,6 +6,7 @@ from sqlbuild.adapter.shared.models import LifeCycleEvent
 @dataclass(frozen=True)
 class BuildQualifiedNameTestCase:
     description: str
+    adapter_name: str
     database: str | None
     schema: str | None
     name: str

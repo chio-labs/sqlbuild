@@ -3,10 +3,12 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapter.shared.models import QueryResult
+from sqlbuild.adapter.shared.types import CursorKind
 from sqlbuild.integrations.bigquery.client import BigQueryAdapter, _BigQueryConnection
 from tests.unit.src.sqlbuild.integrations.bigquery._test_types import (
     BigQueryConnectErrorTestCase,
     BigQueryQueryTestCase,
+    BigQueryRenderCursorBoundLiteralTestCase,
     BigQueryRenderQualifiedNameTestCase,
     BigQueryRenderSchemaTestCase,
     BigQuerySchemaExistsTestCase,
@@ -94,6 +96,21 @@ BIGQUERY_CONNECT_ERROR_TEST_CASES: list[BigQueryConnectErrorTestCase] = [
         description="rejects blank connection project",
         config={"project": " ", "location": "europe-west2"},
         expected_error_fragment="BigQuery connection requires non-empty 'project'",
+    ),
+]
+
+BIGQUERY_RENDER_CURSOR_BOUND_LITERAL_TEST_CASES: list[BigQueryRenderCursorBoundLiteralTestCase] = [
+    BigQueryRenderCursorBoundLiteralTestCase(
+        description="renders timestamp cursor bounds as typed literals",
+        value="2024-01-15T00:00:00",
+        cursor_type=CursorKind.TIMESTAMP,
+        expected_literal="TIMESTAMP '2024-01-15T00:00:00'",
+    ),
+    BigQueryRenderCursorBoundLiteralTestCase(
+        description="renders integer cursor bounds without quotes",
+        value="42",
+        cursor_type=CursorKind.INTEGER,
+        expected_literal="42",
     ),
 ]
 
@@ -197,3 +214,18 @@ def test_given_missing_bigquery_project_when_connecting_then_raises_clear_error(
 
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
         adapter.connect(test_case.config)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    BIGQUERY_RENDER_CURSOR_BOUND_LITERAL_TEST_CASES,
+    ids=[case.description for case in BIGQUERY_RENDER_CURSOR_BOUND_LITERAL_TEST_CASES],
+)
+def test_given_cursor_bounds_when_rendering_then_bigquery_returns_expected_literal(
+    test_case: BigQueryRenderCursorBoundLiteralTestCase,
+) -> None:
+    adapter: BigQueryAdapter = BigQueryAdapter()
+
+    result: str = adapter.render_cursor_bound_literal(test_case.value, test_case.cursor_type)
+
+    assert result == test_case.expected_literal

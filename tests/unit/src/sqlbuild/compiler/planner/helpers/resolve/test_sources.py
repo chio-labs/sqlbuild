@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.adapter.shared.types import CursorKind
 from sqlbuild.compiler.planner.helpers.resolve.sources import (
     resolve_source_references,
 )
@@ -240,11 +241,25 @@ TEST_CASES: list[SourceResolutionTestCase] = [
         source_warehouse_columns={},
         cursor_bounds=CursorBounds(start="2024-01-15", end="2024-02-01"),
         cursor_inputs={"orders": "event_time"},
+        cursor_type=CursorKind.TIMESTAMP,
         lower_bound_inclusive=False,
         expected_sql=(
             "SELECT * FROM (SELECT * FROM raw.orders"
-            " WHERE event_time > '2024-01-15'"
-            " AND event_time < '2024-02-01')"
+            " WHERE event_time > TIMESTAMP '2024-01-15'"
+            " AND event_time < TIMESTAMP '2024-02-01')"
+        ),
+    ),
+    SourceResolutionTestCase(
+        description="uses integer cursor literals without quotes for source subqueries",
+        query_sql='SELECT * FROM __source("orders")',
+        star_exclude_keyword="EXCLUDE",
+        source_map={"orders": SourceEntry(name="orders", schema="raw", table="orders")},
+        source_warehouse_columns={},
+        cursor_bounds=CursorBounds(start="10", end="20"),
+        cursor_inputs={"orders": "event_id"},
+        cursor_type=CursorKind.INTEGER,
+        expected_sql=(
+            "SELECT * FROM (SELECT * FROM raw.orders WHERE event_id >= 10 AND event_id < 20)"
         ),
     ),
 ]
@@ -266,7 +281,7 @@ def test_given_source_references_when_resolving_then_returns_expected_sql(
         cursor_bounds=test_case.cursor_bounds,
         cursor_inputs=test_case.cursor_inputs,
         adapter=DuckDbAdapter(),
-        cursor_type=None,
+        cursor_type=test_case.cursor_type,
         lower_bound_inclusive=test_case.lower_bound_inclusive,
     )
 

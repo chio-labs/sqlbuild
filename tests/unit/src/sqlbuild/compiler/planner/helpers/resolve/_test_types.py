@@ -33,6 +33,7 @@ class SourceResolutionTestCase:
     expected_sql: str
     cursor_bounds: CursorBounds | None = None
     cursor_inputs: dict[str, str] = field(default_factory=dict)
+    cursor_type: str | None = None
     lower_bound_inclusive: bool = True
 
 
@@ -41,6 +42,7 @@ class RefResolutionTestCase:
     description: str
     query_sql: str
     expected_sql: str
+    cursor_type: str | None = None
 
 
 @dataclass(frozen=True)

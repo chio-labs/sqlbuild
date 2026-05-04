@@ -1,0 +1,1 @@
+"""DuckDB adapter unit tests."""
