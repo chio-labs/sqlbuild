@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -38,6 +38,7 @@ class LoadLocalConfigTestCase:
     expected_max_concurrency: int
     expected_setting_overrides: frozenset[str]
     expected_vars: dict[str, str]
+    expected_environments: dict[str, dict[str, object]] = field(default_factory=dict)
     expected_missing_attributes: tuple[str, ...] = ()
 
 
