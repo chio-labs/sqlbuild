@@ -25,6 +25,7 @@ from sqlbuild.compiler.pipeline.helpers.deferred_targets import (
 )
 from sqlbuild.compiler.pipeline.helpers.materializations import load_custom_materializations
 from sqlbuild.compiler.pipeline.helpers.target_defaults import apply_target_defaults
+from sqlbuild.compiler.pipeline.helpers.target_validation import validate_project_targets
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.main.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
@@ -87,6 +88,13 @@ def _build_result(
         assemble_project(compile_inputs),
         default_schema=adapter.default_schema(),
         default_database=adapter.default_database(),
+    )
+    validate_project_targets(
+        adapter_name=resolve_effective_adapter_name(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+        ),
+        project=project,
     )
 
     deferred_targets: dict[str, CompiledRelationTarget] | None = None

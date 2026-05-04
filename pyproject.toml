@@ -58,6 +58,10 @@ update_changelog_on_bump = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 norecursedirs = [".venv", "dist", "*.egg-info", ".git", ".tox"]
+markers = [
+  "real_warehouse: tests that require live external warehouse credentials",
+  "snowflake: tests that require a live Snowflake warehouse",
+]
 
 [tool.ruff]
 target-version = "py312"
