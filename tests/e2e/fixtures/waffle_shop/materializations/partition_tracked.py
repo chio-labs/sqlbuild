@@ -41,7 +41,7 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
 
     all_partitions: list[str] = _generate_date_range(date_start, date_end)
     ctx.log("checking for stale partitions")
-    stale: list[str] = _find_untracked(ctx, tracking_table, all_partitions)
+    stale: list[str] = _find_stale_partitions(ctx, tracking_table, all_partitions)
 
     if not stale:
         if ctx.on_progress is not None:
@@ -109,9 +109,15 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
             )
             ctx.execute_sql(f"INSERT INTO {ctx.target} SELECT * FROM {staging}")
 
-        ctx.execute_sql(
-            f"INSERT INTO {tracking_table} (partition_value, run_id) "
-            f"VALUES ('{partition_value}', '{ctx.run_id}')"
+        ctx.adapter.merge(
+            ctx.connection,
+            target=tracking_table,
+            sql=(
+                f"SELECT '{partition_value}' AS partition_value, "
+                f"'{ctx.run_id}' AS run_id, CURRENT_TIMESTAMP AS built_at"
+            ),
+            unique_key="partition_value",
+            statement_recorder=ctx.statement_recorder,
         )
 
     ctx.adapter.drop(
@@ -124,14 +130,21 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
     )
 
 
-def _find_untracked(
+def _find_stale_partitions(
     ctx: MaterializationContext,
     tracking_table: str,
     all_partitions: list[str],
 ) -> list[str]:
+    if not all_partitions:
+        return []
+
     cursor: Any = ctx.execute_sql(f"SELECT partition_value FROM {tracking_table}")
     tracked: set[str] = {str(row[0]) for row in cursor.fetchall()}
-    return [p for p in all_partitions if p not in tracked]
+    stale: list[str] = [p for p in all_partitions if p not in tracked]
+    latest_partition: str = all_partitions[-1]
+    if latest_partition not in stale:
+        stale.append(latest_partition)
+    return stale
 
 
 def _generate_date_range(start: str, end: str) -> list[str]:
