@@ -116,6 +116,24 @@ DIFF_SCHEMA_TEST_CASES: list[DiffSchemaTestCase] = [
         right_sql="CREATE TABLE right_t (id INTEGER, name VARCHAR)",
         expected_result=SchemaDiffResult(),
     ),
+    DiffSchemaTestCase(
+        description="ignores equivalent scalar aliases and detects numeric scale changes",
+        left_sql=(
+            "CREATE TABLE left_t ("
+            "id INTEGER, flag BOOLEAN, amount DECIMAL(10,2), widened DECIMAL(10,2))"
+        ),
+        right_sql=(
+            "CREATE TABLE right_t (id INT, flag BOOL, amount NUMERIC(10,2), widened NUMERIC(10,3))"
+        ),
+        expected_result=SchemaDiffResult(
+            type_changed_columns=(
+                (
+                    ColumnInfo(name="widened", type="DECIMAL(10,2)"),
+                    ColumnInfo(name="widened", type="DECIMAL(10,3)"),
+                ),
+            ),
+        ),
+    ),
 ]
 
 DIFF_ROWS_TEST_CASES: list[DiffRowsTestCase] = [

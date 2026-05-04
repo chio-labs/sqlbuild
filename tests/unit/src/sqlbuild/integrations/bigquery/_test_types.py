@@ -1,6 +1,11 @@
 from dataclasses import dataclass
 
-from sqlbuild.adapter.shared.models import RowDiffResult, RowDiffSampleRow, SchemaDiffResult
+from sqlbuild.adapter.shared.models import (
+    ColumnInfo,
+    RowDiffResult,
+    RowDiffSampleRow,
+    SchemaDiffResult,
+)
 
 
 @dataclass(frozen=True)
@@ -57,6 +62,8 @@ class BigQueryRenderCursorBoundLiteralTestCase:
 class BigQuerySchemaDiffTestCase:
     description: str
     expected_result: SchemaDiffResult
+    left_relation_columns: tuple[ColumnInfo, ...] | None = None
+    right_relation_columns: tuple[ColumnInfo, ...] | None = None
 
 
 @dataclass(frozen=True)
