@@ -14,6 +14,14 @@ class ClonePolicy:
 
 
 @dataclass(frozen=True)
+class LocalClonePolicy:
+    """Local environment clone policy overrides."""
+
+    allow_as_source: bool | None = None
+    allow_as_target: bool | None = None
+
+
+@dataclass(frozen=True)
 class EnvironmentConfig:
     """One named environment configuration."""
 
@@ -22,6 +30,17 @@ class EnvironmentConfig:
     database: str | None = None
     schema: str | None = None
     clone: ClonePolicy = field(default_factory=ClonePolicy)
+
+
+@dataclass(frozen=True)
+class LocalEnvironmentConfig:
+    """Local developer overrides for one named environment."""
+
+    connection: dict[str, object] = field(default_factory=dict)
+    vars: dict[str, str] = field(default_factory=dict)
+    database: str | None = None
+    schema: str | None = None
+    clone: LocalClonePolicy = field(default_factory=LocalClonePolicy)
 
 
 @dataclass(frozen=True)
@@ -90,6 +109,7 @@ class LocalConfig:
     environment: str | None = None
     adapter: str | None = None
     connection: dict[str, object] = field(default_factory=dict)
+    environments: dict[str, LocalEnvironmentConfig] = field(default_factory=dict)
     settings: SettingsConfig = field(default_factory=SettingsConfig)
     setting_overrides: frozenset[str] = field(default_factory=frozenset)
     vars: dict[str, str] = field(default_factory=dict)

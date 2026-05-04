@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlbuild.compiler.compile.helpers.attachment import (
     build_effective_connection,
     build_effective_vars,
+    resolve_environment_config,
     resolve_environment_name,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -23,7 +24,11 @@ def build_effective_connection_config(
     )
     environment_config: EnvironmentConfig | None = None
     if environment_name is not None:
-        environment_config = discovered_inputs.project_config.environments[environment_name]
+        environment_config = resolve_environment_config(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+            environment_name=environment_name,
+        )
     effective_vars: dict[str, str] = build_effective_vars(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,

@@ -54,6 +54,17 @@ class SeedRefRegressionTestCase:
 
 
 @dataclass(frozen=True)
+class ResolveEnvironmentConfigTestCase:
+    description: str
+    expected_connection: dict[str, object]
+    expected_vars: dict[str, str]
+    expected_database: str
+    expected_schema: str
+    expected_allow_as_source: bool
+    expected_allow_as_target: bool
+
+
+@dataclass(frozen=True)
 class CursorStartCompileInputsTestCase:
     description: str
     repo_files: dict[str, str]

@@ -11,6 +11,7 @@ from sqlbuild.compiler.compile.helpers.attachment import (
     build_seed_inputs,
     build_source_inputs,
     build_test_inputs,
+    resolve_environment_config,
     resolve_environment_name,
     resolve_run_id,
 )
@@ -45,9 +46,11 @@ def build_compile_inputs(
     )
     effective_environment: EnvironmentConfig | None = None
     if effective_environment_name is not None:
-        effective_environment = discovered_inputs.project_config.environments[
-            effective_environment_name
-        ]
+        effective_environment = resolve_environment_config(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+            environment_name=effective_environment_name,
+        )
 
     effective_vars: dict[str, str] = build_effective_vars(
         project_config=discovered_inputs.project_config,

@@ -6,16 +6,26 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.compiler.compile.helpers.attachment import resolve_environment_config
 from sqlbuild.compiler.compile.main.build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import CompileProjectInputs
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.spec.models.project import (
+    ClonePolicy,
+    EnvironmentConfig,
+    LocalClonePolicy,
+    LocalConfig,
+    LocalEnvironmentConfig,
+    ProjectConfig,
+)
 from tests.unit.src.sqlbuild.compiler.compile._test_helpers import (
     base_repo_files,
 )
 from tests.unit.src.sqlbuild.compiler.compile._test_types import (
     BuildCompileInputsErrorTestCase,
     BuildCompileInputsTestCase,
+    ResolveEnvironmentConfigTestCase,
     SeedRefRegressionTestCase,
 )
 
@@ -1408,6 +1418,59 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
         if test_case.run_id is not None
         else re.fullmatch(r"\d{8}T\d{6}Z_[0-9a-f]{6}", compile_inputs.run_id) is not None
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ResolveEnvironmentConfigTestCase(
+            description="merges local environment overrides with nullable clone policy",
+            expected_connection={"warehouse": "local_wh", "role": "project_role"},
+            expected_vars={"shared": "local", "project_only": "present"},
+            expected_database="local_db",
+            expected_schema="project_schema",
+            expected_allow_as_source=False,
+            expected_allow_as_target=True,
+        )
+    ],
+    ids=["merges local environment overrides with nullable clone policy"],
+)
+def test_given_project_and_local_environment_when_resolving_then_local_values_override_by_field(
+    test_case: ResolveEnvironmentConfigTestCase,
+) -> None:
+    environment: EnvironmentConfig = resolve_environment_config(
+        project_config=ProjectConfig(
+            name="demo",
+            adapter="duckdb",
+            environments={
+                "dev": EnvironmentConfig(
+                    connection={"warehouse": "project_wh", "role": "project_role"},
+                    vars={"shared": "project", "project_only": "present"},
+                    database="project_db",
+                    schema="project_schema",
+                    clone=ClonePolicy(allow_as_source=True, allow_as_target=True),
+                )
+            },
+        ),
+        local_config=LocalConfig(
+            environments={
+                "dev": LocalEnvironmentConfig(
+                    connection={"warehouse": "local_wh"},
+                    vars={"shared": "local"},
+                    database="local_db",
+                    clone=LocalClonePolicy(allow_as_source=False),
+                )
+            }
+        ),
+        environment_name="dev",
+    )
+
+    assert environment.connection == test_case.expected_connection
+    assert environment.vars == test_case.expected_vars
+    assert environment.database == test_case.expected_database
+    assert environment.schema == test_case.expected_schema
+    assert environment.clone.allow_as_source is test_case.expected_allow_as_source
+    assert environment.clone.allow_as_target is test_case.expected_allow_as_target
 
 
 COMPILE_ERROR_TEST_CASES: list[BuildCompileInputsErrorTestCase] = [
