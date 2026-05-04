@@ -22,9 +22,6 @@ from sqlbuild.adapter.shared.models import (
     SchemaDiffResult,
     StatementRecorder,
 )
-from sqlbuild.integrations.duckdb.helpers.sql import (
-    build_attach_sql,
-)
 from sqlbuild.shared.helpers.diagnostics_logging import log_sql
 
 
@@ -63,7 +60,7 @@ class DuckDbAdapter(BaseAdapter):
         attach_entries: list[dict[str, object]] = config.get("attach", [])
         attach_entry: dict[str, object]
         for attach_entry in attach_entries:
-            self.execute(connection, build_attach_sql(attach_entry))
+            self.execute(connection, self.duckdb_build_attach_sql(attach_entry))
 
         return connection
 
@@ -121,6 +118,25 @@ class DuckDbAdapter(BaseAdapter):
             start_cursor=start_cursor,
             end_cursor=end_cursor,
         )
+
+    def duckdb_build_attach_sql(self, attach_entry: dict[str, object]) -> str:
+        """Build a DuckDB ATTACH statement from one attach config entry."""
+
+        path: str = str(attach_entry["path"])
+        sql: str = f"ATTACH '{path}'"
+        alias: object | None = attach_entry.get("alias")
+        if alias is not None:
+            sql += f" AS {alias}"
+        options: list[str] = []
+        attach_type: object | None = attach_entry.get("type")
+        if attach_type is not None:
+            options.append(f"TYPE {attach_type}")
+        read_only: object | None = attach_entry.get("read_only")
+        if read_only is True:
+            options.append("READ_ONLY")
+        if options:
+            sql += f" ({', '.join(options)})"
+        return sql
 
     def close(self, connection: Any) -> None:
         """Close a DuckDB connection."""

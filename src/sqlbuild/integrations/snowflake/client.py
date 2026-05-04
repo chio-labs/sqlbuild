@@ -783,7 +783,7 @@ class SnowflakeAdapter(BaseAdapter):
             statements.append(f"USE WAREHOUSE {normalized_warehouse}")
         if normalized_database is not None:
             statements.append(f"USE DATABASE {normalized_database}")
-        if normalized_schema is not None and self._schema_exists(
+        if normalized_schema is not None and self.schema_exists(
             connection=connection,
             database=normalized_database,
             schema=normalized_schema,
@@ -802,10 +802,10 @@ class SnowflakeAdapter(BaseAdapter):
             return None
         return stripped
 
-    def _schema_exists(
+    def schema_exists(
         self,
-        *,
         connection: _SnowflakeConnection,
+        *,
         database: str | None,
         schema: str,
     ) -> bool:
