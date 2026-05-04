@@ -322,7 +322,7 @@ def build_test_inputs(
     discovered_inputs: DiscoveredProjectInputs,
     *,
     effective_vars: dict[str, str] | None = None,
-    macro_context: MacroContext | None = None,
+    macro_context: MacroContext,
 ) -> tuple[CompileSqlTestInput, ...]:
     """Build compile-time test inputs from discovered SQL-native test blocks."""
 
@@ -415,7 +415,7 @@ def build_audit_inputs(
     effective_settings: SettingsConfig,
     model_inputs: tuple[CompileModelInput, ...],
     source_inputs: tuple[CompileSourceInput, ...],
-    macro_context: MacroContext | None = None,
+    macro_context: MacroContext,
 ) -> tuple[CompileAuditInput, ...]:
     """Build compile-time audit inputs from discovered SQL audit blocks."""
 
@@ -512,7 +512,7 @@ def build_model_attached_audit_inputs(
     known_source_names: set[str],
     default_audit_severity: str | None,
     default_audit_run_scope: str | None,
-    macro_context: MacroContext | None,
+    macro_context: MacroContext,
 ) -> tuple[CompileAuditInput, ...]:
     """Render schema-attached model audits into compile audit inputs."""
 
@@ -572,7 +572,7 @@ def build_source_attached_audit_inputs(
     known_source_names: set[str],
     default_audit_severity: str | None,
     default_audit_run_scope: str | None,
-    macro_context: MacroContext | None,
+    macro_context: MacroContext,
 ) -> tuple[CompileAuditInput, ...]:
     """Render source-attached audits into compile audit inputs."""
 
@@ -636,7 +636,7 @@ def build_attached_audit_input(
     known_source_names: set[str],
     default_audit_severity: str | None,
     default_audit_run_scope: str | None,
-    macro_context: MacroContext | None,
+    macro_context: MacroContext,
 ) -> CompileAuditInput:
     """Render one attached generic audit instance into a compile audit input."""
 

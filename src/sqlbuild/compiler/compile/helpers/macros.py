@@ -66,7 +66,7 @@ def expand_sql_macros(
     file_path: Path,
     loaded_macros: dict[str, LoadedMacro],
     macro_overrides: dict[str, str] | None = None,
-    macro_context: MacroContext | None = None,
+    macro_context: MacroContext,
 ) -> str:
     """Expand authored Python macros in one executable SQL string."""
 
@@ -134,7 +134,7 @@ def _evaluate_macro_call(
     file_path: Path,
     loaded_macros: dict[str, LoadedMacro],
     macro_overrides: dict[str, str],
-    macro_context: MacroContext | None,
+    macro_context: MacroContext,
     top_level: bool,
 ) -> tuple[object, int]:
     macro_name: str = _parse_macro_name(sql=sql, call_start_index=call_start_index)
@@ -190,19 +190,23 @@ def _evaluate_macro_call(
 def _call_loaded_macro(
     *,
     loaded_macro: LoadedMacro,
-    macro_context: MacroContext | None,
+    macro_context: MacroContext,
     args: tuple[object, ...],
     kwargs: dict[str, object],
 ) -> object:
     signature: inspect.Signature = inspect.signature(loaded_macro.function)
     parameters: tuple[inspect.Parameter, ...] = tuple(signature.parameters.values())
     if (
-        macro_context is not None
-        and parameters
+        parameters
         and parameters[0].kind
         in {inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD}
         and parameters[0].name == "ctx"
     ):
+        if "ctx" in kwargs:
+            raise CompileInputError(
+                f"Macro '@{loaded_macro.name}' must not be called with keyword argument 'ctx'; "
+                "'ctx' is reserved for injected macro context"
+            )
         return loaded_macro.function(macro_context, *args, **kwargs)
     return loaded_macro.function(*args, **kwargs)
 
@@ -213,7 +217,7 @@ def _parse_macro_arguments(
     file_path: Path,
     loaded_macros: dict[str, LoadedMacro],
     macro_overrides: dict[str, str],
-    macro_context: MacroContext | None,
+    macro_context: MacroContext,
 ) -> tuple[tuple[object, ...], dict[str, object]]:
     if not args_source.strip():
         return (), {}
@@ -264,7 +268,7 @@ def _rewrite_nested_macro_calls(
     file_path: Path,
     loaded_macros: dict[str, LoadedMacro],
     macro_overrides: dict[str, str],
-    macro_context: MacroContext | None,
+    macro_context: MacroContext,
 ) -> tuple[str, dict[str, object]]:
     rewritten_parts: list[str] = []
     placeholder_values: dict[str, object] = {}
