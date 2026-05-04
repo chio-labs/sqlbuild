@@ -18,6 +18,7 @@ from sqlbuild.compiler.planner.helpers.audit_scheduling import (
     resolve_effective_run_scope,
 )
 from sqlbuild.compiler.planner.models import AuditPlanEntry
+from sqlbuild.shared.helpers.sql_resolution import assert_no_unresolved_sql_markers
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -38,6 +39,10 @@ def plan_audit(
         model_targets=model_targets,
         seed_targets=seed_targets,
         source_map=source_map,
+    )
+    assert_no_unresolved_sql_markers(
+        sql=resolved_sql,
+        context=f"audit '{audit.name}' planned SQL",
     )
 
     attachment_kind: AuditAttachmentKind

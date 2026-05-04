@@ -12,7 +12,9 @@ from sqlbuild.cli.commands.main.helpers.diff.output import (
 )
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_connection_config
+from sqlbuild.cli.commands.main.shared.helpers.connection import (
+    resolve_environment_connection_config,
+)
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.diff import run_diff_pipeline
@@ -84,13 +86,10 @@ def run_diff(
     effective_max_row_only_examples: int = (
         max_row_only_examples if max_row_only_examples is not None else (10 if verbose else 3)
     )
-    connection_config: dict[str, object] = resolve_connection_config(
-        raw_config={
-            **discovered_inputs.project_config.connection,
-            **discovered_inputs.project_config.environments[to_environment].connection,
-        },
+    connection_config: dict[str, object] = resolve_environment_connection_config(
+        discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
-        adapter_name=effective_adapter_name,
+        environment_name=to_environment,
     )
     connection: Any = adapter.connect(connection_config)
     try:

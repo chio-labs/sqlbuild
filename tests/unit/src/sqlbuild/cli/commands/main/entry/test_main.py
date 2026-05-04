@@ -42,6 +42,14 @@ ERROR_RENDERING_TEST_CASES: list[MainErrorRenderingTestCase] = [
         expected_stderr_fragment="invalid compile request",
         expected_exit_code=1,
     ),
+    MainErrorRenderingTestCase(
+        description="renders query user errors without a traceback",
+        argv=["query", "SELECT 1"],
+        error_type=CliUserError,
+        error_factory=lambda project_dir: CliUserError("query requires SQL"),
+        expected_stderr_fragment="query requires SQL",
+        expected_exit_code=1,
+    ),
 ]
 
 COMMAND_LOCAL_GLOBAL_FLAG_ERROR_TEST_CASES: list[MainTestCase] = [
@@ -250,16 +258,15 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
 def test_given_query_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[Path | None, str | None, str | None, str, int | None]] = []
+    received_args: list[tuple[Path | None, str | None, str, int | None]] = []
 
     def run_query(
         project_dir: Path | None,
         sql: str | None,
-        file_path: str | None,
         output_format: str,
         limit: int | None,
     ) -> int:
-        received_args.append((project_dir, sql, file_path, output_format, limit))
+        received_args.append((project_dir, sql, output_format, limit))
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -268,7 +275,7 @@ def test_given_query_command_arguments_when_running_with_dependencies_then_it_di
     )
 
     assert exit_code == test_case.expected_exit_code
-    assert received_args == [(None, "select 1 as id", None, "table", 5)]
+    assert received_args == [(None, "select 1 as id", "table", 5)]
 
 
 @pytest.mark.parametrize(
@@ -676,9 +683,18 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
         assert project_dir is not None
         raise test_case.error_factory(project_dir)
 
+    def run_query(
+        project_dir: Path | None,
+        sql: str | None,
+        output_format: str,
+        limit: int | None,
+    ) -> int:
+        del project_dir, sql, output_format, limit
+        raise test_case.error_factory(Path("/tmp/demo"))
+
     exit_code: int = _main_with_dependencies(
         argv=test_case.argv,
-        handlers=build_handlers(run_compile=run_compile),
+        handlers=build_handlers(run_compile=run_compile, run_query=run_query),
     )
     rendered_stderr: str = capsys.readouterr().err
 

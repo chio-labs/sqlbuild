@@ -15,6 +15,7 @@ from sqlbuild.compiler.compile.models import CompiledRelationTarget
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
+from sqlbuild.shared.helpers.sql_resolution import assert_no_unresolved_sql_markers
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -37,6 +38,10 @@ def execute_audit(
         seed_targets=seed_targets,
         source_map=source_map,
         relation_overrides=relation_overrides,
+    )
+    assert_no_unresolved_sql_markers(
+        sql=executed_sql,
+        context=f"audit '{audit.name}' executable SQL",
     )
 
     with diagnostics_context(

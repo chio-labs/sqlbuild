@@ -1,0 +1,1 @@
+"""SQL resolution helper tests."""

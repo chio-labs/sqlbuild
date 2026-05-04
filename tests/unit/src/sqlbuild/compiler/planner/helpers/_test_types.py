@@ -206,6 +206,7 @@ class PlanAuditTestCase:
     model_targets: dict[str, str]
     source_map_entries: dict[str, tuple[str | None, str, str | None]]
     expected_sql_fragment: str
+    expected_error_fragment: str = ""
 
 
 @dataclass(frozen=True)
