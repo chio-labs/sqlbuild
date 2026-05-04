@@ -76,6 +76,43 @@ connection:
         expected_vars={},
         expected_missing_attributes=("default_environment", "defaults", "janitor"),
     ),
+    LoadLocalConfigTestCase(
+        description="loads local environment overrides",
+        repo_files={
+            "sqlbuild_local.yml": """
+environment: dev
+environments:
+  dev:
+    connection:
+      warehouse: local_wh
+    vars:
+      user: local_user
+    database: local_db
+    schema: local_schema
+    clone:
+      allow_as_source: true
+      allow_as_target: false
+""".strip()
+        },
+        expected_environment="dev",
+        expected_adapter=None,
+        expected_connection={},
+        expected_sqlglot=True,
+        expected_sql_validation=True,
+        expected_max_concurrency=1,
+        expected_setting_overrides=frozenset(),
+        expected_vars={},
+        expected_environments={
+            "dev": {
+                "connection": {"warehouse": "local_wh"},
+                "vars": {"user": "local_user"},
+                "database": "local_db",
+                "schema": "local_schema",
+                "allow_as_source": True,
+                "allow_as_target": False,
+            }
+        },
+    ),
 ]
 
 PROJECT_CONFIG_ERROR_TEST_CASES: list[LoadProjectConfigErrorTestCase] = [
@@ -481,6 +518,17 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
     assert config.settings.max_concurrency == test_case.expected_max_concurrency
     assert config.setting_overrides == test_case.expected_setting_overrides
     assert config.vars == test_case.expected_vars
+    assert {
+        environment_name: {
+            "connection": environment_config.connection,
+            "vars": environment_config.vars,
+            "database": environment_config.database,
+            "schema": environment_config.schema,
+            "allow_as_source": environment_config.clone.allow_as_source,
+            "allow_as_target": environment_config.clone.allow_as_target,
+        }
+        for environment_name, environment_config in config.environments.items()
+    } == test_case.expected_environments
     attribute_name: str
     for attribute_name in test_case.expected_missing_attributes:
         assert not hasattr(config, attribute_name)
