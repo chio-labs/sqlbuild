@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.compiler.shared.helpers.sources import render_source_relation
@@ -20,6 +21,8 @@ def resolve_source_references(
     star_exclude_keyword: str,
     cursor_bounds: CursorBounds | None,
     cursor_inputs: dict[str, str],
+    adapter: BaseAdapter,
+    cursor_type: str | None,
     lower_bound_inclusive: bool,
 ) -> str:
     """Replace all __source() calls in query SQL with resolved names or CAST subqueries."""
@@ -53,6 +56,8 @@ def resolve_source_references(
             resolved_source=resolved_source,
             cursor_column=cursor_column,
             bounds=cursor_bounds,
+            adapter=adapter,
+            cursor_type=cursor_type,
             lower_bound_inclusive=lower_bound_inclusive,
         )
 
@@ -117,13 +122,17 @@ def _build_cursor_subquery(
     resolved_source: str,
     cursor_column: str,
     bounds: CursorBounds,
+    adapter: BaseAdapter,
+    cursor_type: str | None,
     lower_bound_inclusive: bool,
 ) -> str:
     """Wrap a resolved source relation in a cursor-filtered subquery."""
 
     lower_operator: str = ">=" if lower_bound_inclusive else ">"
+    start_literal: str = adapter.render_cursor_bound_literal(bounds.start, cursor_type)
+    end_literal: str = adapter.render_cursor_bound_literal(bounds.end, cursor_type)
     return (
         f"(SELECT * FROM {resolved_source}"
-        f" WHERE {cursor_column} {lower_operator} '{bounds.start}'"
-        f" AND {cursor_column} < '{bounds.end}')"
+        f" WHERE {cursor_column} {lower_operator} {start_literal}"
+        f" AND {cursor_column} < {end_literal})"
     )

@@ -30,6 +30,7 @@ def build_compiled_project(
         assemble_project(compile_inputs),
         default_schema=adapter.default_schema(),
         default_database=adapter.default_database(),
+        render_qualified_name=adapter.render_qualified_name,
     )
     validate_project_targets(
         adapter_name=resolve_effective_adapter_name(

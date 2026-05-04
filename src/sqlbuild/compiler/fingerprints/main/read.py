@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
@@ -18,14 +20,23 @@ def read_latest_fingerprints(
     execute: Any,
     database: str | None,
     schema: str,
+    render_qualified_name: Callable[..., str | None],
 ) -> FingerprintSet:
     """Read all fingerprints for a schema and resolve latest per model in memory."""
 
-    qualified_name: str = build_qualified_table_name(database=database, schema=schema)
+    qualified_name: str = build_qualified_table_name(
+        database=database,
+        schema=schema,
+        render_qualified_name=render_qualified_name,
+    )
     if not _table_exists(connection=connection, execute=execute, qualified_name=qualified_name):
         return FingerprintSet(schema=schema, fingerprints={})
 
-    read_sql: str = build_read_all_sql(database=database, schema=schema)
+    read_sql: str = build_read_all_sql(
+        database=database,
+        schema=schema,
+        render_qualified_name=render_qualified_name,
+    )
     result: Any = execute(connection, read_sql)
     rows: list[tuple[Any, ...]] = result.fetchall()
     latest: dict[str, Fingerprint] = {}
@@ -56,6 +67,13 @@ def _row_to_fingerprint(row: tuple[Any, ...]) -> Fingerprint:
     raw_target_database: Any = row[1]
     raw_target_schema: Any = row[2]
     raw_target_name: Any = row[3]
+    query_sql_storage: str = str(row[8])
+    try:
+        query_sql: str = base64.b64decode(query_sql_storage.encode("ascii"), validate=True).decode(
+            "utf-8"
+        )
+    except Exception:
+        query_sql = query_sql_storage
     return Fingerprint(
         model_name=str(row[0]),
         target_database=str(raw_target_database) if raw_target_database is not None else None,
@@ -65,6 +83,6 @@ def _row_to_fingerprint(row: tuple[Any, ...]) -> Fingerprint:
         query_hash=str(row[5]),
         ast_hash=ast_hash,
         schema_fingerprint=str(row[7]),
-        query_sql=str(row[8]),
+        query_sql=query_sql,
         ts=ts,
     )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import inspect
 import re
 from importlib.machinery import ModuleSpec
 from pathlib import Path
@@ -23,7 +24,7 @@ from sqlbuild.compiler.compile.helpers.sql_scanning import (
 from sqlbuild.compiler.compile.helpers.sql_scanning import (
     is_identifier_start as _is_identifier_start,
 )
-from sqlbuild.compiler.compile.models import LoadedMacro
+from sqlbuild.compiler.compile.models import LoadedMacro, MacroContext
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile
 
 _CONTEXT: str = "Macro expansion"
@@ -65,6 +66,7 @@ def expand_sql_macros(
     file_path: Path,
     loaded_macros: dict[str, LoadedMacro],
     macro_overrides: dict[str, str] | None = None,
+    macro_context: MacroContext | None = None,
 ) -> str:
     """Expand authored Python macros in one executable SQL string."""
 
@@ -87,6 +89,7 @@ def expand_sql_macros(
             file_path=file_path,
             loaded_macros=loaded_macros,
             macro_overrides={} if macro_overrides is None else macro_overrides,
+            macro_context=macro_context,
             top_level=True,
         )
         if not isinstance(macro_result, str):
@@ -131,6 +134,7 @@ def _evaluate_macro_call(
     file_path: Path,
     loaded_macros: dict[str, LoadedMacro],
     macro_overrides: dict[str, str],
+    macro_context: MacroContext | None,
     top_level: bool,
 ) -> tuple[object, int]:
     macro_name: str = _parse_macro_name(sql=sql, call_start_index=call_start_index)
@@ -158,9 +162,15 @@ def _evaluate_macro_call(
         file_path=file_path,
         loaded_macros=loaded_macros,
         macro_overrides=macro_overrides,
+        macro_context=macro_context,
     )
     try:
-        macro_result: object = loaded_macro.function(*args, **kwargs)
+        macro_result: object = _call_loaded_macro(
+            loaded_macro=loaded_macro,
+            macro_context=macro_context,
+            args=args,
+            kwargs=kwargs,
+        )
     except TypeError as error:
         raise CompileInputError(
             f"Macro '@{macro_name}' in '{file_path}' could not be called: {error}"
@@ -177,12 +187,33 @@ def _evaluate_macro_call(
     return macro_result, closing_paren_index + 1
 
 
+def _call_loaded_macro(
+    *,
+    loaded_macro: LoadedMacro,
+    macro_context: MacroContext | None,
+    args: tuple[object, ...],
+    kwargs: dict[str, object],
+) -> object:
+    signature: inspect.Signature = inspect.signature(loaded_macro.function)
+    parameters: tuple[inspect.Parameter, ...] = tuple(signature.parameters.values())
+    if (
+        macro_context is not None
+        and parameters
+        and parameters[0].kind
+        in {inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD}
+        and parameters[0].name == "ctx"
+    ):
+        return loaded_macro.function(macro_context, *args, **kwargs)
+    return loaded_macro.function(*args, **kwargs)
+
+
 def _parse_macro_arguments(
     *,
     args_source: str,
     file_path: Path,
     loaded_macros: dict[str, LoadedMacro],
     macro_overrides: dict[str, str],
+    macro_context: MacroContext | None,
 ) -> tuple[tuple[object, ...], dict[str, object]]:
     if not args_source.strip():
         return (), {}
@@ -193,6 +224,7 @@ def _parse_macro_arguments(
         file_path=file_path,
         loaded_macros=loaded_macros,
         macro_overrides=macro_overrides,
+        macro_context=macro_context,
     )
     try:
         expression: ast.Expression = ast.parse(f"_macro_call({rewritten_args_source})", mode="eval")
@@ -232,6 +264,7 @@ def _rewrite_nested_macro_calls(
     file_path: Path,
     loaded_macros: dict[str, LoadedMacro],
     macro_overrides: dict[str, str],
+    macro_context: MacroContext | None,
 ) -> tuple[str, dict[str, object]]:
     rewritten_parts: list[str] = []
     placeholder_values: dict[str, object] = {}
@@ -251,6 +284,7 @@ def _rewrite_nested_macro_calls(
             file_path=file_path,
             loaded_macros=loaded_macros,
             macro_overrides=macro_overrides,
+            macro_context=macro_context,
             top_level=False,
         )
         placeholder: str = f"__sqlbuild_macro_arg_{replacement_index}"

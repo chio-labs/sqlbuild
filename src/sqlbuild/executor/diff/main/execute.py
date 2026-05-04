@@ -46,8 +46,8 @@ def execute_diff(
         if left_model is None or right_model is None:
             raise ValueError(f"diff selected model '{name}' does not exist in both environments")
 
-        left_relation: str = qualified_name(left_model)
-        right_relation: str = qualified_name(right_model)
+        left_relation: str = qualified_name(adapter=adapter, model=left_model)
+        right_relation: str = qualified_name(adapter=adapter, model=right_model)
         unique_key: tuple[str, ...] = ()
         if _model_has_unique_key(right_model):
             unique_key = get_unique_key(right_model)

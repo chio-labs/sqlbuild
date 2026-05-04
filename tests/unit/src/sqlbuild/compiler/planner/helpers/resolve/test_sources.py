@@ -9,6 +9,7 @@ from sqlbuild.compiler.planner.helpers.resolve.sources import (
     resolve_source_references,
 )
 from sqlbuild.compiler.planner.models import CursorBounds
+from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers.resolve._test_types import (
     SourceResolutionTestCase,
@@ -264,6 +265,8 @@ def test_given_source_references_when_resolving_then_returns_expected_sql(
         star_exclude_keyword=test_case.star_exclude_keyword,
         cursor_bounds=test_case.cursor_bounds,
         cursor_inputs=test_case.cursor_inputs,
+        adapter=DuckDbAdapter(),
+        cursor_type=None,
         lower_bound_inclusive=test_case.lower_bound_inclusive,
     )
 

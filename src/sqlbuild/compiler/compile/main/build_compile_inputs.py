@@ -24,9 +24,14 @@ from sqlbuild.compiler.compile.models import (
     CompileSourceInput,
     CompileSqlTestInput,
     LoadedMacro,
+    MacroContext,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.models.project import EnvironmentConfig, SettingsConfig
+from sqlbuild.spec.models.project import (
+    EnvironmentConfig,
+    SettingsConfig,
+    resolve_effective_adapter_name,
+)
 
 
 def build_compile_inputs(
@@ -62,6 +67,15 @@ def build_compile_inputs(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
     )
+    macro_context: MacroContext = MacroContext(
+        adapter_name=resolve_effective_adapter_name(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+        ),
+        sqlglot_enabled=effective_settings.sqlglot,
+        environment_name=effective_environment_name,
+        vars=effective_vars,
+    )
     resolved_run_id: str = resolve_run_id(selected_run_id=run_id)
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
 
@@ -72,6 +86,7 @@ def build_compile_inputs(
         environment_config=effective_environment,
         effective_environment_name=effective_environment_name,
         run_id=resolved_run_id,
+        macro_context=macro_context,
         no_sql_validation=no_sql_validation,
     )
     seed_inputs: tuple[CompileSeedInput, ...] = build_seed_inputs(discovered_inputs)
@@ -83,12 +98,14 @@ def build_compile_inputs(
     test_inputs: tuple[CompileSqlTestInput, ...] = build_test_inputs(
         discovered_inputs,
         effective_vars=effective_vars,
+        macro_context=macro_context,
     )
     audit_inputs: tuple[CompileAuditInput, ...] = build_audit_inputs(
         discovered_inputs,
         effective_settings=effective_settings,
         model_inputs=model_inputs,
         source_inputs=source_inputs,
+        macro_context=macro_context,
     )
     return CompileProjectInputs(
         project_config=discovered_inputs.project_config,

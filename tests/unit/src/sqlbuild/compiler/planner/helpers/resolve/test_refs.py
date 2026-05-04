@@ -12,6 +12,7 @@ from sqlbuild.compiler.planner.helpers.resolve.refs import (
     resolve_ref_references,
 )
 from sqlbuild.compiler.planner.models import CursorBounds
+from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.unit.src.sqlbuild.compiler.planner.helpers.resolve._test_types import (
     ApplyDeferredTargetsTestCase,
     RefResolutionTestCase,
@@ -104,6 +105,8 @@ def test_given_refs_without_cursor_when_resolving_then_returns_expected_sql(
         seed_targets=_SEED_TARGETS,
         cursor_bounds=None,
         cursor_inputs={},
+        adapter=DuckDbAdapter(),
+        cursor_type=None,
         lower_bound_inclusive=True,
     )
 
@@ -124,6 +127,8 @@ def test_given_refs_with_cursor_when_resolving_then_returns_expected_sql(
         seed_targets=_SEED_TARGETS,
         cursor_bounds=_CURSOR_BOUNDS,
         cursor_inputs=_CURSOR_INPUTS,
+        adapter=DuckDbAdapter(),
+        cursor_type=None,
         lower_bound_inclusive=True,
     )
 
@@ -154,6 +159,8 @@ def test_given_refs_with_exclusive_cursor_when_resolving_then_returns_expected_s
         seed_targets=_SEED_TARGETS,
         cursor_bounds=_CURSOR_BOUNDS,
         cursor_inputs=_CURSOR_INPUTS,
+        adapter=DuckDbAdapter(),
+        cursor_type=None,
         lower_bound_inclusive=False,
     )
 

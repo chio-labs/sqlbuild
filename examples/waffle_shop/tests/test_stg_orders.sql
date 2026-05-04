@@ -7,7 +7,7 @@ __source__raw_orders AS (
     100 AS customer_id,
     2 AS waffle_type_id,
     3 AS quantity,
-    '2026-04-01 10:00:00' AS ordered_at,
+    CAST('2026-04-01 10:00:00' AS TIMESTAMP) AS ordered_at,
     'completed' AS status
 ),
 __expected__stg_orders AS (
@@ -16,7 +16,7 @@ __expected__stg_orders AS (
     100 AS customer_id,
     2 AS waffle_type_id,
     3 AS quantity,
-    '2026-04-01 10:00:00' AS ordered_at,
+    CAST('2026-04-01 10:00:00' AS TIMESTAMP) AS ordered_at,
     'completed' AS status
 )
 SELECT 1

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile.helpers.macros import expand_sql_macros
-from sqlbuild.compiler.compile.models import LoadedMacro
+from sqlbuild.compiler.compile.models import LoadedMacro, MacroContext
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     ExpandSqlMacrosErrorTestCase,
     ExpandSqlMacrosTestCase,
@@ -157,6 +157,16 @@ SELECT `@fake_macro()` AS quoted_name, @project_columns() FROM raw_orders
 SELECT `@fake_macro()` AS quoted_name, order_id FROM raw_orders
 """.strip(),
     ),
+    ExpandSqlMacrosTestCase(
+        description="passes compile macro context to ctx-aware macros",
+        macro_file_contents="""
+def adapter_name(ctx) -> str:
+    return ctx.adapter_name
+""".strip()
+        + "\n",
+        sql="SELECT @adapter_name() AS adapter_name",
+        expected_sql="SELECT bigquery AS adapter_name",
+    ),
 ]
 
 
@@ -178,6 +188,12 @@ def test_given_sql_macro_variants_when_expanding_then_it_returns_expected_sql(
         file_path=tmp_path / "models" / "orders.sql",
         loaded_macros=loaded_macros,
         macro_overrides=test_case.macro_overrides,
+        macro_context=MacroContext(
+            adapter_name="bigquery",
+            sqlglot_enabled=True,
+            environment_name="dev",
+            vars={"project_name": "demo"},
+        ),
     )
 
     assert expanded_sql == test_case.expected_sql

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.executor.shared.helpers.naming import build_qualified_name
+from sqlbuild.integrations.duckdb.client import DuckDbAdapter
+from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
 from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
     BuildQualifiedNameTestCase,
 )
@@ -36,7 +37,7 @@ QUALIFIED_NAME_TEST_CASES: list[BuildQualifiedNameTestCase] = [
         database="analytics",
         schema=None,
         name="orders",
-        expected_qualified="analytics.orders",
+        expected_qualified="orders",
     ),
 ]
 
@@ -46,10 +47,11 @@ QUALIFIED_NAME_TEST_CASES: list[BuildQualifiedNameTestCase] = [
     QUALIFIED_NAME_TEST_CASES,
     ids=[case.description for case in QUALIFIED_NAME_TEST_CASES],
 )
-def test_given_relation_parts_when_building_qualified_name_then_returns_expected(
+def test_given_relation_parts_when_resolving_qualified_name_then_returns_expected(
     test_case: BuildQualifiedNameTestCase,
 ) -> None:
-    result: str = build_qualified_name(
+    result: str = resolve_qualified_name_parts(
+        adapter=DuckDbAdapter(),
         database=test_case.database,
         schema=test_case.schema,
         name=test_case.name,
