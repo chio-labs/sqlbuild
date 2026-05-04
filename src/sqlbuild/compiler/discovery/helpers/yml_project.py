@@ -16,7 +16,9 @@ from sqlbuild.spec.models.project import (
     DefaultsConfig,
     EnvironmentConfig,
     JanitorConfig,
+    LocalClonePolicy,
     LocalConfig,
+    LocalEnvironmentConfig,
     ProjectConfig,
     SettingsConfig,
 )
@@ -77,6 +79,10 @@ def load_local_config(*, project_dir: Path) -> LocalConfig:
     environment: str | None = _optional_str(payload=payload, key="environment")
     adapter: str | None = _optional_str(payload=payload, key="adapter")
     connection: dict[str, object] = _optional_mapping(payload=payload, key="connection")
+    environments: dict[str, LocalEnvironmentConfig] = _load_local_environments(
+        payload=payload.get("environments"),
+        file_path=file_path,
+    )
     local_settings_result: tuple[SettingsConfig, frozenset[str]] = _load_local_settings(
         payload=payload.get("settings"), file_path=file_path
     )
@@ -89,6 +95,7 @@ def load_local_config(*, project_dir: Path) -> LocalConfig:
         environment=environment,
         adapter=adapter,
         connection=connection,
+        environments=environments,
         settings=settings,
         setting_overrides=setting_overrides,
         vars=vars_map,
@@ -338,6 +345,45 @@ def _load_environments(*, payload: object, file_path: Path) -> dict[str, Environ
     return environments
 
 
+def _load_local_environments(
+    *, payload: object, file_path: Path
+) -> dict[str, LocalEnvironmentConfig]:
+    mapping: dict[str, object] = _coerce_mapping(
+        payload=payload, label="environments", file_path=file_path
+    )
+    environments: dict[str, LocalEnvironmentConfig] = {}
+    env_name: str
+    env_payload: object
+    for env_name, env_payload in mapping.items():
+        env_mapping: dict[str, object] = _coerce_mapping(
+            payload=env_payload,
+            label=f"environments.{env_name}",
+            file_path=file_path,
+        )
+        clone_mapping: dict[str, object] = _coerce_mapping(
+            payload=env_mapping.get("clone"),
+            label=f"environments.{env_name}.clone",
+            file_path=file_path,
+        )
+        environments[env_name] = LocalEnvironmentConfig(
+            connection=_optional_mapping(payload=env_mapping, key="connection"),
+            vars=_load_string_mapping(payload=env_mapping.get("vars"), file_path=file_path),
+            database=_optional_str(payload=env_mapping, key="database"),
+            schema=_optional_str(payload=env_mapping, key="schema"),
+            clone=LocalClonePolicy(
+                allow_as_source=_optional_nullable_bool(
+                    mapping=clone_mapping,
+                    key="allow_as_source",
+                ),
+                allow_as_target=_optional_nullable_bool(
+                    mapping=clone_mapping,
+                    key="allow_as_target",
+                ),
+            ),
+        )
+    return environments
+
+
 def _load_janitor(*, payload: object, file_path: Path) -> JanitorConfig:
     mapping: dict[str, object] = _coerce_mapping(
         payload=payload, label="janitor", file_path=file_path
@@ -406,6 +452,15 @@ def _optional_bool(*, mapping: dict[str, object], key: str, default: bool) -> bo
     value: object | None = mapping.get(key)
     if value is None:
         return default
+    if not isinstance(value, bool):
+        raise ProjectConfigError(f"Expected '{key}' to be a boolean when provided")
+    return value
+
+
+def _optional_nullable_bool(*, mapping: dict[str, object], key: str) -> bool | None:
+    value: object | None = mapping.get(key)
+    if value is None:
+        return None
     if not isinstance(value, bool):
         raise ProjectConfigError(f"Expected '{key}' to be a boolean when provided")
     return value
