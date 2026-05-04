@@ -5,15 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.main.assemble_project import assemble_project
-from sqlbuild.compiler.compile.main.build_compile_inputs import build_compile_inputs
-from sqlbuild.compiler.compile.models import CompiledProject, CompileProjectInputs
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.helpers.target_defaults import apply_target_defaults
-from sqlbuild.compiler.pipeline.helpers.target_validation import validate_project_targets
+from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.models import ClonePipelineResult
 from sqlbuild.compiler.planner.main.clone import run_clone_planning
-from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
 def prepare_clone_pipeline(
@@ -71,21 +67,9 @@ def _compile_project_for_environment(
     environment_name: str,
     no_sql_validation: bool,
 ) -> CompiledProject:
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
-        discovered_inputs,
+    return build_compiled_project(
+        discovered_inputs=discovered_inputs,
+        adapter=adapter,
         selected_environment=environment_name,
         no_sql_validation=no_sql_validation,
     )
-    project: CompiledProject = apply_target_defaults(
-        assemble_project(compile_inputs),
-        default_schema=adapter.default_schema(),
-        default_database=adapter.default_database(),
-    )
-    validate_project_targets(
-        adapter_name=resolve_effective_adapter_name(
-            project_config=discovered_inputs.project_config,
-            local_config=discovered_inputs.local_config,
-        ),
-        project=project,
-    )
-    return project
