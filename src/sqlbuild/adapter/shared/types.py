@@ -30,3 +30,22 @@ class LifeCycleEventKind(StrEnum):
 class FrameworkType(StrEnum):
     STRING = "string"
     TIMESTAMP = "timestamp"
+
+
+class TypeFamily(StrEnum):
+    INTEGER = "integer"
+    DECIMAL = "decimal"
+    FLOAT = "float"
+    STRING = "string"
+    BOOLEAN = "boolean"
+    TIMESTAMP = "timestamp"
+    DATE = "date"
+    DATETIME = "datetime"
+    OTHER = "other"
+
+
+class TypeDialect(StrEnum):
+    BIGQUERY = "bigquery"
+    SNOWFLAKE = "snowflake"
+    DUCKDB = "duckdb"
+    DATABRICKS = "databricks"

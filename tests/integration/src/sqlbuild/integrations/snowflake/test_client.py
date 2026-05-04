@@ -142,6 +142,43 @@ ROW_DIFF_SAMPLE_TEST_CASES: list[SnowflakeRowDiffSampleTestCase] = [
     ),
 ]
 
+SCHEMA_DIFF_TEST_CASES: list[SnowflakeSchemaDiffTestCase] = [
+    SnowflakeSchemaDiffTestCase(
+        description="detects added removed and changed column types",
+        left_sql=("CREATE OR REPLACE TABLE left_t (id NUMBER, status VARCHAR, old_col BOOLEAN)"),
+        right_sql=("CREATE OR REPLACE TABLE right_t (id VARCHAR, status VARCHAR, new_col DATE)"),
+        expected_result=SchemaDiffResult(
+            added_columns=(ColumnInfo(name="new_col", type="DATE"),),
+            removed_columns=(ColumnInfo(name="old_col", type="BOOLEAN"),),
+            type_changed_columns=(
+                (
+                    ColumnInfo(name="id", type="NUMBER(38,0)"),
+                    ColumnInfo(name="id", type="VARCHAR(16777216)"),
+                ),
+            ),
+        ),
+    ),
+    SnowflakeSchemaDiffTestCase(
+        description="ignores equivalent scalar aliases and detects numeric scale changes",
+        left_sql=(
+            "CREATE OR REPLACE TABLE left_t ("
+            "id NUMBER(38,0), status VARCHAR, amount NUMBER(10,2), widened NUMBER(10,2))"
+        ),
+        right_sql=(
+            "CREATE OR REPLACE TABLE right_t ("
+            "id DECIMAL(38,0), status TEXT, amount DECIMAL(10,2), widened DECIMAL(10,3))"
+        ),
+        expected_result=SchemaDiffResult(
+            type_changed_columns=(
+                (
+                    ColumnInfo(name="widened", type="NUMBER(10,2)"),
+                    ColumnInfo(name="widened", type="NUMBER(10,3)"),
+                ),
+            ),
+        ),
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -260,28 +297,8 @@ def test_given_relations_when_introspecting_then_returns_expected_metadata(
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        SnowflakeSchemaDiffTestCase(
-            description="detects added removed and changed column types",
-            left_sql=(
-                "CREATE OR REPLACE TABLE left_t (id NUMBER, status VARCHAR, old_col BOOLEAN)"
-            ),
-            right_sql=(
-                "CREATE OR REPLACE TABLE right_t (id VARCHAR, status VARCHAR, new_col DATE)"
-            ),
-            expected_result=SchemaDiffResult(
-                added_columns=(ColumnInfo(name="new_col", type="DATE"),),
-                removed_columns=(ColumnInfo(name="old_col", type="BOOLEAN"),),
-                type_changed_columns=(
-                    (
-                        ColumnInfo(name="id", type="NUMBER(38,0)"),
-                        ColumnInfo(name="id", type="VARCHAR(16777216)"),
-                    ),
-                ),
-            ),
-        )
-    ],
-    ids=["detects added removed and changed column types"],
+    SCHEMA_DIFF_TEST_CASES,
+    ids=[case.description for case in SCHEMA_DIFF_TEST_CASES],
 )
 def test_given_relations_when_diffing_schema_then_returns_expected_result(
     test_case: SnowflakeSchemaDiffTestCase,

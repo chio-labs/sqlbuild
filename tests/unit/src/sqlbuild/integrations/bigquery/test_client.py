@@ -35,7 +35,6 @@ from tests.unit.src.sqlbuild.integrations.bigquery.helpers import (
     build_row_diff_execute,
     build_sample_rows_execute,
     fake_row_diff_describe_relation,
-    fake_schema_diff_describe_relation,
 )
 
 BIGQUERY_QUERY_TEST_CASES: list[BigQueryQueryTestCase] = [
@@ -131,6 +130,33 @@ BIGQUERY_RENDER_CURSOR_BOUND_LITERAL_TEST_CASES: list[BigQueryRenderCursorBoundL
         value="42",
         cursor_type=CursorKind.INTEGER,
         expected_literal="42",
+    ),
+]
+
+BIGQUERY_SCHEMA_DIFF_TEST_CASES: list[BigQuerySchemaDiffTestCase] = [
+    BigQuerySchemaDiffTestCase(
+        description="detects added removed and changed column types",
+        expected_result=SchemaDiffResult(
+            added_columns=(ColumnInfo(name="new_col", type="DATE"),),
+            removed_columns=(ColumnInfo(name="status", type="STRING"),),
+            type_changed_columns=(
+                (ColumnInfo(name="id", type="INT64"), ColumnInfo(name="id", type="STRING")),
+            ),
+        ),
+        left_relation_columns=(
+            ColumnInfo(name="id", type="INT64"),
+            ColumnInfo(name="status", type="STRING"),
+        ),
+        right_relation_columns=(
+            ColumnInfo(name="id", type="STRING"),
+            ColumnInfo(name="new_col", type="DATE"),
+        ),
+    ),
+    BigQuerySchemaDiffTestCase(
+        description="ignores semantically equivalent type aliases",
+        expected_result=SchemaDiffResult(),
+        left_relation_columns=(ColumnInfo(name="id", type="INT64"),),
+        right_relation_columns=(ColumnInfo(name="id", type="INTEGER"),),
     ),
 ]
 
@@ -253,26 +279,23 @@ def test_given_cursor_bounds_when_rendering_then_bigquery_returns_expected_liter
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        BigQuerySchemaDiffTestCase(
-            description="detects added removed and changed column types",
-            expected_result=SchemaDiffResult(
-                added_columns=(ColumnInfo(name="new_col", type="DATE"),),
-                removed_columns=(ColumnInfo(name="status", type="STRING"),),
-                type_changed_columns=(
-                    (ColumnInfo(name="id", type="INT64"), ColumnInfo(name="id", type="STRING")),
-                ),
-            ),
-        )
-    ],
-    ids=["detects added removed and changed column types"],
+    BIGQUERY_SCHEMA_DIFF_TEST_CASES,
+    ids=[case.description for case in BIGQUERY_SCHEMA_DIFF_TEST_CASES],
 )
 def test_given_bigquery_relations_when_diffing_schema_then_returns_expected_result(
     test_case: BigQuerySchemaDiffTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     adapter: BigQueryAdapter = BigQueryAdapter()
-    monkeypatch.setattr(adapter, "describe_relation", fake_schema_diff_describe_relation)
+    monkeypatch.setattr(
+        adapter,
+        "describe_relation",
+        lambda connection, relation: (
+            test_case.left_relation_columns
+            if relation == "left_relation"
+            else test_case.right_relation_columns
+        ),
+    )
 
     result: SchemaDiffResult = adapter.diff_schema(
         connection=object(),
