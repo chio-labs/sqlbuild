@@ -101,6 +101,18 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_create_function(
+        self,
+        *,
+        target: str,
+        arguments: tuple[Any, ...],
+        returns: str,
+        body_sql: str,
+    ) -> tuple[str, ...]:
+        """Render SQL statements that create or replace a SQL function."""
+        ...
+
+    @abstractmethod
     def render_append(
         self, *, target: str, sql: str, columns: tuple[str, ...] | None = None
     ) -> tuple[str, ...]:

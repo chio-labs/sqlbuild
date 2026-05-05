@@ -6,6 +6,7 @@ import re
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
+    CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
     CompiledRelationTarget,
@@ -15,6 +16,7 @@ from sqlbuild.compiler.planner.models import CursorBounds
 
 _REF_PATTERN: re.Pattern[str] = re.compile(r'__ref\("([^"]+)"\)')
 _DBT_REF_PATTERN: re.Pattern[str] = re.compile(r'__dbt_ref\("([^"]+)"\)')
+_UDF_PATTERN: re.Pattern[str] = re.compile(r'__udf\("([^"]+)"\)')
 
 
 def resolve_ref_references(
@@ -66,6 +68,21 @@ def resolve_dbt_ref_references(*, query_sql: str) -> str:
     return query_sql
 
 
+def resolve_udf_references(
+    *, query_sql: str, function_targets: dict[str, CompiledRelationTarget]
+) -> str:
+    """Replace all __udf() calls with qualified function names."""
+
+    def _replace_udf(match: re.Match[str]) -> str:
+        function_name: str = match.group(1)
+        target: CompiledRelationTarget | None = function_targets.get(function_name)
+        if target is None or target.qualified_name is None:
+            return match.group(0)
+        return target.qualified_name
+
+    return _UDF_PATTERN.sub(_replace_udf, query_sql)
+
+
 def _build_cursor_subquery(
     *,
     qualified_name: str,
@@ -101,6 +118,14 @@ def build_seed_targets(
     """Build a lookup of seed name to compiled relation target."""
 
     return {seed.name: seed.target for seed in seeds}
+
+
+def build_function_targets(
+    functions: tuple[CompiledFunction, ...],
+) -> dict[str, CompiledRelationTarget]:
+    """Build a lookup of function name to compiled relation target."""
+
+    return {function.name: function.target for function in functions}
 
 
 def apply_deferred_targets(

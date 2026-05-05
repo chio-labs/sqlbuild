@@ -12,6 +12,7 @@ class WrittenTarget:
 
     model_count: int
     seed_count: int
+    function_count: int
     audit_count: int
     test_count: int
     target_dir: Path
@@ -26,6 +27,9 @@ class WrittenTarget:
         if self.seed_count:
             seed_label: str = "seed" if self.seed_count == 1 else "seeds"
             parts.append(f"{self.seed_count} {seed_label}")
+        if self.function_count:
+            function_label: str = "function" if self.function_count == 1 else "functions"
+            parts.append(f"{self.function_count} {function_label}")
         if self.audit_count:
             audit_label: str = "audit" if self.audit_count == 1 else "audits"
             parts.append(f"{self.audit_count} {audit_label}")

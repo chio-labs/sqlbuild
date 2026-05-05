@@ -9,18 +9,26 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationTarget
+from sqlbuild.compiler.compile.models import (
+    CompiledObjectKey,
+    CompiledRelationTarget,
+    FunctionArgument,
+)
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     ChainStep,
+    FunctionPlanEntry,
     ModelPlanEntry,
     PlanOutput,
     SeedPlanEntry,
     SqlTestPlanEntry,
 )
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
-from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.executor.build.models import (
+    BuildExecutionResult,
+    FunctionExecutionResult,
+)
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
@@ -44,6 +52,10 @@ def build_target_writer_plan_output() -> PlanOutput:
     test_key: CompiledObjectKey = CompiledObjectKey(
         resource_type=CompiledResourceType.SQL_TEST,
         name="orders_chain",
+    )
+    function_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.FUNCTION,
+        name="is_completed_order",
     )
     target: CompiledRelationTarget = CompiledRelationTarget(
         database=None,
@@ -73,6 +85,22 @@ def build_target_writer_plan_output() -> PlanOutput:
                 target=target,
                 file_path=Path("seeds/country_codes.csv"),
                 columns=(),
+            ),
+        ),
+        function_entries=(
+            FunctionPlanEntry(
+                key=function_key,
+                name="is_completed_order",
+                relative_path=Path("functions/sql/is_completed_order.sql"),
+                target=CompiledRelationTarget(
+                    database=None,
+                    schema="analytics",
+                    name="is_completed_order",
+                    qualified_name="analytics.is_completed_order",
+                ),
+                arguments=(FunctionArgument(name="order_status", type="VARCHAR"),),
+                returns="BOOLEAN",
+                body_sql="order_status = 'completed'",
             ),
         ),
         audit_entries=(
@@ -139,6 +167,21 @@ def build_runtime_target_execution_result() -> BuildExecutionResult:
                         kind=LifeCycleEventKind.SQL,
                         content="CREATE OR REPLACE TABLE analytics.orders__staging "
                         "AS SELECT 1 AS order_id",
+                    ),
+                ),
+            ),
+        ),
+        function_results=(
+            FunctionExecutionResult(
+                function_name="is_completed_order",
+                status=ExecutionStatus.SUCCESS,
+                lifecycle_events=(
+                    LifeCycleEvent(
+                        kind=LifeCycleEventKind.SQL,
+                        content=(
+                            "CREATE OR REPLACE FUNCTION analytics.is_completed_order"
+                            "(order_status VARCHAR) RETURNS BOOLEAN"
+                        ),
                     ),
                 ),
             ),

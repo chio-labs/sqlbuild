@@ -13,6 +13,7 @@ from sqlbuild.compiler.compile.helpers.templating import expand_template_data
 from sqlbuild.compiler.compile.models import (
     CompileAuditInput,
     CompiledAudit,
+    CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
@@ -24,6 +25,7 @@ from sqlbuild.compiler.compile.models import (
     CompileProjectInputs,
     CompileSeedInput,
     CompileSourceInput,
+    CompileSqlFunctionInput,
     CompileSqlTestInput,
     InferredColumn,
     MacroContext,
@@ -66,6 +68,10 @@ def assemble_compiled_project(inputs: CompileProjectInputs) -> CompiledProject:
                 effective_vars=inputs.effective_vars,
             )
             for seed_input in inputs.seed_inputs
+        ),
+        functions=tuple(
+            _assemble_compiled_function(function_input)
+            for function_input in inputs.sql_function_inputs
         ),
         audits=tuple(_assemble_compiled_audit(audit_input) for audit_input in inputs.audit_inputs),
         sql_tests=tuple(
@@ -142,6 +148,27 @@ def _assemble_compiled_seed(
         schema_entry=seed_input.schema_entry,
         schema_file=seed_input.schema_file,
         target=target,
+    )
+
+
+def _assemble_compiled_function(function_input: CompileSqlFunctionInput) -> CompiledFunction:
+    return CompiledFunction(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.FUNCTION,
+            name=function_input.name,
+        ),
+        deps=(),
+        name=function_input.name,
+        relative_path=function_input.function_file.relative_path,
+        arguments=function_input.arguments,
+        returns=function_input.returns,
+        body_sql=function_input.body_sql,
+        target=CompiledRelationTarget(
+            database=function_input.database,
+            schema=function_input.schema,
+            name=function_input.name,
+            qualified_name=None,
+        ),
     )
 
 

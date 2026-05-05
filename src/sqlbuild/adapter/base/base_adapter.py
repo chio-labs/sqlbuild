@@ -233,6 +233,20 @@ class BaseAdapter(StrictAdapter):
     def render_create_view_as(self, *, target: str, sql: str) -> tuple[str, ...]:
         return (f"CREATE OR REPLACE VIEW {target} AS {sql}",)
 
+    def render_create_function(
+        self,
+        *,
+        target: str,
+        arguments: tuple[Any, ...],
+        returns: str,
+        body_sql: str,
+    ) -> tuple[str, ...]:
+        argument_sql: str = ", ".join(f"{arg.name} {arg.type}" for arg in arguments)
+        return (
+            f"CREATE OR REPLACE FUNCTION {target}({argument_sql}) "
+            f"RETURNS {returns} LANGUAGE SQL AS $$\n{body_sql}\n$$",
+        )
+
     def render_append(
         self, *, target: str, sql: str, columns: tuple[str, ...] | None = None
     ) -> tuple[str, ...]:
@@ -364,6 +378,27 @@ class BaseAdapter(StrictAdapter):
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_create_view_as(target=target, sql=sql)
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def create_function(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        arguments: tuple[Any, ...],
+        returns: str,
+        body_sql: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_create_function(
+            target=target,
+            arguments=arguments,
+            returns=returns,
+            body_sql=body_sql,
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:

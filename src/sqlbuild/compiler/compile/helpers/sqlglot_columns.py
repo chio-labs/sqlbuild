@@ -11,6 +11,7 @@ from sqlbuild.compiler.compile.models import InferredColumn
 _REF_PATTERN: re.Pattern[str] = re.compile(r'__ref\("([^"]+)"\)')
 _SOURCE_PATTERN: re.Pattern[str] = re.compile(r'__source\("([^"]+)"\)')
 _DBT_REF_PATTERN: re.Pattern[str] = re.compile(r'__dbt_ref\("([^"]+)"\)')
+_UDF_PATTERN: re.Pattern[str] = re.compile(r'__udf\("([A-Za-z_][A-Za-z0-9_]*)"\)\s*(?=\()')
 _PLACEHOLDER_PATTERN: re.Pattern[str] = re.compile(r"@@(\w+)")
 
 
@@ -62,11 +63,12 @@ def substitute_placeholder_defaults(query_sql: str, placeholders: dict[str, str]
 
 
 def _replace_refs_with_stubs(query_sql: str) -> str:
-    """Replace __ref/__source/__dbt_ref calls with plain table names for parsing."""
+    """Replace SQLBuild marker calls with parseable SQL stubs."""
 
     result: str = _REF_PATTERN.sub(r"\1", query_sql)
     result = _SOURCE_PATTERN.sub(r"\1", result)
     result = _DBT_REF_PATTERN.sub(r"\1", result)
+    result = _UDF_PATTERN.sub(r"__sqlbuild_udf_\1", result)
     return result
 
 

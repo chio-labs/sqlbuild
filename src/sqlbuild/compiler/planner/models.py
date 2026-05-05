@@ -259,6 +259,19 @@ class SeedPlanEntry:
 
 
 @dataclass(frozen=True)
+class FunctionPlanEntry:
+    """Per-SQL-function execution plan entry."""
+
+    key: CompiledObjectKey
+    name: str
+    relative_path: Path
+    target: CompiledRelationTarget
+    arguments: tuple[object, ...]
+    returns: str
+    body_sql: str
+
+
+@dataclass(frozen=True)
 class AuditPlanEntry:
     """Per-audit execution plan entry with resolved SQL and scheduling metadata."""
 
@@ -310,6 +323,7 @@ class PlanOutput:
     execution_order: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
     model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
     seed_entries: tuple[SeedPlanEntry, ...] = field(default_factory=tuple)
+    function_entries: tuple[FunctionPlanEntry, ...] = field(default_factory=tuple)
     audit_entries: tuple[AuditPlanEntry, ...] = field(default_factory=tuple)
     test_entries: tuple[SqlTestPlanEntry, ...] = field(default_factory=tuple)
     selected_keys: frozenset[CompiledObjectKey] = field(default_factory=frozenset)
@@ -322,4 +336,5 @@ class PlanOutput:
     )
     model_targets: dict[str, CompiledRelationTarget] = field(default_factory=dict)
     seed_targets: dict[str, CompiledRelationTarget] = field(default_factory=dict)
+    function_targets: dict[str, CompiledRelationTarget] = field(default_factory=dict)
     source_map: dict[str, SourceEntry] = field(default_factory=dict)

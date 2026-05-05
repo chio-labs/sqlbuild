@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.compiler.discovery.helpers.sql_audits import parse_sql_audit_file
+from sqlbuild.compiler.discovery.helpers.sql_functions import parse_function_sql
 from sqlbuild.compiler.discovery.helpers.sql_models import parse_model_sql
 from sqlbuild.compiler.discovery.helpers.sql_tests import parse_sql_test_file
 from sqlbuild.compiler.discovery.helpers.yml_schema import parse_schema_yml
@@ -18,6 +19,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
+    DiscoveredSqlFunctionFile,
     DiscoveredSqlModelFile,
     DiscoveredSqlTestFile,
 )
@@ -50,6 +52,32 @@ def discover_model_files(*, project_dir: Path) -> tuple[DiscoveredSqlModelFile, 
             )
         )
     return tuple(discovered_model_files)
+
+
+def discover_sql_function_files(*, project_dir: Path) -> tuple[DiscoveredSqlFunctionFile, ...]:
+    """Discover SQL function files under functions/sql/."""
+
+    function_root: Path = project_dir / "functions" / "sql"
+    if not function_root.is_dir():
+        return ()
+
+    discovered_function_files: list[DiscoveredSqlFunctionFile] = []
+    file_path: Path
+    for file_path in sorted(function_root.rglob("*.sql")):
+        contents: str = file_path.read_text(encoding="utf-8")
+        header_values: dict[str, object]
+        body_sql: str
+        header_values, body_sql = parse_function_sql(contents, file_path)
+        discovered_function_files.append(
+            DiscoveredSqlFunctionFile(
+                file_path=file_path,
+                relative_path=file_path.relative_to(project_dir),
+                contents=contents,
+                header_values=header_values,
+                body_sql=body_sql,
+            )
+        )
+    return tuple(discovered_function_files)
 
 
 def discover_schema_files(*, project_dir: Path) -> tuple[DiscoveredSchemaFile, ...]:

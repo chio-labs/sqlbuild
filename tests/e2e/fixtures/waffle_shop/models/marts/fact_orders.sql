@@ -13,6 +13,7 @@ SELECT
   w.price_cents * o.quantity AS line_total_cents,
   o.ordered_at,
   o.status AS order_status,
+  __udf("is_completed_order")(o.status) AS is_completed_order,
   p.payment_method,
   p.payment_status,
   p.amount_cents AS payment_amount_cents

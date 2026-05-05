@@ -328,6 +328,22 @@ class SnowflakeAdapter(BaseAdapter):
     def sqlglot_dialect(self) -> str | None:
         return "snowflake"
 
+    def render_create_function(
+        self,
+        *,
+        target: str,
+        arguments: tuple[Any, ...],
+        returns: str,
+        body_sql: str,
+    ) -> tuple[str, ...]:
+        argument_sql: str = ", ".join(f"{argument.name} {argument.type}" for argument in arguments)
+        return (
+            f"CREATE OR REPLACE FUNCTION {target}({argument_sql})\n"
+            f"RETURNS {returns}\n"
+            "LANGUAGE SQL\n"
+            f"AS $$\n{body_sql}\n$$",
+        )
+
     def render_cursor_bound_literal(self, value: str, cursor_type: str | None) -> str:
         if cursor_type == CursorKind.INTEGER:
             return value

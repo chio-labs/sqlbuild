@@ -13,7 +13,11 @@ from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
-from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
+from sqlbuild.executor.build.models import (
+    BuildExecutionResult,
+    FunctionExecutionResult,
+    SeedExecutionResult,
+)
 from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
@@ -55,7 +59,9 @@ class BuildProgressCallbacks:
             entry.name: entry for entry in plan.model_entries
         }
         self._test_results_by_model: dict[str, SqlTestExecutionResult] = {}
-        self._total: int = len(plan.model_entries) + len(plan.seed_entries)
+        self._total: int = (
+            len(plan.model_entries) + len(plan.seed_entries) + len(plan.function_entries)
+        )
         self._counter: int = 0
         self._use_color: bool = use_color
         self._verbose: bool = verbose
@@ -81,6 +87,11 @@ class BuildProgressCallbacks:
         seed_entry: object
         for seed_entry in plan.seed_entries:
             max_name_len = max(max_name_len, len(getattr(seed_entry, "name", str(seed_entry))))
+        function_entry: object
+        for function_entry in plan.function_entries:
+            max_name_len = max(
+                max_name_len, len(getattr(function_entry, "name", str(function_entry)))
+            )
         self._name_width: int = max(
             min(max_name_len + _NAME_PADDING, _MAX_NAME_WIDTH), _MIN_NAME_WIDTH
         )
@@ -156,6 +167,25 @@ class BuildProgressCallbacks:
             self._stream.write(
                 f"  {ctr}  {'seed':<{_TYPE_WIDTH}}{seed_name:<{nw}} {status:<6} {duration}\n"
             )
+            self._stream.flush()
+            return
+
+        if isinstance(node_result, FunctionExecutionResult):
+            status: str = colorize_status(
+                _execution_status_display(node_result.status),
+                use_color=self._use_color,
+            )
+            duration: str = _format_duration(node_result.duration_ms)
+            function_name: str = _truncate_name(node_result.function_name, self._name_width)
+            detail: str = ""
+            if node_result.status == ExecutionStatus.FAILED and node_result.error_message:
+                detail = f"  {node_result.error_message}"
+            nw = self._name_width
+            line: str = (
+                f"  {ctr}  {'function':<{_TYPE_WIDTH}}{function_name:<{nw}} "
+                f"{status:<6} {duration}{detail}\n"
+            )
+            self._stream.write(line)
             self._stream.flush()
             return
 
@@ -303,6 +333,15 @@ def format_build_footer(
         elif seed_result.status == ExecutionStatus.SKIPPED:
             skip_count += 1
 
+    function_result: FunctionExecutionResult
+    for function_result in result.function_results:
+        if function_result.status == ExecutionStatus.SUCCESS:
+            pass_count += 1
+        elif function_result.status == ExecutionStatus.FAILED:
+            fail_count += 1
+        elif function_result.status == ExecutionStatus.SKIPPED:
+            skip_count += 1
+
     test_r: SqlTestExecutionResult
     for test_r in result.test_results:
         if test_r.outcome == SqlTestOutcome.PASS:
@@ -347,6 +386,20 @@ def _format_failure_details(result: BuildExecutionResult) -> list[str]:
             lines.append(f"    {model_result.error_message}")
         if model_result.staging_relation is not None:
             lines.append(f"    {_inspection_relation_message(model_result.staging_relation)}")
+        lines.append("")
+
+    function_result: FunctionExecutionResult
+    for function_result in result.function_results:
+        if function_result.status != ExecutionStatus.FAILED:
+            continue
+        if not has_failures:
+            lines.append("")
+            lines.append("Failures:")
+            lines.append("")
+            has_failures = True
+        lines.append(f"  {function_result.function_name}  (function)")
+        if function_result.error_message is not None:
+            lines.append(f"    {function_result.error_message}")
         lines.append("")
 
     test_r: SqlTestExecutionResult
@@ -447,6 +500,8 @@ def _materialization_type_display(materialization_type: str) -> str:
         return "view"
     if materialization_type == MaterializationType.SEED:
         return "seed"
+    if materialization_type == "function":
+        return "function"
     if materialization_type == MaterializationType.CUSTOM:
         return "custom"
     return "table"
