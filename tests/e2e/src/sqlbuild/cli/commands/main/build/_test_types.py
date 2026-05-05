@@ -15,6 +15,9 @@ class BuildE2ETestCase:
     expected_view_names: tuple[str, ...]
     expected_seed_names: tuple[str, ...]
     expected_fact_orders_data: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
+    expected_fact_orders_python_udf_data: tuple[tuple[object, ...], ...] = field(
+        default_factory=tuple
+    )
     expected_dim_customers_data: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
     expected_waffle_types_data: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
     expected_daily_revenue_data: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
@@ -139,6 +142,7 @@ class RuntimeArtifactPreservationBuildE2ETestCase:
     rerun_command: tuple[str, ...]
     expected_runtime_paths: tuple[str, ...]
     expected_exit_code: int
+    expected_compiled_paths: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

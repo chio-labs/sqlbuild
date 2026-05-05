@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import ast
 import csv
+import json
 import logging
 from decimal import Decimal
 from pathlib import Path
@@ -30,6 +32,7 @@ from sqlbuild.adapter.shared.types import (
     PromotionStrategy,
     TablePromotionMode,
 )
+from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.shared.helpers.diagnostics_logging import log_sql
 
 
@@ -337,13 +340,90 @@ class DatabricksAdapter(BaseAdapter):
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
+        language: FunctionLanguage = FunctionLanguage.SQL,
+        runtime_version: str | None = None,
+        entry_point: str | None = None,
+        packages: tuple[str, ...] = (),
     ) -> tuple[str, ...]:
+        if language == FunctionLanguage.PYTHON:
+            del runtime_version
+            return self._render_create_python_function(
+                target=target,
+                arguments=arguments,
+                returns=returns,
+                body_sql=body_sql,
+                entry_point=entry_point,
+                packages=packages,
+            )
+        del runtime_version, entry_point, packages
         argument_sql: str = ", ".join(f"{argument.name} {argument.type}" for argument in arguments)
         return (
             f"CREATE OR REPLACE FUNCTION {target}({argument_sql})\n"
             f"RETURNS {returns}\n"
             f"RETURN {body_sql}",
         )
+
+    def _render_create_python_function(
+        self,
+        *,
+        target: str,
+        arguments: tuple[Any, ...],
+        returns: str,
+        body_sql: str,
+        entry_point: str | None,
+        packages: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        argument_sql: str = ", ".join(f"{argument.name} {argument.type}" for argument in arguments)
+        environment_sql: str = self._render_python_environment(packages=packages)
+        body: str = self._databricks_python_body(body_sql=body_sql, entry_point=entry_point)
+        return (
+            f"CREATE OR REPLACE FUNCTION {target}({argument_sql})\n"
+            f"RETURNS {returns}\n"
+            "LANGUAGE PYTHON\n"
+            f"{environment_sql}"
+            "AS $$\n"
+            f"{body}\n"
+            "$$",
+        )
+
+    @staticmethod
+    def _render_python_environment(*, packages: tuple[str, ...]) -> str:
+        if not packages:
+            return ""
+        dependencies: str = json.dumps(list(packages))
+        return (
+            "ENVIRONMENT (\n"
+            f"  dependencies = '{dependencies}',\n"
+            "  environment_version = 'None'\n"
+            ")\n"
+        )
+
+    @staticmethod
+    def _databricks_python_body(*, body_sql: str, entry_point: str | None) -> str:
+        if entry_point is None:
+            return body_sql.strip()
+        try:
+            module: ast.Module = ast.parse(body_sql)
+        except SyntaxError:
+            return body_sql.strip()
+        body: list[ast.stmt] = []
+        found_entry_point: bool = False
+        node: ast.stmt
+        for node in module.body:
+            if (
+                isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+                and node.name == entry_point
+            ):
+                body.extend(node.body)
+                found_entry_point = True
+                continue
+            body.append(node)
+        if not found_entry_point:
+            return body_sql.strip()
+        return ast.unparse(ast.Module(body=body, type_ignores=[])).strip()
+
+    def supports_python_functions(self) -> bool:
+        return True
 
     def render_append(
         self, *, target: str, sql: str, columns: tuple[str, ...] | None = None

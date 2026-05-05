@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.compiler.compile.models import FunctionArgument
+from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.integrations.databricks.client import DatabricksAdapter
 from tests.unit.src.sqlbuild.integrations.databricks._test_types import (
+    DatabricksPythonFunctionSupportTestCase,
     DatabricksRenderDeleteInsertCursorTestCase,
+    DatabricksRenderPythonFunctionTestCase,
 )
 
 TEST_CASES: list[DatabricksRenderDeleteInsertCursorTestCase] = [
@@ -56,3 +60,96 @@ def test_given_cursor_delete_insert_when_rendering_then_databricks_uses_replace_
     )
 
     assert statements == test_case.expected_statements
+
+
+DATABRICKS_RENDER_PYTHON_FUNCTION_TEST_CASES: list[DatabricksRenderPythonFunctionTestCase] = [
+    DatabricksRenderPythonFunctionTestCase(
+        description="renders Python UDF DDL with unwrapped function body",
+        body_sql=(
+            "def main(order_status: str | None) -> bool:\n    return order_status == 'completed'"
+        ),
+        packages=(),
+        expected_statements=(
+            "CREATE OR REPLACE FUNCTION `workspace`.`test`.`is_completed_order_py`"
+            "(order_status STRING)\n"
+            "RETURNS BOOLEAN\n"
+            "LANGUAGE PYTHON\n"
+            "AS $$\n"
+            "return order_status == 'completed'\n"
+            "$$",
+        ),
+    ),
+    DatabricksRenderPythonFunctionTestCase(
+        description="renders Python UDF DDL with imports helpers and dependencies",
+        body_sql=(
+            "import json\n\n"
+            "def normalize(value):\n"
+            "    return value.strip()\n\n"
+            "def main(order_status: str | None) -> bool:\n"
+            "    if order_status is None:\n"
+            "        return False\n"
+            "    return normalize(order_status) == 'completed'"
+        ),
+        packages=("simplejson==3.19.3",),
+        expected_statements=(
+            "CREATE OR REPLACE FUNCTION `workspace`.`test`.`is_completed_order_py`"
+            "(order_status STRING)\n"
+            "RETURNS BOOLEAN\n"
+            "LANGUAGE PYTHON\n"
+            "ENVIRONMENT (\n"
+            "  dependencies = '[\"simplejson==3.19.3\"]',\n"
+            "  environment_version = 'None'\n"
+            ")\n"
+            "AS $$\n"
+            "import json\n\n"
+            "def normalize(value):\n"
+            "    return value.strip()\n"
+            "if order_status is None:\n"
+            "    return False\n"
+            "return normalize(order_status) == 'completed'\n"
+            "$$",
+        ),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    DATABRICKS_RENDER_PYTHON_FUNCTION_TEST_CASES,
+    ids=[case.description for case in DATABRICKS_RENDER_PYTHON_FUNCTION_TEST_CASES],
+)
+def test_given_python_function_when_rendering_then_databricks_returns_expected_ddl(
+    test_case: DatabricksRenderPythonFunctionTestCase,
+) -> None:
+    adapter: DatabricksAdapter = DatabricksAdapter()
+
+    statements: tuple[str, ...] = adapter.render_create_function(
+        target="`workspace`.`test`.`is_completed_order_py`",
+        arguments=(FunctionArgument(name="order_status", type="STRING"),),
+        returns="BOOLEAN",
+        body_sql=test_case.body_sql,
+        language=FunctionLanguage.PYTHON,
+        runtime_version="3.11",
+        entry_point="main",
+        packages=test_case.packages,
+    )
+
+    assert statements == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksPythonFunctionSupportTestCase(
+            description="supports Python function execution",
+            expected_supports_python_functions=True,
+        )
+    ],
+    ids=["supports Python function execution"],
+)
+def test_given_databricks_adapter_when_checking_capabilities_then_python_functions_supported(
+    test_case: DatabricksPythonFunctionSupportTestCase,
+) -> None:
+    adapter: DatabricksAdapter = DatabricksAdapter()
+
+    assert adapter.supports_python_functions() is test_case.expected_supports_python_functions

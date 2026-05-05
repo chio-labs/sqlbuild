@@ -87,6 +87,7 @@ def test_given_snowflake_local_config_when_running_query_then_outputs_expected_r
             expected_table_name="fact_orders",
             expected_row_count=10,
             expected_udf_rows=((1, True), (10, False)),
+            expected_python_udf_rows=((1, True), (10, False)),
             expected_stdout_fragments=("Execution", "OK"),
         )
     ],
@@ -129,6 +130,15 @@ def test_given_waffle_shop_when_running_full_build_on_snowflake_then_expected_ta
             ),
         )
         assert udf_rows == test_case.expected_udf_rows
+        python_udf_rows: tuple[tuple[object, ...], ...] = fetch_snowflake_rows(
+            schema_name=schema_name,
+            sql=(
+                "SELECT order_id, is_completed_order_py FROM "
+                f"{relation_name(schema_name=schema_name, name='fact_orders')} "
+                "WHERE order_id IN (1, 10) ORDER BY order_id"
+            ),
+        )
+        assert python_udf_rows == test_case.expected_python_udf_rows
     finally:
         cleanup_snowflake_schema(schema_name=schema_name)
 

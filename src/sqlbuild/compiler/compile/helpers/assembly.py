@@ -169,6 +169,11 @@ def _assemble_compiled_function(function_input: CompileSqlFunctionInput) -> Comp
             name=function_input.name,
             qualified_name=None,
         ),
+        language=function_input.language,
+        source_file_path=function_input.function_file.file_path,
+        runtime_version=function_input.runtime_version,
+        entry_point=function_input.entry_point,
+        packages=function_input.packages,
     )
 
 

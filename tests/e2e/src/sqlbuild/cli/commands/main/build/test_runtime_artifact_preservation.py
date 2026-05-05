@@ -28,8 +28,16 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 "target/run/models/intermediate/customer_status_snapshot.sql",
                 "target/run/models/marts/hourly_order_activity.sql",
                 "target/run/models/marts/hourly_activity_with_daily_context.sql",
+                "target/run/functions/sql/is_completed_order.sql",
+                "target/run/functions/python/is_completed_order_py.sql",
             ),
             expected_exit_code=0,
+            expected_compiled_paths=(
+                "target/compiled/models/marts/fact_orders.sql",
+                "target/compiled/functions/sql/is_completed_order.sql",
+                "target/compiled/functions/python/is_completed_order_py.sql",
+                "target/manifest.json",
+            ),
         )
     ],
     ids=["full build then selected rerun preserves existing runtime artifacts"],
@@ -60,3 +68,6 @@ def test_given_full_build_when_running_selected_rerun_then_existing_runtime_arti
     for relative_path in test_case.expected_runtime_paths:
         path: Path = project_dir / relative_path
         assert path.exists(), f"expected runtime artifact to exist: {path}"
+    for relative_path in test_case.expected_compiled_paths:
+        path = project_dir / relative_path
+        assert path.exists(), f"expected compiled artifact to exist: {path}"

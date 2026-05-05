@@ -19,6 +19,10 @@ class BuildExecutionTestCase:
     run_tests: bool = True
     fail_fast: bool = False
     expected_model_statuses: tuple[tuple[str, ExecutionStatus], ...] = field(default_factory=tuple)
+    expected_function_statuses: tuple[tuple[str, ExecutionStatus], ...] = field(
+        default_factory=tuple
+    )
+    expected_function_error_fragments: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     expected_model_audit_count: int = 0
     expected_source_audit_count: int = 0
     expected_end_audit_count: int = 0

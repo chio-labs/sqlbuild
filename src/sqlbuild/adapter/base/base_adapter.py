@@ -25,6 +25,7 @@ from sqlbuild.adapter.shared.types import (
     TablePromotionMode,
 )
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
+from sqlbuild.compiler.compile.types import FunctionLanguage
 
 
 class BaseAdapter(StrictAdapter):
@@ -38,6 +39,9 @@ class BaseAdapter(StrictAdapter):
         return False
 
     def supports_relation_age_metadata(self) -> bool:
+        return False
+
+    def supports_python_functions(self) -> bool:
         return False
 
     def recommended_max_sql_length(self) -> int | None:
@@ -240,7 +244,16 @@ class BaseAdapter(StrictAdapter):
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
+        language: FunctionLanguage = FunctionLanguage.SQL,
+        runtime_version: str | None = None,
+        entry_point: str | None = None,
+        packages: tuple[str, ...] = (),
     ) -> tuple[str, ...]:
+        del runtime_version, entry_point, packages
+        if language == FunctionLanguage.PYTHON:
+            raise NotImplementedError(
+                f"Adapter '{type(self).__name__}' does not support Python UDFs"
+            )
         argument_sql: str = ", ".join(f"{arg.name} {arg.type}" for arg in arguments)
         return (
             f"CREATE OR REPLACE FUNCTION {target}({argument_sql}) "
@@ -391,13 +404,23 @@ class BaseAdapter(StrictAdapter):
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
+        language: FunctionLanguage = FunctionLanguage.SQL,
+        runtime_version: str | None = None,
+        entry_point: str | None = None,
+        packages: tuple[str, ...] = (),
+        source_file_path: Path | None = None,
         statement_recorder: StatementRecorder,
     ) -> None:
+        del source_file_path
         statements: tuple[str, ...] = self.render_create_function(
             target=target,
             arguments=arguments,
             returns=returns,
             body_sql=body_sql,
+            language=language,
+            runtime_version=runtime_version,
+            entry_point=entry_point,
+            packages=packages,
         )
         statement_recorder.record_many(statements)
         stmt: str

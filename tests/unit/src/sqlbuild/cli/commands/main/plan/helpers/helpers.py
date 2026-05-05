@@ -5,11 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationTarget
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeResult,
     CursorBounds,
+    FunctionPlanEntry,
     ModelPlanEntry,
     PlanOutput,
     PlanWarning,
@@ -77,15 +78,19 @@ def build_plan_output(
     *,
     model_entries: tuple[ModelPlanEntry, ...] = (),
     seed_entries: tuple[SeedPlanEntry, ...] = (),
+    function_entries: tuple[FunctionPlanEntry, ...] = (),
     warnings: tuple[PlanWarning, ...] = (),
 ) -> PlanOutput:
     """Build a minimal PlanOutput for formatter tests."""
 
-    selected_keys: frozenset[CompiledObjectKey] = frozenset(e.key for e in model_entries)
+    selected_keys: frozenset[CompiledObjectKey] = frozenset(
+        e.key for e in (*model_entries, *seed_entries, *function_entries)
+    )
     return PlanOutput(
-        execution_order=tuple(e.key for e in model_entries),
+        execution_order=tuple(e.key for e in (*function_entries, *model_entries, *seed_entries)),
         model_entries=model_entries,
         seed_entries=seed_entries,
+        function_entries=function_entries,
         selected_keys=selected_keys,
         warnings=warnings,
     )
@@ -102,6 +107,27 @@ def build_seed_entry(*, name: str) -> SeedPlanEntry:
         ),
         file_path=Path(f"seeds/{name}.csv"),
         columns=(),
+    )
+
+
+def build_function_entry(
+    *,
+    name: str,
+    language: FunctionLanguage = FunctionLanguage.SQL,
+) -> FunctionPlanEntry:
+    """Build a minimal FunctionPlanEntry for formatter tests."""
+
+    return FunctionPlanEntry(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name=name),
+        name=name,
+        relative_path=Path(f"functions/{language.value}/{name}.sql"),
+        target=CompiledRelationTarget(
+            database=None, schema="main", name=name, qualified_name=f"main.{name}"
+        ),
+        arguments=(),
+        returns="BOOLEAN",
+        body_sql="return True",
+        language=language,
     )
 
 
