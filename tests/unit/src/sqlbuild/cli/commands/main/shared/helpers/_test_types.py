@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.build.models import BuildExecutionResult
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,7 @@ class AuditAggregationTestCase:
 @dataclass(frozen=True)
 class BuildFooterTestCase:
     description: str
+    result: BuildExecutionResult
     expected_fragments: tuple[str, ...]
 
 

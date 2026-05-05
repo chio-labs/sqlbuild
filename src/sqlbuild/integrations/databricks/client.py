@@ -815,7 +815,7 @@ class DatabricksAdapter(BaseAdapter):
             reader: csv.DictReader[str] = csv.DictReader(
                 seed_file,
                 delimiter=csv_settings.delimiter or ",",
-                quotechar=csv_settings.quotechar,
+                quotechar=csv_settings.quotechar or '"',
                 escapechar=csv_settings.escapechar,
                 doublequote=True if csv_settings.doublequote is None else csv_settings.doublequote,
                 skipinitialspace=False
