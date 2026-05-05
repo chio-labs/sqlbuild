@@ -9,6 +9,7 @@ class SqlReferenceKind(StrEnum):
     REF = "ref"
     SOURCE = "source"
     DBT_REF = "dbt_ref"
+    UDF = "udf"
 
 
 class AttachedAuditTargetKind(StrEnum):
@@ -38,6 +39,7 @@ class CompiledResourceType(StrEnum):
     MODEL = "model"
     SOURCE = "source"
     SEED = "seed"
+    FUNCTION = "function"
     DBT_REF = "dbt_ref"
     AUDIT = "audit"
     SQL_TEST = "sql_test"

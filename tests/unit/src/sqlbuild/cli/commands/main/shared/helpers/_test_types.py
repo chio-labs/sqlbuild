@@ -34,6 +34,12 @@ class AuditAggregationTestCase:
 
 
 @dataclass(frozen=True)
+class BuildFooterTestCase:
+    description: str
+    expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ResolveProjectConnectionConfigTestCase:
     description: str
     project_dir_name: str

@@ -13,7 +13,12 @@ from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.helpers.indexes import build_execution_indexes
 from sqlbuild.executor.build.helpers.scheduler import BuildScheduler
-from sqlbuild.executor.build.models import BuildExecutionResult, BuildIndexes, SeedExecutionResult
+from sqlbuild.executor.build.models import (
+    BuildExecutionResult,
+    BuildIndexes,
+    FunctionExecutionResult,
+    SeedExecutionResult,
+)
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.custom.models import MaterializationResult
 from sqlbuild.executor.run.models import ModelExecutionResult
@@ -70,12 +75,14 @@ def execute_build_plan(
 
     model_results: tuple[ModelExecutionResult, ...]
     seed_results: tuple[SeedExecutionResult, ...]
+    function_results: tuple[FunctionExecutionResult, ...]
     test_results: tuple[SqlTestExecutionResult, ...]
     source_audit_results: tuple[AuditExecutionResult, ...]
     end_audit_results: tuple[AuditExecutionResult, ...]
     (
         model_results,
         seed_results,
+        function_results,
         test_results,
         source_audit_results,
         end_audit_results,
@@ -84,6 +91,7 @@ def execute_build_plan(
     return _aggregate_build_result(
         model_results=model_results,
         seed_results=seed_results,
+        function_results=function_results,
         test_results=test_results,
         source_audit_results=source_audit_results,
         end_audit_results=end_audit_results,
@@ -94,6 +102,7 @@ def _aggregate_build_result(
     *,
     model_results: tuple[ModelExecutionResult, ...],
     seed_results: tuple[SeedExecutionResult, ...],
+    function_results: tuple[FunctionExecutionResult, ...],
     test_results: tuple[SqlTestExecutionResult, ...],
     source_audit_results: tuple[AuditExecutionResult, ...],
     end_audit_results: tuple[AuditExecutionResult, ...],
@@ -128,6 +137,15 @@ def _aggregate_build_result(
         elif seed_result.status == ExecutionStatus.SKIPPED:
             skipped_count += 1
 
+    function_result: FunctionExecutionResult
+    for function_result in function_results:
+        if function_result.status == ExecutionStatus.SUCCESS:
+            success_count += 1
+        elif function_result.status == ExecutionStatus.FAILED:
+            failure_count += 1
+        elif function_result.status == ExecutionStatus.SKIPPED:
+            skipped_count += 1
+
     test_result_entry: SqlTestExecutionResult
     for test_result_entry in test_results:
         if test_result_entry.outcome == SqlTestOutcome.PASS:
@@ -157,6 +175,7 @@ def _aggregate_build_result(
         status=status,
         model_results=model_results,
         seed_results=seed_results,
+        function_results=function_results,
         test_results=test_results,
         source_audit_results=source_audit_results,
         end_audit_results=end_audit_results,

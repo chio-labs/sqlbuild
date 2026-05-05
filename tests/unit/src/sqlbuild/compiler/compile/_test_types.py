@@ -26,6 +26,14 @@ class BuildCompileInputsTestCase:
     expected_test_mock_source_names: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     expected_test_expected_model_names: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     expected_audit_sql_bodies: tuple[str, ...] = field(default_factory=tuple)
+    expected_sql_function_names: tuple[str, ...] = field(default_factory=tuple)
+    expected_sql_function_arguments: tuple[tuple[tuple[str, str], ...], ...] = field(
+        default_factory=tuple
+    )
+    expected_sql_function_returns: tuple[str, ...] = field(default_factory=tuple)
+    expected_sql_function_body_sqls: tuple[str, ...] = field(default_factory=tuple)
+    expected_sql_function_databases: tuple[str | None, ...] = field(default_factory=tuple)
+    expected_sql_function_schemas: tuple[str | None, ...] = field(default_factory=tuple)
     expected_model_references: tuple[tuple[tuple[str, str], ...], ...] = field(
         default_factory=tuple
     )

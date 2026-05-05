@@ -1031,6 +1031,74 @@ SELECT 1
         expected_audit_references=((("source", "raw_orders"),),),
     ),
     BuildCompileInputsTestCase(
+        description="expands vars and macros in sql function bodies and headers",
+        repo_files=base_repo_files()
+        | {
+            "macros/common.py": """
+def status_match(column_name: str, status: str) -> str:
+    return f"{column_name} = '{status}'"
+""".strip()
+            + "\n",
+            "sqlbuild_project.yml": """
+name: demo
+adapter: duckdb
+default_environment: dev
+
+vars:
+  status_type: VARCHAR
+  return_type: BOOLEAN
+  cancelled_status: "'cancelled'"
+  udf_database: analytics
+  udf_schema: udf_dev
+
+environments:
+  dev:
+    database: analytics_default
+    schema: default_schema
+""".strip()
+            + "\n",
+            "functions/sql/is_completed_order.sql": """
+FUNCTION (
+  database ${udf_database},
+  schema ${udf_schema},
+  arguments (order_status ${status_type}),
+  returns ${return_type}
+);
+
+@status_match("order_status", "completed") AND order_status <> @cancelled_status
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        cli_vars=None,
+        run_id=None,
+        expected_model_schema_names=(),
+        expected_model_config_values=(),
+        expected_model_query_sqls=(),
+        expected_model_path_defaults=(),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_sql_function_names=("is_completed_order",),
+        expected_sql_function_arguments=((("order_status", "VARCHAR"),),),
+        expected_sql_function_returns=("BOOLEAN",),
+        expected_sql_function_body_sqls=(
+            "order_status = 'completed' AND order_status <> 'cancelled'",
+        ),
+        expected_sql_function_databases=("analytics",),
+        expected_sql_function_schemas=("udf_dev",),
+        expected_effective_environment_name="dev",
+        expected_effective_connection={},
+        expected_effective_vars={
+            "status_type": "VARCHAR",
+            "return_type": "BOOLEAN",
+            "cancelled_status": "'cancelled'",
+            "udf_database": "analytics",
+            "udf_schema": "udf_dev",
+        },
+        expected_model_references=(),
+        expected_audit_references=(),
+    ),
+    BuildCompileInputsTestCase(
         description="expands macros across multi block tests and audits",
         repo_files=base_repo_files()
         | {
@@ -1386,6 +1454,33 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
     assert (
         tuple(audit_input.sql_body for audit_input in compile_inputs.audit_inputs)
         == test_case.expected_audit_sql_bodies
+    )
+    assert (
+        tuple(function_input.name for function_input in compile_inputs.sql_function_inputs)
+        == test_case.expected_sql_function_names
+    )
+    assert (
+        tuple(
+            tuple((argument.name, argument.type) for argument in function_input.arguments)
+            for function_input in compile_inputs.sql_function_inputs
+        )
+        == test_case.expected_sql_function_arguments
+    )
+    assert (
+        tuple(function_input.returns for function_input in compile_inputs.sql_function_inputs)
+        == test_case.expected_sql_function_returns
+    )
+    assert (
+        tuple(function_input.body_sql for function_input in compile_inputs.sql_function_inputs)
+        == test_case.expected_sql_function_body_sqls
+    )
+    assert (
+        tuple(function_input.database for function_input in compile_inputs.sql_function_inputs)
+        == test_case.expected_sql_function_databases
+    )
+    assert (
+        tuple(function_input.schema for function_input in compile_inputs.sql_function_inputs)
+        == test_case.expected_sql_function_schemas
     )
     assert (
         tuple(

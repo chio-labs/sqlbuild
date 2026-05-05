@@ -10,6 +10,7 @@ from sqlbuild.compiler.compile.helpers.attachment import (
     build_model_inputs,
     build_seed_inputs,
     build_source_inputs,
+    build_sql_function_inputs,
     build_test_inputs,
     resolve_environment_config,
     resolve_environment_name,
@@ -22,6 +23,7 @@ from sqlbuild.compiler.compile.models import (
     CompileProjectInputs,
     CompileSeedInput,
     CompileSourceInput,
+    CompileSqlFunctionInput,
     CompileSqlTestInput,
     LoadedMacro,
     MacroContext,
@@ -90,6 +92,15 @@ def build_compile_inputs(
         no_sql_validation=no_sql_validation,
     )
     seed_inputs: tuple[CompileSeedInput, ...] = build_seed_inputs(discovered_inputs)
+    sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = build_sql_function_inputs(
+        discovered_inputs,
+        effective_vars=effective_vars,
+        effective_settings=effective_settings,
+        environment_config=effective_environment,
+        adapter_name=macro_context.adapter_name,
+        macro_context=macro_context,
+        no_sql_validation=no_sql_validation,
+    )
     source_inputs: tuple[CompileSourceInput, ...] = build_source_inputs(
         discovered_inputs,
         effective_settings=effective_settings,
@@ -126,6 +137,7 @@ def build_compile_inputs(
         model_inputs=model_inputs,
         seed_inputs=seed_inputs,
         source_inputs=source_inputs,
+        sql_function_inputs=sql_function_inputs,
         test_inputs=test_inputs,
         audit_inputs=audit_inputs,
     )

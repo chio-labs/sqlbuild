@@ -9,6 +9,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
+    CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
@@ -38,6 +39,7 @@ from sqlbuild.compiler.planner.helpers.plan_entry import (
 )
 from sqlbuild.compiler.planner.helpers.resolve.refs import (
     apply_deferred_targets,
+    build_function_targets,
     build_model_targets,
     build_seed_targets,
 )
@@ -48,6 +50,7 @@ from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     CascadeResult,
     CursorOverrides,
+    FunctionPlanEntry,
     MissingUpstream,
     ModelPlanEntry,
     PlanOutput,
@@ -125,6 +128,7 @@ def build_execution_plan(
 
     model_targets: dict[str, CompiledRelationTarget] = build_model_targets(project.models)
     seed_targets: dict[str, CompiledRelationTarget] = build_seed_targets(project.seeds)
+    function_targets: dict[str, CompiledRelationTarget] = build_function_targets(project.functions)
     if deferred_targets is not None:
         apply_deferred_targets(
             model_targets=model_targets,
@@ -176,6 +180,7 @@ def build_execution_plan(
             model_targets=model_targets,
             models_by_name=models_by_name,
             seed_targets=seed_targets,
+            function_targets=function_targets,
             source_map=source_map,
             source_warehouse_columns=source_warehouse_columns,
             star_exclude_keyword=star_exclude_keyword,
@@ -242,6 +247,20 @@ def build_execution_plan(
         if seed.key in selected_keys
     ]
 
+    function_entries: list[FunctionPlanEntry] = [
+        FunctionPlanEntry(
+            key=function.key,
+            name=function.name,
+            relative_path=function.relative_path,
+            target=function.target,
+            arguments=function.arguments,
+            returns=function.returns,
+            body_sql=function.body_sql,
+        )
+        for function in project.functions
+        if function.key in selected_keys
+    ]
+
     model_materializations: dict[str, str] = build_model_materializations(tuple(model_entries))
 
     audit_entries: list[AuditPlanEntry] = []
@@ -288,6 +307,7 @@ def build_execution_plan(
         execution_order=scoped_order,
         model_entries=tuple(model_entries),
         seed_entries=tuple(seed_entries),
+        function_entries=tuple(function_entries),
         audit_entries=tuple(audit_entries),
         test_entries=tuple(test_entries),
         selected_keys=selected_keys,
@@ -296,6 +316,7 @@ def build_execution_plan(
         downstream_deps=downstream_deps,
         model_targets=model_targets,
         seed_targets=seed_targets,
+        function_targets=function_targets,
         source_map=source_map,
     )
 
@@ -311,6 +332,9 @@ def _build_all_keys(project: CompiledProject) -> dict[str, CompiledObjectKey]:
     seed: CompiledSeed
     for seed in project.seeds:
         keys[seed.name] = seed.key
+    function: CompiledFunction
+    for function in project.functions:
+        keys[function.name] = function.key
     return keys
 
 

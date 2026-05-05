@@ -22,6 +22,7 @@ from sqlbuild.compiler.planner.helpers.plan_entry import (
     gather_source_columns,
 )
 from sqlbuild.compiler.planner.helpers.resolve.refs import (
+    build_function_targets,
     build_model_targets,
     build_seed_targets,
 )
@@ -87,6 +88,7 @@ def build_clone_model_entries(
 ) -> tuple[ModelPlanEntry, ...]:
     model_targets: dict[str, CompiledRelationTarget] = build_model_targets(project.models)
     seed_targets: dict[str, CompiledRelationTarget] = build_seed_targets(project.seeds)
+    function_targets: dict[str, CompiledRelationTarget] = build_function_targets(project.functions)
     source_map: dict[str, SourceEntry] = {
         source.name: source.source_entry for source in project.sources
     }
@@ -109,6 +111,7 @@ def build_clone_model_entries(
                 snapshot=WarehouseSnapshot(),
                 model_targets=model_targets,
                 seed_targets=seed_targets,
+                function_targets=function_targets,
                 source_map=source_map,
                 source_warehouse_columns=source_warehouse_columns,
                 star_exclude_keyword=adapter.star_exclude_keyword(),

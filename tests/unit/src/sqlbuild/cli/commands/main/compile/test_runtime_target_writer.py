@@ -22,6 +22,10 @@ TEST_CASES: list[TargetWriterTestCase] = [
                 "DROP TABLE IF EXISTS analytics.orders__staging;\n\n"
                 "CREATE OR REPLACE TABLE analytics.orders__staging AS SELECT 1 AS order_id;\n"
             ),
+            "run/functions/sql/is_completed_order.sql": (
+                "CREATE OR REPLACE FUNCTION analytics.is_completed_order"
+                "(order_status VARCHAR) RETURNS BOOLEAN;\n"
+            ),
         },
     ),
     TargetWriterTestCase(
@@ -34,6 +38,10 @@ TEST_CASES: list[TargetWriterTestCase] = [
             "run/models/staging/orders.sql": (
                 "DROP TABLE IF EXISTS analytics.orders__staging;\n\n"
                 "CREATE OR REPLACE TABLE analytics.orders__staging AS SELECT 1 AS order_id;\n"
+            ),
+            "run/functions/sql/is_completed_order.sql": (
+                "CREATE OR REPLACE FUNCTION analytics.is_completed_order"
+                "(order_status VARCHAR) RETURNS BOOLEAN;\n"
             ),
         },
     ),

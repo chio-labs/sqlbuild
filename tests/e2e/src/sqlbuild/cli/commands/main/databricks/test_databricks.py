@@ -101,6 +101,7 @@ def test_given_databricks_local_config_when_running_query_then_outputs_expected_
                 (3, "Chicken and Waffle", "savory", 4350, "completed", "success"),
                 (10, "Classic Belgian", "sweet", 3400, "placed", None),
             ),
+            expected_udf_rows=((1, True), (10, False)),
             expected_daily_revenue_rows=(
                 ("2026-04-01", 3, 6, 7100),
                 ("2026-04-02", 3, 3, 2550),
@@ -147,6 +148,15 @@ def test_given_waffle_shop_when_running_full_build_on_databricks_then_expected_v
             ),
         )
         assert fact_order_rows == test_case.expected_fact_order_rows
+        udf_rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+            schema_name=schema_name,
+            sql=(
+                "SELECT order_id, is_completed_order FROM "
+                f"{relation_name(schema_name=schema_name, name='fact_orders')} "
+                "WHERE order_id IN (1, 10) ORDER BY order_id"
+            ),
+        )
+        assert udf_rows == test_case.expected_udf_rows
         daily_revenue_rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
             schema_name=schema_name,
             sql=(
