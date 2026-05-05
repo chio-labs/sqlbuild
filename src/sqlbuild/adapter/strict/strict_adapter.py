@@ -50,6 +50,11 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def supports_table_functions(self) -> bool:
+        """Return whether the adapter can create table function resources."""
+        ...
+
+    @abstractmethod
     def recommended_max_sql_length(self) -> int | None:
         """Return the recommended maximum SQL length for lightweight queries."""
         ...
@@ -107,6 +112,11 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_table_function_call(self, *, target: str, arguments_sql: str) -> str:
+        """Render a table function call for use as a FROM target."""
+        ...
+
+    @abstractmethod
     def render_create_function(
         self,
         *,
@@ -114,6 +124,7 @@ class StrictAdapter(
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
+        return_columns: tuple[Any, ...] = (),
         language: FunctionLanguage = FunctionLanguage.SQL,
         runtime_version: str | None = None,
         entry_point: str | None = None,

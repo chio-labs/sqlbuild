@@ -17,6 +17,9 @@ from sqlbuild.compiler.planner.models import CursorBounds
 _REF_PATTERN: re.Pattern[str] = re.compile(r'__ref\("([^"]+)"\)')
 _DBT_REF_PATTERN: re.Pattern[str] = re.compile(r'__dbt_ref\("([^"]+)"\)')
 _UDF_PATTERN: re.Pattern[str] = re.compile(r'__udf\("([^"]+)"\)')
+_TABLE_FUNCTION_CALL_PATTERN: re.Pattern[str] = re.compile(
+    r'__table_function\("([^"]+)"\)\s*\(([^()]*)\)'
+)
 
 
 def resolve_ref_references(
@@ -81,6 +84,28 @@ def resolve_udf_references(
         return target.qualified_name
 
     return _UDF_PATTERN.sub(_replace_udf, query_sql)
+
+
+def resolve_table_function_references(
+    *,
+    query_sql: str,
+    function_targets: dict[str, CompiledRelationTarget],
+    adapter: BaseAdapter,
+) -> str:
+    """Replace __table_function() calls with adapter-specific table function calls."""
+
+    def _replace_table_function(match: re.Match[str]) -> str:
+        function_name: str = match.group(1)
+        arguments_sql: str = match.group(2)
+        target: CompiledRelationTarget | None = function_targets.get(function_name)
+        if target is None or target.qualified_name is None:
+            return match.group(0)
+        return adapter.render_table_function_call(
+            target=target.qualified_name,
+            arguments_sql=arguments_sql,
+        )
+
+    return _TABLE_FUNCTION_CALL_PATTERN.sub(_replace_table_function, query_sql)
 
 
 def _build_cursor_subquery(

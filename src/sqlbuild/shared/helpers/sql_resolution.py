@@ -7,6 +7,7 @@ import re
 _UNRESOLVED_REF_PATTERN: re.Pattern[str] = re.compile(r"__ref\(")
 _UNRESOLVED_SOURCE_PATTERN: re.Pattern[str] = re.compile(r"__source\(")
 _UNRESOLVED_UDF_PATTERN: re.Pattern[str] = re.compile(r"__udf\(")
+_UNRESOLVED_TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(r"__table_function\(")
 
 
 def assert_no_unresolved_sql_markers(*, sql: str, context: str) -> None:
@@ -18,3 +19,5 @@ def assert_no_unresolved_sql_markers(*, sql: str, context: str) -> None:
         raise ValueError(f"{context} still contains unresolved __source() markers")
     if _UNRESOLVED_UDF_PATTERN.search(sql):
         raise ValueError(f"{context} still contains unresolved __udf() markers")
+    if _UNRESOLVED_TABLE_FUNCTION_PATTERN.search(sql):
+        raise ValueError(f"{context} still contains unresolved __table_function() markers")

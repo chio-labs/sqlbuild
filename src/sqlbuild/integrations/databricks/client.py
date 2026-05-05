@@ -333,6 +333,9 @@ class DatabricksAdapter(BaseAdapter):
     def render_create_view_as(self, *, target: str, sql: str) -> tuple[str, ...]:
         return (f"CREATE OR REPLACE VIEW {target} AS {sql}",)
 
+    def supports_table_functions(self) -> bool:
+        return True
+
     def render_create_function(
         self,
         *,
@@ -340,12 +343,15 @@ class DatabricksAdapter(BaseAdapter):
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
+        return_columns: tuple[Any, ...] = (),
         language: FunctionLanguage = FunctionLanguage.SQL,
         runtime_version: str | None = None,
         entry_point: str | None = None,
         packages: tuple[str, ...] = (),
     ) -> tuple[str, ...]:
         if language == FunctionLanguage.PYTHON:
+            if return_columns:
+                raise ValueError("Databricks table functions must use SQL language")
             del runtime_version
             return self._render_create_python_function(
                 target=target,
@@ -357,6 +363,13 @@ class DatabricksAdapter(BaseAdapter):
             )
         del runtime_version, entry_point, packages
         argument_sql: str = ", ".join(f"{argument.name} {argument.type}" for argument in arguments)
+        if return_columns:
+            del returns
+            return (
+                f"CREATE OR REPLACE FUNCTION {target}({argument_sql})\n"
+                "RETURNS TABLE\n"
+                f"RETURN {body_sql}",
+            )
         return (
             f"CREATE OR REPLACE FUNCTION {target}({argument_sql})\n"
             f"RETURNS {returns}\n"

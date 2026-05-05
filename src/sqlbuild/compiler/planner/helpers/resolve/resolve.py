@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models import (
+    CompiledFunction,
     CompiledModel,
     CompiledRelationTarget,
 )
@@ -21,6 +22,7 @@ from sqlbuild.compiler.planner.helpers.resolve.cursor_inputs import (
 from sqlbuild.compiler.planner.helpers.resolve.refs import (
     resolve_dbt_ref_references,
     resolve_ref_references,
+    resolve_table_function_references,
     resolve_udf_references,
 )
 from sqlbuild.compiler.planner.helpers.resolve.sources import (
@@ -98,8 +100,56 @@ def resolve_model_sql(
 
     query_sql = resolve_dbt_ref_references(query_sql=query_sql)
     query_sql = resolve_udf_references(query_sql=query_sql, function_targets=function_targets or {})
+    query_sql = resolve_table_function_references(
+        query_sql=query_sql,
+        function_targets=function_targets or {},
+        adapter=adapter,
+    )
 
     return query_sql
+
+
+def resolve_function_sql(
+    *,
+    adapter: BaseAdapter,
+    function: CompiledFunction,
+    model_targets: dict[str, CompiledRelationTarget],
+    seed_targets: dict[str, CompiledRelationTarget],
+    function_targets: dict[str, CompiledRelationTarget],
+    source_map: dict[str, SourceEntry],
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
+    star_exclude_keyword: str,
+) -> str:
+    """Resolve relation and function references in a SQL function body."""
+
+    query_sql: str = resolve_source_references(
+        query_sql=function.body_sql,
+        source_map=source_map,
+        source_warehouse_columns=source_warehouse_columns,
+        star_exclude_keyword=star_exclude_keyword,
+        cursor_bounds=None,
+        cursor_inputs={},
+        adapter=adapter,
+        cursor_type=None,
+        lower_bound_inclusive=True,
+    )
+    query_sql = resolve_ref_references(
+        query_sql=query_sql,
+        model_targets=model_targets,
+        seed_targets=seed_targets,
+        cursor_bounds=None,
+        cursor_inputs={},
+        adapter=adapter,
+        cursor_type=None,
+        lower_bound_inclusive=True,
+    )
+    query_sql = resolve_dbt_ref_references(query_sql=query_sql)
+    query_sql = resolve_udf_references(query_sql=query_sql, function_targets=function_targets)
+    return resolve_table_function_references(
+        query_sql=query_sql,
+        function_targets=function_targets,
+        adapter=adapter,
+    )
 
 
 def _compute_model_cursor_bounds(

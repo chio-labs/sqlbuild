@@ -3,9 +3,11 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapter.shared.types import CursorKind
+from sqlbuild.compiler.compile.models import FunctionArgument, FunctionReturnColumn
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.unit.src.sqlbuild.integrations.duckdb._test_types import (
     DuckDbRenderCursorBoundLiteralTestCase,
+    DuckDbRenderTableFunctionTestCase,
 )
 
 TEST_CASES: list[DuckDbRenderCursorBoundLiteralTestCase] = [
@@ -37,3 +39,33 @@ def test_given_cursor_bounds_when_rendering_then_duckdb_returns_expected_literal
     result: str = adapter.render_cursor_bound_literal(test_case.value, test_case.cursor_type)
 
     assert result == test_case.expected_literal
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbRenderTableFunctionTestCase(
+            description="renders table function as DuckDB table macro",
+            expected_statements=(
+                "CREATE OR REPLACE MACRO main.customer_orders(p_customer_id) AS TABLE\n"
+                "SELECT order_id FROM main.fact_orders\n"
+                "WHERE customer_id = p_customer_id",
+            ),
+        )
+    ],
+    ids=["renders table function as DuckDB table macro"],
+)
+def test_given_table_function_when_rendering_then_duckdb_returns_expected_macro(
+    test_case: DuckDbRenderTableFunctionTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+
+    statements: tuple[str, ...] = adapter.render_create_function(
+        target="main.customer_orders",
+        arguments=(FunctionArgument(name="p_customer_id", type="INTEGER"),),
+        returns="TABLE",
+        body_sql="SELECT order_id FROM main.fact_orders\nWHERE customer_id = p_customer_id",
+        return_columns=(FunctionReturnColumn(name="order_id", type="INTEGER"),),
+    )
+
+    assert statements == test_case.expected_statements

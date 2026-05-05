@@ -48,6 +48,7 @@ from sqlbuild.compiler.planner.helpers.resolve.refs import (
     build_model_targets,
     build_seed_targets,
 )
+from sqlbuild.compiler.planner.helpers.resolve.resolve import resolve_function_sql
 from sqlbuild.compiler.planner.helpers.selectors import resolve_selectors
 from sqlbuild.compiler.planner.helpers.sql_test_assembly import plan_test
 from sqlbuild.compiler.planner.helpers.warehouse_snapshot import gather_warehouse_snapshot
@@ -272,8 +273,18 @@ def build_execution_plan(
             target=function.target,
             arguments=function.arguments,
             returns=function.returns,
-            body_sql=function.body_sql,
+            body_sql=resolve_function_sql(
+                adapter=adapter,
+                function=function,
+                model_targets=model_targets,
+                seed_targets=seed_targets,
+                function_targets=function_targets,
+                source_map=source_map,
+                source_warehouse_columns=source_warehouse_columns,
+                star_exclude_keyword=star_exclude_keyword,
+            ),
             fingerprint_query_sql=function_fingerprint_sql[function.name],
+            return_columns=function.return_columns,
             language=function.language,
             source_file_path=function.source_file_path,
             runtime_version=function.runtime_version,

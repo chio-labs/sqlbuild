@@ -31,6 +31,9 @@ class BuildCompileInputsTestCase:
         default_factory=tuple
     )
     expected_sql_function_returns: tuple[str, ...] = field(default_factory=tuple)
+    expected_sql_function_return_columns: tuple[tuple[tuple[str, str], ...], ...] = field(
+        default_factory=tuple
+    )
     expected_sql_function_body_sqls: tuple[str, ...] = field(default_factory=tuple)
     expected_sql_function_databases: tuple[str | None, ...] = field(default_factory=tuple)
     expected_sql_function_schemas: tuple[str | None, ...] = field(default_factory=tuple)

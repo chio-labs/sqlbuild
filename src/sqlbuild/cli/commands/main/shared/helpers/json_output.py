@@ -6,6 +6,7 @@ import json
 
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
+    FunctionPlanEntry,
     ModelPlanEntry,
     PlanOutput,
     PlanWarning,
@@ -19,12 +20,18 @@ def format_plan_json(plan: PlanOutput) -> str:
 
     models: list[dict[str, object]] = [_serialize_model_entry(e) for e in plan.model_entries]
     seeds: list[dict[str, object]] = [_serialize_seed_entry(e) for e in plan.seed_entries]
+    functions: list[dict[str, object]] = [
+        _serialize_function_entry(e) for e in plan.function_entries
+    ]
     warnings: list[dict[str, object]] = [_serialize_warning(w) for w in plan.warnings]
 
     result: dict[str, object] = {
-        "selected_count": len(plan.model_entries) + len(plan.seed_entries),
+        "selected_count": len(plan.model_entries)
+        + len(plan.seed_entries)
+        + len(plan.function_entries),
         "models": models,
         "seeds": seeds,
+        "functions": functions,
         "warnings": warnings,
     }
     return json.dumps(result, indent=2)
@@ -48,14 +55,19 @@ def format_compile_json(plan: PlanOutput) -> str:
         models.append(model)
 
     seeds: list[dict[str, object]] = [_serialize_seed_entry(e) for e in plan.seed_entries]
+    functions: list[dict[str, object]] = [
+        _serialize_function_entry(e) for e in plan.function_entries
+    ]
 
     result: dict[str, object] = {
         "model_count": len(plan.model_entries),
         "seed_count": len(plan.seed_entries),
+        "function_count": len(plan.function_entries),
         "audit_count": len(plan.audit_entries),
         "test_count": len(plan.test_entries),
         "models": models,
         "seeds": seeds,
+        "functions": functions,
     }
     return json.dumps(result, indent=2)
 
@@ -121,6 +133,24 @@ def _serialize_seed_entry(entry: SeedPlanEntry) -> dict[str, object]:
     if entry.target.qualified_name is not None:
         seed["qualified_name"] = entry.target.qualified_name
     return seed
+
+
+def _serialize_function_entry(entry: FunctionPlanEntry) -> dict[str, object]:
+    """Serialize one FunctionPlanEntry."""
+
+    function: dict[str, object] = {
+        "name": entry.name,
+        "relative_path": str(entry.relative_path),
+        "language": entry.language.value,
+        "return_kind": "table" if entry.return_columns else "scalar",
+        "returns": entry.returns,
+        "return_columns": [
+            {"name": column.name, "type": column.type} for column in entry.return_columns
+        ],
+    }
+    if entry.target.qualified_name is not None:
+        function["qualified_name"] = entry.target.qualified_name
+    return function
 
 
 def _serialize_warning(warning: PlanWarning) -> dict[str, object]:
