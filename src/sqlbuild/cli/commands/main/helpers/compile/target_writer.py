@@ -80,6 +80,7 @@ def _write_functions(*, target_dir: Path, adapter: BaseAdapter, plan_output: Pla
             arguments=entry.arguments,
             returns=entry.returns,
             body_sql=entry.body_sql,
+            return_columns=entry.return_columns,
             language=entry.language,
             runtime_version=entry.runtime_version,
             entry_point=entry.entry_point,

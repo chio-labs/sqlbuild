@@ -10,6 +10,7 @@ REF_CALL_NAME: str = f"__{SqlReferenceKind.REF.value}"
 SOURCE_CALL_NAME: str = f"__{SqlReferenceKind.SOURCE.value}"
 DBT_REF_CALL_NAME: str = f"__{SqlReferenceKind.DBT_REF.value}"
 UDF_CALL_NAME: str = f"__{SqlReferenceKind.UDF.value}"
+TABLE_FUNCTION_CALL_NAME: str = f"__{SqlReferenceKind.TABLE_FUNCTION.value}"
 
 PRESERVE_ENVIRONMENT_VALUE: str = "preserve"
 

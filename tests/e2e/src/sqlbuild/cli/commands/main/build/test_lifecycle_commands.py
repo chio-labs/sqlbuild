@@ -24,8 +24,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
             description="waffle shop core lifecycle commands remain consistent",
             expected_exit_code=0,
             expected_fresh_plan_fragments=(
-                "Plan ready (15 selected)",
-                "Functions (2)",
+                "Plan ready (16 selected)",
+                "Functions (3)",
+                "customer_orders             table function",
                 "First run (12)",
             ),
             expected_test_fragment="PASS=1  FAIL=0  TOTAL=1",
@@ -35,7 +36,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 "stg_orders": "no_change",
                 "hourly_order_activity": "normal_incremental",
             },
-            expected_full_refresh_fragment="Plan ready (full refresh, 15 selected)",
+            expected_full_refresh_fragment="Plan ready (full refresh, 16 selected)",
         )
     ],
     ids=["waffle shop core lifecycle commands remain consistent"],

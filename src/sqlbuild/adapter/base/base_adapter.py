@@ -44,6 +44,9 @@ class BaseAdapter(StrictAdapter):
     def supports_python_functions(self) -> bool:
         return False
 
+    def supports_table_functions(self) -> bool:
+        return False
+
     def recommended_max_sql_length(self) -> int | None:
         """Return the recommended maximum SQL length for lightweight unit-test queries."""
 
@@ -237,6 +240,9 @@ class BaseAdapter(StrictAdapter):
     def render_create_view_as(self, *, target: str, sql: str) -> tuple[str, ...]:
         return (f"CREATE OR REPLACE VIEW {target} AS {sql}",)
 
+    def render_table_function_call(self, *, target: str, arguments_sql: str) -> str:
+        return f"{target}({arguments_sql})"
+
     def render_create_function(
         self,
         *,
@@ -244,12 +250,17 @@ class BaseAdapter(StrictAdapter):
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
+        return_columns: tuple[Any, ...] = (),
         language: FunctionLanguage = FunctionLanguage.SQL,
         runtime_version: str | None = None,
         entry_point: str | None = None,
         packages: tuple[str, ...] = (),
     ) -> tuple[str, ...]:
         del runtime_version, entry_point, packages
+        if return_columns:
+            raise NotImplementedError(
+                f"Adapter '{type(self).__name__}' does not support SQL table functions"
+            )
         if language == FunctionLanguage.PYTHON:
             raise NotImplementedError(
                 f"Adapter '{type(self).__name__}' does not support Python UDFs"
@@ -404,6 +415,7 @@ class BaseAdapter(StrictAdapter):
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
+        return_columns: tuple[Any, ...] = (),
         language: FunctionLanguage = FunctionLanguage.SQL,
         runtime_version: str | None = None,
         entry_point: str | None = None,
@@ -417,6 +429,7 @@ class BaseAdapter(StrictAdapter):
             arguments=arguments,
             returns=returns,
             body_sql=body_sql,
+            return_columns=return_columns,
             language=language,
             runtime_version=runtime_version,
             entry_point=entry_point,

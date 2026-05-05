@@ -21,3 +21,9 @@ class SnowflakeSchemaDiffTestCase:
 class SnowflakeRenderPythonFunctionTestCase:
     description: str
     expected_sql: str
+
+
+@dataclass(frozen=True)
+class SnowflakeRenderTableFunctionTestCase:
+    description: str
+    expected_sql: str

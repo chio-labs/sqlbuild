@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.compiler.compile.helpers.deps import (
     audit_scope_deps,
+    function_build_deps,
     model_build_deps,
     sql_test_scope_deps,
 )
@@ -70,7 +71,7 @@ def assemble_compiled_project(inputs: CompileProjectInputs) -> CompiledProject:
             for seed_input in inputs.seed_inputs
         ),
         functions=tuple(
-            _assemble_compiled_function(function_input)
+            _assemble_compiled_function(function_input, seed_names=seed_names)
             for function_input in inputs.sql_function_inputs
         ),
         audits=tuple(_assemble_compiled_audit(audit_input) for audit_input in inputs.audit_inputs),
@@ -151,18 +152,24 @@ def _assemble_compiled_seed(
     )
 
 
-def _assemble_compiled_function(function_input: CompileSqlFunctionInput) -> CompiledFunction:
+def _assemble_compiled_function(
+    function_input: CompileSqlFunctionInput,
+    *,
+    seed_names: frozenset[str] = frozenset(),
+) -> CompiledFunction:
     return CompiledFunction(
         key=CompiledObjectKey(
             resource_type=CompiledResourceType.FUNCTION,
             name=function_input.name,
         ),
-        deps=(),
+        deps=function_build_deps(references=function_input.references, seed_names=seed_names),
         name=function_input.name,
         relative_path=function_input.function_file.relative_path,
         arguments=function_input.arguments,
         returns=function_input.returns,
         body_sql=function_input.body_sql,
+        return_columns=function_input.return_columns,
+        references=function_input.references,
         target=CompiledRelationTarget(
             database=function_input.database,
             schema=function_input.schema,

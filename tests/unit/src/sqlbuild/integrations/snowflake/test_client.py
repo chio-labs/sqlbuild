@@ -4,12 +4,13 @@ import pytest
 
 from sqlbuild.adapter.shared.models import ColumnInfo, SchemaDiffResult
 from sqlbuild.adapter.shared.types import CursorKind
-from sqlbuild.compiler.compile.models import FunctionArgument
+from sqlbuild.compiler.compile.models import FunctionArgument, FunctionReturnColumn
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.integrations.snowflake.client import SnowflakeAdapter
 from tests.unit.src.sqlbuild.integrations.snowflake._test_types import (
     SnowflakeRenderCursorBoundLiteralTestCase,
     SnowflakeRenderPythonFunctionTestCase,
+    SnowflakeRenderTableFunctionTestCase,
     SnowflakeSchemaDiffTestCase,
 )
 
@@ -80,6 +81,37 @@ def test_given_python_function_when_rendering_then_snowflake_returns_expected_dd
         runtime_version="3.11",
         entry_point="main",
         packages=("numpy", "pandas==1.5.0"),
+    )
+
+    assert statements == (test_case.expected_sql,)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeRenderTableFunctionTestCase(
+            description="renders table function DDL with explicit Snowflake return columns",
+            expected_sql=(
+                "CREATE OR REPLACE FUNCTION analytics.customer_orders(p_customer_id INTEGER)\n"
+                "RETURNS TABLE (order_id INTEGER)\n"
+                "AS $$\nSELECT order_id FROM analytics.fact_orders\n"
+                "WHERE customer_id = p_customer_id\n$$"
+            ),
+        )
+    ],
+    ids=["renders table function DDL with explicit Snowflake return columns"],
+)
+def test_given_table_function_when_rendering_then_snowflake_returns_expected_ddl(
+    test_case: SnowflakeRenderTableFunctionTestCase,
+) -> None:
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+
+    statements: tuple[str, ...] = adapter.render_create_function(
+        target="analytics.customer_orders",
+        arguments=(FunctionArgument(name="p_customer_id", type="INTEGER"),),
+        returns="TABLE",
+        body_sql=("SELECT order_id FROM analytics.fact_orders\nWHERE customer_id = p_customer_id"),
+        return_columns=(FunctionReturnColumn(name="order_id", type="INTEGER"),),
     )
 
     assert statements == (test_case.expected_sql,)

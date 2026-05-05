@@ -297,6 +297,7 @@ class DuckDbAdapter(BaseAdapter):
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
+        return_columns: tuple[Any, ...] = (),
         language: FunctionLanguage = FunctionLanguage.SQL,
         runtime_version: str | None = None,
         entry_point: str | None = None,
@@ -304,13 +305,20 @@ class DuckDbAdapter(BaseAdapter):
     ) -> tuple[str, ...]:
         del runtime_version, entry_point, packages
         if language == FunctionLanguage.PYTHON:
+            if return_columns:
+                raise ValueError("DuckDB table functions must use SQL language")
             parameter_types: str = ", ".join(str(arg.type) for arg in arguments)
             return (f"REGISTER PYTHON FUNCTION {target}({parameter_types}) RETURNS {returns}",)
         del returns
         argument_sql: str = ", ".join(str(arg.name) for arg in arguments)
+        if return_columns:
+            return (f"CREATE OR REPLACE MACRO {target}({argument_sql}) AS TABLE\n{body_sql}",)
         return (f"CREATE OR REPLACE MACRO {target}({argument_sql}) AS (\n{body_sql}\n)",)
 
     def supports_python_functions(self) -> bool:
+        return True
+
+    def supports_table_functions(self) -> bool:
         return True
 
     def create_function(
@@ -321,6 +329,7 @@ class DuckDbAdapter(BaseAdapter):
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
+        return_columns: tuple[Any, ...] = (),
         language: FunctionLanguage = FunctionLanguage.SQL,
         runtime_version: str | None = None,
         entry_point: str | None = None,
@@ -335,6 +344,7 @@ class DuckDbAdapter(BaseAdapter):
                 arguments=arguments,
                 returns=returns,
                 body_sql=body_sql,
+                return_columns=return_columns,
                 language=language,
                 runtime_version=runtime_version,
                 entry_point=entry_point,
