@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.plan.formatter import format_plan
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
+from sqlbuild.cli.commands.main.shared.helpers.connection_progress import (
+    ConnectionProgressReporter,
+)
 from sqlbuild.cli.commands.main.shared.helpers.json_output import format_plan_json
+from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
@@ -35,13 +41,31 @@ def run_plan(
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
+    adapter_name: str = resolve_effective_adapter_name(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+    )
     adapter: BaseAdapter = resolve_adapter(
-        resolve_effective_adapter_name(
-            project_config=discovered_inputs.project_config,
-            local_config=discovered_inputs.local_config,
-        ),
+        adapter_name,
         project_dir=effective_project_dir,
     )
+    connection_config: dict[str, object] = resolve_project_connection_config(
+        discovered_inputs=discovered_inputs, project_dir=effective_project_dir
+    )
+    use_color: bool = not no_color and not json_output and supports_color()
+    progress_stream: TextIO = sys.stderr if json_output else sys.stdout
+    connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
+        adapter_name=adapter_name,
+        stream=progress_stream,
+        use_color=use_color,
+    )
+    planning_progress: PlanningProgressReporter = PlanningProgressReporter(
+        stream=progress_stream,
+        use_color=use_color,
+    )
+    if not json_output:
+        progress_stream.write("\n")
+        progress_stream.flush()
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
@@ -51,9 +75,11 @@ def run_plan(
         full_refresh=full_refresh,
         select=select,
         exclude=exclude,
-        connection_config=resolve_project_connection_config(
-            discovered_inputs=discovered_inputs, project_dir=effective_project_dir
-        ),
+        connection_config=connection_config,
+        on_connection_start=connection_progress.on_connection_start,
+        on_connection_complete=connection_progress.on_connection_complete,
+        on_connection_error=connection_progress.on_connection_error,
+        on_progress=planning_progress.on_progress,
     )
 
     plan_output: PlanOutput = pipeline_result.plan_output
@@ -62,6 +88,5 @@ def run_plan(
         print(format_plan_json(plan_output))
         return 0
 
-    use_color: bool = not no_color and supports_color()
     print("\n" + format_plan(plan_output, full_refresh=full_refresh, use_color=use_color))
     return 0

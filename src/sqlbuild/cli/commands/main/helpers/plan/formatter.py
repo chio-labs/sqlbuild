@@ -233,7 +233,11 @@ def _format_detail_entry(
 
     action_text: str = _action_text(entry)
     lines.append(f"  {blue_bold(entry.name):<40s} {action_text}")
-    _append_cursor_detail(lines, entry)
+    _append_cursor_detail(
+        lines,
+        entry,
+        show_range=entry.backfill.action != BackfillAction.FULL,
+    )
     _append_policy_line(lines, entry)
     _append_schema_diff(lines, entry)
     _append_query_diff(lines, entry)
@@ -245,20 +249,26 @@ def _format_upstream_changed_entry(lines: list[str], entry: ModelPlanEntry) -> N
     cascade: CascadeResult | None = entry.cascade
     action_text: str = _cascade_action_text(cascade)
     lines.append(f"  {blue_bold(entry.name):<40s} {action_text}")
-    _append_cursor_detail(lines, entry)
+    _append_cursor_detail(
+        lines,
+        entry,
+        show_range=cascade is None or cascade.effective_action != BackfillAction.FULL,
+    )
     if cascade is not None and cascade.root_cause is not None:
         cause_desc: str = _cascade_cause_description(cascade)
         lines.append(f"    cause: {cause_desc}")
 
 
-def _append_cursor_detail(lines: list[str], entry: ModelPlanEntry) -> None:
+def _append_cursor_detail(
+    lines: list[str], entry: ModelPlanEntry, *, show_range: bool = True
+) -> None:
     """Append cursor column, mode, and range detail lines."""
 
     if entry.cursor_column is not None:
         lines.append(f"    cursor: {entry.cursor_column}")
     if entry.incremental_mode == IncrementalMode.MICROBATCH:
         lines.append(f"    mode: {IncrementalMode.MICROBATCH.value}")
-    if entry.cursor_bounds is not None:
+    if show_range and entry.cursor_bounds is not None:
         lines.append(f"    range: {entry.cursor_bounds.start} \u2192 {entry.cursor_bounds.end}")
 
 
@@ -325,6 +335,10 @@ def _cascade_cause_description(cascade: CascadeResult) -> str:
     """Format the cause line content for an upstream-changed entry."""
 
     root: str = cascade.root_cause or "unknown"
+    if cascade.root_reason is not None:
+        reason_text: str = _plan_reason_text(cascade.root_reason)
+        if reason_text:
+            return f"{root} ({reason_text})"
     if cascade.effective_action == BackfillAction.FULL:
         return f"{root} (full)"
     if (
@@ -333,6 +347,20 @@ def _cascade_cause_description(cascade: CascadeResult) -> str:
     ):
         return f"{root} ({cascade.effective_duration})"
     return root
+
+
+def _plan_reason_text(reason: PlanReason) -> str:
+    """Format a plan reason for cascade cause output."""
+
+    if reason == PlanReason.QUERY_CHANGED:
+        return "query changed"
+    if reason == PlanReason.SCHEMA_CHANGED:
+        return "schema changed"
+    if reason == PlanReason.FIRST_RUN:
+        return "first run"
+    if reason == PlanReason.FULL_REFRESH:
+        return "full refresh"
+    return ""
 
 
 def _schema_change_suffix(entry: ModelPlanEntry) -> str:
@@ -376,16 +404,55 @@ def _format_functions(lines: list[str], plan: PlanOutput) -> None:
 
     if not plan.function_entries:
         return
+    changed_entries: list[FunctionPlanEntry] = [
+        entry for entry in plan.function_entries if entry.reason != PlanReason.NO_CHANGE
+    ]
+    unchanged_entries: list[FunctionPlanEntry] = [
+        entry for entry in plan.function_entries if entry.reason == PlanReason.NO_CHANGE
+    ]
+    if changed_entries:
+        lines.append("")
+        lines.append(green_bold(f"Function changed ({len(changed_entries)})"))
+        function_entry: FunctionPlanEntry
+        for function_entry in changed_entries:
+            _format_function_entry(lines, function_entry, show_details=True)
+    if not unchanged_entries:
+        return
     lines.append("")
-    lines.append(green_bold(f"Functions ({len(plan.function_entries)})"))
-    function_entry: FunctionPlanEntry
-    for function_entry in plan.function_entries:
-        function_kind: str = (
-            "table function"
-            if function_entry.return_columns
-            else f"{function_entry.language.value} udf"
-        )
-        lines.append(f"  {blue_bold(function_entry.name):<40s} {function_kind}")
+    lines.append(green_bold(f"Functions ({len(unchanged_entries)})"))
+    for function_entry in unchanged_entries:
+        _format_function_entry(lines, function_entry, show_details=False)
+
+
+def _format_function_entry(
+    lines: list[str], function_entry: FunctionPlanEntry, *, show_details: bool
+) -> None:
+    """Append one function line and optional change details."""
+
+    function_kind: str = (
+        "table function"
+        if function_entry.return_columns
+        else f"{function_entry.language.value} udf"
+    )
+    lines.append(f"  {blue_bold(function_entry.name):<40s} {function_kind}")
+    if not show_details:
+        return
+    if function_entry.reason == PlanReason.FIRST_RUN:
+        lines.append("    reason: first run")
+    elif function_entry.reason == PlanReason.FULL_REFRESH:
+        lines.append("    reason: full refresh")
+    elif function_entry.reason == PlanReason.QUERY_CHANGED:
+        if function_entry.backfill.action != BackfillAction.WARN_ONLY:
+            duration: str = function_entry.backfill.duration or "full"
+            policy_value: str = _backfill_value(function_entry.backfill.action, duration)
+            lines.append(f"    policy: query_change_backfill={policy_value}")
+        if function_entry.previous_query_sql is not None:
+            lines.append("    query diff:")
+            lines.extend(
+                _format_query_diff(
+                    function_entry.previous_query_sql, function_entry.fingerprint_query_sql
+                )
+            )
 
 
 def _format_warnings(lines: list[str], plan: PlanOutput) -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -326,12 +327,18 @@ def _gather_cursor_snapshots(
         return {}
 
     queries: list[_CursorQuery] = _build_cursor_queries(cursor_models)
+    cursor_start: float = time.monotonic()
     results: dict[str, str] = _execute_cursor_queries_batched(
         queries=queries,
         connection=connection,
         execute=execute,
         on_progress=on_progress,
     )
+    if on_progress is not None:
+        total: int = len(queries)
+        on_progress(
+            f"Gathered cursor bounds ({total}/{total}). ({time.monotonic() - cursor_start:.2f}s)"
+        )
 
     return _assemble_cursor_snapshots(cursor_models=cursor_models, results=results)
 

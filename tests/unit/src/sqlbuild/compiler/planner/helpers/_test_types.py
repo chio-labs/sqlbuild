@@ -323,6 +323,27 @@ class ResolveCascadeTestCase:
 
 
 @dataclass(frozen=True)
+class ResolveCascadeRootCauseTestCase:
+    description: str
+    expected_action: BackfillAction
+    expected_root_cause: str
+    expected_root_reason: PlanReason
+    expected_immediate_cause: str
+
+
+@dataclass(frozen=True)
+class DetectFunctionChangeTestCase:
+    description: str
+    body_sql: str
+    previous_query_sql: str
+    query_change_backfill: str | None
+    expected_reason: PlanReason
+    expected_action: BackfillAction
+    expected_duration: str | None = None
+    existing_fingerprint: bool = True
+
+
+@dataclass(frozen=True)
 class ResolveAttachmentTestCase:
     description: str
     references: tuple[CompileSqlReference, ...]

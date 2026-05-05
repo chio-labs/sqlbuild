@@ -12,7 +12,7 @@ from sqlbuild.compiler.planner.models import (
     CascadeCause,
     CascadeResult,
 )
-from sqlbuild.compiler.planner.types import BackfillAction
+from sqlbuild.compiler.planner.types import BackfillAction, PlanReason
 
 _DURATION_PATTERN: re.Pattern[str] = re.compile(r"^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$")
 
@@ -56,18 +56,25 @@ def resolve_cascade(
     return CascadeResult(
         effective_action=winning.effective_action,
         effective_duration=winning.effective_duration,
-        root_cause=winning.model_name,
+        root_cause=winning.root_cause or winning.model_name,
+        root_reason=winning.root_reason,
         causes=tuple(candidates),
     )
 
 
-def build_self_cascade(backfill: BackfillResult) -> CascadeResult:
+def build_self_cascade(
+    backfill: BackfillResult,
+    *,
+    root_cause: str | None = None,
+    root_reason: PlanReason | None = None,
+) -> CascadeResult:
     """Build a CascadeResult representing a model's own backfill for the accumulator."""
 
     return CascadeResult(
         effective_action=backfill.action,
         effective_duration=backfill.duration,
-        root_cause=None,
+        root_cause=root_cause,
+        root_reason=root_reason,
         causes=(),
     )
 
@@ -98,6 +105,8 @@ def _gather_cascade_candidates(
                     model_name=key.name,
                     effective_action=upstream_cascade.effective_action,
                     effective_duration=upstream_cascade.effective_duration,
+                    root_cause=upstream_cascade.root_cause or key.name,
+                    root_reason=upstream_cascade.root_reason,
                 )
             )
             continue
@@ -115,6 +124,8 @@ def _gather_cascade_candidates(
                     model_name=key.name,
                     effective_action=upstream_cascade.effective_action,
                     effective_duration=upstream_cascade.effective_duration,
+                    root_cause=upstream_cascade.root_cause or key.name,
+                    root_reason=upstream_cascade.root_reason,
                 )
             )
         elif same_cursor_type:
@@ -123,6 +134,8 @@ def _gather_cascade_candidates(
                     model_name=key.name,
                     effective_action=upstream_cascade.effective_action,
                     effective_duration=upstream_cascade.effective_duration,
+                    root_cause=upstream_cascade.root_cause or key.name,
+                    root_reason=upstream_cascade.root_reason,
                 )
             )
 
