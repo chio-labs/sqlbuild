@@ -41,6 +41,10 @@ class CliNamespace:
     query_format: str = "long"
     query_limit: int | None = 20
     query_no_limit: bool = False
+    lineage_target: str | None = None
+    lineage_format: str = "tree"
+    lineage_direction: str = "upstream"
+    lineage_depth: str = "all"
     full: bool = False
     schema_only: bool = False
     select: list[str] = field(default_factory=list)
@@ -128,4 +132,8 @@ class CliEntrypointHandlers:
         int,
     ]
     run_query: Callable[[Path | None, str | None, str, int | None], int]
+    run_lineage: Callable[
+        [Path | None, bool, str | None, str, str, str, tuple[str, ...], tuple[str, ...]],
+        int,
+    ]
     run_janitor: Callable[[Path | None, bool, bool, int | None], int]

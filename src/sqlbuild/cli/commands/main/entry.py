@@ -102,6 +102,23 @@ def _build_parser() -> argparse.ArgumentParser:
     query_parser.add_argument(
         "--no-limit", dest="query_no_limit", action="store_true", default=False
     )
+    lineage_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.LINEAGE)
+    lineage_parser.add_argument("lineage_target", nargs="?", metavar="target")
+    lineage_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    lineage_parser.add_argument(
+        "--format",
+        dest="lineage_format",
+        choices=("tree", "json", "list"),
+        default="tree",
+    )
+    lineage_parser.add_argument(
+        "--direction",
+        dest="lineage_direction",
+        choices=("upstream", "downstream", "both"),
+        default="upstream",
+    )
+    lineage_parser.add_argument("--depth", dest="lineage_depth", default="all")
+    add_select_args(lineage_parser)
     subparsers.add_parser(CliCommand.CLEAN)
     janitor_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.JANITOR)
     janitor_parser.add_argument("--auto-approve", action="store_true", default=False)
@@ -119,6 +136,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.compile import run_compile
     from sqlbuild.cli.commands.main.diff import run_diff
     from sqlbuild.cli.commands.main.janitor import run_janitor
+    from sqlbuild.cli.commands.main.lineage import run_lineage
     from sqlbuild.cli.commands.main.plan import run_plan
     from sqlbuild.cli.commands.main.query import run_query
     from sqlbuild.cli.commands.main.run import run_run
@@ -136,6 +154,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_clone=run_clone,
         run_diff=run_diff,
         run_query=run_query,
+        run_lineage=run_lineage,
         run_janitor=run_janitor,
     )
     return _main_with_dependencies(argv=argv, handlers=handlers)
@@ -254,6 +273,17 @@ def _main_with_dependencies(
             return handlers.run_seed(
                 project_dir,
                 args.no_color,
+                tuple(args.select),
+                tuple(args.exclude),
+            )
+        if args.command == CliCommand.LINEAGE:
+            return handlers.run_lineage(
+                project_dir,
+                args.no_sql_validation,
+                args.lineage_target,
+                args.lineage_format,
+                args.lineage_direction,
+                args.lineage_depth,
                 tuple(args.select),
                 tuple(args.exclude),
             )
