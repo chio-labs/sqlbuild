@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/chio-labs/sqlbuild/compare/v0.2.0...v0.2.1) (2026-05-05)
+
+
+### Bug Fixes
+
+* render README correctly on PyPI ([8abf270](https://github.com/chio-labs/sqlbuild/commit/8abf270a77aabd1040ce223fc9f377eb168bfe39))
+* render README correctly on PyPI ([8251c0d](https://github.com/chio-labs/sqlbuild/commit/8251c0d6bf5b8277d36a7756c1fa95b04d1df698))
+
 ## [0.2.0](https://github.com/chio-labs/sqlbuild/compare/v0.1.0...v0.2.0) (2026-05-05)
 
 
