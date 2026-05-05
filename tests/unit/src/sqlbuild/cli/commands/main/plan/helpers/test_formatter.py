@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.cli.commands.main.helpers.plan.formatter import format_plan
+from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.models import CascadeCause, CascadeResult, CursorBounds
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
@@ -18,6 +19,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers._test_types import (
     FormatPlanTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers.helpers import (
+    build_function_entry,
     build_model_entry,
     build_plan_output,
     build_schema_finding,
@@ -227,6 +229,26 @@ TEST_CASES: list[FormatPlanTestCase] = [
         expected_fragments=(
             "Seeds (1)",
             "country_codes",
+        ),
+    ),
+    FormatPlanTestCase(
+        description="functions section shows names and udf language",
+        plan_output=build_plan_output(
+            model_entries=(build_model_entry(name="orders", action=PlanAction.CREATE_TABLE),),
+            function_entries=(
+                build_function_entry(name="is_completed_order", language=FunctionLanguage.SQL),
+                build_function_entry(
+                    name="is_completed_order_py", language=FunctionLanguage.PYTHON
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "Plan ready (3 selected)",
+            "Functions (2)",
+            "is_completed_order",
+            "sql udf",
+            "is_completed_order_py",
+            "python udf",
         ),
     ),
     FormatPlanTestCase(

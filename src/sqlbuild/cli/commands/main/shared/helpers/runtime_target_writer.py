@@ -6,6 +6,7 @@ from pathlib import Path
 
 from sqlbuild.adapter.shared.models import LifeCycleEvent
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
+from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.models import FunctionPlanEntry, ModelPlanEntry, PlanOutput
 from sqlbuild.executor.build.models import BuildExecutionResult, FunctionExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
@@ -13,7 +14,7 @@ from sqlbuild.executor.run.models import ModelExecutionResult
 _RUN_DIR: str = "run"
 _MODELS_DIR: str = "models"
 _FUNCTIONS_DIR: str = "functions"
-_SQL_FUNCTIONS_DIR: str = "sql"
+_SQL_FILE_SUFFIX: str = ".sql"
 
 
 def write_runtime_target(
@@ -65,7 +66,10 @@ def write_runtime_target(
         )
         if function_entry is None:
             continue
-        function_run_path: Path = run_dir / _function_output_path(function_entry.relative_path)
+        function_run_path: Path = run_dir / _function_output_path(
+            relative_path=function_entry.relative_path,
+            language=function_entry.language,
+        )
         _write_sql(
             path=function_run_path,
             sql="\n\n".join(_format_statement(e.content) for e in function_sql_events),
@@ -84,11 +88,12 @@ def _model_output_path(relative_path: Path) -> Path:
     return Path(_MODELS_DIR) / relative_path
 
 
-def _function_output_path(relative_path: Path) -> Path:
+def _function_output_path(*, relative_path: Path, language: FunctionLanguage) -> Path:
     parts: tuple[str, ...] = relative_path.parts
-    if len(parts) >= 2 and parts[0] == _FUNCTIONS_DIR and parts[1] == _SQL_FUNCTIONS_DIR:
-        return Path(*parts)
-    return Path(_FUNCTIONS_DIR) / _SQL_FUNCTIONS_DIR / relative_path
+    language_dir: str = language.value
+    if len(parts) >= 2 and parts[0] == _FUNCTIONS_DIR and parts[1] == language_dir:
+        return Path(*parts).with_suffix(_SQL_FILE_SUFFIX)
+    return (Path(_FUNCTIONS_DIR) / language_dir / relative_path).with_suffix(_SQL_FILE_SUFFIX)
 
 
 def _format_statement(statement: str) -> str:

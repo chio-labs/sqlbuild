@@ -29,11 +29,15 @@ from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
                     "order_status = 'completed'\n"
                     ")\n"
                 ),
+                "compiled/functions/python/is_completed_order_py.sql": (
+                    "REGISTER PYTHON FUNCTION analytics.is_completed_order_py"
+                    "(VARCHAR) RETURNS BOOLEAN\n"
+                ),
                 "compiled/audits/generic/orders/not_null__order_id.sql": (
                     "SELECT order_id FROM analytics.orders WHERE order_id IS NULL\n"
                 ),
             },
-            expected_summary_line="Compiled 1 model, 1 seed, 1 function, 1 audit, 1 test",
+            expected_summary_line="Compiled 1 model, 1 seed, 2 functions, 1 audit, 1 test",
         )
     ],
     ids=["writes compiled SQL, manifest, audits, and chain tests"],
