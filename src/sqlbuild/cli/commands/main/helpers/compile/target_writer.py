@@ -8,6 +8,7 @@ from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.compile.models import WrittenTarget
+from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 
@@ -85,7 +86,9 @@ def _write_functions(*, target_dir: Path, adapter: BaseAdapter, plan_output: Pla
             packages=entry.packages,
         )
         function_path: Path = (
-            target_dir / _COMPILED_DIR / _function_output_path(entry.relative_path)
+            target_dir
+            / _COMPILED_DIR
+            / _function_output_path(relative_path=entry.relative_path, language=entry.language)
         )
         _write_sql(path=function_path, sql=";\n\n".join(statements))
 
@@ -138,11 +141,12 @@ def _model_output_path(relative_path: Path) -> Path:
     return Path(_MODELS_DIR) / relative_path
 
 
-def _function_output_path(relative_path: Path) -> Path:
+def _function_output_path(*, relative_path: Path, language: FunctionLanguage) -> Path:
     parts: tuple[str, ...] = relative_path.parts
-    if len(parts) >= 2 and parts[0] == _FUNCTIONS_DIR and parts[1] == _SQL_FUNCTIONS_DIR:
-        return Path(*parts)
-    return Path(_FUNCTIONS_DIR) / _SQL_FUNCTIONS_DIR / relative_path
+    language_dir: str = language.value
+    if len(parts) >= 2 and parts[0] == _FUNCTIONS_DIR and parts[1] == language_dir:
+        return Path(*parts).with_suffix(_SQL_FILE_SUFFIX)
+    return (Path(_FUNCTIONS_DIR) / language_dir / relative_path).with_suffix(_SQL_FILE_SUFFIX)
 
 
 def _audit_folder(entry: AuditPlanEntry) -> Path:

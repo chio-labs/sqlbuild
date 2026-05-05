@@ -14,7 +14,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationTarget,
     FunctionArgument,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     ChainStep,
@@ -56,6 +56,10 @@ def build_target_writer_plan_output() -> PlanOutput:
     function_key: CompiledObjectKey = CompiledObjectKey(
         resource_type=CompiledResourceType.FUNCTION,
         name="is_completed_order",
+    )
+    python_function_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.FUNCTION,
+        name="is_completed_order_py",
     )
     target: CompiledRelationTarget = CompiledRelationTarget(
         database=None,
@@ -101,6 +105,25 @@ def build_target_writer_plan_output() -> PlanOutput:
                 arguments=(FunctionArgument(name="order_status", type="VARCHAR"),),
                 returns="BOOLEAN",
                 body_sql="order_status = 'completed'",
+            ),
+            FunctionPlanEntry(
+                key=python_function_key,
+                name="is_completed_order_py",
+                relative_path=Path("functions/python/is_completed_order_py.py"),
+                target=CompiledRelationTarget(
+                    database=None,
+                    schema="analytics",
+                    name="is_completed_order_py",
+                    qualified_name="analytics.is_completed_order_py",
+                ),
+                arguments=(FunctionArgument(name="order_status", type="VARCHAR"),),
+                returns="BOOLEAN",
+                body_sql=(
+                    "def main(order_status: str | None) -> bool:\n"
+                    "    return order_status == 'completed'"
+                ),
+                language=FunctionLanguage.PYTHON,
+                entry_point="main",
             ),
         ),
         audit_entries=(
@@ -181,6 +204,19 @@ def build_runtime_target_execution_result() -> BuildExecutionResult:
                         content=(
                             "CREATE OR REPLACE FUNCTION analytics.is_completed_order"
                             "(order_status VARCHAR) RETURNS BOOLEAN"
+                        ),
+                    ),
+                ),
+            ),
+            FunctionExecutionResult(
+                function_name="is_completed_order_py",
+                status=ExecutionStatus.SUCCESS,
+                lifecycle_events=(
+                    LifeCycleEvent(
+                        kind=LifeCycleEventKind.SQL,
+                        content=(
+                            "REGISTER PYTHON FUNCTION analytics.is_completed_order_py"
+                            "(VARCHAR) RETURNS BOOLEAN"
                         ),
                     ),
                 ),
