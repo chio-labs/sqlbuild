@@ -13,7 +13,11 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
 )
 from sqlbuild.executor.build.helpers.output import format_build_output
-from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
+from sqlbuild.executor.build.models import (
+    BuildExecutionResult,
+    FunctionExecutionResult,
+    SeedExecutionResult,
+)
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
@@ -192,6 +196,49 @@ TEST_CASES: list[BuildOutputTestCase] = [
             "country_codes",
             "OK",
             "0.02s",
+        ),
+    ),
+    BuildOutputTestCase(
+        description="failed seed shows failure detail",
+        result=BuildExecutionResult(
+            status=BuildStatus.FAILED,
+            seed_results=(
+                SeedExecutionResult(
+                    seed_name="waffle_types",
+                    status=ExecutionStatus.FAILED,
+                    duration_ms=20,
+                    error_message="failed to load seed CSV: invalid input syntax",
+                ),
+            ),
+            failure_count=1,
+        ),
+        expected_output_fragments=(
+            "seed",
+            "waffle_types",
+            "FAIL",
+            "Failures:",
+            "waffle_types  (seed)",
+            "failed to load seed CSV: invalid input syntax",
+        ),
+    ),
+    BuildOutputTestCase(
+        description="failed function shows failure detail",
+        result=BuildExecutionResult(
+            status=BuildStatus.FAILED,
+            function_results=(
+                FunctionExecutionResult(
+                    function_name="is_completed_order",
+                    status=ExecutionStatus.FAILED,
+                    error_message="function target could not be qualified",
+                ),
+            ),
+            failure_count=1,
+        ),
+        expected_output_fragments=(
+            "FAIL=1",
+            "Failures:",
+            "is_completed_order  (function)",
+            "function target could not be qualified",
         ),
     ),
     BuildOutputTestCase(

@@ -16,7 +16,11 @@ from sqlbuild.executor.build.helpers.color import (
     colorize_completion,
     colorize_status,
 )
-from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
+from sqlbuild.executor.build.models import (
+    BuildExecutionResult,
+    FunctionExecutionResult,
+    SeedExecutionResult,
+)
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
@@ -301,6 +305,15 @@ def _format_summary_counts(
         elif seed_result.status == ExecutionStatus.SKIPPED:
             skip_count += 1
 
+    function_result: FunctionExecutionResult
+    for function_result in result.function_results:
+        if function_result.status == ExecutionStatus.SUCCESS:
+            pass_count += 1
+        elif function_result.status == ExecutionStatus.FAILED:
+            fail_count += 1
+        elif function_result.status == ExecutionStatus.SKIPPED:
+            skip_count += 1
+
     test_result: SqlTestExecutionResult
     for test_result in result.test_results:
         if test_result.outcome == SqlTestOutcome.PASS:
@@ -339,6 +352,32 @@ def _format_summary_counts(
 def _format_failure_details(result: BuildExecutionResult) -> list[str]:
     lines: list[str] = []
     has_failures: bool = False
+
+    seed_result: SeedExecutionResult
+    for seed_result in result.seed_results:
+        if seed_result.status != ExecutionStatus.FAILED:
+            continue
+        if not has_failures:
+            lines.append("Failures:")
+            lines.append("")
+            has_failures = True
+        lines.append(f"  {seed_result.seed_name}  (seed)")
+        if seed_result.error_message is not None:
+            lines.append(f"    {seed_result.error_message}")
+        lines.append("")
+
+    function_result: FunctionExecutionResult
+    for function_result in result.function_results:
+        if function_result.status != ExecutionStatus.FAILED:
+            continue
+        if not has_failures:
+            lines.append("Failures:")
+            lines.append("")
+            has_failures = True
+        lines.append(f"  {function_result.function_name}  (function)")
+        if function_result.error_message is not None:
+            lines.append(f"    {function_result.error_message}")
+        lines.append("")
 
     model_result: ModelExecutionResult
     for model_result in result.model_results:
