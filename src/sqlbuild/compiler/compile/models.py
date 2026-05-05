@@ -9,12 +9,14 @@ from pathlib import Path
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledResourceType,
+    FunctionLanguage,
     SqlReferenceKind,
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
     DiscoveredProjectInputs,
+    DiscoveredPythonFunctionFile,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
@@ -125,13 +127,17 @@ class FunctionArgument:
 class CompileSqlFunctionInput:
     """One discovered SQL function with validated compile-time metadata."""
 
-    function_file: DiscoveredSqlFunctionFile
+    function_file: DiscoveredSqlFunctionFile | DiscoveredPythonFunctionFile
     name: str
     arguments: tuple[FunctionArgument, ...]
     returns: str
     body_sql: str
     database: str | None = None
     schema: str | None = None
+    language: FunctionLanguage = FunctionLanguage.SQL
+    runtime_version: str | None = None
+    entry_point: str | None = None
+    packages: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -287,6 +293,11 @@ class CompiledFunction:
     returns: str
     body_sql: str
     target: CompiledRelationTarget
+    language: FunctionLanguage = FunctionLanguage.SQL
+    source_file_path: Path | None = None
+    runtime_version: str | None = None
+    entry_point: str | None = None
+    packages: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

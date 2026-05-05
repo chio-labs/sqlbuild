@@ -26,6 +26,10 @@ TEST_CASES: list[TargetWriterTestCase] = [
                 "CREATE OR REPLACE FUNCTION analytics.is_completed_order"
                 "(order_status VARCHAR) RETURNS BOOLEAN;\n"
             ),
+            "run/functions/python/is_completed_order_py.sql": (
+                "REGISTER PYTHON FUNCTION analytics.is_completed_order_py"
+                "(VARCHAR) RETURNS BOOLEAN;\n"
+            ),
         },
     ),
     TargetWriterTestCase(
@@ -42,6 +46,10 @@ TEST_CASES: list[TargetWriterTestCase] = [
             "run/functions/sql/is_completed_order.sql": (
                 "CREATE OR REPLACE FUNCTION analytics.is_completed_order"
                 "(order_status VARCHAR) RETURNS BOOLEAN;\n"
+            ),
+            "run/functions/python/is_completed_order_py.sql": (
+                "REGISTER PYTHON FUNCTION analytics.is_completed_order_py"
+                "(VARCHAR) RETURNS BOOLEAN;\n"
             ),
         },
     ),

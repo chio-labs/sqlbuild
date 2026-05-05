@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compile_target
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.plan_format import format_plan
@@ -78,6 +79,13 @@ def run_build(
     plan_text: str = format_plan(plan_output, full_refresh=full_refresh, use_color=use_color)
     plan_stream.write("\n" + plan_text + "\n\n")
     plan_stream.flush()
+
+    write_compile_target(
+        target_dir=effective_project_dir / "target",
+        adapter=adapter,
+        plan_output=plan_output,
+        manifest=pipeline_result.manifest,
+    )
 
     callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
         plan=plan_output, use_color=use_color, verbose=verbose, debug=debug

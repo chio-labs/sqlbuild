@@ -8,6 +8,7 @@ from collections import Counter
 
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
+    FunctionPlanEntry,
     ModelPlanEntry,
     PlanOutput,
     PlanWarning,
@@ -56,7 +57,7 @@ def format_plan(plan: PlanOutput, *, full_refresh: bool = False, use_color: bool
         return result if use_color else _strip_ansi(result)
 
     active: list[ModelPlanEntry] = [e for e in plan.model_entries if e.action != PlanAction.SKIP]
-    selected_count: int = len(plan.model_entries) + len(plan.seed_entries)
+    selected_count: int = _selected_count(plan)
 
     header: str = f"Plan ready ({selected_count} selected)"
     lines.append(green_bold(header))
@@ -64,6 +65,8 @@ def format_plan(plan: PlanOutput, *, full_refresh: bool = False, use_color: bool
     normal: list[ModelPlanEntry] = _collect_normal(active)
     cascade: list[ModelPlanEntry] = _collect_upstream_changed(active)
     groups: dict[PlanReason, list[ModelPlanEntry]] = _group_by_reason(active, cascade)
+
+    _format_functions(lines, plan)
 
     if normal:
         lines.append("")
@@ -98,10 +101,12 @@ def format_plan(plan: PlanOutput, *, full_refresh: bool = False, use_color: bool
 def _format_full_refresh(lines: list[str], plan: PlanOutput) -> None:
     """Format the full refresh variant of plan output."""
 
-    selected_count: int = len(plan.model_entries) + len(plan.seed_entries)
+    selected_count: int = _selected_count(plan)
     active: list[ModelPlanEntry] = [e for e in plan.model_entries if e.action != PlanAction.SKIP]
 
     lines.append(green_bold(f"Plan ready (full refresh, {selected_count} selected)"))
+
+    _format_functions(lines, plan)
     lines.append("")
 
     counts: Counter[str] = Counter()
@@ -117,6 +122,12 @@ def _format_full_refresh(lines: list[str], plan: PlanOutput) -> None:
         lines.append(f"  {count_value:>3} {count_label}")
 
     _format_seeds(lines, plan)
+
+
+def _selected_count(plan: PlanOutput) -> int:
+    """Count selected executable resources shown in plan output."""
+
+    return len(plan.model_entries) + len(plan.seed_entries) + len(plan.function_entries)
 
 
 def _collect_normal(entries: list[ModelPlanEntry]) -> list[ModelPlanEntry]:
@@ -358,6 +369,18 @@ def _format_seeds(lines: list[str], plan: PlanOutput) -> None:
     seed_entry: object
     for seed_entry in plan.seed_entries:
         lines.append(f"  {getattr(seed_entry, 'name', str(seed_entry))}")
+
+
+def _format_functions(lines: list[str], plan: PlanOutput) -> None:
+    """Append the functions section."""
+
+    if not plan.function_entries:
+        return
+    lines.append("")
+    lines.append(green_bold(f"Functions ({len(plan.function_entries)})"))
+    function_entry: FunctionPlanEntry
+    for function_entry in plan.function_entries:
+        lines.append(f"  {blue_bold(function_entry.name):<40s} {function_entry.language.value} udf")
 
 
 def _format_warnings(lines: list[str], plan: PlanOutput) -> None:

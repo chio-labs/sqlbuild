@@ -80,6 +80,31 @@ def verify_model_statuses(
         assert actual_statuses.get(expected_name) == expected_status
 
 
+def verify_function_statuses(
+    *,
+    result: BuildExecutionResult,
+    test_case: BuildExecutionTestCase,
+) -> None:
+    """Assert per-function execution statuses and error fragments match expected."""
+
+    if not test_case.expected_function_statuses and not test_case.expected_function_error_fragments:
+        return
+    actual_statuses: dict[str, ExecutionStatus] = {
+        r.function_name: r.status for r in result.function_results
+    }
+    expected_name: str
+    expected_status: ExecutionStatus
+    for expected_name, expected_status in test_case.expected_function_statuses:
+        assert actual_statuses.get(expected_name) == expected_status
+
+    actual_errors: dict[str, str] = {
+        r.function_name: r.error_message or "" for r in result.function_results
+    }
+    expected_fragment: str
+    for expected_name, expected_fragment in test_case.expected_function_error_fragments:
+        assert expected_fragment in actual_errors.get(expected_name, "")
+
+
 def verify_test_counts(
     *,
     result: BuildExecutionResult,

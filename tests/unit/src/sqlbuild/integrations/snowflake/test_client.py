@@ -4,9 +4,12 @@ import pytest
 
 from sqlbuild.adapter.shared.models import ColumnInfo, SchemaDiffResult
 from sqlbuild.adapter.shared.types import CursorKind
+from sqlbuild.compiler.compile.models import FunctionArgument
+from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.integrations.snowflake.client import SnowflakeAdapter
 from tests.unit.src.sqlbuild.integrations.snowflake._test_types import (
     SnowflakeRenderCursorBoundLiteralTestCase,
+    SnowflakeRenderPythonFunctionTestCase,
     SnowflakeSchemaDiffTestCase,
 )
 
@@ -39,6 +42,47 @@ def test_given_cursor_bounds_when_rendering_then_snowflake_returns_expected_lite
     result: str = adapter.render_cursor_bound_literal(test_case.value, test_case.cursor_type)
 
     assert result == test_case.expected_literal
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeRenderPythonFunctionTestCase(
+            description="renders Python UDF DDL with runtime handler and packages",
+            expected_sql=(
+                "CREATE OR REPLACE FUNCTION "
+                "udf_db.udf_schema.is_positive_int(a_string STRING)\n"
+                "RETURNS INTEGER\n"
+                "LANGUAGE PYTHON\n"
+                "RUNTIME_VERSION = '3.11'\n"
+                "HANDLER = 'main'\n"
+                "PACKAGES = ('numpy','pandas==1.5.0')\n"
+                "AS $$\n"
+                "def main(a_string):\n"
+                "    return 1 if a_string else 0\n"
+                "$$"
+            ),
+        )
+    ],
+    ids=["renders Python UDF DDL with runtime handler and packages"],
+)
+def test_given_python_function_when_rendering_then_snowflake_returns_expected_ddl(
+    test_case: SnowflakeRenderPythonFunctionTestCase,
+) -> None:
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+
+    statements: tuple[str, ...] = adapter.render_create_function(
+        target="udf_db.udf_schema.is_positive_int",
+        arguments=(FunctionArgument(name="a_string", type="STRING"),),
+        returns="INTEGER",
+        body_sql="def main(a_string):\n    return 1 if a_string else 0",
+        language=FunctionLanguage.PYTHON,
+        runtime_version="3.11",
+        entry_point="main",
+        packages=("numpy", "pandas==1.5.0"),
+    )
+
+    assert statements == (test_case.expected_sql,)
 
 
 @pytest.mark.parametrize(

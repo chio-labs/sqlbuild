@@ -18,6 +18,7 @@ from tests.integration.src.sqlbuild.executor.build._test_types import (
 from tests.integration.src.sqlbuild.executor.build.helpers import (
     run_build_for_project,
     verify_audit_counts,
+    verify_function_statuses,
     verify_model_statuses,
     verify_test_counts,
     verify_warehouse_state,
@@ -88,6 +89,36 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
                 "  returns BOOLEAN\n"
                 ");\n\n"
                 "regexp_matches(a_string, '^[0-9]+$')"
+            ),
+            "models/validated_orders.sql": (
+                "MODEL (materialized table);\n\n"
+                'SELECT value, __udf("is_positive_int")(value) AS is_positive '
+                "FROM (VALUES ('123'), ('abc')) AS input(value)"
+            ),
+        },
+        expected_status=BuildStatus.SUCCESS,
+        expected_success_count=2,
+        expected_model_statuses=(("validated_orders", ExecutionStatus.SUCCESS),),
+        expected_query_results=(
+            (
+                "SELECT value, is_positive FROM main.validated_orders ORDER BY value DESC",
+                (("abc", False), ("123", True)),
+            ),
+        ),
+    ),
+    BuildExecutionTestCase(
+        description="python udf builds before dependent model",
+        project_files={
+            "sqlbuild_project.yml": _PROJECT_YML,
+            "functions/python/is_positive_int.py": (
+                "from sqlbuild.functions import udf\n\n"
+                "@udf(\n"
+                "    arguments={'a_string': 'VARCHAR'},\n"
+                "    returns='BOOLEAN',\n"
+                "    runtime_version='3.11',\n"
+                ")\n"
+                "def main(a_string):\n"
+                "    return bool(a_string and a_string.isdigit())\n"
             ),
             "models/validated_orders.sql": (
                 "MODEL (materialized table);\n\n"
@@ -399,6 +430,41 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         expected_missing_relations=("main.stg_orders", "main.orders"),
     ),
     BuildExecutionTestCase(
+        description="duckdb python udf with explicit schema fails clearly",
+        project_files={
+            "sqlbuild_project.yml": _PROJECT_YML,
+            "functions/python/is_positive_int.py": (
+                "from sqlbuild.functions import udf\n\n"
+                "@udf(\n"
+                "    arguments={'a_string': 'VARCHAR'},\n"
+                "    returns='BOOLEAN',\n"
+                "    runtime_version='3.11',\n"
+                "    schema='udfs',\n"
+                ")\n"
+                "def main(a_string):\n"
+                "    return bool(a_string and a_string.isdigit())\n"
+            ),
+            "models/validated_orders.sql": (
+                "MODEL (materialized table);\n\n"
+                'SELECT __udf("is_positive_int")('
+                "'123'"
+                ") AS is_positive"
+            ),
+        },
+        expected_status=BuildStatus.FAILED,
+        expected_failure_count=1,
+        expected_skipped_count=1,
+        expected_function_statuses=(("is_positive_int", ExecutionStatus.FAILED),),
+        expected_function_error_fragments=(
+            (
+                "is_positive_int",
+                "DuckDB Python UDF 'is_positive_int' cannot set database or schema",
+            ),
+        ),
+        expected_model_statuses=(("validated_orders", ExecutionStatus.SKIPPED),),
+        expected_missing_relations=("main.validated_orders",),
+    ),
+    BuildExecutionTestCase(
         description="independent branch succeeds with real data despite sibling failure",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
@@ -656,6 +722,7 @@ def test_given_build_plan_when_executing_then_succeeds(
     assert result.failure_count == test_case.expected_failure_count
     assert result.skipped_count == test_case.expected_skipped_count
     verify_model_statuses(result=result, test_case=test_case)
+    verify_function_statuses(result=result, test_case=test_case)
     verify_audit_counts(result=result, test_case=test_case)
     verify_warehouse_state(connection=connection, test_case=test_case)
 
@@ -724,6 +791,7 @@ def test_given_view_build_plan_when_executing_then_succeeds(
     assert result.status == test_case.expected_status
     assert result.success_count == test_case.expected_success_count
     verify_model_statuses(result=result, test_case=test_case)
+    verify_function_statuses(result=result, test_case=test_case)
     verify_audit_counts(result=result, test_case=test_case)
     verify_warehouse_state(connection=connection, test_case=test_case)
 

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 from decimal import Decimal
+from importlib.machinery import ModuleSpec
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -24,6 +27,7 @@ from sqlbuild.adapter.shared.models import (
 )
 from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
 from sqlbuild.adapter.shared.types import CursorKind, FrameworkType
+from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.shared.helpers.diagnostics_logging import log_sql
 
 
@@ -293,10 +297,91 @@ class DuckDbAdapter(BaseAdapter):
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
+        language: FunctionLanguage = FunctionLanguage.SQL,
+        runtime_version: str | None = None,
+        entry_point: str | None = None,
+        packages: tuple[str, ...] = (),
     ) -> tuple[str, ...]:
+        del runtime_version, entry_point, packages
+        if language == FunctionLanguage.PYTHON:
+            parameter_types: str = ", ".join(str(arg.type) for arg in arguments)
+            return (f"REGISTER PYTHON FUNCTION {target}({parameter_types}) RETURNS {returns}",)
         del returns
         argument_sql: str = ", ".join(str(arg.name) for arg in arguments)
         return (f"CREATE OR REPLACE MACRO {target}({argument_sql}) AS (\n{body_sql}\n)",)
+
+    def supports_python_functions(self) -> bool:
+        return True
+
+    def create_function(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        arguments: tuple[Any, ...],
+        returns: str,
+        body_sql: str,
+        language: FunctionLanguage = FunctionLanguage.SQL,
+        runtime_version: str | None = None,
+        entry_point: str | None = None,
+        packages: tuple[str, ...] = (),
+        source_file_path: Path | None = None,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        if language != FunctionLanguage.PYTHON:
+            return super().create_function(
+                connection,
+                target=target,
+                arguments=arguments,
+                returns=returns,
+                body_sql=body_sql,
+                language=language,
+                runtime_version=runtime_version,
+                entry_point=entry_point,
+                packages=packages,
+                source_file_path=source_file_path,
+                statement_recorder=statement_recorder,
+            )
+        del body_sql, runtime_version, packages
+        if source_file_path is None or entry_point is None:
+            raise ValueError("DuckDB Python UDFs require source_file_path and entry_point")
+        function_name: str = target.split(".")[-1]
+        if target not in {function_name, f"main.{function_name}"}:
+            raise ValueError(
+                f"DuckDB Python UDF '{function_name}' cannot set database or schema because "
+                "DuckDB registers Python UDFs as connection-scoped functions. Remove "
+                "database/schema from the UDF decorator or use SQL UDFs for schema-qualified "
+                "DuckDB functions."
+            )
+        callable_function: Any = self._load_python_udf_callable(
+            source_file_path=source_file_path,
+            entry_point=entry_point,
+        )
+        parameter_types: list[str] = [argument.type for argument in arguments]
+        registration_sql: str = (
+            f"REGISTER PYTHON FUNCTION {function_name}({', '.join(parameter_types)}) "
+            f"RETURNS {returns}"
+        )
+        statement_recorder.record(registration_sql)
+        connection.create_function(function_name, callable_function, parameter_types, returns)
+
+    def _load_python_udf_callable(self, *, source_file_path: Path, entry_point: str) -> Any:
+        module_name: str = "sqlbuild_python_udf_" + "_".join(
+            source_file_path.with_suffix("").parts[-4:]
+        ).replace("-", "_")
+        spec: ModuleSpec | None = importlib.util.spec_from_file_location(
+            module_name, source_file_path
+        )
+        if spec is None or spec.loader is None:
+            raise ValueError(f"Could not load Python UDF from '{source_file_path}'")
+        module: ModuleType = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        udf_function: object = getattr(module, entry_point, None)
+        if not callable(udf_function):
+            raise ValueError(
+                f"Python UDF entry_point '{entry_point}' was not found in '{source_file_path}'"
+            )
+        return udf_function
 
     def render_append(
         self, *, target: str, sql: str, columns: tuple[str, ...] | None = None

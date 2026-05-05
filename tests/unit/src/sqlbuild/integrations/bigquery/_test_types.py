@@ -37,6 +37,12 @@ class BigQueryRenderQualifiedNameTestCase:
 
 
 @dataclass(frozen=True)
+class BigQueryRenderPythonFunctionTestCase:
+    description: str
+    expected_sql: str
+
+
+@dataclass(frozen=True)
 class BigQuerySchemaExistsTestCase:
     description: str
     missing_dataset: bool

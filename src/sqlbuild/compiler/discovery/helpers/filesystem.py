@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.compiler.discovery.helpers.python_functions import parse_python_function
 from sqlbuild.compiler.discovery.helpers.sql_audits import parse_sql_audit_file
 from sqlbuild.compiler.discovery.helpers.sql_functions import parse_function_sql
 from sqlbuild.compiler.discovery.helpers.sql_models import parse_model_sql
@@ -16,6 +17,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredDbtManifestFile,
     DiscoveredMacroFile,
     DiscoveredMaterializationFile,
+    DiscoveredPythonFunctionFile,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
@@ -75,6 +77,36 @@ def discover_sql_function_files(*, project_dir: Path) -> tuple[DiscoveredSqlFunc
                 contents=contents,
                 header_values=header_values,
                 body_sql=body_sql,
+            )
+        )
+    return tuple(discovered_function_files)
+
+
+def discover_python_function_files(
+    *, project_dir: Path
+) -> tuple[DiscoveredPythonFunctionFile, ...]:
+    """Discover Python function files under functions/python/."""
+
+    function_root: Path = project_dir / "functions" / "python"
+    if not function_root.is_dir():
+        return ()
+
+    discovered_function_files: list[DiscoveredPythonFunctionFile] = []
+    file_path: Path
+    for file_path in sorted(function_root.rglob("*.py")):
+        contents: str = file_path.read_text(encoding="utf-8")
+        header_values: dict[str, object]
+        entry_point: str
+        body_python: str
+        header_values, entry_point, body_python = parse_python_function(contents, file_path)
+        discovered_function_files.append(
+            DiscoveredPythonFunctionFile(
+                file_path=file_path,
+                relative_path=file_path.relative_to(project_dir),
+                contents=contents,
+                header_values=header_values,
+                entry_point=entry_point,
+                body_python=body_python,
             )
         )
     return tuple(discovered_function_files)

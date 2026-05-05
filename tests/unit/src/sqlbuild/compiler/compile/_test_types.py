@@ -34,6 +34,10 @@ class BuildCompileInputsTestCase:
     expected_sql_function_body_sqls: tuple[str, ...] = field(default_factory=tuple)
     expected_sql_function_databases: tuple[str | None, ...] = field(default_factory=tuple)
     expected_sql_function_schemas: tuple[str | None, ...] = field(default_factory=tuple)
+    expected_sql_function_languages: tuple[str, ...] = field(default_factory=tuple)
+    expected_sql_function_runtime_versions: tuple[str | None, ...] = field(default_factory=tuple)
+    expected_sql_function_entry_points: tuple[str | None, ...] = field(default_factory=tuple)
+    expected_sql_function_packages: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     expected_model_references: tuple[tuple[tuple[str, str], ...], ...] = field(
         default_factory=tuple
     )
