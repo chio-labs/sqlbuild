@@ -14,6 +14,8 @@ from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_compari
 _COMPILED_DIR: str = "compiled"
 _RUN_DIR: str = "run"
 _MODELS_DIR: str = "models"
+_FUNCTIONS_DIR: str = "functions"
+_SQL_FUNCTIONS_DIR: str = "sql"
 _AUDITS_DIR: str = "audits"
 _GENERIC_DIR: str = "generic"
 _SINGULAR_DIR: str = "singular"
@@ -35,6 +37,7 @@ def write_compile_target(
     _clean_target(target_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
     _write_models(target_dir=target_dir, plan_output=plan_output)
+    _write_functions(target_dir=target_dir, adapter=adapter, plan_output=plan_output)
     _write_audits(target_dir=target_dir, plan_output=plan_output)
     _write_tests(target_dir=target_dir, adapter=adapter, plan_output=plan_output)
     _write_manifest(target_dir=target_dir, manifest=manifest)
@@ -42,6 +45,7 @@ def write_compile_target(
     return WrittenTarget(
         model_count=len(plan_output.model_entries),
         seed_count=len(plan_output.seed_entries),
+        function_count=len(plan_output.function_entries),
         audit_count=len(plan_output.audit_entries),
         test_count=len(plan_output.test_entries),
         target_dir=target_dir,
@@ -62,6 +66,24 @@ def _write_models(*, target_dir: Path, plan_output: PlanOutput) -> None:
     for entry in plan_output.model_entries:
         compiled_path: Path = target_dir / _COMPILED_DIR / _model_output_path(entry.relative_path)
         _write_sql(path=compiled_path, sql=entry.resolved_sql)
+
+
+def _write_functions(*, target_dir: Path, adapter: BaseAdapter, plan_output: PlanOutput) -> None:
+    """Write executable SQL function DDL."""
+
+    for entry in plan_output.function_entries:
+        if entry.target.qualified_name is None:
+            continue
+        statements: tuple[str, ...] = adapter.render_create_function(
+            target=entry.target.qualified_name,
+            arguments=entry.arguments,
+            returns=entry.returns,
+            body_sql=entry.body_sql,
+        )
+        function_path: Path = (
+            target_dir / _COMPILED_DIR / _function_output_path(entry.relative_path)
+        )
+        _write_sql(path=function_path, sql=";\n\n".join(statements))
 
 
 def _write_audits(*, target_dir: Path, plan_output: PlanOutput) -> None:
@@ -110,6 +132,13 @@ def _model_output_path(relative_path: Path) -> Path:
     if parts and parts[0] == _MODELS_DIR:
         return Path(*parts)
     return Path(_MODELS_DIR) / relative_path
+
+
+def _function_output_path(relative_path: Path) -> Path:
+    parts: tuple[str, ...] = relative_path.parts
+    if len(parts) >= 2 and parts[0] == _FUNCTIONS_DIR and parts[1] == _SQL_FUNCTIONS_DIR:
+        return Path(*parts)
+    return Path(_FUNCTIONS_DIR) / _SQL_FUNCTIONS_DIR / relative_path
 
 
 def _audit_folder(entry: AuditPlanEntry) -> Path:

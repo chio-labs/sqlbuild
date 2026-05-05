@@ -137,7 +137,14 @@ def resolve_selectors(
             )
             excluded.update(resolved)
 
-    return frozenset(selected - excluded)
+    scoped: set[CompiledObjectKey] = selected - excluded
+    key: CompiledObjectKey
+    for key in tuple(scoped):
+        upstream_key: CompiledObjectKey
+        for upstream_key in expand_upstream(key, upstream):
+            if upstream_key.resource_type == CompiledResourceType.FUNCTION:
+                scoped.add(upstream_key)
+    return frozenset(scoped)
 
 
 def _resolve_token(

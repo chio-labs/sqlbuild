@@ -48,9 +48,11 @@ from sqlbuild.compiler.compile.models import (
     CompileModelInput,
     CompileSeedInput,
     CompileSourceInput,
+    CompileSqlFunctionInput,
     CompileSqlReference,
     CompileSqlTestCtes,
     CompileSqlTestInput,
+    FunctionArgument,
     LoadedMacro,
     MacroContext,
 )
@@ -66,6 +68,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
+    DiscoveredSqlFunctionFile,
     DiscoveredSqlModelFile,
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
@@ -107,6 +110,7 @@ def build_model_inputs(
     validate_var_macro_collision(effective_vars=effective_vars, loaded_macros=loaded_macros)
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
+    known_function_names: set[str] = build_known_function_names(discovered_inputs)
     custom_materialization_names: frozenset[str] = frozenset(
         mf.name for mf in discovered_inputs.materialization_files
     )
@@ -161,6 +165,7 @@ def build_model_inputs(
             model_file=model_file,
             known_model_names=known_model_names,
             known_source_names=known_source_names,
+            known_function_names=known_function_names,
             has_dbt_manifest=discovered_inputs.dbt_manifest_file is not None,
         )
         validate_incremental_config(
@@ -283,6 +288,166 @@ def build_seed_inputs(discovered_inputs: DiscoveredProjectInputs) -> tuple[Compi
         )
 
     return tuple(seed_inputs)
+
+
+def build_sql_function_inputs(
+    discovered_inputs: DiscoveredProjectInputs,
+    *,
+    effective_vars: dict[str, str],
+    effective_settings: SettingsConfig,
+    environment_config: EnvironmentConfig | None,
+    adapter_name: str,
+    no_sql_validation: bool = False,
+) -> tuple[CompileSqlFunctionInput, ...]:
+    """Attach and validate SQL function metadata."""
+
+    database, schema = _resolve_function_namespace(
+        defaults=discovered_inputs.project_config.defaults,
+        environment_config=environment_config,
+        effective_vars=effective_vars,
+    )
+    known_names: set[str] = set()
+    function_inputs: list[CompileSqlFunctionInput] = []
+    function_file: DiscoveredSqlFunctionFile
+    for function_file in discovered_inputs.sql_function_files:
+        function_name: str = function_file.file_path.stem
+        if function_name in known_names:
+            raise CompileInputError(f"Duplicate SQL function name '{function_name}'")
+        known_names.add(function_name)
+        header_values: dict[str, object] = function_file.header_values
+        raw_returns: object | None = header_values.get("returns")
+        if not isinstance(raw_returns, str) or not raw_returns.strip():
+            raise CompileInputError(
+                f"SQL function file {function_file.relative_path} must declare returns"
+            )
+        arguments: tuple[FunctionArgument, ...] = _parse_function_arguments(function_file)
+        returns: str = raw_returns.strip()
+        raw_database: object | None = header_values.get("database")
+        raw_schema: object | None = header_values.get("schema")
+        function_database: str | None = raw_database if isinstance(raw_database, str) else database
+        function_schema: str | None = raw_schema if isinstance(raw_schema, str) else schema
+        if not no_sql_validation and effective_settings.sql_validation:
+            argument: FunctionArgument
+            for argument in arguments:
+                validate_native_type(
+                    argument.type,
+                    adapter_name=adapter_name,
+                    context=(
+                        f"SQL function {function_file.relative_path} argument '{argument.name}'"
+                    ),
+                )
+            validate_native_type(
+                returns,
+                adapter_name=adapter_name,
+                context=f"SQL function {function_file.relative_path} return type",
+            )
+        function_inputs.append(
+            CompileSqlFunctionInput(
+                function_file=function_file,
+                name=function_name,
+                arguments=arguments,
+                returns=returns,
+                body_sql=function_file.body_sql,
+                database=function_database,
+                schema=function_schema,
+            )
+        )
+    return tuple(function_inputs)
+
+
+def _parse_function_arguments(
+    function_file: DiscoveredSqlFunctionFile,
+) -> tuple[FunctionArgument, ...]:
+    raw_arguments: object | None = function_file.header_values.get("arguments")
+    if raw_arguments is None:
+        return ()
+    if not isinstance(raw_arguments, dict):
+        raise CompileInputError(
+            f"SQL function file {function_file.relative_path} arguments must be a map"
+        )
+    arguments: list[FunctionArgument] = []
+    argument_name: object
+    argument_type: object
+    for argument_name, argument_type in raw_arguments.items():
+        if not isinstance(argument_name, str) or not argument_name.strip():
+            raise CompileInputError(
+                f"SQL function file {function_file.relative_path} has an invalid argument name"
+            )
+        if not isinstance(argument_type, str) or not argument_type.strip():
+            raise CompileInputError(
+                f"SQL function file {function_file.relative_path} argument '{argument_name}' "
+                "must declare a type"
+            )
+        arguments.append(FunctionArgument(name=argument_name.strip(), type=argument_type.strip()))
+    return tuple(arguments)
+
+
+def validate_native_type(type_sql: str, *, adapter_name: str, context: str) -> None:
+    """Validate an adapter-native type string with SQLGlot when a dialect is known."""
+
+    dialect_by_adapter: dict[str, str] = {
+        "duckdb": "duckdb",
+        "bigquery": "bigquery",
+        "snowflake": "snowflake",
+        "databricks": "databricks",
+    }
+    dialect: str | None = dialect_by_adapter.get(adapter_name)
+    if dialect is None:
+        return
+    try:
+        import sqlglot
+
+        sqlglot.parse_one(
+            f"CREATE TABLE __sqlbuild_type_check__ (__value__ {type_sql})",
+            read=dialect,
+        )
+    except Exception as error:
+        raise CompileInputError(
+            f"{context} type '{type_sql}' is not valid for adapter '{adapter_name}' "
+            f"SQLGlot dialect '{dialect}': {error}"
+        ) from error
+
+
+def _resolve_function_namespace(
+    *,
+    defaults: DefaultsConfig,
+    environment_config: EnvironmentConfig | None,
+    effective_vars: dict[str, str],
+) -> tuple[str | None, str | None]:
+    database: str | None = defaults.database
+    schema: str | None = defaults.schema
+    if environment_config is not None:
+        if environment_config.database is not None:
+            database = _expand_function_environment_value(
+                raw_value=environment_config.database,
+                effective_vars=effective_vars,
+                context_label="environment database",
+            )
+        if environment_config.schema is not None:
+            schema = _expand_function_environment_value(
+                raw_value=environment_config.schema,
+                effective_vars=effective_vars,
+                context_label="environment schema",
+            )
+    return database, schema
+
+
+def _expand_function_environment_value(
+    *, raw_value: str, effective_vars: dict[str, str], context_label: str
+) -> str | None:
+    if raw_value == PRESERVE_ENVIRONMENT_VALUE:
+        return None
+    return str(
+        expand_template_data(
+            raw_value,
+            variables=effective_vars,
+            context_values={},
+            context_label=context_label,
+            allow_context=False,
+            preserve_context_tokens=True,
+            preserve_unknown_context=False,
+        )
+    )
 
 
 def build_source_inputs(
@@ -859,6 +1024,7 @@ def validate_model_references(
     model_file: DiscoveredSqlModelFile,
     known_model_names: set[str],
     known_source_names: set[str],
+    known_function_names: set[str],
     has_dbt_manifest: bool,
 ) -> None:
     """Validate extracted model refs against discovered project inputs."""
@@ -885,6 +1051,14 @@ def validate_model_references(
             raise CompileInputError(
                 f"Model file {model_file.relative_path} uses __dbt_ref('{reference.ref_name}') "
                 "but no dbt manifest.json was discovered"
+            )
+        if (
+            reference.ref_kind == SqlReferenceKind.UDF
+            and reference.ref_name not in known_function_names
+        ):
+            raise CompileInputError(
+                f"Model file {model_file.relative_path} references unknown SQL function "
+                f"'{reference.ref_name}'"
             )
 
 
@@ -1058,6 +1232,12 @@ def build_known_source_names(discovered_inputs: DiscoveredProjectInputs) -> set[
         for source_file in discovered_inputs.source_files
         for source_entry in source_file.source_entries
     }
+
+
+def build_known_function_names(discovered_inputs: DiscoveredProjectInputs) -> set[str]:
+    """Build the set of names valid as __udf() targets."""
+
+    return {function_file.file_path.stem for function_file in discovered_inputs.sql_function_files}
 
 
 def build_effective_vars(

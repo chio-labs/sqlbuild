@@ -22,6 +22,17 @@ class DiscoveredSqlModelFile:
 
 
 @dataclass(frozen=True)
+class DiscoveredSqlFunctionFile:
+    """A discovered SQL function file and its raw contents."""
+
+    file_path: Path
+    relative_path: Path
+    contents: str
+    header_values: dict[str, object]
+    body_sql: str
+
+
+@dataclass(frozen=True)
 class DiscoveredSchemaFile:
     """A discovered schema.yml file and its raw contents."""
 
@@ -132,6 +143,7 @@ class DiscoveredProjectInputs:
     project_config: ProjectConfig
     local_config: LocalConfig
     model_files: tuple[DiscoveredSqlModelFile, ...] = field(default_factory=tuple)
+    sql_function_files: tuple[DiscoveredSqlFunctionFile, ...] = field(default_factory=tuple)
     schema_files: tuple[DiscoveredSchemaFile, ...] = field(default_factory=tuple)
     source_files: tuple[DiscoveredSourceFile, ...] = field(default_factory=tuple)
     seed_files: tuple[DiscoveredSeedFile, ...] = field(default_factory=tuple)

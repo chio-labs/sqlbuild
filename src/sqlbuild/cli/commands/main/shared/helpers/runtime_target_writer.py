@@ -6,12 +6,14 @@ from pathlib import Path
 
 from sqlbuild.adapter.shared.models import LifeCycleEvent
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
-from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
-from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.compiler.planner.models import FunctionPlanEntry, ModelPlanEntry, PlanOutput
+from sqlbuild.executor.build.models import BuildExecutionResult, FunctionExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 
 _RUN_DIR: str = "run"
 _MODELS_DIR: str = "models"
+_FUNCTIONS_DIR: str = "functions"
+_SQL_FUNCTIONS_DIR: str = "sql"
 
 
 def write_runtime_target(
@@ -26,6 +28,9 @@ def write_runtime_target(
 
     model_entry_map: dict[str, ModelPlanEntry] = {
         entry.name: entry for entry in plan_output.model_entries
+    }
+    function_entry_map: dict[str, FunctionPlanEntry] = {
+        entry.name: entry for entry in plan_output.function_entries
     }
 
     model_result: ModelExecutionResult
@@ -46,6 +51,26 @@ def write_runtime_target(
             sql="\n\n".join(_format_statement(e.content) for e in sql_events),
         )
 
+    function_result: FunctionExecutionResult
+    for function_result in result.function_results:
+        if not function_result.lifecycle_events:
+            continue
+        function_sql_events: tuple[LifeCycleEvent, ...] = tuple(
+            e for e in function_result.lifecycle_events if e.kind == LifeCycleEventKind.SQL
+        )
+        if not function_sql_events:
+            continue
+        function_entry: FunctionPlanEntry | None = function_entry_map.get(
+            function_result.function_name
+        )
+        if function_entry is None:
+            continue
+        function_run_path: Path = run_dir / _function_output_path(function_entry.relative_path)
+        _write_sql(
+            path=function_run_path,
+            sql="\n\n".join(_format_statement(e.content) for e in function_sql_events),
+        )
+
 
 def _write_sql(*, path: Path, sql: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -57,6 +82,13 @@ def _model_output_path(relative_path: Path) -> Path:
     if parts and parts[0] == _MODELS_DIR:
         return Path(*parts)
     return Path(_MODELS_DIR) / relative_path
+
+
+def _function_output_path(relative_path: Path) -> Path:
+    parts: tuple[str, ...] = relative_path.parts
+    if len(parts) >= 2 and parts[0] == _FUNCTIONS_DIR and parts[1] == _SQL_FUNCTIONS_DIR:
+        return Path(*parts)
+    return Path(_FUNCTIONS_DIR) / _SQL_FUNCTIONS_DIR / relative_path
 
 
 def _format_statement(statement: str) -> str:

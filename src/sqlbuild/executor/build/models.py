@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from sqlbuild.adapter.shared.models import LifeCycleEvent
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
+    FunctionPlanEntry,
     ModelPlanEntry,
     SeedPlanEntry,
     SqlTestPlanEntry,
@@ -29,11 +31,25 @@ class SeedExecutionResult:
 
 
 @dataclass(frozen=True)
+class FunctionExecutionResult:
+    """Outcome of one SQL function creation."""
+
+    function_name: str
+    status: ExecutionStatus
+    duration_ms: int | None = None
+    error_message: str | None = None
+    lifecycle_events: tuple[LifeCycleEvent, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class BuildIndexes:
     """Precomputed lookup structures for build execution loop."""
 
     model_entries_by_key: dict[CompiledObjectKey, ModelPlanEntry] = field(default_factory=dict)
     seed_entries_by_key: dict[CompiledObjectKey, SeedPlanEntry] = field(default_factory=dict)
+    function_entries_by_key: dict[CompiledObjectKey, FunctionPlanEntry] = field(
+        default_factory=dict
+    )
     test_entries_by_key: dict[CompiledObjectKey, SqlTestPlanEntry] = field(default_factory=dict)
     source_audits_by_source: dict[str, tuple[AuditPlanEntry, ...]] = field(default_factory=dict)
     model_audits_by_model: dict[str, tuple[AuditPlanEntry, ...]] = field(default_factory=dict)
@@ -45,7 +61,12 @@ class NodeCompletion:
     """Result of a single node execution passed back from a worker to the scheduler."""
 
     key: CompiledObjectKey
-    result: ModelExecutionResult | SeedExecutionResult | SqlTestExecutionResult
+    result: (
+        ModelExecutionResult
+        | SeedExecutionResult
+        | FunctionExecutionResult
+        | SqlTestExecutionResult
+    )
 
 
 @dataclass(frozen=True)
@@ -55,6 +76,7 @@ class BuildExecutionResult:
     status: BuildStatus
     model_results: tuple[ModelExecutionResult, ...] = field(default_factory=tuple)
     seed_results: tuple[SeedExecutionResult, ...] = field(default_factory=tuple)
+    function_results: tuple[FunctionExecutionResult, ...] = field(default_factory=tuple)
     test_results: tuple[SqlTestExecutionResult, ...] = field(default_factory=tuple)
     source_audit_results: tuple[AuditExecutionResult, ...] = field(default_factory=tuple)
     end_audit_results: tuple[AuditExecutionResult, ...] = field(default_factory=tuple)

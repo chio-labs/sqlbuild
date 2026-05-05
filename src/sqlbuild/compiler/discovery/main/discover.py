@@ -15,6 +15,7 @@ from sqlbuild.compiler.discovery.helpers.filesystem import (
     discover_schema_files,
     discover_seed_files,
     discover_source_files,
+    discover_sql_function_files,
     discover_test_files,
 )
 from sqlbuild.compiler.discovery.helpers.yml_project import (
@@ -35,6 +36,7 @@ def discover_project_inputs(*, project_dir: Path) -> DiscoveredProjectInputs:
         project_config=project_config,
         local_config=local_config,
         model_files=discover_model_files(project_dir=project_dir),
+        sql_function_files=discover_sql_function_files(project_dir=project_dir),
         schema_files=discover_schema_files(project_dir=project_dir),
         source_files=discover_source_files(project_dir=project_dir),
         seed_files=discover_seed_files(project_dir=project_dir),

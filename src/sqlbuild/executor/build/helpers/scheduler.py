@@ -18,6 +18,7 @@ from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
+    FunctionPlanEntry,
     ModelPlanEntry,
     PlanOutput,
     SeedPlanEntry,
@@ -29,8 +30,14 @@ from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
 from sqlbuild.executor.build.helpers.blocking import block_downstream
 from sqlbuild.executor.build.helpers.end_audits import run_end_audits
 from sqlbuild.executor.build.helpers.source_audits import run_pending_source_audits
-from sqlbuild.executor.build.models import BuildIndexes, NodeCompletion, SeedExecutionResult
+from sqlbuild.executor.build.models import (
+    BuildIndexes,
+    FunctionExecutionResult,
+    NodeCompletion,
+    SeedExecutionResult,
+)
 from sqlbuild.executor.custom.models import MaterializationResult
+from sqlbuild.executor.functions.main.execute import execute_function
 from sqlbuild.executor.run.main.execute import (
     execute_custom_entry,
     execute_incremental_entry,
@@ -106,6 +113,7 @@ class BuildScheduler:
 
         self._model_results: list[ModelExecutionResult] = []
         self._seed_results: list[SeedExecutionResult] = []
+        self._function_results: list[FunctionExecutionResult] = []
         self._test_results: list[SqlTestExecutionResult] = []
         self._source_audit_results: list[AuditExecutionResult] = []
 
@@ -125,6 +133,7 @@ class BuildScheduler:
     ) -> tuple[
         tuple[ModelExecutionResult, ...],
         tuple[SeedExecutionResult, ...],
+        tuple[FunctionExecutionResult, ...],
         tuple[SqlTestExecutionResult, ...],
         tuple[AuditExecutionResult, ...],
         tuple[AuditExecutionResult, ...],
@@ -156,6 +165,7 @@ class BuildScheduler:
         return (
             tuple(self._model_results),
             tuple(self._seed_results),
+            tuple(self._function_results),
             tuple(self._test_results),
             tuple(self._source_audit_results),
             end_audit_results,
@@ -200,9 +210,12 @@ class BuildScheduler:
                 if not self._pre_dispatch(key):
                     self._mark_complete(key)
                     continue
-                result: ModelExecutionResult | SeedExecutionResult | SqlTestExecutionResult = (
-                    self._execute_node(key, connection)
-                )
+                result: (
+                    ModelExecutionResult
+                    | SeedExecutionResult
+                    | FunctionExecutionResult
+                    | SqlTestExecutionResult
+                ) = self._execute_node(key, connection)
                 self._handle_completion(key, result)
         finally:
             self._connection_pool.put(connection)
@@ -240,9 +253,12 @@ class BuildScheduler:
     def _worker(self, key: CompiledObjectKey) -> None:
         connection: Any = self._connection_pool.get()
         try:
-            result: ModelExecutionResult | SeedExecutionResult | SqlTestExecutionResult = (
-                self._execute_node(key, connection)
-            )
+            result: (
+                ModelExecutionResult
+                | SeedExecutionResult
+                | FunctionExecutionResult
+                | SqlTestExecutionResult
+            ) = self._execute_node(key, connection)
             self._completion_queue.put(NodeCompletion(key=key, result=result))
         except Exception as exc:
             self._completion_queue.put(
@@ -304,11 +320,18 @@ class BuildScheduler:
 
     def _execute_node(
         self, key: CompiledObjectKey, connection: Any
-    ) -> ModelExecutionResult | SeedExecutionResult | SqlTestExecutionResult:
+    ) -> (
+        ModelExecutionResult
+        | SeedExecutionResult
+        | FunctionExecutionResult
+        | SqlTestExecutionResult
+    ):
         """Execute a single node. Runs in a worker thread (or scheduler thread for serial)."""
 
         if key.resource_type == CompiledResourceType.SEED:
             return self._execute_seed_node(key, connection)
+        if key.resource_type == CompiledResourceType.FUNCTION:
+            return self._execute_function_node(key, connection)
         if key.resource_type == CompiledResourceType.SQL_TEST:
             return self._execute_test_node(key, connection)
         if key.resource_type == CompiledResourceType.MODEL:
@@ -395,6 +418,26 @@ class BuildScheduler:
         )
         return result
 
+    def _execute_function_node(
+        self, key: CompiledObjectKey, connection: Any
+    ) -> FunctionExecutionResult:
+        function_entry: FunctionPlanEntry | None = self._indexes.function_entries_by_key.get(key)
+        if function_entry is None:
+            return FunctionExecutionResult(function_name=key.name, status=ExecutionStatus.FAILED)
+        if self._on_progress is not None:
+            self._on_progress(f"function: {function_entry.name}")
+        if self._on_node_start is not None:
+            self._on_node_start(function_entry.name, "function")
+        start: float = time.monotonic()
+        result: FunctionExecutionResult = execute_function(
+            function_entry=function_entry,
+            adapter=self._adapter,
+            connection=connection,
+            statement_recorder=StatementRecorder(),
+        )
+        duration: int = int((time.monotonic() - start) * 1000)
+        return dataclasses.replace(result, duration_ms=duration)
+
     def _execute_model_node(self, key: CompiledObjectKey, connection: Any) -> ModelExecutionResult:
         model_entry: ModelPlanEntry | None = self._indexes.model_entries_by_key.get(key)
         if model_entry is None:
@@ -455,7 +498,12 @@ class BuildScheduler:
     def _handle_completion(
         self,
         key: CompiledObjectKey,
-        result: ModelExecutionResult | SeedExecutionResult | SqlTestExecutionResult,
+        result: (
+            ModelExecutionResult
+            | SeedExecutionResult
+            | FunctionExecutionResult
+            | SqlTestExecutionResult
+        ),
     ) -> None:
         """Process a completed node: record result, propagate blocking, enqueue ready."""
 
@@ -484,6 +532,12 @@ class BuildScheduler:
                             selected_keys=self._plan.selected_keys,
                             blocked_keys=self._blocked_keys,
                         )
+
+        elif isinstance(result, FunctionExecutionResult):
+            self._function_results.append(result)
+            if self._on_node_complete is not None:
+                self._on_node_complete(result)
+            failed = result.status == ExecutionStatus.FAILED
 
         elif isinstance(result, ModelExecutionResult):
             self._model_results.append(result)
@@ -529,6 +583,16 @@ class BuildScheduler:
             if seed_entry is not None:
                 self._seed_results.append(
                     SeedExecutionResult(seed_name=seed_entry.name, status=ExecutionStatus.SKIPPED)
+                )
+        elif key.resource_type == CompiledResourceType.FUNCTION:
+            function_entry: FunctionPlanEntry | None = self._indexes.function_entries_by_key.get(
+                key
+            )
+            if function_entry is not None:
+                self._function_results.append(
+                    FunctionExecutionResult(
+                        function_name=function_entry.name, status=ExecutionStatus.SKIPPED
+                    )
                 )
 
     def _skip_remaining(self) -> None:

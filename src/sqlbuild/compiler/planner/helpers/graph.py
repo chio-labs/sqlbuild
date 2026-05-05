@@ -23,6 +23,7 @@ def build_upstream_deps(
     upstream.update({model.key: list(model.deps) for model in project.models})
     upstream.update({source.key: list(source.deps) for source in project.sources})
     upstream.update({seed.key: list(seed.deps) for seed in project.seeds})
+    upstream.update({function.key: list(function.deps) for function in project.functions})
 
     test: CompiledSqlTest
     for test in project.sql_tests:

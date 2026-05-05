@@ -24,11 +24,16 @@ from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
             description="writes compiled SQL, manifest, audits, and chain tests",
             expected_files={
                 "compiled/models/staging/orders.sql": "SELECT 1 AS order_id\n",
+                "compiled/functions/sql/is_completed_order.sql": (
+                    "CREATE OR REPLACE MACRO analytics.is_completed_order(order_status) AS (\n"
+                    "order_status = 'completed'\n"
+                    ")\n"
+                ),
                 "compiled/audits/generic/orders/not_null__order_id.sql": (
                     "SELECT order_id FROM analytics.orders WHERE order_id IS NULL\n"
                 ),
             },
-            expected_summary_line="Compiled 1 model, 1 seed, 1 audit, 1 test",
+            expected_summary_line="Compiled 1 model, 1 seed, 1 function, 1 audit, 1 test",
         )
     ],
     ids=["writes compiled SQL, manifest, audits, and chain tests"],

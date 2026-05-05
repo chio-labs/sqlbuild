@@ -37,6 +37,11 @@ VALID_SQL_TEST_CASES: list[ValidateSqlSyntaxTestCase] = [
         expected_valid=True,
     ),
     ValidateSqlSyntaxTestCase(
+        description="accepts udf references",
+        query_sql='SELECT __udf("is_completed_order")(status) AS is_done FROM __ref("orders")',
+        expected_valid=True,
+    ),
+    ValidateSqlSyntaxTestCase(
         description="accepts union queries",
         query_sql=('SELECT id FROM __ref("orders") UNION ALL SELECT id FROM __ref("returns")'),
         expected_valid=True,

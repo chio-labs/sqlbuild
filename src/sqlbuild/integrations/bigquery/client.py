@@ -234,6 +234,21 @@ class BigQueryAdapter(BaseAdapter):
     def render_create_view_as(self, *, target: str, sql: str) -> tuple[str, ...]:
         return (f"CREATE OR REPLACE VIEW {self._quote_identifier_path(target)} AS {sql}",)
 
+    def render_create_function(
+        self,
+        *,
+        target: str,
+        arguments: tuple[Any, ...],
+        returns: str,
+        body_sql: str,
+    ) -> tuple[str, ...]:
+        argument_sql: str = ", ".join(f"{argument.name} {argument.type}" for argument in arguments)
+        return (
+            f"CREATE OR REPLACE FUNCTION {self._quote_identifier_path(target)}({argument_sql})\n"
+            f"RETURNS {returns}\n"
+            f"AS (\n{body_sql}\n)",
+        )
+
     def render_append(
         self, *, target: str, sql: str, columns: tuple[str, ...] | None = None
     ) -> tuple[str, ...]:

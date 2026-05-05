@@ -286,6 +286,18 @@ class DuckDbAdapter(BaseAdapter):
     def render_create_view_as(self, *, target: str, sql: str) -> tuple[str, ...]:
         return (f"CREATE OR REPLACE VIEW {target} AS {sql}",)
 
+    def render_create_function(
+        self,
+        *,
+        target: str,
+        arguments: tuple[Any, ...],
+        returns: str,
+        body_sql: str,
+    ) -> tuple[str, ...]:
+        del returns
+        argument_sql: str = ", ".join(str(arg.name) for arg in arguments)
+        return (f"CREATE OR REPLACE MACRO {target}({argument_sql}) AS (\n{body_sql}\n)",)
+
     def render_append(
         self, *, target: str, sql: str, columns: tuple[str, ...] | None = None
     ) -> tuple[str, ...]:
