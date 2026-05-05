@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime
 from typing import Any
 
@@ -86,6 +87,7 @@ def plan_model(
     full_refresh: bool,
     start_cursor_override: str | None,
     end_cursor_override: str | None,
+    backfill_override: BackfillResult | None = None,
 ) -> tuple[ModelPlanEntry, tuple[PlanWarning, ...]]:
     """Build a plan entry and warnings for a single model."""
 
@@ -97,7 +99,13 @@ def plan_model(
         full_refresh=full_refresh,
     )
 
+    if backfill_override is not None:
+        change_result = replace(change_result, backfill=backfill_override)
+
     backfill: BackfillResult = change_result.backfill
+    suppress_runtime_cursor_bounds: bool = (
+        backfill_override is not None and backfill_override.action == BackfillAction.FULL
+    )
 
     resolved_sql: str = resolve_model_sql(
         adapter=adapter,
@@ -113,6 +121,7 @@ def plan_model(
         full_refresh=full_refresh,
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
+        suppress_runtime_cursor_bounds=suppress_runtime_cursor_bounds,
     )
 
     action: PlanAction
@@ -151,14 +160,16 @@ def plan_model(
     cursor_type: str | None = _get_config_str(model, "cursor_type")
     cursor_grain: str | None = _get_config_str(model, "cursor_grain")
     cursor_start: str | None = _get_cursor_start(model)
-    cursor_input_relations: tuple[CursorInputRelation, ...] = _build_cursor_input_relations(
-        model=model,
-        model_targets=model_targets,
-        models_by_name=models_by_name,
-        seed_targets=seed_targets,
-        source_map=source_map,
-        cursor_column=cursor_column,
-    )
+    cursor_input_relations: tuple[CursorInputRelation, ...] = ()
+    if not suppress_runtime_cursor_bounds:
+        cursor_input_relations = _build_cursor_input_relations(
+            model=model,
+            model_targets=model_targets,
+            models_by_name=models_by_name,
+            seed_targets=seed_targets,
+            source_map=source_map,
+            cursor_column=cursor_column,
+        )
     runtime_owned_cursor_bounds: bool = _has_model_backed_cursor_inputs(cursor_input_relations)
     cursor_bounds: CursorBounds | None = _compute_plan_cursor_bounds(
         model=model,

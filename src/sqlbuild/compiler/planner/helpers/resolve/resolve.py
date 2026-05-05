@@ -51,6 +51,7 @@ def resolve_model_sql(
     full_refresh: bool,
     start_cursor_override: str | None,
     end_cursor_override: str | None,
+    suppress_runtime_cursor_bounds: bool = False,
 ) -> str:
     """Resolve all references in a model's query SQL to produce executable SQL."""
 
@@ -66,6 +67,7 @@ def resolve_model_sql(
         end_cursor_override=end_cursor_override,
         model_targets=model_targets,
         seed_targets=seed_targets,
+        suppress_runtime_cursor_bounds=suppress_runtime_cursor_bounds,
     )
 
     cursor_inputs: dict[str, str] = _get_cursor_inputs(model)
@@ -110,6 +112,7 @@ def _compute_model_cursor_bounds(
     end_cursor_override: str | None,
     model_targets: dict[str, CompiledRelationTarget],
     seed_targets: dict[str, CompiledRelationTarget],
+    suppress_runtime_cursor_bounds: bool,
 ) -> CursorBounds | None:
     """Compute cursor bounds for a model if it is incremental with a cursor."""
 
@@ -119,6 +122,9 @@ def _compute_model_cursor_bounds(
     if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
         return None
 
+    if full_refresh or suppress_runtime_cursor_bounds:
+        return None
+
     if has_model_backed_cursor_inputs(
         model=model,
         model_targets=model_targets,
@@ -126,9 +132,6 @@ def _compute_model_cursor_bounds(
         cursor_inputs=_get_cursor_inputs(model),
     ):
         return CursorBounds(start=MICROBATCH_START_SENTINEL, end=MICROBATCH_END_SENTINEL)
-
-    if full_refresh:
-        return None
 
     cursor_snapshot: ModelCursorSnapshot | None = snapshot.cursor_snapshots.get(model.name)
     if cursor_snapshot is None:
