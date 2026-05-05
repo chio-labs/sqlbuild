@@ -50,7 +50,7 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
         expected_column_audit_names=((("not_null",), ("recency",)), ()),
     ),
     ParseSourcesYamlTestCase(
-        description="parses source expression escape hatch",
+        description="defaults expression source type enforcement from typed columns",
         contents="""
         sources:
           - name: raw_orders
@@ -64,10 +64,66 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
         """,
         expected_source_names=("raw_orders",),
         expected_column_names=(("order_id", "status"),),
-        expected_type_enforcement_values=(None,),
+        expected_type_enforcement_values=(True,),
         expected_expressions=("SELECT 1 AS order_id, 'placed' AS status\n",),
         expected_source_audit_names=((),),
         expected_column_audit_names=(((), ()),),
+    ),
+    ParseSourcesYamlTestCase(
+        description="allows expression source type enforcement to opt in explicitly",
+        contents="""
+        sources:
+          - name: raw_orders
+            expression: |
+              SELECT 1 AS order_id, 'placed' AS status
+            type_enforcement: true
+            columns:
+              - name: order_id
+                type: INTEGER
+        """,
+        expected_source_names=("raw_orders",),
+        expected_column_names=(("order_id",),),
+        expected_type_enforcement_values=(True,),
+        expected_expressions=("SELECT 1 AS order_id, 'placed' AS status\n",),
+        expected_source_audit_names=((),),
+        expected_column_audit_names=(((),),),
+    ),
+    ParseSourcesYamlTestCase(
+        description="does not enforce source types for untyped column metadata",
+        contents="""
+        sources:
+          - name: raw_orders
+            schema: public
+            table: orders
+            columns:
+              - name: order_id
+                description: Stable order identifier.
+        """,
+        expected_source_names=("raw_orders",),
+        expected_column_names=(("order_id",),),
+        expected_type_enforcement_values=(None,),
+        expected_expressions=(None,),
+        expected_source_audit_names=((),),
+        expected_column_audit_names=(((),),),
+    ),
+    ParseSourcesYamlTestCase(
+        description="allows source columns to opt out of default type enforcement",
+        contents="""
+        sources:
+          - name: raw_orders
+            schema: public
+            table: orders
+            type_enforcement: false
+            columns:
+              - name: order_id
+                type: INTEGER
+        """,
+        expected_source_names=("raw_orders",),
+        expected_column_names=(("order_id",),),
+        expected_type_enforcement_values=(False,),
+        expected_expressions=(None,),
+        expected_source_audit_names=((),),
+        expected_column_audit_names=(((),),),
     ),
     ParseSourcesYamlTestCase(
         description="allows empty sources files with no declarations",
