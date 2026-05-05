@@ -34,7 +34,8 @@ def run_compile(
         resolve_effective_adapter_name(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
-        )
+        ),
+        project_dir=effective_project_dir,
     )
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered_inputs,

@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 
 
-class MaterializationMixin:
+class MaterializationMixin(ABC):
     """Executes SQL materialization operations against the warehouse."""
 
     @abstractmethod

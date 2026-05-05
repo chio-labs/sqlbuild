@@ -110,7 +110,7 @@ class DiscoveredDbtManifestFile:
 
 @dataclass(frozen=True)
 class DiscoveredAdapterFile:
-    """A detected project adapter.py file."""
+    """A detected project adapter Python file."""
 
     file_path: Path
     relative_path: Path
