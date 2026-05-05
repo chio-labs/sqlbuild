@@ -1086,6 +1086,10 @@ FUNCTION (
         ),
         expected_sql_function_databases=("analytics",),
         expected_sql_function_schemas=("udf_dev",),
+        expected_sql_function_languages=("sql",),
+        expected_sql_function_runtime_versions=(None,),
+        expected_sql_function_entry_points=(None,),
+        expected_sql_function_packages=((),),
         expected_effective_environment_name="dev",
         expected_effective_connection={},
         expected_effective_vars={
@@ -1190,6 +1194,74 @@ SELECT 1
         ),
         expected_model_references=((),),
         expected_audit_references=((), ()),
+    ),
+    BuildCompileInputsTestCase(
+        description="discovers python sqlbuild udf metadata",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.yml": """
+name: demo
+adapter: duckdb
+default_environment: dev
+
+vars:
+  status_type: VARCHAR
+  return_type: BOOLEAN
+  udf_schema: udf_dev
+
+environments:
+  dev:
+    schema: default_schema
+""".strip()
+            + "\n",
+            "functions/python/is_completed_order.py": """
+from sqlbuild.functions import udf
+
+@udf(
+    arguments={"order_status": "${status_type}"},
+    returns="${return_type}",
+    runtime_version="3.11",
+    schema="${udf_schema}",
+    packages=["faker"],
+)
+def main(order_status):
+    return order_status == "completed"
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        cli_vars=None,
+        run_id=None,
+        expected_model_schema_names=(),
+        expected_model_config_values=(),
+        expected_model_query_sqls=(),
+        expected_model_path_defaults=(),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_sql_function_names=("is_completed_order",),
+        expected_sql_function_arguments=((("order_status", "VARCHAR"),),),
+        expected_sql_function_returns=("BOOLEAN",),
+        expected_sql_function_body_sqls=(
+            """
+def main(order_status):
+    return order_status == 'completed'
+""".strip(),
+        ),
+        expected_sql_function_databases=(None,),
+        expected_sql_function_schemas=("udf_dev",),
+        expected_sql_function_languages=("python",),
+        expected_sql_function_runtime_versions=("3.11",),
+        expected_sql_function_entry_points=("main",),
+        expected_sql_function_packages=(("faker",),),
+        expected_effective_environment_name="dev",
+        expected_effective_connection={},
+        expected_effective_vars={
+            "status_type": "VARCHAR",
+            "return_type": "BOOLEAN",
+            "udf_schema": "udf_dev",
+        },
+        expected_model_references=(),
+        expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
         description="renders attached model and source audits from generic definitions",
@@ -1481,6 +1553,24 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
     assert (
         tuple(function_input.schema for function_input in compile_inputs.sql_function_inputs)
         == test_case.expected_sql_function_schemas
+    )
+    assert (
+        tuple(str(function_input.language) for function_input in compile_inputs.sql_function_inputs)
+        == test_case.expected_sql_function_languages
+    )
+    assert (
+        tuple(
+            function_input.runtime_version for function_input in compile_inputs.sql_function_inputs
+        )
+        == test_case.expected_sql_function_runtime_versions
+    )
+    assert (
+        tuple(function_input.entry_point for function_input in compile_inputs.sql_function_inputs)
+        == test_case.expected_sql_function_entry_points
+    )
+    assert (
+        tuple(function_input.packages for function_input in compile_inputs.sql_function_inputs)
+        == test_case.expected_sql_function_packages
     )
     assert (
         tuple(

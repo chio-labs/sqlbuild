@@ -30,6 +30,7 @@ from sqlbuild.adapter.shared.types import (
     PromotionStrategy,
     TablePromotionMode,
 )
+from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.shared.helpers.diagnostics_logging import log_sql
 
 
@@ -337,7 +338,14 @@ class DatabricksAdapter(BaseAdapter):
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
+        language: FunctionLanguage = FunctionLanguage.SQL,
+        runtime_version: str | None = None,
+        entry_point: str | None = None,
+        packages: tuple[str, ...] = (),
     ) -> tuple[str, ...]:
+        del runtime_version, entry_point, packages
+        if language == FunctionLanguage.PYTHON:
+            raise NotImplementedError("Databricks Python UDF support has not been implemented")
         argument_sql: str = ", ".join(f"{argument.name} {argument.type}" for argument in arguments)
         return (
             f"CREATE OR REPLACE FUNCTION {target}({argument_sql})\n"

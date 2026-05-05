@@ -79,6 +79,10 @@ def _write_functions(*, target_dir: Path, adapter: BaseAdapter, plan_output: Pla
             arguments=entry.arguments,
             returns=entry.returns,
             body_sql=entry.body_sql,
+            language=entry.language,
+            runtime_version=entry.runtime_version,
+            entry_point=entry.entry_point,
+            packages=entry.packages,
         )
         function_path: Path = (
             target_dir / _COMPILED_DIR / _function_output_path(entry.relative_path)

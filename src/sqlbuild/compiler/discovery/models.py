@@ -33,6 +33,18 @@ class DiscoveredSqlFunctionFile:
 
 
 @dataclass(frozen=True)
+class DiscoveredPythonFunctionFile:
+    """A discovered Python function file and its parsed UDF metadata."""
+
+    file_path: Path
+    relative_path: Path
+    contents: str
+    header_values: dict[str, object]
+    entry_point: str
+    body_python: str
+
+
+@dataclass(frozen=True)
 class DiscoveredSchemaFile:
     """A discovered schema.yml file and its raw contents."""
 
@@ -144,6 +156,7 @@ class DiscoveredProjectInputs:
     local_config: LocalConfig
     model_files: tuple[DiscoveredSqlModelFile, ...] = field(default_factory=tuple)
     sql_function_files: tuple[DiscoveredSqlFunctionFile, ...] = field(default_factory=tuple)
+    python_function_files: tuple[DiscoveredPythonFunctionFile, ...] = field(default_factory=tuple)
     schema_files: tuple[DiscoveredSchemaFile, ...] = field(default_factory=tuple)
     source_files: tuple[DiscoveredSourceFile, ...] = field(default_factory=tuple)
     seed_files: tuple[DiscoveredSeedFile, ...] = field(default_factory=tuple)

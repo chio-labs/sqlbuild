@@ -14,6 +14,7 @@ SELECT
   o.ordered_at,
   o.status AS order_status,
   __udf("is_completed_order")(o.status) AS is_completed_order,
+  __udf("is_completed_order_py")(o.status) AS is_completed_order_py,
   p.payment_method,
   p.payment_status,
   p.amount_cents AS payment_amount_cents

@@ -24,6 +24,7 @@ from sqlbuild.adapter.shared.models import (
 )
 from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
 from sqlbuild.adapter.shared.types import CursorKind, FrameworkType, TablePromotionMode
+from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.shared.helpers.diagnostics_logging import log_sql
 
 
@@ -221,6 +222,9 @@ class BigQueryAdapter(BaseAdapter):
     def default_table_promotion_mode(self) -> TablePromotionMode:
         return TablePromotionMode.DIRECT
 
+    def supports_python_functions(self) -> bool:
+        return True
+
     def render_create_schema(self, *, database: str | None, schema: str) -> tuple[str, ...]:
         target: str = f"{database}.{schema}" if database is not None else schema
         sql: str = f"CREATE SCHEMA IF NOT EXISTS {self._quote_identifier_path(target)}"
@@ -241,8 +245,31 @@ class BigQueryAdapter(BaseAdapter):
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
+        language: FunctionLanguage = FunctionLanguage.SQL,
+        runtime_version: str | None = None,
+        entry_point: str | None = None,
+        packages: tuple[str, ...] = (),
     ) -> tuple[str, ...]:
         argument_sql: str = ", ".join(f"{argument.name} {argument.type}" for argument in arguments)
+        if language == FunctionLanguage.PYTHON:
+            if runtime_version is None or entry_point is None:
+                raise ValueError("BigQuery Python UDFs require runtime_version and entry_point")
+            package_sql: str = ""
+            if packages:
+                package_values: str = ", ".join(f"'{package}'" for package in packages)
+                package_sql = f",\n  packages = [{package_values}]"
+            return (
+                "CREATE OR REPLACE FUNCTION "
+                f"{self._quote_identifier_path(target)}({argument_sql})\n"
+                f"RETURNS {returns}\n"
+                "LANGUAGE python\n"
+                "OPTIONS(\n"
+                f'  runtime_version = "python-{runtime_version}",\n'
+                f'  entry_point = "{entry_point}"'
+                f"{package_sql}\n"
+                ")\n"
+                f"AS r'''\n{body_sql}\n'''",
+            )
         return (
             f"CREATE OR REPLACE FUNCTION {self._quote_identifier_path(target)}({argument_sql})\n"
             f"RETURNS {returns}\n"

@@ -18,6 +18,7 @@ from sqlbuild.adapter.shared.models import (
     StatementRecorder,
 )
 from sqlbuild.adapter.shared.types import FrameworkType, PromotionStrategy, TablePromotionMode
+from sqlbuild.compiler.compile.types import FunctionLanguage
 
 
 class StrictAdapter(
@@ -41,6 +42,11 @@ class StrictAdapter(
     @abstractmethod
     def supports_relation_age_metadata(self) -> bool:
         """Return whether relation metadata includes reliable age information."""
+        ...
+
+    @abstractmethod
+    def supports_python_functions(self) -> bool:
+        """Return whether the adapter can create Python UDF resources."""
         ...
 
     @abstractmethod
@@ -108,6 +114,10 @@ class StrictAdapter(
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
+        language: FunctionLanguage = FunctionLanguage.SQL,
+        runtime_version: str | None = None,
+        entry_point: str | None = None,
+        packages: tuple[str, ...] = (),
     ) -> tuple[str, ...]:
         """Render SQL statements that create or replace a SQL function."""
         ...

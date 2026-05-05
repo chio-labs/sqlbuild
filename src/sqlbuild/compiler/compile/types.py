@@ -43,3 +43,8 @@ class CompiledResourceType(StrEnum):
     DBT_REF = "dbt_ref"
     AUDIT = "audit"
     SQL_TEST = "sql_test"
+
+
+class FunctionLanguage(StrEnum):
+    SQL = "sql"
+    PYTHON = "python"

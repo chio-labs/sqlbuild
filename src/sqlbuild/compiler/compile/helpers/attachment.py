@@ -59,12 +59,14 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompileContextKey,
+    FunctionLanguage,
     SqlReferenceKind,
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
     DiscoveredProjectInputs,
+    DiscoveredPythonFunctionFile,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
@@ -388,6 +390,91 @@ def build_sql_function_inputs(
                 schema=function_schema,
             )
         )
+    python_function_file: DiscoveredPythonFunctionFile
+    for python_function_file in discovered_inputs.python_function_files:
+        function_name = python_function_file.file_path.stem
+        if function_name in known_names:
+            raise CompileInputError(f"Duplicate function name '{function_name}'")
+        known_names.add(function_name)
+        header_values = python_function_file.header_values
+        raw_returns = header_values.get("returns")
+        if not isinstance(raw_returns, str) or not raw_returns.strip():
+            raise CompileInputError(
+                f"Python function file {python_function_file.relative_path} must declare returns"
+            )
+        arguments: tuple[FunctionArgument, ...] = _parse_python_function_arguments(
+            python_function_file, effective_vars
+        )
+        returns: str = _expand_function_header_value(
+            raw_value=raw_returns.strip(),
+            effective_vars=effective_vars,
+            context_label=f"Python function {python_function_file.relative_path} returns",
+        )
+        runtime_version: str = _parse_required_string_header(
+            header_values=header_values,
+            key="runtime_version",
+            relative_path=python_function_file.relative_path,
+            language="Python",
+        )
+        entry_point: str = _parse_required_string_header(
+            header_values=header_values,
+            key="entry_point",
+            relative_path=python_function_file.relative_path,
+            language="Python",
+        )
+        packages: tuple[str, ...] = _parse_python_packages(
+            raw_packages=header_values.get("packages"),
+            relative_path=python_function_file.relative_path,
+        )
+        raw_database = header_values.get("database")
+        raw_schema = header_values.get("schema")
+        function_database = (
+            _expand_function_header_value(
+                raw_value=raw_database,
+                effective_vars=effective_vars,
+                context_label=f"Python function {python_function_file.relative_path} database",
+            )
+            if isinstance(raw_database, str)
+            else database
+        )
+        function_schema = (
+            _expand_function_header_value(
+                raw_value=raw_schema,
+                effective_vars=effective_vars,
+                context_label=f"Python function {python_function_file.relative_path} schema",
+            )
+            if isinstance(raw_schema, str)
+            else schema
+        )
+        if not no_sql_validation and effective_settings.sql_validation:
+            for argument in arguments:
+                validate_native_type(
+                    argument.type,
+                    adapter_name=adapter_name,
+                    context=(
+                        f"Python function {python_function_file.relative_path} "
+                        f"argument '{argument.name}'"
+                    ),
+                )
+            validate_native_type(
+                returns,
+                adapter_name=adapter_name,
+                context=f"Python function {python_function_file.relative_path} return type",
+            )
+        compile_input: CompileSqlFunctionInput = CompileSqlFunctionInput(
+            function_file=python_function_file,
+            name=function_name,
+            arguments=arguments,
+            returns=returns,
+            body_sql=python_function_file.body_python,
+            database=function_database,
+            schema=function_schema,
+            language=FunctionLanguage.PYTHON,
+            runtime_version=runtime_version,
+            entry_point=entry_point,
+            packages=packages,
+        )
+        function_inputs.append(compile_input)
     return tuple(function_inputs)
 
 
@@ -425,6 +512,65 @@ def _parse_function_arguments(
         )
         arguments.append(FunctionArgument(name=argument_name.strip(), type=expanded_type))
     return tuple(arguments)
+
+
+def _parse_python_function_arguments(
+    function_file: DiscoveredPythonFunctionFile, effective_vars: dict[str, str]
+) -> tuple[FunctionArgument, ...]:
+    raw_arguments: object | None = function_file.header_values.get("arguments")
+    if raw_arguments is None:
+        return ()
+    if not isinstance(raw_arguments, dict):
+        raise CompileInputError(
+            f"Python function file {function_file.relative_path} arguments must be a map"
+        )
+    arguments: list[FunctionArgument] = []
+    argument_name: object
+    argument_type: object
+    for argument_name, argument_type in raw_arguments.items():
+        if not isinstance(argument_name, str) or not argument_name.strip():
+            raise CompileInputError(
+                f"Python function file {function_file.relative_path} has an invalid argument name"
+            )
+        if not isinstance(argument_type, str) or not argument_type.strip():
+            raise CompileInputError(
+                f"Python function file {function_file.relative_path} argument '{argument_name}' "
+                "must declare a type"
+            )
+        expanded_type: str = _expand_function_header_value(
+            raw_value=argument_type.strip(),
+            effective_vars=effective_vars,
+            context_label=(
+                f"Python function {function_file.relative_path} argument '{argument_name}' type"
+            ),
+        )
+        arguments.append(FunctionArgument(name=argument_name.strip(), type=expanded_type))
+    return tuple(arguments)
+
+
+def _parse_required_string_header(
+    *, header_values: dict[str, object], key: str, relative_path: Path, language: str
+) -> str:
+    raw_value: object | None = header_values.get(key)
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        raise CompileInputError(f"{language} function file {relative_path} must declare {key}")
+    return raw_value.strip()
+
+
+def _parse_python_packages(*, raw_packages: object | None, relative_path: Path) -> tuple[str, ...]:
+    if raw_packages is None:
+        return ()
+    if not isinstance(raw_packages, list | tuple):
+        raise CompileInputError(f"Python function file {relative_path} packages must be a list")
+    packages: list[str] = []
+    package: object
+    for package in raw_packages:
+        if not isinstance(package, str) or not package.strip():
+            raise CompileInputError(
+                f"Python function file {relative_path} packages entries must be non-empty strings"
+            )
+        packages.append(package.strip())
+    return tuple(packages)
 
 
 def _expand_function_header_value(
@@ -1298,7 +1444,13 @@ def build_known_source_names(discovered_inputs: DiscoveredProjectInputs) -> set[
 def build_known_function_names(discovered_inputs: DiscoveredProjectInputs) -> set[str]:
     """Build the set of names valid as __udf() targets."""
 
-    return {function_file.file_path.stem for function_file in discovered_inputs.sql_function_files}
+    return {
+        *(function_file.file_path.stem for function_file in discovered_inputs.sql_function_files),
+        *(
+            function_file.file_path.stem
+            for function_file in discovered_inputs.python_function_files
+        ),
+    }
 
 
 def build_effective_vars(
