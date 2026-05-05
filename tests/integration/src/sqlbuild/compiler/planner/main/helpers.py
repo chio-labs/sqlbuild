@@ -130,6 +130,12 @@ def build_project_from_test_case(
                     name=function_name,
                     qualified_name=f"{target_schema}.{function_name}",
                 ),
+                fingerprint_target=CompiledRelationTarget(
+                    database=None,
+                    schema=target_schema,
+                    name=function_name,
+                    qualified_name=f"{target_schema}.{function_name}",
+                ),
                 language=language,
                 entry_point="main" if language == FunctionLanguage.PYTHON else None,
                 query_change_backfill=test_case.function_query_change_backfills.get(function_name),

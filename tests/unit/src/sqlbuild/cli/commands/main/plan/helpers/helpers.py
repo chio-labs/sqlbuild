@@ -130,6 +130,9 @@ def build_function_entry(
         target=CompiledRelationTarget(
             database=None, schema="main", name=name, qualified_name=f"main.{name}"
         ),
+        fingerprint_target=CompiledRelationTarget(
+            database=None, schema="main", name=name, qualified_name=f"main.{name}"
+        ),
         arguments=(),
         returns="BOOLEAN",
         body_sql="return True",

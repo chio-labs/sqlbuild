@@ -171,6 +171,9 @@ def build_test_project(
                 target=CompiledRelationTarget(
                     database=None, schema=None, name=function_name, qualified_name=None
                 ),
+                fingerprint_target=CompiledRelationTarget(
+                    database=None, schema=None, name=function_name, qualified_name=None
+                ),
             )
         )
 
@@ -561,6 +564,12 @@ def build_compiled_function(
         returns="BOOLEAN",
         body_sql=body_sql,
         target=CompiledRelationTarget(
+            database=None,
+            schema="main",
+            name="is_completed_order",
+            qualified_name="main.is_completed_order",
+        ),
+        fingerprint_target=CompiledRelationTarget(
             database=None,
             schema="main",
             name="is_completed_order",

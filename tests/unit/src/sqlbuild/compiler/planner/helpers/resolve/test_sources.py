@@ -339,7 +339,8 @@ ERROR_TEST_CASES: list[SourceResolutionErrorTestCase] = [
             ),
         },
         expected_error_fragment=(
-            "Source expression declares columns not found in query output: amount_cents"
+            "Source expression 'raw_payments' declares columns not found in query output: "
+            "amount_cents. Available query output columns: id, status"
         ),
     ),
     SourceResolutionErrorTestCase(
@@ -364,7 +365,8 @@ ERROR_TEST_CASES: list[SourceResolutionErrorTestCase] = [
             ),
         },
         expected_error_fragment=(
-            "Source expression declares columns not found in query output: status"
+            "Source expression 'raw_payments' declares columns not found in query output: "
+            "status. Available query output columns: id, amount_cents"
         ),
     ),
     SourceResolutionErrorTestCase(
@@ -381,7 +383,8 @@ ERROR_TEST_CASES: list[SourceResolutionErrorTestCase] = [
         },
         source_warehouse_columns={},
         expected_error_fragment=(
-            "Source expression type enforcement requires query output column metadata"
+            "Source expression 'raw_payments' type enforcement requires "
+            "query output column metadata"
         ),
     ),
 ]

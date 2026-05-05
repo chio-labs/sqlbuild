@@ -353,6 +353,12 @@ class DuckDbAdapter(BaseAdapter):
     def persists_python_functions(self) -> bool:
         return False
 
+    def python_functions_inherit_default_namespace(self) -> bool:
+        return False
+
+    def supports_unqualified_function_fingerprints(self) -> bool:
+        return True
+
     def supports_table_functions(self) -> bool:
         return True
 

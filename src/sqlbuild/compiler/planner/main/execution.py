@@ -308,6 +308,7 @@ def build_execution_plan(
                 star_exclude_keyword=star_exclude_keyword,
             ),
             fingerprint_query_sql=function_fingerprint_sql[function.name],
+            fingerprint_target=function.fingerprint_target,
             return_columns=function.return_columns,
             language=function.language,
             source_file_path=function.source_file_path,

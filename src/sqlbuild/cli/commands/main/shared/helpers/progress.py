@@ -341,6 +341,7 @@ def format_build_footer(
             fail_count += 1
         elif function_result.status == ExecutionStatus.SKIPPED:
             skip_count += 1
+        warn_count += len(function_result.warning_messages)
 
     test_r: SqlTestExecutionResult
     for test_r in result.test_results:
@@ -462,6 +463,21 @@ def _format_warning_details(result: BuildExecutionResult) -> list[str]:
             for line in model_warnings:
                 lines.append(line)
             lines.append("")
+
+    function_result: FunctionExecutionResult
+    for function_result in result.function_results:
+        if not function_result.warning_messages:
+            continue
+        if not has_warnings:
+            lines.append("")
+            lines.append("Warnings:")
+            lines.append("")
+            has_warnings = True
+        lines.append(f"  {function_result.function_name}  (function)")
+        warning_msg: str
+        for warning_msg in function_result.warning_messages:
+            lines.append(f"    {warning_msg}")
+        lines.append("")
 
     return lines
 

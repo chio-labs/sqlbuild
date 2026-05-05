@@ -104,6 +104,12 @@ def build_target_writer_plan_output() -> PlanOutput:
                     name="is_completed_order",
                     qualified_name="analytics.is_completed_order",
                 ),
+                fingerprint_target=CompiledRelationTarget(
+                    database=None,
+                    schema="analytics",
+                    name="is_completed_order",
+                    qualified_name="analytics.is_completed_order",
+                ),
                 arguments=(FunctionArgument(name="order_status", type="VARCHAR"),),
                 returns="BOOLEAN",
                 body_sql="order_status = 'completed'",
@@ -114,6 +120,12 @@ def build_target_writer_plan_output() -> PlanOutput:
                 name="is_completed_order_py",
                 relative_path=Path("functions/python/is_completed_order_py.py"),
                 target=CompiledRelationTarget(
+                    database=None,
+                    schema="analytics",
+                    name="is_completed_order_py",
+                    qualified_name="analytics.is_completed_order_py",
+                ),
+                fingerprint_target=CompiledRelationTarget(
                     database=None,
                     schema="analytics",
                     name="is_completed_order_py",

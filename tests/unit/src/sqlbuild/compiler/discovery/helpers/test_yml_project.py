@@ -552,6 +552,25 @@ def test_given_invalid_project_config_file_when_loading_project_config_then_it_r
 
 @pytest.mark.parametrize(
     "test_case",
+    [
+        LoadProjectConfigErrorTestCase(
+            description="raises clear error when project config is missing",
+            project_file_contents="",
+            expected_error_fragment="Project config not found",
+        ),
+    ],
+    ids=["raises clear error when project config is missing"],
+)
+def test_given_missing_project_config_file_when_loading_project_config_then_it_raises_clear_error(
+    test_case: LoadProjectConfigErrorTestCase,
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+        load_project_config(project_dir=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "test_case",
     LOCAL_CONFIG_ERROR_TEST_CASES,
     ids=[case.description for case in LOCAL_CONFIG_ERROR_TEST_CASES],
 )

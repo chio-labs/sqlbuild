@@ -73,6 +73,7 @@ def execute_function(
             run_id=run_id,
             query_change_tracking=query_change_tracking,
             warnings=warnings,
+            statement_recorder=statement_recorder,
         )
         return FunctionExecutionResult(
             function_name=function_entry.name,
@@ -98,18 +99,28 @@ def _try_write_function_fingerprint(
     run_id: str,
     query_change_tracking: bool,
     warnings: list[str],
+    statement_recorder: StatementRecorder,
 ) -> None:
     if not query_change_tracking:
         return
-    target_schema: str | None = entry.target.schema
-    if target_schema is None:
+    fingerprint_schema: str | None = entry.fingerprint_target.schema
+    target_is_unqualified: bool = entry.target.schema is None and entry.target.database is None
+    if target_is_unqualified and not adapter.supports_unqualified_function_fingerprints():
+        fingerprint_schema = None
+    if fingerprint_schema is None:
         warnings.append(
             "fingerprint write skipped for "
-            f"function '{entry.name}': target schema is missing while "
+            f"function '{entry.name}': fingerprint schema is missing while "
             "query_change_tracking is enabled"
         )
         return
     try:
+        adapter.ensure_schema(
+            connection,
+            database=entry.fingerprint_target.database,
+            schema=fingerprint_schema,
+            statement_recorder=statement_recorder,
+        )
         normalized_sql: str = " ".join(entry.fingerprint_query_sql.split())
         query_hash: str = hashlib.sha256(normalized_sql.encode()).hexdigest()
         schema_fp: str = hashlib.sha256(b"").hexdigest()
@@ -128,8 +139,8 @@ def _try_write_function_fingerprint(
         write_fingerprint(
             connection=connection,
             execute=adapter.execute,
-            database=entry.target.database,
-            schema=target_schema,
+            database=entry.fingerprint_target.database,
+            schema=fingerprint_schema,
             fingerprint=fingerprint,
             render_qualified_name=adapter.render_qualified_name,
             render_framework_type=adapter.render_framework_type,

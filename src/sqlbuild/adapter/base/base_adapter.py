@@ -49,6 +49,12 @@ class BaseAdapter(StrictAdapter):
     def persists_python_functions(self) -> bool:
         return True
 
+    def python_functions_inherit_default_namespace(self) -> bool:
+        return True
+
+    def supports_unqualified_function_fingerprints(self) -> bool:
+        return False
+
     def supports_table_functions(self) -> bool:
         return False
 

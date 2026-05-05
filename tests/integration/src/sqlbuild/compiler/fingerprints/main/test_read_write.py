@@ -13,6 +13,7 @@ from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.compiler.fingerprints.main._test_types import (
+    InvalidQuerySqlStorageTestCase,
     LatestResolutionTestCase,
     NullAstHashTestCase,
     ReadNonExistentTableTestCase,
@@ -343,3 +344,70 @@ def test_given_null_ast_hash_when_writing_and_reading_then_ast_hash_is_none(
     latest: Fingerprint = result.fingerprints["orders"]
 
     assert (latest.ast_hash is None) == test_case.expected_ast_hash_is_none
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        InvalidQuerySqlStorageTestCase(
+            description="invalid legacy query sql storage raises contextual error",
+            schema="test_schema",
+            model_name="orders",
+            raw_query_sql_storage="SELECT 1",
+            expected_error_fragments=(
+                "Invalid fingerprint query SQL storage for 'orders'",
+                "expected base64-encoded UTF-8",
+                "delete or rebuild",
+                "_sqlbuild_fingerprints",
+            ),
+        )
+    ],
+    ids=["invalid legacy query sql storage raises contextual error"],
+)
+def test_given_invalid_query_sql_storage_when_reading_then_raises_contextual_error(
+    test_case: InvalidQuerySqlStorageTestCase,
+    connection: Any,
+    execute: Any,
+) -> None:
+    connection.execute(f"CREATE SCHEMA IF NOT EXISTS {test_case.schema}")
+    connection.execute(
+        f"CREATE TABLE {test_case.schema}.{FINGERPRINT_TABLE_NAME} ("
+        "model_name VARCHAR NOT NULL, "
+        "target_database VARCHAR, "
+        "target_schema VARCHAR, "
+        "target_name VARCHAR, "
+        "run_id VARCHAR NOT NULL, "
+        "query_hash VARCHAR NOT NULL, "
+        "ast_hash VARCHAR, "
+        "schema_fingerprint VARCHAR NOT NULL, "
+        "query_sql VARCHAR NOT NULL, "
+        "ts TIMESTAMP NOT NULL)"
+    )
+    connection.execute(
+        f"INSERT INTO {test_case.schema}.{FINGERPRINT_TABLE_NAME} VALUES "
+        "(?, NULL, ?, ?, ?, ?, NULL, ?, ?, ?)",
+        (
+            test_case.model_name,
+            test_case.schema,
+            test_case.model_name,
+            "run_001",
+            "hash_a",
+            "schema_a",
+            test_case.raw_query_sql_storage,
+            datetime(2026, 1, 15, 12, 0, 0),
+        ),
+    )
+
+    with pytest.raises(ValueError) as error_info:
+        read_latest_fingerprints(
+            connection=connection,
+            execute=execute,
+            database=None,
+            schema=test_case.schema,
+            render_qualified_name=RENDER_QUALIFIED_NAME,
+        )
+
+    message: str = str(error_info.value)
+    fragment: str
+    for fragment in test_case.expected_error_fragments:
+        assert fragment in message
