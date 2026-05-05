@@ -16,6 +16,7 @@ class BigQueryBuildE2ETestCase:
     expected_row_count: int
     expected_fact_order_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
     expected_udf_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
+    expected_python_udf_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
     expected_daily_revenue_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
     command: tuple[str, ...] = field(default_factory=tuple)
     expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)

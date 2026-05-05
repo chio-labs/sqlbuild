@@ -23,6 +23,7 @@ from sqlbuild.adapter.shared.models import (
 )
 from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
 from sqlbuild.adapter.shared.types import CursorKind, FrameworkType
+from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.shared.helpers.diagnostics_logging import log_sql
 
 
@@ -45,6 +46,9 @@ class _SnowflakeConnection:
 
 class SnowflakeAdapter(BaseAdapter):
     """Snowflake adapter backed by snowflake-connector-python."""
+
+    def supports_python_functions(self) -> bool:
+        return True
 
     def connect(self, config: dict[str, Any]) -> _SnowflakeConnection:
         """Open a Snowflake connection from the resolved connection config."""
@@ -335,8 +339,28 @@ class SnowflakeAdapter(BaseAdapter):
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
+        language: FunctionLanguage = FunctionLanguage.SQL,
+        runtime_version: str | None = None,
+        entry_point: str | None = None,
+        packages: tuple[str, ...] = (),
     ) -> tuple[str, ...]:
         argument_sql: str = ", ".join(f"{argument.name} {argument.type}" for argument in arguments)
+        if language == FunctionLanguage.PYTHON:
+            if runtime_version is None or entry_point is None:
+                raise ValueError("Snowflake Python UDFs require runtime_version and entry_point")
+            package_clause: str = ""
+            if packages:
+                package_values: str = "','".join(packages)
+                package_clause = f"PACKAGES = ('{package_values}')\n"
+            return (
+                f"CREATE OR REPLACE FUNCTION {target}({argument_sql})\n"
+                f"RETURNS {returns}\n"
+                "LANGUAGE PYTHON\n"
+                f"RUNTIME_VERSION = '{runtime_version}'\n"
+                f"HANDLER = '{entry_point}'\n"
+                f"{package_clause}"
+                f"AS $$\n{body_sql}\n$$",
+            )
         return (
             f"CREATE OR REPLACE FUNCTION {target}({argument_sql})\n"
             f"RETURNS {returns}\n"

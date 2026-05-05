@@ -15,12 +15,15 @@ from sqlbuild.adapter.shared.models import (
     SchemaDiffResult,
 )
 from sqlbuild.adapter.shared.types import CursorKind
+from sqlbuild.compiler.compile.models import FunctionArgument
+from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.integrations.bigquery.client import BigQueryAdapter, _BigQueryConnection
 from tests.unit.src.sqlbuild.integrations.bigquery._test_types import (
     BigQueryConnectErrorTestCase,
     BigQueryCountRowsTestCase,
     BigQueryQueryTestCase,
     BigQueryRenderCursorBoundLiteralTestCase,
+    BigQueryRenderPythonFunctionTestCase,
     BigQueryRenderQualifiedNameTestCase,
     BigQueryRenderSchemaTestCase,
     BigQueryRowDiffTestCase,
@@ -224,6 +227,48 @@ def test_given_bigquery_relation_parts_when_rendering_then_quotes_qualified_name
     )
 
     assert qualified_name == test_case.expected_qualified_name
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryRenderPythonFunctionTestCase(
+            description="renders Python UDF DDL with runtime entry point and packages",
+            expected_sql=(
+                "CREATE OR REPLACE FUNCTION `demo.udfs.is_positive_int`(a_string STRING)\n"
+                "RETURNS INT64\n"
+                "LANGUAGE python\n"
+                "OPTIONS(\n"
+                '  runtime_version = "python-3.11",\n'
+                '  entry_point = "main",\n'
+                "  packages = ['numpy', 'pandas==1.5.0']\n"
+                ")\n"
+                "AS r'''\n"
+                "def main(a_string):\n"
+                "    return 1 if a_string else 0\n"
+                "'''"
+            ),
+        )
+    ],
+    ids=["renders Python UDF DDL with runtime entry point and packages"],
+)
+def test_given_python_function_when_rendering_then_bigquery_returns_expected_ddl(
+    test_case: BigQueryRenderPythonFunctionTestCase,
+) -> None:
+    adapter: BigQueryAdapter = BigQueryAdapter()
+
+    statements: tuple[str, ...] = adapter.render_create_function(
+        target="demo.udfs.is_positive_int",
+        arguments=(FunctionArgument(name="a_string", type="STRING"),),
+        returns="INT64",
+        body_sql="def main(a_string):\n    return 1 if a_string else 0",
+        language=FunctionLanguage.PYTHON,
+        runtime_version="3.11",
+        entry_point="main",
+        packages=("numpy", "pandas==1.5.0"),
+    )
+
+    assert statements == (test_case.expected_sql,)
 
 
 @pytest.mark.parametrize(

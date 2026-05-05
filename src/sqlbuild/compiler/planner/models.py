@@ -15,6 +15,7 @@ from sqlbuild.compiler.auditing.types import (
     AuditSeverity,
 )
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationTarget
+from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
@@ -269,6 +270,11 @@ class FunctionPlanEntry:
     arguments: tuple[object, ...]
     returns: str
     body_sql: str
+    language: FunctionLanguage = FunctionLanguage.SQL
+    source_file_path: Path | None = None
+    runtime_version: str | None = None
+    entry_point: str | None = None
+    packages: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.models import FunctionPlanEntry
 from sqlbuild.executor.build.models import FunctionExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
@@ -27,6 +28,13 @@ def execute_function(
             error_message="function target could not be qualified",
         )
     try:
+        if (
+            function_entry.language == FunctionLanguage.PYTHON
+            and not adapter.supports_python_functions()
+        ):
+            raise NotImplementedError(
+                f"Adapter '{type(adapter).__name__}' does not support Python UDFs"
+            )
         adapter.ensure_schema(
             connection,
             database=function_entry.target.database,
@@ -39,6 +47,11 @@ def execute_function(
             arguments=function_entry.arguments,
             returns=function_entry.returns,
             body_sql=function_entry.body_sql,
+            language=function_entry.language,
+            runtime_version=function_entry.runtime_version,
+            entry_point=function_entry.entry_point,
+            packages=function_entry.packages,
+            source_file_path=function_entry.source_file_path,
             statement_recorder=statement_recorder,
         )
         return FunctionExecutionResult(

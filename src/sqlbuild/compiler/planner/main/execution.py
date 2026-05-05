@@ -256,6 +256,11 @@ def build_execution_plan(
             arguments=function.arguments,
             returns=function.returns,
             body_sql=function.body_sql,
+            language=function.language,
+            source_file_path=function.source_file_path,
+            runtime_version=function.runtime_version,
+            entry_point=function.entry_point,
+            packages=function.packages,
         )
         for function in project.functions
         if function.key in selected_keys

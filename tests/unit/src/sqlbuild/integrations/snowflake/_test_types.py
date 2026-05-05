@@ -15,3 +15,9 @@ class SnowflakeRenderCursorBoundLiteralTestCase:
 class SnowflakeSchemaDiffTestCase:
     description: str
     expected_result: SchemaDiffResult
+
+
+@dataclass(frozen=True)
+class SnowflakeRenderPythonFunctionTestCase:
+    description: str
+    expected_sql: str
