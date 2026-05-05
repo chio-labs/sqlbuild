@@ -26,6 +26,7 @@ from sqlbuild.compiler.planner.types import (
     SchemaColumnSource,
     WarningSeverity,
 )
+from sqlbuild.spec.models.schema import SeedCsvSettings
 
 
 def build_model_entry(
@@ -107,6 +108,7 @@ def build_seed_entry(*, name: str) -> SeedPlanEntry:
         ),
         file_path=Path(f"seeds/{name}.csv"),
         columns=(),
+        csv_settings=SeedCsvSettings(),
     )
 
 

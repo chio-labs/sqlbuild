@@ -77,7 +77,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
-from sqlbuild.compiler.shared.constants import SCHEMA_FILE_NAME, SEED_FILE_SUFFIX
 from sqlbuild.compiler.shared.helpers.schema_audits import parse_audit_instance
 from sqlbuild.spec.models.project import (
     ClonePolicy,
@@ -114,6 +113,7 @@ def build_model_inputs(
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     validate_var_macro_collision(effective_vars=effective_vars, loaded_macros=loaded_macros)
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
+    known_seed_names: set[str] = build_known_seed_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
     known_function_names: set[str] = build_known_function_names(discovered_inputs)
     known_table_function_names: set[str] = build_known_table_function_names(discovered_inputs)
@@ -170,6 +170,7 @@ def build_model_inputs(
             references=references,
             model_file=model_file,
             known_model_names=known_model_names,
+            known_seed_names=known_seed_names,
             known_source_names=known_source_names,
             known_function_names=known_function_names,
             known_table_function_names=known_table_function_names,
@@ -271,36 +272,35 @@ def build_model_inputs(
 
 
 def build_seed_inputs(discovered_inputs: DiscoveredProjectInputs) -> tuple[CompileSeedInput, ...]:
-    """Attach seed schema metadata to discovered seed files."""
+    """Attach seed declarations to discovered seed CSV files."""
 
-    seed_schema_matches: dict[str, tuple[SchemaSeedEntry, DiscoveredSchemaFile]] = {}
+    seed_declarations: list[tuple[SchemaSeedEntry, DiscoveredSchemaFile]] = []
     schema_file: DiscoveredSchemaFile
     for schema_file in discovered_inputs.schema_files:
         seed_entry: SchemaSeedEntry
         for seed_entry in schema_file.seed_entries:
-            seed_schema_matches[seed_entry.name] = (seed_entry, schema_file)
+            seed_declarations.append((seed_entry, schema_file))
+
+    seed_files_by_name: dict[str, DiscoveredSeedFile] = {
+        seed_file.file_path.stem: seed_file for seed_file in discovered_inputs.seed_files
+    }
 
     seed_inputs: list[CompileSeedInput] = []
-    seed_file: DiscoveredSeedFile
-    for seed_file in discovered_inputs.seed_files:
-        if seed_file.file_path.suffix != SEED_FILE_SUFFIX:
-            continue
-
-        seed_name: str = seed_file.file_path.stem
-        schema_match: tuple[SchemaSeedEntry, DiscoveredSchemaFile] | None = seed_schema_matches.get(
-            seed_name
-        )
-        if schema_match is None:
+    seed_entry: SchemaSeedEntry
+    seed_schema_file: DiscoveredSchemaFile
+    for seed_entry, seed_schema_file in seed_declarations:
+        seed_file: DiscoveredSeedFile | None = seed_files_by_name.get(seed_entry.name)
+        if seed_file is None:
             raise CompileInputError(
-                f"Seed file {seed_file.relative_path} has no matching seed declaration in "
-                f"{SCHEMA_FILE_NAME}"
+                f"Seed declaration '{seed_entry.name}' in {seed_schema_file.relative_path} "
+                "has no matching CSV file under seeds/"
             )
 
         seed_inputs.append(
             CompileSeedInput(
                 seed_file=seed_file,
-                schema_entry=schema_match[0],
-                schema_file=schema_match[1],
+                schema_entry=seed_entry,
+                schema_file=seed_schema_file,
             )
         )
 
@@ -321,6 +321,7 @@ def build_sql_function_inputs(
 
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
+    known_seed_names: set[str] = build_known_seed_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
     known_function_names: set[str] = build_known_function_names(discovered_inputs)
     known_table_function_names: set[str] = build_known_table_function_names(discovered_inputs)
@@ -422,6 +423,7 @@ def build_sql_function_inputs(
             references=references,
             function_file=function_file,
             known_model_names=known_model_names,
+            known_seed_names=known_seed_names,
             known_source_names=known_source_names,
             known_function_names=known_function_names,
             known_table_function_names=known_table_function_names,
@@ -801,6 +803,7 @@ def build_test_inputs(
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     vars_for_substitution: dict[str, str] = effective_vars or {}
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
+    known_seed_names: set[str] = build_known_seed_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
     test_inputs: list[CompileSqlTestInput] = []
     test_file: DiscoveredSqlTestFile
@@ -826,6 +829,7 @@ def build_test_inputs(
                 test_ctes=test_ctes,
                 test_file=test_file,
                 known_model_names=known_model_names,
+                known_seed_names=known_seed_names,
                 known_source_names=known_source_names,
                 loaded_macros=loaded_macros,
             )
@@ -849,6 +853,7 @@ def validate_test_ctes(
     test_ctes: CompileSqlTestCtes,
     test_file: DiscoveredSqlTestFile,
     known_model_names: set[str],
+    known_seed_names: set[str],
     known_source_names: set[str],
     loaded_macros: dict[str, LoadedMacro],
 ) -> None:
@@ -893,6 +898,7 @@ def build_audit_inputs(
 
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
+    known_seed_names: set[str] = build_known_seed_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
     generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]] = (
         index_generic_audit_definitions(discovered_inputs.audit_files)
@@ -917,6 +923,7 @@ def build_audit_inputs(
                 references=references,
                 audit_file=audit_file,
                 known_model_names=known_model_names,
+                known_seed_names=known_seed_names,
                 known_source_names=known_source_names,
             )
             header_severity: str | None = _str_from_dict(audit_block.header_values, "severity")
@@ -950,6 +957,7 @@ def build_audit_inputs(
                 generic_audit_definitions=generic_audit_definitions,
                 loaded_macros=loaded_macros,
                 known_model_names=known_model_names,
+                known_seed_names=known_seed_names,
                 known_source_names=known_source_names,
                 default_audit_severity=default_audit_severity,
                 default_audit_run_scope=default_audit_run_scope,
@@ -964,6 +972,7 @@ def build_audit_inputs(
                 generic_audit_definitions=generic_audit_definitions,
                 loaded_macros=loaded_macros,
                 known_model_names=known_model_names,
+                known_seed_names=known_seed_names,
                 known_source_names=known_source_names,
                 default_audit_severity=default_audit_severity,
                 default_audit_run_scope=default_audit_run_scope,
@@ -979,6 +988,7 @@ def build_model_attached_audit_inputs(
     generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]],
     loaded_macros: dict[str, LoadedMacro],
     known_model_names: set[str],
+    known_seed_names: set[str],
     known_source_names: set[str],
     default_audit_severity: str | None,
     default_audit_run_scope: str | None,
@@ -1006,6 +1016,7 @@ def build_model_attached_audit_inputs(
                 attached_column_name=None,
                 loaded_macros=loaded_macros,
                 known_model_names=known_model_names,
+                known_seed_names=known_seed_names,
                 known_source_names=known_source_names,
                 default_audit_severity=default_audit_severity,
                 default_audit_run_scope=default_audit_run_scope,
@@ -1029,6 +1040,7 @@ def build_model_attached_audit_inputs(
                     attached_column_name=column_entry.name,
                     loaded_macros=loaded_macros,
                     known_model_names=known_model_names,
+                    known_seed_names=known_seed_names,
                     known_source_names=known_source_names,
                     default_audit_severity=default_audit_severity,
                     default_audit_run_scope=default_audit_run_scope,
@@ -1044,6 +1056,7 @@ def build_source_attached_audit_inputs(
     generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]],
     loaded_macros: dict[str, LoadedMacro],
     known_model_names: set[str],
+    known_seed_names: set[str],
     known_source_names: set[str],
     default_audit_severity: str | None,
     default_audit_run_scope: str | None,
@@ -1065,6 +1078,7 @@ def build_source_attached_audit_inputs(
                 attached_column_name=None,
                 loaded_macros=loaded_macros,
                 known_model_names=known_model_names,
+                known_seed_names=known_seed_names,
                 known_source_names=known_source_names,
                 default_audit_severity=default_audit_severity,
                 default_audit_run_scope=default_audit_run_scope,
@@ -1088,6 +1102,7 @@ def build_source_attached_audit_inputs(
                     attached_column_name=column_entry.name,
                     loaded_macros=loaded_macros,
                     known_model_names=known_model_names,
+                    known_seed_names=known_seed_names,
                     known_source_names=known_source_names,
                     default_audit_severity=default_audit_severity,
                     default_audit_run_scope=default_audit_run_scope,
@@ -1108,6 +1123,7 @@ def build_attached_audit_input(
     attached_column_name: str | None,
     loaded_macros: dict[str, LoadedMacro],
     known_model_names: set[str],
+    known_seed_names: set[str],
     known_source_names: set[str],
     default_audit_severity: str | None,
     default_audit_run_scope: str | None,
@@ -1145,6 +1161,7 @@ def build_attached_audit_input(
         references=references,
         audit_file=definition[0],
         known_model_names=known_model_names,
+        known_seed_names=known_seed_names,
         known_source_names=known_source_names,
     )
     audit_label: str = f"{owner_file} audit '{audit_instance.definition_name}'"
@@ -1333,6 +1350,7 @@ def validate_model_references(
     references: tuple[CompileSqlReference, ...],
     model_file: DiscoveredSqlModelFile,
     known_model_names: set[str],
+    known_seed_names: set[str],
     known_source_names: set[str],
     known_function_names: set[str],
     known_table_function_names: set[str],
@@ -1346,8 +1364,28 @@ def validate_model_references(
             reference.ref_kind == SqlReferenceKind.REF
             and reference.ref_name not in known_model_names
         ):
+            if reference.ref_name in known_seed_names:
+                raise CompileInputError(
+                    f"Model file {model_file.relative_path} references seed '{reference.ref_name}' "
+                    f'with __ref(...). Use __seed("{reference.ref_name}") for seed '
+                    "references; __ref only resolves models."
+                )
             raise CompileInputError(
                 f"Model file {model_file.relative_path} references unknown model "
+                f"'{reference.ref_name}'"
+            )
+        if (
+            reference.ref_kind == SqlReferenceKind.SEED
+            and reference.ref_name not in known_seed_names
+        ):
+            if reference.ref_name in known_model_names:
+                raise CompileInputError(
+                    f"Model file {model_file.relative_path} references model "
+                    f"'{reference.ref_name}' "
+                    f'with __seed(...). Use __ref("{reference.ref_name}") for model references.'
+                )
+            raise CompileInputError(
+                f"Model file {model_file.relative_path} references unknown seed "
                 f"'{reference.ref_name}'"
             )
         if (
@@ -1393,6 +1431,7 @@ def validate_function_references(
     references: tuple[CompileSqlReference, ...],
     function_file: DiscoveredSqlFunctionFile,
     known_model_names: set[str],
+    known_seed_names: set[str],
     known_source_names: set[str],
     known_function_names: set[str],
     known_table_function_names: set[str],
@@ -1406,8 +1445,22 @@ def validate_function_references(
             reference.ref_kind == SqlReferenceKind.REF
             and reference.ref_name not in known_model_names
         ):
+            if reference.ref_name in known_seed_names:
+                raise CompileInputError(
+                    f"SQL function file {function_file.relative_path} references seed "
+                    f"'{reference.ref_name}' with __ref(...). Use __seed(\"{reference.ref_name}\") "
+                    "for seed references; __ref only resolves models."
+                )
             raise CompileInputError(
                 f"SQL function file {function_file.relative_path} references unknown model "
+                f"'{reference.ref_name}'"
+            )
+        if (
+            reference.ref_kind == SqlReferenceKind.SEED
+            and reference.ref_name not in known_seed_names
+        ):
+            raise CompileInputError(
+                f"SQL function file {function_file.relative_path} references unknown seed "
                 f"'{reference.ref_name}'"
             )
         if (
@@ -1454,6 +1507,7 @@ def validate_audit_references(
     references: tuple[CompileSqlReference, ...],
     audit_file: DiscoveredAuditFile,
     known_model_names: set[str],
+    known_seed_names: set[str],
     known_source_names: set[str],
 ) -> None:
     """Validate extracted audit refs against discovered project inputs."""
@@ -1469,8 +1523,22 @@ def validate_audit_references(
             reference.ref_kind == SqlReferenceKind.REF
             and reference.ref_name not in known_model_names
         ):
+            if reference.ref_name in known_seed_names:
+                raise CompileInputError(
+                    f"Audit file {audit_file.relative_path} references seed '{reference.ref_name}' "
+                    f'with __ref(...). Use __seed("{reference.ref_name}") for seed '
+                    "references; __ref only resolves models."
+                )
             raise CompileInputError(
                 f"Audit file {audit_file.relative_path} references unknown model "
+                f"'{reference.ref_name}'"
+            )
+        if (
+            reference.ref_kind == SqlReferenceKind.SEED
+            and reference.ref_name not in known_seed_names
+        ):
+            raise CompileInputError(
+                f"Audit file {audit_file.relative_path} references unknown seed "
                 f"'{reference.ref_name}'"
             )
         if (
@@ -1599,12 +1667,18 @@ def build_effective_settings(
 
 
 def build_known_ref_names(discovered_inputs: DiscoveredProjectInputs) -> set[str]:
-    """Build the set of names valid as __ref() targets (models + seeds)."""
+    """Build the set of names valid as __ref() targets."""
 
     return {
         discovered_model_file.file_path.stem
         for discovered_model_file in discovered_inputs.model_files
-    } | {
+    }
+
+
+def build_known_seed_names(discovered_inputs: DiscoveredProjectInputs) -> set[str]:
+    """Build the set of names valid as __seed() targets."""
+
+    return {
         seed_entry.name
         for schema_file in discovered_inputs.schema_files
         for seed_entry in schema_file.seed_entries

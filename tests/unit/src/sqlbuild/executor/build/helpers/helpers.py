@@ -21,6 +21,7 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.spec.models.schema import SeedCsvSettings
 
 
 @dataclass(frozen=True)
@@ -111,6 +112,7 @@ def build_seed_plan_entry(*, name: str) -> SeedPlanEntry:
         ),
         file_path=Path(f"seeds/{name}.csv"),
         columns=(),
+        csv_settings=SeedCsvSettings(),
     )
 
 

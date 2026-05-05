@@ -32,6 +32,7 @@ from sqlbuild.executor.build.models import (
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.spec.models.schema import SeedCsvSettings
 
 
 def build_target_writer_plan_output() -> PlanOutput:
@@ -89,6 +90,7 @@ def build_target_writer_plan_output() -> PlanOutput:
                 target=target,
                 file_path=Path("seeds/country_codes.csv"),
                 columns=(),
+                csv_settings=SeedCsvSettings(),
             ),
         ),
         function_entries=(

@@ -34,6 +34,7 @@ from sqlbuild.compiler.planner.types import (
     SelectorKind,
     WarningSeverity,
 )
+from sqlbuild.spec.models.schema import SeedCsvSettings
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -260,6 +261,7 @@ class SeedPlanEntry:
     target: CompiledRelationTarget
     file_path: Path
     columns: tuple[ColumnInfo, ...]
+    csv_settings: SeedCsvSettings
     action: PlanAction = PlanAction.LOAD_SEED
 
 
