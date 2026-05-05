@@ -1792,6 +1792,44 @@ SELECT * FROM __source("missing_source")
         expected_error_fragment="references unknown source 'missing_source'",
     ),
     BuildCompileInputsErrorTestCase(
+        description="raises when a model uses dbt refs",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/orders.sql": """
+MODEL ();
+
+SELECT * FROM __dbt_ref("stg_orders")
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment=(
+            r"Model file models/staging/orders\.sql uses __dbt_ref\('stg_orders'\) "
+            "but dbt refs are not supported yet"
+        ),
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when a SQL function uses dbt refs",
+        repo_files=base_repo_files()
+        | {
+            "functions/sql/orders.sql": """
+FUNCTION (
+  returns table (order_id INTEGER)
+);
+
+SELECT * FROM __dbt_ref("stg_orders")
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment=(
+            r"SQL function file functions/sql/orders\.sql uses __dbt_ref\('stg_orders'\) "
+            "but dbt refs are not supported yet"
+        ),
+    ),
+    BuildCompileInputsErrorTestCase(
         description="raises when an audit uses dbt refs",
         repo_files=base_repo_files()
         | {
