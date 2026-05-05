@@ -65,6 +65,13 @@ class BigQueryRenderCursorBoundLiteralTestCase:
 
 
 @dataclass(frozen=True)
+class BigQueryRenderDeleteInsertTestCase:
+    description: str
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class BigQuerySchemaDiffTestCase:
     description: str
     expected_result: SchemaDiffResult

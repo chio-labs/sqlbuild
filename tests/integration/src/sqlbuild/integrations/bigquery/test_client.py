@@ -22,6 +22,7 @@ from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.integrations.bigquery.client import BigQueryAdapter
 from tests.integration.src.sqlbuild.integrations.bigquery._test_types import (
     BigQueryBuildFlowTestCase,
+    BigQueryDeleteInsertCursorTestCase,
     BigQueryFingerprintTestCase,
     BigQueryMergeTestCase,
     BigQueryQueryTestCase,
@@ -613,6 +614,68 @@ def test_given_merge_source_when_merging_then_target_matches_expected_rows(
     )
 
     assert rows == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryDeleteInsertCursorTestCase(
+            description="cursor delete insert replaces bounded window with native merge",
+            target_setup_sql=(
+                "CREATE OR REPLACE TABLE __target__ (id INT64, event_time TIMESTAMP, val STRING)",
+                "INSERT INTO __target__ VALUES "
+                "(1, TIMESTAMP '2026-01-01 00:00:00', 'old'), "
+                "(2, TIMESTAMP '2026-01-03 00:00:00', 'keep')",
+            ),
+            source_sql=(
+                "SELECT 1 AS id, TIMESTAMP '2026-01-01 00:00:00' AS event_time, 'new' AS val"
+            ),
+            cursor_column="event_time",
+            cursor_start="2026-01-01T00:00:00",
+            cursor_end="2026-01-02T00:00:00",
+            columns=("id", "event_time", "val"),
+            expected_rows=((1, "new"), (2, "keep")),
+            expected_recorded_fragment="MERGE",
+        )
+    ],
+    ids=["cursor delete insert replaces bounded window with native merge"],
+)
+def test_given_cursor_window_when_delete_inserting_then_bigquery_uses_merge(
+    test_case: BigQueryDeleteInsertCursorTestCase,
+    adapter: BigQueryAdapter,
+    connection: Any,
+    bigquery_project: str,
+    bigquery_dataset: str,
+) -> None:
+    target_name: str = qualified_name(
+        project=bigquery_project,
+        dataset=bigquery_dataset,
+        name="events",
+    )
+    setup_sql: tuple[str, ...] = tuple(
+        statement.replace("__target__", target_name) for statement in test_case.target_setup_sql
+    )
+    execute_statements(adapter=adapter, connection=connection, statements=setup_sql)
+    recorder: StatementRecorder = build_statement_recorder()
+
+    adapter.delete_insert_cursor(
+        connection,
+        target=target_name,
+        sql=test_case.source_sql,
+        cursor_column=test_case.cursor_column,
+        cursor_start=test_case.cursor_start,
+        cursor_end=test_case.cursor_end,
+        columns=test_case.columns,
+        statement_recorder=recorder,
+    )
+    rows: tuple[tuple[object, ...], ...] = fetch_rows(
+        adapter=adapter,
+        connection=connection,
+        sql=f"SELECT id, val FROM {target_name} ORDER BY id",
+    )
+
+    assert rows == test_case.expected_rows
+    assert test_case.expected_recorded_fragment in recorder.snapshot()[0].content
 
 
 @pytest.mark.parametrize(
