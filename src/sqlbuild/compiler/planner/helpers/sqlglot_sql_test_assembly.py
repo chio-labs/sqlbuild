@@ -16,6 +16,8 @@ def try_resolve_test_model_sql_with_sqlglot(
     query_sql: str,
     mock_refs: dict[str, str],
     mock_sources: dict[str, str],
+    mock_seeds: dict[str, str],
+    function_targets: dict[str, str],
     helper_ctes: tuple[CompileSqlTestCte, ...],
     resolved_chain: dict[str, SqlglotResolvedTestSql],
     reachable_mocks: set[str],
@@ -118,6 +120,26 @@ def try_resolve_test_model_sql_with_sqlglot(
                     _wrap_mock_body(mock_sources[referenced_name]),
                 )
                 table.set("this", identifier_type(this=generated_name, quoted=False))
+                return table
+            return table
+
+        if function_name == "__seed":
+            generated_name = f"__seed__{referenced_name}"
+            if referenced_name in mock_seeds:
+                reachable_mocks.add(referenced_name)
+                _ensure_available(generated_name, referenced_name, "seed")
+                generated_ctes.setdefault(
+                    generated_name,
+                    _wrap_mock_body(mock_seeds[referenced_name]),
+                )
+                table.set("this", identifier_type(this=generated_name, quoted=False))
+                return table
+            return table
+
+        if function_name == "__udf":
+            target: str | None = function_targets.get(referenced_name)
+            if target is not None:
+                table.set("this", identifier_type(this=target, quoted=False))
                 return table
             return table
 

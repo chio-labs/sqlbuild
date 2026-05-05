@@ -14,6 +14,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
     CursorValue,
+    FunctionInfo,
     QueryResult,
     RelationInfo,
     RowDiffColumnResult,
@@ -235,6 +236,36 @@ class DuckDbAdapter(BaseAdapter):
             for row in rows
         )
 
+    def list_functions(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> tuple[FunctionInfo, ...]:
+        query: str = (
+            "SELECT function_name, schema_name, function_type FROM duckdb_functions() WHERE 1=1"
+        )
+        if schemas is not None:
+            quoted: str = ", ".join(f"'{s}'" for s in schemas)
+            query += f" AND schema_name IN ({quoted})"
+        if names:
+            quoted_names: str = ", ".join(f"'{name}'" for name in names)
+            query += f" AND function_name IN ({quoted_names})"
+        if database is not None:
+            query += f" AND database_name = '{database}'"
+        rows: list[tuple[Any, ...]] = self.execute(connection, query).fetchall()
+        return tuple(
+            FunctionInfo(
+                database=database,
+                schema=row[1],
+                name=row[0],
+                function_type=row[2],
+            )
+            for row in rows
+        )
+
     def get_columns(
         self,
         connection: Any,
@@ -318,6 +349,9 @@ class DuckDbAdapter(BaseAdapter):
 
     def supports_python_functions(self) -> bool:
         return True
+
+    def persists_python_functions(self) -> bool:
+        return False
 
     def supports_table_functions(self) -> bool:
         return True

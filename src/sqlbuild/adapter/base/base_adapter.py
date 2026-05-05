@@ -9,6 +9,7 @@ from typing import Any
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
     CursorValue,
+    FunctionInfo,
     QueryResult,
     RelationInfo,
     RowDiffResult,
@@ -44,6 +45,9 @@ class BaseAdapter(StrictAdapter):
 
     def supports_python_functions(self) -> bool:
         return False
+
+    def persists_python_functions(self) -> bool:
+        return True
 
     def supports_table_functions(self) -> bool:
         return False
@@ -159,6 +163,32 @@ class BaseAdapter(StrictAdapter):
                 schema=row[1],
                 name=row[0],
                 relation_type=row[2],
+            )
+            for row in cursor.fetchall()
+        )
+
+    def list_functions(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> tuple[FunctionInfo, ...]:
+        query: str = (
+            "SELECT routine_name, routine_schema, routine_type "
+            "FROM information_schema.routines WHERE 1=1"
+            + _build_schemas_filter(schemas, column_name="routine_schema")
+            + _build_names_filter(names, column_name="routine_name")
+            + (f" AND routine_catalog = '{database}'" if database else "")
+        )
+        cursor: Any = connection.execute(query)
+        return tuple(
+            FunctionInfo(
+                database=database,
+                schema=row[1],
+                name=row[0],
+                function_type=row[2],
             )
             for row in cursor.fetchall()
         )
@@ -887,19 +917,27 @@ class BaseAdapter(StrictAdapter):
         return PromotionStrategy.ATOMIC_SWAP
 
 
-def _build_schemas_filter(schemas: tuple[str, ...] | None) -> str:
+def _build_schemas_filter(
+    schemas: tuple[str, ...] | None,
+    *,
+    column_name: str = "table_schema",
+) -> str:
     """Build an AND clause filtering to the given schemas."""
 
     if schemas is None:
         return ""
     quoted: str = ", ".join(f"'{s}'" for s in schemas)
-    return f" AND table_schema IN ({quoted})"
+    return f" AND {column_name} IN ({quoted})"
 
 
-def _build_names_filter(names: tuple[str, ...] | None) -> str:
+def _build_names_filter(
+    names: tuple[str, ...] | None,
+    *,
+    column_name: str = "table_name",
+) -> str:
     """Build an AND clause filtering to the given relation names."""
 
     if not names:
         return ""
     quoted: str = ", ".join(f"'{name}'" for name in names)
-    return f" AND table_name IN ({quoted})"
+    return f" AND {column_name} IN ({quoted})"

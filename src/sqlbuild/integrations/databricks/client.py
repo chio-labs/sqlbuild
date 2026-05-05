@@ -14,6 +14,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
     CursorValue,
+    FunctionInfo,
     QueryResult,
     RelationInfo,
     RowDiffColumnResult,
@@ -204,6 +205,40 @@ class DatabricksAdapter(BaseAdapter):
                 schema=str(row[1]).lower(),
                 name=str(row[0]).lower(),
                 relation_type=self._normalize_relation_type(str(row[2])),
+            )
+            for row in rows
+        )
+
+    def list_functions(
+        self,
+        connection: _DatabricksConnection,
+        *,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> tuple[FunctionInfo, ...]:
+        if database is None or not schemas:
+            return ()
+        information_schema: str = self._information_schema(database)
+        query: str = (
+            f"SELECT routine_name, routine_schema, routine_type FROM {information_schema}.routines "
+            "WHERE 1=1"
+        )
+        query += self._build_in_filter(column="routine_schema", values=schemas)
+        if names:
+            query += self._build_in_filter(column="routine_name", values=names)
+        cursor: Any = connection.cursor()
+        try:
+            cursor.execute(query)
+            rows: list[tuple[Any, ...]] = cursor.fetchall()
+        finally:
+            cursor.close()
+        return tuple(
+            FunctionInfo(
+                database=database,
+                schema=str(row[1]).lower(),
+                name=str(row[0]).lower(),
+                function_type=str(row[2]).lower(),
             )
             for row in rows
         )

@@ -7,6 +7,7 @@ from sqlbuild.compiler.compile.constants import (
     MACRO_TEST_CTE_PREFIX,
     REF_TEST_CTE_PREFIX,
     RESERVED_SQL_TEST_CTE_NAMES,
+    SEED_TEST_CTE_PREFIX,
     SOURCE_TEST_CTE_PREFIX,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
@@ -77,6 +78,7 @@ def _classify_sql_test_ctes(
     macro_mocks: dict[str, str] = {}
     mock_model_names: list[str] = []
     mock_source_names: list[str] = []
+    mock_seed_names: list[str] = []
     expected_model_names: list[str] = []
 
     cte: CompileSqlTestCte
@@ -112,6 +114,17 @@ def _classify_sql_test_ctes(
             )
             authored_ctes.append(cte)
             continue
+        if cte.name.startswith(SEED_TEST_CTE_PREFIX):
+            mock_seed_names.append(
+                _require_prefixed_name(
+                    cte_name=cte.name,
+                    prefix=SEED_TEST_CTE_PREFIX,
+                    label="__seed__<seed>",
+                    file_label=file_label,
+                )
+            )
+            authored_ctes.append(cte)
+            continue
         if cte.name.startswith(EXPECTED_TEST_CTE_PREFIX):
             expected_model_names.append(
                 _require_prefixed_name(
@@ -129,9 +142,10 @@ def _classify_sql_test_ctes(
             )
         authored_ctes.append(cte)
 
-    if not mock_model_names and not mock_source_names:
+    if not mock_model_names and not mock_source_names and not mock_seed_names:
         raise CompileInputError(
-            f"SQL test '{file_label}' must define at least one __ref__* or __source__* mock CTE"
+            f"SQL test '{file_label}' must define at least one __ref__*, __source__*, "
+            "or __seed__* mock CTE"
         )
     if not expected_model_names:
         raise CompileInputError(
@@ -142,6 +156,7 @@ def _classify_sql_test_ctes(
         macro_mocks=macro_mocks,
         mock_model_names=tuple(mock_model_names),
         mock_source_names=tuple(mock_source_names),
+        mock_seed_names=tuple(mock_seed_names),
         expected_model_names=tuple(expected_model_names),
     )
 
