@@ -156,6 +156,55 @@ seeds:
         expected_test_scope_deps=(),
         expected_test_expected_model_names=(),
     ),
+    AssembleCompiledProjectTestCase(
+        description="assembles seed targets using seed declaration templates",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.yml": """
+name: demo
+adapter: duckdb
+default_environment: dev
+
+vars:
+  seed_schema_suffix: lookups
+
+defaults:
+  database: default_db
+  schema: default_schema
+
+environments:
+  dev:
+    database: env_db
+    schema: env_schema
+""".strip()
+            + "\n",
+            "seeds/lookups.yml": """
+seeds:
+  - name: country_codes
+    database: "${if(ENV:USE_SEED_DB, 'seed_db', CTX:target.database)}"
+    schema: "${CTX:target.schema}_${seed_schema_suffix}"
+    columns:
+      - name: code
+        type: VARCHAR
+""".strip()
+            + "\n",
+            "seeds/country_codes.csv": "code\nUS\n",
+        },
+        expected_model_names=(),
+        expected_model_deps=(),
+        expected_model_target_names=(),
+        expected_model_target_schemas=(),
+        expected_source_names=(),
+        expected_seed_names=("country_codes",),
+        expected_seed_target_schemas=("env_schema_lookups",),
+        expected_seed_target_databases=("seed_db",),
+        expected_seed_target_qualified_names=(None,),
+        expected_audit_names=(),
+        expected_audit_scope_deps=(),
+        expected_test_names=(),
+        expected_test_scope_deps=(),
+        expected_test_expected_model_names=(),
+    ),
 ]
 
 
@@ -172,6 +221,7 @@ def test_given_compile_inputs_when_assembling_compiled_project_then_returns_expe
 ) -> None:
     monkeypatch.setenv("TARGET_DB", "projectdb")
     monkeypatch.setenv("LOCAL_TARGET_DB", "local_reportingdb")
+    monkeypatch.setenv("USE_SEED_DB", "1")
     write_repo_files(tmp_path, test_case.repo_files)
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
     compile_inputs: CompileProjectInputs = build_compile_inputs(discovered, run_id="test_run_id")

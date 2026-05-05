@@ -191,6 +191,20 @@ def _parse_seed_entry(*, entry: dict[str, object], file_path: Path) -> SchemaSee
             label="seed",
             error_class=SchemaParseError,
         ),
+        database=optional_non_empty_string(
+            entry=entry,
+            key="database",
+            file_path=file_path,
+            label="seed",
+            error_class=SchemaParseError,
+        ),
+        schema=optional_non_empty_string(
+            entry=entry,
+            key="schema",
+            file_path=file_path,
+            label="seed",
+            error_class=SchemaParseError,
+        ),
         meta=optional_mapping(
             entry=entry, key="meta", file_path=file_path, label="seed", error_class=SchemaParseError
         ),
