@@ -30,6 +30,28 @@ TEST_CASES: list[ParseSchemaYamlTestCase] = [
         expected_seed_column_names=(("country_code", "country_name"),),
         expected_model_audit_names=(),
         expected_column_audit_names=(),
+        expected_seed_databases=(None,),
+        expected_seed_schemas=(None,),
+    ),
+    ParseSchemaYamlTestCase(
+        description="parses seed target overrides",
+        contents="""
+        seeds:
+          - name: country_codes
+            database: "${ENV:SEED_DB}"
+            schema: "${coalesce(ENV:SEED_SCHEMA, 'lookups')}"
+            columns:
+              - name: country_code
+                type: VARCHAR
+        """,
+        expected_model_names=(),
+        expected_seed_names=("country_codes",),
+        expected_model_column_names=(),
+        expected_seed_column_names=(("country_code",),),
+        expected_model_audit_names=(),
+        expected_column_audit_names=(),
+        expected_seed_databases=("${ENV:SEED_DB}",),
+        expected_seed_schemas=("${coalesce(ENV:SEED_SCHEMA, 'lookups')}",),
     ),
     ParseSchemaYamlTestCase(
         description="allows empty schema files with no models or seeds",
@@ -40,6 +62,8 @@ TEST_CASES: list[ParseSchemaYamlTestCase] = [
         expected_seed_column_names=(),
         expected_model_audit_names=(),
         expected_column_audit_names=(),
+        expected_seed_databases=(),
+        expected_seed_schemas=(),
     ),
 ]
 
@@ -66,6 +90,8 @@ def test_given_schema_yaml_variants_when_parsing_then_it_returns_expected_raw_me
         tuple(tuple(column.name for column in entry.columns) for entry in seed_entries)
         == test_case.expected_seed_column_names
     )
+    assert tuple(entry.database for entry in seed_entries) == test_case.expected_seed_databases
+    assert tuple(entry.schema for entry in seed_entries) == test_case.expected_seed_schemas
     assert (
         tuple(tuple(audit.definition_name for audit in entry.audits) for entry in model_entries)
         == test_case.expected_model_audit_names

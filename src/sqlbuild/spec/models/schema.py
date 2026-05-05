@@ -65,6 +65,8 @@ class SchemaSeedEntry:
 
     name: str
     description: str | None = None
+    database: str | None = None
+    schema: str | None = None
     meta: dict[str, object] = field(default_factory=dict)
     csv_settings: SeedCsvSettings = field(default_factory=SeedCsvSettings)
     columns: tuple[SchemaColumn, ...] = field(default_factory=tuple)

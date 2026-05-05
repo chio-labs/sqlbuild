@@ -37,6 +37,7 @@ from sqlbuild.spec.models.project import (
     EnvironmentConfig,
     resolve_effective_adapter_name,
 )
+from sqlbuild.spec.models.schema import SchemaSeedEntry
 
 
 def assemble_compiled_project(inputs: CompileProjectInputs) -> CompiledProject:
@@ -134,7 +135,7 @@ def _assemble_compiled_seed(
     effective_vars: dict[str, str],
 ) -> CompiledSeed:
     target: CompiledRelationTarget = _build_seed_relation_target(
-        seed_name=seed_input.schema_entry.name,
+        seed_entry=seed_input.schema_entry,
         defaults=defaults,
         environment_config=environment_config,
         effective_vars=effective_vars,
@@ -303,20 +304,40 @@ def _build_model_relation_target(
 
 def _build_seed_relation_target(
     *,
-    seed_name: str,
+    seed_entry: SchemaSeedEntry,
     defaults: DefaultsConfig,
     environment_config: EnvironmentConfig | None,
     effective_vars: dict[str, str],
 ) -> CompiledRelationTarget:
-    database, schema = _resolve_target_namespace(
+    resolved_namespace: tuple[str | None, str | None] = _resolve_target_namespace(
         defaults=defaults,
         environment_config=environment_config,
         effective_vars=effective_vars,
     )
+    database: str | None = resolved_namespace[0]
+    schema: str | None = resolved_namespace[1]
+    if seed_entry.database is not None:
+        database = _expand_seed_target_value(
+            raw_value=seed_entry.database,
+            seed_name=seed_entry.name,
+            database=database,
+            schema=schema,
+            effective_vars=effective_vars,
+            context_label=f"seed '{seed_entry.name}' database",
+        )
+    if seed_entry.schema is not None:
+        schema = _expand_seed_target_value(
+            raw_value=seed_entry.schema,
+            seed_name=seed_entry.name,
+            database=database,
+            schema=schema,
+            effective_vars=effective_vars,
+            context_label=f"seed '{seed_entry.name}' schema",
+        )
     return CompiledRelationTarget(
         database=database,
         schema=schema,
-        name=seed_name,
+        name=seed_entry.name,
         qualified_name=None,
     )
 
@@ -361,3 +382,50 @@ def _expand_seed_environment_value(
             preserve_unknown_context=False,
         )
     )
+
+
+def _expand_seed_target_value(
+    *,
+    raw_value: str,
+    seed_name: str,
+    database: str | None,
+    schema: str | None,
+    effective_vars: dict[str, str],
+    context_label: str,
+) -> str | None:
+    if raw_value == "preserve":
+        return None
+    return str(
+        expand_template_data(
+            raw_value,
+            variables=effective_vars,
+            context_values={
+                "model.name": seed_name,
+                "model.database": database,
+                "model.schema": schema,
+                "model.alias": seed_name,
+                "target.database": database,
+                "target.schema": schema,
+                "target.table": seed_name,
+                "target.qualified": _build_seed_target_qualified_context(
+                    database=database,
+                    schema=schema,
+                    name=seed_name,
+                ),
+            },
+            context_label=context_label,
+            allow_context=True,
+            preserve_context_tokens=False,
+            preserve_unknown_context=False,
+        )
+    )
+
+
+def _build_seed_target_qualified_context(
+    *, database: str | None, schema: str | None, name: str
+) -> str | None:
+    if database is not None and schema is not None:
+        return f"{database}.{schema}.{name}"
+    if schema is not None:
+        return f"{schema}.{name}"
+    return None

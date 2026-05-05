@@ -113,6 +113,8 @@ class ParseSchemaYamlTestCase:
     expected_seed_column_names: tuple[tuple[str, ...], ...]
     expected_model_audit_names: tuple[tuple[str, ...], ...]
     expected_column_audit_names: tuple[tuple[tuple[str, ...], ...], ...]
+    expected_seed_databases: tuple[str | None, ...] = ()
+    expected_seed_schemas: tuple[str | None, ...] = ()
 
 
 @dataclass(frozen=True)
