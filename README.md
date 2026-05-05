@@ -15,7 +15,7 @@ SQLBuild is a framework for building batch SQL transformation pipelines where co
 - **Python macros, not Jinja** - Macros are real Python functions. Testable, debuggable, and composable with standard tooling.
 - **Change-aware incremental rebuilds** - Fingerprint-based query change detection, schema diff tracking, and configurable backfill policies with automatic cascade through the DAG.
 - **Cursor-based incremental processing** - Automatic gap detection and resume. If a model fails for several runs, the next build replays from where it left off. Microbatch mode splits large ranges into configurable batches.
-- **Environment diffs** - Compare schemas and row-level data between environments with `sqb diff --from prod --to dev`.
+- **Environment diffs** - Compare schemas and row-level data between environments with `sqb diff prod:dev`.
 - **Zero-copy cloning** - Branch environments instantly with `sqb clone` without duplicating data. No `manifest.json` required.
 - **Custom materializations** - Write materialization logic in Python with full framework integration, including audit hooks, schema change signals, and query change detection.
 - **Path-between selectors** - `--select fact_orders~daily_activity_rollup` selects every model on the shortest path between two nodes.

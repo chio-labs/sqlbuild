@@ -8,6 +8,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from sqlbuild.cli.commands.main.helpers.diff.validation import parse_diff_environment_range
 from sqlbuild.cli.commands.main.helpers.entry.models import CliEntrypointHandlers, CliNamespace
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.parsers import (
@@ -80,9 +81,8 @@ def _build_parser() -> argparse.ArgumentParser:
     add_select_args(clone_parser)
 
     diff_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DIFF)
+    diff_parser.add_argument("environment_range", metavar="FROM:TO")
     diff_parser.add_argument("--no-sql-validation", action="store_true", default=False)
-    diff_parser.add_argument("--from", dest="from_environment", required=True)
-    diff_parser.add_argument("--to", dest="to_environment", required=True)
     diff_parser.add_argument("--full", action="store_true", default=False)
     diff_parser.add_argument("--schema-only", action="store_true", default=False)
     diff_parser.add_argument("--bounded", default=None)
@@ -271,14 +271,15 @@ def _main_with_dependencies(
                 tuple(args.exclude),
             )
         if args.command == CliCommand.DIFF:
-            if args.from_environment is None or args.to_environment is None:
-                raise CliUserError("diff requires --from and --to")
+            from_environment: str
+            to_environment: str
+            from_environment, to_environment = parse_diff_environment_range(args.environment_range)
             return handlers.run_diff(
                 project_dir,
                 args.no_color,
                 args.no_sql_validation,
-                args.from_environment,
-                args.to_environment,
+                from_environment,
+                to_environment,
                 args.full,
                 args.schema_only,
                 args.bounded,
