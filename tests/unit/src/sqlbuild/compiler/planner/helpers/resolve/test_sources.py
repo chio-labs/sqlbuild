@@ -13,6 +13,7 @@ from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers.resolve._test_types import (
+    SourceResolutionErrorTestCase,
     SourceResolutionTestCase,
 )
 
@@ -93,11 +94,41 @@ TEST_CASES: list[SourceResolutionTestCase] = [
                 ),
             ),
         },
-        source_warehouse_columns={},
+        source_warehouse_columns={
+            "raw_orders": (
+                ColumnInfo(name="order_id", type=""),
+                ColumnInfo(name="amount", type=""),
+            ),
+        },
         expected_sql=(
             "SELECT * FROM (SELECT CAST(order_id AS INTEGER) AS order_id, "
             "CAST(amount AS DECIMAL) AS amount "
             "FROM (SELECT '1' AS order_id, 12 AS amount))"
+        ),
+    ),
+    SourceResolutionTestCase(
+        description="partial expression source enforcement preserves untyped columns",
+        query_sql='SELECT * FROM __source("raw_payments")',
+        star_exclude_keyword="EXCLUDE",
+        source_map={
+            "raw_payments": SourceEntry(
+                name="raw_payments",
+                expression="SELECT 1 AS id, '1700' AS amount_cents, 'success' AS status",
+                type_enforcement=True,
+                columns=(SourceColumnEntry(name="amount_cents", type="INTEGER"),),
+            ),
+        },
+        source_warehouse_columns={
+            "raw_payments": (
+                ColumnInfo(name="id", type=""),
+                ColumnInfo(name="amount_cents", type=""),
+                ColumnInfo(name="status", type=""),
+            ),
+        },
+        expected_sql=(
+            "SELECT * FROM (SELECT id, "
+            "CAST(amount_cents AS INTEGER) AS amount_cents, status "
+            "FROM (SELECT 1 AS id, '1700' AS amount_cents, 'success' AS status))"
         ),
     ),
     SourceResolutionTestCase(
@@ -175,35 +206,6 @@ TEST_CASES: list[SourceResolutionTestCase] = [
         expected_sql="SELECT * FROM name_only",
     ),
     SourceResolutionTestCase(
-        description="enforcement skips columns not in warehouse",
-        query_sql='SELECT * FROM __source("partial_source")',
-        star_exclude_keyword="EXCLUDE",
-        source_map={
-            "partial_source": SourceEntry(
-                name="partial_source",
-                database="raw",
-                schema="public",
-                table="partial",
-                type_enforcement=True,
-                columns=(
-                    SourceColumnEntry(name="order_id", type="VARCHAR"),
-                    SourceColumnEntry(name="missing_col", type="INTEGER"),
-                ),
-            ),
-        },
-        source_warehouse_columns={
-            "partial_source": (
-                ColumnInfo(name="order_id", type="VARCHAR"),
-                ColumnInfo(name="amount", type="DECIMAL"),
-            ),
-        },
-        expected_sql=(
-            "SELECT * FROM (SELECT * EXCLUDE (order_id), "
-            "CAST(order_id AS VARCHAR) AS order_id "
-            "FROM raw.public.partial)"
-        ),
-    ),
-    SourceResolutionTestCase(
         description="all columns enforced uses plain SELECT without EXCLUDE",
         query_sql='SELECT * FROM __source("all_enforced")',
         star_exclude_keyword="EXCLUDE",
@@ -264,6 +266,75 @@ TEST_CASES: list[SourceResolutionTestCase] = [
     ),
 ]
 
+ERROR_TEST_CASES: list[SourceResolutionErrorTestCase] = [
+    SourceResolutionErrorTestCase(
+        description="raises when enforced source declares missing warehouse columns",
+        query_sql='SELECT * FROM __source("partial_source")',
+        star_exclude_keyword="EXCLUDE",
+        source_map={
+            "partial_source": SourceEntry(
+                name="partial_source",
+                database="raw",
+                schema="public",
+                table="partial",
+                type_enforcement=True,
+                columns=(
+                    SourceColumnEntry(name="order_id", type="VARCHAR"),
+                    SourceColumnEntry(name="missing_col", type="INTEGER"),
+                ),
+            ),
+        },
+        source_warehouse_columns={
+            "partial_source": (
+                ColumnInfo(name="order_id", type="VARCHAR"),
+                ColumnInfo(name="amount", type="DECIMAL"),
+            ),
+        },
+        expected_error_fragment=(
+            "Source raw.public.partial declares columns not found in warehouse: missing_col"
+        ),
+    ),
+    SourceResolutionErrorTestCase(
+        description="raises when expression source typed column is missing from query output",
+        query_sql='SELECT * FROM __source("raw_payments")',
+        star_exclude_keyword="EXCLUDE",
+        source_map={
+            "raw_payments": SourceEntry(
+                name="raw_payments",
+                expression="SELECT 1 AS id, 'success' AS status",
+                type_enforcement=True,
+                columns=(SourceColumnEntry(name="amount_cents", type="INTEGER"),),
+            ),
+        },
+        source_warehouse_columns={
+            "raw_payments": (
+                ColumnInfo(name="id", type=""),
+                ColumnInfo(name="status", type=""),
+            ),
+        },
+        expected_error_fragment=(
+            "Source expression declares typed columns not found in query output: amount_cents"
+        ),
+    ),
+    SourceResolutionErrorTestCase(
+        description="raises when expression source enforcement lacks query output metadata",
+        query_sql='SELECT * FROM __source("raw_payments")',
+        star_exclude_keyword="EXCLUDE",
+        source_map={
+            "raw_payments": SourceEntry(
+                name="raw_payments",
+                expression="SELECT 1 AS amount_cents",
+                type_enforcement=True,
+                columns=(SourceColumnEntry(name="amount_cents", type="INTEGER"),),
+            ),
+        },
+        source_warehouse_columns={},
+        expected_error_fragment=(
+            "Source expression type enforcement requires query output column metadata"
+        ),
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -286,3 +357,25 @@ def test_given_source_references_when_resolving_then_returns_expected_sql(
     )
 
     assert result == test_case.expected_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    ERROR_TEST_CASES,
+    ids=[case.description for case in ERROR_TEST_CASES],
+)
+def test_given_invalid_source_references_when_resolving_then_raises_clear_error(
+    test_case: SourceResolutionErrorTestCase,
+) -> None:
+    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+        resolve_source_references(
+            query_sql=test_case.query_sql,
+            source_map=test_case.source_map,
+            source_warehouse_columns=test_case.source_warehouse_columns,
+            star_exclude_keyword=test_case.star_exclude_keyword,
+            cursor_bounds=None,
+            cursor_inputs={},
+            adapter=DuckDbAdapter(),
+            cursor_type=None,
+            lower_bound_inclusive=True,
+        )

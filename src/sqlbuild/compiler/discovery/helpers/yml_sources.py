@@ -51,6 +51,25 @@ def _load_sources_payload(*, contents: str, file_path: Path) -> dict[str, object
 
 
 def _parse_source_entry(*, entry: dict[str, object], file_path: Path) -> SourceEntry:
+    columns: tuple[SourceColumnEntry, ...] = _parse_columns(entry=entry, file_path=file_path)
+    raw_type_enforcement: bool | None = optional_bool(
+        entry=entry,
+        key="type_enforcement",
+        file_path=file_path,
+        label="source",
+        error_class=SourceParseError,
+    )
+    type_enforcement: bool | None = raw_type_enforcement
+    expression: str | None = optional_non_empty_string(
+        entry=entry,
+        key="expression",
+        file_path=file_path,
+        label="source",
+        error_class=SourceParseError,
+    )
+    if type_enforcement is None and any(column.type is not None for column in columns):
+        type_enforcement = True
+
     source_entry: SourceEntry = SourceEntry(
         name=require_non_empty_string(
             entry=entry,
@@ -80,13 +99,7 @@ def _parse_source_entry(*, entry: dict[str, object], file_path: Path) -> SourceE
             label="source",
             error_class=SourceParseError,
         ),
-        expression=optional_non_empty_string(
-            entry=entry,
-            key="expression",
-            file_path=file_path,
-            label="source",
-            error_class=SourceParseError,
-        ),
+        expression=expression,
         description=optional_non_empty_string(
             entry=entry,
             key="description",
@@ -94,13 +107,7 @@ def _parse_source_entry(*, entry: dict[str, object], file_path: Path) -> SourceE
             label="source",
             error_class=SourceParseError,
         ),
-        type_enforcement=optional_bool(
-            entry=entry,
-            key="type_enforcement",
-            file_path=file_path,
-            label="source",
-            error_class=SourceParseError,
-        ),
+        type_enforcement=type_enforcement,
         meta=optional_mapping(
             entry=entry,
             key="meta",
@@ -108,7 +115,7 @@ def _parse_source_entry(*, entry: dict[str, object], file_path: Path) -> SourceE
             label="source",
             error_class=SourceParseError,
         ),
-        columns=_parse_columns(entry=entry, file_path=file_path),
+        columns=columns,
         audits=parse_audit_instances(
             entry=entry, file_path=file_path, label="source", error_class=SourceParseError
         ),

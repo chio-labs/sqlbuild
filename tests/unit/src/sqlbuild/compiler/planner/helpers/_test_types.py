@@ -23,6 +23,7 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
     WarningSeverity,
 )
+from sqlbuild.spec.models.source import SourceEntry
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,15 @@ class BuildUpstreamDepsTestCase:
     source_names: tuple[str, ...]
     seed_names: tuple[str, ...]
     expected_upstream_keys: dict[str, tuple[str, ...]]
+
+
+@dataclass(frozen=True)
+class SourceColumnsTestCase:
+    description: str
+    source_entry: SourceEntry
+    adapter_column_names: tuple[str, ...]
+    expected_queried_sql: tuple[str, ...]
+    expected_source_column_names: tuple[str, ...]
 
 
 @dataclass(frozen=True)
