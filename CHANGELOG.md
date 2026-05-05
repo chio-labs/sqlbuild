@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0](https://github.com/chio-labs/sqlbuild/compare/v0.2.1...v0.3.0) (2026-05-05)
+
+
+### Features
+
+* add lineage command ([9aef7d6](https://github.com/chio-labs/sqlbuild/commit/9aef7d69ad556a2ef0ec568f1aed4492a119dfff))
+* add lineage command ([a0af73a](https://github.com/chio-labs/sqlbuild/commit/a0af73adfd5dba1870ff5b3b7293a78967a578c8))
+
 ## [0.2.1](https://github.com/chio-labs/sqlbuild/compare/v0.2.0...v0.2.1) (2026-05-05)
 
 
