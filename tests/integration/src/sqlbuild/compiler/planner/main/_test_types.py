@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 
+from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
     PlanAction,
@@ -38,6 +39,11 @@ class BuildExecutionPlanTestCase:
     expected_warning_count: int = 0
     expected_warning_fragment: str | None = None
     seed_targets: dict[str, str] = field(default_factory=dict)
+    function_targets: dict[str, str] = field(default_factory=dict)
+    function_bodies: dict[str, str] = field(default_factory=dict)
+    previous_function_bodies: dict[str, str] = field(default_factory=dict)
+    function_languages: dict[str, FunctionLanguage] = field(default_factory=dict)
+    function_deps: dict[str, tuple[str, ...]] = field(default_factory=dict)
     select: tuple[str, ...] = ()
     expected_seed_names: tuple[str, ...] = ()
     expected_model_count: int | None = None

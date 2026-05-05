@@ -120,6 +120,8 @@ class QueryPropagationBuildE2ETestCase:
     after_text: str
     expected_exit_code: int
     expected_reasons: dict[str, str]
+    expected_actions: dict[str, str] = field(default_factory=dict)
+    expected_fingerprint_models: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

@@ -14,6 +14,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     prepare_inline_project,
+    query_duckdb,
     run_sqb,
 )
 
@@ -134,6 +135,90 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
             "hourly_order_activity": "query_changed",
             "daily_activity_rollup": "normal_incremental",
         },
+        expected_fingerprint_models=(
+            "daily_activity_rollup",
+            "fact_orders",
+            "hourly_order_activity",
+            "stg_orders",
+        ),
+    ),
+    QueryPropagationBuildE2ETestCase(
+        description="changed SQL UDF propagates full rebuild to downstream incremental model",
+        repo_files={
+            "sqlbuild_project.yml": dedent(
+                """
+                name: function_query_propagation_project
+                adapter: duckdb
+
+                connection:
+                  database: propagation.duckdb
+                """
+            ).strip()
+            + "\n",
+            "seed_raw_data.sql": dedent(
+                """
+                CREATE TABLE IF NOT EXISTS raw_orders (
+                  id INTEGER,
+                  amount_cents INTEGER
+                );
+
+                INSERT INTO raw_orders VALUES
+                  (1, 100),
+                  (2, 200);
+                """
+            ).strip()
+            + "\n",
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_orders
+                    schema: main
+                    table: raw_orders
+                """
+            ).strip()
+            + "\n",
+            "functions/sql/is_high_value_order.sql": dedent(
+                """
+                FUNCTION (
+                  arguments (amount_cents INTEGER),
+                  returns BOOLEAN,
+                );
+
+                amount_cents > 100
+                """
+            ).strip()
+            + "\n",
+            "models/fact_orders.sql": dedent(
+                """
+                MODEL (
+                  materialized incremental,
+                  incremental_strategy delete_insert,
+                  cursor order_id,
+                  cursor_type integer,
+                  cursor_inputs (
+                    raw_orders id,
+                  ),
+                  unique_key order_id
+                );
+
+                SELECT
+                  id AS order_id,
+                  amount_cents,
+                  __udf("is_high_value_order")(amount_cents) AS is_high_value
+                FROM __source("raw_orders")
+                """
+            ).strip()
+            + "\n",
+        },
+        initial_build_command=("--no-color", "build"),
+        plan_command=("plan", "--json"),
+        mutation_file="functions/sql/is_high_value_order.sql",
+        before_text="amount_cents > 100",
+        after_text="amount_cents >= 100",
+        expected_exit_code=0,
+        expected_reasons={"fact_orders": "upstream_changed"},
+        expected_actions={"fact_orders": "create_table"},
+        expected_fingerprint_models=("fact_orders", "is_high_value_order"),
     ),
     QueryPropagationBuildE2ETestCase(
         description="bounded query change propagates downstream",
@@ -252,6 +337,12 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
             "hourly_order_activity": "query_changed",
             "daily_activity_rollup": "upstream_changed",
         },
+        expected_fingerprint_models=(
+            "daily_activity_rollup",
+            "fact_orders",
+            "hourly_order_activity",
+            "stg_orders",
+        ),
     ),
 ]
 
@@ -286,6 +377,12 @@ def test_given_changed_upstream_when_planning_then_downstream_reason_matches_pol
         initial_result.stdout + initial_result.stderr
     )
 
+    fingerprint_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=db_path,
+        sql="SELECT model_name FROM main._sqlbuild_fingerprints ORDER BY model_name",
+    )
+    assert tuple(row[0] for row in fingerprint_rows) == test_case.expected_fingerprint_models
+
     mutation_path: Path = project_dir / test_case.mutation_file
     original_text: str = mutation_path.read_text(encoding="utf-8")
     mutation_path.write_text(
@@ -308,5 +405,11 @@ def test_given_changed_upstream_when_planning_then_downstream_reason_matches_pol
             if str(entry["name"]) in test_case.expected_reasons
         }
         assert reasons_by_name == test_case.expected_reasons
+        actions_by_name: dict[str, str] = {
+            str(entry["name"]): str(entry["action"])
+            for entry in payload["models"]
+            if str(entry["name"]) in test_case.expected_actions
+        }
+        assert actions_by_name == test_case.expected_actions
     finally:
         mutation_path.write_text(original_text, encoding="utf-8")

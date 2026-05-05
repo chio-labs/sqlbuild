@@ -23,6 +23,10 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.helpers.audit_entry import plan_audit
 from sqlbuild.compiler.planner.helpers.buildability import check_buildability
 from sqlbuild.compiler.planner.helpers.cascade import build_self_cascade, resolve_cascade
+from sqlbuild.compiler.planner.helpers.function_fingerprints import (
+    build_compiled_function_fingerprint_sql,
+    detect_function_backfill,
+)
 from sqlbuild.compiler.planner.helpers.graph import (
     build_downstream_deps,
     build_upstream_deps,
@@ -154,6 +158,22 @@ def build_execution_plan(
     effective_cascades: dict[str, CascadeResult] = {}
     model_cursor_types: dict[str, str | None] = {}
 
+    function_fingerprint_sql: dict[str, str] = {}
+    function: CompiledFunction
+    for function in project.functions:
+        fingerprint_sql: str = build_compiled_function_fingerprint_sql(function)
+        function_fingerprint_sql[function.name] = fingerprint_sql
+        if function.key not in selected_keys:
+            continue
+        function_backfill: BackfillResult = detect_function_backfill(
+            function=function,
+            fingerprint_sql=fingerprint_sql,
+            snapshot=snapshot,
+            query_change_tracking=query_change_tracking,
+            full_refresh=full_refresh,
+        )
+        effective_cascades[function.name] = build_self_cascade(function_backfill)
+
     key: CompiledObjectKey
     for key in execution_order:
         if key not in selected_keys:
@@ -253,11 +273,17 @@ def build_execution_plan(
             arguments=function.arguments,
             returns=function.returns,
             body_sql=function.body_sql,
+            fingerprint_query_sql=function_fingerprint_sql[function.name],
             language=function.language,
             source_file_path=function.source_file_path,
             runtime_version=function.runtime_version,
             entry_point=function.entry_point,
             packages=function.packages,
+            previous_query_sql=(
+                snapshot.fingerprints[function.name].query_sql
+                if function.name in snapshot.fingerprints
+                else None
+            ),
         )
         for function in project.functions
         if function.key in selected_keys
