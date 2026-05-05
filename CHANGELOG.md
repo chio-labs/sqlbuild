@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/chio-labs/sqlbuild/compare/v0.3.0...v0.4.0) (2026-05-05)
+
+
+### Features
+
+* add debug command ([b7a67f5](https://github.com/chio-labs/sqlbuild/commit/b7a67f5fbc4bcb963ac36988f6a18a9127742d91))
+* add debug command ([1193f75](https://github.com/chio-labs/sqlbuild/commit/1193f75149787bac84f3907ef166409020a64814))
+
 ## [0.3.0](https://github.com/chio-labs/sqlbuild/compare/v0.2.1...v0.3.0) (2026-05-05)
 
 
