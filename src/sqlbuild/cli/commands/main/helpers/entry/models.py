@@ -17,6 +17,7 @@ class CliNamespace:
     project_dir: str | None = None
     no_sql_validation: bool = False
     defer_to: str | None = None
+    environment_range: str | None = None
     from_environment: str | None = None
     to_environment: str | None = None
     hard_copy: bool = False

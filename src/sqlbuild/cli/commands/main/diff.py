@@ -57,9 +57,9 @@ def run_diff(
         project_dir=effective_project_dir
     )
     if from_environment not in discovered_inputs.project_config.environments:
-        raise CliUserError(f"unknown diff --from environment '{from_environment}'")
+        raise CliUserError(f"unknown diff FROM environment '{from_environment}'")
     if to_environment not in discovered_inputs.project_config.environments:
-        raise CliUserError(f"unknown diff --to environment '{to_environment}'")
+        raise CliUserError(f"unknown diff TO environment '{to_environment}'")
 
     effective_adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,

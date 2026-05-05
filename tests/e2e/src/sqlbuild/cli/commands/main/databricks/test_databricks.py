@@ -178,10 +178,7 @@ DATABRICKS_DIFF_E2E_TEST_CASES: list[DatabricksDiffE2ETestCase] = [
         command=(
             "--no-color",
             "diff",
-            "--from",
-            "prod",
-            "--to",
-            "dev",
+            "prod:dev",
             "--schema-only",
             "--select",
             "stg_orders",
@@ -195,10 +192,7 @@ DATABRICKS_DIFF_E2E_TEST_CASES: list[DatabricksDiffE2ETestCase] = [
         command=(
             "--no-color",
             "diff",
-            "--from",
-            "prod",
-            "--to",
-            "dev",
+            "prod:dev",
             "--full",
             "--select",
             "stg_orders",
