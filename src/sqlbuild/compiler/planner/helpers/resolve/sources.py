@@ -34,6 +34,12 @@ def resolve_source_references(
             return match.group(0)
         resolved_source: str = render_source_relation(source_entry)
         warehouse_cols: tuple[ColumnInfo, ...] | None = source_warehouse_columns.get(source_name)
+        if source_entry.expression is None and warehouse_cols:
+            _validate_declared_columns(
+                qualified_name=resolved_source,
+                declared_columns=source_entry.columns,
+                available_columns=warehouse_cols,
+            )
         if source_entry.type_enforcement:
             if source_entry.expression is not None:
                 resolved_source = _build_expression_cast_subquery(
@@ -77,18 +83,10 @@ def _build_relation_cast_subquery(
     enforced_map: dict[str, str] = {
         col.name: col.type for col in declared_columns if col.type is not None
     }
-    warehouse_names: set[str] = {col.name for col in warehouse_columns}
-    missing_names: tuple[str, ...] = tuple(
-        col.name for col in declared_columns if col.name not in warehouse_names
-    )
-    if missing_names:
-        missing_columns: str = ", ".join(missing_names)
-        raise ValueError(
-            f"Source {qualified_name} declares columns not found in warehouse: {missing_columns}"
-        )
     if not enforced_map:
         return qualified_name
 
+    warehouse_names: set[str] = {col.name for col in warehouse_columns}
     cast_names: list[str] = [name for name in enforced_map if name in warehouse_names]
     if not cast_names:
         return qualified_name
@@ -105,6 +103,26 @@ def _build_relation_cast_subquery(
     exclude_list: str = ", ".join(cast_names)
     return (
         f"(SELECT * {star_exclude_keyword} ({exclude_list}), {cast_clause} FROM {qualified_name})"
+    )
+
+
+def _validate_declared_columns(
+    *,
+    qualified_name: str,
+    declared_columns: tuple[SourceColumnEntry, ...],
+    available_columns: tuple[ColumnInfo, ...],
+) -> None:
+    """Ensure declared relation source columns exist in warehouse metadata."""
+
+    available_names: set[str] = {col.name for col in available_columns}
+    missing_names: tuple[str, ...] = tuple(
+        col.name for col in declared_columns if col.name not in available_names
+    )
+    if not missing_names:
+        return
+    missing_columns: str = ", ".join(missing_names)
+    raise ValueError(
+        f"Source {qualified_name} declares columns not found in warehouse: {missing_columns}"
     )
 
 

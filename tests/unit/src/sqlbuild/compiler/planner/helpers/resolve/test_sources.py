@@ -295,6 +295,32 @@ ERROR_TEST_CASES: list[SourceResolutionErrorTestCase] = [
         ),
     ),
     SourceResolutionErrorTestCase(
+        description="raises when untyped relation source metadata has missing columns",
+        query_sql='SELECT * FROM __source("partial_source")',
+        star_exclude_keyword="EXCLUDE",
+        source_map={
+            "partial_source": SourceEntry(
+                name="partial_source",
+                database="raw",
+                schema="public",
+                table="partial",
+                columns=(
+                    SourceColumnEntry(name="order_id"),
+                    SourceColumnEntry(name="missing_col"),
+                ),
+            ),
+        },
+        source_warehouse_columns={
+            "partial_source": (
+                ColumnInfo(name="order_id", type="VARCHAR"),
+                ColumnInfo(name="amount", type="DECIMAL"),
+            ),
+        },
+        expected_error_fragment=(
+            "Source raw.public.partial declares columns not found in warehouse: missing_col"
+        ),
+    ),
+    SourceResolutionErrorTestCase(
         description="raises when expression source typed column is missing from query output",
         query_sql='SELECT * FROM __source("raw_payments")',
         star_exclude_keyword="EXCLUDE",
