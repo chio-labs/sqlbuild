@@ -123,6 +123,21 @@ class ParseSchemaYamlErrorTestCase:
 
 
 @dataclass(frozen=True)
+class ParseSeedCsvSettingsYamlTestCase:
+    description: str
+    contents: str
+    expected_delimiter: str | None
+    expected_quotechar: str | None
+    expected_doublequote: bool | None
+    expected_escapechar: str | None
+    expected_skipinitialspace: bool | None
+    expected_lineterminator: str | None
+    expected_encoding: str | None
+    expected_na_values: tuple[object, ...] | dict[str, tuple[object, ...]] | None
+    expected_keep_default_na: bool | None
+
+
+@dataclass(frozen=True)
 class DiscoverProjectInputsErrorTestCase:
     description: str
     repo_files: dict[str, str]

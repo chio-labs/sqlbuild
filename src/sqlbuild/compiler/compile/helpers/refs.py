@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlbuild.compiler.compile.constants import (
     DBT_REF_CALL_NAME,
     REF_CALL_NAME,
+    SEED_CALL_NAME,
     SOURCE_CALL_NAME,
     TABLE_FUNCTION_CALL_NAME,
     UDF_CALL_NAME,
@@ -55,6 +56,8 @@ def _parse_reference_at(*, sql: str, start: int) -> tuple[CompileSqlReference, i
     ref_kind: SqlReferenceKind | None = None
     if sql.startswith(f"{DBT_REF_CALL_NAME}(", start):
         ref_kind = SqlReferenceKind.DBT_REF
+    elif sql.startswith(f"{SEED_CALL_NAME}(", start):
+        ref_kind = SqlReferenceKind.SEED
     elif sql.startswith(f"{SOURCE_CALL_NAME}(", start):
         ref_kind = SqlReferenceKind.SOURCE
     elif sql.startswith(f"{UDF_CALL_NAME}(", start):
@@ -89,6 +92,8 @@ def ref_prefix(ref_kind: SqlReferenceKind | str) -> str:
         return DBT_REF_CALL_NAME
     if normalized_ref_kind == SqlReferenceKind.SOURCE:
         return SOURCE_CALL_NAME
+    if normalized_ref_kind == SqlReferenceKind.SEED:
+        return SEED_CALL_NAME
     if normalized_ref_kind == SqlReferenceKind.UDF:
         return UDF_CALL_NAME
     if normalized_ref_kind == SqlReferenceKind.TABLE_FUNCTION:

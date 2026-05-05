@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.compiler.discovery.exceptions import SchemaParseError
 from sqlbuild.compiler.discovery.helpers.python_functions import parse_python_function
 from sqlbuild.compiler.discovery.helpers.sql_audits import parse_sql_audit_file
 from sqlbuild.compiler.discovery.helpers.sql_functions import parse_function_sql
@@ -25,7 +26,11 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlModelFile,
     DiscoveredSqlTestFile,
 )
-from sqlbuild.compiler.shared.constants import SCHEMA_FILE_NAME, YAML_FILE_SUFFIXES
+from sqlbuild.compiler.shared.constants import (
+    SCHEMA_FILE_NAME,
+    SEED_FILE_SUFFIX,
+    YAML_FILE_SUFFIXES,
+)
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -113,7 +118,7 @@ def discover_python_function_files(
 
 
 def discover_schema_files(*, project_dir: Path) -> tuple[DiscoveredSchemaFile, ...]:
-    """Discover schema.yml files under models/ and seeds/."""
+    """Discover model schema.yml files and seed declaration .yml files."""
 
     schema_paths: list[Path] = []
     models_root: Path = project_dir / "models"
@@ -121,8 +126,14 @@ def discover_schema_files(*, project_dir: Path) -> tuple[DiscoveredSchemaFile, .
 
     if models_root.is_dir():
         schema_paths.extend(sorted(models_root.rglob(SCHEMA_FILE_NAME)))
-    if seeds_root.is_dir() and (seeds_root / SCHEMA_FILE_NAME).exists():
-        schema_paths.append(seeds_root / SCHEMA_FILE_NAME)
+    if seeds_root.is_dir():
+        yaml_path: Path
+        for yaml_path in sorted(seeds_root.rglob("*.yaml")):
+            raise SchemaParseError(
+                f"Seed declaration file {yaml_path.relative_to(project_dir)} must use .yml; "
+                ".yaml is not supported"
+            )
+        schema_paths.extend(sorted(seeds_root.rglob("*.yml")))
 
     deduped_paths: tuple[Path, ...] = tuple(dict.fromkeys(schema_paths))
     discovered_schema_files: list[DiscoveredSchemaFile] = []
@@ -171,7 +182,7 @@ def discover_source_files(*, project_dir: Path) -> tuple[DiscoveredSourceFile, .
 
 
 def discover_seed_files(*, project_dir: Path) -> tuple[DiscoveredSeedFile, ...]:
-    """Discover seed files under seeds/, excluding schema.yml metadata."""
+    """Discover seed CSV files under seeds/."""
 
     seeds_root: Path = project_dir / "seeds"
     if not seeds_root.is_dir():
@@ -183,7 +194,7 @@ def discover_seed_files(*, project_dir: Path) -> tuple[DiscoveredSeedFile, ...]:
             relative_path=file_path.relative_to(project_dir),
         )
         for file_path in sorted(seeds_root.rglob("*"))
-        if file_path.is_file() and file_path.name != SCHEMA_FILE_NAME
+        if file_path.is_file() and file_path.suffix == SEED_FILE_SUFFIX
     )
 
 

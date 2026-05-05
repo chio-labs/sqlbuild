@@ -13,7 +13,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSourceFile,
     DiscoveredSqlModelFile,
 )
-from sqlbuild.compiler.shared.constants import RESERVED_MODEL_NAMES, SEED_FILE_SUFFIX
+from sqlbuild.compiler.shared.constants import RESERVED_MODEL_NAMES
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -98,7 +98,7 @@ def _validate_unique_schema_seed_names(schema_files: tuple[DiscoveredSchemaFile,
             existing_path: str | None = seen_names.get(seed_entry.name)
             if existing_path is not None:
                 raise DiscoveryConflictError(
-                    "Duplicate schema.yml seed declaration found for "
+                    "Duplicate seed declaration found for "
                     f"'{seed_entry.name}' in {existing_path} and {schema_file.relative_path}"
                 )
             seen_names[seed_entry.name] = str(schema_file.relative_path)
@@ -155,6 +155,7 @@ def _validate_declared_seed_files(
     schema_files: tuple[DiscoveredSchemaFile, ...],
     seed_files: tuple[DiscoveredSeedFile, ...],
 ) -> None:
+    _validate_unique_seed_csv_names(seed_files)
     declared_seed_entries: list[tuple[SchemaSeedEntry, str]] = []
     schema_file: DiscoveredSchemaFile
     for schema_file in schema_files:
@@ -167,10 +168,7 @@ def _validate_declared_seed_files(
         seed_entry: SchemaSeedEntry = seed_entry_and_path[0]
         declaration_path: str = seed_entry_and_path[1]
         matching_seed_files: tuple[DiscoveredSeedFile, ...] = tuple(
-            seed_file
-            for seed_file in seed_files
-            if seed_file.file_path.suffix == SEED_FILE_SUFFIX
-            and seed_file.file_path.stem == seed_entry.name
+            seed_file for seed_file in seed_files if seed_file.file_path.stem == seed_entry.name
         )
         if not matching_seed_files:
             raise SeedDiscoveryError(
@@ -187,11 +185,41 @@ def _validate_declared_seed_files(
 
         _validate_seed_csv_header(seed_entry=seed_entry, seed_file=matching_seed_files[0])
 
+    declared_names: set[str] = {seed_entry.name for seed_entry, _ in declared_seed_entries}
+    seed_file: DiscoveredSeedFile
+    for seed_file in seed_files:
+        if seed_file.file_path.stem not in declared_names:
+            raise SeedDiscoveryError(
+                f"Seed CSV {seed_file.relative_path} has no matching declaration for seed "
+                f"'{seed_file.file_path.stem}' under seeds/**/*.yml"
+            )
+
+
+def _validate_unique_seed_csv_names(seed_files: tuple[DiscoveredSeedFile, ...]) -> None:
+    seen_paths: dict[str, Path] = {}
+    seed_file: DiscoveredSeedFile
+    for seed_file in seed_files:
+        seed_name: str = seed_file.file_path.stem
+        existing_path: Path | None = seen_paths.get(seed_name)
+        if existing_path is not None:
+            raise SeedDiscoveryError(
+                f"Duplicate seed CSV name '{seed_name}' found: {existing_path}, "
+                f"{seed_file.relative_path}. Seed CSV filenames must be unique under seeds/."
+            )
+        seen_paths[seed_name] = seed_file.relative_path
+
 
 def _validate_seed_csv_header(
     *, seed_entry: SchemaSeedEntry, seed_file: DiscoveredSeedFile
 ) -> None:
-    header_columns: tuple[str, ...] = _load_seed_csv_header(seed_file.file_path)
+    header_columns: tuple[str, ...] = _load_seed_csv_header(
+        seed_file.file_path,
+        delimiter=seed_entry.csv_settings.delimiter,
+        quotechar=seed_entry.csv_settings.quotechar,
+        escapechar=seed_entry.csv_settings.escapechar,
+        doublequote=seed_entry.csv_settings.doublequote,
+        skipinitialspace=seed_entry.csv_settings.skipinitialspace,
+    )
     if not header_columns:
         raise SeedDiscoveryError(f"{seed_file.relative_path} must contain a CSV header row")
 
@@ -213,10 +241,39 @@ def _validate_seed_csv_header(
         )
 
 
-def _load_seed_csv_header(file_path: Path) -> tuple[str, ...]:
+def _load_seed_csv_header(
+    file_path: Path,
+    *,
+    delimiter: str | None,
+    quotechar: str | None,
+    escapechar: str | None,
+    doublequote: bool | None,
+    skipinitialspace: bool | None,
+) -> tuple[str, ...]:
+    reader_kwargs: dict[str, object] = {}
+    if delimiter is not None:
+        reader_kwargs["delimiter"] = delimiter
+    if quotechar is not None:
+        reader_kwargs["quotechar"] = quotechar
+    if escapechar is not None:
+        reader_kwargs["escapechar"] = escapechar
+    if doublequote is not None:
+        reader_kwargs["doublequote"] = doublequote
+    if skipinitialspace is not None:
+        reader_kwargs["skipinitialspace"] = skipinitialspace
+
     with file_path.open("r", encoding="utf-8", newline="") as handle:
         try:
-            header_row: list[str] = next(csv.reader(handle))
+            header_row: list[str] = next(
+                csv.reader(
+                    handle,
+                    delimiter=delimiter or ",",
+                    quotechar=quotechar,
+                    escapechar=escapechar,
+                    doublequote=True if doublequote is None else doublequote,
+                    skipinitialspace=False if skipinitialspace is None else skipinitialspace,
+                )
+            )
         except StopIteration:
             return ()
     return tuple(header_row)

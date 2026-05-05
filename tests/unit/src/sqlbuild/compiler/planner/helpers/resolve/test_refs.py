@@ -58,9 +58,14 @@ NO_CURSOR_TEST_CASES: list[RefResolutionTestCase] = [
         expected_sql='SELECT * FROM __ref("unknown_model")',
     ),
     RefResolutionTestCase(
-        description="resolves seed ref from seed targets",
-        query_sql='SELECT * FROM __ref("country_codes")',
+        description="resolves seed marker from seed targets",
+        query_sql='SELECT * FROM __seed("country_codes")',
         expected_sql="SELECT * FROM seeds.country_codes",
+    ),
+    RefResolutionTestCase(
+        description="leaves seed name through ref unresolved",
+        query_sql='SELECT * FROM __ref("country_codes")',
+        expected_sql='SELECT * FROM __ref("country_codes")',
     ),
 ]
 

@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
 
 
 class MaterializationMixin(ABC):
@@ -115,6 +116,7 @@ class MaterializationMixin(ABC):
         target: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
+        csv_settings: SeedCsvSettings = default_seed_csv_settings,
         replace: bool = True,
         infer_types: bool = False,
         statement_recorder: StatementRecorder,

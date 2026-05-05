@@ -32,7 +32,16 @@ sources:
 """.strip()
                 + "\n",
                 "seeds/country_codes.csv": "country_code,country_name\nUS,United States\n",
-                "seeds/schema.yml": "seeds: []\n",
+                "seeds/lookups.yml": """
+seeds:
+  - name: country_codes
+    columns:
+      - name: country_code
+        type: VARCHAR
+      - name: country_name
+        type: VARCHAR
+""".strip()
+                + "\n",
                 "tests/unit/orders.sql": "TEST ();\nSELECT 1\n",
                 "audits/generic/not_null.sql": "AUDIT ();\nSELECT 1\n",
                 "macros/name_helpers.py": "def slug() -> str:\n    return 'slug'\n",
@@ -43,9 +52,9 @@ sources:
             expected_model_paths=("models/staging/orders.sql",),
             expected_model_header_values=({},),
             expected_model_query_sql=("select 1",),
-            expected_schema_paths=("models/staging/schema.yml", "seeds/schema.yml"),
+            expected_schema_paths=("models/staging/schema.yml", "seeds/lookups.yml"),
             expected_schema_model_names=((), ()),
-            expected_schema_seed_names=((), ()),
+            expected_schema_seed_names=((), ("country_codes",)),
             expected_source_paths=("sources/raw.yml",),
             expected_source_entry_names=(("raw_orders",),),
             expected_seed_paths=("seeds/country_codes.csv",),
@@ -207,7 +216,7 @@ models:
         description="raises on duplicate schema seed names across files",
         repo_files=base_repo_files()
         | {
-            "models/schema.yml": """
+            "seeds/a.yml": """
 seeds:
   - name: country_codes
     columns:
@@ -215,7 +224,7 @@ seeds:
         type: VARCHAR
 """.strip()
             + "\n",
-            "seeds/schema.yml": """
+            "seeds/b.yml": """
 seeds:
   - name: country_codes
     columns:
@@ -224,7 +233,7 @@ seeds:
 """.strip()
             + "\n",
         },
-        expected_error_fragment="Duplicate schema.yml seed declaration found for 'country_codes'",
+        expected_error_fragment="Duplicate seed declaration found for 'country_codes'",
     ),
     DiscoverProjectInputsErrorTestCase(
         description="raises on duplicate model file names across directories",
@@ -271,6 +280,46 @@ seeds:
         expected_error_fragment="Logical relation name 'country_codes' is declared as both source",
     ),
     DiscoverProjectInputsErrorTestCase(
+        description="raises when seeds are declared outside seeds directory",
+        repo_files=base_repo_files()
+        | {
+            "models/schema.yml": """
+seeds:
+  - name: country_codes
+    columns:
+      - name: country_code
+        type: VARCHAR
+""".strip()
+            + "\n",
+        },
+        expected_error_fragment="seed declarations must live under seeds/",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when a seed declaration uses yaml extension",
+        repo_files=base_repo_files()
+        | {
+            "seeds/lookups.yaml": "seeds: []\n",
+        },
+        expected_error_fragment=r"\.yaml is not supported",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when seed csv basenames are duplicated",
+        repo_files=base_repo_files()
+        | {
+            "seeds/a/country_codes.csv": "country_code\nUS\n",
+            "seeds/b/country_codes.csv": "country_code\nCA\n",
+            "seeds/lookups.yml": """
+seeds:
+  - name: country_codes
+    columns:
+      - name: country_code
+        type: VARCHAR
+""".strip()
+            + "\n",
+        },
+        expected_error_fragment="Duplicate seed CSV name 'country_codes' found",
+    ),
+    DiscoverProjectInputsErrorTestCase(
         description="raises when a declared seed has no matching csv file",
         repo_files=base_repo_files()
         | {
@@ -284,6 +333,14 @@ seeds:
             + "\n",
         },
         expected_error_fragment="has no matching CSV file under seeds/",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when a seed csv has no matching declaration",
+        repo_files=base_repo_files()
+        | {
+            "seeds/country_codes.csv": "country_code\nUS\n",
+        },
+        expected_error_fragment="has no matching declaration for seed 'country_codes'",
     ),
     DiscoverProjectInputsErrorTestCase(
         description="raises when a seed csv header does not match declared columns",

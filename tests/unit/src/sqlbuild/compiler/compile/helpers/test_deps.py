@@ -42,12 +42,11 @@ MODEL_BUILD_DEPS_TEST_CASES: list[ModelBuildDepsTestCase] = [
         ),
     ),
     ModelBuildDepsTestCase(
-        description="ref to a seed produces a SEED typed dep key",
+        description="seed reference produces a SEED typed dep key",
         references=(
             CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="stg_orders"),
-            CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="waffle_types"),
+            CompileSqlReference(ref_kind=SqlReferenceKind.SEED, ref_name="waffle_types"),
         ),
-        seed_names=frozenset({"waffle_types"}),
         expected_deps=(
             CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="stg_orders"),
             CompiledObjectKey(resource_type=CompiledResourceType.SEED, name="waffle_types"),

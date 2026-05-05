@@ -20,6 +20,7 @@ from sqlbuild.adapter.shared.models import (
 )
 from sqlbuild.adapter.shared.types import CursorKind
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
+from sqlbuild.spec.models.schema import SeedCsvSettings
 from tests.integration.src.sqlbuild.integrations.duckdb._test_types import (
     ConnectSettingsTestCase,
     ConnectTestCase,
@@ -440,6 +441,19 @@ LOAD_SEED_TEST_CASES: list[LoadSeedTestCase] = [
         infer_types=True,
         expected_row_count=2,
         expected_first_row=(1, "alice"),
+    ),
+    LoadSeedTestCase(
+        description="loads csv with custom delimiter",
+        csv_content="id|name\n1|alice\n2|bob\n",
+        columns=(
+            ColumnInfo(name="id", type="INTEGER"),
+            ColumnInfo(name="name", type="VARCHAR"),
+        ),
+        infer_types=False,
+        expected_row_count=2,
+        expected_first_row=(1, "alice"),
+        csv_settings=SeedCsvSettings(delimiter="|"),
+        expected_recorded_fragment="delim='|'",
     ),
 ]
 
@@ -1118,19 +1132,22 @@ def test_given_csv_file_when_loading_seed_twice_then_table_is_replaced(
 ) -> None:
     csv_path: Path = tmp_path / "seed.csv"
     csv_path.write_text(test_case.csv_content, encoding="utf-8")
+    first_recorder: StatementRecorder = StatementRecorder()
     adapter.load_seed(
         connection,
         target="seed_table",
         file_path=csv_path,
         columns=test_case.columns,
+        csv_settings=test_case.csv_settings,
         infer_types=test_case.infer_types,
-        statement_recorder=StatementRecorder(),
+        statement_recorder=first_recorder,
     )
     adapter.load_seed(
         connection,
         target="seed_table",
         file_path=csv_path,
         columns=test_case.columns,
+        csv_settings=test_case.csv_settings,
         replace=True,
         infer_types=test_case.infer_types,
         statement_recorder=StatementRecorder(),
@@ -1142,6 +1159,9 @@ def test_given_csv_file_when_loading_seed_twice_then_table_is_replaced(
 
     assert count == test_case.expected_row_count
     assert tuple(first_row) == test_case.expected_first_row
+    assert test_case.expected_recorded_fragment in "\n".join(
+        event.content for event in first_recorder.snapshot()
+    )
 
 
 @pytest.mark.parametrize(

@@ -216,15 +216,25 @@ def _add_model_upstream_names(
 ) -> None:
     reference: CompileSqlReference
     for reference in model.references:
-        if reference.ref_kind != SqlReferenceKind.REF or reference.ref_name in selected_names:
+        if (
+            reference.ref_kind
+            not in {
+                SqlReferenceKind.REF,
+                SqlReferenceKind.SEED,
+            }
+            or reference.ref_name in selected_names
+        ):
             continue
-        upstream_model: CompiledModel | None = model_map.get(reference.ref_name)
-        if upstream_model is not None:
-            names.add(upstream_model.target.name)
+        if reference.ref_kind == SqlReferenceKind.REF:
+            upstream_model: CompiledModel | None = model_map.get(reference.ref_name)
+            if upstream_model is not None:
+                names.add(upstream_model.target.name)
             continue
-        upstream_seed: CompiledSeed | None = seed_map.get(reference.ref_name)
-        if upstream_seed is not None:
-            names.add(upstream_seed.target.name)
+        if reference.ref_kind == SqlReferenceKind.SEED:
+            upstream_seed: CompiledSeed | None = seed_map.get(reference.ref_name)
+            if upstream_seed is not None:
+                names.add(upstream_seed.target.name)
+            continue
 
 
 def _gather_relations(

@@ -260,6 +260,7 @@ def build_execution_plan(
             target=seed.target,
             file_path=seed.seed_file.file_path,
             columns=extract_seed_columns(seed),
+            csv_settings=seed.schema_entry.csv_settings,
         )
         for seed in project.seeds
         if seed.key in selected_keys
