@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
@@ -25,7 +26,7 @@ from sqlbuild.compiler.planner.helpers.buildability import check_buildability
 from sqlbuild.compiler.planner.helpers.cascade import build_self_cascade, resolve_cascade
 from sqlbuild.compiler.planner.helpers.function_fingerprints import (
     build_compiled_function_fingerprint_sql,
-    detect_function_backfill,
+    detect_function_change,
 )
 from sqlbuild.compiler.planner.helpers.graph import (
     build_downstream_deps,
@@ -66,6 +67,7 @@ from sqlbuild.compiler.planner.models import (
     SqlTestPlanEntry,
     WarehouseSnapshot,
 )
+from sqlbuild.compiler.planner.types import BackfillAction, PlanReason
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -108,6 +110,9 @@ def build_execution_plan(
     execution_order: tuple[CompiledObjectKey, ...] = topologically_order_keys(upstream_deps)
 
     execute: Any = adapter.execute
+    warehouse_start: float = time.monotonic()
+    if on_progress is not None:
+        on_progress("Inspecting warehouse state...")
     snapshot: WarehouseSnapshot = gather_warehouse_snapshot(
         project=project,
         adapter=adapter,
@@ -150,6 +155,10 @@ def build_execution_plan(
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]] = gather_source_columns(
         project=project, adapter=adapter, connection=connection
     )
+    if on_progress is not None:
+        on_progress(f"Inspected warehouse state. ({time.monotonic() - warehouse_start:.2f}s)")
+        on_progress("Generating plan...")
+    plan_start: float = time.monotonic()
 
     sqlglot_enabled: bool = project.settings.sqlglot
     query_change_tracking: bool = project.settings.query_change_tracking
@@ -160,20 +169,30 @@ def build_execution_plan(
     model_cursor_types: dict[str, str | None] = {}
 
     function_fingerprint_sql: dict[str, str] = {}
+    function_reasons: dict[str, PlanReason] = {}
+    function_backfills: dict[str, BackfillResult] = {}
     function: CompiledFunction
     for function in project.functions:
         fingerprint_sql: str = build_compiled_function_fingerprint_sql(function)
         function_fingerprint_sql[function.name] = fingerprint_sql
         if function.key not in selected_keys:
             continue
-        function_backfill: BackfillResult = detect_function_backfill(
+        function_reason: PlanReason
+        function_backfill: BackfillResult
+        function_reason, function_backfill = detect_function_change(
             function=function,
             fingerprint_sql=fingerprint_sql,
             snapshot=snapshot,
             query_change_tracking=query_change_tracking,
             full_refresh=full_refresh,
         )
-        effective_cascades[function.name] = build_self_cascade(function_backfill)
+        function_reasons[function.name] = function_reason
+        function_backfills[function.name] = function_backfill
+        effective_cascades[function.name] = build_self_cascade(
+            function_backfill,
+            root_cause=function.name,
+            root_reason=function_reason,
+        )
 
     key: CompiledObjectKey
     for key in execution_order:
@@ -248,7 +267,11 @@ def build_execution_plan(
             entry = replace(entry, cascade=cascade)
             effective_cascades[entry.name] = cascade
         else:
-            effective_cascades[entry.name] = build_self_cascade(entry.backfill)
+            effective_cascades[entry.name] = build_self_cascade(
+                entry.backfill,
+                root_cause=entry.name,
+                root_reason=entry.reason,
+            )
 
         model_entries.append(entry)
         all_warnings.extend(warnings)
@@ -295,6 +318,10 @@ def build_execution_plan(
                 snapshot.fingerprints[function.name].query_sql
                 if function.name in snapshot.fingerprints
                 else None
+            ),
+            reason=function_reasons.get(function.name, PlanReason.NO_CHANGE),
+            backfill=function_backfills.get(
+                function.name, BackfillResult(action=BackfillAction.WARN_ONLY)
             ),
         )
         for function in project.functions
@@ -343,7 +370,7 @@ def build_execution_plan(
         k for k in execution_order if k in scoped_keys
     )
 
-    return PlanOutput(
+    plan_output: PlanOutput = PlanOutput(
         execution_order=scoped_order,
         model_entries=tuple(model_entries),
         seed_entries=tuple(seed_entries),
@@ -359,6 +386,9 @@ def build_execution_plan(
         function_targets=function_targets,
         source_map=source_map,
     )
+    if on_progress is not None:
+        on_progress(f"Generated plan. ({time.monotonic() - plan_start:.2f}s)")
+    return plan_output
 
 
 def _build_all_keys(project: CompiledProject) -> dict[str, CompiledObjectKey]:

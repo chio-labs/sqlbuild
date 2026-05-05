@@ -182,6 +182,7 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
                 FUNCTION (
                   arguments (amount_cents INTEGER),
                   returns BOOLEAN,
+                  query_change_backfill full,
                 );
 
                 amount_cents > 100

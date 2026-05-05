@@ -167,6 +167,8 @@ class CascadeCause:
     model_name: str
     effective_action: BackfillAction
     effective_duration: str | None
+    root_cause: str | None = None
+    root_reason: PlanReason | None = None
 
 
 @dataclass(frozen=True)
@@ -176,7 +178,8 @@ class CascadeResult:
     effective_action: BackfillAction
     effective_duration: str | None
     root_cause: str | None
-    causes: tuple[CascadeCause, ...]
+    root_reason: PlanReason | None = None
+    causes: tuple[CascadeCause, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -284,6 +287,10 @@ class FunctionPlanEntry:
     entry_point: str | None = None
     packages: tuple[str, ...] = field(default_factory=tuple)
     previous_query_sql: str | None = None
+    reason: PlanReason = PlanReason.NO_CHANGE
+    backfill: BackfillResult = field(
+        default_factory=lambda: BackfillResult(action=BackfillAction.WARN_ONLY)
+    )
 
 
 @dataclass(frozen=True)

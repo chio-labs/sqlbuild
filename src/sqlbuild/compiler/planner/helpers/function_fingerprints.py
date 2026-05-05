@@ -8,8 +8,9 @@ from sqlbuild.compiler.compile.models import (
     FunctionReturnColumn,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.planner.helpers.changes.policy import resolve_query_change_backfill
 from sqlbuild.compiler.planner.models import BackfillResult, WarehouseSnapshot
-from sqlbuild.compiler.planner.types import BackfillAction
+from sqlbuild.compiler.planner.types import BackfillAction, PlanReason
 from sqlbuild.compiler.shared.helpers.hashing import compute_query_hash
 
 
@@ -42,16 +43,40 @@ def detect_function_backfill(
 ) -> BackfillResult:
     """Resolve a function definition change into a cascadeable backfill."""
 
+    result: tuple[PlanReason, BackfillResult] = detect_function_change(
+        function=function,
+        fingerprint_sql=fingerprint_sql,
+        snapshot=snapshot,
+        query_change_tracking=query_change_tracking,
+        full_refresh=full_refresh,
+    )
+    return result[1]
+
+
+def detect_function_change(
+    *,
+    function: CompiledFunction,
+    fingerprint_sql: str,
+    snapshot: WarehouseSnapshot,
+    query_change_tracking: bool,
+    full_refresh: bool,
+) -> tuple[PlanReason, BackfillResult]:
+    """Resolve function definition changes and downstream backfill policy."""
+
     if full_refresh:
-        return BackfillResult(action=BackfillAction.FULL)
+        return PlanReason.FULL_REFRESH, BackfillResult(action=BackfillAction.FULL)
     fingerprint: Fingerprint | None = snapshot.fingerprints.get(function.name)
     if fingerprint is None:
-        return BackfillResult(action=BackfillAction.FULL)
+        return PlanReason.FIRST_RUN, resolve_query_change_backfill(
+            query_change_backfill=function.query_change_backfill
+        )
     if not query_change_tracking:
-        return BackfillResult(action=BackfillAction.WARN_ONLY)
+        return PlanReason.NO_CHANGE, BackfillResult(action=BackfillAction.WARN_ONLY)
     if compute_query_hash(fingerprint_sql) != fingerprint.query_hash:
-        return BackfillResult(action=BackfillAction.FULL)
-    return BackfillResult(action=BackfillAction.WARN_ONLY)
+        return PlanReason.QUERY_CHANGED, resolve_query_change_backfill(
+            query_change_backfill=function.query_change_backfill
+        )
+    return PlanReason.NO_CHANGE, BackfillResult(action=BackfillAction.WARN_ONLY)
 
 
 def build_function_fingerprint_sql(

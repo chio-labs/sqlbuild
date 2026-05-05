@@ -31,6 +31,12 @@ BUILD_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
         expected_action={"orders": PlanAction.CREATE_TABLE},
         expected_reason={"orders": PlanReason.FIRST_RUN},
         expected_ddl_fragments={"orders": "CREATE OR REPLACE TABLE staging.orders AS"},
+        expected_progress_fragments=(
+            "Inspecting warehouse state...",
+            "Inspected warehouse state. (",
+            "Generating plan...",
+            "Generated plan. (",
+        ),
     ),
     BuildExecutionPlanTestCase(
         description="existing table with no change always rebuilds",
@@ -142,12 +148,14 @@ def test_given_project_when_building_plan_then_produces_expected_output(
 
     project: Any = build_project_from_test_case(test_case)
 
+    progress_messages: list[str] = []
     plan: PlanOutput = build_execution_plan(
         project=project,
         adapter=adapter,
         connection=connection,
         full_refresh=test_case.full_refresh,
         select=test_case.select,
+        on_progress=progress_messages.append,
     )
 
     entry_map: dict[str, ModelPlanEntry] = {e.name: e for e in plan.model_entries}
@@ -173,6 +181,11 @@ def test_given_project_when_building_plan_then_produces_expected_output(
     expected_count: int = test_case.expected_model_count or len(test_case.expected_action)
     assert len(plan.model_entries) == expected_count
 
+    progress_output: str = "\n".join(progress_messages)
+    expected_progress_fragment: str
+    for expected_progress_fragment in test_case.expected_progress_fragments:
+        assert expected_progress_fragment in progress_output
+
 
 CURSOR_TYPE_MISMATCH_TEST_CASES: list[BuildExecutionPlanTestCase] = [
     BuildExecutionPlanTestCase(
@@ -195,6 +208,10 @@ CURSOR_TYPE_MISMATCH_TEST_CASES: list[BuildExecutionPlanTestCase] = [
         expected_warning_count=1,
         expected_warning_severity=WarningSeverity.WARNING,
         expected_warning_fragment="appears to be integer",
+        expected_progress_fragments=(
+            "Gathering cursor bounds (1/1)",
+            "Gathered cursor bounds (1/1). (",
+        ),
     ),
     BuildExecutionPlanTestCase(
         description="sqlglot cursor type mismatch produces error",
@@ -237,11 +254,13 @@ def test_given_cursor_type_mismatch_when_building_plan_then_produces_warning(
 
     project: Any = build_project_from_test_case(test_case)
 
+    progress_messages: list[str] = []
     plan: PlanOutput = build_execution_plan(
         project=project,
         adapter=adapter,
         connection=connection,
         full_refresh=test_case.full_refresh,
+        on_progress=progress_messages.append,
     )
 
     entry_map: dict[str, ModelPlanEntry] = {e.name: e for e in plan.model_entries}
@@ -256,6 +275,11 @@ def test_given_cursor_type_mismatch_when_building_plan_then_produces_warning(
     assert warning.severity == test_case.expected_warning_severity
     assert test_case.expected_warning_fragment is not None
     assert test_case.expected_warning_fragment in warning.message
+
+    progress_output: str = "\n".join(progress_messages)
+    expected_progress_fragment: str
+    for expected_progress_fragment in test_case.expected_progress_fragments:
+        assert expected_progress_fragment in progress_output
 
 
 CASCADE_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
@@ -331,6 +355,7 @@ CASCADE_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
         function_targets={"is_priority_order": "staging"},
         function_bodies={"is_priority_order": "value = 2"},
         previous_function_bodies={"is_priority_order": "value = 1"},
+        function_query_change_backfills={"is_priority_order": "full"},
         function_deps={"fact_orders": ("is_priority_order",)},
         model_configs={
             "fact_orders": {
@@ -363,6 +388,7 @@ CASCADE_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
         previous_function_bodies={
             "is_priority_order_py": "def main(value: int) -> int:\n    return value + 1",
         },
+        function_query_change_backfills={"is_priority_order_py": "full"},
         function_deps={"fact_orders": ("is_priority_order_py",)},
         model_configs={
             "fact_orders": {

@@ -1052,6 +1052,7 @@ vars:
   cancelled_status: "'cancelled'"
   udf_database: analytics
   udf_schema: udf_dev
+  backfill_days: "30"
 
 environments:
   dev:
@@ -1064,7 +1065,8 @@ FUNCTION (
   database ${udf_database},
   schema ${udf_schema},
   arguments (order_status ${status_type}),
-  returns ${return_type}
+  returns ${return_type},
+  query_change_backfill bounded-${backfill_days}d
 );
 
 @status_match("order_status", "completed") AND order_status <> @cancelled_status
@@ -1093,6 +1095,7 @@ FUNCTION (
         expected_sql_function_runtime_versions=(None,),
         expected_sql_function_entry_points=(None,),
         expected_sql_function_packages=((),),
+        expected_sql_function_query_change_backfills=("bounded-30d",),
         expected_effective_environment_name="dev",
         expected_effective_connection={},
         expected_effective_vars={
@@ -1101,6 +1104,7 @@ FUNCTION (
             "cancelled_status": "'cancelled'",
             "udf_database": "analytics",
             "udf_schema": "udf_dev",
+            "backfill_days": "30",
         },
         expected_model_references=(),
         expected_audit_references=(),
@@ -1158,6 +1162,7 @@ WHERE customer_id = p_customer_id
         expected_sql_function_runtime_versions=(None,),
         expected_sql_function_entry_points=(None,),
         expected_sql_function_packages=((),),
+        expected_sql_function_query_change_backfills=(None,),
         expected_effective_environment_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
@@ -1318,6 +1323,7 @@ def main(order_status):
         expected_sql_function_runtime_versions=("3.11",),
         expected_sql_function_entry_points=("main",),
         expected_sql_function_packages=(("faker",),),
+        expected_sql_function_query_change_backfills=(None,),
         expected_effective_environment_name="dev",
         expected_effective_connection={},
         expected_effective_vars={
@@ -1646,6 +1652,13 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
     assert (
         tuple(function_input.packages for function_input in compile_inputs.sql_function_inputs)
         == test_case.expected_sql_function_packages
+    )
+    assert (
+        tuple(
+            function_input.query_change_backfill
+            for function_input in compile_inputs.sql_function_inputs
+        )
+        == test_case.expected_sql_function_query_change_backfills
     )
     assert (
         tuple(
