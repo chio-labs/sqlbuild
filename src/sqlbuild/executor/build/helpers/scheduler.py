@@ -434,6 +434,8 @@ class BuildScheduler:
             adapter=self._adapter,
             connection=connection,
             statement_recorder=StatementRecorder(),
+            run_id=self._run_id,
+            query_change_tracking=self._query_change_tracking,
         )
         duration: int = int((time.monotonic() - start) * 1000)
         return dataclasses.replace(result, duration_ms=duration)

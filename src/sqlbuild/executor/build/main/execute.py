@@ -145,6 +145,7 @@ def _aggregate_build_result(
             failure_count += 1
         elif function_result.status == ExecutionStatus.SKIPPED:
             skipped_count += 1
+        warning_count += len(function_result.warning_messages)
 
     test_result_entry: SqlTestExecutionResult
     for test_result_entry in test_results:
