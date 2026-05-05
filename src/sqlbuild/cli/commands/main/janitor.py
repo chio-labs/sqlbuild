@@ -53,7 +53,9 @@ def run_janitor(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
     )
-    adapter: BaseAdapter = resolve_adapter(effective_adapter_name)
+    adapter: BaseAdapter = resolve_adapter(
+        effective_adapter_name, project_dir=effective_project_dir
+    )
     project: CompiledProject = compile_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,

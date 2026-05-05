@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import contextlib
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Generator
 from typing import Any
 
 from sqlbuild.adapter.shared.models import QueryResult
 
 
-class ConnectionMixin:
+class ConnectionMixin(ABC):
     """Manages adapter connection lifecycle and transaction control."""
 
     @abstractmethod

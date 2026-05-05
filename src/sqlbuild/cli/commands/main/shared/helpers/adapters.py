@@ -2,32 +2,49 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import cast
+
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.types import BuiltinAdapter
+from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
+from sqlbuild.shared.helpers.adapters import discover_project_adapters
 
 
-def resolve_adapter(adapter_name: str) -> BaseAdapter:
-    """Resolve an adapter name from project config to a built-in adapter instance."""
+def resolve_adapter(adapter_name: str, *, project_dir: Path | None = None) -> BaseAdapter:
+    """Resolve an adapter name from project config to an adapter instance."""
 
-    match adapter_name:
-        case BuiltinAdapter.DUCKDB:
-            from sqlbuild.integrations.duckdb.client import DuckDbAdapter
+    builtin_adapters: dict[str, type[BaseAdapter]] = _builtin_adapter_classes()
+    adapter_class: type[StrictAdapter] | None = None
+    if project_dir is not None:
+        local_adapters: dict[str, type[StrictAdapter]] = discover_project_adapters(
+            project_dir=project_dir,
+            reserved_names=frozenset(builtin_adapters),
+        )
+        adapter_class = local_adapters.get(adapter_name)
+    if adapter_class is None:
+        adapter_class = builtin_adapters.get(adapter_name)
+    if adapter_class is None:
+        available: tuple[str, ...] = tuple(sorted(builtin_adapters))
+        local_text: str = ""
+        if project_dir is not None:
+            local_text = " Project-local adapters are discovered from adapters/**/*.py."
+        raise ValueError(
+            f"Unknown adapter '{adapter_name}'. Available built-in adapters: "
+            f"{', '.join(available)}.{local_text}"
+        )
+    return cast(BaseAdapter, adapter_class())
 
-            return DuckDbAdapter()
-        case BuiltinAdapter.SNOWFLAKE:
-            from sqlbuild.integrations.snowflake.client import SnowflakeAdapter
 
-            return SnowflakeAdapter()
-        case BuiltinAdapter.BIGQUERY:
-            from sqlbuild.integrations.bigquery.client import BigQueryAdapter
+def _builtin_adapter_classes() -> dict[str, type[BaseAdapter]]:
+    from sqlbuild.integrations.bigquery.client import BigQueryAdapter
+    from sqlbuild.integrations.databricks.client import DatabricksAdapter
+    from sqlbuild.integrations.duckdb.client import DuckDbAdapter
+    from sqlbuild.integrations.snowflake.client import SnowflakeAdapter
 
-            return BigQueryAdapter()
-        case BuiltinAdapter.DATABRICKS:
-            from sqlbuild.integrations.databricks.client import DatabricksAdapter
-
-            return DatabricksAdapter()
-        case _:
-            available: str = ", ".join(a.value for a in BuiltinAdapter)
-            raise ValueError(
-                f"Unknown adapter '{adapter_name}'. Available built-in adapters: {available}"
-            )
+    return {
+        BuiltinAdapter.DUCKDB.value: DuckDbAdapter,
+        BuiltinAdapter.SNOWFLAKE.value: SnowflakeAdapter,
+        BuiltinAdapter.BIGQUERY.value: BigQueryAdapter,
+        BuiltinAdapter.DATABRICKS.value: DatabricksAdapter,
+    }
