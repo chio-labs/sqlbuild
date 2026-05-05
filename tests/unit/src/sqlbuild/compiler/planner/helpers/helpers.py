@@ -7,12 +7,14 @@ from pathlib import Path
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
+    CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationTarget,
     CompiledSeed,
     CompiledSource,
+    CompiledSqlTest,
     CompileModelConfig,
     CompileSqlReference,
 )
@@ -27,6 +29,8 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
+    DiscoveredSqlTestBlock,
+    DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
@@ -63,24 +67,34 @@ def seed_key(name: str) -> CompiledObjectKey:
     return CompiledObjectKey(resource_type=CompiledResourceType.SEED, name=name)
 
 
+def function_key(name: str) -> CompiledObjectKey:
+    """Build a function object key."""
+
+    return CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name=name)
+
+
 def build_test_project(
     *,
     model_deps: dict[str, tuple[str, ...]] | None = None,
     model_paths: dict[str, str] | None = None,
     source_names: tuple[str, ...] = (),
     seed_names: tuple[str, ...] = (),
+    function_names: tuple[str, ...] = (),
+    sql_test_expected_model_names: tuple[str, ...] = (),
 ) -> CompiledProject:
     """Build a minimal CompiledProject for graph tests."""
 
     effective_paths: dict[str, str] = model_paths or {}
     source_name_set: set[str] = set(source_names)
     seed_name_set: set[str] = set(seed_names)
+    function_name_set: set[str] = set(function_names)
     models: list[CompiledModel] = []
     model_name: str
     dep_names: tuple[str, ...]
     for model_name, dep_names in (model_deps or {}).items():
         deps: tuple[CompiledObjectKey, ...] = tuple(
-            _resolve_dep_key(d, source_name_set, seed_name_set) for d in dep_names
+            _resolve_dep_key(d, source_name_set, seed_name_set, function_name_set)
+            for d in dep_names
         )
         rel_path: str = effective_paths.get(model_name, f"models/{model_name}.sql")
         models.append(
@@ -138,6 +152,49 @@ def build_test_project(
             )
         )
 
+    functions: list[CompiledFunction] = []
+    function_name: str
+    for function_name in function_names:
+        functions.append(
+            CompiledFunction(
+                key=function_key(function_name),
+                deps=(),
+                name=function_name,
+                relative_path=Path(f"functions/sql/{function_name}.sql"),
+                arguments=(),
+                returns="BOOLEAN",
+                body_sql="SELECT TRUE",
+                target=CompiledRelationTarget(
+                    database=None, schema=None, name=function_name, qualified_name=None
+                ),
+            )
+        )
+
+    sql_tests: list[CompiledSqlTest] = []
+    if sql_test_expected_model_names:
+        sql_tests.append(
+            CompiledSqlTest(
+                key=CompiledObjectKey(
+                    resource_type=CompiledResourceType.SQL_TEST,
+                    name="test_models",
+                ),
+                scope_deps=tuple(model_key(name) for name in sql_test_expected_model_names),
+                name="test_models",
+                test_file=DiscoveredSqlTestFile(
+                    file_path=Path("tests/test_models.sql"),
+                    relative_path=Path("tests/test_models.sql"),
+                    contents="SELECT 1",
+                    blocks=(),
+                ),
+                test_block=DiscoveredSqlTestBlock(
+                    test_index=0,
+                    header_values={},
+                    sql_body="SELECT 1",
+                ),
+                sql_body="SELECT 1",
+            )
+        )
+
     return CompiledProject(
         run_id="test_run",
         effective_environment_name=None,
@@ -146,6 +203,8 @@ def build_test_project(
         models=tuple(models),
         sources=tuple(sources),
         seeds=tuple(seeds),
+        functions=tuple(functions),
+        sql_tests=tuple(sql_tests),
     )
 
 
@@ -183,13 +242,20 @@ def build_test_project_with_source_entry(source_entry: SourceEntry) -> CompiledP
     )
 
 
-def _resolve_dep_key(name: str, source_names: set[str], seed_names: set[str]) -> CompiledObjectKey:
+def _resolve_dep_key(
+    name: str,
+    source_names: set[str],
+    seed_names: set[str],
+    function_names: set[str],
+) -> CompiledObjectKey:
     """Resolve a dependency name to the correct key type."""
 
     if name in source_names:
         return source_key(name)
     if name in seed_names:
         return seed_key(name)
+    if name in function_names:
+        return function_key(name)
     return model_key(name)
 
 
@@ -282,16 +348,6 @@ def build_warnings_change_result(
         schema_findings=test_case.schema_findings,
         backfill=BackfillResult(action=test_case.backfill_action),
     )
-
-
-def _resolve_dep_key(name: str, source_names: set[str], seed_names: set[str]) -> CompiledObjectKey:
-    """Resolve a dependency name to the correct key type."""
-
-    if name in source_names:
-        return source_key(name)
-    if name in seed_names:
-        return seed_key(name)
-    return model_key(name)
 
 
 def build_audit_from_test_case(
