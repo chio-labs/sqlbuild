@@ -53,6 +53,12 @@ def _parse_model_entries(
     *, payload: dict[str, object], file_path: Path
 ) -> tuple[SchemaModelEntry, ...]:
     raw_models: object = payload.get("models", [])
+    if raw_models:
+        raise SchemaParseError(
+            f"{file_path} declares model metadata in 'models', but model metadata must live "
+            "in the model file MODEL(...). Move description, columns, and audits into the "
+            "model header."
+        )
     model_mappings: tuple[dict[str, object], ...] = _parse_named_mapping_list(
         raw_value=raw_models,
         file_path=file_path,

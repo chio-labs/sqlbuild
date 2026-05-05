@@ -1,6 +1,10 @@
 MODEL (
   materialized table,
   tags [marts],
+  description "Customer dimension with lifetime metrics.",
+  columns (
+    customer_id (audits [not_null, unique]),
+  ),
 );
 
 SELECT

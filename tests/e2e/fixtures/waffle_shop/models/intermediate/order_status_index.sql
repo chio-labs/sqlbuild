@@ -9,6 +9,10 @@ MODEL (
     type_change full,
   ),
   tags [intermediate, acceptance],
+  description "Integer-cursor incremental projection over fact orders.",
+  columns (
+    order_id (audits [not_null, unique]),
+  ),
 );
 
 SELECT

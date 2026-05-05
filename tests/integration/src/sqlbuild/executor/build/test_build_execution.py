@@ -53,6 +53,13 @@ _PROJECT_YML_DIRECT: str = (
 )
 
 _NOT_NULL_AUDIT: str = 'AUDIT ();\n\nSELECT @column FROM __ref("@model") WHERE @column IS NULL'
+_TABLE_WITH_ID_NOT_NULL_AUDIT: str = (
+    "MODEL (materialized table, columns (id (audits [not_null])));\n\n"
+)
+_VIEW_WITH_ID_NOT_NULL_AUDIT: str = (
+    "MODEL (materialized view, columns (id (audits [not_null])));\n\n"
+)
+
 
 _PASSING_TEST_SQL: str = (
     "TEST ();\n\n"
@@ -204,15 +211,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         description="run_audits false skips all audits but tables still built",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
-            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id",
-            "models/schema.yml": (
-                "models:\n"
-                "  - name: orders\n"
-                "    columns:\n"
-                "      - name: id\n"
-                "        audits:\n"
-                "          - not_null\n"
-            ),
+            "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT 1 AS id",
             "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
         },
         run_audits=False,
@@ -225,15 +224,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         description="passing model audit does not block and table is promoted",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
-            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id",
-            "models/schema.yml": (
-                "models:\n"
-                "  - name: orders\n"
-                "    columns:\n"
-                "      - name: id\n"
-                "        audits:\n"
-                "          - not_null\n"
-            ),
+            "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT 1 AS id",
             "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
         },
         expected_status=BuildStatus.SUCCESS,
@@ -245,15 +236,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         description="warn audit records warning but build succeeds",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML_WARN,
-            "models/orders.sql": "MODEL (materialized table);\n\nSELECT NULL AS id",
-            "models/schema.yml": (
-                "models:\n"
-                "  - name: orders\n"
-                "    columns:\n"
-                "      - name: id\n"
-                "        audits:\n"
-                "          - not_null\n"
-            ),
+            "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT NULL AS id",
             "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
         },
         expected_status=BuildStatus.SUCCESS,
@@ -310,14 +293,6 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
                 'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")'
             ),
             "models/payments.sql": ("MODEL (materialized table);\n\nSELECT 1 AS payment_id"),
-            "models/schema.yml": (
-                "models:\n"
-                "  - name: orders\n"
-                "    columns:\n"
-                "      - name: id\n"
-                "        audits:\n"
-                "          - not_null\n"
-            ),
             "sources/raw.yml": (
                 "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
             ),
@@ -353,15 +328,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
                 "  default_audit_severity: warn\n"
                 "  table_promotion_mode: direct\n"
             ),
-            "models/orders.sql": "MODEL (materialized table);\n\nSELECT NULL AS id",
-            "models/schema.yml": (
-                "models:\n"
-                "  - name: orders\n"
-                "    columns:\n"
-                "      - name: id\n"
-                "        audits:\n"
-                "          - not_null\n"
-            ),
+            "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT NULL AS id",
             "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
         },
         expected_status=BuildStatus.SUCCESS,
@@ -390,15 +357,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         description="direct mode with passing audit creates table",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML_DIRECT,
-            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 5 AS id",
-            "models/schema.yml": (
-                "models:\n"
-                "  - name: orders\n"
-                "    columns:\n"
-                "      - name: id\n"
-                "        audits:\n"
-                "          - not_null\n"
-            ),
+            "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT 5 AS id",
             "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
         },
         expected_status=BuildStatus.SUCCESS,
@@ -494,15 +453,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         description="failing error audit blocks promotion and table has no final data",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
-            "models/orders.sql": "MODEL (materialized table);\n\nSELECT NULL AS id",
-            "models/schema.yml": (
-                "models:\n"
-                "  - name: orders\n"
-                "    columns:\n"
-                "      - name: id\n"
-                "        audits:\n"
-                "          - not_null\n"
-            ),
+            "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT NULL AS id",
             "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
         },
         expected_status=BuildStatus.FAILED,
@@ -599,15 +550,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         description="direct mode failing audit leaves target updated but build fails",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML_DIRECT,
-            "models/orders.sql": "MODEL (materialized table);\n\nSELECT NULL AS id",
-            "models/schema.yml": (
-                "models:\n"
-                "  - name: orders\n"
-                "    columns:\n"
-                "      - name: id\n"
-                "        audits:\n"
-                "          - not_null\n"
-            ),
+            "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT NULL AS id",
             "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
         },
         expected_status=BuildStatus.FAILED,
@@ -679,15 +622,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         description="staged audit failure preserves existing target with old data",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
-            "models/orders.sql": "MODEL (materialized table);\n\nSELECT NULL AS id",
-            "models/schema.yml": (
-                "models:\n"
-                "  - name: orders\n"
-                "    columns:\n"
-                "      - name: id\n"
-                "        audits:\n"
-                "          - not_null\n"
-            ),
+            "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT NULL AS id",
             "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
         },
         setup_sql=("CREATE TABLE main.orders AS SELECT 999 AS id",),
@@ -751,17 +686,8 @@ VIEW_SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         description="view with audit succeeds when audit passes",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
-            "models/stg_orders.sql": (
-                "MODEL (materialized view);\n\nSELECT 1 AS id, 'alice' AS name"
-            ),
-            "models/schema.yml": (
-                "models:\n"
-                "  - name: stg_orders\n"
-                "    columns:\n"
-                "      - name: id\n"
-                "        audits:\n"
-                "          - not_null\n"
-            ),
+            "models/stg_orders.sql": _VIEW_WITH_ID_NOT_NULL_AUDIT
+            + "SELECT 1 AS id, 'alice' AS name",
             "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
         },
         expected_status=BuildStatus.SUCCESS,
@@ -848,17 +774,8 @@ def test_given_view_build_plan_when_executing_then_fails(
             description="view with run_audits false still creates view",
             project_files={
                 "sqlbuild_project.yml": _PROJECT_YML,
-                "models/stg_orders.sql": (
-                    "MODEL (materialized view);\n\nSELECT 1 AS id, 'alice' AS name"
-                ),
-                "models/schema.yml": (
-                    "models:\n"
-                    "  - name: stg_orders\n"
-                    "    columns:\n"
-                    "      - name: id\n"
-                    "        audits:\n"
-                    "          - not_null\n"
-                ),
+                "models/stg_orders.sql": _VIEW_WITH_ID_NOT_NULL_AUDIT
+                + "SELECT 1 AS id, 'alice' AS name",
                 "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
             },
             run_audits=False,

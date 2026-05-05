@@ -83,7 +83,16 @@ vars:
   local_only: present
 """.strip()
             + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            "models/staging/orders.sql": """
+MODEL (
+  columns (
+    order_id (type VARCHAR),
+  ),
+);
+
+select 1
+""".strip()
+            + "\n",
             "models/staging/nested/orders_enriched.sql": """
 MODEL (
   materialized incremental,
@@ -96,14 +105,6 @@ MODEL (
 );
 
 select 1
-""".strip()
-            + "\n",
-            "models/staging/schema.yml": """
-models:
-  - name: orders
-    columns:
-      - name: order_id
-        type: VARCHAR
 """.strip()
             + "\n",
             "seeds/schema.yml": """
@@ -1329,16 +1330,15 @@ def main(order_status):
         description="renders attached model and source audits from generic definitions",
         repo_files=base_repo_files()
         | {
-            "models/marts/orders.sql": "MODEL ();\n\nselect 1\n",
-            "models/marts/schema.yml": """
-models:
-  - name: orders
-    audits:
-      - model_not_null
-    columns:
-      - name: order_id
-        audits:
-          - column_not_null
+            "models/marts/orders.sql": """
+MODEL (
+  audits [model_not_null],
+  columns (
+    order_id (audits [column_not_null]),
+  ),
+);
+
+select 1
 """.strip()
             + "\n",
             "sources/raw.yml": """
@@ -2074,23 +2074,6 @@ select 1
         selected_environment=None,
         run_id=None,
         expected_error_fragment="model config field 'schema' does not allow macros",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description=(
-            "raises when a schema model declaration is outside its effective directory scope"
-        ),
-        repo_files=base_repo_files()
-        | {
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-            "models/marts/schema.yml": """
-models:
-  - name: orders
-""".strip()
-            + "\n",
-        },
-        selected_environment=None,
-        run_id=None,
-        expected_error_fragment="does not match any discovered model file in that directory scope",
     ),
     BuildCompileInputsErrorTestCase(
         description="raises when a seed csv exists without a matching schema declaration",
