@@ -165,7 +165,7 @@ def test_given_clone_command_arguments_when_running_with_dependencies_then_it_di
     [
         MainTestCase(
             description="dispatches diff command through injected handler",
-            argv=["diff", "--from", "prod", "--to", "dev", "--full", "--select", "orders"],
+            argv=["diff", "prod:dev", "--full", "--select", "orders"],
             expected_exit_code=6,
         )
     ],
@@ -285,10 +285,7 @@ def test_given_query_command_arguments_when_running_with_dependencies_then_it_di
             description="passes verbose flag to diff handler",
             argv=[
                 "diff",
-                "--from",
-                "prod",
-                "--to",
-                "dev",
+                "prod:dev",
                 "--full",
                 "--verbose",
                 "--select",
@@ -340,10 +337,7 @@ def test_given_verbose_diff_arguments_when_running_then_it_dispatches_verbose_fl
             description="passes diff example caps to handler",
             argv=[
                 "diff",
-                "--from",
-                "prod",
-                "--to",
-                "dev",
+                "prod:dev",
                 "--full",
                 "--max-column-examples",
                 "7",
