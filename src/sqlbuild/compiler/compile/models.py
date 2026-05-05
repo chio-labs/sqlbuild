@@ -149,6 +149,7 @@ class CompileSqlFunctionInput:
     runtime_version: str | None = None
     entry_point: str | None = None
     packages: tuple[str, ...] = field(default_factory=tuple)
+    query_change_backfill: str | None = None
 
 
 @dataclass(frozen=True)
@@ -312,6 +313,7 @@ class CompiledFunction:
     runtime_version: str | None = None
     entry_point: str | None = None
     packages: tuple[str, ...] = field(default_factory=tuple)
+    query_change_backfill: str | None = None
 
 
 @dataclass(frozen=True)

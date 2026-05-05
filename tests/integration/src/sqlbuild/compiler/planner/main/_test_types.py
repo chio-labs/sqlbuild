@@ -42,6 +42,7 @@ class BuildExecutionPlanTestCase:
     function_targets: dict[str, str] = field(default_factory=dict)
     function_bodies: dict[str, str] = field(default_factory=dict)
     previous_function_bodies: dict[str, str] = field(default_factory=dict)
+    function_query_change_backfills: dict[str, str] = field(default_factory=dict)
     function_languages: dict[str, FunctionLanguage] = field(default_factory=dict)
     function_deps: dict[str, tuple[str, ...]] = field(default_factory=dict)
     select: tuple[str, ...] = ()
@@ -51,3 +52,4 @@ class BuildExecutionPlanTestCase:
     model_deps: dict[str, tuple[str, ...]] = field(default_factory=dict)
     expected_cascade_action: dict[str, BackfillAction] = field(default_factory=dict)
     expected_cascade_root_cause: dict[str, str] = field(default_factory=dict)
+    expected_progress_fragments: tuple[str, ...] = field(default_factory=tuple)

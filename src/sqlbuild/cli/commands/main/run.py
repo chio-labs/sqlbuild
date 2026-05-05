@@ -10,7 +10,11 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compile_target
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
+from sqlbuild.cli.commands.main.shared.helpers.connection_progress import (
+    ConnectionProgressReporter,
+)
 from sqlbuild.cli.commands.main.shared.helpers.plan_format import format_plan
+from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
 from sqlbuild.cli.commands.main.shared.helpers.progress import (
     BuildProgressCallbacks,
     format_build_footer,
@@ -49,17 +53,37 @@ def run_run(
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
+    adapter_name: str = resolve_effective_adapter_name(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+    )
     adapter: BaseAdapter = resolve_adapter(
-        resolve_effective_adapter_name(
-            project_config=discovered_inputs.project_config,
-            local_config=discovered_inputs.local_config,
-        ),
+        adapter_name,
         project_dir=effective_project_dir,
     )
     connection_config: dict[str, object] = resolve_project_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
     )
+    use_color: bool = not no_color and supports_color()
+    progress_stream: TextIO = sys.stderr if debug else sys.stdout
+    connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
+        adapter_name=adapter_name,
+        stream=progress_stream,
+        use_color=use_color,
+    )
+    execution_connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
+        adapter_name=adapter_name,
+        stream=progress_stream,
+        blank_line_after_complete=True,
+        use_color=use_color,
+    )
+    planning_progress: PlanningProgressReporter = PlanningProgressReporter(
+        stream=progress_stream,
+        use_color=use_color,
+    )
+    progress_stream.write("\n")
+    progress_stream.flush()
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
@@ -70,10 +94,13 @@ def run_run(
         exclude=exclude,
         full_refresh=full_refresh,
         connection_config=connection_config,
+        on_connection_start=connection_progress.on_connection_start,
+        on_connection_complete=connection_progress.on_connection_complete,
+        on_connection_error=connection_progress.on_connection_error,
+        on_progress=planning_progress.on_progress,
     )
 
     plan_output: PlanOutput = pipeline_result.plan_output
-    use_color: bool = not no_color and supports_color()
     plan_stream: TextIO = sys.stderr if debug else sys.stdout
 
     plan_text: str = format_plan(plan_output, full_refresh=full_refresh, use_color=use_color)
@@ -90,7 +117,6 @@ def run_run(
     callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
         plan=plan_output, use_color=use_color, verbose=verbose, debug=debug
     )
-    progress_stream: TextIO = sys.stderr if debug else sys.stdout
     effective_concurrency: int = (
         concurrency if concurrency is not None else pipeline_result.project.settings.max_concurrency
     )
@@ -116,6 +142,9 @@ def run_run(
         on_node_complete=callbacks.on_node_complete,
         on_sub_progress=callbacks.on_sub_progress,
         custom_materializations=pipeline_result.custom_materializations,
+        on_connection_start=execution_connection_progress.on_connection_start,
+        on_connection_complete=execution_connection_progress.on_connection_complete,
+        on_connection_error=execution_connection_progress.on_connection_error,
     )
     write_runtime_target(
         target_dir=effective_project_dir / "target",

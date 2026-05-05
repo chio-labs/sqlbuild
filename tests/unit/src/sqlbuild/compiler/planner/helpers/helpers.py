@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlbuild.adapter.shared.models import RelationInfo
@@ -17,6 +18,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledSqlTest,
     CompileModelConfig,
     CompileSqlReference,
+    FunctionArgument,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
@@ -32,6 +34,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeResult,
@@ -39,6 +42,7 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction
+from sqlbuild.compiler.shared.helpers.hashing import compute_query_hash
 from sqlbuild.spec.models.schema import SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
@@ -538,6 +542,49 @@ def build_cascade_upstream_state(
         )
         cursor_types[name] = cursor_type
     return tuple(keys), cascades, cursor_types
+
+
+def build_compiled_function(
+    *, body_sql: str, query_change_backfill: str | None = None
+) -> CompiledFunction:
+    """Build a minimal compiled function for planner tests."""
+
+    return CompiledFunction(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.FUNCTION,
+            name="is_completed_order",
+        ),
+        deps=(),
+        name="is_completed_order",
+        relative_path=Path("functions/sql/is_completed_order.sql"),
+        arguments=(FunctionArgument(name="order_status", type="STRING"),),
+        returns="BOOLEAN",
+        body_sql=body_sql,
+        target=CompiledRelationTarget(
+            database=None,
+            schema="main",
+            name="is_completed_order",
+            qualified_name="main.is_completed_order",
+        ),
+        query_change_backfill=query_change_backfill,
+    )
+
+
+def build_fingerprint(*, query_sql: str) -> Fingerprint:
+    """Build a fingerprint with a hash matching the supplied query SQL."""
+
+    return Fingerprint(
+        model_name="is_completed_order",
+        target_database=None,
+        target_schema="main",
+        target_name="is_completed_order",
+        run_id="run-1",
+        query_hash=compute_query_hash(query_sql),
+        ast_hash=None,
+        schema_fingerprint="",
+        query_sql=query_sql,
+        ts=datetime(2026, 1, 1, tzinfo=UTC),
+    )
 
 
 def _stub_schema_file() -> DiscoveredSchemaFile:

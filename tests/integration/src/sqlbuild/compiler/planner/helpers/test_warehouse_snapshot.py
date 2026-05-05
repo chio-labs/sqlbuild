@@ -267,7 +267,7 @@ CURSOR_SNAPSHOT_TEST_CASES: list[GatherCursorSnapshotTestCase] = [
                 upstream_maxes=("2024-02-01 00:00:00",),
             ),
         },
-        expected_progress_calls=1,
+        expected_progress_calls=2,
     ),
     GatherCursorSnapshotTestCase(
         description="gathers cursor bounds for first run with no target table",
@@ -287,7 +287,7 @@ CURSOR_SNAPSHOT_TEST_CASES: list[GatherCursorSnapshotTestCase] = [
                 upstream_maxes=("2024-02-01 00:00:00",),
             ),
         },
-        expected_progress_calls=1,
+        expected_progress_calls=2,
     ),
     GatherCursorSnapshotTestCase(
         description="skips cursor gathering when full refresh is true",
@@ -398,7 +398,7 @@ DEFERRED_CURSOR_TEST_CASES: list[GatherCursorSnapshotTestCase] = [
                 upstream_maxes=("2024-03-01 00:00:00",),
             ),
         },
-        expected_progress_calls=1,
+        expected_progress_calls=2,
     ),
     GatherCursorSnapshotTestCase(
         description="non-selected upstream reads cursor from deferred env",
@@ -422,7 +422,7 @@ DEFERRED_CURSOR_TEST_CASES: list[GatherCursorSnapshotTestCase] = [
                 upstream_maxes=("2024-06-01 00:00:00",),
             ),
         },
-        expected_progress_calls=1,
+        expected_progress_calls=2,
     ),
 ]
 

@@ -42,6 +42,9 @@ class BuildCompileInputsTestCase:
     expected_sql_function_runtime_versions: tuple[str | None, ...] = field(default_factory=tuple)
     expected_sql_function_entry_points: tuple[str | None, ...] = field(default_factory=tuple)
     expected_sql_function_packages: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
+    expected_sql_function_query_change_backfills: tuple[str | None, ...] = field(
+        default_factory=tuple
+    )
     expected_model_references: tuple[tuple[tuple[str, str], ...], ...] = field(
         default_factory=tuple
     )

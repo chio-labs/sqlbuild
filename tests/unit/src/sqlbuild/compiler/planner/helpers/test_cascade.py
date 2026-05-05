@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.helpers.cascade import (
     build_self_cascade,
     resolve_cascade,
@@ -13,8 +14,9 @@ from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeResult,
 )
-from sqlbuild.compiler.planner.types import BackfillAction
+from sqlbuild.compiler.planner.types import BackfillAction, PlanReason
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
+    ResolveCascadeRootCauseTestCase,
     ResolveCascadeTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
@@ -245,3 +247,48 @@ def test_given_own_backfill_when_building_self_cascade_then_preserves_values(
     assert result.effective_duration == test_case.expected_duration
     assert result.root_cause is None
     assert result.causes == ()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ResolveCascadeRootCauseTestCase(
+            description="multihop cascade preserves function root cause",
+            expected_action=BackfillAction.FULL,
+            expected_root_cause="is_completed_order",
+            expected_root_reason=PlanReason.QUERY_CHANGED,
+            expected_immediate_cause="hourly_order_activity",
+        )
+    ],
+    ids=["multihop cascade preserves function root cause"],
+)
+def test_given_multihop_cascade_when_resolving_then_preserves_root_cause(
+    test_case: ResolveCascadeRootCauseTestCase,
+) -> None:
+    hourly_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.MODEL, name="hourly_order_activity"
+    )
+    upstream_keys: tuple[CompiledObjectKey, ...] = (hourly_key,)
+    effective_cascades: dict[str, CascadeResult] = {
+        "hourly_order_activity": build_self_cascade(
+            BackfillResult(action=BackfillAction.FULL),
+            root_cause="is_completed_order",
+            root_reason=PlanReason.QUERY_CHANGED,
+        )
+    }
+    model_cursor_types: dict[str, str | None] = {"hourly_order_activity": "timestamp"}
+
+    result: CascadeResult | None = resolve_cascade(
+        model_name="daily_activity_rollup",
+        own_backfill=BackfillResult(action=BackfillAction.WARN_ONLY),
+        own_cursor_type="timestamp",
+        upstream_keys=upstream_keys,
+        effective_cascades=effective_cascades,
+        model_cursor_types=model_cursor_types,
+    )
+
+    assert result is not None
+    assert result.effective_action == test_case.expected_action
+    assert result.root_cause == test_case.expected_root_cause
+    assert result.root_reason == test_case.expected_root_reason
+    assert result.causes[0].model_name == test_case.expected_immediate_cause
