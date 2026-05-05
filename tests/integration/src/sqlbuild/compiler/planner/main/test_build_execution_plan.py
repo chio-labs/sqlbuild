@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 
 from sqlbuild.cli.commands.main.helpers.plan.formatter import format_plan
+from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.main.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import CascadeResult, ModelPlanEntry, PlanOutput, PlanWarning
 from sqlbuild.compiler.planner.types import BackfillAction, PlanAction, PlanReason, WarningSeverity
@@ -16,6 +17,7 @@ from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
 from tests.integration.src.sqlbuild.compiler.planner.main.helpers import (
     build_project_from_format_test_case,
     build_project_from_test_case,
+    write_previous_function_fingerprints,
 )
 
 BUILD_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
@@ -322,6 +324,65 @@ CASCADE_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
         expected_cascade_action={"fact_orders": BackfillAction.FULL},
         expected_cascade_root_cause={"fact_orders": "stg_orders"},
     ),
+    BuildExecutionPlanTestCase(
+        description="changed SQL UDF cascades full rebuild to incremental downstream",
+        setup_sql=("CREATE TABLE staging.fact_orders AS SELECT 1 AS id",),
+        model_targets={"fact_orders": "staging"},
+        function_targets={"is_priority_order": "staging"},
+        function_bodies={"is_priority_order": "value = 2"},
+        previous_function_bodies={"is_priority_order": "value = 1"},
+        function_deps={"fact_orders": ("is_priority_order",)},
+        model_configs={
+            "fact_orders": {
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "cursor": "id",
+                "cursor_type": "integer",
+                "unique_key": "id",
+            },
+        },
+        model_queries={"fact_orders": "SELECT 1 AS id"},
+        full_refresh=False,
+        expected_action={"fact_orders": PlanAction.CREATE_TABLE},
+        expected_reason={"fact_orders": PlanReason.FULL_REFRESH},
+        expected_ddl_fragments={
+            "fact_orders": "CREATE OR REPLACE TABLE staging.fact_orders AS",
+        },
+        expected_cascade_action={"fact_orders": BackfillAction.FULL},
+        expected_cascade_root_cause={"fact_orders": "is_priority_order"},
+    ),
+    BuildExecutionPlanTestCase(
+        description="changed Python UDF cascades full rebuild to incremental downstream",
+        setup_sql=("CREATE TABLE staging.fact_orders AS SELECT 1 AS id",),
+        model_targets={"fact_orders": "staging"},
+        function_targets={"is_priority_order_py": "staging"},
+        function_languages={"is_priority_order_py": FunctionLanguage.PYTHON},
+        function_bodies={
+            "is_priority_order_py": "def main(value: int) -> int:\n    return value + 2",
+        },
+        previous_function_bodies={
+            "is_priority_order_py": "def main(value: int) -> int:\n    return value + 1",
+        },
+        function_deps={"fact_orders": ("is_priority_order_py",)},
+        model_configs={
+            "fact_orders": {
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "cursor": "id",
+                "cursor_type": "integer",
+                "unique_key": "id",
+            },
+        },
+        model_queries={"fact_orders": "SELECT 1 AS id"},
+        full_refresh=False,
+        expected_action={"fact_orders": PlanAction.CREATE_TABLE},
+        expected_reason={"fact_orders": PlanReason.FULL_REFRESH},
+        expected_ddl_fragments={
+            "fact_orders": "CREATE OR REPLACE TABLE staging.fact_orders AS",
+        },
+        expected_cascade_action={"fact_orders": BackfillAction.FULL},
+        expected_cascade_root_cause={"fact_orders": "is_priority_order_py"},
+    ),
 ]
 
 
@@ -338,6 +399,11 @@ def test_given_upstream_first_run_when_building_plan_then_cascades_to_downstream
     sql: str
     for sql in test_case.setup_sql:
         connection.execute(sql)
+    write_previous_function_fingerprints(
+        test_case=test_case,
+        adapter=adapter,
+        connection=connection,
+    )
 
     project: Any = build_project_from_test_case(test_case)
 

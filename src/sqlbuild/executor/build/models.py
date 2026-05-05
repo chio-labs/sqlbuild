@@ -38,6 +38,7 @@ class FunctionExecutionResult:
     status: ExecutionStatus
     duration_ms: int | None = None
     error_message: str | None = None
+    warning_messages: tuple[str, ...] = field(default_factory=tuple)
     lifecycle_events: tuple[LifeCycleEvent, ...] = field(default_factory=tuple)
 
 

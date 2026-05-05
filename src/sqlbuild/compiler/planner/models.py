@@ -270,11 +270,13 @@ class FunctionPlanEntry:
     arguments: tuple[object, ...]
     returns: str
     body_sql: str
+    fingerprint_query_sql: str
     language: FunctionLanguage = FunctionLanguage.SQL
     source_file_path: Path | None = None
     runtime_version: str | None = None
     entry_point: str | None = None
     packages: tuple[str, ...] = field(default_factory=tuple)
+    previous_query_sql: str | None = None
 
 
 @dataclass(frozen=True)

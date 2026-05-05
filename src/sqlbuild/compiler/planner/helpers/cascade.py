@@ -84,12 +84,22 @@ def _gather_cascade_candidates(
     candidates: list[CascadeCause] = []
     key: CompiledObjectKey
     for key in upstream_keys:
-        if key.resource_type != CompiledResourceType.MODEL:
+        if key.resource_type not in (CompiledResourceType.MODEL, CompiledResourceType.FUNCTION):
             continue
         upstream_cascade: CascadeResult | None = effective_cascades.get(key.name)
         if upstream_cascade is None:
             continue
         if upstream_cascade.effective_action == BackfillAction.WARN_ONLY:
+            continue
+
+        if key.resource_type == CompiledResourceType.FUNCTION:
+            candidates.append(
+                CascadeCause(
+                    model_name=key.name,
+                    effective_action=upstream_cascade.effective_action,
+                    effective_duration=upstream_cascade.effective_duration,
+                )
+            )
             continue
 
         upstream_cursor_type: str | None = model_cursor_types.get(key.name)

@@ -105,6 +105,7 @@ def build_target_writer_plan_output() -> PlanOutput:
                 arguments=(FunctionArgument(name="order_status", type="VARCHAR"),),
                 returns="BOOLEAN",
                 body_sql="order_status = 'completed'",
+                fingerprint_query_sql="order_status = 'completed'",
             ),
             FunctionPlanEntry(
                 key=python_function_key,
@@ -119,6 +120,10 @@ def build_target_writer_plan_output() -> PlanOutput:
                 arguments=(FunctionArgument(name="order_status", type="VARCHAR"),),
                 returns="BOOLEAN",
                 body_sql=(
+                    "def main(order_status: str | None) -> bool:\n"
+                    "    return order_status == 'completed'"
+                ),
+                fingerprint_query_sql=(
                     "def main(order_status: str | None) -> bool:\n"
                     "    return order_status == 'completed'"
                 ),
