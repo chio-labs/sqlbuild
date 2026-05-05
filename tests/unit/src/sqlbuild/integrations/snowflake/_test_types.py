@@ -27,3 +27,17 @@ class SnowflakeRenderPythonFunctionTestCase:
 class SnowflakeRenderTableFunctionTestCase:
     description: str
     expected_sql: str
+
+
+@dataclass(frozen=True)
+class SnowflakeQueryColumnNamesTestCase:
+    description: str
+    cursor_description: tuple[tuple[str], ...]
+    expected_columns: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SnowflakeLoadSeedTestCase:
+    description: str
+    csv_text: str
+    expected_rows: list[tuple[object, ...]]

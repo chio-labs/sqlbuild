@@ -371,6 +371,20 @@ def _format_failure_details(result: BuildExecutionResult) -> list[str]:
     lines: list[str] = []
     has_failures: bool = False
 
+    seed_result: SeedExecutionResult
+    for seed_result in result.seed_results:
+        if seed_result.status != ExecutionStatus.FAILED:
+            continue
+        if not has_failures:
+            lines.append("")
+            lines.append("Failures:")
+            lines.append("")
+            has_failures = True
+        lines.append(f"  {seed_result.seed_name}  (seed)")
+        if seed_result.error_message is not None:
+            lines.append(f"    {seed_result.error_message}")
+        lines.append("")
+
     model_result: ModelExecutionResult
     for model_result in result.model_results:
         if model_result.status != ExecutionStatus.FAILED:

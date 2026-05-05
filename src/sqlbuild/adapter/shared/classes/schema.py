@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo
+from sqlbuild.adapter.shared.models import ColumnInfo, FunctionInfo, RelationInfo
 
 
 class SchemaMixin(ABC):
@@ -21,6 +21,18 @@ class SchemaMixin(ABC):
         names: tuple[str, ...] | None = None,
     ) -> tuple[RelationInfo, ...]:
         """Return all relations in the given database/schema scope."""
+        ...
+
+    @abstractmethod
+    def list_functions(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> tuple[FunctionInfo, ...]:
+        """Return all functions in the given database/schema scope."""
         ...
 
     @abstractmethod

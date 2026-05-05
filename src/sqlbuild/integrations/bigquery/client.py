@@ -11,6 +11,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
     CursorValue,
+    FunctionInfo,
     QueryResult,
     RelationInfo,
     RowDiffColumnResult,
@@ -463,6 +464,44 @@ class BigQueryAdapter(BaseAdapter):
                 if not self._is_google_not_found(error):
                     raise
         return tuple(relations)
+
+    def list_functions(
+        self,
+        connection: _BigQueryConnection,
+        *,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> tuple[FunctionInfo, ...]:
+        if not schemas:
+            return ()
+        functions: list[FunctionInfo] = []
+        schema: str
+        for schema in schemas:
+            dataset_id: str = self._build_dataset_id(database=database, schema=schema)
+            query: str = (
+                "SELECT routine_name, routine_schema, routine_type "
+                f"FROM `{dataset_id}`.INFORMATION_SCHEMA.ROUTINES WHERE 1=1"
+            )
+            if names:
+                quoted_names: str = ", ".join(f"'{name}'" for name in names)
+                query += f" AND routine_name IN ({quoted_names})"
+            try:
+                cursor: _BigQueryCursor = self.execute(connection, query)
+                row: tuple[Any, ...]
+                for row in cursor.fetchall():
+                    functions.append(
+                        FunctionInfo(
+                            database=database,
+                            schema=None if row[1] is None else str(row[1]),
+                            name=str(row[0]),
+                            function_type=str(row[2]),
+                        )
+                    )
+            except Exception as error:
+                if not self._is_google_not_found(error):
+                    raise
+        return tuple(functions)
 
     def get_columns(
         self,

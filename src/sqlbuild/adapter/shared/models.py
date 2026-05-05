@@ -54,6 +54,16 @@ class RelationInfo:
 
 
 @dataclass(frozen=True)
+class FunctionInfo:
+    """Metadata for one discovered warehouse function or routine."""
+
+    database: str | None
+    schema: str | None
+    name: str
+    function_type: str
+
+
+@dataclass(frozen=True)
 class QueryResult:
     """Rows returned by an ad hoc warehouse query."""
 

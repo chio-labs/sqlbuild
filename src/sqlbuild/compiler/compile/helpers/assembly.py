@@ -233,6 +233,7 @@ def _assemble_compiled_sql_test(
         ),
         mock_model_names=test_input.mock_model_names,
         mock_source_names=test_input.mock_source_names,
+        mock_seed_names=test_input.mock_seed_names,
         expected_model_names=test_input.expected_model_names,
     )
 
