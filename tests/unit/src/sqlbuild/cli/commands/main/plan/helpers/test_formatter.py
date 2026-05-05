@@ -155,6 +155,39 @@ TEST_CASES: list[FormatPlanTestCase] = [
         ),
     ),
     FormatPlanTestCase(
+        description="full rebuild hides cursor range placeholders",
+        plan_output=build_plan_output(
+            model_entries=(
+                build_model_entry(
+                    name="hourly_order_activity",
+                    action=PlanAction.CREATE_TABLE,
+                    reason=PlanReason.QUERY_CHANGED,
+                    materialization_type=MaterializationType.INCREMENTAL,
+                    backfill_action=BackfillAction.FULL,
+                    cursor_column="activity_hour",
+                    cursor_type="timestamp",
+                    incremental_mode="microbatch",
+                    cursor_bounds=CursorBounds(
+                        start="__SQB_CURSOR_START__",
+                        end="__SQB_CURSOR_END__",
+                    ),
+                    previous_query_sql="SELECT activity_hour FROM raw",
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "hourly_order_activity",
+            "full rebuild",
+            "cursor: activity_hour",
+            "mode: microbatch",
+        ),
+        unexpected_fragments=(
+            "range:",
+            "__SQB_CURSOR_START__",
+            "__SQB_CURSOR_END__",
+        ),
+    ),
+    FormatPlanTestCase(
         description="upstream changed shows cascade cause",
         plan_output=build_plan_output(
             model_entries=(
@@ -250,6 +283,62 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "is_completed_order_py",
             "python udf",
         ),
+    ),
+    FormatPlanTestCase(
+        description="function query change shows diff and policy",
+        plan_output=build_plan_output(
+            model_entries=(build_model_entry(name="orders", action=PlanAction.CREATE_TABLE),),
+            function_entries=(
+                build_function_entry(
+                    name="is_completed_order",
+                    language=FunctionLanguage.SQL,
+                    reason=PlanReason.QUERY_CHANGED,
+                    backfill_action=BackfillAction.FULL,
+                    previous_query_sql="returns=BOOLEAN\nbody=\norder_status = 'completed'",
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "Function changed (1)",
+            "is_completed_order",
+            "sql udf",
+            "policy: query_change_backfill=full",
+            "query diff:",
+            "--- previous",
+            "+++ current",
+        ),
+    ),
+    FormatPlanTestCase(
+        description="upstream changed prefers root function query cause",
+        plan_output=build_plan_output(
+            model_entries=(
+                build_model_entry(
+                    name="daily_activity_rollup",
+                    action=PlanAction.CREATE_TABLE,
+                    reason=PlanReason.NO_CHANGE,
+                    cascade=CascadeResult(
+                        effective_action=BackfillAction.FULL,
+                        effective_duration=None,
+                        root_cause="is_completed_order",
+                        root_reason=PlanReason.QUERY_CHANGED,
+                        causes=(
+                            CascadeCause(
+                                model_name="hourly_order_activity",
+                                effective_action=BackfillAction.FULL,
+                                effective_duration=None,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "Upstream changed (1)",
+            "daily_activity_rollup",
+            "full rebuild",
+            "cause: is_completed_order (query changed)",
+        ),
+        unexpected_fragments=("cause: hourly_order_activity", "cause: is_completed_order (full)"),
     ),
     FormatPlanTestCase(
         description="warnings section shows warning messages",

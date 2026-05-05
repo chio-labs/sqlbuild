@@ -42,6 +42,27 @@ class BuildFooterTestCase:
 
 
 @dataclass(frozen=True)
+class ConnectionProgressTestCase:
+    description: str
+    connection_count: int
+    elapsed_seconds: float
+    expected_start: str
+    expected_complete: str
+    expected_error: str
+    blank_line_after_complete: bool = False
+    use_color: bool = False
+    expected_lines: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class PlanningProgressTestCase:
+    description: str
+    messages: tuple[str, ...]
+    expected_output: str
+    use_color: bool = False
+
+
+@dataclass(frozen=True)
 class ResolveProjectConnectionConfigTestCase:
     description: str
     project_dir_name: str

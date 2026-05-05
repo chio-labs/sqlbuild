@@ -116,6 +116,10 @@ def build_function_entry(
     *,
     name: str,
     language: FunctionLanguage = FunctionLanguage.SQL,
+    reason: PlanReason = PlanReason.NO_CHANGE,
+    backfill_action: BackfillAction = BackfillAction.WARN_ONLY,
+    backfill_duration: str | None = None,
+    previous_query_sql: str | None = None,
 ) -> FunctionPlanEntry:
     """Build a minimal FunctionPlanEntry for formatter tests."""
 
@@ -131,6 +135,9 @@ def build_function_entry(
         body_sql="return True",
         fingerprint_query_sql="return True",
         language=language,
+        previous_query_sql=previous_query_sql,
+        reason=reason,
+        backfill=BackfillResult(action=backfill_action, duration=backfill_duration),
     )
 
 

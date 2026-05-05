@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -39,6 +41,10 @@ def run_compile_pipeline(
     cursor_overrides: CursorOverrides | None = None,
     full_refresh: bool = False,
     connection_config: dict[str, object] | None = None,
+    on_connection_start: Callable[[int], None] | None = None,
+    on_connection_complete: Callable[[int, float], None] | None = None,
+    on_connection_error: Callable[[int, float], None] | None = None,
+    on_progress: Callable[[str], None] | None = None,
 ) -> CompilePipelineResult:
     """Run compile inputs, assembly, planning, and manifest generation."""
 
@@ -47,7 +53,17 @@ def run_compile_pipeline(
         if connection_config is not None
         else build_effective_connection_config(discovered_inputs=discovered_inputs)
     )
-    connection: Any = adapter.connect(effective_config)
+    if on_connection_start is not None:
+        on_connection_start(1)
+    start: float = time.monotonic()
+    try:
+        connection: Any = adapter.connect(effective_config)
+    except Exception:
+        if on_connection_error is not None:
+            on_connection_error(1, time.monotonic() - start)
+        raise
+    if on_connection_complete is not None:
+        on_connection_complete(1, time.monotonic() - start)
     try:
         return _build_result(
             discovered_inputs=discovered_inputs,
@@ -59,6 +75,7 @@ def run_compile_pipeline(
             exclude=exclude,
             cursor_overrides=cursor_overrides,
             full_refresh=full_refresh,
+            on_progress=on_progress,
         )
     finally:
         adapter.close(connection)
@@ -75,6 +92,7 @@ def _build_result(
     exclude: tuple[str, ...] = (),
     cursor_overrides: CursorOverrides | None = None,
     full_refresh: bool = False,
+    on_progress: Callable[[str], None] | None = None,
 ) -> CompilePipelineResult:
     project: CompiledProject = build_compiled_project(
         discovered_inputs=discovered_inputs,
@@ -114,6 +132,7 @@ def _build_result(
         deferred_relations=deferred_relations,
         cursor_overrides=cursor_overrides,
         full_refresh=full_refresh,
+        on_progress=on_progress,
     )
     loaded_macros: dict[str, LoadedMacro] = load_macros(discovered_inputs.macro_files)
     manifest: dict[str, object] = build_manifest(

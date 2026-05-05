@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -43,19 +44,40 @@ def run_build_pipeline(
     custom_materializations: dict[str, Callable[..., MaterializationResult]] | None = None,
     environment: str = "",
     effective_vars: dict[str, str] | None = None,
+    on_connection_start: Callable[[int], None] | None = None,
+    on_connection_complete: Callable[[int, float], None] | None = None,
+    on_connection_error: Callable[[int, float], None] | None = None,
 ) -> BuildExecutionResult:
     """Execute a full build pipeline: resolve settings, open connections, run plan, close."""
 
     promotion_mode: TablePromotionMode = resolve_promotion_mode(settings=settings, adapter=adapter)
     effective_concurrency: int = max(1, max_concurrency)
     logger: logging.Logger = logging.getLogger("sqlbuild.executor.pipeline")
-    logger.debug("open scheduler connection")
-    scheduler_connection: Any = adapter.connect(connection_config)
     worker_connections: list[Any] = []
-    _i: int
-    for _i in range(effective_concurrency):
-        logger.debug("open worker connection index=%s", _i)
-        worker_connections.append(adapter.connect(connection_config))
+    scheduler_connection: Any | None = None
+    if on_connection_start is not None:
+        on_connection_start(effective_concurrency)
+    start: float = time.monotonic()
+    try:
+        logger.debug("open scheduler connection")
+        scheduler_connection = adapter.connect(connection_config)
+        _i: int
+        for _i in range(effective_concurrency):
+            logger.debug("open worker connection index=%s", _i)
+            worker_connections.append(adapter.connect(connection_config))
+    except Exception:
+        if on_connection_error is not None:
+            on_connection_error(effective_concurrency, time.monotonic() - start)
+        conn: Any
+        for _i, conn in enumerate(worker_connections):
+            logger.debug("close worker connection index=%s", _i)
+            adapter.close(conn)
+        if scheduler_connection is not None:
+            logger.debug("close scheduler connection")
+            adapter.close(scheduler_connection)
+        raise
+    if on_connection_complete is not None:
+        on_connection_complete(effective_concurrency, time.monotonic() - start)
     try:
         return execute_build_plan(
             plan=plan,
@@ -82,4 +104,5 @@ def run_build_pipeline(
             logger.debug("close worker connection index=%s", _i)
             adapter.close(conn)
         logger.debug("close scheduler connection")
-        adapter.close(scheduler_connection)
+        if scheduler_connection is not None:
+            adapter.close(scheduler_connection)

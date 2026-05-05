@@ -132,6 +132,7 @@ def build_project_from_test_case(
                 ),
                 language=language,
                 entry_point="main" if language == FunctionLanguage.PYTHON else None,
+                query_change_backfill=test_case.function_query_change_backfills.get(function_name),
             )
         )
 
