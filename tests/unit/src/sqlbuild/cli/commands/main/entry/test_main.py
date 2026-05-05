@@ -282,6 +282,66 @@ def test_given_query_command_arguments_when_running_with_dependencies_then_it_di
     "test_case",
     [
         MainTestCase(
+            description="dispatches lineage command through injected handler",
+            argv=[
+                "lineage",
+                "fact_orders",
+                "--direction",
+                "both",
+                "--depth",
+                "2",
+                "--format",
+                "json",
+            ],
+            expected_exit_code=11,
+        )
+    ],
+    ids=["dispatches lineage command through injected handler"],
+)
+def test_given_lineage_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[
+        tuple[Path | None, bool, str | None, str, str, str, tuple[str, ...], tuple[str, ...]]
+    ] = []
+
+    def run_lineage(
+        project_dir: Path | None,
+        no_sql_validation: bool,
+        target: str | None,
+        output_format: str,
+        direction: str,
+        depth: str,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+    ) -> int:
+        received_args.append(
+            (
+                project_dir,
+                no_sql_validation,
+                target,
+                output_format,
+                direction,
+                depth,
+                select,
+                exclude,
+            )
+        )
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_lineage=run_lineage),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [(None, False, "fact_orders", "json", "both", "2", (), ())]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
             description="passes verbose flag to diff handler",
             argv=[
                 "diff",
