@@ -233,6 +233,9 @@ class BigQueryAdapter(BaseAdapter):
     def supports_python_functions(self) -> bool:
         return True
 
+    def supports_table_functions(self) -> bool:
+        return True
+
     def render_create_schema(self, *, database: str | None, schema: str) -> tuple[str, ...]:
         target: str = f"{database}.{schema}" if database is not None else schema
         sql: str = f"CREATE SCHEMA IF NOT EXISTS {self._quote_identifier_path(target)}"
@@ -253,12 +256,22 @@ class BigQueryAdapter(BaseAdapter):
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
+        return_columns: tuple[Any, ...] = (),
         language: FunctionLanguage = FunctionLanguage.SQL,
         runtime_version: str | None = None,
         entry_point: str | None = None,
         packages: tuple[str, ...] = (),
     ) -> tuple[str, ...]:
         argument_sql: str = ", ".join(f"{argument.name} {argument.type}" for argument in arguments)
+        if return_columns:
+            if language != FunctionLanguage.SQL:
+                raise ValueError("BigQuery table functions must use SQL language")
+            del returns, runtime_version, entry_point, packages
+            return (
+                f"CREATE OR REPLACE TABLE FUNCTION {self._quote_identifier_path(target)}"
+                f"({argument_sql})\n"
+                f"AS (\n{body_sql}\n)",
+            )
         if language == FunctionLanguage.PYTHON:
             if runtime_version is None or entry_point is None:
                 raise ValueError("BigQuery Python UDFs require runtime_version and entry_point")

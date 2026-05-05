@@ -329,8 +329,14 @@ class SnowflakeAdapter(BaseAdapter):
 
         return "EXCEPT"
 
+    def render_table_function_call(self, *, target: str, arguments_sql: str) -> str:
+        return f"TABLE({target}({arguments_sql}))"
+
     def sqlglot_dialect(self) -> str | None:
         return "snowflake"
+
+    def supports_table_functions(self) -> bool:
+        return True
 
     def render_create_function(
         self,
@@ -339,12 +345,23 @@ class SnowflakeAdapter(BaseAdapter):
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
+        return_columns: tuple[Any, ...] = (),
         language: FunctionLanguage = FunctionLanguage.SQL,
         runtime_version: str | None = None,
         entry_point: str | None = None,
         packages: tuple[str, ...] = (),
     ) -> tuple[str, ...]:
         argument_sql: str = ", ".join(f"{argument.name} {argument.type}" for argument in arguments)
+        if return_columns:
+            if language != FunctionLanguage.SQL:
+                raise ValueError("Snowflake table functions must use SQL language")
+            column_sql: str = ", ".join(f"{column.name} {column.type}" for column in return_columns)
+            del returns, runtime_version, entry_point, packages
+            return (
+                f"CREATE OR REPLACE FUNCTION {target}({argument_sql})\n"
+                f"RETURNS TABLE ({column_sql})\n"
+                f"AS $$\n{body_sql}\n$$",
+            )
         if language == FunctionLanguage.PYTHON:
             if runtime_version is None or entry_point is None:
                 raise ValueError("Snowflake Python UDFs require runtime_version and entry_point")

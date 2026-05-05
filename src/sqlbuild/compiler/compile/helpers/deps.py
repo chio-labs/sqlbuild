@@ -24,6 +24,18 @@ def model_build_deps(
     )
 
 
+def function_build_deps(
+    *,
+    references: tuple[CompileSqlReference, ...],
+    seed_names: frozenset[str] = frozenset(),
+) -> tuple[CompiledObjectKey, ...]:
+    """Return build graph dependencies implied by function SQL references."""
+
+    return _dedupe_object_keys(
+        _reference_dep(reference=reference, seed_names=seed_names) for reference in references
+    )
+
+
 def audit_scope_deps(
     *,
     references: tuple[CompileSqlReference, ...],
@@ -76,7 +88,7 @@ def _reference_dep(
             resource_type=CompiledResourceType.DBT_REF,
             name=reference.ref_name,
         )
-    if reference.ref_kind == SqlReferenceKind.UDF:
+    if reference.ref_kind in {SqlReferenceKind.UDF, SqlReferenceKind.TABLE_FUNCTION}:
         return CompiledObjectKey(
             resource_type=CompiledResourceType.FUNCTION,
             name=reference.ref_name,

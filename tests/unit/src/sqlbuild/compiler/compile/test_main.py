@@ -1081,6 +1081,7 @@ FUNCTION (
         expected_sql_function_names=("is_completed_order",),
         expected_sql_function_arguments=((("order_status", "VARCHAR"),),),
         expected_sql_function_returns=("BOOLEAN",),
+        expected_sql_function_return_columns=((),),
         expected_sql_function_body_sqls=(
             "order_status = 'completed' AND order_status <> 'cancelled'",
         ),
@@ -1100,6 +1101,66 @@ FUNCTION (
             "udf_schema": "udf_dev",
         },
         expected_model_references=(),
+        expected_audit_references=(),
+    ),
+    BuildCompileInputsTestCase(
+        description="attaches SQL table function metadata with return columns and body refs",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.yml": """
+name: demo
+adapter: duckdb
+settings:
+  sql_validation: false
+""".strip()
+            + "\n",
+            "models/fact_orders.sql": "MODEL ();\n\nSELECT 1 AS order_id, 7 AS customer_id\n",
+            "functions/sql/customer_orders.sql": """
+FUNCTION (
+  arguments (p_customer_id INTEGER),
+  returns table (
+    order_id INTEGER,
+    amount_cents INTEGER
+  )
+);
+
+SELECT order_id, 100 AS amount_cents
+FROM __ref("fact_orders")
+WHERE customer_id = p_customer_id
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        cli_vars=None,
+        run_id=None,
+        expected_model_schema_names=(None,),
+        expected_model_config_values=({},),
+        expected_model_query_sqls=("SELECT 1 AS order_id, 7 AS customer_id",),
+        expected_model_path_defaults=(None,),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_sql_function_names=("customer_orders",),
+        expected_sql_function_arguments=((("p_customer_id", "INTEGER"),),),
+        expected_sql_function_returns=("TABLE",),
+        expected_sql_function_return_columns=(
+            (("order_id", "INTEGER"), ("amount_cents", "INTEGER")),
+        ),
+        expected_sql_function_body_sqls=(
+            "SELECT order_id, 100 AS amount_cents\n"
+            'FROM __ref("fact_orders")\n'
+            "WHERE customer_id = p_customer_id",
+        ),
+        expected_sql_function_databases=(None,),
+        expected_sql_function_schemas=(None,),
+        expected_sql_function_languages=("sql",),
+        expected_sql_function_runtime_versions=(None,),
+        expected_sql_function_entry_points=(None,),
+        expected_sql_function_packages=((),),
+        expected_effective_environment_name=None,
+        expected_effective_connection={},
+        expected_effective_vars={},
+        expected_effective_sql_validation=False,
+        expected_model_references=((),),
         expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
@@ -1241,6 +1302,7 @@ def main(order_status):
         expected_sql_function_names=("is_completed_order",),
         expected_sql_function_arguments=((("order_status", "VARCHAR"),),),
         expected_sql_function_returns=("BOOLEAN",),
+        expected_sql_function_return_columns=((),),
         expected_sql_function_body_sqls=(
             """
 def main(order_status):
@@ -1543,6 +1605,13 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
         == test_case.expected_sql_function_returns
     )
     assert (
+        tuple(
+            tuple((column.name, column.type) for column in function_input.return_columns)
+            for function_input in compile_inputs.sql_function_inputs
+        )
+        == test_case.expected_sql_function_return_columns
+    )
+    assert (
         tuple(function_input.body_sql for function_input in compile_inputs.sql_function_inputs)
         == test_case.expected_sql_function_body_sqls
     )
@@ -1661,6 +1730,37 @@ def test_given_project_and_local_environment_when_resolving_then_local_values_ov
 
 
 COMPILE_ERROR_TEST_CASES: list[BuildCompileInputsErrorTestCase] = [
+    BuildCompileInputsErrorTestCase(
+        description="raises when a model references a table function",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.yml": """
+name: demo
+adapter: duckdb
+settings:
+  sql_validation: false
+""".strip()
+            + "\n",
+            "models/orders.sql": """
+MODEL ();
+
+SELECT * FROM __table_function("customer_orders")(1)
+""".strip()
+            + "\n",
+            "functions/sql/customer_orders.sql": """
+FUNCTION (
+  arguments (p_customer_id INTEGER),
+  returns table (order_id INTEGER)
+);
+
+SELECT 1 AS order_id
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="table functions are terminal resources",
+    ),
     BuildCompileInputsErrorTestCase(
         description="raises when a model references an unknown source",
         repo_files=base_repo_files()

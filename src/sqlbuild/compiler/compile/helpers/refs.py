@@ -6,6 +6,7 @@ from sqlbuild.compiler.compile.constants import (
     DBT_REF_CALL_NAME,
     REF_CALL_NAME,
     SOURCE_CALL_NAME,
+    TABLE_FUNCTION_CALL_NAME,
     UDF_CALL_NAME,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
@@ -58,6 +59,8 @@ def _parse_reference_at(*, sql: str, start: int) -> tuple[CompileSqlReference, i
         ref_kind = SqlReferenceKind.SOURCE
     elif sql.startswith(f"{UDF_CALL_NAME}(", start):
         ref_kind = SqlReferenceKind.UDF
+    elif sql.startswith(f"{TABLE_FUNCTION_CALL_NAME}(", start):
+        ref_kind = SqlReferenceKind.TABLE_FUNCTION
     elif sql.startswith(f"{REF_CALL_NAME}(", start):
         ref_kind = SqlReferenceKind.REF
     if ref_kind is None:
@@ -88,6 +91,8 @@ def ref_prefix(ref_kind: SqlReferenceKind | str) -> str:
         return SOURCE_CALL_NAME
     if normalized_ref_kind == SqlReferenceKind.UDF:
         return UDF_CALL_NAME
+    if normalized_ref_kind == SqlReferenceKind.TABLE_FUNCTION:
+        return TABLE_FUNCTION_CALL_NAME
     return REF_CALL_NAME
 
 

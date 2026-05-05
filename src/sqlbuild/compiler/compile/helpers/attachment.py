@@ -33,6 +33,7 @@ from sqlbuild.compiler.compile.helpers.sql_vars import (
     validate_var_macro_collision,
 )
 from sqlbuild.compiler.compile.helpers.sqlglot_validation import (
+    validate_function_sql_syntax,
     validate_hook_sql_syntax,
     validate_source_expression_syntax,
     validate_sql_syntax,
@@ -53,6 +54,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlTestCtes,
     CompileSqlTestInput,
     FunctionArgument,
+    FunctionReturnColumn,
     LoadedMacro,
     MacroContext,
 )
@@ -113,6 +115,7 @@ def build_model_inputs(
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
     known_function_names: set[str] = build_known_function_names(discovered_inputs)
+    known_table_function_names: set[str] = build_known_table_function_names(discovered_inputs)
     custom_materialization_names: frozenset[str] = frozenset(
         mf.name for mf in discovered_inputs.materialization_files
     )
@@ -168,6 +171,7 @@ def build_model_inputs(
             known_model_names=known_model_names,
             known_source_names=known_source_names,
             known_function_names=known_function_names,
+            known_table_function_names=known_table_function_names,
             has_dbt_manifest=discovered_inputs.dbt_manifest_file is not None,
         )
         validate_incremental_config(
@@ -305,6 +309,10 @@ def build_sql_function_inputs(
     """Attach and validate SQL function metadata."""
 
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
+    known_model_names: set[str] = build_known_ref_names(discovered_inputs)
+    known_source_names: set[str] = build_known_source_names(discovered_inputs)
+    known_function_names: set[str] = build_known_function_names(discovered_inputs)
+    known_table_function_names: set[str] = build_known_table_function_names(discovered_inputs)
     database, schema = _resolve_function_namespace(
         defaults=discovered_inputs.project_config.defaults,
         environment_config=environment_config,
@@ -320,7 +328,7 @@ def build_sql_function_inputs(
         known_names.add(function_name)
         header_values: dict[str, object] = function_file.header_values
         raw_returns: object | None = header_values.get("returns")
-        if not isinstance(raw_returns, str) or not raw_returns.strip():
+        if raw_returns is None:
             raise CompileInputError(
                 f"SQL function file {function_file.relative_path} must declare returns"
             )
@@ -328,10 +336,12 @@ def build_sql_function_inputs(
             function_file=function_file,
             effective_vars=effective_vars,
         )
-        returns: str = _expand_function_header_value(
-            raw_value=raw_returns.strip(),
+        returns: str
+        return_columns: tuple[FunctionReturnColumn, ...]
+        returns, return_columns = _parse_sql_function_returns(
+            raw_returns=raw_returns,
+            function_file=function_file,
             effective_vars=effective_vars,
-            context_label=f"SQL function {function_file.relative_path} returns",
         )
         raw_database: object | None = header_values.get("database")
         raw_schema: object | None = header_values.get("schema")
@@ -374,11 +384,38 @@ def build_sql_function_inputs(
                         f"SQL function {function_file.relative_path} argument '{argument.name}'"
                     ),
                 )
-            validate_native_type(
-                returns,
-                adapter_name=adapter_name,
-                context=f"SQL function {function_file.relative_path} return type",
+            if return_columns:
+                return_column: FunctionReturnColumn
+                for return_column in return_columns:
+                    validate_native_type(
+                        return_column.type,
+                        adapter_name=adapter_name,
+                        context=(
+                            f"SQL function {function_file.relative_path} return column "
+                            f"'{return_column.name}'"
+                        ),
+                    )
+            else:
+                validate_native_type(
+                    returns,
+                    adapter_name=adapter_name,
+                    context=f"SQL function {function_file.relative_path} return type",
+                )
+            validate_function_sql_syntax(
+                body_sql=expanded_body_sql,
+                function_name=function_name,
+                file_path=function_file.file_path,
             )
+        references: tuple[CompileSqlReference, ...] = extract_sql_references(expanded_body_sql)
+        validate_function_references(
+            references=references,
+            function_file=function_file,
+            known_model_names=known_model_names,
+            known_source_names=known_source_names,
+            known_function_names=known_function_names,
+            known_table_function_names=known_table_function_names,
+            has_dbt_manifest=discovered_inputs.dbt_manifest_file is not None,
+        )
         function_inputs.append(
             CompileSqlFunctionInput(
                 function_file=function_file,
@@ -386,6 +423,8 @@ def build_sql_function_inputs(
                 arguments=arguments,
                 returns=returns,
                 body_sql=expanded_body_sql,
+                return_columns=return_columns,
+                references=references,
                 database=function_database,
                 schema=function_schema,
             )
@@ -546,6 +585,56 @@ def _parse_python_function_arguments(
         )
         arguments.append(FunctionArgument(name=argument_name.strip(), type=expanded_type))
     return tuple(arguments)
+
+
+def _parse_sql_function_returns(
+    *,
+    raw_returns: object,
+    function_file: DiscoveredSqlFunctionFile,
+    effective_vars: dict[str, str],
+) -> tuple[str, tuple[FunctionReturnColumn, ...]]:
+    if isinstance(raw_returns, str) and raw_returns.strip():
+        returns: str = _expand_function_header_value(
+            raw_value=raw_returns.strip(),
+            effective_vars=effective_vars,
+            context_label=f"SQL function {function_file.relative_path} returns",
+        )
+        return returns, ()
+    if isinstance(raw_returns, dict) and set(raw_returns) == {"table"}:
+        table_returns: dict[str, object] = cast(dict[str, object], raw_returns)
+        raw_columns: object = table_returns["table"]
+        if not isinstance(raw_columns, dict) or not raw_columns:
+            raise CompileInputError(
+                f"SQL function file {function_file.relative_path} returns table must declare "
+                "at least one column"
+            )
+        columns: list[FunctionReturnColumn] = []
+        column_name: object
+        column_type: object
+        for column_name, column_type in raw_columns.items():
+            if not isinstance(column_name, str) or not column_name.strip():
+                raise CompileInputError(
+                    f"SQL function file {function_file.relative_path} has an invalid return "
+                    "column name"
+                )
+            if not isinstance(column_type, str) or not column_type.strip():
+                raise CompileInputError(
+                    f"SQL function file {function_file.relative_path} return column "
+                    f"'{column_name}' must declare a type"
+                )
+            expanded_type: str = _expand_function_header_value(
+                raw_value=column_type.strip(),
+                effective_vars=effective_vars,
+                context_label=(
+                    f"SQL function {function_file.relative_path} return column '{column_name}' type"
+                ),
+            )
+            columns.append(FunctionReturnColumn(name=column_name.strip(), type=expanded_type))
+        return "TABLE", tuple(columns)
+    raise CompileInputError(
+        f"SQL function file {function_file.relative_path} returns must be a type string or "
+        "table column declaration"
+    )
 
 
 def _parse_required_string_header(
@@ -1232,6 +1321,7 @@ def validate_model_references(
     known_model_names: set[str],
     known_source_names: set[str],
     known_function_names: set[str],
+    known_table_function_names: set[str],
     has_dbt_manifest: bool,
 ) -> None:
     """Validate extracted model refs against discovered project inputs."""
@@ -1266,6 +1356,82 @@ def validate_model_references(
             raise CompileInputError(
                 f"Model file {model_file.relative_path} references unknown SQL function "
                 f"'{reference.ref_name}'"
+            )
+        if (
+            reference.ref_kind == SqlReferenceKind.UDF
+            and reference.ref_name in known_table_function_names
+        ):
+            raise CompileInputError(
+                f"Model file {model_file.relative_path} references table function "
+                f"'{reference.ref_name}' with __udf(); use __table_function() in SQL contexts "
+                "that support table-valued functions"
+            )
+        if reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION:
+            raise CompileInputError(
+                f"Model file {model_file.relative_path} references table function "
+                f"'{reference.ref_name}', but table functions are terminal resources and cannot "
+                "be model dependencies"
+            )
+
+
+def validate_function_references(
+    *,
+    references: tuple[CompileSqlReference, ...],
+    function_file: DiscoveredSqlFunctionFile,
+    known_model_names: set[str],
+    known_source_names: set[str],
+    known_function_names: set[str],
+    known_table_function_names: set[str],
+    has_dbt_manifest: bool,
+) -> None:
+    """Validate extracted SQL function refs against discovered project inputs."""
+
+    reference: CompileSqlReference
+    for reference in references:
+        if (
+            reference.ref_kind == SqlReferenceKind.REF
+            and reference.ref_name not in known_model_names
+        ):
+            raise CompileInputError(
+                f"SQL function file {function_file.relative_path} references unknown model "
+                f"'{reference.ref_name}'"
+            )
+        if (
+            reference.ref_kind == SqlReferenceKind.SOURCE
+            and reference.ref_name not in known_source_names
+        ):
+            raise CompileInputError(
+                f"SQL function file {function_file.relative_path} references unknown source "
+                f"'{reference.ref_name}'"
+            )
+        if reference.ref_kind == SqlReferenceKind.DBT_REF and not has_dbt_manifest:
+            raise CompileInputError(
+                f"SQL function file {function_file.relative_path} uses "
+                f"__dbt_ref('{reference.ref_name}') but no dbt manifest.json was discovered"
+            )
+        if (
+            reference.ref_kind in {SqlReferenceKind.UDF, SqlReferenceKind.TABLE_FUNCTION}
+            and reference.ref_name not in known_function_names
+        ):
+            raise CompileInputError(
+                f"SQL function file {function_file.relative_path} references unknown SQL function "
+                f"'{reference.ref_name}'"
+            )
+        if (
+            reference.ref_kind == SqlReferenceKind.UDF
+            and reference.ref_name in known_table_function_names
+        ):
+            raise CompileInputError(
+                f"SQL function file {function_file.relative_path} references table function "
+                f"'{reference.ref_name}' with __udf(); use __table_function()"
+            )
+        if (
+            reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION
+            and reference.ref_name not in known_table_function_names
+        ):
+            raise CompileInputError(
+                f"SQL function file {function_file.relative_path} references scalar function "
+                f"'{reference.ref_name}' with __table_function(); use __udf() for scalar UDFs"
             )
 
 
@@ -1451,6 +1617,20 @@ def build_known_function_names(discovered_inputs: DiscoveredProjectInputs) -> se
             for function_file in discovered_inputs.python_function_files
         ),
     }
+
+
+def build_known_table_function_names(discovered_inputs: DiscoveredProjectInputs) -> set[str]:
+    """Build the set of discovered SQL functions declared as table functions."""
+
+    return {
+        function_file.file_path.stem
+        for function_file in discovered_inputs.sql_function_files
+        if _is_table_function_returns(function_file.header_values.get("returns"))
+    }
+
+
+def _is_table_function_returns(raw_returns: object) -> bool:
+    return isinstance(raw_returns, dict) and set(raw_returns) == {"table"}
 
 
 def build_effective_vars(

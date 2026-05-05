@@ -14,7 +14,11 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationTarget
+from sqlbuild.compiler.compile.models import (
+    CompiledObjectKey,
+    CompiledRelationTarget,
+    FunctionReturnColumn,
+)
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.types import (
@@ -271,6 +275,7 @@ class FunctionPlanEntry:
     returns: str
     body_sql: str
     fingerprint_query_sql: str
+    return_columns: tuple[FunctionReturnColumn, ...] = field(default_factory=tuple)
     language: FunctionLanguage = FunctionLanguage.SQL
     source_file_path: Path | None = None
     runtime_version: str | None = None

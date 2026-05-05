@@ -12,6 +12,9 @@ _REF_PATTERN: re.Pattern[str] = re.compile(r'__ref\("([^"]+)"\)')
 _SOURCE_PATTERN: re.Pattern[str] = re.compile(r'__source\("([^"]+)"\)')
 _DBT_REF_PATTERN: re.Pattern[str] = re.compile(r'__dbt_ref\("([^"]+)"\)')
 _UDF_PATTERN: re.Pattern[str] = re.compile(r'__udf\("([A-Za-z_][A-Za-z0-9_]*)"\)\s*(?=\()')
+_TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(
+    r'__table_function\("([A-Za-z_][A-Za-z0-9_]*)"\)\s*(?=\()'
+)
 _PLACEHOLDER_PATTERN: re.Pattern[str] = re.compile(r"@@(\w+)")
 
 
@@ -69,6 +72,7 @@ def _replace_refs_with_stubs(query_sql: str) -> str:
     result = _SOURCE_PATTERN.sub(r"\1", result)
     result = _DBT_REF_PATTERN.sub(r"\1", result)
     result = _UDF_PATTERN.sub(r"__sqlbuild_udf_\1", result)
+    result = _TABLE_FUNCTION_PATTERN.sub(r"__sqlbuild_table_function_\1", result)
     return result
 
 

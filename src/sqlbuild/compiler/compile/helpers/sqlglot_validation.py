@@ -78,6 +78,22 @@ def validate_sql_syntax(
         ) from None
 
 
+def validate_function_sql_syntax(
+    *,
+    body_sql: str,
+    function_name: str,
+    file_path: Path,
+    placeholders: dict[str, str] | None = None,
+) -> None:
+    """Validate that a SQL function body is parseable by SQLGlot when available."""
+
+    _validate_sql_syntax_with_message(
+        query_sql=body_sql,
+        error_prefix=f"SQL syntax error in function '{function_name}' ({file_path})",
+        placeholders=placeholders,
+    )
+
+
 def validate_hook_sql_syntax(
     *,
     value: object,

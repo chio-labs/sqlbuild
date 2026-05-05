@@ -47,6 +47,7 @@ class MaterializationMixin(ABC):
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
+        return_columns: tuple[Any, ...] = (),
         language: FunctionLanguage = FunctionLanguage.SQL,
         runtime_version: str | None = None,
         entry_point: str | None = None,

@@ -42,6 +42,10 @@ def execute_function(
             raise NotImplementedError(
                 f"Adapter '{type(adapter).__name__}' does not support Python UDFs"
             )
+        if function_entry.return_columns and not adapter.supports_table_functions():
+            raise NotImplementedError(
+                f"Adapter '{type(adapter).__name__}' does not support SQL table functions"
+            )
         adapter.ensure_schema(
             connection,
             database=function_entry.target.database,
@@ -54,6 +58,7 @@ def execute_function(
             arguments=function_entry.arguments,
             returns=function_entry.returns,
             body_sql=function_entry.body_sql,
+            return_columns=function_entry.return_columns,
             language=function_entry.language,
             runtime_version=function_entry.runtime_version,
             entry_point=function_entry.entry_point,

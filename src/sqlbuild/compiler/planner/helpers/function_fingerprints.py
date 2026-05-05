@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledFunction, FunctionArgument
+from sqlbuild.compiler.compile.models import (
+    CompiledFunction,
+    FunctionArgument,
+    FunctionReturnColumn,
+)
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import BackfillResult, WarehouseSnapshot
 from sqlbuild.compiler.planner.types import BackfillAction
@@ -19,6 +23,7 @@ def build_compiled_function_fingerprint_sql(function: CompiledFunction) -> str:
         target_name=function.target.name,
         arguments=function.arguments,
         returns=function.returns,
+        return_columns=function.return_columns,
         body_sql=function.body_sql,
         language=str(function.language),
         runtime_version=function.runtime_version,
@@ -62,10 +67,14 @@ def build_function_fingerprint_sql(
     runtime_version: str | None,
     entry_point: str | None,
     packages: tuple[str, ...],
+    return_columns: tuple[FunctionReturnColumn | object, ...] = (),
 ) -> str:
     """Build stable function definition text used for change fingerprints."""
 
     rendered_arguments: str = ",".join(_render_argument(arg) for arg in arguments)
+    rendered_return_columns: str = ",".join(
+        _render_return_column(column) for column in return_columns
+    )
     rendered_packages: str = ",".join(packages)
     return "\n".join(
         (
@@ -76,6 +85,7 @@ def build_function_fingerprint_sql(
             f"language={language}",
             f"arguments={rendered_arguments}",
             f"returns={returns}",
+            f"return_columns={rendered_return_columns}",
             f"runtime_version={runtime_version or ''}",
             f"entry_point={entry_point or ''}",
             f"packages={rendered_packages}",
@@ -89,3 +99,9 @@ def _render_argument(argument: FunctionArgument | object) -> str:
     name: object | None = getattr(argument, "name", None)
     arg_type: object | None = getattr(argument, "type", None)
     return f"{name or ''}:{arg_type or ''}"
+
+
+def _render_return_column(column: FunctionReturnColumn | object) -> str:
+    name: object | None = getattr(column, "name", None)
+    col_type: object | None = getattr(column, "type", None)
+    return f"{name or ''}:{col_type or ''}"

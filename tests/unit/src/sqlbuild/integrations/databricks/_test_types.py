@@ -22,6 +22,12 @@ class DatabricksRenderPythonFunctionTestCase:
 
 
 @dataclass(frozen=True)
+class DatabricksRenderTableFunctionTestCase:
+    description: str
+    expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DatabricksPythonFunctionSupportTestCase:
     description: str
     expected_supports_python_functions: bool
