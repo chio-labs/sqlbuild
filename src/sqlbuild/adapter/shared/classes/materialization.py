@@ -38,6 +38,20 @@ class MaterializationMixin(ABC):
         ...
 
     @abstractmethod
+    def create_function(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        arguments: tuple[Any, ...],
+        returns: str,
+        body_sql: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        """Create or replace a SQL function."""
+        ...
+
+    @abstractmethod
     def drop(
         self,
         connection: Any,

@@ -21,6 +21,7 @@ from sqlbuild.compiler.planner.helpers.resolve.cursor_inputs import (
 from sqlbuild.compiler.planner.helpers.resolve.refs import (
     resolve_dbt_ref_references,
     resolve_ref_references,
+    resolve_udf_references,
 )
 from sqlbuild.compiler.planner.helpers.resolve.sources import (
     resolve_source_references,
@@ -42,6 +43,7 @@ def resolve_model_sql(
     snapshot: WarehouseSnapshot,
     model_targets: dict[str, CompiledRelationTarget],
     seed_targets: dict[str, CompiledRelationTarget],
+    function_targets: dict[str, CompiledRelationTarget] | None = None,
     source_map: dict[str, SourceEntry],
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
     star_exclude_keyword: str,
@@ -93,6 +95,7 @@ def resolve_model_sql(
     )
 
     query_sql = resolve_dbt_ref_references(query_sql=query_sql)
+    query_sql = resolve_udf_references(query_sql=query_sql, function_targets=function_targets or {})
 
     return query_sql
 

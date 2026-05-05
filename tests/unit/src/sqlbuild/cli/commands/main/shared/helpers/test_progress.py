@@ -8,10 +8,15 @@ from sqlbuild.cli.commands.main.shared.helpers.progress import (
     _aggregate_audit_results,
     _AuditDisplayEntry,
     _truncate_name,
+    format_build_footer,
 )
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
+from sqlbuild.executor.build.models import BuildExecutionResult, FunctionExecutionResult
+from sqlbuild.executor.build.types import BuildStatus
+from sqlbuild.executor.shared.types import ExecutionStatus
 from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import (
     AuditAggregationTestCase,
+    BuildFooterTestCase,
     TruncateNameTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers.helpers import (
@@ -222,3 +227,38 @@ def test_given_audit_results_when_aggregating_then_produces_expected_entries(
             f"entry {idx}: expected batch_pass {test_case.expected_batch_passes[idx]}, "
             f"got {entries[idx].batch_pass}"
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildFooterTestCase(
+            description="failed function result includes failure count and error",
+            expected_fragments=(
+                "FAIL=1",
+                "is_completed_order  (function)",
+                "warehouse said no",
+            ),
+        ),
+    ],
+    ids=["failed function result includes failure count and error"],
+)
+def test_given_failed_function_result_when_formatting_footer_then_includes_error(
+    test_case: BuildFooterTestCase,
+) -> None:
+    result: BuildExecutionResult = BuildExecutionResult(
+        status=BuildStatus.FAILED,
+        function_results=(
+            FunctionExecutionResult(
+                function_name="is_completed_order",
+                status=ExecutionStatus.FAILED,
+                error_message="warehouse said no",
+            ),
+        ),
+    )
+
+    footer: str = format_build_footer(result=result, elapsed=1.25, use_color=False)
+
+    expected_fragment: str
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in footer

@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import replace
 
 from sqlbuild.compiler.compile.models import (
+    CompiledFunction,
     CompiledModel,
     CompiledProject,
     CompiledRelationTarget,
@@ -46,7 +47,19 @@ def apply_target_defaults(
         )
         for s in project.seeds
     )
-    return replace(project, models=models, seeds=seeds)
+    functions: tuple[CompiledFunction, ...] = tuple(
+        replace(
+            f,
+            target=_resolve_target(
+                f.target,
+                default_schema,
+                default_database,
+                render_qualified_name,
+            ),
+        )
+        for f in project.functions
+    )
+    return replace(project, models=models, seeds=seeds, functions=functions)
 
 
 def _resolve_target(

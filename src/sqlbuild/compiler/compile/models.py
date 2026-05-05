@@ -18,6 +18,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
+    DiscoveredSqlFunctionFile,
     DiscoveredSqlModelFile,
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
@@ -113,6 +114,27 @@ class CompileSqlTestCtes:
 
 
 @dataclass(frozen=True)
+class FunctionArgument:
+    """One SQL function argument with an adapter-native type string."""
+
+    name: str
+    type: str
+
+
+@dataclass(frozen=True)
+class CompileSqlFunctionInput:
+    """One discovered SQL function with validated compile-time metadata."""
+
+    function_file: DiscoveredSqlFunctionFile
+    name: str
+    arguments: tuple[FunctionArgument, ...]
+    returns: str
+    body_sql: str
+    database: str | None = None
+    schema: str | None = None
+
+
+@dataclass(frozen=True)
 class CompileModelInput:
     """One discovered model file with its attached schema metadata, if any."""
 
@@ -196,6 +218,7 @@ class CompileProjectInputs:
     model_inputs: tuple[CompileModelInput, ...] = field(default_factory=tuple)
     seed_inputs: tuple[CompileSeedInput, ...] = field(default_factory=tuple)
     source_inputs: tuple[CompileSourceInput, ...] = field(default_factory=tuple)
+    sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = field(default_factory=tuple)
     test_inputs: tuple[CompileSqlTestInput, ...] = field(default_factory=tuple)
     audit_inputs: tuple[CompileAuditInput, ...] = field(default_factory=tuple)
 
@@ -253,6 +276,20 @@ class CompiledSeed:
 
 
 @dataclass(frozen=True)
+class CompiledFunction:
+    """Planner-ready compiled SQL function metadata."""
+
+    key: CompiledObjectKey
+    deps: tuple[CompiledObjectKey, ...]
+    name: str
+    relative_path: Path
+    arguments: tuple[FunctionArgument, ...]
+    returns: str
+    body_sql: str
+    target: CompiledRelationTarget
+
+
+@dataclass(frozen=True)
 class CompiledAudit:
     """Compiled audit metadata selected by scope dependencies."""
 
@@ -300,5 +337,6 @@ class CompiledProject:
     models: tuple[CompiledModel, ...] = field(default_factory=tuple)
     sources: tuple[CompiledSource, ...] = field(default_factory=tuple)
     seeds: tuple[CompiledSeed, ...] = field(default_factory=tuple)
+    functions: tuple[CompiledFunction, ...] = field(default_factory=tuple)
     audits: tuple[CompiledAudit, ...] = field(default_factory=tuple)
     sql_tests: tuple[CompiledSqlTest, ...] = field(default_factory=tuple)

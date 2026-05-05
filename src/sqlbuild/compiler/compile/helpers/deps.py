@@ -76,6 +76,11 @@ def _reference_dep(
             resource_type=CompiledResourceType.DBT_REF,
             name=reference.ref_name,
         )
+    if reference.ref_kind == SqlReferenceKind.UDF:
+        return CompiledObjectKey(
+            resource_type=CompiledResourceType.FUNCTION,
+            name=reference.ref_name,
+        )
     if reference.ref_name in seed_names:
         return CompiledObjectKey(
             resource_type=CompiledResourceType.SEED,

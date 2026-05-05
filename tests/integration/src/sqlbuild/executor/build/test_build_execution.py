@@ -79,6 +79,33 @@ _FAILING_TEST_SQL: str = (
 
 SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
+        description="sql udf builds before dependent model",
+        project_files={
+            "sqlbuild_project.yml": _PROJECT_YML,
+            "functions/sql/is_positive_int.sql": (
+                "FUNCTION (\n"
+                "  arguments (a_string VARCHAR),\n"
+                "  returns BOOLEAN\n"
+                ");\n\n"
+                "regexp_matches(a_string, '^[0-9]+$')"
+            ),
+            "models/validated_orders.sql": (
+                "MODEL (materialized table);\n\n"
+                'SELECT value, __udf("is_positive_int")(value) AS is_positive '
+                "FROM (VALUES ('123'), ('abc')) AS input(value)"
+            ),
+        },
+        expected_status=BuildStatus.SUCCESS,
+        expected_success_count=2,
+        expected_model_statuses=(("validated_orders", ExecutionStatus.SUCCESS),),
+        expected_query_results=(
+            (
+                "SELECT value, is_positive FROM main.validated_orders ORDER BY value DESC",
+                (("abc", False), ("123", True)),
+            ),
+        ),
+    ),
+    BuildExecutionTestCase(
         description="two independent models both succeed",
         project_files={
             "sqlbuild_project.yml": _PROJECT_YML,
