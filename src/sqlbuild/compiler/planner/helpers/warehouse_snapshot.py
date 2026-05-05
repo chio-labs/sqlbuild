@@ -9,6 +9,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo
 from sqlbuild.compiler.compile.models import (
+    CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
@@ -141,11 +142,15 @@ def _resolve_database(project: CompiledProject) -> str | None:
     for seed in project.seeds:
         if seed.target.database is not None:
             return seed.target.database
+    function: CompiledFunction
+    for function in project.functions:
+        if function.target.database is not None:
+            return function.target.database
     return None
 
 
 def _collect_target_schemas(project: CompiledProject) -> tuple[str, ...]:
-    """Collect distinct non-null target schemas from models and seeds."""
+    """Collect distinct non-null target schemas from models, seeds, and functions."""
 
     schemas: set[str] = set()
     model: CompiledModel
@@ -156,6 +161,10 @@ def _collect_target_schemas(project: CompiledProject) -> tuple[str, ...]:
     for seed in project.seeds:
         if seed.target.schema is not None:
             schemas.add(seed.target.schema)
+    function: CompiledFunction
+    for function in project.functions:
+        if function.target.schema is not None:
+            schemas.add(function.target.schema)
     return tuple(sorted(schemas))
 
 

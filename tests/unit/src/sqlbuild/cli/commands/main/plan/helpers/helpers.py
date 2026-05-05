@@ -127,6 +127,7 @@ def build_function_entry(
         arguments=(),
         returns="BOOLEAN",
         body_sql="return True",
+        fingerprint_query_sql="return True",
         language=language,
     )
 
