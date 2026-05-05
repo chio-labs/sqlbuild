@@ -380,7 +380,12 @@ def _format_functions(lines: list[str], plan: PlanOutput) -> None:
     lines.append(green_bold(f"Functions ({len(plan.function_entries)})"))
     function_entry: FunctionPlanEntry
     for function_entry in plan.function_entries:
-        lines.append(f"  {blue_bold(function_entry.name):<40s} {function_entry.language.value} udf")
+        function_kind: str = (
+            "table function"
+            if function_entry.return_columns
+            else f"{function_entry.language.value} udf"
+        )
+        lines.append(f"  {blue_bold(function_entry.name):<40s} {function_kind}")
 
 
 def _format_warnings(lines: list[str], plan: PlanOutput) -> None:

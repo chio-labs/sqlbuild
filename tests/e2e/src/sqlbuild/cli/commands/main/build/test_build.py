@@ -44,6 +44,11 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 (10, 3, "Classic Belgian", "placed"),
             ),
             expected_fact_orders_python_udf_data=((1, True), (10, False)),
+            expected_customer_orders_table_function_data=(
+                (1, "Classic Belgian", 1700, "completed", True),
+                (2, "Cheddar Herb", 1050, "completed", True),
+                (8, "Liege", 950, "completed", True),
+            ),
             expected_dim_customers_data=(
                 (1, "Leslie", 3, 3700),
                 (2, "Ron", 2, 4350),
@@ -120,6 +125,18 @@ def test_given_waffle_shop_project_when_running_build_then_warehouse_state_match
     python_udf_rows: list[tuple[Any, ...]] = query_duckdb(db_path=db_path, sql=python_udf_sql)
     assert (
         tuple(tuple(r) for r in python_udf_rows) == test_case.expected_fact_orders_python_udf_data
+    )
+
+    table_function_sql: str = (
+        "SELECT order_id, waffle_name, line_total_cents, order_status, is_completed_order "
+        "FROM main.customer_orders(1) ORDER BY order_id"
+    )
+    table_function_rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=db_path, sql=table_function_sql
+    )
+    assert (
+        tuple(tuple(r) for r in table_function_rows)
+        == test_case.expected_customer_orders_table_function_data
     )
 
     dim_sql: str = (

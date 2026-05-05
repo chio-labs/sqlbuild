@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.models import FunctionArgument
+from sqlbuild.compiler.compile.models import FunctionArgument, FunctionReturnColumn
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.integrations.databricks.client import DatabricksAdapter
 from tests.unit.src.sqlbuild.integrations.databricks._test_types import (
     DatabricksPythonFunctionSupportTestCase,
     DatabricksRenderDeleteInsertCursorTestCase,
     DatabricksRenderPythonFunctionTestCase,
+    DatabricksRenderTableFunctionTestCase,
 )
 
 TEST_CASES: list[DatabricksRenderDeleteInsertCursorTestCase] = [
@@ -153,3 +154,38 @@ def test_given_databricks_adapter_when_checking_capabilities_then_python_functio
     adapter: DatabricksAdapter = DatabricksAdapter()
 
     assert adapter.supports_python_functions() is test_case.expected_supports_python_functions
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksRenderTableFunctionTestCase(
+            description="renders SQL table function DDL",
+            expected_statements=(
+                "CREATE OR REPLACE FUNCTION `workspace`.`test`.`customer_orders`"
+                "(p_customer_id INT)\n"
+                "RETURNS TABLE\n"
+                "RETURN SELECT order_id FROM `workspace`.`test`.`fact_orders`\n"
+                "WHERE customer_id = p_customer_id",
+            ),
+        )
+    ],
+    ids=["renders SQL table function DDL"],
+)
+def test_given_table_function_when_rendering_then_databricks_returns_expected_ddl(
+    test_case: DatabricksRenderTableFunctionTestCase,
+) -> None:
+    adapter: DatabricksAdapter = DatabricksAdapter()
+
+    statements: tuple[str, ...] = adapter.render_create_function(
+        target="`workspace`.`test`.`customer_orders`",
+        arguments=(FunctionArgument(name="p_customer_id", type="INT"),),
+        returns="TABLE",
+        body_sql=(
+            "SELECT order_id FROM `workspace`.`test`.`fact_orders`\n"
+            "WHERE customer_id = p_customer_id"
+        ),
+        return_columns=(FunctionReturnColumn(name="order_id", type="INT"),),
+    )
+
+    assert statements == test_case.expected_statements

@@ -124,6 +124,14 @@ class FunctionArgument:
 
 
 @dataclass(frozen=True)
+class FunctionReturnColumn:
+    """One named table-function return column with an adapter-native type string."""
+
+    name: str
+    type: str
+
+
+@dataclass(frozen=True)
 class CompileSqlFunctionInput:
     """One discovered SQL function with validated compile-time metadata."""
 
@@ -132,6 +140,8 @@ class CompileSqlFunctionInput:
     arguments: tuple[FunctionArgument, ...]
     returns: str
     body_sql: str
+    return_columns: tuple[FunctionReturnColumn, ...] = field(default_factory=tuple)
+    references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
     database: str | None = None
     schema: str | None = None
     language: FunctionLanguage = FunctionLanguage.SQL
@@ -293,6 +303,8 @@ class CompiledFunction:
     returns: str
     body_sql: str
     target: CompiledRelationTarget
+    return_columns: tuple[FunctionReturnColumn, ...] = field(default_factory=tuple)
+    references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
     language: FunctionLanguage = FunctionLanguage.SQL
     source_file_path: Path | None = None
     runtime_version: str | None = None

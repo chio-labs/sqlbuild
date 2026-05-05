@@ -15,7 +15,7 @@ from sqlbuild.adapter.shared.models import (
     SchemaDiffResult,
 )
 from sqlbuild.adapter.shared.types import CursorKind
-from sqlbuild.compiler.compile.models import FunctionArgument
+from sqlbuild.compiler.compile.models import FunctionArgument, FunctionReturnColumn
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.integrations.bigquery.client import BigQueryAdapter, _BigQueryConnection
 from tests.unit.src.sqlbuild.integrations.bigquery._test_types import (
@@ -27,6 +27,7 @@ from tests.unit.src.sqlbuild.integrations.bigquery._test_types import (
     BigQueryRenderPythonFunctionTestCase,
     BigQueryRenderQualifiedNameTestCase,
     BigQueryRenderSchemaTestCase,
+    BigQueryRenderTableFunctionTestCase,
     BigQueryRowDiffTestCase,
     BigQuerySampleRowsTestCase,
     BigQuerySchemaDiffTestCase,
@@ -267,6 +268,39 @@ def test_given_python_function_when_rendering_then_bigquery_returns_expected_ddl
         runtime_version="3.11",
         entry_point="main",
         packages=("numpy", "pandas==1.5.0"),
+    )
+
+    assert statements == (test_case.expected_sql,)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryRenderTableFunctionTestCase(
+            description="renders table function DDL with inferred BigQuery return schema",
+            expected_sql=(
+                "CREATE OR REPLACE TABLE FUNCTION `demo.analytics.customer_orders`"
+                "(p_customer_id INT64)\n"
+                "AS (\nSELECT order_id FROM `demo.analytics.fact_orders`\n"
+                "WHERE customer_id = p_customer_id\n)"
+            ),
+        )
+    ],
+    ids=["renders table function DDL with inferred BigQuery return schema"],
+)
+def test_given_table_function_when_rendering_then_bigquery_returns_expected_ddl(
+    test_case: BigQueryRenderTableFunctionTestCase,
+) -> None:
+    adapter: BigQueryAdapter = BigQueryAdapter()
+
+    statements: tuple[str, ...] = adapter.render_create_function(
+        target="demo.analytics.customer_orders",
+        arguments=(FunctionArgument(name="p_customer_id", type="INT64"),),
+        returns="TABLE",
+        body_sql=(
+            "SELECT order_id FROM `demo.analytics.fact_orders`\nWHERE customer_id = p_customer_id"
+        ),
+        return_columns=(FunctionReturnColumn(name="order_id", type="INT64"),),
     )
 
     assert statements == (test_case.expected_sql,)
