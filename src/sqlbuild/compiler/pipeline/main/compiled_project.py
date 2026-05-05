@@ -25,12 +25,18 @@ def build_compiled_project(
         discovered_inputs,
         selected_environment=selected_environment,
         no_sql_validation=no_sql_validation,
+        python_functions_inherit_default_namespace=(
+            adapter.python_functions_inherit_default_namespace()
+        ),
     )
     project: CompiledProject = apply_target_defaults(
         assemble_project(compile_inputs),
         default_schema=adapter.default_schema(),
         default_database=adapter.default_database(),
         render_qualified_name=adapter.render_qualified_name,
+        python_functions_inherit_default_namespace=(
+            adapter.python_functions_inherit_default_namespace()
+        ),
     )
     validate_project_targets(
         adapter_name=resolve_effective_adapter_name(

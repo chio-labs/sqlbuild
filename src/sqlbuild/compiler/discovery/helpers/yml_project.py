@@ -103,6 +103,11 @@ def load_local_config(*, project_dir: Path) -> LocalConfig:
 
 
 def _load_yaml_mapping(*, file_path: Path) -> dict[str, object]:
+    if not file_path.exists():
+        raise ProjectConfigError(
+            f"Project config not found: {file_path}. Run sqb from a sqlbuild project "
+            "directory or pass --project-dir."
+        )
     contents: str = file_path.read_text(encoding="utf-8")
     try:
         payload: object = yaml.safe_load(contents)

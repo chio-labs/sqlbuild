@@ -177,6 +177,12 @@ def _assemble_compiled_function(
             name=function_input.name,
             qualified_name=None,
         ),
+        fingerprint_target=CompiledRelationTarget(
+            database=function_input.fingerprint_database,
+            schema=function_input.fingerprint_schema,
+            name=function_input.name,
+            qualified_name=None,
+        ),
         language=function_input.language,
         source_file_path=function_input.function_file.file_path,
         runtime_version=function_input.runtime_version,

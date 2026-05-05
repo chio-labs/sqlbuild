@@ -242,6 +242,29 @@ TEST_CASES: list[BuildOutputTestCase] = [
         ),
     ),
     BuildOutputTestCase(
+        description="function warning appears in summary and warnings section",
+        result=BuildExecutionResult(
+            status=BuildStatus.SUCCESS,
+            function_results=(
+                FunctionExecutionResult(
+                    function_name="is_completed_order_py",
+                    status=ExecutionStatus.SUCCESS,
+                    warning_messages=("fingerprint write skipped",),
+                ),
+            ),
+            success_count=1,
+            warning_count=1,
+        ),
+        expected_output_fragments=(
+            "Completed with warnings.",
+            "PASS=1",
+            "WARN=1",
+            "Warnings:",
+            "is_completed_order_py  (function)",
+            "fingerprint write skipped",
+        ),
+    ),
+    BuildOutputTestCase(
         description="view model shows view type",
         result=BuildExecutionResult(
             status=BuildStatus.SUCCESS,
