@@ -126,12 +126,12 @@ def _build_expression_cast_subquery(
 
     expression_names: tuple[str, ...] = tuple(col.name for col in expression_columns)
     missing_names: tuple[str, ...] = tuple(
-        name for name in enforced_map if name not in expression_names
+        col.name for col in declared_columns if col.name not in expression_names
     )
     if missing_names:
         missing_columns: str = ", ".join(missing_names)
         raise ValueError(
-            f"Source expression declares typed columns not found in query output: {missing_columns}"
+            f"Source expression declares columns not found in query output: {missing_columns}"
         )
 
     projections: list[str] = [

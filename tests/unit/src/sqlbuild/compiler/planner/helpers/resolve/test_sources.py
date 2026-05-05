@@ -313,7 +313,32 @@ ERROR_TEST_CASES: list[SourceResolutionErrorTestCase] = [
             ),
         },
         expected_error_fragment=(
-            "Source expression declares typed columns not found in query output: amount_cents"
+            "Source expression declares columns not found in query output: amount_cents"
+        ),
+    ),
+    SourceResolutionErrorTestCase(
+        description="raises when expression source untyped column is missing from query output",
+        query_sql='SELECT * FROM __source("raw_payments")',
+        star_exclude_keyword="EXCLUDE",
+        source_map={
+            "raw_payments": SourceEntry(
+                name="raw_payments",
+                expression="SELECT 1 AS id, 1700 AS amount_cents",
+                type_enforcement=True,
+                columns=(
+                    SourceColumnEntry(name="amount_cents", type="INTEGER"),
+                    SourceColumnEntry(name="status"),
+                ),
+            ),
+        },
+        source_warehouse_columns={
+            "raw_payments": (
+                ColumnInfo(name="id", type=""),
+                ColumnInfo(name="amount_cents", type=""),
+            ),
+        },
+        expected_error_fragment=(
+            "Source expression declares columns not found in query output: status"
         ),
     ),
     SourceResolutionErrorTestCase(
