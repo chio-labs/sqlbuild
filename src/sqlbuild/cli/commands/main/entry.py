@@ -90,6 +90,9 @@ def _build_parser() -> argparse.ArgumentParser:
     diff_parser.add_argument("--max-column-examples", type=int, default=None)
     diff_parser.add_argument("--max-row-only-examples", type=int, default=None)
     add_select_args(diff_parser)
+    debug_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DEBUG)
+    debug_parser.add_argument("--json", action="store_true", default=False)
+    debug_parser.add_argument("--no-connection", action="store_true", default=False)
     query_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.QUERY)
     query_parser.add_argument("query_sql", nargs="?", metavar="sql")
     query_parser.add_argument(
@@ -134,6 +137,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.build import run_build
     from sqlbuild.cli.commands.main.clone import run_clone
     from sqlbuild.cli.commands.main.compile import run_compile
+    from sqlbuild.cli.commands.main.debug import run_debug
     from sqlbuild.cli.commands.main.diff import run_diff
     from sqlbuild.cli.commands.main.janitor import run_janitor
     from sqlbuild.cli.commands.main.lineage import run_lineage
@@ -154,6 +158,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_clone=run_clone,
         run_diff=run_diff,
         run_query=run_query,
+        run_debug=run_debug,
         run_lineage=run_lineage,
         run_janitor=run_janitor,
     )
@@ -326,6 +331,13 @@ def _main_with_dependencies(
                 args.query_sql,
                 args.query_format,
                 query_limit,
+            )
+        if args.command == CliCommand.DEBUG:
+            return handlers.run_debug(
+                project_dir,
+                args.no_color,
+                args.no_connection,
+                args.json,
             )
         if args.command == CliCommand.JANITOR:
             return handlers.run_janitor(

@@ -282,6 +282,41 @@ def test_given_query_command_arguments_when_running_with_dependencies_then_it_di
     "test_case",
     [
         MainTestCase(
+            description="dispatches debug command through injected handler",
+            argv=["--no-color", "debug", "--no-connection", "--json"],
+            expected_exit_code=12,
+            expected_no_color=True,
+        )
+    ],
+    ids=["dispatches debug command through injected handler"],
+)
+def test_given_debug_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[tuple[Path | None, bool, bool, bool]] = []
+
+    def run_debug(
+        project_dir: Path | None,
+        no_color: bool,
+        no_connection: bool,
+        json_output: bool,
+    ) -> int:
+        received_args.append((project_dir, no_color, no_connection, json_output))
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_debug=run_debug),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [(None, True, True, True)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
             description="dispatches lineage command through injected handler",
             argv=[
                 "lineage",
