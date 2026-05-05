@@ -64,6 +64,7 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
         expected_exit_code=1,
         expected_stderr_fragments=(),
         expected_stdout_fragments=("missing_column",),
+        pre_commands=(("--no-color", "build", "--select", "+fact_orders"),),
     ),
     CliFailureBuildE2ETestCase(
         description="broken runtime-owned upstream relation fails at compile time",
@@ -125,6 +126,14 @@ def test_given_cursor_runtime_failure_projects_when_running_build_then_cli_fails
     connection: duckdb.DuckDBPyConnection = duckdb.connect(str(db_path))
     connection.execute(seed_file.read_text(encoding="utf-8"))
     connection.close()
+
+    pre_command: tuple[str, ...]
+    for pre_command in test_case.pre_commands:
+        pre_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=pre_command,
+            project_dir=project_dir,
+        )
+        assert pre_result.returncode == 0, pre_result.stdout + pre_result.stderr
 
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=test_case.command, project_dir=project_dir
