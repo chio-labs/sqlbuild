@@ -11,6 +11,17 @@ MODEL (
   batch_size 2d,
   query_change_backfill bounded-14d,
   tags [marts, acceptance],
+  description "Downstream daily microbatch rollup with a wider batch size than its hourly upstream.",
+  columns (
+    activity_day (audits [not_null (run_scope delta_and_final)]),
+  ),
+  audits [
+    expression_is_true (
+      name "daily orders placed is non-negative",
+      expression "orders_placed >= 0",
+      run_scope delta_and_final,
+    ),
+  ],
 );
 
 SELECT

@@ -1,6 +1,16 @@
 MODEL (
   materialized view,
   tags [staging],
+  description "Cleaned order records.",
+  columns (
+    order_id (audits [not_null, unique]),
+    customer_id (audits [not_null]),
+    status (
+      audits [
+        accepted_values (values ["placed", "preparing", "ready", "completed", "cancelled"]),
+      ],
+    ),
+  ),
 );
 
 SELECT

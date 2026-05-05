@@ -13,28 +13,8 @@ from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
 
 TEST_CASES: list[ParseSchemaYamlTestCase] = [
     ParseSchemaYamlTestCase(
-        description="parses model and seed metadata with attached audits",
+        description="parses seed metadata while model metadata is header-owned",
         contents="""
-        models:
-          - name: stg_orders
-            description: Cleaned orders.
-            type_enforcement: true
-            meta:
-              owner: finance
-            columns:
-              - name: order_id
-                type: VARCHAR
-                audits:
-                  - not_null
-                  - unique:
-                      severity: warning
-              - name: status
-                type: VARCHAR
-            audits:
-              - expression_is_true:
-                  name: orders valid
-                  expression: "status != 'bad'"
-
         seeds:
           - name: country_codes
             columns:
@@ -43,12 +23,12 @@ TEST_CASES: list[ParseSchemaYamlTestCase] = [
               - name: country_name
                 type: VARCHAR
         """,
-        expected_model_names=("stg_orders",),
+        expected_model_names=(),
         expected_seed_names=("country_codes",),
-        expected_model_column_names=(("order_id", "status"),),
+        expected_model_column_names=(),
         expected_seed_column_names=(("country_code", "country_name"),),
-        expected_model_audit_names=(("expression_is_true",),),
-        expected_column_audit_names=((("not_null", "unique"), ()),),
+        expected_model_audit_names=(),
+        expected_column_audit_names=(),
     ),
     ParseSchemaYamlTestCase(
         description="allows empty schema files with no models or seeds",
@@ -107,166 +87,12 @@ ERROR_TEST_CASES: list[ParseSchemaYamlErrorTestCase] = [
         expected_error_fragment="must contain a top-level mapping",
     ),
     ParseSchemaYamlErrorTestCase(
-        description="raises when models is not a list",
-        contents="models: {}\n",
-        expected_error_fragment="models must be a list",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when a model entry is not a mapping",
-        contents="""
-        models:
-          - stg_orders
-        """,
-        expected_error_fragment="models must contain only mappings",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when a model omits name",
-        contents="""
-        models:
-          - description: no name
-        """,
-        expected_error_fragment="model must define non-empty string 'name'",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when model type enforcement is not a boolean",
+        description="raises when schema yml declares model metadata",
         contents="""
         models:
           - name: stg_orders
-            type_enforcement: 123
         """,
-        expected_error_fragment="model 'type_enforcement' must be a boolean",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when model meta is not a mapping",
-        contents="""
-        models:
-          - name: stg_orders
-            meta: finance
-        """,
-        expected_error_fragment="model 'meta' must be a mapping",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when model columns is not a list",
-        contents="""
-        models:
-          - name: stg_orders
-            columns: {}
-        """,
-        expected_error_fragment="model columns must be a list",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when model column entry is not a mapping",
-        contents="""
-        models:
-          - name: stg_orders
-            columns:
-              - order_id
-        """,
-        expected_error_fragment="model columns must contain only mappings",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when model column omits name",
-        contents="""
-        models:
-          - name: stg_orders
-            columns:
-              - type: VARCHAR
-        """,
-        expected_error_fragment="model column must define non-empty string 'name'",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when model column meta is not a mapping",
-        contents="""
-        models:
-          - name: stg_orders
-            columns:
-              - name: order_id
-                meta: finance
-        """,
-        expected_error_fragment="model column 'meta' must be a mapping",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when model audits is not a list",
-        contents="""
-        models:
-          - name: stg_orders
-            audits: {}
-        """,
-        expected_error_fragment="model audits must be a list",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when an audit entry is not a string or single-key mapping",
-        contents="""
-        models:
-          - name: stg_orders
-            audits:
-              - name: broken
-                severity: warning
-        """,
-        expected_error_fragment="audits must be strings or single-key mappings",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when an audit entry has an empty string name",
-        contents="""
-        models:
-          - name: stg_orders
-            audits:
-              - "  "
-        """,
-        expected_error_fragment="audits must not contain empty names",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when an audit mapping has an empty definition name",
-        contents="""
-        models:
-          - name: stg_orders
-            audits:
-              - "": {}
-        """,
-        expected_error_fragment="audit names must be non-empty strings",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when audit arguments are not a mapping",
-        contents="""
-        models:
-          - name: stg_orders
-            audits:
-              - unique: warning
-        """,
-        expected_error_fragment="audit 'unique' arguments must be a mapping",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when audit metadata name is not a string",
-        contents="""
-        models:
-          - name: stg_orders
-            audits:
-              - unique:
-                  name: 123
-        """,
-        expected_error_fragment="audit 'unique' 'name' must be a non-empty string",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when audit metadata description is not a string",
-        contents="""
-        models:
-          - name: stg_orders
-            audits:
-              - unique:
-                  description: 123
-        """,
-        expected_error_fragment="audit 'unique' 'description' must be a non-empty string",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when audit metadata severity is not a string",
-        contents="""
-        models:
-          - name: stg_orders
-            audits:
-              - unique:
-                  severity: 123
-        """,
-        expected_error_fragment="audit 'unique' 'severity' must be a non-empty string",
+        expected_error_fragment="model metadata must live in the model file MODEL",
     ),
     ParseSchemaYamlErrorTestCase(
         description="raises when seeds is not a list",
@@ -340,24 +166,6 @@ ERROR_TEST_CASES: list[ParseSchemaYamlErrorTestCase] = [
                 type: VARCHAR
         """,
         expected_error_fragment="seed column must define non-empty string 'name'",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when model tags is a string instead of list",
-        contents="""
-        models:
-          - name: orders
-            tags: nightly
-        """,
-        expected_error_fragment="model 'tags' must be a list",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when model tags contains non-string entry",
-        contents="""
-        models:
-          - name: orders
-            tags: [123]
-        """,
-        expected_error_fragment="model 'tags' entries must be strings",
     ),
 ]
 

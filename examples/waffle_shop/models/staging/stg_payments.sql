@@ -1,6 +1,11 @@
 MODEL (
   materialized view,
   tags [staging],
+  description "Cleaned payment records.",
+  columns (
+    payment_id (audits [not_null, unique]),
+    order_id (audits [not_null]),
+  ),
 );
 
 SELECT

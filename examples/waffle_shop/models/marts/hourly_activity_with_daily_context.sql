@@ -10,6 +10,17 @@ MODEL (
   incremental_mode microbatch,
   batch_size 6h,
   tags [marts, acceptance],
+  description "Hourly downstream microbatch model that depends on a coarser-grain daily upstream.",
+  columns (
+    activity_hour (audits [not_null (run_scope delta_and_final)]),
+  ),
+  audits [
+    expression_is_true (
+      name "day orders cover hourly orders",
+      expression "day_orders_placed >= orders_placed",
+      run_scope delta_and_final,
+    ),
+  ],
 );
 
 SELECT
