@@ -15,6 +15,7 @@ class CliCommand(StrEnum):
     SEED = "seed"
     CLONE = "clone"
     DIFF = "diff"
+    DEBUG = "debug"
     LINEAGE = "lineage"
     QUERY = "query"
     CLEAN = "clean"

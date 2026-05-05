@@ -45,6 +45,7 @@ class CliNamespace:
     lineage_format: str = "tree"
     lineage_direction: str = "upstream"
     lineage_depth: str = "all"
+    no_connection: bool = False
     full: bool = False
     schema_only: bool = False
     select: list[str] = field(default_factory=list)
@@ -132,6 +133,7 @@ class CliEntrypointHandlers:
         int,
     ]
     run_query: Callable[[Path | None, str | None, str, int | None], int]
+    run_debug: Callable[[Path | None, bool, bool, bool], int]
     run_lineage: Callable[
         [Path | None, bool, str | None, str, str, str, tuple[str, ...], tuple[str, ...]],
         int,
