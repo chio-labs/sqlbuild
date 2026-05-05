@@ -49,3 +49,12 @@ class NullAstHashTestCase:
     schema: str
     fingerprint: Fingerprint
     expected_ast_hash_is_none: bool
+
+
+@dataclass(frozen=True)
+class InvalidQuerySqlStorageTestCase:
+    description: str
+    schema: str
+    model_name: str
+    raw_query_sql_storage: str
+    expected_error_fragments: tuple[str, ...]

@@ -43,6 +43,7 @@ def build_compile_inputs(
     cli_vars: dict[str, str] | None = None,
     run_id: str | None = None,
     no_sql_validation: bool = False,
+    python_functions_inherit_default_namespace: bool = True,
 ) -> CompileProjectInputs:
     """Attach discovered metadata into the first compile input snapshot."""
 
@@ -100,6 +101,7 @@ def build_compile_inputs(
         adapter_name=macro_context.adapter_name,
         macro_context=macro_context,
         no_sql_validation=no_sql_validation,
+        python_functions_inherit_default_namespace=(python_functions_inherit_default_namespace),
     )
     source_inputs: tuple[CompileSourceInput, ...] = build_source_inputs(
         discovered_inputs,

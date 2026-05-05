@@ -168,6 +168,12 @@ def build_test_and_project(
                     name=function_name,
                     qualified_name=qualified_name,
                 ),
+                fingerprint_target=CompiledRelationTarget(
+                    database=None,
+                    schema="main",
+                    name=function_name,
+                    qualified_name=qualified_name,
+                ),
             )
         )
 

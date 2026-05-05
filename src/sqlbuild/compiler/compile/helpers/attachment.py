@@ -316,6 +316,7 @@ def build_sql_function_inputs(
     adapter_name: str,
     macro_context: MacroContext,
     no_sql_validation: bool = False,
+    python_functions_inherit_default_namespace: bool = True,
 ) -> tuple[CompileSqlFunctionInput, ...]:
     """Attach and validate SQL function metadata."""
 
@@ -440,6 +441,8 @@ def build_sql_function_inputs(
                 references=references,
                 database=function_database,
                 schema=function_schema,
+                fingerprint_database=function_database,
+                fingerprint_schema=function_schema,
                 query_change_backfill=_parse_optional_function_header(
                     header_values=header_values,
                     key="query_change_backfill",
@@ -487,24 +490,28 @@ def build_sql_function_inputs(
         )
         raw_database = header_values.get("database")
         raw_schema = header_values.get("schema")
-        function_database = (
-            _expand_function_header_value(
+        function_database: str | None
+        if isinstance(raw_database, str):
+            function_database = _expand_function_header_value(
                 raw_value=raw_database,
                 effective_vars=effective_vars,
                 context_label=f"Python function {python_function_file.relative_path} database",
             )
-            if isinstance(raw_database, str)
-            else database
-        )
-        function_schema = (
-            _expand_function_header_value(
+        else:
+            function_database = database if python_functions_inherit_default_namespace else None
+        function_schema: str | None
+        if isinstance(raw_schema, str):
+            function_schema = _expand_function_header_value(
                 raw_value=raw_schema,
                 effective_vars=effective_vars,
                 context_label=f"Python function {python_function_file.relative_path} schema",
             )
-            if isinstance(raw_schema, str)
-            else schema
+        else:
+            function_schema = schema if python_functions_inherit_default_namespace else None
+        fingerprint_database: str | None = (
+            function_database if isinstance(raw_database, str) else database
         )
+        fingerprint_schema: str | None = function_schema if isinstance(raw_schema, str) else schema
         if not no_sql_validation and effective_settings.sql_validation:
             for argument in arguments:
                 validate_native_type(
@@ -528,6 +535,8 @@ def build_sql_function_inputs(
             body_sql=python_function_file.body_python,
             database=function_database,
             schema=function_schema,
+            fingerprint_database=fingerprint_database,
+            fingerprint_schema=fingerprint_schema,
             language=FunctionLanguage.PYTHON,
             runtime_version=runtime_version,
             entry_point=entry_point,

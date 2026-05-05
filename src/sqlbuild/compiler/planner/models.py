@@ -280,6 +280,7 @@ class FunctionPlanEntry:
     returns: str
     body_sql: str
     fingerprint_query_sql: str
+    fingerprint_target: CompiledRelationTarget
     return_columns: tuple[FunctionReturnColumn, ...] = field(default_factory=tuple)
     language: FunctionLanguage = FunctionLanguage.SQL
     source_file_path: Path | None = None

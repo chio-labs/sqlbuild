@@ -145,6 +145,8 @@ class CompileSqlFunctionInput:
     references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
     database: str | None = None
     schema: str | None = None
+    fingerprint_database: str | None = None
+    fingerprint_schema: str | None = None
     language: FunctionLanguage = FunctionLanguage.SQL
     runtime_version: str | None = None
     entry_point: str | None = None
@@ -306,6 +308,7 @@ class CompiledFunction:
     returns: str
     body_sql: str
     target: CompiledRelationTarget
+    fingerprint_target: CompiledRelationTarget
     return_columns: tuple[FunctionReturnColumn, ...] = field(default_factory=tuple)
     references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
     language: FunctionLanguage = FunctionLanguage.SQL
