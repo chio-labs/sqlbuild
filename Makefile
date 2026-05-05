@@ -22,8 +22,31 @@ test-real:
 	uv run pytest tests -m real_warehouse -vv
 
 
-test-snowflake:
-	uv run pytest tests -m snowflake -vv
+test-real-all: test-real
+
+
+test-real-snowflake:
+	uv run pytest tests -m "real_warehouse and snowflake" -vv
+
+
+test-real-bigquery:
+	uv run pytest tests -m "real_warehouse and bigquery" -vv
+
+
+test-real-databricks:
+	uv run pytest tests -m "real_warehouse and databricks" -vv
+
+
+test-e2e-real-snowflake:
+	uv run pytest tests/e2e -m "real_warehouse and snowflake" -vv
+
+
+test-e2e-real-bigquery:
+	uv run pytest tests/e2e -m "real_warehouse and bigquery" -vv
+
+
+test-e2e-real-databricks:
+	uv run pytest tests/e2e -m "real_warehouse and databricks" -vv
 
 
 check-test-conventions:

@@ -11,6 +11,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
+    FunctionInfo,
     QueryResult,
     RowDiffColumnResult,
     RowDiffResult,
@@ -189,6 +190,46 @@ class SnowflakeAdapter(BaseAdapter):
                 schema=None if row[1] is None else str(row[1]).lower(),
                 name=str(row[0]).lower(),
                 relation_type=str(row[2]).lower(),
+            )
+            for row in rows
+        )
+
+    def list_functions(
+        self,
+        connection: _SnowflakeConnection,
+        *,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> tuple[FunctionInfo, ...]:
+        query: str = (
+            "SELECT function_name, function_schema, 'function' "
+            "FROM information_schema.functions WHERE 1=1"
+        )
+        params: list[str] = []
+        if schemas:
+            placeholders: str = ", ".join(["%s"] * len(schemas))
+            query += f" AND UPPER(function_schema) IN ({placeholders})"
+            params.extend(schema.upper() for schema in schemas)
+        if names:
+            placeholders = ", ".join(["%s"] * len(names))
+            query += f" AND UPPER(function_name) IN ({placeholders})"
+            params.extend(name.upper() for name in names)
+        if database is not None:
+            query += " AND UPPER(function_catalog) = UPPER(%s)"
+            params.append(database)
+        cursor: Any = connection.cursor()
+        try:
+            cursor.execute(query, tuple(params))
+            rows: list[tuple[Any, ...]] = cursor.fetchall()
+        finally:
+            cursor.close()
+        return tuple(
+            FunctionInfo(
+                database=None if row[1] is None else database,
+                schema=None if row[1] is None else str(row[1]).lower(),
+                name=str(row[0]).lower(),
+                function_type=str(row[2]).lower(),
             )
             for row in rows
         )
@@ -457,7 +498,7 @@ class SnowflakeAdapter(BaseAdapter):
             reader: csv.DictReader[str] = csv.DictReader(
                 seed_file,
                 delimiter=csv_settings.delimiter or ",",
-                quotechar=csv_settings.quotechar,
+                quotechar=csv_settings.quotechar or '"',
                 escapechar=csv_settings.escapechar,
                 doublequote=True if csv_settings.doublequote is None else csv_settings.doublequote,
                 skipinitialspace=False
@@ -513,7 +554,7 @@ class SnowflakeAdapter(BaseAdapter):
             description: tuple[Any, ...] | None = cursor.description
             if description is None:
                 return ()
-            return tuple(str(column[0]) for column in description)
+            return tuple(str(column[0]).lower() for column in description)
         finally:
             cursor.close()
 

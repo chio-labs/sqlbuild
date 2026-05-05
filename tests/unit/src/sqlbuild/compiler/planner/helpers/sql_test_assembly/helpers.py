@@ -8,10 +8,12 @@ from pathlib import Path
 from sqlbuild.compiler.compile.constants import (
     EXPECTED_TEST_CTE_PREFIX,
     REF_TEST_CTE_PREFIX,
+    SEED_TEST_CTE_PREFIX,
     SOURCE_TEST_CTE_PREFIX,
 )
 from sqlbuild.compiler.compile.helpers.macros import expand_sql_macros
 from sqlbuild.compiler.compile.models import (
+    CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
@@ -74,6 +76,13 @@ def build_test_and_project(
                 sql_body=body,
             )
         )
+    for name, body in test_case.mock_seed_ctes.items():
+        authored_ctes.append(
+            CompileSqlTestCte(
+                name=f"{SEED_TEST_CTE_PREFIX}{name}",
+                sql_body=body,
+            )
+        )
     for name, body in test_case.helper_ctes.items():
         authored_ctes.append(CompileSqlTestCte(name=name, sql_body=body))
 
@@ -82,6 +91,7 @@ def build_test_and_project(
         sql_body = _build_test_sql_body(
             test_case.mock_ref_ctes,
             test_case.mock_source_ctes,
+            test_case.mock_seed_ctes,
             test_case.helper_ctes,
             test_case.expected_cte_bodies,
         )
@@ -108,6 +118,7 @@ def build_test_and_project(
         ),
         mock_model_names=tuple(test_case.mock_ref_ctes.keys()),
         mock_source_names=tuple(test_case.mock_source_ctes.keys()),
+        mock_seed_names=tuple(test_case.mock_seed_ctes.keys()),
         expected_model_names=test_case.expected_model_names,
     )
 
@@ -135,12 +146,38 @@ def build_test_and_project(
             )
         )
 
+    functions: list[CompiledFunction] = []
+    function_name: str
+    qualified_name: str
+    for function_name, qualified_name in test_case.function_targets.items():
+        functions.append(
+            CompiledFunction(
+                key=CompiledObjectKey(
+                    resource_type=CompiledResourceType.FUNCTION,
+                    name=function_name,
+                ),
+                deps=(),
+                name=function_name,
+                relative_path=Path(f"functions/sql/{function_name}.sql"),
+                arguments=(),
+                returns="BOOLEAN",
+                body_sql="SELECT TRUE",
+                target=CompiledRelationTarget(
+                    database=None,
+                    schema="main",
+                    name=function_name,
+                    qualified_name=qualified_name,
+                ),
+            )
+        )
+
     project: CompiledProject = CompiledProject(
         run_id="test_run",
         effective_environment_name=None,
         effective_connection={},
         effective_vars={},
         models=tuple(models),
+        functions=tuple(functions),
     )
 
     return compiled_test, project
@@ -198,6 +235,7 @@ def _macro_function(output: str) -> Callable[..., object]:
 def _build_test_sql_body(
     mock_refs: dict[str, str],
     mock_sources: dict[str, str],
+    mock_seeds: dict[str, str],
     helpers: dict[str, str],
     expected_bodies: dict[str, str],
 ) -> str:
@@ -210,6 +248,8 @@ def _build_test_sql_body(
         parts.append(f"{REF_TEST_CTE_PREFIX}{name} AS ({body})")
     for name, body in mock_sources.items():
         parts.append(f"{SOURCE_TEST_CTE_PREFIX}{name} AS ({body})")
+    for name, body in mock_seeds.items():
+        parts.append(f"{SEED_TEST_CTE_PREFIX}{name} AS ({body})")
     for name, body in helpers.items():
         parts.append(f"{name} AS ({body})")
     for name, body in expected_bodies.items():

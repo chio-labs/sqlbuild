@@ -11,7 +11,11 @@ from sqlbuild.cli.commands.main.shared.helpers.progress import (
     format_build_footer,
 )
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
-from sqlbuild.executor.build.models import BuildExecutionResult, FunctionExecutionResult
+from sqlbuild.executor.build.models import (
+    BuildExecutionResult,
+    FunctionExecutionResult,
+    SeedExecutionResult,
+)
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.shared.types import ExecutionStatus
 from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import (
@@ -197,6 +201,46 @@ AUDIT_AGGREGATION_TEST_CASES: list[AuditAggregationTestCase] = [
 ]
 
 
+BUILD_FOOTER_TEST_CASES: list[BuildFooterTestCase] = [
+    BuildFooterTestCase(
+        description="failed function result includes failure count and error",
+        result=BuildExecutionResult(
+            status=BuildStatus.FAILED,
+            function_results=(
+                FunctionExecutionResult(
+                    function_name="is_completed_order",
+                    status=ExecutionStatus.FAILED,
+                    error_message="warehouse said no",
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "FAIL=1",
+            "is_completed_order  (function)",
+            "warehouse said no",
+        ),
+    ),
+    BuildFooterTestCase(
+        description="failed seed result includes failure count and error",
+        result=BuildExecutionResult(
+            status=BuildStatus.FAILED,
+            seed_results=(
+                SeedExecutionResult(
+                    seed_name="waffle_types",
+                    status=ExecutionStatus.FAILED,
+                    error_message="failed to load seed CSV",
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "FAIL=1",
+            "waffle_types  (seed)",
+            "failed to load seed CSV",
+        ),
+    ),
+]
+
+
 @pytest.mark.parametrize(
     "test_case",
     AUDIT_AGGREGATION_TEST_CASES,
@@ -231,33 +275,13 @@ def test_given_audit_results_when_aggregating_then_produces_expected_entries(
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        BuildFooterTestCase(
-            description="failed function result includes failure count and error",
-            expected_fragments=(
-                "FAIL=1",
-                "is_completed_order  (function)",
-                "warehouse said no",
-            ),
-        ),
-    ],
-    ids=["failed function result includes failure count and error"],
+    BUILD_FOOTER_TEST_CASES,
+    ids=[case.description for case in BUILD_FOOTER_TEST_CASES],
 )
-def test_given_failed_function_result_when_formatting_footer_then_includes_error(
+def test_given_failed_resource_result_when_formatting_footer_then_includes_error(
     test_case: BuildFooterTestCase,
 ) -> None:
-    result: BuildExecutionResult = BuildExecutionResult(
-        status=BuildStatus.FAILED,
-        function_results=(
-            FunctionExecutionResult(
-                function_name="is_completed_order",
-                status=ExecutionStatus.FAILED,
-                error_message="warehouse said no",
-            ),
-        ),
-    )
-
-    footer: str = format_build_footer(result=result, elapsed=1.25, use_color=False)
+    footer: str = format_build_footer(result=test_case.result, elapsed=1.25, use_color=False)
 
     expected_fragment: str
     for expected_fragment in test_case.expected_fragments:

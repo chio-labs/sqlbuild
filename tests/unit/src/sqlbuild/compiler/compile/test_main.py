@@ -1022,6 +1022,7 @@ SELECT 1
         expected_test_authored_cte_names=(("__source__raw_orders",),),
         expected_test_mock_model_names=((),),
         expected_test_mock_source_names=(("raw_orders",),),
+        expected_test_mock_seed_names=((),),
         expected_test_expected_model_names=(("orders",),),
         expected_audit_sql_bodies=('SELECT order_id, customer_id FROM __source("raw_orders")',),
         expected_effective_environment_name="dev",
@@ -1249,6 +1250,7 @@ SELECT 1
         ),
         expected_test_mock_model_names=(("orders",), ("orders",)),
         expected_test_mock_source_names=((), ()),
+        expected_test_mock_seed_names=((), ()),
         expected_test_expected_model_names=(("orders",), ("orders",)),
         expected_audit_sql_bodies=(
             "SELECT order_id FROM raw_orders;",
@@ -1580,6 +1582,10 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
     assert (
         tuple(test_input.mock_source_names for test_input in compile_inputs.test_inputs)
         == test_case.expected_test_mock_source_names
+    )
+    assert (
+        tuple(test_input.mock_seed_names for test_input in compile_inputs.test_inputs)
+        == test_case.expected_test_mock_seed_names
     )
     assert (
         tuple(test_input.expected_model_names for test_input in compile_inputs.test_inputs)
@@ -1966,6 +1972,29 @@ SELECT 1
         selected_environment=None,
         run_id=None,
         expected_error_fragment="mocks unknown source 'missing_source'",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when a compiled test body references an unknown seed mock",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            "tests/unit/orders.sql": """
+TEST ();
+
+WITH
+__seed__missing_seed AS (
+  SELECT 1 AS id
+),
+__expected__orders AS (
+  SELECT 1 AS id
+)
+SELECT 1
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="mocks unknown seed 'missing_seed'",
     ),
     BuildCompileInputsErrorTestCase(
         description="raises when a compiled test body references an unknown macro mock",

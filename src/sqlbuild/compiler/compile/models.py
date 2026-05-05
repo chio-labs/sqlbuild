@@ -112,6 +112,7 @@ class CompileSqlTestCtes:
     macro_mocks: dict[str, str] = field(default_factory=dict)
     mock_model_names: tuple[str, ...] = field(default_factory=tuple)
     mock_source_names: tuple[str, ...] = field(default_factory=tuple)
+    mock_seed_names: tuple[str, ...] = field(default_factory=tuple)
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
 
 
@@ -191,6 +192,7 @@ class CompileSqlTestInput:
     macro_mocks: dict[str, str] = field(default_factory=dict)
     mock_model_names: tuple[str, ...] = field(default_factory=tuple)
     mock_source_names: tuple[str, ...] = field(default_factory=tuple)
+    mock_seed_names: tuple[str, ...] = field(default_factory=tuple)
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
 
 
@@ -345,6 +347,7 @@ class CompiledSqlTest:
     model_query_overrides: dict[str, str] = field(default_factory=dict)
     mock_model_names: tuple[str, ...] = field(default_factory=tuple)
     mock_source_names: tuple[str, ...] = field(default_factory=tuple)
+    mock_seed_names: tuple[str, ...] = field(default_factory=tuple)
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
 
 

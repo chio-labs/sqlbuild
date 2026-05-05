@@ -18,14 +18,52 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     ExpandUpstreamTestCase,
     FindPathKeysErrorTestCase,
     FindPathKeysTestCase,
+    SqlTestFunctionGraphDepsTestCase,
     TopologicalOrderTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     build_test_project,
+    function_key,
     model_key,
     seed_key,
     source_key,
 )
+
+BUILD_UPSTREAM_ORDER_TEST_CASES: list[TopologicalOrderTestCase] = [
+    TopologicalOrderTestCase(
+        description="includes sources and seeds from build_upstream_deps",
+        upstream=build_upstream_deps(
+            build_test_project(
+                model_deps={"orders": ("raw_orders",)},
+                source_names=("raw_orders",),
+                seed_names=("country_codes",),
+            )
+        ),
+        expected_order=(
+            seed_key("country_codes"),
+            source_key("raw_orders"),
+            model_key("orders"),
+        ),
+    ),
+    TopologicalOrderTestCase(
+        description="runs function deps before sql tests for dependent models",
+        upstream=build_upstream_deps(
+            build_test_project(
+                model_deps={"orders": ("is_completed_order",)},
+                function_names=("is_completed_order",),
+                sql_test_expected_model_names=("orders",),
+            )
+        ),
+        expected_order=(
+            function_key("is_completed_order"),
+            CompiledObjectKey(
+                resource_type="sql_test",
+                name="test_models",
+            ),
+            model_key("orders"),
+        ),
+    ),
+]
 
 
 @pytest.mark.parametrize(
@@ -265,24 +303,8 @@ def test_given_unreachable_end_when_finding_path_keys_then_raises(
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        TopologicalOrderTestCase(
-            description="includes sources and seeds from build_upstream_deps",
-            upstream=build_upstream_deps(
-                build_test_project(
-                    model_deps={"orders": ("raw_orders",)},
-                    source_names=("raw_orders",),
-                    seed_names=("country_codes",),
-                )
-            ),
-            expected_order=(
-                seed_key("country_codes"),
-                source_key("raw_orders"),
-                model_key("orders"),
-            ),
-        ),
-    ],
-    ids=["includes sources and seeds from build_upstream_deps"],
+    BUILD_UPSTREAM_ORDER_TEST_CASES,
+    ids=[case.description for case in BUILD_UPSTREAM_ORDER_TEST_CASES],
 )
 def test_given_project_when_building_upstream_and_ordering_then_returns_expected(
     test_case: TopologicalOrderTestCase,
@@ -290,3 +312,32 @@ def test_given_project_when_building_upstream_and_ordering_then_returns_expected
     result: tuple[CompiledObjectKey, ...] = topologically_order_keys(test_case.upstream)
 
     assert result == test_case.expected_order
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlTestFunctionGraphDepsTestCase(
+            description="sql test depends on functions used by expected model",
+            expected_test_upstream_keys=(function_key("is_completed_order"),),
+        ),
+    ],
+    ids=["sql test depends on functions used by expected model"],
+)
+def test_given_sql_test_for_function_model_when_building_upstream_then_test_depends_on_function(
+    test_case: SqlTestFunctionGraphDepsTestCase,
+) -> None:
+    test_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type="sql_test",
+        name="test_models",
+    )
+
+    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_upstream_deps(
+        build_test_project(
+            model_deps={"orders": ("is_completed_order",)},
+            function_names=("is_completed_order",),
+            sql_test_expected_model_names=("orders",),
+        )
+    )
+
+    assert upstream[test_key] == test_case.expected_test_upstream_keys

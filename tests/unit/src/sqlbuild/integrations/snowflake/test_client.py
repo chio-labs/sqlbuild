@@ -1,17 +1,25 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-from sqlbuild.adapter.shared.models import ColumnInfo, SchemaDiffResult
+from sqlbuild.adapter.shared.models import ColumnInfo, SchemaDiffResult, StatementRecorder
 from sqlbuild.adapter.shared.types import CursorKind
 from sqlbuild.compiler.compile.models import FunctionArgument, FunctionReturnColumn
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.integrations.snowflake.client import SnowflakeAdapter
 from tests.unit.src.sqlbuild.integrations.snowflake._test_types import (
+    SnowflakeLoadSeedTestCase,
+    SnowflakeQueryColumnNamesTestCase,
     SnowflakeRenderCursorBoundLiteralTestCase,
     SnowflakeRenderPythonFunctionTestCase,
     SnowflakeRenderTableFunctionTestCase,
     SnowflakeSchemaDiffTestCase,
+)
+from tests.unit.src.sqlbuild.integrations.snowflake.helpers import (
+    FakeSnowflakeDescribeConnection,
+    FakeSnowflakeDescribeCursor,
 )
 
 TEST_CASES: list[SnowflakeRenderCursorBoundLiteralTestCase] = [
@@ -149,3 +157,68 @@ def test_given_equivalent_types_when_diffing_schema_then_snowflake_ignores_alias
     )
 
     assert result == test_case.expected_result
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeQueryColumnNamesTestCase(
+            description="normalizes unquoted Snowflake query output columns to lowercase",
+            cursor_description=(("ID",), ("FIRST_NAME",), ("CREATED_AT",)),
+            expected_columns=("id", "first_name", "created_at"),
+        ),
+    ],
+    ids=["normalizes unquoted Snowflake query output columns to lowercase"],
+)
+def test_given_snowflake_query_metadata_when_getting_column_names_then_normalizes_to_lowercase(
+    test_case: SnowflakeQueryColumnNamesTestCase,
+) -> None:
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+    cursor: FakeSnowflakeDescribeCursor = FakeSnowflakeDescribeCursor(
+        description=test_case.cursor_description
+    )
+    connection: FakeSnowflakeDescribeConnection = FakeSnowflakeDescribeConnection(cursor)
+
+    columns: tuple[str, ...] = adapter.query_column_names(
+        connection=connection,
+        sql="SELECT 1 AS id, 'Ada' AS first_name, CURRENT_TIMESTAMP AS created_at",
+    )
+
+    assert columns == test_case.expected_columns
+    assert cursor.closed is True
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeLoadSeedTestCase(
+            description="loads seed with default quote character",
+            csv_text='id,name\n1,"Liege waffle"\n',
+            expected_rows=[("1", "Liege waffle")],
+        ),
+    ],
+    ids=["loads seed with default quote character"],
+)
+def test_given_default_seed_csv_settings_when_loading_seed_then_uses_python_csv_defaults(
+    test_case: SnowflakeLoadSeedTestCase,
+    tmp_path: Path,
+) -> None:
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+    cursor: FakeSnowflakeDescribeCursor = FakeSnowflakeDescribeCursor(description=())
+    connection: FakeSnowflakeDescribeConnection = FakeSnowflakeDescribeConnection(cursor)
+    seed_file: Path = tmp_path / "waffle_types.csv"
+    seed_file.write_text(test_case.csv_text, encoding="utf-8")
+
+    adapter.load_seed(
+        connection,
+        target="dev.waffle_types",
+        file_path=seed_file,
+        columns=(
+            ColumnInfo(name="id", type="INTEGER"),
+            ColumnInfo(name="name", type="VARCHAR"),
+        ),
+        replace=False,
+        statement_recorder=StatementRecorder(),
+    )
+
+    assert cursor.executemany_rows == test_case.expected_rows

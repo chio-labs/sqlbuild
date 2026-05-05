@@ -842,6 +842,7 @@ def build_test_inputs(
                     macro_mocks=test_ctes.macro_mocks,
                     mock_model_names=test_ctes.mock_model_names,
                     mock_source_names=test_ctes.mock_source_names,
+                    mock_seed_names=test_ctes.mock_seed_names,
                     expected_model_names=test_ctes.expected_model_names,
                 )
             )
@@ -870,6 +871,12 @@ def validate_test_ctes(
         if mock_source_name not in known_source_names:
             raise CompileInputError(
                 f"SQL test file {test_file.relative_path} mocks unknown source '{mock_source_name}'"
+            )
+    mock_seed_name: str
+    for mock_seed_name in test_ctes.mock_seed_names:
+        if mock_seed_name not in known_seed_names:
+            raise CompileInputError(
+                f"SQL test file {test_file.relative_path} mocks unknown seed '{mock_seed_name}'"
             )
     macro_mock_name: str
     for macro_mock_name in test_ctes.macro_mocks:

@@ -7,6 +7,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompiledSqlTest,
 )
+from sqlbuild.compiler.compile.types import CompiledResourceType
 
 
 def build_upstream_deps(
@@ -27,13 +28,33 @@ def build_upstream_deps(
 
     test: CompiledSqlTest
     for test in project.sql_tests:
-        upstream[test.key] = []
+        upstream[test.key] = list(_function_deps_for_test(test=test, upstream=upstream))
         target_key: CompiledObjectKey
         for target_key in test.scope_deps:
             if target_key in upstream:
                 upstream[target_key].append(test.key)
 
     return {k: tuple(v) for k, v in upstream.items()}
+
+
+def _function_deps_for_test(
+    *,
+    test: CompiledSqlTest,
+    upstream: dict[CompiledObjectKey, list[CompiledObjectKey]],
+) -> tuple[CompiledObjectKey, ...]:
+    deps: list[CompiledObjectKey] = []
+    seen: set[CompiledObjectKey] = set()
+    target_key: CompiledObjectKey
+    for target_key in test.scope_deps:
+        dep_key: CompiledObjectKey
+        for dep_key in upstream.get(target_key, ()):
+            if dep_key.resource_type != CompiledResourceType.FUNCTION:
+                continue
+            if dep_key in seen:
+                continue
+            seen.add(dep_key)
+            deps.append(dep_key)
+    return tuple(deps)
 
 
 def build_downstream_deps(
