@@ -1,0 +1,20 @@
+"""Validation helpers for diff command arguments."""
+
+from __future__ import annotations
+
+from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
+
+
+def parse_diff_environment_range(environment_range: str | None) -> tuple[str, str]:
+    """Parse a diff environment range in FROM:TO form."""
+
+    if environment_range is None:
+        raise CliUserError("diff requires FROM:TO")
+    if environment_range.count(":") != 1:
+        raise CliUserError("diff environment range must be FROM:TO")
+    from_environment: str
+    to_environment: str
+    from_environment, to_environment = environment_range.split(":", 1)
+    if not from_environment or not to_environment:
+        raise CliUserError("diff environment range must be FROM:TO")
+    return from_environment, to_environment
