@@ -67,13 +67,14 @@ def resolve_ref_references(
 
 
 def resolve_dbt_ref_references(*, query_sql: str) -> str:
-    """Replace all __dbt_ref() calls. Currently stubs with an error marker.
+    """Reject dbt refs until dbt manifest resolution is supported."""
 
-    Full dbt manifest resolution is deferred. Any remaining __dbt_ref() calls
-    are left as-is for now; validation at compile time already ensures a
-    manifest exists when __dbt_ref is used.
-    """
-
+    match: re.Match[str] | None = _DBT_REF_PATTERN.search(query_sql)
+    if match is not None:
+        raise NotImplementedError(
+            f"__dbt_ref('{match.group(1)}') is not supported yet; "
+            "support may be added in a future release"
+        )
     return query_sql
 
 

@@ -195,19 +195,18 @@ def test_given_refs_with_exclusive_cursor_when_resolving_then_returns_expected_s
     "test_case",
     [
         RefResolutionTestCase(
-            description="leaves dbt ref unchanged as stub",
+            description="raises for dbt ref placeholder",
             query_sql='SELECT * FROM __dbt_ref("external_model")',
-            expected_sql='SELECT * FROM __dbt_ref("external_model")',
+            expected_sql=r"__dbt_ref\('external_model'\) is not supported yet",
         ),
     ],
-    ids=["leaves dbt ref unchanged as stub"],
+    ids=["raises for dbt ref placeholder"],
 )
-def test_given_dbt_ref_when_resolving_then_leaves_unchanged(
+def test_given_dbt_ref_when_resolving_then_raises_not_supported(
     test_case: RefResolutionTestCase,
 ) -> None:
-    result: str = resolve_dbt_ref_references(query_sql=test_case.query_sql)
-
-    assert result == test_case.expected_sql
+    with pytest.raises(NotImplementedError, match=test_case.expected_sql):
+        resolve_dbt_ref_references(query_sql=test_case.query_sql)
 
 
 APPLY_DEFERRED_TEST_CASES: list[ApplyDeferredTargetsTestCase] = [
