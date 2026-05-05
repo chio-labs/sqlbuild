@@ -489,13 +489,15 @@ def test_given_relations_when_sampling_side_only_rows_then_returns_expected_exam
     "test_case",
     [
         BigQueryBuildFlowTestCase(
-            description="loads seed csv and builds table from select sql",
+            description="loads seed csv and replaces table from select sql",
             seed_csv="id,name\n1,alice\n2,bob\n",
-            expected_rows=((1, "alice"), (2, "bob")),
-            expected_statement_count=2,
+            staging_sql="SELECT 3 AS id, 'carol' AS name",
+            expected_rows=((3, "carol"),),
+            expected_recorded_fragment="COPY WRITE_TRUNCATE",
+            expected_statement_count=4,
         )
     ],
-    ids=["loads seed csv and builds table from select sql"],
+    ids=["loads seed csv and replaces table from select sql"],
 )
 def test_given_seed_and_table_flow_when_materializing_then_returns_expected_rows(
     test_case: BigQueryBuildFlowTestCase,
@@ -520,6 +522,11 @@ def test_given_seed_and_table_flow_when_materializing_then_returns_expected_rows
         dataset=bigquery_dataset,
         name="built_table",
     )
+    staging_target: str = qualified_name(
+        project=bigquery_project,
+        dataset=bigquery_dataset,
+        name="built_table__staging",
+    )
     recorder: StatementRecorder = build_statement_recorder()
 
     adapter.load_seed(
@@ -535,6 +542,18 @@ def test_given_seed_and_table_flow_when_materializing_then_returns_expected_rows
         sql=f"SELECT id, name FROM {seed_target} ORDER BY id",
         statement_recorder=recorder,
     )
+    adapter.create_table_as(
+        connection,
+        target=staging_target,
+        sql=test_case.staging_sql,
+        statement_recorder=recorder,
+    )
+    adapter.replace_table_from_relation(
+        connection,
+        target=table_target,
+        source=staging_target,
+        statement_recorder=recorder,
+    )
 
     rows: tuple[tuple[object, ...], ...] = fetch_rows(
         adapter=adapter,
@@ -544,6 +563,7 @@ def test_given_seed_and_table_flow_when_materializing_then_returns_expected_rows
 
     assert rows == test_case.expected_rows
     assert len(recorder.snapshot()) == test_case.expected_statement_count
+    assert test_case.expected_recorded_fragment in recorder.snapshot()[-1].content
 
 
 @pytest.mark.parametrize(

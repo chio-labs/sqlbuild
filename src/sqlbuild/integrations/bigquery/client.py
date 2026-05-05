@@ -23,7 +23,12 @@ from sqlbuild.adapter.shared.models import (
     StatementRecorder,
 )
 from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
-from sqlbuild.adapter.shared.types import CursorKind, FrameworkType, TablePromotionMode
+from sqlbuild.adapter.shared.types import (
+    CursorKind,
+    FrameworkType,
+    PromotionStrategy,
+    TablePromotionMode,
+)
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.shared.helpers.diagnostics_logging import log_sql
 
@@ -220,7 +225,10 @@ class BigQueryAdapter(BaseAdapter):
         return f"'{value}'"
 
     def default_table_promotion_mode(self) -> TablePromotionMode:
-        return TablePromotionMode.DIRECT
+        return TablePromotionMode.STAGED
+
+    def default_promotion_strategy(self) -> PromotionStrategy:
+        return PromotionStrategy.ATOMIC_REPLACE
 
     def supports_python_functions(self) -> bool:
         return True
@@ -326,6 +334,37 @@ class BigQueryAdapter(BaseAdapter):
     ) -> tuple[str, ...]:
         del hard_copy
         return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+
+    def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:
+        return (
+            "-- BigQuery execution copies this relation to the destination table with "
+            "WRITE_TRUNCATE for staged atomic replace.\n"
+            f"CREATE OR REPLACE TABLE {self._quote_identifier_path(target)} AS "
+            f"SELECT * FROM {self._quote_identifier_path(source)}",
+        )
+
+    def replace_table_from_relation(
+        self,
+        connection: _BigQueryConnection,
+        *,
+        target: str,
+        source: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        from google.cloud import bigquery
+
+        source_table: str = self._strip_identifier_quotes(source)
+        destination_table: str = self._strip_identifier_quotes(target)
+        job_config: Any = bigquery.CopyJobConfig(
+            write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
+        )
+        statement_recorder.record(f"COPY WRITE_TRUNCATE {source} TO {target}")
+        connection.client.copy_table(
+            source_table,
+            destination_table,
+            job_config=job_config,
+            location=connection.location,
+        ).result()
 
     def relation_exists(
         self,
