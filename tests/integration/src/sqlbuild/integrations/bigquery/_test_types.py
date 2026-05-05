@@ -79,6 +79,19 @@ class BigQueryMergeTestCase:
 
 
 @dataclass(frozen=True)
+class BigQueryDeleteInsertCursorTestCase:
+    description: str
+    target_setup_sql: tuple[str, ...]
+    source_sql: str
+    cursor_column: str
+    cursor_start: str
+    cursor_end: str
+    columns: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_recorded_fragment: str
+
+
+@dataclass(frozen=True)
 class BigQueryFingerprintTestCase:
     description: str
     query_sql: str
