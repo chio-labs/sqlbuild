@@ -111,6 +111,11 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
                 "SELECT value, is_positive FROM main.validated_orders ORDER BY value DESC",
                 (("abc", False), ("123", True)),
             ),
+            (
+                "SELECT model_name FROM main._sqlbuild_fingerprints "
+                "WHERE model_name = 'is_positive_int'",
+                (("is_positive_int",),),
+            ),
         ),
     ),
     BuildExecutionTestCase(
@@ -140,6 +145,51 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
             (
                 "SELECT value, is_positive FROM main.validated_orders ORDER BY value DESC",
                 (("abc", False), ("123", True)),
+            ),
+        ),
+    ),
+    BuildExecutionTestCase(
+        description="duckdb python udf ignores inherited environment schema",
+        project_files={
+            "sqlbuild_project.yml": (
+                "name: demo\n"
+                "adapter: duckdb\n"
+                "default_environment: dev\n"
+                "connection:\n"
+                "  database: ':memory:'\n"
+                "environments:\n"
+                "  dev:\n"
+                "    schema: dev\n"
+            ),
+            "functions/python/is_positive_int.py": (
+                "from sqlbuild.functions import udf\n\n"
+                "@udf(\n"
+                "    arguments={'a_string': 'VARCHAR'},\n"
+                "    returns='BOOLEAN',\n"
+                "    runtime_version='3.11',\n"
+                ")\n"
+                "def main(a_string):\n"
+                "    return bool(a_string and a_string.isdigit())\n"
+            ),
+            "models/validated_orders.sql": (
+                "MODEL (materialized table);\n\n"
+                'SELECT value, __udf("is_positive_int")(value) AS is_positive '
+                "FROM (VALUES ('123'), ('abc')) AS input(value)"
+            ),
+        },
+        expected_status=BuildStatus.SUCCESS,
+        expected_success_count=2,
+        expected_model_statuses=(("validated_orders", ExecutionStatus.SUCCESS),),
+        expected_function_statuses=(("is_positive_int", ExecutionStatus.SUCCESS),),
+        expected_query_results=(
+            (
+                "SELECT value, is_positive FROM dev.validated_orders ORDER BY value DESC",
+                (("abc", False), ("123", True)),
+            ),
+            (
+                "SELECT model_name FROM dev._sqlbuild_fingerprints "
+                "WHERE model_name = 'is_positive_int'",
+                (("is_positive_int",),),
             ),
         ),
     ),

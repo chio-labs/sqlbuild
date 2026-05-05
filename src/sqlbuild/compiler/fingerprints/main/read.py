@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -42,7 +43,7 @@ def read_latest_fingerprints(
     latest: dict[str, Fingerprint] = {}
     row: tuple[Any, ...]
     for row in rows:
-        fingerprint: Fingerprint = _row_to_fingerprint(row)
+        fingerprint: Fingerprint = _row_to_fingerprint(row, qualified_name=qualified_name)
         model_name: str = fingerprint.model_name
         if model_name not in latest or fingerprint.ts > latest[model_name].ts:
             latest[model_name] = fingerprint
@@ -59,7 +60,7 @@ def _table_exists(*, connection: Any, execute: Any, qualified_name: str) -> bool
         return False
 
 
-def _row_to_fingerprint(row: tuple[Any, ...]) -> Fingerprint:
+def _row_to_fingerprint(row: tuple[Any, ...], *, qualified_name: str) -> Fingerprint:
     raw_ts: Any = row[9]
     ts: datetime = raw_ts if isinstance(raw_ts, datetime) else datetime.fromisoformat(str(raw_ts))
     raw_ast_hash: Any = row[6]
@@ -67,12 +68,20 @@ def _row_to_fingerprint(row: tuple[Any, ...]) -> Fingerprint:
     raw_target_database: Any = row[1]
     raw_target_schema: Any = row[2]
     raw_target_name: Any = row[3]
+    model_name: str = str(row[0])
     query_sql_storage: str = str(row[8])
-    query_sql: str = base64.b64decode(query_sql_storage.encode("ascii"), validate=True).decode(
-        "utf-8"
-    )
+    try:
+        query_sql: str = base64.b64decode(query_sql_storage.encode("ascii"), validate=True).decode(
+            "utf-8"
+        )
+    except (binascii.Error, UnicodeDecodeError) as error:
+        raise ValueError(
+            f"Invalid fingerprint query SQL storage for '{model_name}' in {qualified_name}: "
+            "expected base64-encoded UTF-8. This can happen after upgrading from an older "
+            f"sqlbuild version; delete or rebuild {qualified_name} to regenerate fingerprints."
+        ) from error
     return Fingerprint(
-        model_name=str(row[0]),
+        model_name=model_name,
         target_database=str(raw_target_database) if raw_target_database is not None else None,
         target_schema=str(raw_target_schema) if raw_target_schema is not None else None,
         target_name=str(raw_target_name) if raw_target_name is not None else None,

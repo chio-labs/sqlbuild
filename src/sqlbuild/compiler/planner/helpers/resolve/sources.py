@@ -43,6 +43,7 @@ def resolve_source_references(
         if source_entry.type_enforcement:
             if source_entry.expression is not None:
                 resolved_source = _build_expression_cast_subquery(
+                    source_name=source_entry.name,
                     source_relation=resolved_source,
                     declared_columns=source_entry.columns,
                     expression_columns=warehouse_cols,
@@ -128,6 +129,7 @@ def _validate_declared_columns(
 
 def _build_expression_cast_subquery(
     *,
+    source_name: str,
     source_relation: str,
     declared_columns: tuple[SourceColumnEntry, ...],
     expression_columns: tuple[ColumnInfo, ...] | None,
@@ -140,7 +142,10 @@ def _build_expression_cast_subquery(
     if not enforced_map:
         return source_relation
     if expression_columns is None:
-        raise ValueError("Source expression type enforcement requires query output column metadata")
+        raise ValueError(
+            f"Source expression '{source_name}' type enforcement requires query output "
+            "column metadata"
+        )
 
     expression_names: tuple[str, ...] = tuple(col.name for col in expression_columns)
     missing_names: tuple[str, ...] = tuple(
@@ -148,8 +153,10 @@ def _build_expression_cast_subquery(
     )
     if missing_names:
         missing_columns: str = ", ".join(missing_names)
+        available_columns: str = ", ".join(expression_names) if expression_names else "<none>"
         raise ValueError(
-            f"Source expression declares columns not found in query output: {missing_columns}"
+            f"Source expression '{source_name}' declares columns not found in query output: "
+            f"{missing_columns}. Available query output columns: {available_columns}"
         )
 
     projections: list[str] = [
