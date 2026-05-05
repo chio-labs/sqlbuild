@@ -62,7 +62,7 @@ SQLGLOT_CHAIN_TEST_CASES: list[SqlglotChainSqlTestE2ETestCase] = [
         SqlTestE2ETestCase(
             description="test runs SQL unit tests and all pass",
             expected_exit_code=0,
-            expected_stdout_fragment="PASS=1",
+            expected_stdout_fragment="PASS=2",
         ),
     ],
     ids=["test runs SQL unit tests and all pass"],
@@ -72,6 +72,11 @@ def test_given_waffle_shop_project_when_running_test_then_all_tests_pass(
     tmp_path: Path,
 ) -> None:
     project_dir: Path = prepare_waffle_shop(tmp_path)
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
 
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "test"), project_dir=project_dir

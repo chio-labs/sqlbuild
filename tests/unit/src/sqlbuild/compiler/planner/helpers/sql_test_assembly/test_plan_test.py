@@ -92,6 +92,46 @@ PLAN_TEST_CASES: list[PlanTestChainTestCase] = [
         },
     ),
     PlanTestChainTestCase(
+        description="single model with mock seed replaces seed in sql",
+        model_queries={
+            "orders": 'SELECT code FROM __seed("country_codes")',
+        },
+        mock_ref_ctes={},
+        mock_source_ctes={},
+        mock_seed_ctes={
+            "country_codes": "SELECT 'US' AS code",
+        },
+        helper_ctes={},
+        expected_model_names=("orders",),
+        expected_chain_length=1,
+        expected_sql_fragments={
+            "orders": "SELECT 'US' AS code",
+        },
+        expected_cte_bodies={
+            "orders": "SELECT 'US' AS code",
+        },
+    ),
+    PlanTestChainTestCase(
+        description="single model resolves udf references in sql tests",
+        model_queries={
+            "orders": 'SELECT __udf("is_ready")(status) AS ready FROM __source("raw")',
+        },
+        mock_ref_ctes={},
+        mock_source_ctes={
+            "raw": "SELECT 'completed' AS status",
+        },
+        helper_ctes={},
+        expected_model_names=("orders",),
+        expected_chain_length=1,
+        function_targets={"is_ready": "main.is_ready"},
+        expected_sql_fragments={
+            "orders": "main.is_ready(status) AS ready",
+        },
+        expected_cte_bodies={
+            "orders": "SELECT TRUE AS ready",
+        },
+    ),
+    PlanTestChainTestCase(
         description="two model chain resolves in dependency order",
         model_queries={
             "stg_orders": 'SELECT id FROM __source("raw")',
@@ -238,6 +278,22 @@ PLAN_TEST_CASES: list[PlanTestChainTestCase] = [
         description=("unresolved source produces error warning"),
         model_queries={
             "orders": ('SELECT id FROM __source("missing_source")'),
+        },
+        mock_ref_ctes={},
+        mock_source_ctes={},
+        helper_ctes={},
+        expected_model_names=("orders",),
+        expected_chain_length=1,
+        expected_warning_count=1,
+        expected_warning_severity=WarningSeverity.ERROR,
+        expected_cte_bodies={
+            "orders": "SELECT 1",
+        },
+    ),
+    PlanTestChainTestCase(
+        description=("unresolved seed produces error warning"),
+        model_queries={
+            "orders": ('SELECT code FROM __seed("missing_seed")'),
         },
         mock_ref_ctes={},
         mock_source_ctes={},

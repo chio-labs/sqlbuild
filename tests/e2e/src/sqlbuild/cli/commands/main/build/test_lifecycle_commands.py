@@ -29,7 +29,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 "customer_orders             table function",
                 "First run (12)",
             ),
-            expected_test_fragment="PASS=1  FAIL=0  TOTAL=1",
+            expected_test_fragment="PASS=2  FAIL=0  TOTAL=2",
             expected_audit_fragment="PASS=26  WARN=0  FAIL=0  TOTAL=26",
             expected_run_fragment="Completed successfully.",
             expected_rerun_reasons={

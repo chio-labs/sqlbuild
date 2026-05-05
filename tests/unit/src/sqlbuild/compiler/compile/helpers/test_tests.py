@@ -10,6 +10,20 @@ from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
 
 TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
     ExtractSqlTestCtesTestCase(
+        description="extracts seed mocks from seed-prefixed ctes",
+        sql="""
+        WITH
+        __seed__country_codes AS (SELECT 'US' AS country_code),
+        __expected__orders AS (SELECT 'US' AS country_code)
+        SELECT 1
+        """.strip(),
+        expected_authored_cte_names=("__seed__country_codes",),
+        expected_mock_model_names=(),
+        expected_mock_source_names=(),
+        expected_expected_model_names=("orders",),
+        expected_mock_seed_names=("country_codes",),
+    ),
+    ExtractSqlTestCtesTestCase(
         description="extracts macro mocks from single string literal ctes",
         sql="""
         WITH
@@ -219,6 +233,7 @@ def test_given_sql_test_cte_variants_when_extracting_then_it_returns_expected_ro
     )
     assert extracted_ctes.mock_model_names == test_case.expected_mock_model_names
     assert extracted_ctes.mock_source_names == test_case.expected_mock_source_names
+    assert extracted_ctes.mock_seed_names == test_case.expected_mock_seed_names
     assert extracted_ctes.expected_model_names == test_case.expected_expected_model_names
     assert extracted_ctes.macro_mocks == test_case.expected_macro_mocks
 

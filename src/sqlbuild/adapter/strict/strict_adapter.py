@@ -50,6 +50,11 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def persists_python_functions(self) -> bool:
+        """Return whether Python UDF resources survive across connections."""
+        ...
+
+    @abstractmethod
     def supports_table_functions(self) -> bool:
         """Return whether the adapter can create table function resources."""
         ...

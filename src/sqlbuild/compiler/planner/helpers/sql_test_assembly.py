@@ -7,14 +7,19 @@ import re
 from sqlbuild.compiler.compile.constants import (
     EXPECTED_TEST_CTE_PREFIX,
     REF_TEST_CTE_PREFIX,
+    SEED_TEST_CTE_PREFIX,
     SOURCE_TEST_CTE_PREFIX,
 )
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
+    CompiledObjectKey,
     CompiledProject,
+    CompiledRelationTarget,
     CompiledSqlTest,
     CompileSqlTestCte,
 )
+from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner.helpers.resolve.refs import resolve_udf_references
 from sqlbuild.compiler.planner.helpers.sqlglot_sql_test_assembly import (
     try_resolve_test_model_sql_with_sqlglot,
 )
@@ -28,6 +33,7 @@ from sqlbuild.compiler.planner.types import WarningSeverity
 
 _REF_PATTERN: re.Pattern[str] = re.compile(r'__ref\("([^"]+)"\)')
 _SOURCE_PATTERN: re.Pattern[str] = re.compile(r'__source\("([^"]+)"\)')
+_SEED_PATTERN: re.Pattern[str] = re.compile(r'__seed\("([^"]+)"\)')
 
 
 def plan_test(
@@ -39,8 +45,12 @@ def plan_test(
     """Build a test plan entry with chained resolution."""
 
     model_map: dict[str, CompiledModel] = {m.name: m for m in project.models}
+    function_targets: dict[str, CompiledRelationTarget] = {
+        function.name: function.target for function in project.functions
+    }
     mock_refs: dict[str, str] = _extract_mock_refs(test)
     mock_sources: dict[str, str] = _extract_mock_sources(test)
+    mock_seeds: dict[str, str] = _extract_mock_seeds(test)
     helper_ctes: tuple[CompileSqlTestCte, ...] = _extract_helper_ctes(test)
     expected_map: dict[str, str] = _extract_expected_ctes(test)
 
@@ -54,6 +64,7 @@ def plan_test(
     reachable_mocks: set[str] = set()
     resolved: dict[str, str] = {}
     sqlglot_resolved: dict[str, SqlglotResolvedTestSql] = {}
+    function_deps: list[CompiledObjectKey] = []
 
     chain_steps: list[ChainStep] = []
     model_name: str
@@ -70,15 +81,20 @@ def plan_test(
                 )
             )
             continue
+        function_deps.extend(
+            dep for dep in model.deps if dep.resource_type == CompiledResourceType.FUNCTION
+        )
 
         query_sql: str = _resolve_test_model_query_sql(model=model, test=test)
         step_sql: str = _resolve_test_model_sql(
             query_sql=query_sql,
             mock_refs=mock_refs,
             mock_sources=mock_sources,
+            mock_seeds=mock_seeds,
             helper_ctes=helper_ctes,
             resolved_chain=resolved,
             reachable_mocks=reachable_mocks,
+            function_targets=function_targets,
         )
         resolved_value: str = f"({step_sql})"
         if sqlglot_enabled:
@@ -86,6 +102,12 @@ def plan_test(
                 query_sql=query_sql,
                 mock_refs=mock_refs,
                 mock_sources=mock_sources,
+                mock_seeds=mock_seeds,
+                function_targets={
+                    name: target.qualified_name
+                    for name, target in function_targets.items()
+                    if target.qualified_name is not None
+                },
                 helper_ctes=helper_ctes,
                 resolved_chain=sqlglot_resolved,
                 reachable_mocks=reachable_mocks,
@@ -138,13 +160,36 @@ def plan_test(
             )
         )
 
+    unreachable_seed: str
+    for unreachable_seed in sorted(set(mock_seeds) - reachable_mocks):
+        warnings.append(
+            PlanWarning(
+                model_name=None,
+                severity=WarningSeverity.WARNING,
+                message=(f"test '{test.name}' mock __seed__{unreachable_seed} is unreachable"),
+            )
+        )
+
     entry: SqlTestPlanEntry = SqlTestPlanEntry(
         key=test.key,
         name=test.name,
         chain=tuple(chain_steps),
         scope_deps=test.scope_deps,
+        function_deps=_dedupe_function_deps(function_deps),
     )
     return entry, tuple(warnings)
+
+
+def _dedupe_function_deps(deps: list[CompiledObjectKey]) -> tuple[CompiledObjectKey, ...]:
+    deduped: list[CompiledObjectKey] = []
+    seen: set[CompiledObjectKey] = set()
+    dep: CompiledObjectKey
+    for dep in deps:
+        if dep in seen:
+            continue
+        seen.add(dep)
+        deduped.append(dep)
+    return tuple(deduped)
 
 
 def _resolve_test_model_query_sql(
@@ -162,9 +207,11 @@ def _resolve_test_model_sql(
     query_sql: str,
     mock_refs: dict[str, str],
     mock_sources: dict[str, str],
+    mock_seeds: dict[str, str],
     helper_ctes: tuple[CompileSqlTestCte, ...],
     resolved_chain: dict[str, str],
     reachable_mocks: set[str],
+    function_targets: dict[str, CompiledRelationTarget],
 ) -> str:
     """Replace refs and sources in model SQL with mocks or chain outputs."""
 
@@ -194,8 +241,21 @@ def _resolve_test_model_sql(
             )
         return match.group(0)
 
+    def _replace_seed(match: re.Match[str]) -> str:
+        seed_name: str = match.group(1)
+        if seed_name in mock_seeds:
+            reachable_mocks.add(seed_name)
+            mock_body: str = mock_seeds[seed_name]
+            return _wrap_mock_with_helpers(
+                mock_body=mock_body,
+                helper_with=helper_with,
+            )
+        return match.group(0)
+
     result: str = _REF_PATTERN.sub(_replace_ref, query_sql)
     result = _SOURCE_PATTERN.sub(_replace_source, result)
+    result = _SEED_PATTERN.sub(_replace_seed, result)
+    result = resolve_udf_references(query_sql=result, function_targets=function_targets)
     return result
 
 
@@ -232,6 +292,20 @@ def _validate_resolved_sql(
                 message=(
                     f"test '{test_name}': model '{model_name}'"
                     f' references __source("{source_name}") which'
+                    f" has no mock"
+                ),
+            )
+        )
+    seed_match: re.Match[str]
+    for seed_match in _SEED_PATTERN.finditer(resolved_sql):
+        seed_name: str = seed_match.group(1)
+        warnings.append(
+            PlanWarning(
+                model_name=model_name,
+                severity=WarningSeverity.ERROR,
+                message=(
+                    f"test '{test_name}': model '{model_name}'"
+                    f' references __seed("{seed_name}") which'
                     f" has no mock"
                 ),
             )
@@ -330,6 +404,18 @@ def _extract_mock_sources(test: CompiledSqlTest) -> dict[str, str]:
     return result
 
 
+def _extract_mock_seeds(test: CompiledSqlTest) -> dict[str, str]:
+    """Extract mock seed CTE bodies keyed by seed name."""
+
+    result: dict[str, str] = {}
+    cte: CompileSqlTestCte
+    for cte in test.authored_ctes:
+        if cte.name.startswith(SEED_TEST_CTE_PREFIX):
+            name: str = cte.name.removeprefix(SEED_TEST_CTE_PREFIX)
+            result[name] = cte.sql_body
+    return result
+
+
 def _extract_helper_ctes(
     test: CompiledSqlTest,
 ) -> tuple[CompileSqlTestCte, ...]:
@@ -341,6 +427,8 @@ def _extract_helper_ctes(
         if cte.name.startswith(REF_TEST_CTE_PREFIX):
             continue
         if cte.name.startswith(SOURCE_TEST_CTE_PREFIX):
+            continue
+        if cte.name.startswith(SEED_TEST_CTE_PREFIX):
             continue
         helpers.append(cte)
     return tuple(helpers)

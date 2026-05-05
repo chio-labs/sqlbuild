@@ -24,6 +24,7 @@ class BuildCompileInputsTestCase:
     expected_test_authored_cte_names: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     expected_test_mock_model_names: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     expected_test_mock_source_names: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
+    expected_test_mock_seed_names: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     expected_test_expected_model_names: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     expected_audit_sql_bodies: tuple[str, ...] = field(default_factory=tuple)
     expected_sql_function_names: tuple[str, ...] = field(default_factory=tuple)
