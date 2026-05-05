@@ -23,6 +23,7 @@ from tests.unit.src.sqlbuild.integrations.bigquery._test_types import (
     BigQueryCountRowsTestCase,
     BigQueryQueryTestCase,
     BigQueryRenderCursorBoundLiteralTestCase,
+    BigQueryRenderDeleteInsertTestCase,
     BigQueryRenderPythonFunctionTestCase,
     BigQueryRenderQualifiedNameTestCase,
     BigQueryRenderSchemaTestCase,
@@ -320,6 +321,51 @@ def test_given_cursor_bounds_when_rendering_then_bigquery_returns_expected_liter
     result: str = adapter.render_cursor_bound_literal(test_case.value, test_case.cursor_type)
 
     assert result == test_case.expected_literal
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryRenderDeleteInsertTestCase(
+            description="renders cursor delete insert as merge replace window",
+            expected_fragments=(
+                "MERGE `example-project.dev.events` AS __target",
+                "USING (SELECT id, event_time FROM delta_events) AS __source ON FALSE",
+                "WHEN NOT MATCHED BY TARGET THEN INSERT (id, event_time)",
+                "WHEN NOT MATCHED BY SOURCE AND __target.event_time >= "
+                "TIMESTAMP '2026-01-01T00:00:00'",
+                "AND __target.event_time < TIMESTAMP '2026-01-02T00:00:00' THEN DELETE",
+            ),
+            unexpected_fragments=(
+                "DELETE FROM",
+                "INSERT INTO",
+            ),
+        ),
+    ],
+    ids=["renders cursor delete insert as merge replace window"],
+)
+def test_given_delete_insert_cursor_when_rendering_then_bigquery_uses_merge(
+    test_case: BigQueryRenderDeleteInsertTestCase,
+) -> None:
+    adapter: BigQueryAdapter = BigQueryAdapter()
+
+    statements: tuple[str, ...] = adapter.render_delete_insert_cursor(
+        target="example-project.dev.events",
+        sql="SELECT id, event_time FROM delta_events",
+        cursor_column="event_time",
+        cursor_start="2026-01-01T00:00:00",
+        cursor_end="2026-01-02T00:00:00",
+        columns=("id", "event_time"),
+    )
+    rendered_sql: str = statements[0]
+
+    expected_fragment: str
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in rendered_sql
+
+    unexpected_fragment: str
+    for unexpected_fragment in test_case.unexpected_fragments:
+        assert unexpected_fragment not in rendered_sql
 
 
 @pytest.mark.parametrize(

@@ -303,13 +303,43 @@ class BigQueryAdapter(BaseAdapter):
         cursor_end: str,
         columns: tuple[str, ...] | None = None,
     ) -> tuple[str, ...]:
-        delete_sql: str = (
-            f"DELETE FROM {self._quote_identifier_path(target)} "
-            f"WHERE {cursor_column} >= {self._render_cursor_bound_string(cursor_start)} "
-            f"AND {cursor_column} < {self._render_cursor_bound_string(cursor_end)}"
+        insert_clause: str = "INSERT ROW"
+        if columns is not None:
+            column_list: str = ", ".join(columns)
+            values_list: str = ", ".join(f"__source.{column}" for column in columns)
+            insert_clause = f"INSERT ({column_list}) VALUES ({values_list})"
+        cursor_filter: str = (
+            f"__target.{cursor_column} >= {self._render_cursor_bound_string(cursor_start)} "
+            f"AND __target.{cursor_column} < {self._render_cursor_bound_string(cursor_end)}"
         )
-        insert_stmts: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
-        return (delete_sql, *insert_stmts)
+        return (
+            f"MERGE {self._quote_identifier_path(target)} AS __target "
+            f"USING ({sql}) AS __source ON FALSE "
+            f"WHEN NOT MATCHED BY TARGET THEN {insert_clause} "
+            f"WHEN NOT MATCHED BY SOURCE AND {cursor_filter} THEN DELETE",
+        )
+
+    def render_delete_insert(
+        self,
+        *,
+        target: str,
+        sql: str,
+        unique_key: tuple[str, ...],
+        columns: tuple[str, ...] | None = None,
+    ) -> tuple[str, ...]:
+        if columns is None:
+            return super().render_delete_insert(
+                target=self._quote_identifier_path(target),
+                sql=sql,
+                unique_key=unique_key,
+                columns=columns,
+            )
+        return self.render_merge(
+            target=target,
+            sql=sql,
+            unique_key=unique_key,
+            source_columns=columns,
+        )
 
     def render_drop(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
         exists_clause: str = " IF EXISTS" if if_exists else ""
@@ -542,6 +572,57 @@ class BigQueryAdapter(BaseAdapter):
         source_columns: tuple[str, ...] = self.query_column_names(connection, sql)
         statements: tuple[str, ...] = self.render_merge(
             target=target, sql=sql, unique_key=keys, source_columns=source_columns
+        )
+        statement_recorder.record_many(statements)
+        statement: str
+        for statement in statements:
+            self.execute(connection, statement)
+
+    def delete_insert(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        sql: str,
+        unique_key: str | tuple[str, ...],
+        columns: tuple[str, ...] | None = None,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
+        if columns is None:
+            columns = self.query_column_names(connection, sql)
+        statements: tuple[str, ...] = self.render_delete_insert(
+            target=target,
+            sql=sql,
+            unique_key=keys,
+            columns=columns,
+        )
+        statement_recorder.record_many(statements)
+        statement: str
+        for statement in statements:
+            self.execute(connection, statement)
+
+    def delete_insert_cursor(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        sql: str,
+        cursor_column: str,
+        cursor_start: str,
+        cursor_end: str,
+        columns: tuple[str, ...] | None = None,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        if columns is None:
+            columns = self.query_column_names(connection, sql)
+        statements: tuple[str, ...] = self.render_delete_insert_cursor(
+            target=target,
+            sql=sql,
+            cursor_column=cursor_column,
+            cursor_start=cursor_start,
+            cursor_end=cursor_end,
+            columns=columns,
         )
         statement_recorder.record_many(statements)
         statement: str
