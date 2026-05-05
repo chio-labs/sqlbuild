@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -48,6 +49,7 @@ from sqlbuild.compiler.planner.helpers.sql_test_assembly import plan_test
 from sqlbuild.compiler.planner.helpers.warehouse_snapshot import gather_warehouse_snapshot
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
+    BackfillResult,
     CascadeResult,
     CursorOverrides,
     FunctionPlanEntry,
@@ -201,33 +203,28 @@ def build_execution_plan(
             model_cursor_types=model_cursor_types,
         )
         if cascade is not None:
-            entry = ModelPlanEntry(
-                key=entry.key,
-                name=entry.name,
-                relative_path=entry.relative_path,
-                materialization_type=entry.materialization_type,
-                action=entry.action,
-                reason=entry.reason,
-                target=entry.target,
-                fingerprint_query_sql=entry.fingerprint_query_sql,
-                resolved_sql=entry.resolved_sql,
-                logical_ddl=entry.logical_ddl,
-                incremental_strategy=entry.incremental_strategy,
-                incremental_mode=entry.incremental_mode,
-                cursor_column=entry.cursor_column,
-                cursor_type=entry.cursor_type,
-                cursor_grain=entry.cursor_grain,
-                cursor_start=entry.cursor_start,
-                cursor_bounds=entry.cursor_bounds,
-                type_enforcement=entry.type_enforcement,
-                pre_hook=entry.pre_hook,
-                post_hook=entry.post_hook,
-                previous_query_sql=entry.previous_query_sql,
-                schema_actions=entry.schema_actions,
-                schema_findings=entry.schema_findings,
-                backfill=entry.backfill,
-                cascade=cascade,
+            entry, warnings = plan_model(
+                model=model,
+                snapshot=snapshot,
+                adapter=adapter,
+                model_targets=model_targets,
+                models_by_name=models_by_name,
+                seed_targets=seed_targets,
+                function_targets=function_targets,
+                source_map=source_map,
+                source_warehouse_columns=source_warehouse_columns,
+                star_exclude_keyword=star_exclude_keyword,
+                sqlglot_enabled=sqlglot_enabled,
+                query_change_tracking=query_change_tracking,
+                full_refresh=full_refresh,
+                start_cursor_override=resolved_start,
+                end_cursor_override=resolved_end,
+                backfill_override=BackfillResult(
+                    action=cascade.effective_action,
+                    duration=cascade.effective_duration,
+                ),
             )
+            entry = replace(entry, cascade=cascade)
             effective_cascades[entry.name] = cascade
         else:
             effective_cascades[entry.name] = build_self_cascade(entry.backfill)

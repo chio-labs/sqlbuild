@@ -256,39 +256,79 @@ def test_given_cursor_type_mismatch_when_building_plan_then_produces_warning(
     assert test_case.expected_warning_fragment in warning.message
 
 
+CASCADE_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
+    BuildExecutionPlanTestCase(
+        description="upstream first run full cascades to existing downstream",
+        setup_sql=("CREATE TABLE staging.fact_orders AS SELECT 1 AS id",),
+        model_targets={
+            "stg_orders": "staging",
+            "fact_orders": "staging",
+        },
+        model_configs={
+            "stg_orders": {"materialized": "table"},
+            "fact_orders": {"materialized": "table"},
+        },
+        model_queries={
+            "stg_orders": "SELECT 1 AS id",
+            "fact_orders": "SELECT 1 AS id",
+        },
+        model_deps={"fact_orders": ("stg_orders",)},
+        full_refresh=False,
+        expected_action={
+            "stg_orders": PlanAction.CREATE_TABLE,
+            "fact_orders": PlanAction.CREATE_TABLE,
+        },
+        expected_reason={
+            "stg_orders": PlanReason.FIRST_RUN,
+            "fact_orders": PlanReason.FULL_REFRESH,
+        },
+        expected_cascade_action={"fact_orders": BackfillAction.FULL},
+        expected_cascade_root_cause={"fact_orders": "stg_orders"},
+    ),
+    BuildExecutionPlanTestCase(
+        description="upstream full cascade forces existing incremental downstream rebuild",
+        setup_sql=("CREATE TABLE staging.fact_orders AS SELECT 1 AS id",),
+        model_targets={
+            "stg_orders": "staging",
+            "fact_orders": "staging",
+        },
+        model_configs={
+            "stg_orders": {"materialized": "table"},
+            "fact_orders": {
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "cursor": "id",
+                "cursor_type": "integer",
+                "unique_key": "id",
+            },
+        },
+        model_queries={
+            "stg_orders": "SELECT 1 AS id",
+            "fact_orders": "SELECT 1 AS id",
+        },
+        model_deps={"fact_orders": ("stg_orders",)},
+        full_refresh=False,
+        expected_action={
+            "stg_orders": PlanAction.CREATE_TABLE,
+            "fact_orders": PlanAction.CREATE_TABLE,
+        },
+        expected_reason={
+            "stg_orders": PlanReason.FIRST_RUN,
+            "fact_orders": PlanReason.FULL_REFRESH,
+        },
+        expected_ddl_fragments={
+            "fact_orders": "CREATE OR REPLACE TABLE staging.fact_orders AS",
+        },
+        expected_cascade_action={"fact_orders": BackfillAction.FULL},
+        expected_cascade_root_cause={"fact_orders": "stg_orders"},
+    ),
+]
+
+
 @pytest.mark.parametrize(
     "test_case",
-    [
-        BuildExecutionPlanTestCase(
-            description="upstream first run full cascades to existing downstream",
-            setup_sql=("CREATE TABLE staging.fact_orders AS SELECT 1 AS id",),
-            model_targets={
-                "stg_orders": "staging",
-                "fact_orders": "staging",
-            },
-            model_configs={
-                "stg_orders": {"materialized": "table"},
-                "fact_orders": {"materialized": "table"},
-            },
-            model_queries={
-                "stg_orders": "SELECT 1 AS id",
-                "fact_orders": "SELECT 1 AS id",
-            },
-            model_deps={"fact_orders": ("stg_orders",)},
-            full_refresh=False,
-            expected_action={
-                "stg_orders": PlanAction.CREATE_TABLE,
-                "fact_orders": PlanAction.CREATE_TABLE,
-            },
-            expected_reason={
-                "stg_orders": PlanReason.FIRST_RUN,
-                "fact_orders": PlanReason.NO_CHANGE,
-            },
-            expected_cascade_action={"fact_orders": BackfillAction.FULL},
-            expected_cascade_root_cause={"fact_orders": "stg_orders"},
-        ),
-    ],
-    ids=["upstream first run full cascades to existing downstream"],
+    CASCADE_PLAN_TEST_CASES,
+    ids=[case.description for case in CASCADE_PLAN_TEST_CASES],
 )
 def test_given_upstream_first_run_when_building_plan_then_cascades_to_downstream(
     test_case: BuildExecutionPlanTestCase,
@@ -314,6 +354,14 @@ def test_given_upstream_first_run_when_building_plan_then_cascades_to_downstream
     expected_action: PlanAction
     for model_name, expected_action in test_case.expected_action.items():
         assert entry_map[model_name].action == expected_action
+
+    expected_reason: PlanReason
+    for model_name, expected_reason in test_case.expected_reason.items():
+        assert entry_map[model_name].reason == expected_reason
+
+    expected_fragment: str
+    for model_name, expected_fragment in test_case.expected_ddl_fragments.items():
+        assert expected_fragment in entry_map[model_name].logical_ddl
 
     expected_cascade_action: BackfillAction
     for model_name, expected_cascade_action in test_case.expected_cascade_action.items():
