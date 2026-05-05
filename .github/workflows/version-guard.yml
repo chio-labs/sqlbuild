@@ -1,0 +1,47 @@
+name: Version Guard
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  block-1-0:
+    name: Block automatic 1.0 releases
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reject versions at or above 1.0.0
+        run: |
+          python - <<'PY'
+          import sys
+          import tomllib
+
+          with open("pyproject.toml", "rb") as pyproject:
+              version = tomllib.load(pyproject)["project"]["version"]
+
+          parts = version.split(".")
+          try:
+              major = int(parts[0])
+          except (IndexError, ValueError):
+              print(f"Invalid project version: {version}", file=sys.stderr)
+              sys.exit(1)
+
+          if major >= 1:
+              print(
+                  f"Refusing automatic release version {version}. "
+                  "Crossing to 1.0.0 requires an explicit manual decision.",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          print(f"Project version {version} is below 1.0.0.")
+          PY
