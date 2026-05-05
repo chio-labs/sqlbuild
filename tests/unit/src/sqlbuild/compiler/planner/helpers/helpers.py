@@ -159,6 +159,30 @@ def build_snapshot_from_relation_names(relation_names: tuple[str, ...]) -> Wareh
     return WarehouseSnapshot(existing_relations=existing_relations)
 
 
+def build_test_project_with_source_entry(source_entry: SourceEntry) -> CompiledProject:
+    """Build a minimal CompiledProject containing one source entry."""
+
+    source: CompiledSource = CompiledSource(
+        key=source_key(source_entry.name),
+        deps=(),
+        name=source_entry.name,
+        source_entry=source_entry,
+        source_file=DiscoveredSourceFile(
+            file_path=Path("sources/raw.yml"),
+            relative_path=Path("sources/raw.yml"),
+            contents="",
+            source_entries=(source_entry,),
+        ),
+    )
+    return CompiledProject(
+        run_id="test_run",
+        effective_environment_name=None,
+        effective_connection={},
+        effective_vars={},
+        sources=(source,),
+    )
+
+
 def _resolve_dep_key(name: str, source_names: set[str], seed_names: set[str]) -> CompiledObjectKey:
     """Resolve a dependency name to the correct key type."""
 

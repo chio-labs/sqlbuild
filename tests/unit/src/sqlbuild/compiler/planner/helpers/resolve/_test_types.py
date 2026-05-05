@@ -38,6 +38,16 @@ class SourceResolutionTestCase:
 
 
 @dataclass(frozen=True)
+class SourceResolutionErrorTestCase:
+    description: str
+    query_sql: str
+    star_exclude_keyword: str
+    source_map: dict[str, SourceEntry]
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class RefResolutionTestCase:
     description: str
     query_sql: str

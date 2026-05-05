@@ -39,6 +39,7 @@ def resolve_source_references(
                 resolved_source = _build_expression_cast_subquery(
                     source_relation=resolved_source,
                     declared_columns=source_entry.columns,
+                    expression_columns=warehouse_cols,
                 )
             elif warehouse_cols is not None and warehouse_cols:
                 resolved_source = _build_relation_cast_subquery(
@@ -76,10 +77,18 @@ def _build_relation_cast_subquery(
     enforced_map: dict[str, str] = {
         col.name: col.type for col in declared_columns if col.type is not None
     }
+    warehouse_names: set[str] = {col.name for col in warehouse_columns}
+    missing_names: tuple[str, ...] = tuple(
+        col.name for col in declared_columns if col.name not in warehouse_names
+    )
+    if missing_names:
+        missing_columns: str = ", ".join(missing_names)
+        raise ValueError(
+            f"Source {qualified_name} declares columns not found in warehouse: {missing_columns}"
+        )
     if not enforced_map:
         return qualified_name
 
-    warehouse_names: set[str] = {col.name for col in warehouse_columns}
     cast_names: list[str] = [name for name in enforced_map if name in warehouse_names]
     if not cast_names:
         return qualified_name
@@ -103,18 +112,34 @@ def _build_expression_cast_subquery(
     *,
     source_relation: str,
     declared_columns: tuple[SourceColumnEntry, ...],
+    expression_columns: tuple[ColumnInfo, ...] | None,
 ) -> str:
-    """Build a CAST projection for expression sources using declared columns only."""
+    """Build a CAST projection for expression sources using probed column names."""
 
-    cast_expressions: list[str] = [
-        f"CAST({col.name} AS {col.type}) AS {col.name}"
-        for col in declared_columns
-        if col.type is not None
-    ]
-    if not cast_expressions:
+    enforced_map: dict[str, str] = {
+        col.name: col.type for col in declared_columns if col.type is not None
+    }
+    if not enforced_map:
         return source_relation
-    cast_clause: str = ", ".join(cast_expressions)
-    return f"(SELECT {cast_clause} FROM {source_relation})"
+    if expression_columns is None:
+        raise ValueError("Source expression type enforcement requires query output column metadata")
+
+    expression_names: tuple[str, ...] = tuple(col.name for col in expression_columns)
+    missing_names: tuple[str, ...] = tuple(
+        name for name in enforced_map if name not in expression_names
+    )
+    if missing_names:
+        missing_columns: str = ", ".join(missing_names)
+        raise ValueError(
+            f"Source expression declares typed columns not found in query output: {missing_columns}"
+        )
+
+    projections: list[str] = [
+        f"CAST({name} AS {enforced_map[name]}) AS {name}" if name in enforced_map else name
+        for name in expression_names
+    ]
+    projection_clause: str = ", ".join(projections)
+    return f"(SELECT {projection_clause} FROM {source_relation})"
 
 
 def _build_cursor_subquery(

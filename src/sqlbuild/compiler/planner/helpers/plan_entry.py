@@ -373,11 +373,17 @@ def gather_source_columns(
 ) -> dict[str, tuple[ColumnInfo, ...]]:
     """Gather warehouse columns for all declared sources."""
 
+    result: dict[str, tuple[ColumnInfo, ...]] = {}
     source_schemas: dict[str, set[str]] = {}
     source: CompiledSource
     for source in project.sources:
         entry: SourceEntry = source.source_entry
         if entry.expression is not None:
+            if entry.type_enforcement:
+                column_names: tuple[str, ...] = adapter.query_column_names(
+                    connection, entry.expression
+                )
+                result[entry.name] = tuple(ColumnInfo(name=name, type="") for name in column_names)
             continue
         schema: str | None = entry.schema
         if schema is None:
@@ -386,7 +392,6 @@ def gather_source_columns(
         db_key: str = db or ""
         source_schemas.setdefault(db_key, set()).add(schema)
 
-    result: dict[str, tuple[ColumnInfo, ...]] = {}
     db_key_iter: str
     schemas: set[str]
     for db_key_iter, schemas in source_schemas.items():
