@@ -1396,10 +1396,10 @@ def validate_model_references(
                 f"Model file {model_file.relative_path} references unknown source "
                 f"'{reference.ref_name}'"
             )
-        if reference.ref_kind == SqlReferenceKind.DBT_REF and not has_dbt_manifest:
+        if reference.ref_kind == SqlReferenceKind.DBT_REF:
             raise CompileInputError(
                 f"Model file {model_file.relative_path} uses __dbt_ref('{reference.ref_name}') "
-                "but no dbt manifest.json was discovered"
+                "but dbt refs are not supported yet; support may be added in a future release"
             )
         if (
             reference.ref_kind == SqlReferenceKind.UDF
@@ -1471,10 +1471,11 @@ def validate_function_references(
                 f"SQL function file {function_file.relative_path} references unknown source "
                 f"'{reference.ref_name}'"
             )
-        if reference.ref_kind == SqlReferenceKind.DBT_REF and not has_dbt_manifest:
+        if reference.ref_kind == SqlReferenceKind.DBT_REF:
             raise CompileInputError(
                 f"SQL function file {function_file.relative_path} uses "
-                f"__dbt_ref('{reference.ref_name}') but no dbt manifest.json was discovered"
+                f"__dbt_ref('{reference.ref_name}') but dbt refs are not supported yet; "
+                "support may be added in a future release"
             )
         if (
             reference.ref_kind in {SqlReferenceKind.UDF, SqlReferenceKind.TABLE_FUNCTION}
