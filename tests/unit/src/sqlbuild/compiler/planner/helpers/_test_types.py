@@ -36,6 +36,12 @@ class BuildUpstreamDepsTestCase:
 
 
 @dataclass(frozen=True)
+class SqlTestFunctionGraphDepsTestCase:
+    description: str
+    expected_test_upstream_keys: tuple[CompiledObjectKey, ...]
+
+
+@dataclass(frozen=True)
 class SourceColumnsTestCase:
     description: str
     source_entry: SourceEntry

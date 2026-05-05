@@ -554,7 +554,7 @@ class SnowflakeAdapter(BaseAdapter):
             description: tuple[Any, ...] | None = cursor.description
             if description is None:
                 return ()
-            return tuple(str(column[0]) for column in description)
+            return tuple(str(column[0]).lower() for column in description)
         finally:
             cursor.close()
 

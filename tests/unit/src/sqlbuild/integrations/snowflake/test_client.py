@@ -8,10 +8,15 @@ from sqlbuild.compiler.compile.models import FunctionArgument, FunctionReturnCol
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.integrations.snowflake.client import SnowflakeAdapter
 from tests.unit.src.sqlbuild.integrations.snowflake._test_types import (
+    SnowflakeQueryColumnNamesTestCase,
     SnowflakeRenderCursorBoundLiteralTestCase,
     SnowflakeRenderPythonFunctionTestCase,
     SnowflakeRenderTableFunctionTestCase,
     SnowflakeSchemaDiffTestCase,
+)
+from tests.unit.src.sqlbuild.integrations.snowflake.helpers import (
+    FakeSnowflakeDescribeConnection,
+    FakeSnowflakeDescribeCursor,
 )
 
 TEST_CASES: list[SnowflakeRenderCursorBoundLiteralTestCase] = [
@@ -149,3 +154,32 @@ def test_given_equivalent_types_when_diffing_schema_then_snowflake_ignores_alias
     )
 
     assert result == test_case.expected_result
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeQueryColumnNamesTestCase(
+            description="normalizes unquoted Snowflake query output columns to lowercase",
+            cursor_description=(("ID",), ("FIRST_NAME",), ("CREATED_AT",)),
+            expected_columns=("id", "first_name", "created_at"),
+        ),
+    ],
+    ids=["normalizes unquoted Snowflake query output columns to lowercase"],
+)
+def test_given_snowflake_query_metadata_when_getting_column_names_then_normalizes_to_lowercase(
+    test_case: SnowflakeQueryColumnNamesTestCase,
+) -> None:
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+    cursor: FakeSnowflakeDescribeCursor = FakeSnowflakeDescribeCursor(
+        description=test_case.cursor_description
+    )
+    connection: FakeSnowflakeDescribeConnection = FakeSnowflakeDescribeConnection(cursor)
+
+    columns: tuple[str, ...] = adapter.query_column_names(
+        connection=connection,
+        sql="SELECT 1 AS id, 'Ada' AS first_name, CURRENT_TIMESTAMP AS created_at",
+    )
+
+    assert columns == test_case.expected_columns
+    assert cursor.closed is True
