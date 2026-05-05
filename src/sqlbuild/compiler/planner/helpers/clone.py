@@ -183,6 +183,7 @@ def build_clone_seed_entries(
             target=seed.target,
             file_path=seed.seed_file.file_path,
             columns=tuple(),
+            csv_settings=seed.schema_entry.csv_settings,
         )
         for seed in project.seeds
         if seed.key in plan.selected_keys
@@ -201,6 +202,7 @@ def build_source_seed_entries(
             target=seed.target,
             file_path=seed.seed_file.file_path,
             columns=tuple(),
+            csv_settings=seed.schema_entry.csv_settings,
         )
         for seed in project.seeds
         if seed.name in selected_names

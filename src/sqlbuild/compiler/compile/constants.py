@@ -7,6 +7,7 @@ import re
 from sqlbuild.compiler.compile.types import SqlReferenceKind
 
 REF_CALL_NAME: str = f"__{SqlReferenceKind.REF.value}"
+SEED_CALL_NAME: str = f"__{SqlReferenceKind.SEED.value}"
 SOURCE_CALL_NAME: str = f"__{SqlReferenceKind.SOURCE.value}"
 DBT_REF_CALL_NAME: str = f"__{SqlReferenceKind.DBT_REF.value}"
 UDF_CALL_NAME: str = f"__{SqlReferenceKind.UDF.value}"

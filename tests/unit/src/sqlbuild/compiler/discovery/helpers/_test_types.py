@@ -113,6 +113,8 @@ class ParseSchemaYamlTestCase:
     expected_seed_column_names: tuple[tuple[str, ...], ...]
     expected_model_audit_names: tuple[tuple[str, ...], ...]
     expected_column_audit_names: tuple[tuple[tuple[str, ...], ...], ...]
+    expected_seed_databases: tuple[str | None, ...] = ()
+    expected_seed_schemas: tuple[str | None, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -120,6 +122,21 @@ class ParseSchemaYamlErrorTestCase:
     description: str
     contents: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ParseSeedCsvSettingsYamlTestCase:
+    description: str
+    contents: str
+    expected_delimiter: str | None
+    expected_quotechar: str | None
+    expected_doublequote: bool | None
+    expected_escapechar: str | None
+    expected_skipinitialspace: bool | None
+    expected_lineterminator: str | None
+    expected_encoding: str | None
+    expected_na_values: tuple[object, ...] | dict[str, tuple[object, ...]] | None
+    expected_keep_default_na: bool | None
 
 
 @dataclass(frozen=True)

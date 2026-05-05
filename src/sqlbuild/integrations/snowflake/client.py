@@ -25,6 +25,7 @@ from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family,
 from sqlbuild.adapter.shared.types import CursorKind, FrameworkType
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.shared.helpers.diagnostics_logging import log_sql
+from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
 
 
 class _SnowflakeConnection:
@@ -426,6 +427,7 @@ class SnowflakeAdapter(BaseAdapter):
         target: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
+        csv_settings: SeedCsvSettings = default_seed_csv_settings,
         replace: bool = True,
         infer_types: bool = False,
         statement_recorder: StatementRecorder,
@@ -449,13 +451,31 @@ class SnowflakeAdapter(BaseAdapter):
             f"INSERT INTO {target} ({', '.join(column_names)}) VALUES ({placeholders})"
         )
         rows: list[tuple[object, ...]] = []
-        with file_path.open("r", encoding="utf-8", newline="") as seed_file:
-            reader: csv.DictReader[str] = csv.DictReader(seed_file)
+        with file_path.open(
+            "r", encoding=csv_settings.encoding or "utf-8", newline=""
+        ) as seed_file:
+            reader: csv.DictReader[str] = csv.DictReader(
+                seed_file,
+                delimiter=csv_settings.delimiter or ",",
+                quotechar=csv_settings.quotechar,
+                escapechar=csv_settings.escapechar,
+                doublequote=True if csv_settings.doublequote is None else csv_settings.doublequote,
+                skipinitialspace=False
+                if csv_settings.skipinitialspace is None
+                else csv_settings.skipinitialspace,
+            )
             row: dict[str, str] | None
             for row in reader:
                 if row is None:
                     continue
-                rows.append(tuple(row.get(column_name) for column_name in column_names))
+                rows.append(
+                    tuple(
+                        self._normalize_seed_csv_value(
+                            row.get(column_name), column_name=column_name, csv_settings=csv_settings
+                        )
+                        for column_name in column_names
+                    )
+                )
         if not rows:
             return
         statement_recorder.record(insert_sql)
@@ -1078,3 +1098,19 @@ class SnowflakeAdapter(BaseAdapter):
             return cursor.fetchone() is not None
         finally:
             cursor.close()
+
+    def _normalize_seed_csv_value(
+        self, value: str | None, *, column_name: str, csv_settings: SeedCsvSettings
+    ) -> str | None:
+        if value is None:
+            return None
+        na_values: tuple[object, ...] | dict[str, tuple[object, ...]] | None = (
+            csv_settings.na_values
+        )
+        if isinstance(na_values, dict):
+            column_na_values: tuple[object, ...] = na_values.get(column_name, ())
+            if value in {str(item) for item in column_na_values}:
+                return None
+        if isinstance(na_values, tuple) and value in {str(item) for item in na_values}:
+            return None
+        return value

@@ -27,7 +27,7 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.spec.models.schema import SchemaSeedEntry
+from sqlbuild.spec.models.schema import SchemaSeedEntry, SeedCsvSettings, default_seed_csv_settings
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -221,6 +221,7 @@ class FakeJanitorAdapter(BaseAdapter):
         target: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
+        csv_settings: SeedCsvSettings = default_seed_csv_settings,
         replace: bool = True,
         infer_types: bool = False,
         statement_recorder: StatementRecorder,

@@ -29,6 +29,7 @@ from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family,
 from sqlbuild.adapter.shared.types import CursorKind, FrameworkType
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.shared.helpers.diagnostics_logging import log_sql
+from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
 
 
 class DuckDbAdapter(BaseAdapter):
@@ -559,6 +560,7 @@ class DuckDbAdapter(BaseAdapter):
         target: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
+        csv_settings: SeedCsvSettings = default_seed_csv_settings,
         replace: bool = True,
         infer_types: bool = False,
         statement_recorder: StatementRecorder,
@@ -572,9 +574,11 @@ class DuckDbAdapter(BaseAdapter):
                 if_exists=True,
                 statement_recorder=statement_recorder,
             )
+        read_csv_options: str = self._render_seed_csv_options(csv_settings)
         if infer_types:
             stmt: str = (
-                f"CREATE TABLE {target} AS SELECT * FROM read_csv('{file_path}', auto_detect=true)"
+                f"CREATE TABLE {target} AS SELECT * FROM read_csv('{file_path}', "
+                f"auto_detect=true{read_csv_options})"
             )
             statement_recorder.record(stmt)
             self.execute(connection, stmt)
@@ -583,7 +587,8 @@ class DuckDbAdapter(BaseAdapter):
         type_map: str = ", ".join(f"'{col.name}': '{col.type}'" for col in columns)
         statements: tuple[str, ...] = (
             f"CREATE TABLE {target} ({column_defs})",
-            f"INSERT INTO {target} SELECT * FROM read_csv('{file_path}', columns={{{type_map}}})",
+            f"INSERT INTO {target} SELECT * FROM read_csv('{file_path}', "
+            f"columns={{{type_map}}}{read_csv_options})",
         )
         statement_recorder.record_many(statements)
         stmt: str
@@ -1195,3 +1200,29 @@ class DuckDbAdapter(BaseAdapter):
 
     def format_row_diff_decimal_sql(self, value: Decimal) -> str:
         return format(value, "f")
+
+    def _render_seed_csv_options(self, csv_settings: SeedCsvSettings) -> str:
+        options: list[str] = []
+        string_options: dict[str, str | None] = {
+            "delim": csv_settings.delimiter,
+            "quote": csv_settings.quotechar,
+            "escape": csv_settings.escapechar,
+            "encoding": csv_settings.encoding,
+            "new_line": csv_settings.lineterminator,
+        }
+        option_name: str
+        option_value: str | None
+        for option_name, option_value in string_options.items():
+            if option_value is not None:
+                options.append(f"{option_name}='{self._duckdb_string_literal(option_value)}'")
+        if isinstance(csv_settings.na_values, tuple) and csv_settings.na_values:
+            null_values: str = ", ".join(
+                f"'{self._duckdb_string_literal(str(value))}'" for value in csv_settings.na_values
+            )
+            options.append(f"nullstr=[{null_values}]")
+        if not options:
+            return ""
+        return ", " + ", ".join(options)
+
+    def _duckdb_string_literal(self, value: str) -> str:
+        return value.replace("'", "''")

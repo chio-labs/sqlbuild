@@ -23,5 +23,5 @@ SELECT
   p.payment_status,
   p.amount_cents AS payment_amount_cents
 FROM __ref("stg_orders") o
-LEFT JOIN __ref("waffle_types") w ON o.waffle_type_id = w.waffle_type_id
+LEFT JOIN __seed("waffle_types") w ON o.waffle_type_id = w.waffle_type_id
 LEFT JOIN __ref("stg_payments") p ON o.order_id = p.order_id

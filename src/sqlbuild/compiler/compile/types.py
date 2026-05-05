@@ -7,6 +7,7 @@ from enum import StrEnum
 
 class SqlReferenceKind(StrEnum):
     REF = "ref"
+    SEED = "seed"
     SOURCE = "source"
     DBT_REF = "dbt_ref"
     UDF = "udf"
