@@ -3,6 +3,10 @@ MODEL (
   unique_key [customer_id],
   row_diff_exclude_columns [email],
   tags [marts],
+  description "Customer dimension with lifetime metrics.",
+  columns (
+    customer_id (audits [not_null, unique]),
+  ),
 );
 
 SELECT

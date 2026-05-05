@@ -22,17 +22,13 @@ TEST_CASES: list[SchemaBackfillBuildE2ETestCase] = [
         mutate_model_file="models/intermediate/order_status_index.sql",
         model_before_text="on_schema_change append_new_columns",
         model_after_text="on_schema_change append_new_columns",
-        mutate_schema_file="models/intermediate/schema.yml",
-        schema_before_text=(
-            "      - name: order_id\n        audits:\n          - not_null\n          - unique\n"
-        ),
+        mutate_schema_file="models/intermediate/order_status_index.sql",
+        schema_before_text="  columns (\n    order_id (audits [not_null, unique]),\n  ),",
         schema_after_text=(
-            "      - name: order_id\n"
-            "        audits:\n"
-            "          - not_null\n"
-            "          - unique\n"
-            "      - name: status_rank\n"
-            "        type: INTEGER\n"
+            "  columns (\n"
+            "    order_id (audits [not_null, unique]),\n"
+            "    status_rank (type INTEGER),\n"
+            "  ),"
         ),
         command=("plan", "--json", "--select", "order_status_index"),
         expected_exit_code=0,
@@ -46,17 +42,13 @@ TEST_CASES: list[SchemaBackfillBuildE2ETestCase] = [
         mutate_model_file="models/intermediate/order_status_index.sql",
         model_before_text="on_schema_change append_new_columns",
         model_after_text="on_schema_change fail",
-        mutate_schema_file="models/intermediate/schema.yml",
-        schema_before_text=(
-            "      - name: order_id\n        audits:\n          - not_null\n          - unique\n"
-        ),
+        mutate_schema_file="models/intermediate/order_status_index.sql",
+        schema_before_text="  columns (\n    order_id (audits [not_null, unique]),\n  ),",
         schema_after_text=(
-            "      - name: order_id\n"
-            "        audits:\n"
-            "          - not_null\n"
-            "          - unique\n"
-            "      - name: status_rank\n"
-            "        type: INTEGER\n"
+            "  columns (\n"
+            "    order_id (audits [not_null, unique]),\n"
+            "    status_rank (type INTEGER),\n"
+            "  ),"
         ),
         command=("plan", "--json", "--select", "order_status_index"),
         expected_exit_code=0,
@@ -72,17 +64,13 @@ TEST_CASES: list[SchemaBackfillBuildE2ETestCase] = [
         mutate_model_file="models/intermediate/order_status_index.sql",
         model_before_text="on_schema_change append_new_columns",
         model_after_text="on_schema_change ignore",
-        mutate_schema_file="models/intermediate/schema.yml",
-        schema_before_text=(
-            "      - name: order_id\n        audits:\n          - not_null\n          - unique\n"
-        ),
+        mutate_schema_file="models/intermediate/order_status_index.sql",
+        schema_before_text="  columns (\n    order_id (audits [not_null, unique]),\n  ),",
         schema_after_text=(
-            "      - name: order_id\n"
-            "        audits:\n"
-            "          - not_null\n"
-            "          - unique\n"
-            "      - name: status_rank\n"
-            "        type: INTEGER\n"
+            "  columns (\n"
+            "    order_id (audits [not_null, unique]),\n"
+            "    status_rank (type INTEGER),\n"
+            "  ),"
         ),
         command=("plan", "--json", "--select", "order_status_index"),
         expected_exit_code=0,

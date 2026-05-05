@@ -11,6 +11,16 @@ MODEL (
     date_range_start 2026-04-01,
     date_range_end 2026-04-05,
   ),
+  description "Partition-tracked daily order summary using custom materialization.",
+  columns (
+    order_date (audits [not_null]),
+  ),
+  audits [
+    expression_is_true (
+      name "waffles ordered is positive",
+      expression "waffles_ordered > 0",
+    ),
+  ],
 );
 
 SELECT

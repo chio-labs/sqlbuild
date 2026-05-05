@@ -42,16 +42,15 @@ defaults:
   schema: analytics
 """.strip()
             + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect * from __source('raw_orders')\n",
-            "models/staging/schema.yml": """
-models:
-  - name: orders
-    columns:
-      - name: order_id
-        type: VARCHAR
-    audits:
-      - not_null:
-          column: order_id
+            "models/staging/orders.sql": """
+MODEL (
+  columns (
+    order_id (type VARCHAR),
+  ),
+  audits [not_null (column order_id)],
+);
+
+select * from __source('raw_orders')
 """.strip()
             + "\n",
             "sources/raw.yml": """

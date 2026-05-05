@@ -195,6 +195,30 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
         },
         expected_query="SELECT 1",
     ),
+    ParseModelSqlHeaderTestCase(
+        description="accepts callable audit entries in header lists",
+        contents="""
+        MODEL (
+          columns (
+            status (
+              audits [accepted_values (values ["placed", "completed"])],
+            ),
+          ),
+        );
+
+        SELECT 1
+        """,
+        expected_header_values={
+            "columns": {
+                "status": {
+                    "audits": [
+                        {"accepted_values": {"values": ["placed", "completed"]}},
+                    ],
+                },
+            },
+        },
+        expected_query="SELECT 1",
+    ),
 ]
 
 

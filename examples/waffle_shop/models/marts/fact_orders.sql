@@ -1,6 +1,10 @@
 MODEL (
   materialized table,
   tags [marts],
+  description "Order fact table with waffle and payment details.",
+  columns (
+    order_id (audits [not_null]),
+  ),
 );
 
 SELECT

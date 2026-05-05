@@ -192,7 +192,7 @@ sources:
         expected_error_fragment="Duplicate source declaration found for 'raw_orders'",
     ),
     DiscoverProjectInputsErrorTestCase(
-        description="raises on duplicate schema model names across files",
+        description="raises on schema yml model metadata",
         repo_files=base_repo_files()
         | {
             "models/staging/schema.yml": """
@@ -200,13 +200,8 @@ models:
   - name: stg_orders
 """.strip()
             + "\n",
-            "models/marts/schema.yml": """
-models:
-  - name: stg_orders
-""".strip()
-            + "\n",
         },
-        expected_error_fragment="Duplicate schema.yml model declaration found for 'stg_orders'",
+        expected_error_fragment="model metadata must live in the model file MODEL",
     ),
     DiscoverProjectInputsErrorTestCase(
         description="raises on duplicate schema seed names across files",

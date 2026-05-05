@@ -1,6 +1,11 @@
 MODEL (
   materialized view,
   tags [staging],
+  description "Cleaned customer records.",
+  columns (
+    customer_id (audits [not_null, unique]),
+    email (audits [not_null]),
+  ),
 );
 
 SELECT

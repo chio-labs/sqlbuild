@@ -10,6 +10,17 @@ MODEL (
   incremental_mode microbatch,
   batch_size 1d,
   tags [marts],
+  description "Hourly order activity aggregated via microbatch incremental.",
+  columns (
+    activity_hour (audits [not_null (run_scope delta_and_final)]),
+  ),
+  audits [
+    expression_is_true (
+      name "orders placed is non-negative",
+      expression "orders_placed >= 0",
+      run_scope delta_and_final,
+    ),
+  ],
 );
 
 SELECT
