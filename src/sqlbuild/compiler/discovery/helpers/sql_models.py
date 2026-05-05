@@ -98,13 +98,9 @@ class _ModelHeaderParser:
             return token.value
         if token.kind == _WORD_TOKEN:
             self._advance()
-            if (
-                token.value.lower() == "table"
-                and self._peek().kind == _SYMBOL_TOKEN
-                and self._peek().value == "("
-            ):
+            if self._peek().kind == _SYMBOL_TOKEN and self._peek().value == "(":
                 self._advance()
-                return {"table": self._parse_map(end_symbol=")")}
+                return {token.value: self._parse_map(end_symbol=")")}
             return _parse_word_value(token.value)
         if self._match_symbol("["):
             return self._parse_list()

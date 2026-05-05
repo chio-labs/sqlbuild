@@ -1,6 +1,13 @@
 MODEL (
   materialized table,
   tags [marts],
+  description "Daily revenue aggregation.",
+  audits [
+    expression_is_true (
+      name "revenue is non-negative",
+      expression "total_revenue_cents >= 0",
+    ),
+  ],
 );
 
 SELECT

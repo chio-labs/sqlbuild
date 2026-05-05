@@ -15,6 +15,10 @@ MODEL (
     type_change full,
   ),
   tags [intermediate, acceptance],
+  description "Merge-based customer snapshot with timestamp cursor and explicit backfill policies.",
+  columns (
+    customer_id (audits [not_null, unique]),
+  ),
 );
 
 SELECT

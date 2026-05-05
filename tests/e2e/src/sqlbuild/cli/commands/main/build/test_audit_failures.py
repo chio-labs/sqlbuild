@@ -60,23 +60,18 @@ TEST_CASES: list[AuditFailureBuildE2ETestCase] = [
                 MODEL (
                   materialized incremental,
                   incremental_strategy merge,
-                  unique_key [id]
+                  unique_key [id],
+                  audits [
+                    expression_is_true (
+                      name "amount is negative",
+                      expression "amount_cents < 0",
+                      severity error,
+                      run_scope delta_and_final,
+                    ),
+                  ],
                 );
 
                 SELECT id, ordered_at, amount_cents FROM main.raw_orders
-                """
-            ).strip()
-            + "\n",
-            "models/schema.yml": dedent(
-                """
-                models:
-                  - name: orders
-                    audits:
-                      - expression_is_true:
-                          name: amount is negative
-                          expression: "amount_cents < 0"
-                          severity: error
-                          run_scope: delta_and_final
                 """
             ).strip()
             + "\n",
@@ -139,23 +134,18 @@ TEST_CASES: list[AuditFailureBuildE2ETestCase] = [
                 MODEL (
                   materialized incremental,
                   incremental_strategy merge,
-                  unique_key [id]
+                  unique_key [id],
+                  audits [
+                    expression_is_true (
+                      name "amount is negative",
+                      expression "amount_cents < 0",
+                      severity error,
+                      run_scope final,
+                    ),
+                  ],
                 );
 
                 SELECT id, ordered_at, amount_cents FROM main.raw_orders
-                """
-            ).strip()
-            + "\n",
-            "models/schema.yml": dedent(
-                """
-                models:
-                  - name: orders
-                    audits:
-                      - expression_is_true:
-                          name: amount is negative
-                          expression: "amount_cents < 0"
-                          severity: error
-                          run_scope: final
                 """
             ).strip()
             + "\n",

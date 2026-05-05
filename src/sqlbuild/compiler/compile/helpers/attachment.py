@@ -78,6 +78,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.shared.constants import SCHEMA_FILE_NAME, SEED_FILE_SUFFIX
+from sqlbuild.compiler.shared.helpers.schema_audits import parse_audit_instance
 from sqlbuild.spec.models.project import (
     ClonePolicy,
     DefaultsConfig,
@@ -203,6 +204,8 @@ def build_model_inputs(
                 macro_context=macro_context,
             ),
             matched_path_default=effective_config.matched_path_default,
+            logical_schema=effective_config.logical_schema,
+            logical_database=effective_config.logical_database,
         )
         if not no_sql_validation and _is_sql_validation_enabled(
             project_setting=effective_settings.sql_validation,
@@ -217,17 +220,31 @@ def build_model_inputs(
                     file_path=model_file.file_path,
                     placeholders=sql_validation_placeholders,
                 )
+        header_schema_entry: SchemaModelEntry | None = build_model_header_schema_entry(
+            model_name=model_file.file_path.stem,
+            model_header_values=expanded_config.values,
+            file_path=model_file.relative_path,
+        )
+        model_config: CompileModelConfig = strip_model_header_metadata_from_config(expanded_config)
         schema_match: tuple[SchemaModelEntry, DiscoveredSchemaFile] | None = (
             find_schema_model_match(
                 model_file=model_file,
                 schema_files=discovered_inputs.schema_files,
             )
         )
-        if schema_match is None:
+        if schema_match is not None:
+            schema_entry: SchemaModelEntry = schema_match[0]
+            schema_file: DiscoveredSchemaFile = schema_match[1]
+            raise CompileInputError(
+                f"Schema file {schema_file.relative_path} declares model '{schema_entry.name}', "
+                f"but model metadata must live in {model_file.relative_path} MODEL(...). "
+                "Move description, columns, and audits into the model header."
+            )
+        if header_schema_entry is None:
             model_inputs.append(
                 CompileModelInput(
                     model_file=model_file,
-                    config=expanded_config,
+                    config=model_config,
                     query_sql=expanded_query_sql,
                     macro_source_sql=var_substituted_sql,
                     references=references,
@@ -235,20 +252,14 @@ def build_model_inputs(
             )
             continue
 
-        schema_entry: SchemaModelEntry = schema_match[0]
-        schema_file: DiscoveredSchemaFile = schema_match[1]
-        config_with_schema_tags: CompileModelConfig = _merge_schema_tags(
-            config=expanded_config, schema_entry=schema_entry
-        )
         model_inputs.append(
             CompileModelInput(
                 model_file=model_file,
-                config=config_with_schema_tags,
+                config=model_config,
                 query_sql=expanded_query_sql,
                 macro_source_sql=var_substituted_sql,
                 references=references,
-                schema_entry=schema_entry,
-                schema_file=schema_file,
+                schema_entry=header_schema_entry,
             )
         )
 
@@ -931,12 +942,11 @@ def build_audit_inputs(
             )
     model_input: CompileModelInput
     for model_input in model_inputs:
-        if model_input.schema_entry is None or model_input.schema_file is None:
+        if model_input.schema_entry is None:
             continue
         audit_inputs.extend(
             build_model_attached_audit_inputs(
                 model_input=model_input,
-                schema_file=model_input.schema_file,
                 generic_audit_definitions=generic_audit_definitions,
                 loaded_macros=loaded_macros,
                 known_model_names=known_model_names,
@@ -966,7 +976,6 @@ def build_audit_inputs(
 def build_model_attached_audit_inputs(
     *,
     model_input: CompileModelInput,
-    schema_file: DiscoveredSchemaFile,
     generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]],
     loaded_macros: dict[str, LoadedMacro],
     known_model_names: set[str],
@@ -978,13 +987,18 @@ def build_model_attached_audit_inputs(
     """Render schema-attached model audits into compile audit inputs."""
 
     assert model_input.schema_entry is not None
+    owner_file: Path = (
+        model_input.schema_file.relative_path
+        if model_input.schema_file is not None
+        else model_input.model_file.relative_path
+    )
     attached_audit_inputs: list[CompileAuditInput] = []
     audit_instance: SchemaAuditInstance
     for audit_instance in model_input.schema_entry.audits:
         attached_audit_inputs.append(
             build_attached_audit_input(
                 audit_instance=audit_instance,
-                owner_file=schema_file.relative_path,
+                owner_file=owner_file,
                 generic_audit_definitions=generic_audit_definitions,
                 implicit_arguments={"model": model_input.model_file.file_path.stem},
                 attached_target_kind=AttachedAuditTargetKind.MODEL,
@@ -1004,7 +1018,7 @@ def build_model_attached_audit_inputs(
             attached_audit_inputs.append(
                 build_attached_audit_input(
                     audit_instance=audit_instance,
-                    owner_file=schema_file.relative_path,
+                    owner_file=owner_file,
                     generic_audit_definitions=generic_audit_definitions,
                     implicit_arguments={
                         "model": model_input.model_file.file_path.stem,
@@ -1925,6 +1939,146 @@ def _validate_model_header_tags(
     for item in raw_tags:
         if not isinstance(item, str):
             raise CompileInputError(f"model '{model_name}' tags entries must be strings")
+
+
+def build_model_header_schema_entry(
+    *,
+    model_name: str,
+    model_header_values: dict[str, object],
+    file_path: Path,
+) -> SchemaModelEntry | None:
+    """Normalize model-owned MODEL(...) metadata into the existing schema entry shape."""
+
+    raw_description: object | None = model_header_values.get("description")
+    raw_columns: object | None = model_header_values.get("columns")
+    raw_audits: object | None = model_header_values.get("audits")
+    if raw_description is None and raw_columns is None and raw_audits is None:
+        return None
+
+    description: str | None = _optional_model_header_string(
+        raw_value=raw_description,
+        file_path=file_path,
+        label="model",
+        key="description",
+    )
+    columns: tuple[SchemaColumn, ...] = _parse_model_header_columns(
+        raw_columns=raw_columns,
+        file_path=file_path,
+    )
+    audits: tuple[SchemaAuditInstance, ...] = _parse_model_header_audits(
+        raw_audits=raw_audits,
+        file_path=file_path,
+        label="model",
+    )
+    type_enforcement: bool | None = (
+        True if any(column.type is not None for column in columns) else None
+    )
+    return SchemaModelEntry(
+        name=model_name,
+        description=description,
+        type_enforcement=type_enforcement,
+        columns=columns,
+        audits=audits,
+    )
+
+
+def strip_model_header_metadata_from_config(config: CompileModelConfig) -> CompileModelConfig:
+    """Remove model metadata keys after they have been attached as schema metadata."""
+
+    filtered_values: dict[str, object] = {
+        key: value
+        for key, value in config.values.items()
+        if key not in {"description", "columns", "audits"}
+    }
+    if len(filtered_values) == len(config.values):
+        return config
+    return CompileModelConfig(
+        values=filtered_values,
+        matched_path_default=config.matched_path_default,
+        logical_schema=config.logical_schema,
+        logical_database=config.logical_database,
+    )
+
+
+def _parse_model_header_columns(
+    *, raw_columns: object | None, file_path: Path
+) -> tuple[SchemaColumn, ...]:
+    if raw_columns is None:
+        return ()
+    if not isinstance(raw_columns, dict):
+        raise CompileInputError(f"{file_path} model 'columns' must be a mapping")
+
+    parsed_columns: list[SchemaColumn] = []
+    column_mapping: dict[object, object] = cast(dict[object, object], raw_columns)
+    raw_column_name: object
+    raw_column_metadata: object
+    for raw_column_name, raw_column_metadata in column_mapping.items():
+        if not isinstance(raw_column_name, str):
+            raise CompileInputError(f"{file_path} model column names must be strings")
+        if not raw_column_name.strip():
+            raise CompileInputError(f"{file_path} model column names must be non-empty strings")
+        if not isinstance(raw_column_metadata, dict):
+            raise CompileInputError(
+                f"{file_path} model column '{raw_column_name}' metadata must be a mapping"
+            )
+        column_metadata: dict[str, object] = cast(dict[str, object], raw_column_metadata)
+        unknown_keys: set[str] = set(column_metadata) - {"type", "description", "audits"}
+        if unknown_keys:
+            raise CompileInputError(
+                f"{file_path} model column '{raw_column_name}' has unknown metadata keys: "
+                f"{', '.join(sorted(unknown_keys))}"
+            )
+        parsed_columns.append(
+            SchemaColumn(
+                name=raw_column_name,
+                type=_optional_model_header_string(
+                    raw_value=column_metadata.get("type"),
+                    file_path=file_path,
+                    label=f"model column '{raw_column_name}'",
+                    key="type",
+                ),
+                description=_optional_model_header_string(
+                    raw_value=column_metadata.get("description"),
+                    file_path=file_path,
+                    label=f"model column '{raw_column_name}'",
+                    key="description",
+                ),
+                audits=_parse_model_header_audits(
+                    raw_audits=column_metadata.get("audits"),
+                    file_path=file_path,
+                    label=f"model column '{raw_column_name}'",
+                ),
+            )
+        )
+    return tuple(parsed_columns)
+
+
+def _parse_model_header_audits(
+    *, raw_audits: object | None, file_path: Path, label: str
+) -> tuple[SchemaAuditInstance, ...]:
+    if raw_audits is None:
+        return ()
+    if not isinstance(raw_audits, list):
+        raise CompileInputError(f"{file_path} {label} audits must be a list")
+    return tuple(
+        parse_audit_instance(
+            raw_audit=raw_audit,
+            file_path=file_path,
+            label=label,
+            error_class=CompileInputError,
+        )
+        for raw_audit in raw_audits
+    )
+
+
+def _optional_model_header_string(
+    *, raw_value: object | None, file_path: Path, label: str, key: str
+) -> str | None:
+    if raw_value is None:
+        return None
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        raise CompileInputError(f"{file_path} {label} '{key}' must be a non-empty string")
+    return raw_value
 
 
 def _merge_schema_tags(
