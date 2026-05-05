@@ -63,7 +63,9 @@ class BigQueryRowDiffSampleTestCase:
 class BigQueryBuildFlowTestCase:
     description: str
     seed_csv: str
+    staging_sql: str
     expected_rows: tuple[tuple[object, ...], ...]
+    expected_recorded_fragment: str
     expected_statement_count: int = 0
 
 
