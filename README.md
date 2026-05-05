@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/sqlbuild-logo-rounded.png" alt="SQLBuild" width="560">
+  <img src="https://raw.githubusercontent.com/chio-labs/sqlbuild/main/.github/sqlbuild-logo-rounded.png" alt="SQLBuild" width="560">
 </p>
 
 <p align="center">
@@ -32,7 +32,7 @@ uv add sqlbuild
 Clone the repo and run the waffle shop example:
 
 ```bash
-git clone https://github.com/mimo-io/sqlbuild.git
+git clone https://github.com/chio-labs/sqlbuild.git
 cd sqlbuild
 uv sync
 sqb --project-dir examples/waffle_shop plan
