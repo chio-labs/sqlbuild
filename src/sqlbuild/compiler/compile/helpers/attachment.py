@@ -297,10 +297,12 @@ def build_sql_function_inputs(
     effective_settings: SettingsConfig,
     environment_config: EnvironmentConfig | None,
     adapter_name: str,
+    macro_context: MacroContext,
     no_sql_validation: bool = False,
 ) -> tuple[CompileSqlFunctionInput, ...]:
     """Attach and validate SQL function metadata."""
 
+    loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     database, schema = _resolve_function_namespace(
         defaults=discovered_inputs.project_config.defaults,
         environment_config=environment_config,
@@ -320,12 +322,46 @@ def build_sql_function_inputs(
             raise CompileInputError(
                 f"SQL function file {function_file.relative_path} must declare returns"
             )
-        arguments: tuple[FunctionArgument, ...] = _parse_function_arguments(function_file)
-        returns: str = raw_returns.strip()
+        arguments: tuple[FunctionArgument, ...] = _parse_function_arguments(
+            function_file=function_file,
+            effective_vars=effective_vars,
+        )
+        returns: str = _expand_function_header_value(
+            raw_value=raw_returns.strip(),
+            effective_vars=effective_vars,
+            context_label=f"SQL function {function_file.relative_path} returns",
+        )
         raw_database: object | None = header_values.get("database")
         raw_schema: object | None = header_values.get("schema")
-        function_database: str | None = raw_database if isinstance(raw_database, str) else database
-        function_schema: str | None = raw_schema if isinstance(raw_schema, str) else schema
+        function_database: str | None = (
+            _expand_function_header_value(
+                raw_value=raw_database,
+                effective_vars=effective_vars,
+                context_label=f"SQL function {function_file.relative_path} database",
+            )
+            if isinstance(raw_database, str)
+            else database
+        )
+        function_schema: str | None = (
+            _expand_function_header_value(
+                raw_value=raw_schema,
+                effective_vars=effective_vars,
+                context_label=f"SQL function {function_file.relative_path} schema",
+            )
+            if isinstance(raw_schema, str)
+            else schema
+        )
+        var_substituted_body_sql: str = substitute_sql_vars(
+            sql=function_file.body_sql,
+            file_path=function_file.file_path,
+            effective_vars=effective_vars,
+        )
+        expanded_body_sql: str = expand_sql_macros(
+            sql=var_substituted_body_sql,
+            file_path=function_file.file_path,
+            loaded_macros=loaded_macros,
+            macro_context=macro_context,
+        )
         if not no_sql_validation and effective_settings.sql_validation:
             argument: FunctionArgument
             for argument in arguments:
@@ -347,7 +383,7 @@ def build_sql_function_inputs(
                 name=function_name,
                 arguments=arguments,
                 returns=returns,
-                body_sql=function_file.body_sql,
+                body_sql=expanded_body_sql,
                 database=function_database,
                 schema=function_schema,
             )
@@ -356,7 +392,9 @@ def build_sql_function_inputs(
 
 
 def _parse_function_arguments(
+    *,
     function_file: DiscoveredSqlFunctionFile,
+    effective_vars: dict[str, str],
 ) -> tuple[FunctionArgument, ...]:
     raw_arguments: object | None = function_file.header_values.get("arguments")
     if raw_arguments is None:
@@ -378,8 +416,31 @@ def _parse_function_arguments(
                 f"SQL function file {function_file.relative_path} argument '{argument_name}' "
                 "must declare a type"
             )
-        arguments.append(FunctionArgument(name=argument_name.strip(), type=argument_type.strip()))
+        expanded_type: str = _expand_function_header_value(
+            raw_value=argument_type.strip(),
+            effective_vars=effective_vars,
+            context_label=(
+                f"SQL function {function_file.relative_path} argument '{argument_name}' type"
+            ),
+        )
+        arguments.append(FunctionArgument(name=argument_name.strip(), type=expanded_type))
     return tuple(arguments)
+
+
+def _expand_function_header_value(
+    *, raw_value: str, effective_vars: dict[str, str], context_label: str
+) -> str:
+    return str(
+        expand_template_data(
+            raw_value,
+            variables=effective_vars,
+            context_values={},
+            context_label=context_label,
+            allow_context=False,
+            preserve_context_tokens=True,
+            preserve_unknown_context=False,
+        )
+    )
 
 
 def validate_native_type(type_sql: str, *, adapter_name: str, context: str) -> None:

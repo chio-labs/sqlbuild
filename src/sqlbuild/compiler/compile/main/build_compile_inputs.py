@@ -98,6 +98,7 @@ def build_compile_inputs(
         effective_settings=effective_settings,
         environment_config=effective_environment,
         adapter_name=macro_context.adapter_name,
+        macro_context=macro_context,
         no_sql_validation=no_sql_validation,
     )
     source_inputs: tuple[CompileSourceInput, ...] = build_source_inputs(
