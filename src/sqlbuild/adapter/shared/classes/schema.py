@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from typing import Any
 
 from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo
 
 
-class SchemaMixin:
+class SchemaMixin(ABC):
     """Inspects warehouse schema and relation metadata."""
 
     @abstractmethod

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from typing import Any
 
 from sqlbuild.adapter.shared.models import (
@@ -14,7 +14,7 @@ from sqlbuild.adapter.shared.models import (
 )
 
 
-class DiffMixin:
+class DiffMixin(ABC):
     """Compares relation data across environments."""
 
     @abstractmethod
