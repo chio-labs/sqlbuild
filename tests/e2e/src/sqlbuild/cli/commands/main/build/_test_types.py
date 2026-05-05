@@ -104,6 +104,7 @@ class CliFailureBuildE2ETestCase:
     expected_exit_code: int
     expected_stderr_fragments: tuple[str, ...]
     expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
+    pre_commands: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
