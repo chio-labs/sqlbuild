@@ -50,7 +50,9 @@ def run_clone(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
     )
-    adapter: BaseAdapter = resolve_adapter(effective_adapter_name)
+    adapter: BaseAdapter = resolve_adapter(
+        effective_adapter_name, project_dir=effective_project_dir
+    )
 
     source_connection_config: dict[str, object] = resolve_environment_connection_config(
         discovered_inputs=discovered_inputs,

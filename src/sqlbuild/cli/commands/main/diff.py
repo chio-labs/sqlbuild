@@ -65,7 +65,9 @@ def run_diff(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
     )
-    adapter: BaseAdapter = resolve_adapter(effective_adapter_name)
+    adapter: BaseAdapter = resolve_adapter(
+        effective_adapter_name, project_dir=effective_project_dir
+    )
     left_project: Any
     right_project: Any
     selected_names: tuple[str, ...]
