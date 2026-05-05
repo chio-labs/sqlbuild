@@ -34,6 +34,7 @@ def execute_seed(
             target=target_qualified,
             file_path=seed_entry.file_path,
             columns=seed_entry.columns,
+            csv_settings=seed_entry.csv_settings,
             replace=True,
             statement_recorder=statement_recorder,
         )

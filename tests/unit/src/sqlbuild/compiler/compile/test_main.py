@@ -2076,16 +2076,6 @@ select 1
         expected_error_fragment="model config field 'schema' does not allow macros",
     ),
     BuildCompileInputsErrorTestCase(
-        description="raises when a seed csv exists without a matching schema declaration",
-        repo_files=base_repo_files()
-        | {
-            "seeds/extra_seed.csv": "country_code\nUS\n",
-        },
-        selected_environment=None,
-        run_id=None,
-        expected_error_fragment="has no matching seed declaration in schema.yml",
-    ),
-    BuildCompileInputsErrorTestCase(
         description="raises when the selected environment does not exist",
         repo_files=base_repo_files() | {"models/staging/orders.sql": "MODEL ();\n\nselect 1\n"},
         selected_environment="missing",
@@ -2366,7 +2356,7 @@ def test_given_attachment_conflicts_when_building_compile_inputs_then_it_raises_
     "test_case",
     [
         SeedRefRegressionTestCase(
-            description="model referencing a seed via __ref does not raise unknown model error",
+            description="model referencing a seed via __seed compiles successfully",
             repo_files=base_repo_files()
             | {
                 "seeds/waffle_types.csv": "waffle_type_id,waffle_name\n1,Classic\n",
@@ -2380,13 +2370,13 @@ def test_given_attachment_conflicts_when_building_compile_inputs_then_it_raises_
                     "        type: VARCHAR\n"
                 ),
                 "models/orders.sql": (
-                    'MODEL ();\n\nSELECT waffle_type_id FROM __ref("waffle_types")'
+                    'MODEL ();\n\nSELECT waffle_type_id FROM __seed("waffle_types")'
                 ),
             },
             expected_model_count=1,
         ),
     ],
-    ids=["model referencing a seed via __ref does not raise unknown model error"],
+    ids=["model referencing a seed via __seed compiles successfully"],
 )
 def test_given_model_referencing_seed_when_building_compile_inputs_then_succeeds(
     test_case: SeedRefRegressionTestCase,

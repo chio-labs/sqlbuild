@@ -26,6 +26,7 @@ from sqlbuild.adapter.shared.types import (
 )
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
 
 
 class BaseAdapter(StrictAdapter):
@@ -526,6 +527,7 @@ class BaseAdapter(StrictAdapter):
         target: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
+        csv_settings: SeedCsvSettings = default_seed_csv_settings,
         replace: bool = True,
         infer_types: bool = False,
         statement_recorder: StatementRecorder,

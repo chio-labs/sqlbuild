@@ -5,10 +5,11 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.discovery.helpers.yml_schema import parse_schema_yml
-from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
+from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry, SeedCsvSettings
 from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
     ParseSchemaYamlErrorTestCase,
     ParseSchemaYamlTestCase,
+    ParseSeedCsvSettingsYamlTestCase,
 )
 
 TEST_CASES: list[ParseSchemaYamlTestCase] = [
@@ -29,6 +30,28 @@ TEST_CASES: list[ParseSchemaYamlTestCase] = [
         expected_seed_column_names=(("country_code", "country_name"),),
         expected_model_audit_names=(),
         expected_column_audit_names=(),
+        expected_seed_databases=(None,),
+        expected_seed_schemas=(None,),
+    ),
+    ParseSchemaYamlTestCase(
+        description="parses seed target overrides",
+        contents="""
+        seeds:
+          - name: country_codes
+            database: "${ENV:SEED_DB}"
+            schema: "${coalesce(ENV:SEED_SCHEMA, 'lookups')}"
+            columns:
+              - name: country_code
+                type: VARCHAR
+        """,
+        expected_model_names=(),
+        expected_seed_names=("country_codes",),
+        expected_model_column_names=(),
+        expected_seed_column_names=(("country_code",),),
+        expected_model_audit_names=(),
+        expected_column_audit_names=(),
+        expected_seed_databases=("${ENV:SEED_DB}",),
+        expected_seed_schemas=("${coalesce(ENV:SEED_SCHEMA, 'lookups')}",),
     ),
     ParseSchemaYamlTestCase(
         description="allows empty schema files with no models or seeds",
@@ -39,6 +62,8 @@ TEST_CASES: list[ParseSchemaYamlTestCase] = [
         expected_seed_column_names=(),
         expected_model_audit_names=(),
         expected_column_audit_names=(),
+        expected_seed_databases=(),
+        expected_seed_schemas=(),
     ),
 ]
 
@@ -53,7 +78,7 @@ def test_given_schema_yaml_variants_when_parsing_then_it_returns_expected_raw_me
 ) -> None:
     model_entries: tuple[SchemaModelEntry, ...]
     seed_entries: tuple[SchemaSeedEntry, ...]
-    model_entries, seed_entries = parse_schema_yml(test_case.contents, Path("models/schema.yml"))
+    model_entries, seed_entries = parse_schema_yml(test_case.contents, Path("seeds/lookups.yml"))
 
     assert tuple(entry.name for entry in model_entries) == test_case.expected_model_names
     assert tuple(entry.name for entry in seed_entries) == test_case.expected_seed_names
@@ -65,6 +90,8 @@ def test_given_schema_yaml_variants_when_parsing_then_it_returns_expected_raw_me
         tuple(tuple(column.name for column in entry.columns) for entry in seed_entries)
         == test_case.expected_seed_column_names
     )
+    assert tuple(entry.database for entry in seed_entries) == test_case.expected_seed_databases
+    assert tuple(entry.schema for entry in seed_entries) == test_case.expected_seed_schemas
     assert (
         tuple(tuple(audit.definition_name for audit in entry.audits) for entry in model_entries)
         == test_case.expected_model_audit_names
@@ -77,6 +104,62 @@ def test_given_schema_yaml_variants_when_parsing_then_it_returns_expected_raw_me
             for entry in model_entries
         )
         == test_case.expected_column_audit_names
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParseSeedCsvSettingsYamlTestCase(
+            description="parses full seed csv settings",
+            contents="""
+        seeds:
+          - name: country_codes
+            csv_settings:
+              delimiter: "|"
+              quotechar: '"'
+              doublequote: false
+              escapechar: "\\\\"
+              skipinitialspace: true
+              lineterminator: LF
+              encoding: utf-8
+              na_values:
+                country_name: ["", NULL, 0, true]
+              keep_default_na: false
+            columns:
+              - name: country_code
+                type: VARCHAR
+              - name: country_name
+                type: VARCHAR
+        """,
+            expected_delimiter="|",
+            expected_quotechar='"',
+            expected_doublequote=False,
+            expected_escapechar="\\",
+            expected_skipinitialspace=True,
+            expected_lineterminator="LF",
+            expected_encoding="utf-8",
+            expected_na_values={"country_name": ("", None, 0, True)},
+            expected_keep_default_na=False,
+        ),
+    ],
+    ids=["parses full seed csv settings"],
+)
+def test_given_seed_csv_settings_when_parsing_then_it_returns_normalized_settings(
+    test_case: ParseSeedCsvSettingsYamlTestCase,
+) -> None:
+    _, seed_entries = parse_schema_yml(test_case.contents, Path("seeds/lookups.yml"))
+
+    assert seed_entries[0].csv_settings == SeedCsvSettings(
+        delimiter=test_case.expected_delimiter,
+        quotechar=test_case.expected_quotechar,
+        doublequote=test_case.expected_doublequote,
+        escapechar=test_case.expected_escapechar,
+        skipinitialspace=test_case.expected_skipinitialspace,
+        lineterminator=test_case.expected_lineterminator,
+        encoding=test_case.expected_encoding,
+        na_values=test_case.expected_na_values,
+        keep_default_na=test_case.expected_keep_default_na,
     )
 
 
@@ -167,6 +250,70 @@ ERROR_TEST_CASES: list[ParseSchemaYamlErrorTestCase] = [
         """,
         expected_error_fragment="seed column must define non-empty string 'name'",
     ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when seed csv settings is not a mapping",
+        contents="""
+        seeds:
+          - name: country_codes
+            csv_settings: nope
+            columns:
+              - name: country_code
+                type: VARCHAR
+        """,
+        expected_error_fragment="seed 'csv_settings' must be a mapping",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when seed csv settings has unknown keys",
+        contents="""
+        seeds:
+          - name: country_codes
+            csv_settings:
+              unknown: true
+            columns:
+              - name: country_code
+                type: VARCHAR
+        """,
+        expected_error_fragment="unknown keys: unknown",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when seed csv string setting is not a string",
+        contents="""
+        seeds:
+          - name: country_codes
+            csv_settings:
+              delimiter: false
+            columns:
+              - name: country_code
+                type: VARCHAR
+        """,
+        expected_error_fragment="csv_settings 'delimiter' must be a string",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when seed csv boolean setting is not a boolean",
+        contents="""
+        seeds:
+          - name: country_codes
+            csv_settings:
+              keep_default_na: nope
+            columns:
+              - name: country_code
+                type: VARCHAR
+        """,
+        expected_error_fragment="csv_settings 'keep_default_na' must be a boolean",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when seed csv na values type is invalid",
+        contents="""
+        seeds:
+          - name: country_codes
+            csv_settings:
+              na_values: nope
+            columns:
+              - name: country_code
+                type: VARCHAR
+        """,
+        expected_error_fragment="csv_settings 'na_values' must be a list or mapping",
+    ),
 ]
 
 
@@ -179,4 +326,4 @@ def test_given_invalid_schema_yaml_when_parsing_then_it_raises_clear_errors(
     test_case: ParseSchemaYamlErrorTestCase,
 ) -> None:
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
-        parse_schema_yml(test_case.contents, Path("models/schema.yml"))
+        parse_schema_yml(test_case.contents, Path("seeds/lookups.yml"))

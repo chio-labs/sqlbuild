@@ -31,6 +31,7 @@ from sqlbuild.adapter.shared.types import (
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.shared.helpers.diagnostics_logging import log_sql
+from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
 
 
 class _BigQueryCursor:
@@ -544,6 +545,7 @@ class BigQueryAdapter(BaseAdapter):
         target: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
+        csv_settings: SeedCsvSettings = default_seed_csv_settings,
         replace: bool = True,
         infer_types: bool = False,
         statement_recorder: StatementRecorder,
@@ -561,6 +563,12 @@ class BigQueryAdapter(BaseAdapter):
             skip_leading_rows=1,
             write_disposition=write_disposition,
         )
+        if csv_settings.delimiter is not None:
+            job_config.field_delimiter = csv_settings.delimiter
+        if csv_settings.quotechar is not None:
+            job_config.quote_character = csv_settings.quotechar
+        if csv_settings.encoding is not None:
+            job_config.encoding = csv_settings.encoding
         statement_recorder.record(
             f"LOAD CSV {file_path} INTO {target} ({', '.join(col.name for col in columns)})"
         )

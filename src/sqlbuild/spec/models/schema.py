@@ -6,6 +6,24 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
+class SeedCsvSettings:
+    """CSV reader settings for a seed file."""
+
+    delimiter: str | None = None
+    quotechar: str | None = None
+    doublequote: bool | None = None
+    escapechar: str | None = None
+    skipinitialspace: bool | None = None
+    lineterminator: str | None = None
+    encoding: str | None = None
+    na_values: tuple[object, ...] | dict[str, tuple[object, ...]] | None = None
+    keep_default_na: bool | None = None
+
+
+default_seed_csv_settings: SeedCsvSettings = SeedCsvSettings()
+
+
+@dataclass(frozen=True)
 class SchemaAuditInstance:
     """One schema-attached audit instance from schema.yml."""
 
@@ -47,5 +65,8 @@ class SchemaSeedEntry:
 
     name: str
     description: str | None = None
+    database: str | None = None
+    schema: str | None = None
     meta: dict[str, object] = field(default_factory=dict)
+    csv_settings: SeedCsvSettings = field(default_factory=SeedCsvSettings)
     columns: tuple[SchemaColumn, ...] = field(default_factory=tuple)

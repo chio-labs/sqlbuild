@@ -8,6 +8,7 @@ from sqlbuild.adapter.shared.models import (
     RowDiffTolerances,
     SchemaDiffResult,
 )
+from sqlbuild.spec.models.schema import SeedCsvSettings
 
 
 @dataclass(frozen=True)
@@ -133,6 +134,8 @@ class LoadSeedTestCase:
     infer_types: bool
     expected_row_count: int
     expected_first_row: tuple[object, ...]
+    csv_settings: SeedCsvSettings = field(default_factory=SeedCsvSettings)
+    expected_recorded_fragment: str = ""
 
 
 @dataclass(frozen=True)
