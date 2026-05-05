@@ -8,6 +8,13 @@ sources:
         (4, 'Ben', 'Wyatt', 'ben@pawnee.gov', TIMESTAMP '2026-03-01 07:30:00'),
         (5, 'April', 'Ludgate', 'april@pawnee.gov', TIMESTAMP '2026-03-15 11:00:00')
       ) AS raw_customers(id, first_name, last_name, email, created_at)
+    columns:
+      - name: id
+        type: INTEGER
+      - name: first_name
+      - name: last_name
+      - name: email
+      - name: created_at
 
   - name: raw_orders
     expression: |
@@ -36,3 +43,6 @@ sources:
         (7, 7, 2200, 'credit_card', NULL, 'failed'),
         (8, 8, 950, 'cash', TIMESTAMP '2026-04-03 11:01:00', 'success')
       ) AS raw_payments(id, order_id, amount_cents, payment_method, paid_at, status)
+    columns:
+      - name: amount_cents
+        type: INTEGER
