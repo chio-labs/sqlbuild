@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
-from sqlbuild.adapter.shared.models import LifeCycleEvent
+from sqlbuild.adapter.shared.models import LifeCycleEvent, QueryResult
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
@@ -10,8 +11,12 @@ from sqlbuild.compiler.auditing.types import (
     AuditSeverity,
 )
 from sqlbuild.compiler.compile.models import (
+    CompiledFunction,
+    CompiledModel,
     CompiledObjectKey,
+    CompiledProject,
     CompiledRelationTarget,
+    CompileModelConfig,
     FunctionArgument,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
@@ -32,7 +37,55 @@ from sqlbuild.executor.build.models import (
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from sqlbuild.spec.models.schema import SeedCsvSettings
+
+
+class NoConnectDuckDbAdapter(DuckDbAdapter):
+    """DuckDB adapter test double that fails if compile opens a connection."""
+
+    def connect(self, config: dict[str, Any]) -> Any:
+        del config
+        raise AssertionError("compile should not connect")
+
+    def execute(self, connection: Any, sql: str) -> Any:
+        del connection, sql
+        raise AssertionError("compile should not execute SQL")
+
+    def query(self, connection: Any, sql: str, *, limit: int | None) -> QueryResult:
+        del connection, sql, limit
+        raise AssertionError("compile should not query")
+
+    def close(self, connection: Any) -> None:
+        del connection
+        raise AssertionError("compile should not close a connection")
+
+
+def prepare_static_compile_project(root: Path) -> Path:
+    """Create a minimal local project for offline compile command tests."""
+
+    project_dir: Path = root / "project"
+    models_dir: Path = project_dir / "models"
+    models_dir.mkdir(parents=True)
+    (project_dir / "sqlbuild_project.toml").write_text(
+        "\n".join(
+            (
+                'name = "offline_compile"',
+                'adapter = "duckdb"',
+                'default_environment = "dev"',
+                "",
+                "[environments.dev]",
+                'schema = "main"',
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (models_dir / "orders.sql").write_text(
+        "MODEL (materialized view);\n\nSELECT 1 AS order_id\n",
+        encoding="utf-8",
+    )
+    return project_dir
 
 
 def build_target_writer_plan_output() -> PlanOutput:
@@ -187,6 +240,64 @@ def read_target_files(target_dir: Path, expected_files: dict[str, str]) -> dict[
         relative_path: (target_dir / relative_path).read_text(encoding="utf-8")
         for relative_path in expected_files
     }
+
+
+def build_static_target_writer_project() -> CompiledProject:
+    """Build compiled project state for offline compile target writer tests."""
+
+    model_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.MODEL,
+        name="orders",
+    )
+    function_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.FUNCTION,
+        name="is_completed_order",
+    )
+    return CompiledProject(
+        run_id="run-1",
+        effective_environment_name="dev",
+        effective_connection={},
+        effective_vars={},
+        models=(
+            CompiledModel(
+                key=model_key,
+                deps=(),
+                name="orders",
+                relative_path=Path("staging/orders.sql"),
+                query_sql="SELECT 2 AS order_id",
+                config=CompileModelConfig(values={}),
+                target=CompiledRelationTarget(
+                    database=None,
+                    schema="analytics",
+                    name="orders",
+                    qualified_name="analytics.orders",
+                ),
+            ),
+        ),
+        functions=(
+            CompiledFunction(
+                key=function_key,
+                deps=(),
+                name="is_completed_order",
+                relative_path=Path("functions/sql/is_completed_order.sql"),
+                arguments=(FunctionArgument(name="order_status", type="VARCHAR"),),
+                returns="BOOLEAN",
+                body_sql="order_status = 'completed'",
+                target=CompiledRelationTarget(
+                    database=None,
+                    schema="analytics",
+                    name="is_completed_order",
+                    qualified_name="analytics.is_completed_order",
+                ),
+                fingerprint_target=CompiledRelationTarget(
+                    database=None,
+                    schema="analytics",
+                    name="is_completed_order",
+                    qualified_name="analytics.is_completed_order",
+                ),
+            ),
+        ),
+    )
 
 
 def build_runtime_target_execution_result() -> BuildExecutionResult:

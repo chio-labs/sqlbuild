@@ -22,6 +22,7 @@ class CliNamespace:
     to_environment: str | None = None
     hard_copy: bool = False
     json: bool = False
+    manifest: bool = False
     start_cursor_ts: str | None = None
     end_cursor_ts: str | None = None
     start_cursor_int: str | None = None
@@ -56,7 +57,7 @@ class CliNamespace:
 class CliEntrypointHandlers:
     """Injected command handlers for the CLI entrypoint."""
 
-    run_compile: Callable[[Path | None, bool, str | None, bool], int]
+    run_compile: Callable[[Path | None, bool, str | None, bool, bool], int]
     run_plan: Callable[
         [
             Path | None,

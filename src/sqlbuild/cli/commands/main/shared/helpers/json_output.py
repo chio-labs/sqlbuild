@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
     FunctionPlanEntry,
@@ -65,6 +66,58 @@ def format_compile_json(plan: PlanOutput) -> str:
         "function_count": len(plan.function_entries),
         "audit_count": len(plan.audit_entries),
         "test_count": len(plan.test_entries),
+        "models": models,
+        "seeds": seeds,
+        "functions": functions,
+    }
+    return json.dumps(result, indent=2)
+
+
+def format_static_compile_json(graph: ProjectGraph) -> str:
+    """Serialize offline compile output to JSON."""
+
+    models: list[dict[str, object]] = []
+    for model in graph.project.models:
+        item: dict[str, object] = {
+            "name": model.name,
+            "relative_path": str(model.relative_path),
+            "query_sql": model.query_sql,
+        }
+        if model.target.qualified_name is not None:
+            item["qualified_name"] = model.target.qualified_name
+        models.append(item)
+
+    seeds: list[dict[str, object]] = []
+    for seed in graph.project.seeds:
+        item = {"name": seed.name}
+        if seed.target.qualified_name is not None:
+            item["qualified_name"] = seed.target.qualified_name
+        seeds.append(item)
+
+    functions: list[dict[str, object]] = []
+    for function in graph.project.functions:
+        item = {
+            "name": function.name,
+            "relative_path": str(function.relative_path),
+            "language": function.language.value,
+            "return_kind": "table" if function.return_columns else "scalar",
+            "returns": function.returns,
+            "return_columns": [
+                {"name": column.name, "type": column.type} for column in function.return_columns
+            ],
+        }
+        if function.target.qualified_name is not None:
+            item["qualified_name"] = function.target.qualified_name
+        functions.append(item)
+
+    result: dict[str, object] = {
+        "command": "compile",
+        "offline": True,
+        "model_count": len(graph.project.models),
+        "seed_count": len(graph.project.seeds),
+        "function_count": len(graph.project.functions),
+        "audit_count": len(graph.project.audits),
+        "test_count": len(graph.project.sql_tests),
         "models": models,
         "seeds": seeds,
         "functions": functions,

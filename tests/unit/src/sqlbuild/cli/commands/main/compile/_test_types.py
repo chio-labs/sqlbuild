@@ -12,6 +12,13 @@ class TargetWriterTestCase:
 
 
 @dataclass(frozen=True)
+class CompileCommandTestCase:
+    description: str
+    expected_exit_code: int
+    expected_stdout_fragment: str
+
+
+@dataclass(frozen=True)
 class ResolveAdapterTestCase:
     description: str
     adapter_name: str
