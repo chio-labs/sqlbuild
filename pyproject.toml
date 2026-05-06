@@ -18,6 +18,9 @@ dependencies = [
 sqlglot = [
   "sqlglot>=27.13.2",
 ]
+performance = [
+  "sqlglot[c]>=30.7.0",
+]
 snowflake = [
   "snowflake-connector-python>=3.17.3",
 ]

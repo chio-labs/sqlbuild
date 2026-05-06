@@ -33,6 +33,7 @@ def build_fast_project_column_lineage(
     project: CompiledProject,
     *,
     dialect: str | None = None,
+    model_names: frozenset[str] | None = None,
 ) -> ProjectColumnLineage | None:
     """Build a fast, partial project column lineage graph for compiled models."""
 
@@ -49,6 +50,8 @@ def build_fast_project_column_lineage(
     collapsed_edges: list[ColumnLineageEdge] = []
 
     for model in project.models:
+        if model_names is not None and model.name not in model_names:
+            continue
         result: ModelColumnLineage | None = _build_fast_model_column_lineage(
             model,
             schema=schema,
