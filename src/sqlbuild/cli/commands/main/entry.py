@@ -38,6 +38,7 @@ def _build_parser() -> argparse.ArgumentParser:
     compile_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     compile_parser.add_argument("--defer-to", default=None)
     compile_parser.add_argument("--json", action="store_true", default=False)
+    compile_parser.add_argument("--manifest", action="store_true", default=False)
 
     plan_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PLAN)
     plan_parser.add_argument("--no-sql-validation", action="store_true", default=False)
@@ -195,7 +196,7 @@ def _main_with_dependencies(
             )
         if args.command == CliCommand.COMPILE:
             return handlers.run_compile(
-                project_dir, args.no_sql_validation, args.defer_to, args.json
+                project_dir, args.no_sql_validation, args.defer_to, args.json, args.manifest
             )
         if args.command == CliCommand.PLAN:
             cursor_overrides: CursorOverrides = CursorOverrides(

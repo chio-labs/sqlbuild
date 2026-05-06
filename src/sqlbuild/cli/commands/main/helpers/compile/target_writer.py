@@ -8,7 +8,9 @@ from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.compile.models import WrittenTarget
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.compiler.planner.main.sql_test_assembly import build_sql_test_plan_entry
 from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 
@@ -53,6 +55,34 @@ def write_compile_target(
     )
 
 
+def write_static_compile_target(
+    *,
+    target_dir: Path,
+    adapter: BaseAdapter,
+    project: CompiledProject,
+    manifest: dict[str, object] | None = None,
+) -> WrittenTarget:
+    """Write offline compiled output files under target_dir."""
+
+    _clean_target(target_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    _write_static_models(target_dir=target_dir, project=project)
+    _write_static_functions(target_dir=target_dir, adapter=adapter, project=project)
+    _write_static_audits(target_dir=target_dir, project=project)
+    _write_static_tests(target_dir=target_dir, adapter=adapter, project=project)
+    if manifest is not None:
+        _write_manifest(target_dir=target_dir, manifest=manifest)
+
+    return WrittenTarget(
+        model_count=len(project.models),
+        seed_count=len(project.seeds),
+        function_count=len(project.functions),
+        audit_count=len(project.audits),
+        test_count=len(project.sql_tests),
+        target_dir=target_dir,
+    )
+
+
 def _clean_target(target_dir: Path) -> None:
     """Remove generated compile output directories from target/."""
 
@@ -67,6 +97,14 @@ def _write_models(*, target_dir: Path, plan_output: PlanOutput) -> None:
     for entry in plan_output.model_entries:
         compiled_path: Path = target_dir / _COMPILED_DIR / _model_output_path(entry.relative_path)
         _write_sql(path=compiled_path, sql=entry.resolved_sql)
+
+
+def _write_static_models(*, target_dir: Path, project: CompiledProject) -> None:
+    """Write offline model query SQL."""
+
+    for model in project.models:
+        compiled_path: Path = target_dir / _COMPILED_DIR / _model_output_path(model.relative_path)
+        _write_sql(path=compiled_path, sql=model.query_sql)
 
 
 def _write_functions(*, target_dir: Path, adapter: BaseAdapter, plan_output: PlanOutput) -> None:
@@ -94,6 +132,35 @@ def _write_functions(*, target_dir: Path, adapter: BaseAdapter, plan_output: Pla
         _write_sql(path=function_path, sql=";\n\n".join(statements))
 
 
+def _write_static_functions(
+    *, target_dir: Path, adapter: BaseAdapter, project: CompiledProject
+) -> None:
+    """Write offline rendered SQL function DDL."""
+
+    for function in project.functions:
+        if function.target.qualified_name is None:
+            continue
+        statements: tuple[str, ...] = adapter.render_create_function(
+            target=function.target.qualified_name,
+            arguments=function.arguments,
+            returns=function.returns,
+            body_sql=function.body_sql,
+            return_columns=function.return_columns,
+            language=function.language,
+            runtime_version=function.runtime_version,
+            entry_point=function.entry_point,
+            packages=function.packages,
+        )
+        function_path: Path = (
+            target_dir
+            / _COMPILED_DIR
+            / _function_output_path(
+                relative_path=function.relative_path, language=function.language
+            )
+        )
+        _write_sql(path=function_path, sql=";\n\n".join(statements))
+
+
 def _write_audits(*, target_dir: Path, plan_output: PlanOutput) -> None:
     """Write resolved audit SQL."""
 
@@ -104,10 +171,48 @@ def _write_audits(*, target_dir: Path, plan_output: PlanOutput) -> None:
         _write_sql(path=audit_path, sql=entry.resolved_sql)
 
 
+def _write_static_audits(*, target_dir: Path, project: CompiledProject) -> None:
+    """Write offline resolved audit SQL."""
+
+    for audit in project.audits:
+        folder: Path = _static_audit_folder(attached_target_name=audit.attached_target_name)
+        file_name: str = _static_audit_file_name(
+            name=audit.name,
+            attached_target_name=audit.attached_target_name,
+            attached_column_name=audit.attached_column_name,
+        )
+        audit_path: Path = target_dir / _COMPILED_DIR / _AUDITS_DIR / folder / file_name
+        _write_sql(path=audit_path, sql=audit.sql_body)
+
+
 def _write_tests(*, target_dir: Path, adapter: BaseAdapter, plan_output: PlanOutput) -> None:
     """Write resolved SQL-native test SQL."""
 
     for entry in plan_output.test_entries:
+        test_path: Path = (
+            target_dir / _COMPILED_DIR / _TESTS_DIR / _test_folder(entry) / f"{entry.name}.sql"
+        )
+        _write_sql(
+            path=test_path,
+            sql=build_sql_test_comparison_sql(
+                entry,
+                set_difference_operator=adapter.render_set_difference_operator(),
+                sqlglot_dialect=adapter.sqlglot_dialect(),
+            ),
+        )
+
+
+def _write_static_tests(
+    *, target_dir: Path, adapter: BaseAdapter, project: CompiledProject
+) -> None:
+    """Write offline SQL-native test SQL."""
+
+    for test in project.sql_tests:
+        entry, _warnings = build_sql_test_plan_entry(
+            test=test,
+            project=project,
+            sqlglot_enabled=project.settings.sqlglot,
+        )
         test_path: Path = (
             target_dir / _COMPILED_DIR / _TESTS_DIR / _test_folder(entry) / f"{entry.name}.sql"
         )
@@ -158,12 +263,33 @@ def _audit_folder(entry: AuditPlanEntry) -> Path:
     return Path(_SINGULAR_DIR)
 
 
+def _static_audit_folder(*, attached_target_name: str | None) -> Path:
+    """Determine the offline audit output folder."""
+
+    if attached_target_name is not None:
+        return Path(_GENERIC_DIR) / attached_target_name
+    return Path(_SINGULAR_DIR)
+
+
 def _audit_file_name(entry: AuditPlanEntry) -> str:
     """Determine the audit output file name."""
 
     if entry.attached_target_name is not None and entry.attached_column_name is not None:
         return f"{entry.name}__{entry.attached_column_name}{_SQL_FILE_SUFFIX}"
     return f"{entry.name}{_SQL_FILE_SUFFIX}"
+
+
+def _static_audit_file_name(
+    *,
+    name: str,
+    attached_target_name: str | None,
+    attached_column_name: str | None,
+) -> str:
+    """Determine the offline audit output file name."""
+
+    if attached_target_name is not None and attached_column_name is not None:
+        return f"{name}__{attached_column_name}{_SQL_FILE_SUFFIX}"
+    return f"{name}{_SQL_FILE_SUFFIX}"
 
 
 def _test_folder(entry: SqlTestPlanEntry) -> Path:

@@ -36,7 +36,7 @@ from sqlbuild.compiler.planner.models import (
 def build_manifest(
     *,
     project: CompiledProject,
-    plan_output: PlanOutput,
+    plan_output: PlanOutput | None = None,
     loaded_macros: dict[str, LoadedMacro],
     project_name: str,
     adapter_type: str,
@@ -45,9 +45,9 @@ def build_manifest(
 ) -> dict[str, object]:
     """Build a full dbt v12-compatible manifest dictionary."""
 
-    model_plan_map: dict[str, ModelPlanEntry] = {
-        entry.name: entry for entry in plan_output.model_entries
-    }
+    model_plan_map: dict[str, ModelPlanEntry] = {}
+    if plan_output is not None:
+        model_plan_map = {entry.name: entry for entry in plan_output.model_entries}
 
     nodes: dict[str, dict[str, object]] = {}
     sources: dict[str, dict[str, object]] = {}
@@ -79,21 +79,22 @@ def build_manifest(
             project_name=project_name,
         )
 
-    audit_entry: AuditPlanEntry
-    for audit_entry in plan_output.audit_entries:
-        audit_nodes: dict[str, dict[str, object]] = build_audit_test_nodes(
-            audit_entry=audit_entry,
-            project_name=project_name,
-        )
-        nodes.update(audit_nodes)
+    if plan_output is not None:
+        audit_entry: AuditPlanEntry
+        for audit_entry in plan_output.audit_entries:
+            audit_nodes: dict[str, dict[str, object]] = build_audit_test_nodes(
+                audit_entry=audit_entry,
+                project_name=project_name,
+            )
+            nodes.update(audit_nodes)
 
-    test_entry: SqlTestPlanEntry
-    for test_entry in plan_output.test_entries:
-        test_nodes: dict[str, dict[str, object]] = build_sql_test_nodes(
-            test_entry=test_entry,
-            project_name=project_name,
-        )
-        nodes.update(test_nodes)
+        test_entry: SqlTestPlanEntry
+        for test_entry in plan_output.test_entries:
+            test_nodes: dict[str, dict[str, object]] = build_sql_test_nodes(
+                test_entry=test_entry,
+                project_name=project_name,
+            )
+            nodes.update(test_nodes)
 
     macro_name: str
     loaded_macro: LoadedMacro
