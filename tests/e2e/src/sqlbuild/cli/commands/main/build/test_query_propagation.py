@@ -22,16 +22,16 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
     QueryPropagationBuildE2ETestCase(
         description="warn-only query change does not propagate downstream",
         repo_files={
-            "sqlbuild_project.yml": dedent(
+            "sqlbuild_project.toml": dedent(
                 """
-                name: query_propagation_project
-                adapter: duckdb
+            name = "query_propagation_project"
+            adapter = "duckdb"
 
-                connection:
-                  database: propagation.duckdb
+            [connection]
+            database = "propagation.duckdb"
 
-                defaults:
-                  materialized: table
+            [defaults]
+            materialized = "table"
                 """
             ).strip()
             + "\n",
@@ -145,13 +145,13 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
     QueryPropagationBuildE2ETestCase(
         description="changed SQL UDF propagates full rebuild to downstream incremental model",
         repo_files={
-            "sqlbuild_project.yml": dedent(
+            "sqlbuild_project.toml": dedent(
                 """
-                name: function_query_propagation_project
-                adapter: duckdb
+            name = "function_query_propagation_project"
+            adapter = "duckdb"
 
-                connection:
-                  database: propagation.duckdb
+            [connection]
+            database = "propagation.duckdb"
                 """
             ).strip()
             + "\n",
@@ -224,16 +224,16 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
     QueryPropagationBuildE2ETestCase(
         description="bounded query change propagates downstream",
         repo_files={
-            "sqlbuild_project.yml": dedent(
+            "sqlbuild_project.toml": dedent(
                 """
-                name: query_propagation_project
-                adapter: duckdb
+            name = "query_propagation_project"
+            adapter = "duckdb"
 
-                connection:
-                  database: propagation.duckdb
+            [connection]
+            database = "propagation.duckdb"
 
-                defaults:
-                  materialized: table
+            [defaults]
+            materialized = "table"
                 """
             ).strip()
             + "\n",

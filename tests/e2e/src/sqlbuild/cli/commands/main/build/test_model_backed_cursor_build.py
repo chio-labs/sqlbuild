@@ -24,16 +24,16 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
         ModelBackedCursorBuildE2ETestCase(
             description="fresh build succeeds for model-backed normal and microbatch cursor models",
             repo_files={
-                "sqlbuild_project.yml": dedent(
+                "sqlbuild_project.toml": dedent(
                     """
-                    name: model_backed_cursor_project
-                    adapter: duckdb
+                name = "model_backed_cursor_project"
+                adapter = "duckdb"
 
-                    connection:
-                      database: regression.duckdb
+                [connection]
+                database = "regression.duckdb"
 
-                    defaults:
-                      materialized: table
+                [defaults]
+                materialized = "table"
                     """
                 ).strip()
                 + "\n",

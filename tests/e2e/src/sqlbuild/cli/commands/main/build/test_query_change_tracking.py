@@ -26,16 +26,16 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
         QueryChangeTrackingBuildE2ETestCase(
             description="unchanged source and ref models are not query_changed after build",
             repo_files={
-                "sqlbuild_project.yml": dedent(
+                "sqlbuild_project.toml": dedent(
                     """
-                    name: query_change_tracking_project
-                    adapter: duckdb
+                name = "query_change_tracking_project"
+                adapter = "duckdb"
 
-                    connection:
-                      database: regression.duckdb
+                [connection]
+                database = "regression.duckdb"
 
-                    defaults:
-                      materialized: table
+                [defaults]
+                materialized = "table"
                     """
                 ).strip()
                 + "\n",

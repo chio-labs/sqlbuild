@@ -22,28 +22,31 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
         CloneE2ETestCase(
             description="clone copies tables recreates views and warns on missing source",
             repo_files={
-                "sqlbuild_project.yml": dedent(
+                "sqlbuild_project.toml": dedent(
                     """
-                    name: clone_project
-                    adapter: duckdb
-                    default_environment: dev
+                    name = "clone_project"
+                    adapter = "duckdb"
+                    default_environment = "dev"
 
-                    environments:
-                      prod:
-                        schema: prod
-                        connection:
-                          database: clone.duckdb
-                        clone:
-                          allow_as_source: true
-                          allow_as_target: false
+                    [environments.prod]
+                    schema = "prod"
 
-                      dev:
-                        schema: dev
-                        connection:
-                          database: clone.duckdb
-                        clone:
-                          allow_as_source: true
-                          allow_as_target: true
+                    [environments.prod.connection]
+                    database = "clone.duckdb"
+
+                    [environments.prod.clone]
+                    allow_as_source = true
+                    allow_as_target = false
+
+                    [environments.dev]
+                    schema = "dev"
+
+                    [environments.dev.connection]
+                    database = "clone.duckdb"
+
+                    [environments.dev.clone]
+                    allow_as_source = true
+                    allow_as_target = true
                     """
                 ).strip()
                 + "\n",

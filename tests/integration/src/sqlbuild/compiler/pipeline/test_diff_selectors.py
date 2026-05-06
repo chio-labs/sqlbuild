@@ -18,10 +18,10 @@ from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
 )
 
 _PROJECT_FILES: dict[str, str] = {
-    "sqlbuild_project.yml": (
-        "name: demo\nadapter: duckdb\ndefault_environment: dev\n"
-        "connection:\n  database: ':memory:'\n"
-        "environments:\n  dev:\n    schema: dev_schema\n"
+    "sqlbuild_project.toml": (
+        'name = "demo"\nadapter = "duckdb"\ndefault_environment = "dev"\n\n'
+        '[connection]\ndatabase = ":memory:"\n\n'
+        '[environments.dev]\nschema = "dev_schema"\n'
     ),
     "models/staging/stg_orders.sql": (
         "MODEL (materialized table\ntags [staging]);\n\nSELECT 1 AS order_id"

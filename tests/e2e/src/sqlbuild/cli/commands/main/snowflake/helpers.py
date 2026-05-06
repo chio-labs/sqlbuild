@@ -20,16 +20,16 @@ def build_snowflake_local_config(*, schema_name: str) -> str:
     """Build a local config pointing the example project at Snowflake."""
 
     return (
-        "adapter: snowflake\n"
-        "connection:\n"
-        "  account: ${ENV:SQB_TEST_SNOWFLAKE_ACCOUNT}\n"
-        "  user: ${ENV:SQB_TEST_SNOWFLAKE_USER}\n"
-        "  authenticator: ${ENV:SQB_TEST_SNOWFLAKE_AUTHENTICATOR}\n"
-        "  token: ${ENV:SQB_TEST_SNOWFLAKE_PAT}\n"
-        "  role: ${ENV:SQB_TEST_SNOWFLAKE_ROLE}\n"
-        "  warehouse: ${ENV:SQB_TEST_SNOWFLAKE_WAREHOUSE}\n"
-        "  database: ${ENV:SQB_TEST_SNOWFLAKE_DATABASE}\n"
-        f"  schema: {schema_name}\n"
+        'adapter = "snowflake"\n\n'
+        "[connection]\n"
+        'account = "${ENV:SQB_TEST_SNOWFLAKE_ACCOUNT}"\n'
+        'user = "${ENV:SQB_TEST_SNOWFLAKE_USER}"\n'
+        'authenticator = "${ENV:SQB_TEST_SNOWFLAKE_AUTHENTICATOR}"\n'
+        'token = "${ENV:SQB_TEST_SNOWFLAKE_PAT}"\n'
+        'role = "${ENV:SQB_TEST_SNOWFLAKE_ROLE}"\n'
+        'warehouse = "${ENV:SQB_TEST_SNOWFLAKE_WAREHOUSE}"\n'
+        'database = "${ENV:SQB_TEST_SNOWFLAKE_DATABASE}"\n'
+        f'schema = "{schema_name}"\n'
     )
 
 
@@ -39,26 +39,28 @@ def prepare_snowflake_waffle_shop(*, tmp_path: Path) -> tuple[Path, str]:
     project_dir: Path = prepare_waffle_shop(tmp_path)
     schema_name: str = build_unique_schema_name(prefix="sqlbuild_e2e")
     database_name: str = str(build_snowflake_connection_config(schema=schema_name)["database"])
-    project_file_path: Path = project_dir / "sqlbuild_project.yml"
+    project_file_path: Path = project_dir / "sqlbuild_project.toml"
     project_contents: str = (
-        "name: waffle_shop\n"
-        "adapter: duckdb\n\n"
-        "default_environment: dev\n\n"
-        "connection:\n"
-        "  database: waffle_shop.duckdb\n\n"
-        "settings:\n"
-        "  default_audit_severity: warn\n\n"
-        "defaults:\n"
-        "  materialized: table\n\n"
-        "environments:\n"
-        f"  dev:\n    database: {database_name}\n    schema: {schema_name}\n"
-        f"  prod:\n    database: {database_name}\n    schema: {schema_name}\n\n"
-        "path_defaults:\n"
-        "  staging:\n"
-        "    materialized: view\n"
+        'name = "waffle_shop"\n'
+        'adapter = "duckdb"\n'
+        'default_environment = "dev"\n\n'
+        "[connection]\n"
+        'database = "waffle_shop.duckdb"\n\n'
+        "[settings]\n"
+        'default_audit_severity = "warn"\n\n'
+        "[defaults]\n"
+        'materialized = "table"\n\n'
+        "[environments.dev]\n"
+        f'database = "{database_name}"\n'
+        f'schema = "{schema_name}"\n\n'
+        "[environments.prod]\n"
+        f'database = "{database_name}"\n'
+        f'schema = "{schema_name}"\n\n'
+        "[path_defaults.staging]\n"
+        'materialized = "view"\n'
     )
     project_file_path.write_text(project_contents, encoding="utf-8")
-    (project_dir / "sqlbuild_local.yml").write_text(
+    (project_dir / "sqlbuild_local.toml").write_text(
         build_snowflake_local_config(schema_name=schema_name),
         encoding="utf-8",
     )
@@ -114,26 +116,29 @@ def prepare_snowflake_diff_project(*, tmp_path: Path) -> tuple[Path, str, str]:
     dev_schema: str = build_unique_schema_name(prefix="sqlbuild_diff_dev")
     database_name: str = str(build_snowflake_connection_config(schema=dev_schema)["database"])
     project_contents: str = (
-        "name: snowflake_diff_project\n"
-        "adapter: snowflake\n\n"
-        "default_environment: dev\n\n"
-        "connection:\n"
-        "  account: ${ENV:SQB_TEST_SNOWFLAKE_ACCOUNT}\n"
-        "  user: ${ENV:SQB_TEST_SNOWFLAKE_USER}\n"
-        "  authenticator: ${ENV:SQB_TEST_SNOWFLAKE_AUTHENTICATOR}\n"
-        "  token: ${ENV:SQB_TEST_SNOWFLAKE_PAT}\n"
-        "  role: ${ENV:SQB_TEST_SNOWFLAKE_ROLE}\n"
-        "  warehouse: ${ENV:SQB_TEST_SNOWFLAKE_WAREHOUSE}\n"
-        "  database: ${ENV:SQB_TEST_SNOWFLAKE_DATABASE}\n\n"
-        "environments:\n"
-        f"  dev:\n    database: {database_name}\n    schema: {dev_schema}\n"
-        f"  prod:\n    database: {database_name}\n    schema: {prod_schema}\n\n"
-        "defaults:\n"
-        "  materialized: table\n\n"
+        'name = "snowflake_diff_project"\n'
+        'adapter = "snowflake"\n'
+        'default_environment = "dev"\n\n'
+        "[connection]\n"
+        'account = "${ENV:SQB_TEST_SNOWFLAKE_ACCOUNT}"\n'
+        'user = "${ENV:SQB_TEST_SNOWFLAKE_USER}"\n'
+        'authenticator = "${ENV:SQB_TEST_SNOWFLAKE_AUTHENTICATOR}"\n'
+        'token = "${ENV:SQB_TEST_SNOWFLAKE_PAT}"\n'
+        'role = "${ENV:SQB_TEST_SNOWFLAKE_ROLE}"\n'
+        'warehouse = "${ENV:SQB_TEST_SNOWFLAKE_WAREHOUSE}"\n'
+        'database = "${ENV:SQB_TEST_SNOWFLAKE_DATABASE}"\n\n'
+        "[environments.dev]\n"
+        f'database = "{database_name}"\n'
+        f'schema = "{dev_schema}"\n\n'
+        "[environments.prod]\n"
+        f'database = "{database_name}"\n'
+        f'schema = "{prod_schema}"\n\n'
+        "[defaults]\n"
+        'materialized = "table"\n\n'
         "models/staging/stg_orders.sql: invalid\n"
     )
     project_dir.mkdir(parents=True, exist_ok=True)
-    (project_dir / "sqlbuild_project.yml").write_text(
+    (project_dir / "sqlbuild_project.toml").write_text(
         project_contents.replace(
             "models/staging/stg_orders.sql: invalid\n",
             "",
@@ -169,7 +174,7 @@ def execute_snowflake_sql(*, schema_name: str, sql: str) -> None:
 def write_local_environment_override(*, project_dir: Path, environment: str) -> None:
     """Write a local environment override for Snowflake CLI e2e commands."""
 
-    (project_dir / "sqlbuild_local.yml").write_text(
-        f"environment: {environment}\n",
+    (project_dir / "sqlbuild_local.toml").write_text(
+        f'environment = "{environment}"\n',
         encoding="utf-8",
     )

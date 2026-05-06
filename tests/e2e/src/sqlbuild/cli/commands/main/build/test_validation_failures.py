@@ -20,13 +20,13 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
     CliFailureBuildE2ETestCase(
         description="invalid pre_hook fails at compile time",
         repo_files={
-            "sqlbuild_project.yml": dedent(
+            "sqlbuild_project.toml": dedent(
                 """
-                name: hook_validation_project
-                adapter: duckdb
+            name = "hook_validation_project"
+            adapter = "duckdb"
 
-                connection:
-                  database: validation.duckdb
+            [connection]
+            database = "validation.duckdb"
                 """
             ).strip()
             + "\n",
@@ -54,16 +54,16 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
     CliFailureBuildE2ETestCase(
         description="unknown cursor_inputs key fails at compile time",
         repo_files={
-            "sqlbuild_project.yml": dedent(
+            "sqlbuild_project.toml": dedent(
                 """
-                name: cursor_inputs_validation_project
-                adapter: duckdb
+            name = "cursor_inputs_validation_project"
+            adapter = "duckdb"
 
-                connection:
-                  database: validation.duckdb
+            [connection]
+            database = "validation.duckdb"
 
-                defaults:
-                  materialized: table
+            [defaults]
+            materialized = "table"
                 """
             ).strip()
             + "\n",
@@ -136,13 +136,13 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
     CliFailureBuildE2ETestCase(
         description="invalid source expression fails with sql validation enabled",
         repo_files={
-            "sqlbuild_project.yml": dedent(
+            "sqlbuild_project.toml": dedent(
                 """
-                name: source_expression_validation_project
-                adapter: duckdb
+            name = "source_expression_validation_project"
+            adapter = "duckdb"
 
-                connection:
-                  database: validation.duckdb
+            [connection]
+            database = "validation.duckdb"
                 """
             ).strip()
             + "\n",

@@ -23,7 +23,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.helpers.debug._test_types import 
                 configuration=(
                     DebugLine(
                         "project file",
-                        "/repo/sqlbuild_project.yml",
+                        "/repo/sqlbuild_project.toml",
                         DebugCheckStatus.OK,
                         "found and valid",
                     ),
@@ -44,7 +44,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.helpers.debug._test_types import 
                 "  sqlbuild version: 0.2.1\n"
                 "\n"
                 "Configuration:\n"
-                "  project file: /repo/sqlbuild_project.yml [OK found and valid]\n"
+                "  project file: /repo/sqlbuild_project.toml [OK found and valid]\n"
                 "\n"
                 "Connection:\n"
                 "  token: ****\n"

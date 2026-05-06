@@ -26,16 +26,25 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 "and captures late same-timestamp row"
             ),
             repo_files={
-                "sqlbuild_project.yml": dedent(
+                "sqlbuild_project.toml": dedent(
                     """
-                    name: append_cursor_project
-                    adapter: duckdb
 
-                    connection:
-                      database: append_cursor.duckdb
+                name = "append_cursor_project"
 
-                    defaults:
-                      materialized: table
+                adapter = "duckdb"
+
+
+
+                [connection]
+
+                database = "append_cursor.duckdb"
+
+
+
+                [defaults]
+
+                materialized = "table"
+
                     """
                 ).strip()
                 + "\n",
