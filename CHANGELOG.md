@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/chio-labs/sqlbuild/compare/v0.4.0...v0.5.0) (2026-05-06)
+
+
+### Features
+
+* switch project config to TOML ([e7127b0](https://github.com/chio-labs/sqlbuild/commit/e7127b00663b4773d1897500ebc1492b25dff285))
+* switch project config to TOML ([b6f208d](https://github.com/chio-labs/sqlbuild/commit/b6f208d7ca8f39a7bf9bce15c9d964a2df90f941))
+
 ## [0.4.0](https://github.com/chio-labs/sqlbuild/compare/v0.3.0...v0.4.0) (2026-05-05)
 
 
