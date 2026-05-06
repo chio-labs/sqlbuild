@@ -30,16 +30,16 @@ ASSEMBLE_COMPILED_PROJECT_TEST_CASES: list[AssembleCompiledProjectTestCase] = [
         description="assembles models sources seeds audits and tests into compiled project",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
 
-settings:
-  default_audit_severity: warn
+[settings]
+default_audit_severity = "warn"
 
-defaults:
-  materialized: table
-  schema: analytics
+[defaults]
+materialized = "table"
+schema = "analytics"
 """.strip()
             + "\n",
             "models/staging/orders.sql": """
@@ -108,27 +108,29 @@ SELECT 1
         description="assembles seed targets using local environment database templates",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
-default_environment: dev
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "dev"
 
-vars:
-  project: reporting
+[vars]
+project = "reporting"
 
-defaults:
-  schema: analytics
+[defaults]
+schema = "analytics"
 
-environments:
-  dev:
-    database: "${ENV:TARGET_DB}_${project}"
-    schema: seeds_${project}
+[environments]
+
+[environments.dev]
+database = "${ENV:TARGET_DB}_${project}"
+schema = "seeds_${project}"
 """.strip()
             + "\n",
-            "sqlbuild_local.yml": """
-environments:
-  dev:
-    database: "${ENV:LOCAL_TARGET_DB}_${project}"
+            "sqlbuild_local.toml": """
+[environments]
+
+[environments.dev]
+database = "${ENV:LOCAL_TARGET_DB}_${project}"
 """.strip()
             + "\n",
             "seeds/schema.yml": """
@@ -160,22 +162,23 @@ seeds:
         description="assembles seed targets using seed declaration templates",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
-default_environment: dev
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "dev"
 
-vars:
-  seed_schema_suffix: lookups
+[vars]
+seed_schema_suffix = "lookups"
 
-defaults:
-  database: default_db
-  schema: default_schema
+[defaults]
+database = "default_db"
+schema = "default_schema"
 
-environments:
-  dev:
-    database: env_db
-    schema: env_schema
+[environments]
+
+[environments.dev]
+database = "env_db"
+schema = "env_schema"
 """.strip()
             + "\n",
             "seeds/lookups.yml": """

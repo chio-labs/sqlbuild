@@ -12,6 +12,12 @@ from sqlbuild.cli.commands.main.helpers.debug.models import DebugLine, DebugResu
 from sqlbuild.cli.commands.main.helpers.debug.types import DebugCheckStatus
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
+from sqlbuild.compiler.discovery.constants import (
+    LEGACY_LOCAL_CONFIG_FILENAME,
+    LEGACY_PROJECT_CONFIG_FILENAME,
+    LOCAL_CONFIG_FILENAME,
+    PROJECT_CONFIG_FILENAME,
+)
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
@@ -29,7 +35,16 @@ _SECRET_CONNECTION_KEYS: frozenset[str] = frozenset(
 
 def build_debug_result(*, project_dir: Path, check_connection: bool) -> DebugResult:
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
-    local_config_path: Path = project_dir / "sqlbuild_local.yml"
+    project_config_path: Path = _resolve_existing_path(
+        project_dir=project_dir,
+        preferred_filename=PROJECT_CONFIG_FILENAME,
+        legacy_filename=LEGACY_PROJECT_CONFIG_FILENAME,
+    )
+    local_config_path: Path = _resolve_existing_path(
+        project_dir=project_dir,
+        preferred_filename=LOCAL_CONFIG_FILENAME,
+        legacy_filename=LEGACY_LOCAL_CONFIG_FILENAME,
+    )
     adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
@@ -43,7 +58,7 @@ def build_debug_result(*, project_dir: Path, check_connection: bool) -> DebugRes
     configuration: list[DebugLine] = [
         DebugLine(
             label="project file",
-            message=str(project_dir / "sqlbuild_project.yml"),
+            message=str(project_config_path),
             status=DebugCheckStatus.OK,
             status_message="found and valid",
         ),
@@ -84,6 +99,18 @@ def build_debug_result(*, project_dir: Path, check_connection: bool) -> DebugRes
         configuration=tuple(configuration),
         connection=tuple(connection),
     )
+
+
+def _resolve_existing_path(
+    *, project_dir: Path, preferred_filename: str, legacy_filename: str
+) -> Path:
+    preferred_path: Path = project_dir / preferred_filename
+    if preferred_path.exists():
+        return preferred_path
+    legacy_path: Path = project_dir / legacy_filename
+    if legacy_path.exists():
+        return legacy_path
+    return preferred_path
 
 
 def _build_runtime_lines() -> list[DebugLine]:

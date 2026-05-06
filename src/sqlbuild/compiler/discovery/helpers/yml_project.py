@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import tomllib
 from dataclasses import fields
 from datetime import date, datetime
 from pathlib import Path
@@ -10,6 +11,12 @@ from typing import cast
 import yaml
 from yaml import YAMLError
 
+from sqlbuild.compiler.discovery.constants import (
+    LEGACY_LOCAL_CONFIG_FILENAME,
+    LEGACY_PROJECT_CONFIG_FILENAME,
+    LOCAL_CONFIG_FILENAME,
+    PROJECT_CONFIG_FILENAME,
+)
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.spec.models.project import (
     ClonePolicy,
@@ -25,10 +32,10 @@ from sqlbuild.spec.models.project import (
 
 
 def load_project_config(*, project_dir: Path) -> ProjectConfig:
-    """Load `sqlbuild_project.yml` from the given project directory."""
+    """Load project config from the given project directory."""
 
-    file_path: Path = project_dir / "sqlbuild_project.yml"
-    payload: dict[str, object] = _load_yaml_mapping(file_path=file_path)
+    file_path: Path = _resolve_project_config_path(project_dir=project_dir)
+    payload: dict[str, object] = _load_config_mapping(file_path=file_path)
 
     name: str = _require_str(payload=payload, key="name", file_path=file_path)
     adapter: str = _require_str(payload=payload, key="adapter", file_path=file_path)
@@ -69,13 +76,13 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
 
 
 def load_local_config(*, project_dir: Path) -> LocalConfig:
-    """Load `sqlbuild_local.yml` if present."""
+    """Load local config if present."""
 
-    file_path: Path = project_dir / "sqlbuild_local.yml"
+    file_path: Path = _resolve_local_config_path(project_dir=project_dir)
     if not file_path.exists():
         return LocalConfig()
 
-    payload: dict[str, object] = _load_yaml_mapping(file_path=file_path)
+    payload: dict[str, object] = _load_config_mapping(file_path=file_path)
     environment: str | None = _optional_str(payload=payload, key="environment")
     adapter: str | None = _optional_str(payload=payload, key="adapter")
     connection: dict[str, object] = _optional_mapping(payload=payload, key="connection")
@@ -100,6 +107,54 @@ def load_local_config(*, project_dir: Path) -> LocalConfig:
         setting_overrides=setting_overrides,
         vars=vars_map,
     )
+
+
+def _resolve_project_config_path(*, project_dir: Path) -> Path:
+    toml_path: Path = project_dir / PROJECT_CONFIG_FILENAME
+    if toml_path.exists():
+        return toml_path
+    legacy_path: Path = project_dir / LEGACY_PROJECT_CONFIG_FILENAME
+    if legacy_path.exists():
+        raise ProjectConfigError(
+            f"{legacy_path} is no longer supported. Rename it to {PROJECT_CONFIG_FILENAME} "
+            "and convert the contents to TOML."
+        )
+    return toml_path
+
+
+def _resolve_local_config_path(*, project_dir: Path) -> Path:
+    toml_path: Path = project_dir / LOCAL_CONFIG_FILENAME
+    if toml_path.exists():
+        return toml_path
+    yaml_path: Path = project_dir / LEGACY_LOCAL_CONFIG_FILENAME
+    if yaml_path.exists():
+        raise ProjectConfigError(
+            f"{yaml_path} is no longer supported. Rename it to {LOCAL_CONFIG_FILENAME} "
+            "and convert the contents to TOML."
+        )
+    return toml_path
+
+
+def _load_config_mapping(*, file_path: Path) -> dict[str, object]:
+    if file_path.suffix == ".toml":
+        return _load_toml_mapping(file_path=file_path)
+    return _load_yaml_mapping(file_path=file_path)
+
+
+def _load_toml_mapping(*, file_path: Path) -> dict[str, object]:
+    if not file_path.exists():
+        raise ProjectConfigError(
+            f"Project config not found: {file_path}. Run sqb from a sqlbuild project "
+            "directory or pass --project-dir."
+        )
+    try:
+        with file_path.open("rb") as config_file:
+            payload: object = tomllib.load(config_file)
+    except tomllib.TOMLDecodeError as error:
+        raise ProjectConfigError(f"{file_path} contains invalid TOML: {error}") from error
+    if not isinstance(payload, dict):
+        raise ProjectConfigError(f"{file_path} must contain a top-level mapping")
+    return cast(dict[str, object], payload)
 
 
 def _load_yaml_mapping(*, file_path: Path) -> dict[str, object]:

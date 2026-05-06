@@ -25,31 +25,31 @@ from tests.integration.src.sqlbuild.executor.build.helpers import (
 )
 
 _PROJECT_YML: str = (
-    "name: demo\n"
-    "adapter: duckdb\n"
-    "connection:\n"
-    "  database: ':memory:'\n"
-    "settings:\n"
-    "  default_audit_severity: error\n"
+    'name = "demo"\n'
+    'adapter = "duckdb"\n\n'
+    "[connection]\n"
+    'database = ":memory:"\n\n'
+    "[settings]\n"
+    'default_audit_severity = "error"\n'
 )
 
 _PROJECT_YML_WARN: str = (
-    "name: demo\n"
-    "adapter: duckdb\n"
-    "connection:\n"
-    "  database: ':memory:'\n"
-    "settings:\n"
-    "  default_audit_severity: warn\n"
+    'name = "demo"\n'
+    'adapter = "duckdb"\n\n'
+    "[connection]\n"
+    'database = ":memory:"\n\n'
+    "[settings]\n"
+    'default_audit_severity = "warn"\n'
 )
 
 _PROJECT_YML_DIRECT: str = (
-    "name: demo\n"
-    "adapter: duckdb\n"
-    "connection:\n"
-    "  database: ':memory:'\n"
-    "settings:\n"
-    "  default_audit_severity: error\n"
-    "  table_promotion_mode: direct\n"
+    'name = "demo"\n'
+    'adapter = "duckdb"\n\n'
+    "[connection]\n"
+    'database = ":memory:"\n\n'
+    "[settings]\n"
+    'default_audit_severity = "error"\n'
+    'table_promotion_mode = "direct"\n'
 )
 
 _NOT_NULL_AUDIT: str = 'AUDIT ();\n\nSELECT @column FROM __ref("@model") WHERE @column IS NULL'
@@ -89,7 +89,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="sql udf builds before dependent model",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "functions/sql/is_positive_int.sql": (
                 "FUNCTION (\n"
                 "  arguments (a_string VARCHAR),\n"
@@ -121,7 +121,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="python udf builds before dependent model",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "functions/python/is_positive_int.py": (
                 "from sqlbuild.functions import udf\n\n"
                 "@udf(\n"
@@ -151,15 +151,14 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="duckdb python udf ignores inherited environment schema",
         project_files={
-            "sqlbuild_project.yml": (
-                "name: demo\n"
-                "adapter: duckdb\n"
-                "default_environment: dev\n"
-                "connection:\n"
-                "  database: ':memory:'\n"
-                "environments:\n"
-                "  dev:\n"
-                "    schema: dev\n"
+            "sqlbuild_project.toml": (
+                'name = "demo"\n'
+                'adapter = "duckdb"\n'
+                'default_environment = "dev"\n\n'
+                "[connection]\n"
+                'database = ":memory:"\n\n'
+                "[environments.dev]\n"
+                'schema = "dev"\n'
             ),
             "functions/python/is_positive_int.py": (
                 "from sqlbuild.functions import udf\n\n"
@@ -196,7 +195,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="two independent models both succeed",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id, 'alice' AS name",
             "models/payments.sql": (
                 "MODEL (materialized table);\n\nSELECT 10 AS payment_id, 500 AS amount"
@@ -216,7 +215,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="dependent models execute in topo order and downstream reads upstream",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/stg_orders.sql": (
                 "MODEL (materialized table);\n\nSELECT 42 AS id, 'bob' AS name"
             ),
@@ -239,17 +238,16 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="environment schema is auto-created during build",
         project_files={
-            "sqlbuild_project.yml": (
-                "name: demo\n"
-                "adapter: duckdb\n"
-                "connection:\n"
-                "  database: ':memory:'\n"
-                "default_environment: dev\n"
-                "environments:\n"
-                "  dev:\n"
-                "    schema: dev_schema\n"
+            "sqlbuild_project.toml": (
+                'name = "demo"\n'
+                'adapter = "duckdb"\n'
+                'default_environment = "dev"\n\n'
+                "[connection]\n"
+                'database = ":memory:"\n\n'
+                "[environments.dev]\n"
+                'schema = "dev_schema"\n'
             ),
-            "sqlbuild_local.yml": "environment: dev\n",
+            "sqlbuild_local.toml": 'environment = "dev"\n',
             "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id, 'alice' AS name",
         },
         expected_status=BuildStatus.SUCCESS,
@@ -260,7 +258,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="run_audits false skips all audits but tables still built",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT 1 AS id",
             "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
         },
@@ -273,7 +271,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="passing model audit does not block and table is promoted",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT 1 AS id",
             "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
         },
@@ -285,7 +283,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="warn audit records warning but build succeeds",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML_WARN,
+            "sqlbuild_project.toml": _PROJECT_YML_WARN,
             "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT NULL AS id",
             "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
         },
@@ -298,7 +296,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="source audit warn does not block dependent models",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML_WARN,
+            "sqlbuild_project.toml": _PROJECT_YML_WARN,
             "models/orders.sql": (
                 'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")'
             ),
@@ -319,7 +317,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="end audit warn succeeds build with warning",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML_WARN,
+            "sqlbuild_project.toml": _PROJECT_YML_WARN,
             "models/orders.sql": ("MODEL (materialized table);\n\nSELECT 1 AS id"),
             "models/payments.sql": ("MODEL (materialized table);\n\nSELECT 2 AS payment_id"),
             "audits/singular/cross_check.sql": (
@@ -338,7 +336,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="run_audits false skips source model and end audits but tables still built",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/orders.sql": (
                 'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")'
             ),
@@ -369,14 +367,14 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="direct mode warn audit records warning and build succeeds",
         project_files={
-            "sqlbuild_project.yml": (
-                "name: demo\n"
-                "adapter: duckdb\n"
-                "connection:\n"
-                "  database: ':memory:'\n"
-                "settings:\n"
-                "  default_audit_severity: warn\n"
-                "  table_promotion_mode: direct\n"
+            "sqlbuild_project.toml": (
+                'name = "demo"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = ":memory:"\n\n'
+                "[settings]\n"
+                'default_audit_severity = "warn"\n'
+                'table_promotion_mode = "direct"\n'
             ),
             "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT NULL AS id",
             "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
@@ -390,7 +388,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="build writes fingerprints when query tracking is enabled",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id",
         },
         expected_status=BuildStatus.SUCCESS,
@@ -406,7 +404,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="direct mode with passing audit creates table",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML_DIRECT,
+            "sqlbuild_project.toml": _PROJECT_YML_DIRECT,
             "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT 5 AS id",
             "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
         },
@@ -421,7 +419,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="model failure blocks downstream and blocked table does not exist",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/stg_orders.sql": (
                 "MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"
             ),
@@ -441,7 +439,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="duckdb python udf with explicit schema fails clearly",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "functions/python/is_positive_int.py": (
                 "from sqlbuild.functions import udf\n\n"
                 "@udf(\n"
@@ -476,7 +474,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="independent branch succeeds with real data despite sibling failure",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/stg_orders.sql": (
                 "MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"
             ),
@@ -502,7 +500,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="failing error audit blocks promotion and table has no final data",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT NULL AS id",
             "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
         },
@@ -515,7 +513,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="end audit error fails build but completed tables are preserved",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/orders.sql": ("MODEL (materialized table);\n\nSELECT 7 AS id, 'carol' AS name"),
             "models/payments.sql": ("MODEL (materialized table);\n\nSELECT 1 AS payment_id"),
             "audits/singular/cross_check.sql": (
@@ -533,7 +531,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="fail_fast stops after first failure and second model never materialized",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/aaa_broken.sql": (
                 "MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"
             ),
@@ -549,7 +547,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="source audit error blocks dependent models and tables do not exist",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/orders.sql": (
                 'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")'
             ),
@@ -571,7 +569,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="source audit error transitively blocks entire dependent chain",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/stg_orders.sql": (
                 'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")'
             ),
@@ -599,7 +597,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="direct mode failing audit leaves target updated but build fails",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML_DIRECT,
+            "sqlbuild_project.toml": _PROJECT_YML_DIRECT,
             "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT NULL AS id",
             "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
         },
@@ -612,7 +610,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="pre_hook failure blocks model and downstream table does not exist",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/stg_orders.sql": (
                 "MODEL (\n  materialized table\n  pre_hook 'INVALID SQL STATEMENT'\n);\n\n"
                 "SELECT 1 AS id"
@@ -633,7 +631,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="post_hook failure blocks downstream but failed model table exists",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/stg_orders.sql": (
                 "MODEL (\n  materialized table\n  post_hook 'INVALID SQL STATEMENT'\n);\n\n"
                 "SELECT 88 AS id"
@@ -655,7 +653,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="two independent failures both recorded in non fail_fast",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/broken_a.sql": ("MODEL (materialized table);\n\nSELECT * FROM nonexistent_a"),
             "models/broken_b.sql": ("MODEL (materialized table);\n\nSELECT * FROM nonexistent_b"),
         },
@@ -671,7 +669,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="staged audit failure preserves existing target with old data",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT NULL AS id",
             "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
         },
@@ -716,7 +714,7 @@ VIEW_SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="view model creates view and downstream table reads it",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/stg_orders.sql": (
                 "MODEL (materialized view);\n\nSELECT 1 AS id, 'alice' AS name"
             ),
@@ -735,7 +733,7 @@ VIEW_SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="view with audit succeeds when audit passes",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/stg_orders.sql": _VIEW_WITH_ID_NOT_NULL_AUDIT
             + "SELECT 1 AS id, 'alice' AS name",
             "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
@@ -778,7 +776,7 @@ def test_given_view_build_plan_when_executing_then_succeeds(
         BuildExecutionTestCase(
             description="view failure blocks downstream table",
             project_files={
-                "sqlbuild_project.yml": _PROJECT_YML,
+                "sqlbuild_project.toml": _PROJECT_YML,
                 "models/bad_view.sql": (
                     "MODEL (materialized view);\n\nSELECT * FROM nonexistent_source_table"
                 ),
@@ -823,7 +821,7 @@ def test_given_view_build_plan_when_executing_then_fails(
         BuildExecutionTestCase(
             description="view with run_audits false still creates view",
             project_files={
-                "sqlbuild_project.yml": _PROJECT_YML,
+                "sqlbuild_project.toml": _PROJECT_YML,
                 "models/stg_orders.sql": _VIEW_WITH_ID_NOT_NULL_AUDIT
                 + "SELECT 1 AS id, 'alice' AS name",
                 "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
@@ -885,7 +883,7 @@ SQL_TEST_BUILD_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="passing unit test allows model to materialize",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/stg_orders.sql": (
                 "MODEL (materialized table);\n\nSELECT 1 AS id, 'alice' AS name"
             ),
@@ -900,7 +898,7 @@ SQL_TEST_BUILD_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="failing unit test blocks model materialization",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/stg_orders.sql": (
                 "MODEL (materialized table);\n\nSELECT 1 AS id, 'alice' AS name"
             ),
@@ -916,7 +914,7 @@ SQL_TEST_BUILD_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="run_tests false skips test and model materializes",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/stg_orders.sql": (
                 "MODEL (materialized table);\n\nSELECT 1 AS id, 'alice' AS name"
             ),
@@ -932,7 +930,7 @@ SQL_TEST_BUILD_TEST_CASES: list[BuildExecutionTestCase] = [
     BuildExecutionTestCase(
         description="failing test blocks target model and downstream chain",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/stg_orders.sql": (
                 "MODEL (materialized table);\n\nSELECT 1 AS id, 'alice' AS name"
             ),

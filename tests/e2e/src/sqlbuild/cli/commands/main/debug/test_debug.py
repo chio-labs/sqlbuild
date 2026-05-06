@@ -47,8 +47,9 @@ def test_given_debug_command_when_running_then_outputs_checks(
         tmp_path=tmp_path,
         project_name="debug_project",
         repo_files={
-            "sqlbuild_project.yml": (
-                "name: debug_project\nadapter: duckdb\nconnection:\n  database: debug.duckdb\n"
+            "sqlbuild_project.toml": (
+                'name = "debug_project"\nadapter = "duckdb"\n\n'
+                '[connection]\ndatabase = "debug.duckdb"\n'
             ),
         },
     )
@@ -100,8 +101,9 @@ def test_given_debug_json_when_running_then_outputs_machine_readable_checks(
         tmp_path=tmp_path,
         project_name="debug_json_project",
         repo_files={
-            "sqlbuild_project.yml": (
-                "name: debug_json_project\nadapter: duckdb\nconnection:\n  database: debug.duckdb\n"
+            "sqlbuild_project.toml": (
+                'name = "debug_json_project"\nadapter = "duckdb"\n\n'
+                '[connection]\ndatabase = "debug.duckdb"\n'
             ),
         },
     )

@@ -59,4 +59,6 @@ class SqlglotChainCompileTargetIntegrationTestCase:
 class SnowflakeTargetValidationIntegrationTestCase:
     description: str
     project_files: dict[str, str]
-    expected_error_fragment: str
+    expected_error_fragment: str = ""
+    expected_database: str | None = None
+    expected_schema: str | None = None

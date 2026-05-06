@@ -19,14 +19,14 @@ def build_databricks_local_config(*, environment: str = "dev", schema_name: str)
     """Build a local config pointing the project at Databricks."""
 
     return (
-        "adapter: databricks\n"
-        f"environment: {environment}\n"
-        "connection:\n"
-        "  server_hostname: ${ENV:SQB_TEST_DATABRICKS_SERVER_HOSTNAME}\n"
-        "  http_path: ${ENV:SQB_TEST_DATABRICKS_HTTP_PATH}\n"
-        "  token: ${ENV:SQB_TEST_DATABRICKS_TOKEN}\n"
-        "  catalog: ${ENV:SQB_TEST_DATABRICKS_CATALOG}\n"
-        f"  schema: {schema_name}\n"
+        'adapter = "databricks"\n'
+        f'environment = "{environment}"\n\n'
+        "[connection]\n"
+        'server_hostname = "${ENV:SQB_TEST_DATABRICKS_SERVER_HOSTNAME}"\n'
+        'http_path = "${ENV:SQB_TEST_DATABRICKS_HTTP_PATH}"\n'
+        'token = "${ENV:SQB_TEST_DATABRICKS_TOKEN}"\n'
+        'catalog = "${ENV:SQB_TEST_DATABRICKS_CATALOG}"\n'
+        f'schema = "{schema_name}"\n'
     )
 
 
@@ -36,30 +36,32 @@ def prepare_databricks_waffle_shop(*, tmp_path: Path) -> tuple[Path, str]:
     project_dir: Path = prepare_waffle_shop(tmp_path)
     schema_name: str = build_unique_schema_name(prefix="sqlbuild_e2e")
     catalog_name: str = str(build_databricks_connection_config(schema=schema_name)["catalog"])
-    project_file_path: Path = project_dir / "sqlbuild_project.yml"
+    project_file_path: Path = project_dir / "sqlbuild_project.toml"
     project_contents: str = (
-        "name: waffle_shop\n"
-        "adapter: databricks\n\n"
-        "default_environment: dev\n\n"
-        "connection:\n"
-        "  server_hostname: ${ENV:SQB_TEST_DATABRICKS_SERVER_HOSTNAME}\n"
-        "  http_path: ${ENV:SQB_TEST_DATABRICKS_HTTP_PATH}\n"
-        "  token: ${ENV:SQB_TEST_DATABRICKS_TOKEN}\n"
-        "  catalog: ${ENV:SQB_TEST_DATABRICKS_CATALOG}\n"
-        f"  schema: {schema_name}\n\n"
-        "settings:\n"
-        "  default_audit_severity: warn\n\n"
-        "defaults:\n"
-        "  materialized: table\n\n"
-        "environments:\n"
-        f"  dev:\n    database: {catalog_name}\n    schema: {schema_name}\n"
-        f"  prod:\n    database: {catalog_name}\n    schema: {schema_name}\n\n"
-        "path_defaults:\n"
-        "  staging:\n"
-        "    materialized: view\n"
+        'name = "waffle_shop"\n'
+        'adapter = "databricks"\n'
+        'default_environment = "dev"\n\n'
+        "[connection]\n"
+        'server_hostname = "${ENV:SQB_TEST_DATABRICKS_SERVER_HOSTNAME}"\n'
+        'http_path = "${ENV:SQB_TEST_DATABRICKS_HTTP_PATH}"\n'
+        'token = "${ENV:SQB_TEST_DATABRICKS_TOKEN}"\n'
+        'catalog = "${ENV:SQB_TEST_DATABRICKS_CATALOG}"\n'
+        f'schema = "{schema_name}"\n\n'
+        "[settings]\n"
+        'default_audit_severity = "warn"\n\n'
+        "[defaults]\n"
+        'materialized = "table"\n\n'
+        "[environments.dev]\n"
+        f'database = "{catalog_name}"\n'
+        f'schema = "{schema_name}"\n\n'
+        "[environments.prod]\n"
+        f'database = "{catalog_name}"\n'
+        f'schema = "{schema_name}"\n\n'
+        "[path_defaults.staging]\n"
+        'materialized = "view"\n'
     )
     project_file_path.write_text(project_contents, encoding="utf-8")
-    (project_dir / "sqlbuild_local.yml").write_text(
+    (project_dir / "sqlbuild_local.toml").write_text(
         build_databricks_local_config(schema_name=schema_name),
         encoding="utf-8",
     )
@@ -135,23 +137,26 @@ def prepare_databricks_diff_project(*, tmp_path: Path) -> tuple[Path, str, str]:
     dev_schema: str = build_unique_schema_name(prefix="sqlbuild_diff_dev")
     catalog_name: str = str(build_databricks_connection_config(schema=dev_schema)["catalog"])
     project_contents: str = (
-        "name: databricks_diff_project\n"
-        "adapter: databricks\n\n"
-        "default_environment: dev\n\n"
-        "connection:\n"
-        "  server_hostname: ${ENV:SQB_TEST_DATABRICKS_SERVER_HOSTNAME}\n"
-        "  http_path: ${ENV:SQB_TEST_DATABRICKS_HTTP_PATH}\n"
-        "  token: ${ENV:SQB_TEST_DATABRICKS_TOKEN}\n"
-        "  catalog: ${ENV:SQB_TEST_DATABRICKS_CATALOG}\n\n"
-        "environments:\n"
-        f"  dev:\n    database: {catalog_name}\n    schema: {dev_schema}\n"
-        f"  prod:\n    database: {catalog_name}\n    schema: {prod_schema}\n\n"
-        "defaults:\n"
-        "  materialized: table\n"
+        'name = "databricks_diff_project"\n'
+        'adapter = "databricks"\n'
+        'default_environment = "dev"\n\n'
+        "[connection]\n"
+        'server_hostname = "${ENV:SQB_TEST_DATABRICKS_SERVER_HOSTNAME}"\n'
+        'http_path = "${ENV:SQB_TEST_DATABRICKS_HTTP_PATH}"\n'
+        'token = "${ENV:SQB_TEST_DATABRICKS_TOKEN}"\n'
+        'catalog = "${ENV:SQB_TEST_DATABRICKS_CATALOG}"\n\n'
+        "[environments.dev]\n"
+        f'database = "{catalog_name}"\n'
+        f'schema = "{dev_schema}"\n\n'
+        "[environments.prod]\n"
+        f'database = "{catalog_name}"\n'
+        f'schema = "{prod_schema}"\n\n'
+        "[defaults]\n"
+        'materialized = "table"\n'
     )
     project_dir.mkdir(parents=True, exist_ok=True)
-    (project_dir / "sqlbuild_project.yml").write_text(project_contents, encoding="utf-8")
-    (project_dir / "sqlbuild_local.yml").write_text(
+    (project_dir / "sqlbuild_project.toml").write_text(project_contents, encoding="utf-8")
+    (project_dir / "sqlbuild_local.toml").write_text(
         build_databricks_local_config(schema_name=dev_schema),
         encoding="utf-8",
     )
@@ -186,7 +191,7 @@ def write_local_environment_override(
 ) -> None:
     """Write a local environment override for Databricks CLI e2e commands."""
 
-    (project_dir / "sqlbuild_local.yml").write_text(
+    (project_dir / "sqlbuild_local.toml").write_text(
         build_databricks_local_config(environment=environment, schema_name=schema_name),
         encoding="utf-8",
     )

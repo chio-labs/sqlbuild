@@ -19,10 +19,10 @@ ERROR_RENDERING_TEST_CASES: list[MainErrorRenderingTestCase] = [
         argv=["--project-dir", "/tmp/demo", "compile"],
         error_type=ProjectConfigError,
         error_factory=lambda project_dir: ProjectConfigError(
-            f"{project_dir / 'sqlbuild_project.yml'} must define non-empty string 'name'"
+            f"{project_dir / 'sqlbuild_project.toml'} must define non-empty string 'name'"
         ),
         expected_stderr_fragment=(
-            "/tmp/demo/sqlbuild_project.yml must define non-empty string 'name'"
+            "/tmp/demo/sqlbuild_project.toml must define non-empty string 'name'"
         ),
         expected_exit_code=1,
     ),

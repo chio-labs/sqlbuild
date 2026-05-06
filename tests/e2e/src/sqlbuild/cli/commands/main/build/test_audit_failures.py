@@ -20,16 +20,16 @@ TEST_CASES: list[AuditFailureBuildE2ETestCase] = [
     AuditFailureBuildE2ETestCase(
         description="delta audit failure blocks incremental target update",
         repo_files={
-            "sqlbuild_project.yml": dedent(
+            "sqlbuild_project.toml": dedent(
                 """
-                name: audit_failure_project
-                adapter: duckdb
+            name = "audit_failure_project"
+            adapter = "duckdb"
 
-                connection:
-                  database: audit_failures.duckdb
+            [connection]
+            database = "audit_failures.duckdb"
 
-                defaults:
-                  materialized: table
+            [defaults]
+            materialized = "table"
                 """
             ).strip()
             + "\n",
@@ -94,16 +94,16 @@ TEST_CASES: list[AuditFailureBuildE2ETestCase] = [
     AuditFailureBuildE2ETestCase(
         description="final audit failure reports target already updated for incremental model",
         repo_files={
-            "sqlbuild_project.yml": dedent(
+            "sqlbuild_project.toml": dedent(
                 """
-                name: audit_failure_project
-                adapter: duckdb
+            name = "audit_failure_project"
+            adapter = "duckdb"
 
-                connection:
-                  database: audit_failures.duckdb
+            [connection]
+            database = "audit_failures.duckdb"
 
-                defaults:
-                  materialized: table
+            [defaults]
+            materialized = "table"
                 """
             ).strip()
             + "\n",

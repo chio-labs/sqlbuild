@@ -7,6 +7,7 @@ from typing import cast
 import pytest
 
 from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compile_target
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
@@ -27,13 +28,13 @@ from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
     validate_manifest_against_dbt_schema,
 )
 
-_PROJECT_YML: str = "name: demo\nadapter: duckdb\nconnection:\n  database: ':memory:'\n"
+_PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabase = ":memory:"\n'
 
 PIPELINE_TEST_CASES: list[RunCompilePipelineIntegrationTestCase] = [
     RunCompilePipelineIntegrationTestCase(
         description="single table model with no schema defaults to adapter schema",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_TOML,
             "models/orders.sql": ("MODEL (materialized table);\n\nSELECT 1 AS order_id"),
         },
         expected_models={
@@ -51,7 +52,7 @@ PIPELINE_TEST_CASES: list[RunCompilePipelineIntegrationTestCase] = [
     RunCompilePipelineIntegrationTestCase(
         description="view materialization produces create or replace view DDL",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_TOML,
             "models/active_orders.sql": (
                 "MODEL (materialized view);\n\nSELECT order_id FROM orders WHERE status = 'active'"
             ),
@@ -71,7 +72,7 @@ PIPELINE_TEST_CASES: list[RunCompilePipelineIntegrationTestCase] = [
     RunCompilePipelineIntegrationTestCase(
         description="model with explicit schema and database populates manifest target",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_TOML,
             "models/orders.sql": (
                 "MODEL (\n  materialized table\n  schema analytics\n"
                 "  database warehouse\n);\n\n"
@@ -93,7 +94,7 @@ PIPELINE_TEST_CASES: list[RunCompilePipelineIntegrationTestCase] = [
     RunCompilePipelineIntegrationTestCase(
         description="two models with ref dependency resolves ref to qualified name",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_TOML,
             "models/stg_orders.sql": ("MODEL (materialized table);\n\nSELECT 1 AS order_id"),
             "models/fact_orders.sql": (
                 'MODEL (materialized table);\n\nSELECT order_id FROM __ref("stg_orders")'
@@ -120,7 +121,7 @@ PIPELINE_TEST_CASES: list[RunCompilePipelineIntegrationTestCase] = [
     RunCompilePipelineIntegrationTestCase(
         description="model with source reference resolves source to qualified name",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_TOML,
             "sources/raw.yml": (
                 "sources:\n  - name: raw_payments\n    schema: main\n    table: payments\n"
             ),
@@ -143,7 +144,7 @@ PIPELINE_TEST_CASES: list[RunCompilePipelineIntegrationTestCase] = [
     RunCompilePipelineIntegrationTestCase(
         description="multiple models in subdirectories preserves relative paths",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_TOML,
             "models/staging/stg_orders.sql": ("MODEL (materialized view);\n\nSELECT 1 AS order_id"),
             "models/marts/fact_orders.sql": (
                 'MODEL (materialized table);\n\nSELECT order_id FROM __ref("stg_orders")'
@@ -213,16 +214,16 @@ def test_given_project_files_when_running_compile_pipeline_then_produces_valid_o
         SnowflakeTargetValidationIntegrationTestCase(
             description="snowflake compile requires explicit target database and schema",
             project_files={
-                "sqlbuild_project.yml": (
-                    "name: demo\nadapter: duckdb\nconnection:\n  database: demo.duckdb\n"
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabase = "demo.duckdb"\n'
                 ),
-                "sqlbuild_local.yml": (
-                    "adapter: snowflake\n"
-                    "connection:\n"
-                    "  account: ${ENV:TEST_ACCOUNT}\n"
-                    "  warehouse: TEST_WH\n"
-                    "  database: TEST_DB\n"
-                    "  schema: TEST_SCHEMA\n"
+                "sqlbuild_local.toml": (
+                    'adapter = "snowflake"\n\n'
+                    "[connection]\n"
+                    'account = "${ENV:TEST_ACCOUNT}"\n'
+                    'warehouse = "TEST_WH"\n'
+                    'database = "TEST_DB"\n'
+                    'schema = "TEST_SCHEMA"\n'
                 ),
                 "models/stg_orders.sql": "MODEL (materialized view);\n\nSELECT 1 AS order_id\n",
             },
@@ -252,20 +253,65 @@ def test_given_snowflake_local_override_without_target_namespace_when_compiling_
 @pytest.mark.parametrize(
     "test_case",
     [
+        SnowflakeTargetValidationIntegrationTestCase(
+            description="snowflake local environment target namespace resolves model target",
+            project_files={
+                "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
+                "sqlbuild_local.toml": (
+                    'adapter = "snowflake"\n'
+                    'environment = "dev"\n\n'
+                    "[connection]\n"
+                    'database = "${ENV:TEST_DB}"\n'
+                    'schema = "${ENV:TEST_SCHEMA}"\n\n'
+                    "[environments.dev]\n"
+                    'database = "${ENV:TEST_DB}"\n'
+                    'schema = "${ENV:TEST_SCHEMA}"\n'
+                ),
+                "models/stg_orders.sql": "MODEL (materialized view);\n\nSELECT 1 AS order_id\n",
+            },
+            expected_database="LOCAL_DB",
+            expected_schema="LOCAL_SCHEMA",
+        )
+    ],
+    ids=["snowflake local environment target namespace resolves model target"],
+)
+def test_given_snowflake_local_environment_target_namespace_when_compiling_then_targets_resolve(
+    test_case: SnowflakeTargetValidationIntegrationTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TEST_DB", "LOCAL_DB")
+    monkeypatch.setenv("TEST_SCHEMA", "LOCAL_SCHEMA")
+    write_repo_files(tmp_path, test_case.project_files)
+
+    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+    project: CompiledProject = compile_project(
+        discovered_inputs=discovered_inputs,
+        adapter=SnowflakeAdapter(),
+        no_sql_validation=True,
+    )
+
+    assert project.models[0].target.database == test_case.expected_database
+    assert project.models[0].target.schema == test_case.expected_schema
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         DeferToIntegrationTestCase(
             description="defer-to resolves unselected ref to deferred environment schema",
             project_files={
-                "sqlbuild_project.yml": (
-                    "name: demo\n"
-                    "adapter: duckdb\n"
-                    "default_environment: dev\n"
-                    "connection:\n"
-                    "  database: ':memory:'\n"
-                    "environments:\n"
-                    "  dev:\n"
-                    "    schema: dev_schema\n"
-                    "  prod:\n"
-                    "    schema: prod_schema\n"
+                "sqlbuild_project.toml": (
+                    'name = "demo"\n'
+                    'adapter = "duckdb"\n'
+                    'default_environment = "dev"\n\n'
+                    "[connection]\n"
+                    'database = ":memory:"\n\n'
+                    "[environments.dev]\n"
+                    'schema = "dev_schema"\n\n'
+                    "[environments.prod]\n"
+                    'schema = "prod_schema"\n'
                 ),
                 "models/stg_orders.sql": ("MODEL (materialized table);\n\nSELECT 1 AS order_id"),
                 "models/fact_orders.sql": (
@@ -321,13 +367,13 @@ def test_given_project_with_defer_to_when_compiling_then_resolves_refs_to_deferr
         SqlglotChainCompileTargetIntegrationTestCase(
             description="chain test compile target uses flat generated ctes",
             project_files={
-                "sqlbuild_project.yml": (
-                    "name: demo\n"
-                    "adapter: duckdb\n"
-                    "connection:\n"
-                    "  database: ':memory:'\n"
-                    "settings:\n"
-                    "  sqlglot: true\n"
+                "sqlbuild_project.toml": (
+                    'name = "demo"\n'
+                    'adapter = "duckdb"\n\n'
+                    "[connection]\n"
+                    'database = ":memory:"\n\n'
+                    "[settings]\n"
+                    "sqlglot = true\n"
                 ),
                 "models/stg_orders.sql": (
                     'MODEL (materialized table);\n\nSELECT id, amount FROM __source("raw")'
@@ -441,8 +487,8 @@ def test_given_append_cursor_model_when_compiling_then_sql_uses_expected_lower_b
     write_repo_files(
         tmp_path,
         {
-            "sqlbuild_project.yml": (
-                f"name: demo\nadapter: duckdb\nconnection:\n  database: '{db_path}'\n"
+            "sqlbuild_project.toml": (
+                f'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabase = "{db_path}"\n'
             ),
             "sources/raw.yml": (
                 "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
