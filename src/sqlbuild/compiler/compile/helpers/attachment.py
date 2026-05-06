@@ -78,6 +78,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.shared.helpers.schema_audits import parse_audit_instance
+from sqlbuild.shared.helpers.sqlglot import import_sqlglot
 from sqlbuild.spec.models.project import (
     ClonePolicy,
     DefaultsConfig,
@@ -155,9 +156,13 @@ def build_model_inputs(
             if isinstance(raw_placeholders, dict)
             else None
         )
-        if not no_sql_validation and _is_sql_validation_enabled(
-            project_setting=effective_settings.sql_validation,
-            model_config=effective_config,
+        if (
+            effective_settings.sqlglot
+            and not no_sql_validation
+            and _is_sql_validation_enabled(
+                project_setting=effective_settings.sql_validation,
+                model_config=effective_config,
+            )
         ):
             validate_sql_syntax(
                 query_sql=expanded_query_sql,
@@ -208,9 +213,13 @@ def build_model_inputs(
             logical_schema=effective_config.logical_schema,
             logical_database=effective_config.logical_database,
         )
-        if not no_sql_validation and _is_sql_validation_enabled(
-            project_setting=effective_settings.sql_validation,
-            model_config=effective_config,
+        if (
+            effective_settings.sqlglot
+            and not no_sql_validation
+            and _is_sql_validation_enabled(
+                project_setting=effective_settings.sql_validation,
+                model_config=effective_config,
+            )
         ):
             hook_name: str
             for hook_name in ("pre_hook", "post_hook"):
@@ -387,7 +396,11 @@ def build_sql_function_inputs(
             loaded_macros=loaded_macros,
             macro_context=macro_context,
         )
-        if not no_sql_validation and effective_settings.sql_validation:
+        if (
+            effective_settings.sqlglot
+            and not no_sql_validation
+            and effective_settings.sql_validation
+        ):
             argument: FunctionArgument
             for argument in arguments:
                 validate_native_type(
@@ -512,7 +525,11 @@ def build_sql_function_inputs(
             function_database if isinstance(raw_database, str) else database
         )
         fingerprint_schema: str | None = function_schema if isinstance(raw_schema, str) else schema
-        if not no_sql_validation and effective_settings.sql_validation:
+        if (
+            effective_settings.sqlglot
+            and not no_sql_validation
+            and effective_settings.sql_validation
+        ):
             for argument in arguments:
                 validate_native_type(
                     argument.type,
@@ -746,10 +763,11 @@ def validate_native_type(type_sql: str, *, adapter_name: str, context: str) -> N
     dialect: str | None = dialect_by_adapter.get(adapter_name)
     if dialect is None:
         return
+    sqlglot_module: Any | None = import_sqlglot()
+    if sqlglot_module is None:
+        return
     try:
-        import sqlglot
-
-        sqlglot.parse_one(
+        sqlglot_module.parse_one(
             f"CREATE TABLE __sqlbuild_type_check__ (__value__ {type_sql})",
             read=dialect,
         )
@@ -811,7 +829,9 @@ def build_source_inputs(
     """Normalize discovered source declarations into one collection."""
 
     source_inputs: list[CompileSourceInput] = []
-    sql_validation_enabled: bool = effective_settings.sql_validation and not no_sql_validation
+    sql_validation_enabled: bool = (
+        effective_settings.sqlglot and effective_settings.sql_validation and not no_sql_validation
+    )
     source_file: DiscoveredSourceFile
     for source_file in discovered_inputs.source_files:
         source_entry: SourceEntry

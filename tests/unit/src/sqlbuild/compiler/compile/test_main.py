@@ -1533,6 +1533,36 @@ sql_validation = false
         expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
+        description="allows invalid sql when sqlglot is disabled",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+
+[settings]
+sqlglot = false
+""".strip()
+            + "\n",
+            "models/staging/broken.sql": "MODEL ();\n\nSELEC id FROM (SELECT 1\n",
+        },
+        selected_environment=None,
+        cli_vars=None,
+        run_id="test_run",
+        expected_model_schema_names=(None,),
+        expected_model_config_values=({},),
+        expected_model_query_sqls=("SELEC id FROM (SELECT 1",),
+        expected_model_path_defaults=(None,),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_effective_environment_name=None,
+        expected_effective_connection={},
+        expected_effective_vars={},
+        expected_effective_sqlglot=False,
+        expected_model_references=((),),
+        expected_audit_references=(),
+    ),
+    BuildCompileInputsTestCase(
         description="allows invalid sql when no_sql_validation flag is set",
         repo_files=base_repo_files()
         | {

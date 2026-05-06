@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import re
 from collections import OrderedDict
-from importlib import import_module
 from typing import Any
+
+from sqlbuild.shared.helpers.sqlglot import import_sqlglot
 
 _IDENTIFIER_CHAR_PATTERN: re.Pattern[str] = re.compile(r"[^a-zA-Z0-9_]+")
 
@@ -33,7 +34,7 @@ def lift_step_ctes(sql: str, lifted_ctes: OrderedDict[str, str]) -> str:
 def format_sql(sql: str, *, sqlglot_dialect: str | None = None) -> str:
     """Format generated comparison SQL when SQLGlot is available."""
 
-    sqlglot_module: Any | None = _import_sqlglot()
+    sqlglot_module: Any | None = import_sqlglot()
     if sqlglot_module is None:
         return sql
     try:
@@ -61,7 +62,7 @@ def unique_cte_suffix(*, model_name: str, cte_name_counts: dict[str, int]) -> st
 def _split_top_level_with(sql: str) -> tuple[tuple[tuple[str, str], ...], str] | None:
     """Split top-level WITH CTEs from a SQL statement with SQLGlot if available."""
 
-    sqlglot_module: Any | None = _import_sqlglot()
+    sqlglot_module: Any | None = import_sqlglot()
     if sqlglot_module is None:
         return None
 
@@ -85,15 +86,6 @@ def _split_top_level_with(sql: str) -> tuple[tuple[tuple[str, str], ...], str] |
     parsed_without_with: Any = parsed.copy()
     parsed_without_with.set("with_", None)
     return tuple(cte_parts), parsed_without_with.sql(pretty=False)
-
-
-def _import_sqlglot() -> Any | None:
-    """Import SQLGlot if installed."""
-
-    try:
-        return import_module("sqlglot")
-    except ModuleNotFoundError:
-        return None
 
 
 def _sanitize_cte_suffix(model_name: str) -> str:
