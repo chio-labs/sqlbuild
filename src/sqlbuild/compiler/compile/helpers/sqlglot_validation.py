@@ -73,7 +73,7 @@ def validate_sql_syntax(
             f"To skip SQL validation for this model, add `sql_validation: false` "
             f"to the MODEL header.\n"
             f"To disable project-wide, set `settings.sql_validation: false` "
-            f"in sqlbuild_project.yml.\n"
+            f"in sqlbuild_project.toml.\n"
             f"To skip for this run, use `--no-sql-validation`."
         ) from None
 
@@ -173,6 +173,6 @@ def _validate_sql_syntax_with_message(
             f"To skip SQL validation for this model, add `sql_validation: false` "
             f"to the MODEL header.\n"
             f"To disable project-wide, set `settings.sql_validation: false` "
-            f"in sqlbuild_project.yml.\n"
+            f"in sqlbuild_project.toml.\n"
             f"To skip for this run, use `--no-sql-validation`."
         ) from None

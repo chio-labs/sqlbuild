@@ -8,13 +8,13 @@ def build_chain_test_project_files(*, sqlglot_enabled: bool) -> dict[str, str]:
 
     sqlglot_value: str = "true" if sqlglot_enabled else "false"
     return {
-        "sqlbuild_project.yml": (
-            "name: demo\n"
-            "adapter: duckdb\n"
-            "connection:\n"
-            "  database: demo.duckdb\n"
-            "settings:\n"
-            f"  sqlglot: {sqlglot_value}\n"
+        "sqlbuild_project.toml": (
+            'name = "demo"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "demo.duckdb"\n\n'
+            "[settings]\n"
+            f"sqlglot = {sqlglot_value}\n"
         ),
         "models/stg_orders.sql": (
             "MODEL (materialized table);\n\n"

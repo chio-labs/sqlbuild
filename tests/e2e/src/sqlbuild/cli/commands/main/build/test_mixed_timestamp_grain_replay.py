@@ -24,17 +24,26 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
         MixedTimestampGrainBuildE2ETestCase(
             description="coarser upstream timestamp bucket reruns at largest bucket",
             repo_files={
-                "sqlbuild_project.yml": dedent(
+                "sqlbuild_project.toml": dedent(
                     """
-                name: mixed_grain_project
-                adapter: duckdb
 
-                connection:
-                  database: mixed_grain.duckdb
+                name = "mixed_grain_project"
 
-                defaults:
-                  materialized: table
-                """
+                adapter = "duckdb"
+
+
+
+                [connection]
+
+                database = "mixed_grain.duckdb"
+
+
+
+                [defaults]
+
+                materialized = "table"
+
+                    """
                 ).strip()
                 + "\n",
                 "seed_raw_data.sql": dedent(

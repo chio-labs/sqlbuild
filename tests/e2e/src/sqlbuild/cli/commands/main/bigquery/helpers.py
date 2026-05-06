@@ -22,11 +22,11 @@ def build_bigquery_local_config(*, environment: str = "dev", location: str) -> s
     """Build a local config pointing the project at BigQuery."""
 
     return (
-        "adapter: bigquery\n"
-        f"environment: {environment}\n"
-        "connection:\n"
-        "  project: ${ENV:SQB_TEST_BIGQUERY_PROJECT}\n"
-        f"  location: {location}\n"
+        'adapter = "bigquery"\n'
+        f'environment = "{environment}"\n\n'
+        "[connection]\n"
+        'project = "${ENV:SQB_TEST_BIGQUERY_PROJECT}"\n'
+        f'location = "{location}"\n'
     )
 
 
@@ -39,25 +39,27 @@ def prepare_bigquery_waffle_shop(*, tmp_path: Path) -> tuple[Path, str]:
     project_name: str = str(build_bigquery_connection_config(schema=dataset_name)["project"])
     location: str = str(build_bigquery_connection_config(schema=dataset_name)["location"])
     project_contents: str = (
-        "name: waffle_shop\n"
-        "adapter: bigquery\n\n"
-        "default_environment: dev\n\n"
-        "connection:\n"
-        "  project: ${ENV:SQB_TEST_BIGQUERY_PROJECT}\n"
-        f"  location: {location}\n\n"
-        "settings:\n"
-        "  default_audit_severity: warn\n\n"
-        "defaults:\n"
-        "  materialized: table\n\n"
-        "environments:\n"
-        f"  dev:\n    database: {project_name}\n    schema: {dataset_name}\n"
-        f"  prod:\n    database: {project_name}\n    schema: {dataset_name}\n\n"
-        "path_defaults:\n"
-        "  staging:\n"
-        "    materialized: view\n"
+        'name = "waffle_shop"\n'
+        'adapter = "bigquery"\n'
+        'default_environment = "dev"\n\n'
+        "[connection]\n"
+        'project = "${ENV:SQB_TEST_BIGQUERY_PROJECT}"\n'
+        f'location = "{location}"\n\n'
+        "[settings]\n"
+        'default_audit_severity = "warn"\n\n'
+        "[defaults]\n"
+        'materialized = "table"\n\n'
+        "[environments.dev]\n"
+        f'database = "{project_name}"\n'
+        f'schema = "{dataset_name}"\n\n'
+        "[environments.prod]\n"
+        f'database = "{project_name}"\n'
+        f'schema = "{dataset_name}"\n\n'
+        "[path_defaults.staging]\n"
+        'materialized = "view"\n'
     )
-    (project_dir / "sqlbuild_project.yml").write_text(project_contents, encoding="utf-8")
-    (project_dir / "sqlbuild_local.yml").write_text(
+    (project_dir / "sqlbuild_project.toml").write_text(project_contents, encoding="utf-8")
+    (project_dir / "sqlbuild_local.toml").write_text(
         build_bigquery_local_config(location=location),
         encoding="utf-8",
     )
@@ -140,21 +142,24 @@ def prepare_bigquery_diff_project(*, tmp_path: Path) -> tuple[Path, str, str]:
     project_name: str = str(build_bigquery_connection_config(schema=dev_dataset)["project"])
     location: str = str(build_bigquery_connection_config(schema=dev_dataset)["location"])
     project_contents: str = (
-        "name: bigquery_diff_project\n"
-        "adapter: bigquery\n\n"
-        "default_environment: dev\n\n"
-        "connection:\n"
-        "  project: ${ENV:SQB_TEST_BIGQUERY_PROJECT}\n"
-        f"  location: {location}\n\n"
-        "environments:\n"
-        f"  dev:\n    database: {project_name}\n    schema: {dev_dataset}\n"
-        f"  prod:\n    database: {project_name}\n    schema: {prod_dataset}\n\n"
-        "defaults:\n"
-        "  materialized: table\n"
+        'name = "bigquery_diff_project"\n'
+        'adapter = "bigquery"\n'
+        'default_environment = "dev"\n\n'
+        "[connection]\n"
+        'project = "${ENV:SQB_TEST_BIGQUERY_PROJECT}"\n'
+        f'location = "{location}"\n\n'
+        "[environments.dev]\n"
+        f'database = "{project_name}"\n'
+        f'schema = "{dev_dataset}"\n\n'
+        "[environments.prod]\n"
+        f'database = "{project_name}"\n'
+        f'schema = "{prod_dataset}"\n\n'
+        "[defaults]\n"
+        'materialized = "table"\n'
     )
     project_dir.mkdir(parents=True, exist_ok=True)
-    (project_dir / "sqlbuild_project.yml").write_text(project_contents, encoding="utf-8")
-    (project_dir / "sqlbuild_local.yml").write_text(
+    (project_dir / "sqlbuild_project.toml").write_text(project_contents, encoding="utf-8")
+    (project_dir / "sqlbuild_local.toml").write_text(
         build_bigquery_local_config(location=location),
         encoding="utf-8",
     )
@@ -193,7 +198,7 @@ def write_local_environment_override(*, project_dir: Path, environment: str) -> 
     """Write a local environment override for BigQuery CLI e2e commands."""
 
     location: str = str(build_bigquery_connection_config()["location"])
-    (project_dir / "sqlbuild_local.yml").write_text(
+    (project_dir / "sqlbuild_local.toml").write_text(
         build_bigquery_local_config(environment=environment, location=location),
         encoding="utf-8",
     )

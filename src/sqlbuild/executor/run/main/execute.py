@@ -412,7 +412,7 @@ def _direct_lifecycle(
             error=(
                 f"model '{entry.name}': type enforcement requires staged promotion mode "
                 f"for runtime column inspection; set table_promotion_mode: staged in "
-                f"sqlbuild_project.yml settings"
+                f"sqlbuild_project.toml settings"
             ),
             warnings=warnings,
             audit_results=audit_results,

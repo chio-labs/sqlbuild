@@ -20,11 +20,11 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
     CliFailureBuildE2ETestCase(
         description="bad mapped cursor input column fails at runtime",
         repo_files={
-            "sqlbuild_project.yml": (
-                "name: cursor_runtime_project\n"
-                "adapter: duckdb\n"
-                "connection:\n"
-                "  database: cursor_runtime.duckdb\n"
+            "sqlbuild_project.toml": (
+                'name = "cursor_runtime_project"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "cursor_runtime.duckdb"\n'
             ),
             "seed_raw_data.sql": (
                 "CREATE TABLE main.raw_orders (id INTEGER, ordered_at TIMESTAMP);\n"
@@ -69,11 +69,11 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
     CliFailureBuildE2ETestCase(
         description="broken runtime-owned upstream relation fails at compile time",
         repo_files={
-            "sqlbuild_project.yml": (
-                "name: cursor_runtime_project\n"
-                "adapter: duckdb\n"
-                "connection:\n"
-                "  database: cursor_runtime.duckdb\n"
+            "sqlbuild_project.toml": (
+                'name = "cursor_runtime_project"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "cursor_runtime.duckdb"\n'
             ),
             "seed_raw_data.sql": (
                 "CREATE TABLE main.raw_orders (id INTEGER, ordered_at TIMESTAMP);\n"

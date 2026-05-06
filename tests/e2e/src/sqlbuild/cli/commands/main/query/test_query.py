@@ -40,8 +40,9 @@ def test_given_query_command_when_running_then_outputs_result(
         tmp_path=tmp_path,
         project_name="query_project",
         repo_files={
-            "sqlbuild_project.yml": (
-                "name: query_project\nadapter: duckdb\nconnection:\n  database: query.duckdb\n"
+            "sqlbuild_project.toml": (
+                'name = "query_project"\nadapter = "duckdb"\n\n'
+                '[connection]\ndatabase = "query.duckdb"\n'
             ),
         },
     )

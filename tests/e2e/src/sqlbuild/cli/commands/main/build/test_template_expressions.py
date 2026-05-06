@@ -24,23 +24,41 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
         TemplateExpressionsBuildE2ETestCase(
             description="build uses if eq ne and coalesce in config interpolation",
             repo_files={
-                "sqlbuild_project.yml": dedent(
+                "sqlbuild_project.toml": dedent(
                     """
-                    name: template_expressions_project
-                    adapter: duckdb
-                    default_environment: dev
 
-                    connection:
-                      database: template_expressions.duckdb
+                name = "template_expressions_project"
 
-                    defaults:
-                      materialized: incremental
-                      incremental_strategy: append
-                      append_cursor_inclusive: "${if(eq(ENV:APPEND_INCLUSIVE, '0'), false, true)}"
+                adapter = "duckdb"
 
-                    environments:
-                      dev:
-                        schema: "${coalesce(ENV:TEMPLATE_SCHEMA, 'main')}"
+                default_environment = "dev"
+
+
+
+                [connection]
+
+                database = "template_expressions.duckdb"
+
+
+
+                [defaults]
+
+                materialized = "incremental"
+
+                incremental_strategy = "append"
+
+                append_cursor_inclusive = "${if(eq(ENV:APPEND_INCLUSIVE, '0'), false, true)}"
+
+
+
+                [environments]
+
+
+
+                [environments.dev]
+
+                schema = "${coalesce(ENV:TEMPLATE_SCHEMA, 'main')}"
+
                     """
                 ).strip()
                 + "\n",

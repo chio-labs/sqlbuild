@@ -40,12 +40,12 @@ from tests.integration.src.sqlbuild.executor.build.custom.helpers import (
 )
 
 _PROJECT_YML: str = (
-    "name: demo\n"
-    "adapter: duckdb\n"
-    "connection:\n"
-    "  database: test.duckdb\n"
-    "settings:\n"
-    "  default_audit_severity: error\n"
+    'name = "demo"\n'
+    'adapter = "duckdb"\n\n'
+    "[connection]\n"
+    'database = "test.duckdb"\n\n'
+    "[settings]\n"
+    'default_audit_severity = "error"\n'
 )
 
 
@@ -321,7 +321,7 @@ SCHEDULER_ROUTING_TEST_CASES: list[SchedulerRoutingTestCase] = [
     SchedulerRoutingTestCase(
         description="custom materialization dispatched through scheduler alongside regular table",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/regular.sql": (
                 "MODEL (materialized table);\n\nSELECT 1 AS id, 'regular' AS name"
             ),
@@ -342,7 +342,7 @@ SCHEDULER_ROUTING_TEST_CASES: list[SchedulerRoutingTestCase] = [
     SchedulerRoutingTestCase(
         description="custom materialization downstream of regular table receives correct data",
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/upstream.sql": (
                 "MODEL (materialized table);\n\nSELECT 10 AS id, 'upstream' AS origin"
             ),

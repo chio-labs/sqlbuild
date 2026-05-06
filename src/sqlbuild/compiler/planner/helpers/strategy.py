@@ -221,7 +221,7 @@ def build_model_warnings(
                     f"query changed for '{model_name}'; incremental history will not be "
                     "rebuilt unless you set query_change_backfill. Use "
                     "query_change_backfill full or bounded-<duration> to rebuild history, "
-                    "or set settings.query_change_tracking: false in sqlbuild_project.yml "
+                    "or set settings.query_change_tracking = false in sqlbuild_project.toml "
                     "to disable query-change warnings."
                 ),
             )

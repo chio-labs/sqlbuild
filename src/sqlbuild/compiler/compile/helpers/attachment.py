@@ -2547,14 +2547,14 @@ def resolve_audit_severity(
     if default_severity is not None:
         if default_severity not in valid_values:
             raise CompileInputError(
-                f"settings.default_audit_severity in sqlbuild_project.yml: "
+                f"settings.default_audit_severity in sqlbuild_project.toml: "
                 f"unknown value '{default_severity}'; "
                 f"valid values: {', '.join(sorted(valid_values))}"
             )
         return default_severity
     raise CompileInputError(
         f"{audit_label}: severity is required; set it on the audit instance "
-        f"or set settings.default_audit_severity in sqlbuild_project.yml"
+        f"or set settings.default_audit_severity in sqlbuild_project.toml"
     )
 
 
@@ -2578,7 +2578,7 @@ def resolve_audit_run_scope(
     if default_run_scope is not None:
         if default_run_scope not in valid_values:
             raise CompileInputError(
-                f"settings.default_audit_run_scope in sqlbuild_project.yml: "
+                f"settings.default_audit_run_scope in sqlbuild_project.toml: "
                 f"unknown value '{default_run_scope}'; "
                 f"valid values: {', '.join(sorted(valid_values))}"
             )

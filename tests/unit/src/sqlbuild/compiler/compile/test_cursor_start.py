@@ -21,9 +21,10 @@ from tests.unit.src.sqlbuild.compiler.compile._test_types import (
         CursorStartCompileInputsTestCase(
             description="model cursor_start overrides path and project defaults",
             repo_files={
-                "sqlbuild_project.yml": (
-                    "name: demo\nadapter: duckdb\ndefaults:\n  cursor_start: 10\n"
-                    "path_defaults:\n  events:\n    cursor_start: 20\n"
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n\n'
+                    "[defaults]\ncursor_start = 10\n\n"
+                    "[path_defaults.events]\ncursor_start = 20\n"
                 ),
                 "models/events/orders.sql": (
                     "MODEL (\nmaterialized incremental\nincremental_strategy delete_insert\n"
@@ -55,7 +56,7 @@ ERROR_TEST_CASES: list[CursorStartCompileErrorTestCase] = [
     CursorStartCompileErrorTestCase(
         description="cursor_start requires cursor",
         repo_files={
-            "sqlbuild_project.yml": "name: demo\nadapter: duckdb\n",
+            "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
             "models/orders.sql": (
                 "MODEL (\nmaterialized incremental\nincremental_strategy merge\n"
                 "cursor_type integer\ncursor_start 100\n);\n\nSELECT 1 AS id"
@@ -66,7 +67,7 @@ ERROR_TEST_CASES: list[CursorStartCompileErrorTestCase] = [
     CursorStartCompileErrorTestCase(
         description="integer cursor_start rejects non whole number",
         repo_files={
-            "sqlbuild_project.yml": "name: demo\nadapter: duckdb\n",
+            "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
             "models/orders.sql": (
                 "MODEL (\nmaterialized incremental\nincremental_strategy merge\ncursor id\n"
                 "cursor_type integer\nunique_key [id]\n"

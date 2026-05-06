@@ -12,11 +12,11 @@ def prepare_project_with_local_adapter(*, tmp_path: Path) -> Path:
         tmp_path=tmp_path,
         project_name="project_local_adapter",
         repo_files={
-            "sqlbuild_project.yml": (
-                "name: project_local_adapter\n"
-                "adapter: duckdb_plus\n"
-                "connection:\n"
-                "  database: local.duckdb\n"
+            "sqlbuild_project.toml": (
+                'name = "project_local_adapter"\n'
+                'adapter = "duckdb_plus"\n\n'
+                "[connection]\n"
+                'database = "local.duckdb"\n'
             ),
             "adapters/warehouse/duckdb_plus.py": (
                 "from sqlbuild.adapter.shared.models import QueryResult\n"
