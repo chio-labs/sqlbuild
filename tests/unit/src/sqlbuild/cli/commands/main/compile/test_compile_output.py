@@ -58,6 +58,7 @@ def test_given_compiled_project_when_formatting_compile_text_then_matches_expect
         ),
         manifest=False,
         lineage=None,
+        diagnostics=(),
         use_color=False,
     )
 
