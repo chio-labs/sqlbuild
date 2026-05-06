@@ -65,6 +65,23 @@ COMMAND_LOCAL_GLOBAL_FLAG_ERROR_TEST_CASES: list[MainTestCase] = [
     ),
 ]
 
+COMPILE_DISPATCH_TEST_CASES: list[MainTestCase] = [
+    MainTestCase(
+        description="passes no sql validation flag to compile handler",
+        argv=["compile", "--no-sql-validation"],
+        expected_exit_code=3,
+        expected_project_dir=None,
+        expected_no_sql_validation=True,
+    ),
+    MainTestCase(
+        description="passes manifest flag to compile handler",
+        argv=["compile", "--manifest"],
+        expected_exit_code=3,
+        expected_project_dir=None,
+        expected_manifest=True,
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -517,29 +534,22 @@ def test_given_janitor_command_arguments_when_running_with_dependencies_then_it_
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        MainTestCase(
-            description="passes no sql validation flag to compile handler",
-            argv=["compile", "--no-sql-validation"],
-            expected_exit_code=3,
-            expected_project_dir=None,
-            expected_no_sql_validation=True,
-        )
-    ],
-    ids=["passes no sql validation flag to compile handler"],
+    COMPILE_DISPATCH_TEST_CASES,
+    ids=[case.description for case in COMPILE_DISPATCH_TEST_CASES],
 )
 def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_flag(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[Path | None, bool, str | None, bool]] = []
+    received_args: list[tuple[Path | None, bool, str | None, bool, bool]] = []
 
     def run_compile(
         project_dir: Path | None,
         no_sql_validation: bool,
         defer_to: str | None,
         json_output: bool,
+        manifest: bool,
     ) -> int:
-        received_args.append((project_dir, no_sql_validation, defer_to, json_output))
+        received_args.append((project_dir, no_sql_validation, defer_to, json_output, manifest))
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -549,7 +559,13 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
 
     assert exit_code == test_case.expected_exit_code
     assert received_args == [
-        (test_case.expected_project_dir, test_case.expected_no_sql_validation, None, False)
+        (
+            test_case.expected_project_dir,
+            test_case.expected_no_sql_validation,
+            None,
+            False,
+            test_case.expected_manifest,
+        )
     ]
 
 
@@ -765,10 +781,12 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
         no_sql_validation: bool,
         defer_to: str | None,
         json_output: bool,
+        manifest: bool,
     ) -> int:
         del no_sql_validation
         del defer_to
         del json_output
+        del manifest
         assert project_dir is not None
         raise test_case.error_factory(project_dir)
 
