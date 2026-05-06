@@ -16,6 +16,7 @@ class CompileCommandTestCase:
     description: str
     expected_exit_code: int
     expected_stdout_fragments: tuple[str, ...]
+    model_sql: str | None = None
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,16 @@ class CompileTextOutputTestCase:
     model_count: int
     expected_fragments: tuple[str, ...]
     unexpected_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class CompileJsonDiagnosticsTestCase:
+    description: str
+    model_sql: str
+    expected_exit_code: int
+    expected_code: str
+    expected_severity: str
+    expected_message: str
 
 
 @dataclass(frozen=True)

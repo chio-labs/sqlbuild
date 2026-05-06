@@ -18,9 +18,11 @@ from sqlbuild.compiler.compile.models import (
     CompiledSource,
     CompiledSqlTest,
 )
+from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic
+from sqlbuild.compiler.diagnostics.types import DiagnosticSeverity
 from sqlbuild.compiler.lineage.models import ModelColumnLineage, ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.shared.helpers.colors import blue_bold, dim, green, green_bold, yellow
+from sqlbuild.shared.helpers.colors import blue_bold, dim, green, green_bold, red, yellow
 
 _HUMAN_MODEL_LIMIT: int = 100
 _MIN_MODEL_NAME_WIDTH: int = 24
@@ -33,6 +35,7 @@ def format_compile_text(
     written: WrittenTarget,
     manifest: bool,
     lineage: ProjectColumnLineage | None,
+    diagnostics: tuple[CompilerDiagnostic, ...],
     use_color: bool,
 ) -> str:
     """Format human-readable compile output."""
@@ -47,11 +50,14 @@ def format_compile_text(
     ]
     visible_models: tuple[CompiledModel, ...] = graph.project.models[:_HUMAN_MODEL_LIMIT]
     model_name_width: int = _model_name_width(visible_models)
+    error_models: frozenset[str] = _models_with_error_diagnostics(diagnostics)
     for model in visible_models:
         model_name: str = _fit(model.name, width=model_name_width)
+        status: str = "FAIL" if model.name in error_models else "OK"
+        status_styler: Callable[[str], str] = red if status == "FAIL" else green
         lines.append(
             f"  {_style(model_name, blue_bold, use_color)} "
-            f"{_style('OK', green, use_color)} "
+            f"{_style(status, status_styler, use_color)} "
             f"{_style(f'{_column_count(model)} columns', dim, use_color)}"
         )
     hidden_model_count: int = len(graph.project.models) - len(visible_models)
@@ -67,12 +73,18 @@ def format_compile_text(
         )
         lines.append("  " + _style("Use --json for the full compile report.", dim, use_color))
     lines.append("")
+    if diagnostics:
+        lines.append(_format_diagnostics_text(diagnostics, use_color=use_color))
+        lines.append("")
+    error_count: int = _diagnostic_count(diagnostics, DiagnosticSeverity.ERROR)
+    warning_count: int = _diagnostic_count(diagnostics, DiagnosticSeverity.WARNING)
     lines.append(
         f"  {_style('Compiled:', green_bold, use_color)} "
         f"{_count_label(len(graph.project.models), 'model')}, "
         f"{_count_label(len(graph.project.seeds), 'seed')}, "
         f"{_count_label(len(graph.project.functions), 'function')}, "
-        "0 errors, 0 warnings"
+        f"{_count_label(error_count, 'error')}, "
+        f"{_count_label(warning_count, 'warning')}"
     )
     lines.append(
         f"  {_style('Wrote:', dim, use_color)} {_relative_target_path(_compiled_sql_dir(written))}/"
@@ -91,6 +103,7 @@ def format_compile_json(
     manifest: bool,
     timings_ms: dict[str, int],
     lineage: ProjectColumnLineage | None,
+    diagnostics: tuple[CompilerDiagnostic, ...],
 ) -> str:
     """Serialize the offline compile report as JSON."""
 
@@ -98,9 +111,9 @@ def format_compile_json(
         "version": _sqlbuild_version(),
         "command": "compile",
         "offline": True,
-        "has_errors": False,
-        "summary": _summary(graph),
-        "diagnostics": [],
+        "has_errors": any(diagnostic.is_error for diagnostic in diagnostics),
+        "summary": _summary(graph, diagnostics=diagnostics),
+        "diagnostics": [_diagnostic_to_json(diagnostic) for diagnostic in diagnostics],
         "compile_timings": timings_ms,
         "resources": _resources(graph=graph, lineage=lineage),
         "artifacts": _artifacts(written=written, manifest=manifest),
@@ -108,7 +121,7 @@ def format_compile_json(
     return json.dumps(result, indent=2)
 
 
-def _summary(graph: ProjectGraph) -> dict[str, int]:
+def _summary(graph: ProjectGraph, *, diagnostics: tuple[CompilerDiagnostic, ...]) -> dict[str, int]:
     project: CompiledProject = graph.project
     return {
         "models": len(project.models),
@@ -119,8 +132,8 @@ def _summary(graph: ProjectGraph) -> dict[str, int]:
         "audits": len(project.audits),
         "tests": len(project.sql_tests),
         "execution_layers": _execution_layer_count(graph),
-        "errors": 0,
-        "warnings": 0,
+        "errors": _diagnostic_count(diagnostics, DiagnosticSeverity.ERROR),
+        "warnings": _diagnostic_count(diagnostics, DiagnosticSeverity.WARNING),
     }
 
 
@@ -264,6 +277,86 @@ def _count_label(count: int, singular: str) -> str:
     if count == 1:
         return f"{count} {singular}"
     return f"{count} {singular}s"
+
+
+def _diagnostic_count(
+    diagnostics: tuple[CompilerDiagnostic, ...], severity: DiagnosticSeverity
+) -> int:
+    return sum(1 for diagnostic in diagnostics if diagnostic.severity == severity)
+
+
+def _models_with_error_diagnostics(
+    diagnostics: tuple[CompilerDiagnostic, ...],
+) -> frozenset[str]:
+    return frozenset(
+        diagnostic.resource_name
+        for diagnostic in diagnostics
+        if diagnostic.is_error and diagnostic.resource_name is not None
+    )
+
+
+def _diagnostic_to_json(diagnostic: CompilerDiagnostic) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "phase": str(diagnostic.phase),
+        "severity": str(diagnostic.severity),
+        "code": diagnostic.code,
+        "message": diagnostic.message,
+    }
+    if diagnostic.resource_type is not None:
+        payload["resource_type"] = str(diagnostic.resource_type)
+    if diagnostic.resource_name is not None:
+        payload["resource_name"] = diagnostic.resource_name
+    if diagnostic.column_name is not None:
+        payload["column_name"] = diagnostic.column_name
+    if diagnostic.path is not None:
+        payload["path"] = str(diagnostic.path)
+    if diagnostic.line is not None:
+        payload["line"] = diagnostic.line
+    if diagnostic.column is not None:
+        payload["column"] = diagnostic.column
+    if diagnostic.help is not None:
+        payload["help"] = diagnostic.help
+    return payload
+
+
+def _format_diagnostics_text(
+    diagnostics: tuple[CompilerDiagnostic, ...], *, use_color: bool
+) -> str:
+    lines: list[str] = []
+    for diagnostic in diagnostics:
+        lines.extend(_format_diagnostic_text(diagnostic, use_color=use_color))
+        lines.append("")
+    if lines:
+        lines.pop()
+    return "\n".join(lines)
+
+
+def _format_diagnostic_text(diagnostic: CompilerDiagnostic, *, use_color: bool) -> list[str]:
+    header: str = f"{diagnostic.severity}[{diagnostic.code}]: {diagnostic.message}"
+    lines: list[str] = [_style(header, _diagnostic_styler(diagnostic), use_color)]
+    if diagnostic.resource_name is not None:
+        label: str = "model"
+        resource: str = diagnostic.resource_name
+        if diagnostic.resource_type is not None and str(diagnostic.resource_type) != "model":
+            label = "resource"
+            resource = f"{diagnostic.resource_type}: {resource}"
+        lines.append(f"  {label}: {_style(resource, blue_bold, use_color)}")
+    if diagnostic.path is not None:
+        location: str = str(diagnostic.path)
+        if diagnostic.line is not None and diagnostic.column is not None:
+            location = f"{location}:{diagnostic.line}:{diagnostic.column}"
+        lines.append(f"  file: {location}")
+    if diagnostic.help is not None:
+        lines.append(f"  {_style('help:', dim, use_color)} {diagnostic.help}")
+    return lines
+
+
+def _diagnostic_styler(diagnostic: CompilerDiagnostic) -> Callable[[str], str]:
+    if diagnostic.severity == DiagnosticSeverity.ERROR:
+        return red
+    if diagnostic.severity == DiagnosticSeverity.WARNING:
+        return yellow
+    return dim
 
 
 def _serialize_key(key: CompiledObjectKey) -> dict[str, str]:

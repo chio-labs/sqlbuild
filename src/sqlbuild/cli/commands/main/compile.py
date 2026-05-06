@@ -15,6 +15,9 @@ from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_stati
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.compiler.compile.main.load_macros import load_macros
 from sqlbuild.compiler.compile.models import LoadedMacro
+from sqlbuild.compiler.contracts.main.validate import validate_model_contracts
+from sqlbuild.compiler.contracts.models import ContractValidationResult
+from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.main.columns import build_project_column_lineage
@@ -64,6 +67,13 @@ def run_compile(
         dialect=adapter.sqlglot_dialect(),
     )
     lineage_ms: int = _elapsed_ms(lineage_start)
+    contracts_start: float = time.monotonic()
+    contract_result: ContractValidationResult = validate_model_contracts(
+        graph.project,
+        dialect=adapter.sqlglot_dialect(),
+    )
+    contract_ms: int = _elapsed_ms(contracts_start)
+    diagnostics: tuple[CompilerDiagnostic, ...] = contract_result.diagnostics
     manifest_payload: dict[str, object] | None = None
     if manifest:
         loaded_macros: dict[str, LoadedMacro] = load_macros(discovered_inputs.macro_files)
@@ -91,9 +101,11 @@ def run_compile(
         "discover_ms": discover_ms,
         "graph_ms": graph_ms,
         "lineage_ms": lineage_ms,
+        "contracts_ms": contract_ms,
         "write_ms": write_ms,
         "total_ms": _elapsed_ms(total_start),
     }
+    exit_code: int = 1 if any(diagnostic.is_error for diagnostic in diagnostics) else 0
 
     if json_output:
         print(
@@ -103,9 +115,10 @@ def run_compile(
                 manifest=manifest,
                 timings_ms=timings_ms,
                 lineage=lineage,
+                diagnostics=diagnostics,
             )
         )
-        return 0
+        return exit_code
 
     print(
         format_compile_text(
@@ -113,10 +126,11 @@ def run_compile(
             written=written,
             manifest=manifest,
             lineage=lineage,
+            diagnostics=diagnostics,
             use_color=(not no_color) and supports_color(),
         )
     )
-    return 0
+    return exit_code
 
 
 def _elapsed_ms(start: float) -> int:
