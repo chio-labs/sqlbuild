@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from importlib import import_module
 from typing import Any
 
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.planner.models import PlanWarning
 from sqlbuild.compiler.planner.types import CursorType, WarningSeverity
+from sqlbuild.shared.helpers.sqlglot import import_sqlglot
 
 _TIMESTAMP_SUBSTRINGS: frozenset[str] = frozenset(
     {
@@ -214,9 +214,8 @@ def _classify_type_with_sqlglot(warehouse_type: str) -> CursorType | None:
     type cannot be classified.
     """
 
-    try:
-        sqlglot_module: Any = import_module("sqlglot")
-    except ModuleNotFoundError:
+    sqlglot_module: Any | None = import_sqlglot()
+    if sqlglot_module is None:
         return None
 
     try:

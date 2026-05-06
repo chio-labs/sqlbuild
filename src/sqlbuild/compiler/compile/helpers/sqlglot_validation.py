@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from importlib import import_module
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +10,7 @@ from sqlbuild.compiler.compile.helpers.sqlglot_columns import (
     _replace_refs_with_stubs,
     substitute_placeholder_defaults,
 )
+from sqlbuild.shared.helpers.sqlglot import import_sqlglot
 
 _VALID_HOOK_ROOT_KEYS: frozenset[str] = frozenset(
     {
@@ -56,9 +56,8 @@ def validate_sql_syntax(
     if SQLGlot is not installed.
     """
 
-    try:
-        sqlglot_module: Any = import_module("sqlglot")
-    except ModuleNotFoundError:
+    sqlglot_module: Any | None = import_sqlglot()
+    if sqlglot_module is None:
         return
 
     cleaned_sql: str = _replace_refs_with_stubs(query_sql)
@@ -151,9 +150,8 @@ def _validate_sql_syntax_with_message(
 ) -> None:
     """Parse SQL with SQLGlot and raise CompileInputError with a custom message."""
 
-    try:
-        sqlglot_module: Any = import_module("sqlglot")
-    except ModuleNotFoundError:
+    sqlglot_module: Any | None = import_sqlglot()
+    if sqlglot_module is None:
         return
 
     cleaned_sql: str = _replace_refs_with_stubs(query_sql)
