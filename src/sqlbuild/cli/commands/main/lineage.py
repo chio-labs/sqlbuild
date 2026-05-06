@@ -5,14 +5,18 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.main.helpers.lineage.models import LineageGraph
+from sqlbuild.cli.commands.main.helpers.lineage.models import ColumnLineageTrace, LineageGraph
 from sqlbuild.cli.commands.main.helpers.lineage.output import (
+    format_column_lineage_json,
+    format_column_lineage_list,
+    format_column_lineage_tree,
     format_lineage_json,
     format_lineage_list,
     format_lineage_tree,
 )
 from sqlbuild.cli.commands.main.helpers.lineage.selection import (
     parse_depth,
+    select_column_target_lineage,
     select_selector_lineage,
     select_target_lineage,
 )
@@ -64,6 +68,28 @@ def run_lineage(
     )
     lineage_graph: LineageGraph
     if target is not None:
+        column_trace: ColumnLineageTrace | None = select_column_target_lineage(
+            graph=graph,
+            target=target,
+            direction=direction,
+            depth=parsed_depth,
+        )
+        if column_trace is not None:
+            if output_format == "json":
+                print(format_column_lineage_json(column_trace))
+            elif output_format == "list":
+                print(
+                    "\n"
+                    + format_column_lineage_list(column_trace, use_color=supports_color())
+                    + "\n"
+                )
+            else:
+                print(
+                    "\n"
+                    + format_column_lineage_tree(column_trace, use_color=supports_color())
+                    + "\n"
+                )
+            return 0
         lineage_graph = select_target_lineage(
             graph=graph,
             target=target,
