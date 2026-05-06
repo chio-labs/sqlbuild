@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from sqlbuild.cli.commands.main.helpers.lineage.constants import RICH_LINEAGE_STATUS_MODEL_THRESHOLD
 from sqlbuild.cli.commands.main.helpers.lineage.models import (
     ColumnLineageTrace,
     LineageGraph,
@@ -13,6 +14,7 @@ from sqlbuild.cli.commands.main.helpers.lineage.models import (
     ParsedLineageSelector,
 )
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
+from sqlbuild.cli.commands.main.shared.helpers.status import maybe_status
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage.main.columns import build_project_column_lineage
@@ -85,7 +87,20 @@ def select_column_target_lineage(
     if direction == "both":
         raise CliUserError("Column lineage supports --direction upstream or downstream, not both")
 
-    column_lineage: ProjectColumnLineage | None = build_project_column_lineage(graph.project)
+    candidate_model_names: frozenset[str] = _column_lineage_candidate_model_names(
+        graph=graph,
+        key=key,
+        direction=direction,
+        depth=depth,
+    )
+    with maybe_status(
+        f"Analyzing rich column lineage for {len(candidate_model_names)} models...",
+        enabled=len(candidate_model_names) >= RICH_LINEAGE_STATUS_MODEL_THRESHOLD,
+    ):
+        column_lineage: ProjectColumnLineage | None = build_project_column_lineage(
+            graph.project,
+            model_names=candidate_model_names,
+        )
     if column_lineage is None:
         raise CliUserError("Column lineage requires SQLGlot analysis to be enabled and available")
 
@@ -105,6 +120,25 @@ def select_column_target_lineage(
         target=target_column,
         trace=trace,
         direction=direction,
+    )
+
+
+def _column_lineage_candidate_model_names(
+    *,
+    graph: ProjectGraph,
+    key: CompiledObjectKey,
+    direction: str,
+    depth: int | None,
+) -> frozenset[str]:
+    selected: set[CompiledObjectKey] = {key}
+    deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
+        graph.downstream_deps if direction == "downstream" else graph.upstream_deps
+    )
+    selected.update(_walk_bounded(anchors=(key,), deps=deps, max_depth=depth))
+    return frozenset(
+        selected_key.name
+        for selected_key in selected
+        if selected_key.resource_type == CompiledResourceType.MODEL
     )
 
 

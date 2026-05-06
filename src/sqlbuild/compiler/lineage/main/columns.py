@@ -18,11 +18,20 @@ def build_project_column_lineage(
     *,
     dialect: str | None = None,
     mode: ColumnLineageMode = ColumnLineageMode.RICH,
+    model_names: frozenset[str] | None = None,
 ) -> ProjectColumnLineage | None:
     """Build a sidecar project column lineage graph for compiled models."""
 
     match mode:
         case ColumnLineageMode.FAST:
-            return build_fast_project_column_lineage(project, dialect=dialect)
+            return build_fast_project_column_lineage(
+                project,
+                dialect=dialect,
+                model_names=model_names,
+            )
         case ColumnLineageMode.RICH:
-            return _build_project_column_lineage(project, dialect=dialect)
+            return _build_project_column_lineage(
+                project,
+                dialect=dialect,
+                model_names=model_names,
+            )

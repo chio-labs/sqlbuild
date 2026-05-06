@@ -22,6 +22,7 @@ class ColumnLineageSelectionTestCase:
     expected_resource_name: str
     expected_column_name: str
     expected_trace_ids: tuple[str, ...]
+    expected_analyzed_model_names: tuple[str, ...]
 
 
 @dataclass(frozen=True)

@@ -46,7 +46,7 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="compile_lineage_mode",
         choices=COMPILE_LINEAGE_MODE_VALUES,
         default=CompileLineageMode.FAST.value,
-        help="Column lineage mode for compile output",
+        help="Column lineage mode: fast (default), rich (slower), or none",
     )
 
     plan_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PLAN)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
 from sqlbuild.cli.commands.main.helpers.lineage.models import ColumnLineageTrace, LineageGraph
@@ -9,6 +11,12 @@ from sqlbuild.cli.commands.main.helpers.lineage.selection import (
     select_target_lineage,
 )
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
+from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.lineage.models import (
+    ColumnLineageEdge,
+    ProjectColumnLineage,
+    QualifiedLineageColumn,
+)
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from tests.unit.src.sqlbuild.cli.commands.main.helpers.lineage._test_types import (
     ColumnLineageSelectionTestCase,
@@ -58,6 +66,7 @@ COLUMN_SELECTION_TEST_CASES: list[ColumnLineageSelectionTestCase] = [
         expected_resource_name="fact_orders",
         expected_column_name="order_id",
         expected_trace_ids=("stg_orders.order_id->fact_orders.order_id",),
+        expected_analyzed_model_names=("fact_orders", "stg_orders"),
     ),
     ColumnLineageSelectionTestCase(
         description="respects zero depth for column target",
@@ -67,6 +76,17 @@ COLUMN_SELECTION_TEST_CASES: list[ColumnLineageSelectionTestCase] = [
         expected_resource_name="fact_orders",
         expected_column_name="order_id",
         expected_trace_ids=(),
+        expected_analyzed_model_names=("fact_orders",),
+    ),
+    ColumnLineageSelectionTestCase(
+        description="selects downstream candidate models for column target",
+        target="fact_orders.order_id",
+        direction="downstream",
+        depth=1,
+        expected_resource_name="fact_orders",
+        expected_column_name="order_id",
+        expected_trace_ids=("fact_orders.order_id->daily_rollup.order_id",),
+        expected_analyzed_model_names=("daily_rollup", "fact_orders"),
     ),
 ]
 
@@ -99,8 +119,48 @@ def test_given_target_lineage_request_when_selecting_then_returns_expected_subgr
 )
 def test_given_column_target_when_selecting_then_returns_column_trace(
     test_case: ColumnLineageSelectionTestCase,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     graph: ProjectGraph = build_lineage_test_graph()
+    received_model_names: list[frozenset[str]] = []
+
+    def build_column_lineage_spy(*args: object, **kwargs: object) -> ProjectColumnLineage:
+        del args
+        received_model_names.append(cast(frozenset[str], kwargs["model_names"]))
+        return ProjectColumnLineage(
+            models={},
+            edges=(
+                ColumnLineageEdge(
+                    source=QualifiedLineageColumn(
+                        resource_type=CompiledResourceType.MODEL,
+                        resource_name="stg_orders",
+                        column_name="order_id",
+                    ),
+                    target=QualifiedLineageColumn(
+                        resource_type=CompiledResourceType.MODEL,
+                        resource_name="fact_orders",
+                        column_name="order_id",
+                    ),
+                ),
+                ColumnLineageEdge(
+                    source=QualifiedLineageColumn(
+                        resource_type=CompiledResourceType.MODEL,
+                        resource_name="fact_orders",
+                        column_name="order_id",
+                    ),
+                    target=QualifiedLineageColumn(
+                        resource_type=CompiledResourceType.MODEL,
+                        resource_name="daily_rollup",
+                        column_name="order_id",
+                    ),
+                ),
+            ),
+        )
+
+    monkeypatch.setattr(
+        "sqlbuild.cli.commands.main.helpers.lineage.selection.build_project_column_lineage",
+        build_column_lineage_spy,
+    )
 
     result: ColumnLineageTrace | None = select_column_target_lineage(
         graph=graph,
@@ -119,6 +179,7 @@ def test_given_column_target_when_selecting_then_returns_column_trace(
         )
         == test_case.expected_trace_ids
     )
+    assert tuple(sorted(received_model_names[0])) == test_case.expected_analyzed_model_names
 
 
 @pytest.mark.parametrize(

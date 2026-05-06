@@ -6,6 +6,9 @@ import time
 from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.cli.commands.main.helpers.compile.constants import (
+    RICH_LINEAGE_STATUS_MODEL_THRESHOLD,
+)
 from sqlbuild.cli.commands.main.helpers.compile.models import WrittenTarget
 from sqlbuild.cli.commands.main.helpers.compile.output import (
     format_compile_json,
@@ -14,6 +17,7 @@ from sqlbuild.cli.commands.main.helpers.compile.output import (
 from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_static_compile_target
 from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
+from sqlbuild.cli.commands.main.shared.helpers.status import maybe_status
 from sqlbuild.compiler.compile.main.load_macros import load_macros
 from sqlbuild.compiler.compile.models import LoadedMacro
 from sqlbuild.compiler.contracts.main.validate import validate_model_contracts
@@ -159,8 +163,13 @@ def _build_compile_lineage(
                 mode=ColumnLineageMode.FAST,
             )
         case CompileLineageMode.RICH:
-            return build_project_column_lineage(
-                graph.project,
-                dialect=dialect,
-                mode=ColumnLineageMode.RICH,
-            )
+            model_count: int = len(graph.project.models)
+            with maybe_status(
+                f"Analyzing rich column lineage for {model_count} models...",
+                enabled=model_count >= RICH_LINEAGE_STATUS_MODEL_THRESHOLD,
+            ):
+                return build_project_column_lineage(
+                    graph.project,
+                    dialect=dialect,
+                    mode=ColumnLineageMode.RICH,
+                )
