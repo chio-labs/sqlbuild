@@ -29,12 +29,12 @@ from tests.integration.src.sqlbuild.executor.build.concurrent.helpers import (
 )
 
 _PROJECT_YML: str = (
-    "name: demo\n"
-    "adapter: duckdb\n"
-    "connection:\n"
-    "  database: test.duckdb\n"
-    "settings:\n"
-    "  default_audit_severity: error\n"
+    'name = "demo"\n'
+    'adapter = "duckdb"\n\n'
+    "[connection]\n"
+    'database = "test.duckdb"\n\n'
+    "[settings]\n"
+    'default_audit_severity = "error"\n'
 )
 
 
@@ -47,7 +47,7 @@ _PROJECT_YML: str = (
             ),
             max_concurrency=3,
             project_files={
-                "sqlbuild_project.yml": _PROJECT_YML,
+                "sqlbuild_project.toml": _PROJECT_YML,
                 "models/staging/stg_a.sql": ("MODEL (materialized view);\n\nSELECT 1 AS id"),
                 "models/staging/stg_b.sql": ("MODEL (materialized view);\n\nSELECT 2 AS id"),
                 "models/mid_a.sql": (

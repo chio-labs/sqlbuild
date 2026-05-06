@@ -16,27 +16,26 @@ def prepare_diff_project(tmp_path: Path) -> Path:
         tmp_path=tmp_path,
         project_name="diff_project",
         repo_files={
-            "sqlbuild_project.yml": dedent(
+            "sqlbuild_project.toml": dedent(
                 """
-                name: diff_project
-                adapter: duckdb
-                default_environment: dev
+                name = "diff_project"
+                adapter = "duckdb"
+                default_environment = "dev"
 
-                connection:
-                  database: diff.duckdb
+                [connection]
+                database = "diff.duckdb"
 
-                environments:
-                  prod:
-                    schema: prod
-                  dev:
-                    schema: dev
+                [environments.prod]
+                schema = "prod"
 
-                defaults:
-                  materialized: table
+                [environments.dev]
+                schema = "dev"
 
-                path_defaults:
-                  staging:
-                    materialized: view
+                [defaults]
+                materialized = "table"
+
+                [path_defaults.staging]
+                materialized = "view"
                 """
             ).strip()
             + "\n",
@@ -144,8 +143,8 @@ def prepare_diff_project(tmp_path: Path) -> Path:
 def build_environment(*, project_dir: Path, environment: str) -> None:
     """Build one environment for the diff fixture."""
 
-    (project_dir / "sqlbuild_local.yml").write_text(
-        f"environment: {environment}\n",
+    (project_dir / "sqlbuild_local.toml").write_text(
+        f'environment = "{environment}"\n',
         encoding="utf-8",
     )
     result: subprocess.CompletedProcess[str] = run_sqb(

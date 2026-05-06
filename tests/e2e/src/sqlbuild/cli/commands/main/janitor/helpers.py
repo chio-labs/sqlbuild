@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from textwrap import dedent, indent
+from textwrap import dedent
 
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
@@ -21,29 +21,29 @@ def prepare_janitor_project(
 ) -> Path:
     """Create a minimal DuckDB project for janitor e2e tests."""
 
-    normalized_settings_config: str = _normalize_nested_yaml(settings_config)
-    normalized_janitor_config: str = _normalize_nested_yaml(janitor_config)
+    normalized_settings_config: str = dedent(settings_config).strip()
+    normalized_janitor_config: str = dedent(janitor_config).strip()
     settings_block: str = (
-        f"\nsettings:\n{normalized_settings_config}" if normalized_settings_config else ""
+        f"\n[settings]\n{normalized_settings_config}\n" if normalized_settings_config else ""
     )
     janitor_block: str = (
-        f"\njanitor:\n{normalized_janitor_config}" if normalized_janitor_config else ""
+        f"\n[janitor]\n{normalized_janitor_config}\n" if normalized_janitor_config else ""
     )
     project_config: str = (
-        f"name: {project_name}\n"
-        "adapter: duckdb\n\n"
-        "connection:\n"
-        "  database: janitor.duckdb\n"
+        f'name = "{project_name}"\n'
+        'adapter = "duckdb"\n\n'
+        "[connection]\n"
+        'database = "janitor.duckdb"\n'
         f"{settings_block}"
         f"{janitor_block}"
-        "\n\ndefaults:\n"
-        "  materialized: table\n"
+        "\n[defaults]\n"
+        'materialized = "table"\n'
     )
     return prepare_inline_project(
         tmp_path=tmp_path,
         project_name=project_name,
         repo_files={
-            "sqlbuild_project.yml": project_config,
+            "sqlbuild_project.toml": project_config,
             "models/orders.sql": dedent(
                 """
                 MODEL ();
@@ -88,9 +88,3 @@ def create_janitor_demo_relations(*, db_path: Path) -> None:
         )
     finally:
         connection.close()
-
-
-def _normalize_nested_yaml(contents: str) -> str:
-    if not contents:
-        return ""
-    return indent(dedent(contents).strip("\n"), "  ")

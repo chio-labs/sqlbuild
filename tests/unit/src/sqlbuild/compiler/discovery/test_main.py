@@ -47,7 +47,7 @@ seeds:
                 "macros/name_helpers.py": "def slug() -> str:\n    return 'slug'\n",
                 "target/manifest.json": '{"metadata": {"dbt_schema_version": "v12"}}\n',
                 "adapter.py": "class ExampleAdapter:\n    pass\n",
-                "sqlbuild_local.yml": "environment: dev\n",
+                "sqlbuild_local.toml": 'environment = "dev"\n',
             },
             expected_model_paths=("models/staging/orders.sql",),
             expected_model_header_values=({},),
@@ -382,12 +382,12 @@ seeds:
         description="raises when path defaults match no model paths",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
-path_defaults:
-  stagingg:
-    schema: staging
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+
+[path_defaults.stagingg]
+schema = "staging"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",

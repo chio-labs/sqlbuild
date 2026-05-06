@@ -31,17 +31,20 @@ LOCAL_CONFIG_TEST_CASES: list[LoadLocalConfigTestCase] = [
     LoadLocalConfigTestCase(
         description="loads environment connection settings and vars from local config",
         repo_files={
-            "sqlbuild_local.yml": """
-environment: dev
-adapter: snowflake
-connection:
-  database: local.duckdb
-settings:
-  sqlglot: false
-  sql_validation: false
-  max_concurrency: 4
-vars:
-  user: kevin
+            "sqlbuild_local.toml": """
+environment = "dev"
+adapter = "snowflake"
+
+[connection]
+database = "local.duckdb"
+
+[settings]
+sqlglot = false
+sql_validation = false
+max_concurrency = 4
+
+[vars]
+user = "kevin"
 """.strip()
         },
         expected_environment="dev",
@@ -56,14 +59,17 @@ vars:
     LoadLocalConfigTestCase(
         description="does not expose unsupported project level overrides",
         repo_files={
-            "sqlbuild_local.yml": """
-default_environment: prod
-defaults:
-  materialized: table
-janitor:
-  enabled: true
-connection:
-  database: local.duckdb
+            "sqlbuild_local.toml": """
+default_environment = "prod"
+
+[defaults]
+materialized = "table"
+
+[janitor]
+enabled = true
+
+[connection]
+database = "local.duckdb"
 """.strip()
         },
         expected_environment=None,
@@ -79,19 +85,22 @@ connection:
     LoadLocalConfigTestCase(
         description="loads local environment overrides",
         repo_files={
-            "sqlbuild_local.yml": """
-environment: dev
-environments:
-  dev:
-    connection:
-      warehouse: local_wh
-    vars:
-      user: local_user
-    database: local_db
-    schema: local_schema
-    clone:
-      allow_as_source: true
-      allow_as_target: false
+            "sqlbuild_local.toml": """
+environment = "dev"
+
+[environments.dev]
+database = "local_db"
+schema = "local_schema"
+
+[environments.dev.connection]
+warehouse = "local_wh"
+
+[environments.dev.vars]
+user = "local_user"
+
+[environments.dev.clone]
+allow_as_source = true
+allow_as_target = false
 """.strip()
         },
         expected_environment="dev",
@@ -119,212 +128,219 @@ PROJECT_CONFIG_ERROR_TEST_CASES: list[LoadProjectConfigErrorTestCase] = [
     LoadProjectConfigErrorTestCase(
         description="raises when settings sqlglot is not a boolean",
         project_file_contents="""
-name: demo
-adapter: duckdb
-settings:
-  sqlglot: 123
+name = "demo"
+adapter = "duckdb"
+
+[settings]
+sqlglot = 123
 """.strip(),
         expected_error_fragment="Expected 'sqlglot' to be a boolean when provided",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when settings max concurrency is not an integer",
         project_file_contents="""
-name: demo
-adapter: duckdb
-settings:
-  max_concurrency: nope
+name = "demo"
+adapter = "duckdb"
+
+[settings]
+max_concurrency = "nope"
 """.strip(),
         expected_error_fragment="Expected 'max_concurrency' to be an integer when provided",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when defaults batch_size has unsupported type",
         project_file_contents="""
-name: demo
-adapter: duckdb
-defaults:
-  batch_size:
-    amount: 1
+name = "demo"
+adapter = "duckdb"
+
+[defaults.batch_size]
+amount = 1
 """.strip(),
         expected_error_fragment="Expected 'batch_size' to be a string or integer when provided",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when path defaults child value is not a mapping",
         project_file_contents="""
-name: demo
-adapter: duckdb
-path_defaults:
-  staging: view
+name = "demo"
+adapter = "duckdb"
+
+[path_defaults]
+staging = "view"
 """.strip(),
         expected_error_fragment="path_defaults",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when project vars contain non string value",
         project_file_contents="""
-name: demo
-adapter: duckdb
-vars:
-  user: 123
+name = "demo"
+adapter = "duckdb"
+
+[vars]
+user = 123
 """.strip(),
         expected_error_fragment="expected string value for 'user'",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when connection is not a mapping",
         project_file_contents="""
-name: demo
-adapter: duckdb
-connection: bad
+name = "demo"
+adapter = "duckdb"
+connection = "bad"
 """.strip(),
         expected_error_fragment="Expected 'connection' to be a mapping when provided",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when environments is not a mapping",
         project_file_contents="""
-name: demo
-adapter: duckdb
-environments: []
+name = "demo"
+adapter = "duckdb"
+environments = []
 """.strip(),
         expected_error_fragment="environments must be a mapping",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when one environment entry is not a mapping",
         project_file_contents="""
-name: demo
-adapter: duckdb
-environments:
-  dev: here
+name = "demo"
+adapter = "duckdb"
+
+[environments]
+dev = "here"
 """.strip(),
         expected_error_fragment="environments.dev must be a mapping",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when environment clone config is not a mapping",
         project_file_contents="""
-name: demo
-adapter: duckdb
-environments:
-  dev:
-    clone: nope
+name = "demo"
+adapter = "duckdb"
+
+[environments.dev]
+clone = "nope"
 """.strip(),
         expected_error_fragment="environments.dev.clone must be a mapping",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when environment vars contain non string value",
         project_file_contents="""
-name: demo
-adapter: duckdb
-environments:
-  dev:
-    vars:
-      user: false
+name = "demo"
+adapter = "duckdb"
+
+[environments.dev.vars]
+user = false
 """.strip(),
         expected_error_fragment="expected string value for 'user'",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when environment connection is not a mapping",
         project_file_contents="""
-name: demo
-adapter: duckdb
-environments:
-  dev:
-    connection: no
+name = "demo"
+adapter = "duckdb"
+
+[environments.dev]
+connection = "no"
 """.strip(),
         expected_error_fragment="Expected 'connection' to be a mapping when provided",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when environment clone allow_as_source is not a boolean",
         project_file_contents="""
-name: demo
-adapter: duckdb
-environments:
-  dev:
-    clone:
-      allow_as_source: 123
+name = "demo"
+adapter = "duckdb"
+
+[environments.dev.clone]
+allow_as_source = 123
 """.strip(),
         expected_error_fragment="Expected 'allow_as_source' to be a boolean when provided",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when defaults tags is a string instead of list",
         project_file_contents="""
-name: demo
-adapter: duckdb
-defaults:
-  tags: nightly
+name = "demo"
+adapter = "duckdb"
+
+[defaults]
+tags = "nightly"
 """.strip(),
         expected_error_fragment="defaults.tags",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when path_defaults tags is a string instead of list",
         project_file_contents="""
-name: demo
-adapter: duckdb
-path_defaults:
-  models/staging:
-    tags: staging
+name = "demo"
+adapter = "duckdb"
+
+[path_defaults."models/staging"]
+tags = "staging"
 """.strip(),
         expected_error_fragment="path_defaults.*tags must be a list",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when path_defaults tags contains non-string entry",
         project_file_contents="""
-name: demo
-adapter: duckdb
-path_defaults:
-  models/staging:
-    tags: [123]
+name = "demo"
+adapter = "duckdb"
+
+[path_defaults."models/staging"]
+tags = [123]
 """.strip(),
         expected_error_fragment="path_defaults.*tags.*must be strings",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when path defaults key has leading slash",
         project_file_contents="""
-name: demo
-adapter: duckdb
-path_defaults:
-  /staging:
-    schema: staging
+name = "demo"
+adapter = "duckdb"
+
+[path_defaults."/staging"]
+schema = "staging"
 """.strip(),
         expected_error_fragment="without a leading slash",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when path defaults key has empty path segment",
         project_file_contents="""
-name: demo
-adapter: duckdb
-path_defaults:
-  staging//nested:
-    schema: staging
+name = "demo"
+adapter = "duckdb"
+
+[path_defaults."staging//nested"]
+schema = "staging"
 """.strip(),
         expected_error_fragment="empty path segments",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when path defaults uses redundant models prefix",
         project_file_contents="""
-name: demo
-adapter: duckdb
-path_defaults:
-  models/staging:
-    schema: staging
+name = "demo"
+adapter = "duckdb"
+
+[path_defaults."models/staging"]
+schema = "staging"
 """.strip(),
         expected_error_fragment="uses redundant 'models/' prefix",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when tracked-only janitor is enabled without query tracking",
         project_file_contents="""
-name: demo
-adapter: duckdb
-settings:
-  query_change_tracking: false
-janitor:
-  enabled: true
+name = "demo"
+adapter = "duckdb"
+
+[settings]
+query_change_tracking = false
+
+[janitor]
+enabled = true
 """.strip(),
         expected_error_fragment="janitor.delete_tracked_only requires",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when project settings contain unknown key",
         project_file_contents="""
-name: demo
-adapter: duckdb
-settings:
-  threads: 4
+name = "demo"
+adapter = "duckdb"
+
+[settings]
+threads = 4
 """.strip(),
         expected_error_fragment=r"settings contains unknown key\(s\): threads",
     ),
@@ -333,43 +349,43 @@ settings:
 LOCAL_CONFIG_ERROR_TEST_CASES: list[LoadLocalConfigErrorTestCase] = [
     LoadLocalConfigErrorTestCase(
         description="raises when local environment is not a non empty string",
-        local_file_contents="environment: 123\n",
+        local_file_contents="environment = 123\n",
         expected_error_fragment="Expected 'environment' to be a non-empty string when provided",
     ),
     LoadLocalConfigErrorTestCase(
         description="raises when local vars contain non string value",
         local_file_contents="""
-vars:
-  user: 123
+[vars]
+user = 123
 """.strip(),
         expected_error_fragment="expected string value for 'user'",
     ),
     LoadLocalConfigErrorTestCase(
         description="raises when local connection is not a mapping",
-        local_file_contents="connection: local.duckdb\n",
+        local_file_contents='connection = "local.duckdb"\n',
         expected_error_fragment="Expected 'connection' to be a mapping when provided",
     ),
     LoadLocalConfigErrorTestCase(
         description="raises when local settings sqlglot is not a boolean",
         local_file_contents="""
-settings:
-  sqlglot: no thanks
+[settings]
+sqlglot = "no thanks"
 """.strip(),
         expected_error_fragment="Expected 'sqlglot' to be a boolean when provided",
     ),
     LoadLocalConfigErrorTestCase(
         description="raises when local settings max concurrency is not an integer",
         local_file_contents="""
-settings:
-  max_concurrency: many
+[settings]
+max_concurrency = "many"
 """.strip(),
         expected_error_fragment="Expected 'max_concurrency' to be an integer when provided",
     ),
     LoadLocalConfigErrorTestCase(
         description="raises when local settings contain unknown key",
         local_file_contents="""
-settings:
-  concurrency: 8
+[settings]
+concurrency = 8
 """.strip(),
         expected_error_fragment=r"settings contains unknown key\(s\): concurrency",
     ),
@@ -382,55 +398,53 @@ settings:
         LoadProjectConfigTestCase(
             description="loads expected fields from project config",
             project_file_contents="""
-name: demo
-adapter: duckdb
-default_environment: dev
+name = "demo"
+adapter = "duckdb"
+default_environment = "dev"
 
-connection:
-  path: data.db
+[connection]
+path = "data.db"
 
-settings:
-  sqlglot: false
-  query_change_tracking: true
-  max_concurrency: 8
+[settings]
+sqlglot = false
+query_change_tracking = true
+max_concurrency = 8
 
-defaults:
-  materialized: table
-  row_diff_exclude_columns:
-    - loaded_at
-  row_diff_tolerances:
-    by_type:
-      float:
-        relative: 0.0001
-        absolute: 0.000001
-    by_column:
-      revenue:
-        absolute: 0.01
+[defaults]
+materialized = "table"
+row_diff_exclude_columns = ["loaded_at"]
 
-path_defaults:
-  staging:
-    schema: staging
+[defaults.row_diff_tolerances.by_type.float]
+relative = 0.0001
+absolute = 0.000001
 
-vars:
-  user: kevin
+[defaults.row_diff_tolerances.by_column.revenue]
+absolute = 0.01
 
-environments:
-  dev:
-    connection:
-      warehouse: dev_wh
-    vars:
-      schema_prefix: dev
-    schema: "dev_${user}"
-    clone:
-      allow_as_source: true
-      allow_as_target: true
+[path_defaults.staging]
+schema = "staging"
 
-janitor:
-  enabled: true
-  retention_days: 14
-  delete_tracked_only: false
-  exclude_patterns:
-    - partition_*
+[vars]
+user = "kevin"
+
+[environments.dev]
+schema = "dev_${user}"
+
+[environments.dev.connection]
+warehouse = "dev_wh"
+
+[environments.dev.vars]
+schema_prefix = "dev"
+
+[environments.dev.clone]
+allow_as_source = true
+allow_as_target = true
+
+[janitor]
+enabled = true
+retention_days = 14
+delete_tracked_only = false
+exclude_patterns = ["partition_*"]
 """.strip(),
             expected_name="demo",
             expected_adapter="duckdb",
@@ -466,7 +480,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     test_case: LoadProjectConfigTestCase,
     tmp_path: Path,
 ) -> None:
-    project_file: Path = tmp_path / "sqlbuild_project.yml"
+    project_file: Path = tmp_path / "sqlbuild_project.toml"
     project_file.write_text(test_case.project_file_contents, encoding="utf-8")
 
     config: object = load_project_config(project_dir=tmp_path)
@@ -543,7 +557,7 @@ def test_given_invalid_project_config_file_when_loading_project_config_then_it_r
     test_case: LoadProjectConfigErrorTestCase,
     tmp_path: Path,
 ) -> None:
-    project_file: Path = tmp_path / "sqlbuild_project.yml"
+    project_file: Path = tmp_path / "sqlbuild_project.toml"
     project_file.write_text(test_case.project_file_contents, encoding="utf-8")
 
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
@@ -571,10 +585,54 @@ def test_given_missing_project_config_file_when_loading_project_config_then_it_r
 
 @pytest.mark.parametrize(
     "test_case",
+    [
+        LoadProjectConfigErrorTestCase(
+            description="raises clear error when legacy project config is present",
+            project_file_contents="name: demo\nadapter: duckdb\n",
+            expected_error_fragment="sqlbuild_project.yml is no longer supported",
+        )
+    ],
+    ids=["raises clear error when legacy project config is present"],
+)
+def test_given_legacy_project_config_file_when_loading_project_config_then_it_raises_clear_error(
+    test_case: LoadProjectConfigErrorTestCase,
+    tmp_path: Path,
+) -> None:
+    project_file: Path = tmp_path / "sqlbuild_project.yml"
+    project_file.write_text(test_case.project_file_contents, encoding="utf-8")
+
+    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+        load_project_config(project_dir=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "test_case",
     LOCAL_CONFIG_ERROR_TEST_CASES,
     ids=[case.description for case in LOCAL_CONFIG_ERROR_TEST_CASES],
 )
 def test_given_invalid_local_config_file_when_loading_local_config_then_it_raises_clear_errors(
+    test_case: LoadLocalConfigErrorTestCase,
+    tmp_path: Path,
+) -> None:
+    local_file: Path = tmp_path / "sqlbuild_local.toml"
+    local_file.write_text(test_case.local_file_contents, encoding="utf-8")
+
+    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+        load_local_config(project_dir=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadLocalConfigErrorTestCase(
+            description="raises clear error when legacy local config is present",
+            local_file_contents="environment: dev\n",
+            expected_error_fragment="sqlbuild_local.yml is no longer supported",
+        )
+    ],
+    ids=["raises clear error when legacy local config is present"],
+)
+def test_given_legacy_local_config_file_when_loading_local_config_then_it_raises_clear_error(
     test_case: LoadLocalConfigErrorTestCase,
     tmp_path: Path,
 ) -> None:

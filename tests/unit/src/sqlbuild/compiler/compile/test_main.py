@@ -36,51 +36,59 @@ TEST_CASES: list[BuildCompileInputsTestCase] = [
         description="attaches schema metadata to matching models and seeds and normalizes sources",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
-default_environment: dev
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "dev"
 
-connection:
-  path: base.db
-  warehouse: default_wh
+[connection]
+path = "base.db"
+warehouse = "default_wh"
 
-vars:
-  shared: project
-  project_only: present
+[vars]
+shared = "project"
+project_only = "present"
 
-defaults:
-  materialized: table
-  schema: analytics
-  batch_size: 1h
+[defaults]
+materialized = "table"
+schema = "analytics"
+batch_size = "1h"
 
-path_defaults:
-  staging:
-    materialized: view
-    schema: staging
-  staging/nested:
-    schema: nested
+[path_defaults]
 
-environments:
-  dev:
-    connection:
-      warehouse: dev_wh
-    vars:
-      shared: environment
-      env_only: present
+[path_defaults.staging]
+materialized = "view"
+schema = "staging"
+
+[path_defaults."staging/nested"]
+schema = "nested"
+
+[environments]
+
+[environments.dev]
+
+[environments.dev.connection]
+warehouse = "dev_wh"
+
+[environments.dev.vars]
+shared = "environment"
+env_only = "present"
 """.strip()
             + "\n",
-            "sqlbuild_local.yml": """
-environment: dev
-connection:
-  path: local.db
-settings:
-  sqlglot: false
-  sql_validation: false
-  max_concurrency: 4
-vars:
-  shared: local
-  local_only: present
+            "sqlbuild_local.toml": """
+environment = "dev"
+
+[connection]
+path = "local.db"
+
+[settings]
+sqlglot = false
+sql_validation = false
+max_concurrency = 4
+
+[vars]
+shared = "local"
+local_only = "present"
 """.strip()
             + "\n",
             "models/staging/orders.sql": """
@@ -184,37 +192,44 @@ sources:
         description="prefers selected environment over local and project defaults",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
-default_environment: dev
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "dev"
 
-connection:
-  path: base.db
-  warehouse: default_wh
+[connection]
+path = "base.db"
+warehouse = "default_wh"
 
-vars:
-  shared: project
+[vars]
+shared = "project"
 
-environments:
-  dev:
-    connection:
-      warehouse: dev_wh
-    vars:
-      shared: dev
-  prod:
-    connection:
-      warehouse: prod_wh
-      role: transformer
-    vars:
-      shared: prod
-      prod_only: present
+[environments]
+
+[environments.dev]
+
+[environments.dev.connection]
+warehouse = "dev_wh"
+
+[environments.dev.vars]
+shared = "dev"
+
+[environments.prod]
+
+[environments.prod.connection]
+warehouse = "prod_wh"
+role = "transformer"
+
+[environments.prod.vars]
+shared = "prod"
+prod_only = "present"
 """.strip()
             + "\n",
-            "sqlbuild_local.yml": """
-environment: dev
-vars:
-  shared: local
+            "sqlbuild_local.toml": """
+environment = "dev"
+
+[vars]
+shared = "local"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
@@ -242,29 +257,35 @@ vars:
         description="prefers local environment over project default when cli is absent",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
-default_environment: prod
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "prod"
 
-connection:
-  path: base.db
+[connection]
+path = "base.db"
 
-environments:
-  dev:
-    connection:
-      warehouse: dev_wh
-    vars:
-      active: dev
-  prod:
-    connection:
-      warehouse: prod_wh
-    vars:
-      active: prod
+[environments]
+
+[environments.dev]
+
+[environments.dev.connection]
+warehouse = "dev_wh"
+
+[environments.dev.vars]
+active = "dev"
+
+[environments.prod]
+
+[environments.prod.connection]
+warehouse = "prod_wh"
+
+[environments.prod.vars]
+active = "prod"
 """.strip()
             + "\n",
-            "sqlbuild_local.yml": """
-environment: dev
+            "sqlbuild_local.toml": """
+environment = "dev"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
@@ -288,20 +309,20 @@ environment: dev
         description="returns no effective environment when none is configured anywhere",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
 
-connection:
-  path: base.db
+[connection]
+path = "base.db"
 
-vars:
-  project_only: present
+[vars]
+project_only = "present"
 """.strip()
             + "\n",
-            "sqlbuild_local.yml": """
-vars:
-  local_only: present
+            "sqlbuild_local.toml": """
+[vars]
+local_only = "present"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
@@ -329,19 +350,21 @@ vars:
         description="preserves project connection when environment has no connection override",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
-default_environment: dev
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "dev"
 
-connection:
-  path: base.db
-  warehouse: default_wh
+[connection]
+path = "base.db"
+warehouse = "default_wh"
 
-environments:
-  dev:
-    vars:
-      active: dev
+[environments]
+
+[environments.dev]
+
+[environments.dev.vars]
+active = "dev"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
@@ -365,23 +388,25 @@ environments:
         description="preserves non environment vars when selected environment defines none",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
-default_environment: dev
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "dev"
 
-vars:
-  project_only: present
+[vars]
+project_only = "present"
 
-environments:
-  dev:
-    connection:
-      warehouse: dev_wh
+[environments]
+
+[environments.dev]
+
+[environments.dev.connection]
+warehouse = "dev_wh"
 """.strip()
             + "\n",
-            "sqlbuild_local.yml": """
-vars:
-  local_only: present
+            "sqlbuild_local.toml": """
+[vars]
+local_only = "present"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
@@ -409,16 +434,18 @@ vars:
         description="allows environment only connection when project connection is empty",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
-default_environment: dev
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "dev"
 
-environments:
-  dev:
-    connection:
-      path: env.db
-      warehouse: dev_wh
+[environments]
+
+[environments.dev]
+
+[environments.dev.connection]
+path = "env.db"
+warehouse = "dev_wh"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
@@ -442,22 +469,24 @@ environments:
         description="allows env local and cli vars when project vars are empty",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
-default_environment: dev
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "dev"
 
-environments:
-  dev:
-    vars:
-      shared: env
-      env_only: present
+[environments]
+
+[environments.dev]
+
+[environments.dev.vars]
+shared = "env"
+env_only = "present"
 """.strip()
             + "\n",
-            "sqlbuild_local.yml": """
-vars:
-  shared: local
-  local_only: present
+            "sqlbuild_local.toml": """
+[vars]
+shared = "local"
+local_only = "present"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
@@ -486,29 +515,31 @@ vars:
         description="maps every supported project default into compile model config",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
 
-defaults:
-  materialized: incremental
-  database: analytics
-  schema: marts
-  incremental_strategy: merge
-  incremental_mode: microbatch
-  lookback: 1d
-  batch_size: 1h
-  query_change_backfill: bounded-30d
-  schema_change_backfill:
-    add_column: bounded-7d
-    type_change: full
-  row_diff_exclude_columns:
-    - loaded_at
-    - run_id
-  row_diff_tolerances:
-    by_column:
-      revenue:
-        absolute: 0.01
+[defaults]
+materialized = "incremental"
+database = "analytics"
+schema = "marts"
+incremental_strategy = "merge"
+incremental_mode = "microbatch"
+lookback = "1d"
+batch_size = "1h"
+query_change_backfill = "bounded-30d"
+row_diff_exclude_columns = ["loaded_at", "run_id"]
+
+[defaults.schema_change_backfill]
+add_column = "bounded-7d"
+type_change = "full"
+
+[defaults.row_diff_tolerances]
+
+[defaults.row_diff_tolerances.by_column]
+
+[defaults.row_diff_tolerances.by_column.revenue]
+absolute = 0.01
 """.strip()
             + "\n",
             "models/staging/orders.sql": (
@@ -561,14 +592,14 @@ defaults:
         description="maps append cursor inclusive from project defaults",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
 
-defaults:
-  materialized: incremental
-  incremental_strategy: append
-  append_cursor_inclusive: false
+[defaults]
+materialized = "incremental"
+incremental_strategy = "append"
+append_cursor_inclusive = false
 """.strip()
             + "\n",
             "models/staging/orders.sql": (
@@ -606,22 +637,27 @@ defaults:
         description="merges row diff config from project defaults and model header",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
 
-defaults:
-  row_diff_exclude_columns:
-    - loaded_at
-  row_diff_tolerances:
-    by_type:
-      float:
-        relative: 0.0001
-      integer:
-        absolute: 1
-    by_column:
-      revenue:
-        absolute: 0.01
+[defaults]
+row_diff_exclude_columns = ["loaded_at"]
+
+[defaults.row_diff_tolerances]
+
+[defaults.row_diff_tolerances.by_type]
+
+[defaults.row_diff_tolerances.by_type.float]
+relative = 0.0001
+
+[defaults.row_diff_tolerances.by_type.integer]
+absolute = 1
+
+[defaults.row_diff_tolerances.by_column]
+
+[defaults.row_diff_tolerances.by_column.revenue]
+absolute = 0.01
 """.strip()
             + "\n",
             "models/staging/orders.sql": """
@@ -682,30 +718,30 @@ select 1
         description="expands vars env connection model config and environment overrides",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
-default_environment: dev
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "dev"
 
-connection:
-  path: "/tmp/${user}.db"
-  warehouse: "${schema_prefix}_wh"
+[connection]
+path = "/tmp/${user}.db"
+warehouse = "${schema_prefix}_wh"
 
-vars:
-  user: "${ENV:USER}"
-  schema_prefix: "analytics_${user}"
+[vars]
+user = "${ENV:USER}"
+schema_prefix = "analytics_${user}"
 
-defaults:
-  database: "${schema_prefix}"
-  schema: marts
-  query_change_backfill: "${ENV:BACKFILL_POLICY}"
-  row_diff_exclude_columns:
-    - "${schema_prefix}_loaded_at"
+[defaults]
+database = "${schema_prefix}"
+schema = "marts"
+query_change_backfill = "${ENV:BACKFILL_POLICY}"
+row_diff_exclude_columns = ["${schema_prefix}_loaded_at"]
 
-environments:
-  dev:
-    database: "dev_${CTX:model.database}"
-    schema: "dev_${ENV:USER}_${CTX:model.schema}"
+[environments]
+
+[environments.dev]
+database = "dev_${CTX:model.database}"
+schema = "dev_${ENV:USER}_${CTX:model.schema}"
 """.strip()
             + "\n",
             "models/staging/orders.sql": """
@@ -769,15 +805,16 @@ select 1
         description="resolves run context before late target context",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
-default_environment: ci
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "ci"
 
-environments:
-  ci:
-    database: "db_${CTX:run.environment}"
-    schema: "schema_${CTX:run.id}"
+[environments]
+
+[environments.ci]
+database = "db_${CTX:run.environment}"
+schema = "schema_${CTX:run.id}"
 """.strip()
             + "\n",
             "models/staging/orders.sql": """
@@ -822,16 +859,16 @@ select 1
         description="expands helper functions in config interpolation",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
 
-defaults:
-  materialized: incremental
-  incremental_strategy: append
-  database: "${if(ENV:CI, 'ci_db', 'dev_db')}"
-  schema: "${coalesce(ENV:CUSTOM_SCHEMA, 'fallback_schema')}"
-  append_cursor_inclusive: "${if(eq(ENV:APPEND_INCLUSIVE, '0'), false, true)}"
+[defaults]
+materialized = "incremental"
+incremental_strategy = "append"
+database = "${if(ENV:CI, 'ci_db', 'dev_db')}"
+schema = "${coalesce(ENV:CUSTOM_SCHEMA, 'fallback_schema')}"
+append_cursor_inclusive = "${if(eq(ENV:APPEND_INCLUSIVE, '0'), false, true)}"
 """.strip()
             + "\n",
             "models/staging/orders.sql": """
@@ -878,28 +915,30 @@ select 1
         description="supports multi hop var expansion and preserve environment overrides",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
-default_environment: dev
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "dev"
 
-vars:
-  base: analytics
-  stage_one: "${base}_team"
-  stage_two: "${stage_one}_prod"
+[vars]
+base = "analytics"
+stage_one = "${base}_team"
+stage_two = "${stage_one}_prod"
 
-defaults:
-  database: "${stage_two}"
-  schema: marts
+[defaults]
+database = "${stage_two}"
+schema = "marts"
 
-path_defaults:
-  staging:
-    alias: "${stage_two}_orders"
+[path_defaults]
 
-environments:
-  dev:
-    database: preserve
-    schema: preserve
+[path_defaults.staging]
+alias = "${stage_two}_orders"
+
+[environments]
+
+[environments.dev]
+database = "preserve"
+schema = "preserve"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
@@ -941,20 +980,21 @@ def grant_target(target_name: str) -> str:
     return f"GRANT SELECT ON {target_name} TO analyst_role"
 """.strip()
             + "\n",
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
-default_environment: dev
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "dev"
 
-settings:
-  default_audit_severity: warn
+[settings]
+default_audit_severity = "warn"
 
-defaults:
-  schema: marts
+[defaults]
+schema = "marts"
 
-environments:
-  dev:
-    database: analytics
+[environments]
+
+[environments.dev]
+database = "analytics"
 """.strip()
             + "\n",
             "models/staging/orders.sql": """
@@ -1041,23 +1081,24 @@ def status_match(column_name: str, status: str) -> str:
     return f"{column_name} = '{status}'"
 """.strip()
             + "\n",
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
-default_environment: dev
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "dev"
 
-vars:
-  status_type: VARCHAR
-  return_type: BOOLEAN
-  cancelled_status: "'cancelled'"
-  udf_database: analytics
-  udf_schema: udf_dev
-  backfill_days: "30"
+[vars]
+status_type = "VARCHAR"
+return_type = "BOOLEAN"
+cancelled_status = "'cancelled'"
+udf_database = "analytics"
+udf_schema = "udf_dev"
+backfill_days = "30"
 
-environments:
-  dev:
-    database: analytics_default
-    schema: default_schema
+[environments]
+
+[environments.dev]
+database = "analytics_default"
+schema = "default_schema"
 """.strip()
             + "\n",
             "functions/sql/is_completed_order.sql": """
@@ -1113,11 +1154,12 @@ FUNCTION (
         description="attaches SQL table function metadata with return columns and body refs",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
-settings:
-  sql_validation: false
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+
+[settings]
+sql_validation = false
 """.strip()
             + "\n",
             "models/fact_orders.sql": "MODEL ();\n\nSELECT 1 AS order_id, 7 AS customer_id\n",
@@ -1268,19 +1310,20 @@ SELECT 1
         description="discovers python sqlbuild udf metadata",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
-default_environment: dev
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "dev"
 
-vars:
-  status_type: VARCHAR
-  return_type: BOOLEAN
-  udf_schema: udf_dev
+[vars]
+status_type = "VARCHAR"
+return_type = "BOOLEAN"
+udf_schema = "udf_dev"
 
-environments:
-  dev:
-    schema: default_schema
+[environments]
+
+[environments.dev]
+schema = "default_schema"
 """.strip()
             + "\n",
             "functions/python/is_completed_order.py": """
@@ -1463,12 +1506,12 @@ SELECT 1
         description="allows invalid sql when project sql validation is disabled",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
 
-settings:
-  sql_validation: false
+[settings]
+sql_validation = false
 """.strip()
             + "\n",
             "models/staging/broken.sql": "MODEL ();\n\nSELEC id FROM (SELECT 1\n",
@@ -1753,11 +1796,12 @@ COMPILE_ERROR_TEST_CASES: list[BuildCompileInputsErrorTestCase] = [
         description="raises when a model references a table function",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
-settings:
-  sql_validation: false
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+
+[settings]
+sql_validation = false
 """.strip()
             + "\n",
             "models/orders.sql": """
@@ -2166,8 +2210,8 @@ select 1
         description="raises when the local environment does not exist",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_local.yml": """
-environment: missing
+            "sqlbuild_local.toml": """
+environment = "missing"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
@@ -2180,10 +2224,10 @@ environment: missing
         description="raises when the project default environment does not exist",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
-default_environment: missing
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "missing"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
@@ -2196,12 +2240,12 @@ default_environment: missing
         description="raises when effective vars reference an unknown project variable",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
 
-vars:
-  user: "${missing}"
+[vars]
+user = "${missing}"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
@@ -2214,12 +2258,12 @@ vars:
         description="raises when connection templates reference missing env vars",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
 
-connection:
-  path: "${ENV:SQLBUILD_DB_PATH}"
+[connection]
+path = "${ENV:SQLBUILD_DB_PATH}"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
@@ -2234,9 +2278,9 @@ connection:
         description="raises when model config uses unknown ctx keys",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
 """.strip()
             + "\n",
             "models/staging/orders.sql": """
@@ -2256,17 +2300,18 @@ select 1
         description="raises when environment override references an unknown ctx key",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
-default_environment: dev
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "dev"
 
-defaults:
-  schema: marts
+[defaults]
+schema = "marts"
 
-environments:
-  dev:
-    schema: "dev_${CTX:target.missing}"
+[environments]
+
+[environments.dev]
+schema = "dev_${CTX:target.missing}"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
@@ -2279,14 +2324,15 @@ environments:
         description="raises when environment database override references unavailable ctx value",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
-default_environment: dev
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "dev"
 
-environments:
-  dev:
-    database: "dev_${CTX:model.database}"
+[environments]
+
+[environments.dev]
+database = "dev_${CTX:model.database}"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
@@ -2301,13 +2347,13 @@ environments:
         description="raises when effective vars contain a cyclic reference",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
 
-vars:
-  first: "${second}"
-  second: "${first}"
+[vars]
+first = "${second}"
+second = "${first}"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
@@ -2322,15 +2368,15 @@ vars:
         description="raises when templates use an unsupported namespace",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
 
-vars:
-  user: kevin
+[vars]
+user = "kevin"
 
-defaults:
-  schema: "${SQLBUILD:user}"
+[defaults]
+schema = "${SQLBUILD:user}"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
@@ -2343,12 +2389,12 @@ defaults:
         description="raises when connection values use disallowed ctx templates",
         repo_files=base_repo_files()
         | {
-            "sqlbuild_project.yml": """
-name: demo
-adapter: duckdb
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
 
-connection:
-  path: "${CTX:schema}"
+[connection]
+path = "${CTX:schema}"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",

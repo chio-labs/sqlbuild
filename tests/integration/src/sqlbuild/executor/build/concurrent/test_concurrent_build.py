@@ -20,12 +20,12 @@ from tests.integration.src.sqlbuild.executor.build.concurrent.helpers import (
 )
 
 _PROJECT_YML: str = (
-    "name: demo\n"
-    "adapter: duckdb\n"
-    "connection:\n"
-    "  database: test.duckdb\n"
-    "settings:\n"
-    "  default_audit_severity: error\n"
+    'name = "demo"\n'
+    'adapter = "duckdb"\n\n'
+    "[connection]\n"
+    'database = "test.duckdb"\n\n'
+    "[settings]\n"
+    'default_audit_severity = "error"\n'
 )
 
 SUCCESS_TEST_CASES: list[ConcurrentBuildTestCase] = [
@@ -33,7 +33,7 @@ SUCCESS_TEST_CASES: list[ConcurrentBuildTestCase] = [
         description=("two independent tables both materialize with concurrency 2"),
         max_concurrency=2,
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/alpha.sql": ("MODEL (materialized table);\n\nSELECT 1 AS id, 'alpha' AS name"),
             "models/beta.sql": ("MODEL (materialized table);\n\nSELECT 2 AS id, 'beta' AS name"),
         },
@@ -54,7 +54,7 @@ SUCCESS_TEST_CASES: list[ConcurrentBuildTestCase] = [
         description=("diamond DAG with shared upstream materializes all four nodes correctly"),
         max_concurrency=3,
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/staging/stg_raw.sql": (
                 "MODEL (materialized view);\n\nSELECT 10 AS id, 'row' AS val"
             ),
@@ -86,7 +86,7 @@ SUCCESS_TEST_CASES: list[ConcurrentBuildTestCase] = [
         description=("three-layer chain preserves data flow with concurrency 2"),
         max_concurrency=2,
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/layer_1.sql": ("MODEL (materialized table);\n\nSELECT 100 AS val"),
             "models/layer_2.sql": (
                 'MODEL (materialized table);\n\nSELECT val * 2 AS val FROM __ref("layer_1")'
@@ -108,7 +108,7 @@ FAILURE_TEST_CASES: list[ConcurrentBuildTestCase] = [
         ),
         max_concurrency=2,
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/broken.sql": ("MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"),
             "models/healthy.sql": ("MODEL (materialized table);\n\nSELECT 42 AS val"),
         },
@@ -128,7 +128,7 @@ FAILURE_TEST_CASES: list[ConcurrentBuildTestCase] = [
         ),
         max_concurrency=2,
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/broken.sql": ("MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"),
             "models/downstream.sql": (
                 'MODEL (materialized table);\n\nSELECT 1 AS id FROM __ref("broken")'
@@ -154,7 +154,7 @@ FAILURE_TEST_CASES: list[ConcurrentBuildTestCase] = [
         description=("fail_fast stops dispatching independent nodes after first failure"),
         max_concurrency=1,
         project_files={
-            "sqlbuild_project.yml": _PROJECT_YML,
+            "sqlbuild_project.toml": _PROJECT_YML,
             "models/aaa_broken.sql": (
                 "MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"
             ),

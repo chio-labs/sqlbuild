@@ -88,7 +88,7 @@ class JanitorConfig:
 
 @dataclass(frozen=True)
 class ProjectConfig:
-    """Shared project configuration loaded from sqlbuild_project.yml."""
+    """Shared project configuration loaded from sqlbuild_project.toml."""
 
     name: str
     adapter: str
@@ -104,7 +104,7 @@ class ProjectConfig:
 
 @dataclass(frozen=True)
 class LocalConfig:
-    """Local developer overrides from sqlbuild_local.yml."""
+    """Local developer overrides from sqlbuild_local.toml."""
 
     environment: str | None = None
     adapter: str | None = None

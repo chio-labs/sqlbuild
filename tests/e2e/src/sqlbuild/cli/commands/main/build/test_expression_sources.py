@@ -25,16 +25,16 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
         ExpressionSourceBuildE2ETestCase(
             description="blank project builds from inline expression sources",
             repo_files={
-                "sqlbuild_project.yml": dedent(
+                "sqlbuild_project.toml": dedent(
                     """
-                    name: expression_source_project
-                    adapter: duckdb
+                name = "expression_source_project"
+                adapter = "duckdb"
 
-                    connection:
-                      database: expression_sources.duckdb
+                [connection]
+                database = "expression_sources.duckdb"
 
-                    defaults:
-                      materialized: table
+                [defaults]
+                materialized = "table"
                     """
                 ).strip()
                 + "\n",

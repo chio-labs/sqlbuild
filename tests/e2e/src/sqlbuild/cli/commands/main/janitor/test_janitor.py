@@ -92,10 +92,9 @@ def test_given_stale_relations_when_running_janitor_then_it_deletes_only_tracked
         project_name="janitor_cleanup_project",
         janitor_config=dedent(
             """
-              enabled: true
-              retention_days: 0
-              exclude_patterns:
-                - partition_*
+              enabled = true
+              retention_days = 0
+              exclude_patterns = ["partition_*"]
             """
         ),
     )
@@ -147,8 +146,8 @@ def test_given_query_tracking_disabled_when_running_tracked_only_janitor_then_it
     project_dir: Path = prepare_janitor_project(
         tmp_path=tmp_path,
         project_name="janitor_invalid_config_project",
-        settings_config="  query_change_tracking: false\n",
-        janitor_config="  enabled: true\n",
+        settings_config="query_change_tracking = false\n",
+        janitor_config="enabled = true\n",
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(

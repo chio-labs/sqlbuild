@@ -48,5 +48,5 @@ def _validate_required_target_parts(
             f"{adapter_name} execution requires explicit target {missing_text}. "
             f"{resource_kind} '{resource_name}' resolved to "
             f"database={target.database!r} schema={target.schema!r}. "
-            "Set them in sqlbuild_project.yml defaults, environment config, or model config."
+            "Set them in sqlbuild_project.toml defaults, environment config, or model config."
         )
