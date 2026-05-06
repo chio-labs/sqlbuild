@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import re
-from importlib import import_module
 from typing import Any
 
 from sqlbuild.compiler.compile.models import InferredColumn
+from sqlbuild.shared.helpers.sqlglot import import_sqlglot, import_sqlglot_expressions
 
 _REF_PATTERN: re.Pattern[str] = re.compile(r'__ref\("([^"]+)"\)')
 _SEED_PATTERN: re.Pattern[str] = re.compile(r'__seed\("([^"]+)"\)')
@@ -29,10 +29,9 @@ def infer_columns_with_sqlglot(
     extractable column names.
     """
 
-    try:
-        sqlglot_module: Any = import_module("sqlglot")
-        expressions_module: Any = import_module("sqlglot.expressions")
-    except ModuleNotFoundError:
+    sqlglot_module: Any | None = import_sqlglot()
+    expressions_module: Any | None = import_sqlglot_expressions()
+    if sqlglot_module is None or expressions_module is None:
         return None
 
     cleaned_sql: str = _replace_refs_with_stubs(query_sql)

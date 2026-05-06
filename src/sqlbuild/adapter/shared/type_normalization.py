@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from importlib import import_module
 from typing import Any
 
 from sqlbuild.adapter.shared.constants import (
@@ -16,6 +15,7 @@ from sqlbuild.adapter.shared.constants import (
 )
 from sqlbuild.adapter.shared.models import NormalizedType
 from sqlbuild.adapter.shared.types import TypeDialect, TypeFamily
+from sqlbuild.shared.helpers.sqlglot import import_sqlglot, import_sqlglot_expressions
 
 
 def normalize_type(*, type_sql: str, dialect: TypeDialect | str | None) -> NormalizedType:
@@ -51,11 +51,11 @@ def types_equal(*, left: str, right: str, dialect: TypeDialect | str | None) -> 
 def _normalize_with_sqlglot(
     *, type_sql: str, dialect: TypeDialect | str | None
 ) -> NormalizedType | None:
-    sqlglot_module: Any | None = _import_sqlglot()
-    if sqlglot_module is None:
+    sqlglot_module: Any | None = import_sqlglot()
+    expressions_module: Any | None = import_sqlglot_expressions()
+    if sqlglot_module is None or expressions_module is None:
         return None
     try:
-        expressions_module: Any = import_module("sqlglot.expressions")
         parsed: Any = sqlglot_module.parse_one(
             type_sql,
             read=dialect,
@@ -225,13 +225,6 @@ def _fallback_boolean_normalized_name(*, base_type: str, dialect: TypeDialect | 
 def _data_type_param_to_int(expression: Any) -> int:
     literal: Any = getattr(expression, "this", None)
     return int(str(getattr(literal, "this", literal)))
-
-
-def _import_sqlglot() -> Any | None:
-    try:
-        return import_module("sqlglot")
-    except ImportError:
-        return None
 
 
 def _coerce_type_dialect(dialect: TypeDialect | str | None) -> TypeDialect | None:

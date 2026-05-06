@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import re
-from importlib import import_module
 from typing import Any
 
 from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.shared.helpers.sqlglot import import_sqlglot
 
 _WHITESPACE_RUN: re.Pattern[str] = re.compile(r"\s+")
 
@@ -36,9 +36,8 @@ def compute_ast_hash(query_sql: str) -> str | None:
     Returns None if SQLGlot is not available or the SQL cannot be parsed.
     """
 
-    try:
-        sqlglot_module: Any = import_module("sqlglot")
-    except ImportError:
+    sqlglot_module: Any | None = import_sqlglot()
+    if sqlglot_module is None:
         return None
     try:
         parsed: Any = sqlglot_module.parse_one(query_sql)
