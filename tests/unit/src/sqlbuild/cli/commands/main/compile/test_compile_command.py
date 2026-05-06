@@ -21,7 +21,12 @@ from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
         CompileCommandTestCase(
             description="compiles local project without connecting",
             expected_exit_code=0,
-            expected_stdout_fragment="target/compiled/     resolved SQL",
+            expected_stdout_fragments=(
+                "Compile ready (1 model)",
+                "  orders                   OK 1 columns",
+                "  Compiled: 1 model, 0 seeds, 0 functions, 0 errors, 0 warnings",
+                "  Wrote: target/compiled/",
+            ),
         )
     ],
     ids=["compiles local project without connecting"],
@@ -43,6 +48,7 @@ def test_given_local_project_when_running_compile_then_it_does_not_connect(
     rendered_stdout: str = capsys.readouterr().out
 
     assert exit_code == test_case.expected_exit_code
-    assert test_case.expected_stdout_fragment in rendered_stdout
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in rendered_stdout
     assert (project_dir / "target" / "compiled" / "models" / "orders.sql").exists()
     assert not (project_dir / "target" / "manifest.json").exists()
