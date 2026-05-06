@@ -36,6 +36,9 @@ from sqlbuild.shared.helpers.sqlglot import import_sqlglot, import_sqlglot_expre
 _SQLBUILD_REF_PATTERN: re.Pattern[str] = re.compile(
     r"__(?P<kind>ref|source|seed)\(\s*(['\"])(?P<name>[^'\"]+)\2\s*\)"
 )
+_SQLBUILD_UDF_PATTERN: re.Pattern[str] = re.compile(
+    r"__udf\(\s*(['\"])(?P<name>[^'\"]+)\1\s*\)\s*\("
+)
 
 
 @dataclass(frozen=True)
@@ -230,12 +233,21 @@ def _normalize_sqlbuild_refs(sql: str) -> tuple[str, tuple[_PhysicalResource, ..
         )
         return physical_name
 
-    return _SQLBUILD_REF_PATTERN.sub(replace, sql), tuple(resources)
+    normalized_sql: str = _SQLBUILD_REF_PATTERN.sub(replace, sql)
+    normalized_sql = _SQLBUILD_UDF_PATTERN.sub(
+        lambda match: f"{_physical_function_name(match.group('name'))}(",
+        normalized_sql,
+    )
+    return normalized_sql, tuple(resources)
 
 
 def _physical_resource_name(resource_type: CompiledResourceType, resource_name: str) -> str:
     safe_name: str = re.sub(r"[^a-zA-Z0-9_]", "__", resource_name)
     return f"__sqlbuild_{resource_type.value}__{safe_name}"
+
+
+def _physical_function_name(function_name: str) -> str:
+    return re.sub(r"[^a-zA-Z0-9_]", "__", function_name)
 
 
 def _build_schema_mapping(project: CompiledProject) -> dict[str, dict[str, str]]:

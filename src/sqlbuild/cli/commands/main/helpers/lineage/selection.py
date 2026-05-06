@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from sqlbuild.cli.commands.main.helpers.lineage.models import (
+    ColumnLineageTrace,
     LineageGraph,
     LineageNode,
     LineageSelectionAnchors,
@@ -14,6 +15,12 @@ from sqlbuild.cli.commands.main.helpers.lineage.models import (
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.lineage.main.columns import build_project_column_lineage
+from sqlbuild.compiler.lineage.models import (
+    ColumnLineageEdge,
+    ProjectColumnLineage,
+    QualifiedLineageColumn,
+)
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 
 
@@ -56,6 +63,93 @@ def select_target_lineage(
         focus_keys=(key,),
         direction=direction,
     )
+
+
+def select_column_target_lineage(
+    *,
+    graph: ProjectGraph,
+    target: str,
+    direction: str,
+    depth: int | None,
+) -> ColumnLineageTrace | None:
+    """Select column-level lineage when target uses model.column syntax."""
+
+    if "." not in target:
+        return None
+    resource_name: str
+    column_name: str
+    resource_name, column_name = target.rsplit(".", 1)
+    key: CompiledObjectKey | None = graph.all_keys.get(resource_name)
+    if key is None or key.resource_type != CompiledResourceType.MODEL:
+        return None
+    if direction == "both":
+        raise CliUserError("Column lineage supports --direction upstream or downstream, not both")
+
+    column_lineage: ProjectColumnLineage | None = build_project_column_lineage(graph.project)
+    if column_lineage is None:
+        raise CliUserError("Column lineage requires SQLGlot analysis to be enabled and available")
+
+    target_column: QualifiedLineageColumn = QualifiedLineageColumn(
+        resource_type=key.resource_type,
+        resource_name=key.name,
+        column_name=column_name,
+    )
+    trace: tuple[ColumnLineageEdge, ...] = _trace_column_with_depth(
+        column_lineage=column_lineage,
+        resource_name=key.name,
+        column_name=column_name,
+        direction=direction,
+        max_depth=depth,
+    )
+    return ColumnLineageTrace(
+        target=target_column,
+        trace=trace,
+        direction=direction,
+    )
+
+
+def _trace_column_with_depth(
+    *,
+    column_lineage: ProjectColumnLineage,
+    resource_name: str,
+    column_name: str,
+    direction: str,
+    max_depth: int | None,
+) -> tuple[ColumnLineageEdge, ...]:
+    if max_depth == 0:
+        return ()
+    result: list[ColumnLineageEdge] = []
+    stack: list[tuple[str, str, int]] = [(resource_name, column_name, 0)]
+    visited: set[tuple[str, str]] = set()
+    while stack:
+        current_resource: str
+        current_column: str
+        current_depth: int
+        current_resource, current_column, current_depth = stack.pop()
+        if (current_resource, current_column) in visited:
+            continue
+        visited.add((current_resource, current_column))
+        if max_depth is not None and current_depth >= max_depth:
+            continue
+        if direction == "downstream":
+            edges: tuple[ColumnLineageEdge, ...] = column_lineage.column_consumers(
+                current_resource,
+                current_column,
+            )
+            for edge in edges:
+                result.append(edge)
+                stack.append(
+                    (edge.target.resource_name, edge.target.column_name, current_depth + 1)
+                )
+        else:
+            for edge in column_lineage.edges_targeting(current_resource):
+                if edge.target.column_name != current_column:
+                    continue
+                result.append(edge)
+                stack.append(
+                    (edge.source.resource_name, edge.source.column_name, current_depth + 1)
+                )
+    return tuple(result)
 
 
 def select_selector_lineage(

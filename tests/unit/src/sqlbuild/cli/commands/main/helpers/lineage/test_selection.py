@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.cli.commands.main.helpers.lineage.models import LineageGraph
+from sqlbuild.cli.commands.main.helpers.lineage.models import ColumnLineageTrace, LineageGraph
 from sqlbuild.cli.commands.main.helpers.lineage.selection import (
+    select_column_target_lineage,
     select_selector_lineage,
     select_target_lineage,
 )
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from tests.unit.src.sqlbuild.cli.commands.main.helpers.lineage._test_types import (
+    ColumnLineageSelectionTestCase,
     LineageSelectionTestCase,
     LineageSelectorDepthErrorTestCase,
 )
@@ -47,6 +49,27 @@ SELECTION_TEST_CASES: list[LineageSelectionTestCase] = [
     ),
 ]
 
+COLUMN_SELECTION_TEST_CASES: list[ColumnLineageSelectionTestCase] = [
+    ColumnLineageSelectionTestCase(
+        description="selects upstream column trace for dot target",
+        target="fact_orders.order_id",
+        direction="upstream",
+        depth=None,
+        expected_resource_name="fact_orders",
+        expected_column_name="order_id",
+        expected_trace_ids=("stg_orders.order_id->fact_orders.order_id",),
+    ),
+    ColumnLineageSelectionTestCase(
+        description="respects zero depth for column target",
+        target="fact_orders.order_id",
+        direction="upstream",
+        depth=0,
+        expected_resource_name="fact_orders",
+        expected_column_name="order_id",
+        expected_trace_ids=(),
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -67,6 +90,35 @@ def test_given_target_lineage_request_when_selecting_then_returns_expected_subgr
 
     assert node_ids(result.nodes) == test_case.expected_node_ids
     assert edge_ids(result.edges) == test_case.expected_edge_ids
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    COLUMN_SELECTION_TEST_CASES,
+    ids=[case.description for case in COLUMN_SELECTION_TEST_CASES],
+)
+def test_given_column_target_when_selecting_then_returns_column_trace(
+    test_case: ColumnLineageSelectionTestCase,
+) -> None:
+    graph: ProjectGraph = build_lineage_test_graph()
+
+    result: ColumnLineageTrace | None = select_column_target_lineage(
+        graph=graph,
+        target=test_case.target,
+        direction=test_case.direction,
+        depth=test_case.depth,
+    )
+
+    assert result is not None
+    assert result.target.resource_name == test_case.expected_resource_name
+    assert result.target.column_name == test_case.expected_column_name
+    assert (
+        tuple(
+            f"{edge.source.resource_name}.{edge.source.column_name}->{edge.target.resource_name}.{edge.target.column_name}"
+            for edge in result.trace
+        )
+        == test_case.expected_trace_ids
+    )
 
 
 @pytest.mark.parametrize(
