@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from importlib import import_module
 from typing import Any
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.shared.helpers.sqlglot import import_sqlglot, import_sqlglot_expressions
 
 
 def extract_expected_branch_column_names_with_sqlglot(
@@ -13,10 +13,9 @@ def extract_expected_branch_column_names_with_sqlglot(
 ) -> tuple[tuple[str, ...], ...] | None:
     """Return expected SELECT branch names using SQLGlot when it is installed."""
 
-    try:
-        sqlglot_module: Any = import_module("sqlglot")
-        expressions_module: Any = import_module("sqlglot.expressions")
-    except ModuleNotFoundError:
+    sqlglot_module: Any | None = import_sqlglot()
+    expressions_module: Any | None = import_sqlglot_expressions()
+    if sqlglot_module is None or expressions_module is None:
         return None
 
     try:

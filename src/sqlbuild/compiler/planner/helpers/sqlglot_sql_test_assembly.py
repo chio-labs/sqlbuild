@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from importlib import import_module
 from typing import Any
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileSqlTestCte
 from sqlbuild.compiler.planner.models import SqlglotResolvedTestSql
+from sqlbuild.shared.helpers.sqlglot import import_sqlglot, import_sqlglot_expressions
 
 
 def try_resolve_test_model_sql_with_sqlglot(
@@ -25,10 +25,9 @@ def try_resolve_test_model_sql_with_sqlglot(
 ) -> SqlglotResolvedTestSql | None:
     """Return SQLGlot-backed readable test SQL or None on import/parse failure."""
 
-    try:
-        sqlglot_module: Any = import_module("sqlglot")
-        expressions_module: Any = import_module("sqlglot.expressions")
-    except ModuleNotFoundError:
+    sqlglot_module: Any | None = import_sqlglot()
+    expressions_module: Any | None = import_sqlglot_expressions()
+    if sqlglot_module is None or expressions_module is None:
         return None
 
     try:

@@ -147,7 +147,7 @@ def test_given_type_string_when_normalizing_without_sqlglot_then_it_returns_expe
     test_case: TypeNormalizationTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(type_normalization, "_import_sqlglot", lambda: None)
+    monkeypatch.setattr(type_normalization, "import_sqlglot", lambda: None)
 
     result: NormalizedType = normalize_type(type_sql=test_case.raw_type, dialect=test_case.dialect)
 
@@ -180,7 +180,7 @@ def test_given_type_strings_when_comparing_without_sqlglot_then_it_returns_expec
     test_case: TypeEqualityTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(type_normalization, "_import_sqlglot", lambda: None)
+    monkeypatch.setattr(type_normalization, "import_sqlglot", lambda: None)
 
     result: bool = types_equal(
         left=test_case.left_type,
@@ -223,7 +223,7 @@ def test_given_type_string_without_sqlglot_when_resolving_numeric_family_then_it
     test_case: NumericFamilyTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(type_normalization, "_import_sqlglot", lambda: None)
+    monkeypatch.setattr(type_normalization, "import_sqlglot", lambda: None)
 
     result: str | None = normalize_numeric_family(
         type_sql=test_case.raw_type,
