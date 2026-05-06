@@ -196,7 +196,12 @@ def _main_with_dependencies(
             )
         if args.command == CliCommand.COMPILE:
             return handlers.run_compile(
-                project_dir, args.no_sql_validation, args.defer_to, args.json, args.manifest
+                project_dir,
+                args.no_sql_validation,
+                args.defer_to,
+                args.json,
+                args.manifest,
+                args.no_color,
             )
         if args.command == CliCommand.PLAN:
             cursor_overrides: CursorOverrides = CursorOverrides(

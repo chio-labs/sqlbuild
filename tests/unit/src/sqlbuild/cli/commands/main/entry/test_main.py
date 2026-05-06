@@ -540,7 +540,7 @@ def test_given_janitor_command_arguments_when_running_with_dependencies_then_it_
 def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_flag(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[Path | None, bool, str | None, bool, bool]] = []
+    received_args: list[tuple[Path | None, bool, str | None, bool, bool, bool]] = []
 
     def run_compile(
         project_dir: Path | None,
@@ -548,8 +548,11 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
         defer_to: str | None,
         json_output: bool,
         manifest: bool,
+        no_color: bool,
     ) -> int:
-        received_args.append((project_dir, no_sql_validation, defer_to, json_output, manifest))
+        received_args.append(
+            (project_dir, no_sql_validation, defer_to, json_output, manifest, no_color)
+        )
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -565,6 +568,7 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
             None,
             False,
             test_case.expected_manifest,
+            False,
         )
     ]
 
@@ -782,11 +786,13 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
         defer_to: str | None,
         json_output: bool,
         manifest: bool,
+        no_color: bool,
     ) -> int:
         del no_sql_validation
         del defer_to
         del json_output
         del manifest
+        del no_color
         assert project_dir is not None
         raise test_case.error_factory(project_dir)
 

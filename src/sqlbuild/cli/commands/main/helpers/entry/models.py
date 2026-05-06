@@ -57,7 +57,7 @@ class CliNamespace:
 class CliEntrypointHandlers:
     """Injected command handlers for the CLI entrypoint."""
 
-    run_compile: Callable[[Path | None, bool, str | None, bool, bool], int]
+    run_compile: Callable[[Path | None, bool, str | None, bool, bool, bool], int]
     run_plan: Callable[
         [
             Path | None,

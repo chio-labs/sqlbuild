@@ -15,7 +15,15 @@ class TargetWriterTestCase:
 class CompileCommandTestCase:
     description: str
     expected_exit_code: int
-    expected_stdout_fragment: str
+    expected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CompileTextOutputTestCase:
+    description: str
+    model_count: int
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

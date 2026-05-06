@@ -20,6 +20,7 @@ from sqlbuild.compiler.compile.models import (
     FunctionArgument,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
+from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     ChainStep,
@@ -298,6 +299,67 @@ def build_static_target_writer_project() -> CompiledProject:
             ),
         ),
     )
+
+
+def build_compile_output_graph(*, model_names: tuple[str, ...]) -> ProjectGraph:
+    """Build a static project graph for compile output formatter tests."""
+
+    models: list[CompiledModel] = []
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {}
+    all_keys: dict[str, CompiledObjectKey] = {}
+    name: str
+    for name in model_names:
+        key: CompiledObjectKey = CompiledObjectKey(
+            resource_type=CompiledResourceType.MODEL,
+            name=name,
+        )
+        models.append(
+            CompiledModel(
+                key=key,
+                deps=(),
+                name=name,
+                relative_path=Path(f"models/{name}.sql"),
+                query_sql="SELECT 1 AS id",
+                config=CompileModelConfig(values={}),
+                target=CompiledRelationTarget(
+                    database=None,
+                    schema="analytics",
+                    name=name,
+                    qualified_name=f"analytics.{name}",
+                ),
+                inferred_columns=(),
+            )
+        )
+        upstream_deps[key] = ()
+        all_keys[name] = key
+
+    project: CompiledProject = CompiledProject(
+        run_id="run-1",
+        effective_environment_name="dev",
+        effective_connection={},
+        effective_vars={},
+        models=tuple(models),
+    )
+    return ProjectGraph(
+        project=project,
+        upstream_deps=upstream_deps,
+        downstream_deps={key: () for key in upstream_deps},
+        tag_index={},
+        path_index={key: "" for key in upstream_deps},
+        all_keys=all_keys,
+    )
+
+
+def build_compile_output_model_names(model_count: int) -> tuple[str, ...]:
+    """Build model names for compile output formatter cases."""
+
+    if model_count == 3:
+        return (
+            "short",
+            "hourly_activity_with_daily_context",
+            "extremely_long_model_name_that_should_be_truncated_in_human_output",
+        )
+    return tuple(f"model_{index:03d}" for index in range(model_count))
 
 
 def build_runtime_target_execution_result() -> BuildExecutionResult:
