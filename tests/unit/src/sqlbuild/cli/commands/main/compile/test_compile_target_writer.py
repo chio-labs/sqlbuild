@@ -6,12 +6,17 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.cli.commands.main.helpers.compile.models import WrittenTarget
-from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compile_target
+from sqlbuild.cli.commands.main.helpers.compile.target_writer import (
+    write_compile_target,
+    write_static_compile_target,
+)
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import TargetWriterTestCase
 from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
+    build_static_target_writer_project,
     build_target_writer_plan_output,
     read_target_files,
 )
@@ -64,3 +69,40 @@ def test_given_plan_output_when_writing_target_then_expected_files_are_written(
     assert read_target_files(tmp_path / "target", expected_files) == expected_files
     assert json.loads((tmp_path / "target" / "manifest.json").read_text()) == manifest
     assert not (tmp_path / "target" / "run").exists()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TargetWriterTestCase(
+            description="writes offline compiled SQL without manifest by default",
+            expected_files={
+                "compiled/models/staging/orders.sql": "SELECT 2 AS order_id\n",
+                "compiled/functions/sql/is_completed_order.sql": (
+                    "CREATE OR REPLACE MACRO analytics.is_completed_order(order_status) AS (\n"
+                    "order_status = 'completed'\n"
+                    ")\n"
+                ),
+            },
+            expected_summary_line="Compiled 1 model, 1 function",
+        )
+    ],
+    ids=["writes offline compiled SQL without manifest by default"],
+)
+def test_given_compiled_project_when_writing_static_target_then_expected_files_are_written(
+    test_case: TargetWriterTestCase,
+    tmp_path: Path,
+) -> None:
+    project: CompiledProject = build_static_target_writer_project()
+
+    written: WrittenTarget = write_static_compile_target(
+        target_dir=tmp_path / "target",
+        adapter=DuckDbAdapter(),
+        project=project,
+    )
+
+    assert written.summary_line() == test_case.expected_summary_line
+    assert (
+        read_target_files(tmp_path / "target", test_case.expected_files) == test_case.expected_files
+    )
+    assert not (tmp_path / "target" / "manifest.json").exists()
