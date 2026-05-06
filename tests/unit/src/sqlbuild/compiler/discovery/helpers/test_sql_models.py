@@ -4,8 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery.helpers.sql_models import parse_model_sql
+from sqlbuild.compiler.discovery.helpers.sql_models import (
+    model_header_column_locations,
+    model_output_column_locations,
+    parse_model_sql,
+)
+from sqlbuild.spec.models.schema import SourceLocation
 from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
+    ModelHeaderColumnLocationTestCase,
+    ModelOutputColumnLocationTestCase,
     ParseModelSqlErrorTestCase,
     ParseModelSqlHeaderTestCase,
 )
@@ -326,3 +333,183 @@ def test_given_invalid_sql_model_contents_when_parsing_then_it_raises_clear_erro
 ) -> None:
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
         parse_model_sql(test_case.contents, Path("orders.sql"))
+
+
+HEADER_LOCATION_TEST_CASES: tuple[ModelHeaderColumnLocationTestCase, ...] = (
+    ModelHeaderColumnLocationTestCase(
+        description="locates top level model column declarations",
+        contents=(
+            "MODEL (\n"
+            "  materialized view,\n"
+            "  columns (\n"
+            "    order_id (),\n"
+            "    customer_id (type INTEGER),\n"
+            "  ),\n"
+            ");\n\n"
+            "SELECT order_id FROM raw_orders\n"
+        ),
+        expected_locations={
+            "order_id": (Path("models/orders.sql"), 4, 5, 4, 13),
+            "customer_id": (Path("models/orders.sql"), 5, 5, 5, 16),
+        },
+    ),
+    ModelHeaderColumnLocationTestCase(
+        description="ignores nested metadata keys inside column declarations",
+        contents=(
+            "MODEL (\n"
+            "  columns (\n"
+            "    status (\n"
+            '      description "Order status",\n'
+            "      audits [accepted_values (values [placed, completed])],\n"
+            "    ),\n"
+            "  ),\n"
+            ");\n\n"
+            "SELECT status FROM raw_orders\n"
+        ),
+        expected_locations={
+            "status": (Path("models/orders.sql"), 3, 5, 3, 11),
+        },
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    HEADER_LOCATION_TEST_CASES,
+    ids=[case.description for case in HEADER_LOCATION_TEST_CASES],
+)
+def test_given_model_header_columns_when_locating_then_returns_expected_locations(
+    test_case: ModelHeaderColumnLocationTestCase,
+) -> None:
+    locations: dict[str, SourceLocation] = model_header_column_locations(
+        contents=test_case.contents,
+        relative_path=Path("models/orders.sql"),
+    )
+
+    assert {
+        name: (
+            location.path,
+            location.line,
+            location.column,
+            location.end_line,
+            location.end_column,
+        )
+        for name, location in locations.items()
+    } == test_case.expected_locations
+
+
+OUTPUT_LOCATION_TEST_CASES: tuple[ModelOutputColumnLocationTestCase, ...] = (
+    ModelOutputColumnLocationTestCase(
+        description="locates direct and aliased top level select outputs",
+        contents=(
+            "MODEL ();\n\n"
+            "SELECT\n"
+            "  o.order_id,\n"
+            "  CAST(o.amount AS VARCHAR) AS amount_text\n"
+            "FROM raw_orders o\n"
+        ),
+        expected_locations={
+            "order_id": (Path("models/orders.sql"), 4, 3, 4, 13),
+            "amount_text": (Path("models/orders.sql"), 5, 3, 5, 43),
+        },
+    ),
+    ModelOutputColumnLocationTestCase(
+        description="keeps commas inside expressions within one output span",
+        contents=(
+            "MODEL ();\n\n"
+            "SELECT\n"
+            "  COALESCE(first_name, last_name, 'unknown') AS display_name,\n"
+            "  customer_id\n"
+            "FROM raw_customers\n"
+        ),
+        expected_locations={
+            "display_name": (Path("models/orders.sql"), 4, 3, 4, 61),
+            "customer_id": (Path("models/orders.sql"), 5, 3, 5, 14),
+        },
+    ),
+    ModelOutputColumnLocationTestCase(
+        description="locates outer select outputs after ctes",
+        contents=(
+            "MODEL ();\n\n"
+            "WITH prepared AS (\n"
+            "  SELECT order_id, amount_cents FROM raw_orders\n"
+            ")\n"
+            "SELECT\n"
+            "  order_id,\n"
+            "  amount_cents AS total_cents\n"
+            "FROM prepared\n"
+        ),
+        expected_locations={
+            "order_id": (Path("models/orders.sql"), 7, 3, 7, 11),
+            "total_cents": (Path("models/orders.sql"), 8, 3, 8, 30),
+        },
+    ),
+    ModelOutputColumnLocationTestCase(
+        description="locates quoted output aliases",
+        contents=('MODEL ();\n\nSELECT\n  amount_cents AS "amount cents"\nFROM raw_orders\n'),
+        expected_locations={
+            "amount cents": (Path("models/orders.sql"), 4, 3, 4, 33),
+        },
+    ),
+    ModelOutputColumnLocationTestCase(
+        description="locates expressions containing nested select text inside parentheses",
+        contents=(
+            "MODEL ();\n\n"
+            "SELECT\n"
+            "  (SELECT MAX(amount_cents) FROM raw_payments) AS max_payment_cents\n"
+            "FROM raw_orders\n"
+        ),
+        expected_locations={
+            "max_payment_cents": (Path("models/orders.sql"), 4, 3, 4, 68),
+        },
+    ),
+    ModelOutputColumnLocationTestCase(
+        description="skips wildcard outputs",
+        contents="MODEL ();\n\nSELECT * FROM raw_orders\n",
+        expected_locations={},
+    ),
+    ModelOutputColumnLocationTestCase(
+        description="locates alias without AS using sqlglot projection identity",
+        contents=("MODEL ();\n\nSELECT\n  CAST(amount AS VARCHAR) amount_text\nFROM raw_orders\n"),
+        expected_locations={
+            "amount_text": (Path("models/orders.sql"), 4, 3, 4, 38),
+        },
+    ),
+    ModelOutputColumnLocationTestCase(
+        description="locates select without from using sqlglot projection identity",
+        contents="MODEL ();\n\nSELECT 1 AS one\n",
+        expected_locations={
+            "one": (Path("models/orders.sql"), 3, 8, 3, 16),
+        },
+    ),
+    ModelOutputColumnLocationTestCase(
+        description="skips union query after first branch because it is ambiguous",
+        contents=("MODEL ();\n\nSELECT id FROM raw_a\nUNION ALL\nSELECT id FROM raw_b\n"),
+        expected_locations={},
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    OUTPUT_LOCATION_TEST_CASES,
+    ids=[case.description for case in OUTPUT_LOCATION_TEST_CASES],
+)
+def test_given_model_select_outputs_when_locating_then_returns_expected_locations(
+    test_case: ModelOutputColumnLocationTestCase,
+) -> None:
+    locations: dict[str, SourceLocation] = model_output_column_locations(
+        contents=test_case.contents,
+        relative_path=Path("models/orders.sql"),
+    )
+
+    assert {
+        name: (
+            location.path,
+            location.line,
+            location.column,
+            location.end_line,
+            location.end_column,
+        )
+        for name, location in locations.items()
+    } == test_case.expected_locations

@@ -8,6 +8,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from sqlbuild.cli.commands.main.helpers.compile.models import WrittenTarget
+from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
@@ -18,11 +19,12 @@ from sqlbuild.compiler.compile.models import (
     CompiledSource,
     CompiledSqlTest,
 )
-from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic
+from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic, RelatedLocation
 from sqlbuild.compiler.diagnostics.types import DiagnosticSeverity
 from sqlbuild.compiler.lineage.models import ModelColumnLineage, ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.shared.helpers.colors import blue_bold, dim, green, green_bold, red, yellow
+from sqlbuild.spec.models.schema import SourceLocation
 
 _HUMAN_MODEL_LIMIT: int = 100
 _MIN_MODEL_NAME_WIDTH: int = 24
@@ -36,6 +38,7 @@ def format_compile_text(
     manifest: bool,
     lineage: ProjectColumnLineage | None,
     diagnostics: tuple[CompilerDiagnostic, ...],
+    lineage_mode: CompileLineageMode = CompileLineageMode.FAST,
     use_color: bool,
 ) -> str:
     """Format human-readable compile output."""
@@ -74,7 +77,13 @@ def format_compile_text(
         lines.append("  " + _style("Use --json for the full compile report.", dim, use_color))
     lines.append("")
     if diagnostics:
-        lines.append(_format_diagnostics_text(diagnostics, use_color=use_color))
+        lines.append(
+            _format_diagnostics_text(
+                diagnostics,
+                source_texts=_model_source_texts(graph.project.models),
+                use_color=use_color,
+            )
+        )
         lines.append("")
     error_count: int = _diagnostic_count(diagnostics, DiagnosticSeverity.ERROR)
     warning_count: int = _diagnostic_count(diagnostics, DiagnosticSeverity.WARNING)
@@ -91,7 +100,11 @@ def format_compile_text(
     )
     if manifest:
         lines.append(f"  {_style('Wrote:', dim, use_color)} target/manifest.json")
-    if lineage is None and graph.project.settings.sqlglot:
+    if (
+        lineage is None
+        and graph.project.settings.sqlglot
+        and lineage_mode != CompileLineageMode.NONE
+    ):
         lines.append(f"  {_style('Column lineage:', yellow, use_color)} unavailable")
     return "\n" + "\n".join(lines) + "\n"
 
@@ -104,6 +117,7 @@ def format_compile_json(
     timings_ms: dict[str, int],
     lineage: ProjectColumnLineage | None,
     diagnostics: tuple[CompilerDiagnostic, ...],
+    lineage_mode: CompileLineageMode = CompileLineageMode.FAST,
 ) -> str:
     """Serialize the offline compile report as JSON."""
 
@@ -115,6 +129,7 @@ def format_compile_json(
         "summary": _summary(graph, diagnostics=diagnostics),
         "diagnostics": [_diagnostic_to_json(diagnostic) for diagnostic in diagnostics],
         "compile_timings": timings_ms,
+        "lineage_mode": lineage_mode.value,
         "resources": _resources(graph=graph, lineage=lineage),
         "artifacts": _artifacts(written=written, manifest=manifest),
     }
@@ -314,24 +329,56 @@ def _diagnostic_to_json(diagnostic: CompilerDiagnostic) -> dict[str, object]:
         payload["line"] = diagnostic.line
     if diagnostic.column is not None:
         payload["column"] = diagnostic.column
+    if diagnostic.location is not None:
+        payload["location"] = _location_to_json(diagnostic.location)
+    if diagnostic.related_locations:
+        payload["related_locations"] = [
+            {
+                "label": related.label,
+                "location": _location_to_json(related.location),
+                **({"message": related.message} if related.message is not None else {}),
+            }
+            for related in diagnostic.related_locations
+        ]
     if diagnostic.help is not None:
         payload["help"] = diagnostic.help
     return payload
 
 
+def _location_to_json(location: SourceLocation) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "path": str(location.path),
+        "line": location.line,
+        "column": location.column,
+    }
+    if location.end_line is not None:
+        payload["end_line"] = location.end_line
+    if location.end_column is not None:
+        payload["end_column"] = location.end_column
+    return payload
+
+
 def _format_diagnostics_text(
-    diagnostics: tuple[CompilerDiagnostic, ...], *, use_color: bool
+    diagnostics: tuple[CompilerDiagnostic, ...], *, source_texts: dict[Path, str], use_color: bool
 ) -> str:
     lines: list[str] = []
     for diagnostic in diagnostics:
-        lines.extend(_format_diagnostic_text(diagnostic, use_color=use_color))
+        lines.extend(
+            _format_diagnostic_text(
+                diagnostic,
+                source_texts=source_texts,
+                use_color=use_color,
+            )
+        )
         lines.append("")
     if lines:
         lines.pop()
     return "\n".join(lines)
 
 
-def _format_diagnostic_text(diagnostic: CompilerDiagnostic, *, use_color: bool) -> list[str]:
+def _format_diagnostic_text(
+    diagnostic: CompilerDiagnostic, *, source_texts: dict[Path, str], use_color: bool
+) -> list[str]:
     header: str = f"{diagnostic.severity}[{diagnostic.code}]: {diagnostic.message}"
     lines: list[str] = [_style(header, _diagnostic_styler(diagnostic), use_color)]
     if diagnostic.resource_name is not None:
@@ -341,14 +388,74 @@ def _format_diagnostic_text(diagnostic: CompilerDiagnostic, *, use_color: bool) 
             label = "resource"
             resource = f"{diagnostic.resource_type}: {resource}"
         lines.append(f"  {label}: {_style(resource, blue_bold, use_color)}")
-    if diagnostic.path is not None:
-        location: str = str(diagnostic.path)
-        if diagnostic.line is not None and diagnostic.column is not None:
-            location = f"{location}:{diagnostic.line}:{diagnostic.column}"
-        lines.append(f"  file: {location}")
+    if diagnostic.location is not None:
+        lines.extend(
+            _format_location_block(
+                diagnostic.location,
+                source_texts=source_texts,
+                message=None,
+            )
+        )
+    elif diagnostic.path is not None:
+        lines.append(f"  --> {diagnostic.path}")
+    for related_location in diagnostic.related_locations:
+        lines.append("")
+        lines.append(f"  {related_location.label}:")
+        lines.extend(
+            _format_related_location_block(
+                related_location,
+                source_texts=source_texts,
+            )
+        )
     if diagnostic.help is not None:
-        lines.append(f"  {_style('help:', dim, use_color)} {diagnostic.help}")
+        lines.append(f"  {_style('= help:', dim, use_color)} {diagnostic.help}")
     return lines
+
+
+def _format_related_location_block(
+    related_location: RelatedLocation, *, source_texts: dict[Path, str]
+) -> list[str]:
+    return _format_location_block(
+        related_location.location,
+        source_texts=source_texts,
+        message=related_location.message,
+    )
+
+
+def _format_location_block(
+    location: SourceLocation, *, source_texts: dict[Path, str], message: str | None
+) -> list[str]:
+    rendered_location: str = f"{location.path}:{location.line}:{location.column}"
+    lines: list[str] = [f"  --> {rendered_location}"]
+    source_text: str | None = source_texts.get(location.path)
+    if source_text is None:
+        return lines
+    source_lines: list[str] = source_text.splitlines()
+    if location.line < 1 or location.line > len(source_lines):
+        return lines
+    source_line: str = source_lines[location.line - 1]
+    line_number: str = str(location.line)
+    gutter: str = " " * len(line_number)
+    lines.append(f"  {gutter} |")
+    lines.append(f"  {line_number} | {source_line}")
+    lines.append(
+        f"  {gutter} | {_caret_line(location=location, source_line=source_line, message=message)}"
+    )
+    return lines
+
+
+def _caret_line(*, location: SourceLocation, source_line: str, message: str | None) -> str:
+    start_column: int = max(1, location.column)
+    end_column: int = location.end_column or start_column + 1
+    if location.end_line is not None and location.end_line != location.line:
+        end_column = len(source_line) + 1
+    caret_count: int = max(1, end_column - start_column)
+    suffix: str = f" {message}" if message is not None else ""
+    return " " * (start_column - 1) + "^" * caret_count + suffix
+
+
+def _model_source_texts(models: tuple[CompiledModel, ...]) -> dict[Path, str]:
+    return {model.relative_path: model.authored_sql for model in models if model.authored_sql}
 
 
 def _diagnostic_styler(diagnostic: CompilerDiagnostic) -> Callable[[str], str]:

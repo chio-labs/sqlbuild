@@ -8,6 +8,8 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from sqlbuild.cli.commands.main.helpers.compile.constants import COMPILE_LINEAGE_MODE_VALUES
+from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
 from sqlbuild.cli.commands.main.helpers.diff.validation import parse_diff_environment_range
 from sqlbuild.cli.commands.main.helpers.entry.models import CliEntrypointHandlers, CliNamespace
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
@@ -39,6 +41,13 @@ def _build_parser() -> argparse.ArgumentParser:
     compile_parser.add_argument("--defer-to", default=None)
     compile_parser.add_argument("--json", action="store_true", default=False)
     compile_parser.add_argument("--manifest", action="store_true", default=False)
+    compile_parser.add_argument(
+        "--lineage-mode",
+        dest="compile_lineage_mode",
+        choices=COMPILE_LINEAGE_MODE_VALUES,
+        default=CompileLineageMode.FAST.value,
+        help="Column lineage mode for compile output",
+    )
 
     plan_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PLAN)
     plan_parser.add_argument("--no-sql-validation", action="store_true", default=False)
@@ -202,6 +211,7 @@ def _main_with_dependencies(
                 args.json,
                 args.manifest,
                 args.no_color,
+                CompileLineageMode(args.compile_lineage_mode),
             )
         if args.command == CliCommand.PLAN:
             cursor_overrides: CursorOverrides = CursorOverrides(

@@ -1,8 +1,20 @@
-"""Structured raw schema.yml metadata models."""
+"""Structured resource metadata models."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
+
+
+@dataclass(frozen=True)
+class SourceLocation:
+    """An authored source location for compiler diagnostics."""
+
+    path: Path
+    line: int
+    column: int
+    end_line: int | None = None
+    end_column: int | None = None
 
 
 @dataclass(frozen=True)
@@ -25,7 +37,7 @@ default_seed_csv_settings: SeedCsvSettings = SeedCsvSettings()
 
 @dataclass(frozen=True)
 class SchemaAuditInstance:
-    """One schema-attached audit instance from schema.yml."""
+    """One audit instance attached to model, column, or seed metadata."""
 
     definition_name: str
     arguments: dict[str, object] = field(default_factory=dict)
@@ -37,18 +49,19 @@ class SchemaAuditInstance:
 
 @dataclass(frozen=True)
 class SchemaColumn:
-    """One model or seed column entry from schema.yml."""
+    """One declared model, seed, or source column entry."""
 
     name: str
     type: str | None = None
     description: str | None = None
     meta: dict[str, object] = field(default_factory=dict)
     audits: tuple[SchemaAuditInstance, ...] = field(default_factory=tuple)
+    location: SourceLocation | None = None
 
 
 @dataclass(frozen=True)
 class SchemaModelEntry:
-    """One model entry from schema.yml."""
+    """One model metadata entry normalized from MODEL(...)."""
 
     name: str
     description: str | None = None
@@ -61,7 +74,7 @@ class SchemaModelEntry:
 
 @dataclass(frozen=True)
 class SchemaSeedEntry:
-    """One seed entry from schema.yml."""
+    """One seed metadata entry from seed YAML."""
 
     name: str
     description: str | None = None

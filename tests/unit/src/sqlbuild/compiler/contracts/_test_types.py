@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -12,3 +13,15 @@ class ContractValidationTestCase:
     expected_codes: tuple[str, ...]
     expected_severities: tuple[str, ...]
     expected_messages: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ContractLocationTestCase:
+    description: str
+    column_name: str
+    path: Path
+    line: int
+    column: int
+    expected_path: Path
+    expected_line: int
+    expected_column: int

@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -69,6 +70,20 @@ class ParseModelSqlErrorTestCase:
     description: str
     contents: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ModelHeaderColumnLocationTestCase:
+    description: str
+    contents: str
+    expected_locations: dict[str, tuple[Path, int, int, int | None, int | None]]
+
+
+@dataclass(frozen=True)
+class ModelOutputColumnLocationTestCase:
+    description: str
+    contents: str
+    expected_locations: dict[str, tuple[Path, int, int, int | None, int | None]]
 
 
 @dataclass(frozen=True)

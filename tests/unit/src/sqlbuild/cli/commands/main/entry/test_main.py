@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.cli.commands.main.entry import _main_with_dependencies, main
+from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
@@ -79,6 +80,18 @@ COMPILE_DISPATCH_TEST_CASES: list[MainTestCase] = [
         expected_exit_code=3,
         expected_project_dir=None,
         expected_manifest=True,
+    ),
+    MainTestCase(
+        description="passes rich lineage mode to compile handler",
+        argv=["compile", "--lineage-mode", "rich"],
+        expected_exit_code=3,
+        expected_compile_lineage_mode=CompileLineageMode.RICH,
+    ),
+    MainTestCase(
+        description="passes none lineage mode to compile handler",
+        argv=["compile", "--lineage-mode", "none"],
+        expected_exit_code=3,
+        expected_compile_lineage_mode=CompileLineageMode.NONE,
     ),
 ]
 
@@ -540,7 +553,9 @@ def test_given_janitor_command_arguments_when_running_with_dependencies_then_it_
 def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_flag(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[Path | None, bool, str | None, bool, bool, bool]] = []
+    received_args: list[
+        tuple[Path | None, bool, str | None, bool, bool, bool, CompileLineageMode]
+    ] = []
 
     def run_compile(
         project_dir: Path | None,
@@ -549,9 +564,18 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
         json_output: bool,
         manifest: bool,
         no_color: bool,
+        lineage_mode: CompileLineageMode,
     ) -> int:
         received_args.append(
-            (project_dir, no_sql_validation, defer_to, json_output, manifest, no_color)
+            (
+                project_dir,
+                no_sql_validation,
+                defer_to,
+                json_output,
+                manifest,
+                no_color,
+                lineage_mode,
+            )
         )
         return test_case.expected_exit_code
 
@@ -569,6 +593,7 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
             False,
             test_case.expected_manifest,
             False,
+            test_case.expected_compile_lineage_mode,
         )
     ]
 
@@ -787,12 +812,14 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
         json_output: bool,
         manifest: bool,
         no_color: bool,
+        lineage_mode: CompileLineageMode,
     ) -> int:
         del no_sql_validation
         del defer_to
         del json_output
         del manifest
         del no_color
+        del lineage_mode
         assert project_dir is not None
         raise test_case.error_factory(project_dir)
 

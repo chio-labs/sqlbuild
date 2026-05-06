@@ -32,3 +32,10 @@ class ColumnLineageConfidence(StrEnum):
     MEDIUM = "medium"
     LOW = "low"
     UNKNOWN = "unknown"
+
+
+class ColumnLineageMode(StrEnum):
+    """Column lineage analyzer mode."""
+
+    RICH = "rich"
+    FAST = "fast"

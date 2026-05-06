@@ -112,6 +112,8 @@ def _assemble_compiled_model(
         references=model_input.references,
         schema_entry=model_input.schema_entry,
         inferred_columns=inferred_columns,
+        authored_sql=model_input.model_file.contents,
+        output_column_locations=model_input.model_file.output_column_locations,
     )
 
 

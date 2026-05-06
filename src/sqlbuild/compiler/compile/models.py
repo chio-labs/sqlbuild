@@ -31,7 +31,7 @@ from sqlbuild.spec.models.project import (
     ProjectConfig,
     SettingsConfig,
 )
-from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
+from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry, SourceLocation
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -270,6 +270,8 @@ class CompiledModel:
     references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
     schema_entry: SchemaModelEntry | None = None
     inferred_columns: tuple[InferredColumn, ...] | None = None
+    authored_sql: str = ""
+    output_column_locations: dict[str, SourceLocation] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
