@@ -2,6 +2,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 
@@ -17,6 +18,7 @@ class MainTestCase:
     expected_no_color: bool = False
     expected_debug: bool = False
     expected_manifest: bool = False
+    expected_compile_lineage_mode: CompileLineageMode = CompileLineageMode.FAST
 
 
 @dataclass(frozen=True)

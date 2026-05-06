@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
-from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
+from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry, SourceLocation
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -18,6 +18,8 @@ class DiscoveredSqlModelFile:
     relative_path: Path
     contents: str
     header_values: dict[str, object]
+    header_column_locations: dict[str, SourceLocation]
+    output_column_locations: dict[str, SourceLocation]
     query_sql: str
 
 

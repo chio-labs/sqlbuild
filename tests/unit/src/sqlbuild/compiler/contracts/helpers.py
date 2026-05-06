@@ -11,7 +11,7 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry
+from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry, SourceLocation
 
 
 def make_contract_project(
@@ -20,6 +20,7 @@ def make_contract_project(
     inferred_columns: tuple[tuple[str, str | None], ...] | None,
     type_enforcement: bool | None,
     model_name: str = "orders",
+    column_locations: dict[str, SourceLocation] | None = None,
 ) -> CompiledProject:
     """Build a compiled project for contract validation tests."""
 
@@ -50,7 +51,11 @@ def make_contract_project(
                     name=model_name,
                     type_enforcement=type_enforcement,
                     columns=tuple(
-                        SchemaColumn(name=name, type=column_type)
+                        SchemaColumn(
+                            name=name,
+                            type=column_type,
+                            location=(column_locations or {}).get(name),
+                        )
                         for name, column_type in declared_columns
                     ),
                 ),

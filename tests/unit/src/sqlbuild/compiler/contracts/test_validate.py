@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from sqlbuild.adapter.shared.types import TypeDialect
 from sqlbuild.compiler.contracts.main.validate import validate_model_contracts
 from sqlbuild.compiler.contracts.models import ContractValidationResult
+from sqlbuild.spec.models.schema import SourceLocation
 from tests.unit.src.sqlbuild.compiler.contracts._test_types import (
+    ContractLocationTestCase,
     ContractValidationTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.contracts.helpers import make_contract_project
@@ -114,3 +118,44 @@ def test_given_compiled_project_when_validating_contracts_then_returns_expected_
         tuple(diagnostic.message for diagnostic in result.diagnostics)
         == test_case.expected_messages
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ContractLocationTestCase(
+            description="uses declared column location",
+            column_name="customer_id",
+            path=Path("models/orders.sql"),
+            line=4,
+            column=5,
+            expected_path=Path("models/orders.sql"),
+            expected_line=4,
+            expected_column=5,
+        )
+    ],
+    ids=["uses declared column location"],
+)
+def test_given_column_location_when_validating_contracts_then_diagnostic_uses_location(
+    test_case: ContractLocationTestCase,
+) -> None:
+    location: SourceLocation = SourceLocation(
+        path=test_case.path,
+        line=test_case.line,
+        column=test_case.column,
+    )
+    result: ContractValidationResult = validate_model_contracts(
+        make_contract_project(
+            declared_columns=((test_case.column_name, None),),
+            inferred_columns=(("order_id", None),),
+            type_enforcement=None,
+            column_locations={test_case.column_name: location},
+        ),
+        dialect=TypeDialect.DUCKDB,
+    )
+
+    assert len(result.diagnostics) == 1
+    assert result.diagnostics[0].location == location
+    assert result.diagnostics[0].path == test_case.expected_path
+    assert result.diagnostics[0].line == test_case.expected_line
+    assert result.diagnostics[0].column == test_case.expected_column

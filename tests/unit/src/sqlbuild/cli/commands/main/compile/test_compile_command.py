@@ -2,18 +2,96 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from sqlbuild.cli.commands.main import compile as compile_command
 from sqlbuild.cli.commands.main.compile import run_compile
+from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
+from sqlbuild.compiler.lineage.models import ProjectColumnLineage
+from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileCommandTestCase,
     CompileJsonDiagnosticsTestCase,
+    CompileLineageModeTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
     NoConnectDuckDbAdapter,
     prepare_static_compile_project,
+)
+
+CONTRACT_DIAGNOSTIC_TEST_CASES: tuple[CompileCommandTestCase, ...] = (
+    CompileCommandTestCase(
+        description="returns one when contract diagnostics have errors",
+        expected_exit_code=1,
+        expected_stdout_fragments=(
+            "Compile ready (1 model)",
+            "  orders                   FAIL 1 columns",
+            "error[K001]: required column 'customer_id' missing from model output",
+            "  model: orders",
+            "  --> models/orders.sql:5:5",
+            "  5 |     customer_id (),",
+            "    |     ^^^^^^^^^^^",
+            "  = help: add customer_id to the SELECT list or remove it from MODEL(columns)",
+            "  Compiled: 1 model, 0 seeds, 0 functions, 1 error, 0 warnings",
+            "  Wrote: target/compiled/",
+        ),
+        model_sql=(
+            "MODEL (\n"
+            "  materialized view,\n"
+            "  columns (\n"
+            "    order_id (),\n"
+            "    customer_id (),\n"
+            "  ),\n"
+            ");\n\n"
+            "SELECT 1 AS order_id\n"
+        ),
+    ),
+    CompileCommandTestCase(
+        description="reports contract and output locations for type diagnostics",
+        expected_exit_code=1,
+        expected_stdout_fragments=(
+            "error[K002]: column 'amount_cents' inferred as VARCHAR but contract declares INTEGER",
+            "  --> models/orders.sql:4:5",
+            "  4 |     amount_cents (type INTEGER),",
+            "    |     ^^^^^^^^^^^^",
+            "  output:",
+            "  --> models/orders.sql:9:3",
+            "  9 |   CAST('1' AS VARCHAR) AS amount_cents",
+            "inferred VARCHAR",
+            "  = help: change the declared type or cast the expression explicitly",
+        ),
+        model_sql=(
+            "MODEL (\n"
+            "  materialized view,\n"
+            "  columns (\n"
+            "    amount_cents (type INTEGER),\n"
+            "  ),\n"
+            ");\n\n"
+            "SELECT\n"
+            "  CAST('1' AS VARCHAR) AS amount_cents\n"
+            "FROM (SELECT 1) AS source\n"
+        ),
+    ),
+)
+
+LINEAGE_MODE_TEST_CASES: tuple[CompileLineageModeTestCase, ...] = (
+    CompileLineageModeTestCase(
+        description="uses fast lineage by default",
+        lineage_mode=CompileLineageMode.FAST,
+        expected_lineage_mode_values=(ColumnLineageMode.FAST.value,),
+    ),
+    CompileLineageModeTestCase(
+        description="uses rich lineage when requested",
+        lineage_mode=CompileLineageMode.RICH,
+        expected_lineage_mode_values=(ColumnLineageMode.RICH.value,),
+    ),
+    CompileLineageModeTestCase(
+        description="skips lineage when disabled",
+        lineage_mode=CompileLineageMode.NONE,
+        expected_lineage_mode_values=(),
+    ),
 )
 
 
@@ -58,33 +136,8 @@ def test_given_local_project_when_running_compile_then_it_does_not_connect(
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        CompileCommandTestCase(
-            description="returns one when contract diagnostics have errors",
-            expected_exit_code=1,
-            expected_stdout_fragments=(
-                "Compile ready (1 model)",
-                "  orders                   FAIL 1 columns",
-                "error[K001]: required column 'customer_id' missing from model output",
-                "  model: orders",
-                "  file: models/orders.sql",
-                "  help: add customer_id to the SELECT list or remove it from MODEL(columns)",
-                "  Compiled: 1 model, 0 seeds, 0 functions, 1 error, 0 warnings",
-                "  Wrote: target/compiled/",
-            ),
-            model_sql=(
-                "MODEL (\n"
-                "  materialized view,\n"
-                "  columns (\n"
-                "    order_id (),\n"
-                "    customer_id (),\n"
-                "  ),\n"
-                ");\n\n"
-                "SELECT 1 AS order_id\n"
-            ),
-        ),
-    ],
-    ids=["reports contract diagnostics"],
+    CONTRACT_DIAGNOSTIC_TEST_CASES,
+    ids=[case.description for case in CONTRACT_DIAGNOSTIC_TEST_CASES],
 )
 def test_given_contract_errors_when_running_compile_then_reports_diagnostics(
     test_case: CompileCommandTestCase,
@@ -123,6 +176,8 @@ def test_given_contract_errors_when_running_compile_then_reports_diagnostics(
             expected_code="K001",
             expected_severity="error",
             expected_message="required column 'customer_id' missing from model output",
+            expected_line=5,
+            expected_column=5,
             model_sql=(
                 "MODEL (\n"
                 "  materialized view,\n"
@@ -168,4 +223,49 @@ def test_given_contract_errors_when_running_compile_json_then_serializes_diagnos
     assert diagnostics[0]["code"] == test_case.expected_code
     assert diagnostics[0]["severity"] == test_case.expected_severity
     assert diagnostics[0]["message"] == test_case.expected_message
+    assert diagnostics[0]["path"] == "models/orders.sql"
+    assert diagnostics[0]["line"] == test_case.expected_line
+    assert diagnostics[0]["column"] == test_case.expected_column
+    assert diagnostics[0]["location"] == {
+        "path": "models/orders.sql",
+        "line": test_case.expected_line,
+        "column": test_case.expected_column,
+        "end_line": test_case.expected_line,
+        "end_column": 16,
+    }
     assert diagnostics[0]["phase"] == "contract"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    LINEAGE_MODE_TEST_CASES,
+    ids=[case.description for case in LINEAGE_MODE_TEST_CASES],
+)
+def test_given_lineage_mode_when_running_compile_then_uses_expected_lineage_analyzer(
+    test_case: CompileLineageModeTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_dir: Path = prepare_static_compile_project(tmp_path)
+    received_modes: list[ColumnLineageMode] = []
+    monkeypatch.setattr(
+        compile_command,
+        "resolve_adapter",
+        lambda *args, **kwargs: NoConnectDuckDbAdapter(),
+    )
+
+    def build_lineage_spy(*args: object, **kwargs: object) -> ProjectColumnLineage:
+        del args
+        received_modes.append(cast(ColumnLineageMode, kwargs["mode"]))
+        return ProjectColumnLineage(models={}, edges=())
+
+    monkeypatch.setattr(compile_command, "build_project_column_lineage", build_lineage_spy)
+
+    exit_code: int = run_compile(
+        project_dir=project_dir,
+        no_sql_validation=True,
+        lineage_mode=test_case.lineage_mode,
+    )
+
+    assert exit_code == 0
+    assert tuple(mode.value for mode in received_modes) == test_case.expected_lineage_mode_values

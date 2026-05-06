@@ -6,9 +6,9 @@ from sqlbuild.adapter.shared.type_normalization import types_equal
 from sqlbuild.adapter.shared.types import TypeDialect
 from sqlbuild.compiler.compile.models import CompiledModel, InferredColumn
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic
+from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic, RelatedLocation
 from sqlbuild.compiler.diagnostics.types import DiagnosticPhase, DiagnosticSeverity
-from sqlbuild.spec.models.schema import SchemaColumn
+from sqlbuild.spec.models.schema import SchemaColumn, SourceLocation
 
 _MISSING_COLUMN_CODE: str = "K001"
 _TYPE_MISMATCH_CODE: str = "K002"
@@ -60,6 +60,7 @@ def _missing_column_diagnostic(model: CompiledModel, column: SchemaColumn) -> Co
         resource_name=model.name,
         column_name=column.name,
         path=model.relative_path,
+        location=column.location,
         help=f"add {column.name} to the SELECT list or remove it from MODEL(columns)",
     )
 
@@ -91,6 +92,12 @@ def _type_diagnostics(
                 resource_name=model.name,
                 column_name=declared_column.name,
                 path=model.relative_path,
+                location=declared_column.location,
+                related_locations=_output_related_locations(
+                    model=model,
+                    column_name=declared_column.name,
+                    message="output expression with unproven type",
+                ),
                 help="add an explicit CAST if this contract should be checked statically",
             ),
         )
@@ -111,6 +118,21 @@ def _type_diagnostics(
             resource_name=model.name,
             column_name=declared_column.name,
             path=model.relative_path,
+            location=declared_column.location,
+            related_locations=_output_related_locations(
+                model=model,
+                column_name=declared_column.name,
+                message=f"inferred {inferred_column.type}",
+            ),
             help="change the declared type or cast the expression explicitly",
         ),
     )
+
+
+def _output_related_locations(
+    *, model: CompiledModel, column_name: str, message: str
+) -> tuple[RelatedLocation, ...]:
+    location: SourceLocation | None = model.output_column_locations.get(column_name)
+    if location is None:
+        return ()
+    return (RelatedLocation(label="output", location=location, message=message),)

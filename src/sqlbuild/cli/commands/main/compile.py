@@ -12,6 +12,7 @@ from sqlbuild.cli.commands.main.helpers.compile.output import (
     format_compile_text,
 )
 from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_static_compile_target
+from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.compiler.compile.main.load_macros import load_macros
 from sqlbuild.compiler.compile.models import LoadedMacro
@@ -22,6 +23,7 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.main.columns import build_project_column_lineage
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
+from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
@@ -36,6 +38,7 @@ def run_compile(
     json_output: bool = False,
     manifest: bool = False,
     no_color: bool = False,
+    lineage_mode: CompileLineageMode = CompileLineageMode.FAST,
 ) -> int:
     """Execute the compile command."""
 
@@ -62,9 +65,10 @@ def run_compile(
     )
     graph_ms: int = _elapsed_ms(graph_start)
     lineage_start: float = time.monotonic()
-    lineage: ProjectColumnLineage | None = build_project_column_lineage(
-        graph.project,
+    lineage: ProjectColumnLineage | None = _build_compile_lineage(
+        graph=graph,
         dialect=adapter.sqlglot_dialect(),
+        mode=lineage_mode,
     )
     lineage_ms: int = _elapsed_ms(lineage_start)
     contracts_start: float = time.monotonic()
@@ -115,6 +119,7 @@ def run_compile(
                 manifest=manifest,
                 timings_ms=timings_ms,
                 lineage=lineage,
+                lineage_mode=lineage_mode,
                 diagnostics=diagnostics,
             )
         )
@@ -126,6 +131,7 @@ def run_compile(
             written=written,
             manifest=manifest,
             lineage=lineage,
+            lineage_mode=lineage_mode,
             diagnostics=diagnostics,
             use_color=(not no_color) and supports_color(),
         )
@@ -135,3 +141,26 @@ def run_compile(
 
 def _elapsed_ms(start: float) -> int:
     return int((time.monotonic() - start) * 1000)
+
+
+def _build_compile_lineage(
+    *,
+    graph: ProjectGraph,
+    dialect: str | None,
+    mode: CompileLineageMode,
+) -> ProjectColumnLineage | None:
+    match mode:
+        case CompileLineageMode.NONE:
+            return None
+        case CompileLineageMode.FAST:
+            return build_project_column_lineage(
+                graph.project,
+                dialect=dialect,
+                mode=ColumnLineageMode.FAST,
+            )
+        case CompileLineageMode.RICH:
+            return build_project_column_lineage(
+                graph.project,
+                dialect=dialect,
+                mode=ColumnLineageMode.RICH,
+            )
