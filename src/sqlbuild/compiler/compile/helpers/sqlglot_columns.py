@@ -17,7 +17,7 @@ _SOURCE_PATTERN: re.Pattern[str] = re.compile(r'__source\("([^"]+)"\)')
 _DBT_REF_PATTERN: re.Pattern[str] = re.compile(r'__dbt_ref\("([^"]+)"\)')
 _UDF_PATTERN: re.Pattern[str] = re.compile(r'__udf\("([A-Za-z_][A-Za-z0-9_]*)"\)\s*(?=\()')
 _TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(
-    r'__table_function\("([A-Za-z_][A-Za-z0-9_]*)"\)\s*(?=\()'
+    r'__table_fn\("([A-Za-z_][A-Za-z0-9_]*)"\)\s*(?=\()'
 )
 _PLACEHOLDER_PATTERN: re.Pattern[str] = re.compile(r"@@@(\w+)")
 

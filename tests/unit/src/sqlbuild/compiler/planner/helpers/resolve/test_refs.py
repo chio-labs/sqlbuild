@@ -11,6 +11,7 @@ from sqlbuild.compiler.planner.helpers.resolve.refs import (
     apply_deferred_targets,
     resolve_dbt_ref_references,
     resolve_ref_references,
+    resolve_table_function_references,
 )
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
@@ -34,6 +35,15 @@ _MODEL_TARGETS: dict[str, CompiledRelationTarget] = {
 _SEED_TARGETS: dict[str, CompiledRelationTarget] = {
     "country_codes": CompiledRelationTarget(
         database=None, schema="seeds", name="country_codes", qualified_name="seeds.country_codes"
+    ),
+}
+
+_FUNCTION_TARGETS: dict[str, CompiledRelationTarget] = {
+    "customer_orders": CompiledRelationTarget(
+        database=None,
+        schema="analytics",
+        name="customer_orders",
+        qualified_name="analytics.customer_orders",
     ),
 }
 
@@ -102,6 +112,19 @@ WITH_CURSOR_TEST_CASES: list[RefResolutionTestCase] = [
             " AND event_time < 20)"
         ),
         cursor_type=CursorKind.INTEGER,
+    ),
+]
+
+TABLE_FUNCTION_TEST_CASES: list[RefResolutionTestCase] = [
+    RefResolutionTestCase(
+        description="replaces table function marker with qualified call",
+        query_sql='SELECT * FROM __table_fn("customer_orders")(42)',
+        expected_sql="SELECT * FROM analytics.customer_orders(42)",
+    ),
+    RefResolutionTestCase(
+        description="leaves unknown table function marker unchanged",
+        query_sql='SELECT * FROM __table_fn("missing")(42)',
+        expected_sql='SELECT * FROM __table_fn("missing")(42)',
     ),
 ]
 
@@ -207,6 +230,23 @@ def test_given_dbt_ref_when_resolving_then_raises_not_supported(
 ) -> None:
     with pytest.raises(NotImplementedError, match=test_case.expected_sql):
         resolve_dbt_ref_references(query_sql=test_case.query_sql)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    TABLE_FUNCTION_TEST_CASES,
+    ids=[case.description for case in TABLE_FUNCTION_TEST_CASES],
+)
+def test_given_table_function_marker_when_resolving_then_returns_expected_sql(
+    test_case: RefResolutionTestCase,
+) -> None:
+    result: str = resolve_table_function_references(
+        query_sql=test_case.query_sql,
+        function_targets=_FUNCTION_TARGETS,
+        adapter=DuckDbAdapter(),
+    )
+
+    assert result == test_case.expected_sql
 
 
 APPLY_DEFERRED_TEST_CASES: list[ApplyDeferredTargetsTestCase] = [

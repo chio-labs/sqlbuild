@@ -85,7 +85,7 @@ path = "local.db"
 [settings]
 sqlglot = false
 sql_validation = false
-max_concurrency = 4
+concurrency = 4
 
 [vars]
 shared = "local"
@@ -2170,7 +2170,7 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
         is test_case.expected_effective_sql_validation
     )
     assert (
-        compile_inputs.effective_settings.max_concurrency
+        compile_inputs.effective_settings.concurrency
         == test_case.expected_effective_max_concurrency
     )
     assert compile_inputs.effective_vars == test_case.expected_effective_vars
@@ -2250,7 +2250,7 @@ sql_validation = false
             "models/orders.sql": """
 MODEL ();
 
-SELECT * FROM __table_function("customer_orders")(1)
+SELECT * FROM __table_fn("customer_orders")(1)
 """.strip()
             + "\n",
             "functions/sql/customer_orders.sql": """
