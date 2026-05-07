@@ -590,6 +590,36 @@ def test_given_janitor_command_arguments_when_running_with_dependencies_then_it_
 
 @pytest.mark.parametrize(
     "test_case",
+    [
+        MainTestCase(
+            description="dispatches playground command through injected handler",
+            argv=["--project-dir", "/tmp/demo", "playground", "shop"],
+            expected_exit_code=5,
+            expected_project_dir=Path("/tmp/demo"),
+        )
+    ],
+    ids=["dispatches playground command through injected handler"],
+)
+def test_given_playground_command_when_running_then_it_dispatches_handler(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[tuple[Path | None, str]] = []
+
+    def run_playground(project_dir: Path | None, playground_path: str) -> int:
+        received_args.append((project_dir, playground_path))
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_playground=run_playground),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [(test_case.expected_project_dir, "shop")]
+
+
+@pytest.mark.parametrize(
+    "test_case",
     COMPILE_DISPATCH_TEST_CASES,
     ids=[case.description for case in COMPILE_DISPATCH_TEST_CASES],
 )
