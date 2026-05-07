@@ -42,6 +42,14 @@ class BuildFooterTestCase:
 
 
 @dataclass(frozen=True)
+class BuildProgressFailureOutputTestCase:
+    description: str
+    node_result: object
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class ConnectionProgressTestCase:
     description: str
     connection_count: int
