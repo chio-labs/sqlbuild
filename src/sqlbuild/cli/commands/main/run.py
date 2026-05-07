@@ -118,7 +118,7 @@ def run_run(
         plan=plan_output, use_color=use_color, verbose=verbose, debug=debug
     )
     effective_concurrency: int = (
-        concurrency if concurrency is not None else pipeline_result.project.settings.max_concurrency
+        concurrency if concurrency is not None else pipeline_result.project.settings.concurrency
     )
     header: str = format_build_header(
         command="sqb run", target=None, concurrency=effective_concurrency

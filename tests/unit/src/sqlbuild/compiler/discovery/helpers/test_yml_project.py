@@ -41,7 +41,7 @@ database = "local.duckdb"
 [settings]
 sqlglot = false
 sql_validation = false
-max_concurrency = 4
+concurrency = 4
 
 [vars]
 user = "kevin"
@@ -53,8 +53,25 @@ user = "kevin"
         expected_sqlglot=False,
         expected_sql_validation=False,
         expected_max_concurrency=4,
-        expected_setting_overrides=frozenset({"sqlglot", "sql_validation", "max_concurrency"}),
+        expected_setting_overrides=frozenset({"sqlglot", "sql_validation", "concurrency"}),
         expected_vars={"user": "kevin"},
+    ),
+    LoadLocalConfigTestCase(
+        description="loads legacy local max concurrency as canonical concurrency override",
+        repo_files={
+            "sqlbuild_local.toml": """
+[settings]
+max_concurrency = 4
+""".strip()
+        },
+        expected_environment=None,
+        expected_adapter=None,
+        expected_connection={},
+        expected_sqlglot=True,
+        expected_sql_validation=True,
+        expected_max_concurrency=4,
+        expected_setting_overrides=frozenset({"concurrency"}),
+        expected_vars={},
     ),
     LoadLocalConfigTestCase(
         description="does not expose unsupported project level overrides",
@@ -137,15 +154,29 @@ sqlglot = 123
         expected_error_fragment="Expected 'sqlglot' to be a boolean when provided",
     ),
     LoadProjectConfigErrorTestCase(
-        description="raises when settings max concurrency is not an integer",
+        description="raises when settings concurrency is not an integer",
         project_file_contents="""
 name = "demo"
 adapter = "duckdb"
 
 [settings]
-max_concurrency = "nope"
+concurrency = "nope"
 """.strip(),
-        expected_error_fragment="Expected 'max_concurrency' to be an integer when provided",
+        expected_error_fragment="Expected 'concurrency' to be an integer when provided",
+    ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when canonical and legacy concurrency settings are both provided",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[settings]
+concurrency = 4
+max_concurrency = 8
+""".strip(),
+        expected_error_fragment=(
+            "settings cannot define both 'concurrency' and legacy 'max_concurrency'"
+        ),
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when defaults batch_size has unsupported type",
@@ -374,20 +405,20 @@ sqlglot = "no thanks"
         expected_error_fragment="Expected 'sqlglot' to be a boolean when provided",
     ),
     LoadLocalConfigErrorTestCase(
-        description="raises when local settings max concurrency is not an integer",
+        description="raises when local settings concurrency is not an integer",
         local_file_contents="""
 [settings]
-max_concurrency = "many"
+concurrency = "many"
 """.strip(),
-        expected_error_fragment="Expected 'max_concurrency' to be an integer when provided",
+        expected_error_fragment="Expected 'concurrency' to be an integer when provided",
     ),
     LoadLocalConfigErrorTestCase(
         description="raises when local settings contain unknown key",
         local_file_contents="""
 [settings]
-concurrency = 8
+extra_concurrency = 8
 """.strip(),
-        expected_error_fragment=r"settings contains unknown key\(s\): concurrency",
+        expected_error_fragment=r"settings contains unknown key\(s\): extra_concurrency",
     ),
 ]
 
@@ -408,7 +439,7 @@ path = "data.db"
 [settings]
 sqlglot = false
 query_change_tracking = true
-max_concurrency = 8
+concurrency = 8
 
 [defaults]
 materialized = "table"
@@ -490,7 +521,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.default_environment == test_case.expected_default_environment
     assert config.connection == test_case.expected_connection
     assert config.settings.sqlglot is test_case.expected_sqlglot
-    assert config.settings.max_concurrency == test_case.expected_max_concurrency
+    assert config.settings.concurrency == test_case.expected_max_concurrency
     assert config.defaults.materialized == test_case.expected_materialized
     assert config.defaults.row_diff_exclude_columns == test_case.expected_row_diff_exclude_columns
     assert config.defaults.row_diff_tolerances == test_case.expected_row_diff_tolerances
@@ -529,7 +560,7 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
     assert config.connection == test_case.expected_connection
     assert config.settings.sqlglot is test_case.expected_sqlglot
     assert config.settings.sql_validation is test_case.expected_sql_validation
-    assert config.settings.max_concurrency == test_case.expected_max_concurrency
+    assert config.settings.concurrency == test_case.expected_max_concurrency
     assert config.setting_overrides == test_case.expected_setting_overrides
     assert config.vars == test_case.expected_vars
     assert {
