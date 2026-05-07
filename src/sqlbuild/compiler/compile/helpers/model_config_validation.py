@@ -221,18 +221,18 @@ def validate_placeholder_config(
     query_sql: str,
     custom_materialization_names: frozenset[str],
 ) -> None:
-    """Validate @@placeholder usage and placeholders config consistency."""
+    """Validate @@@placeholder usage and placeholders config consistency."""
 
     import re
 
     materialized: str | None = _str(config, "materialized")
     is_custom: bool = materialized is not None and materialized in custom_materialization_names
     placeholders_config: object | None = config.values.get("placeholders")
-    sql_placeholders: frozenset[str] = frozenset(re.findall(r"@@(\w+)", query_sql))
+    sql_placeholders: frozenset[str] = frozenset(re.findall(r"@@@(\w+)", query_sql))
 
     if not is_custom and sql_placeholders:
         raise CompileInputError(
-            f"model '{model_name}': @@placeholders are only allowed on custom materializations"
+            f"model '{model_name}': @@@placeholders are only allowed on custom materializations"
         )
     if not is_custom and placeholders_config is not None:
         raise CompileInputError(
@@ -250,7 +250,7 @@ def validate_placeholder_config(
     if missing_defaults:
         sorted_missing: str = ", ".join(sorted(missing_defaults))
         raise CompileInputError(
-            f"model '{model_name}': @@placeholders without default values "
+            f"model '{model_name}': @@@placeholders without default values "
             f"in placeholders config: {sorted_missing}"
         )
 

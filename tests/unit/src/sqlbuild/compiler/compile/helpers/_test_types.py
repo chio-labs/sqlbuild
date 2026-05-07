@@ -146,6 +146,7 @@ class SubstituteSqlVarsTestCase:
     sql: str
     effective_vars: dict[str, str]
     expected_sql: str
+    environment_variables: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

@@ -96,7 +96,7 @@ def test_given_partition_tracked_materialization_when_first_run_then_builds_all_
     entry: ModelPlanEntry = build_custom_plan_entry(
         sql=(
             "SELECT event_day, event_id FROM main.raw_events "
-            "WHERE event_day >= @@partition_start AND event_day < @@partition_end"
+            "WHERE event_day >= @@@partition_start AND event_day < @@@partition_end"
         ),
         reason=PlanReason.FIRST_RUN,
         custom_config={
@@ -227,20 +227,20 @@ def test_given_custom_materialization_when_target_state_varies_then_existing_rel
 
 PLACEHOLDER_EXECUTION_TEST_CASES: list[PlaceholderExecutionTestCase] = [
     PlaceholderExecutionTestCase(
-        description="@@placeholders substituted and SQL executes against database",
+        description="@@@placeholders substituted and SQL executes against database",
         model_sql=(
             "SELECT * FROM (VALUES (1, 'a'), (2, 'b'), (3, 'c')) AS t(id, name) "
-            "WHERE id >= @@start_id AND id < @@end_id"
+            "WHERE id >= @@@start_id AND id < @@@end_id"
         ),
         placeholders={"start_id": "1", "end_id": "4"},
         substitutions={"start_id": "2", "end_id": "4"},
         expected_row_count=2,
     ),
     PlaceholderExecutionTestCase(
-        description="@@placeholder with string values and quoting",
+        description="@@@placeholder with string values and quoting",
         model_sql=(
             "SELECT * FROM (VALUES ('alice', 10), ('bob', 20), ('charlie', 30)) AS t(name, score) "
-            "WHERE name = @@target_name"
+            "WHERE name = @@@target_name"
         ),
         placeholders={"target_name": "'alice'"},
         substitutions={"target_name": "'bob'"},
