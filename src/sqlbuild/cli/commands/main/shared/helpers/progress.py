@@ -23,7 +23,15 @@ from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
-from sqlbuild.shared.helpers.colors import blue_dim, colorize_completion, colorize_status, dim
+from sqlbuild.shared.helpers.colors import (
+    blue_dim,
+    colorize_completion,
+    colorize_status,
+    dim,
+    red_bold,
+    red_dim,
+    yellow_bold,
+)
 
 _TYPE_WIDTH: int = 10
 _MAX_NAME_WIDTH: int = 60
@@ -31,6 +39,8 @@ _MIN_NAME_WIDTH: int = 20
 _NAME_PADDING: int = 2
 _SUB_INDENT: int = 2
 _SPINNER_TICK_SECONDS: float = 0.1
+_MAX_ERROR_LINES: int = 4
+_MAX_ERROR_LINE_LENGTH: int = 160
 _ACTIVE_SPINNER_FRAMES: tuple[str, ...] = (
     "⠋",
     "⠙",
@@ -371,9 +381,9 @@ class BuildProgressCallbacks:
 
     def _write_error_detail(self, message: str) -> None:
         pad: str = " " * self._prefix_width
-        label: str = "error"
+        label: str = red_dim("error") if self._use_color else "error"
         line: str
-        for line_index, line in enumerate(message.splitlines() or [message]):
+        for line_index, line in enumerate(_format_error_lines(message)):
             display_label: str = label if line_index == 0 else ""
             self._stream.write(f"{pad}{display_label:<{_TYPE_WIDTH}}{line}\n")
 
@@ -459,18 +469,18 @@ def format_build_footer(
         f"SKIP={skip_count}  TOTAL={total_count}  ({elapsed_str})"
     )
 
-    failure_lines: list[str] = _format_failure_details(result)
+    failure_lines: list[str] = _format_failure_details(result, use_color=use_color)
     if failure_lines:
         lines.extend(failure_lines)
 
-    warning_lines: list[str] = _format_warning_details(result)
+    warning_lines: list[str] = _format_warning_details(result, use_color=use_color)
     if warning_lines:
         lines.extend(warning_lines)
 
     return "\n".join(lines)
 
 
-def _format_failure_details(result: BuildExecutionResult) -> list[str]:
+def _format_failure_details(result: BuildExecutionResult, *, use_color: bool) -> list[str]:
     lines: list[str] = []
     has_failures: bool = False
 
@@ -480,12 +490,14 @@ def _format_failure_details(result: BuildExecutionResult) -> list[str]:
             continue
         if not has_failures:
             lines.append("")
-            lines.append("Failures:")
+            lines.append(red_bold("Failures:") if use_color else "Failures:")
             lines.append("")
             has_failures = True
         lines.append(f"  {seed_result.seed_name}  (seed)")
         if seed_result.error_message is not None:
-            lines.append(f"    {seed_result.error_message}")
+            lines.extend(
+                _format_failure_error_block(seed_result.error_message, use_color=use_color)
+            )
         lines.append("")
 
     model_result: ModelExecutionResult
@@ -494,13 +506,15 @@ def _format_failure_details(result: BuildExecutionResult) -> list[str]:
             continue
         if not has_failures:
             lines.append("")
-            lines.append("Failures:")
+            lines.append(red_bold("Failures:") if use_color else "Failures:")
             lines.append("")
             has_failures = True
         phase_str: str = f"  ({model_result.failed_phase})" if model_result.failed_phase else ""
         lines.append(f"  {model_result.model_name}{phase_str}")
         if model_result.error_message is not None:
-            lines.append(f"    {model_result.error_message}")
+            lines.extend(
+                _format_failure_error_block(model_result.error_message, use_color=use_color)
+            )
         if model_result.staging_relation is not None:
             lines.append(f"    {_inspection_relation_message(model_result.staging_relation)}")
         lines.append("")
@@ -511,12 +525,14 @@ def _format_failure_details(result: BuildExecutionResult) -> list[str]:
             continue
         if not has_failures:
             lines.append("")
-            lines.append("Failures:")
+            lines.append(red_bold("Failures:") if use_color else "Failures:")
             lines.append("")
             has_failures = True
         lines.append(f"  {function_result.function_name}  (function)")
         if function_result.error_message is not None:
-            lines.append(f"    {function_result.error_message}")
+            lines.extend(
+                _format_failure_error_block(function_result.error_message, use_color=use_color)
+            )
         lines.append("")
 
     test_r: SqlTestExecutionResult
@@ -525,18 +541,18 @@ def _format_failure_details(result: BuildExecutionResult) -> list[str]:
             continue
         if not has_failures:
             lines.append("")
-            lines.append("Failures:")
+            lines.append(red_bold("Failures:") if use_color else "Failures:")
             lines.append("")
             has_failures = True
         lines.append(f"  {test_r.test_name}  (test)")
         if test_r.error_message is not None:
-            lines.append(f"    {test_r.error_message}")
+            lines.extend(_format_failure_error_block(test_r.error_message, use_color=use_color))
         lines.append("")
 
     return lines
 
 
-def _format_warning_details(result: BuildExecutionResult) -> list[str]:
+def _format_warning_details(result: BuildExecutionResult, *, use_color: bool) -> list[str]:
     lines: list[str] = []
     has_warnings: bool = False
 
@@ -557,7 +573,7 @@ def _format_warning_details(result: BuildExecutionResult) -> list[str]:
         if model_warnings:
             if not has_warnings:
                 lines.append("")
-                lines.append("Warnings:")
+                lines.append(yellow_bold("Warnings:") if use_color else "Warnings:")
                 lines.append("")
                 has_warnings = True
             lines.append(f"  {model_result.model_name}")
@@ -572,7 +588,7 @@ def _format_warning_details(result: BuildExecutionResult) -> list[str]:
             continue
         if not has_warnings:
             lines.append("")
-            lines.append("Warnings:")
+            lines.append(yellow_bold("Warnings:") if use_color else "Warnings:")
             lines.append("")
             has_warnings = True
         lines.append(f"  {function_result.function_name}  (function)")
@@ -588,6 +604,34 @@ def _inspection_relation_message(relation_name: str) -> str:
     if relation_name.endswith("__delta"):
         return f"delta table kept for inspection: {relation_name}"
     return f"staging table kept for inspection: {relation_name}"
+
+
+def _format_failure_error_block(message: str, *, use_color: bool) -> list[str]:
+    lines: list[str] = []
+    label: str = red_dim("error") if use_color else "error"
+    formatted_line: str
+    for index, formatted_line in enumerate(_format_error_lines(message)):
+        display_label: str = label if index == 0 else ""
+        lines.append(f"    {display_label:<{_TYPE_WIDTH}}{formatted_line}")
+    return lines
+
+
+def _format_error_lines(message: str) -> list[str]:
+    raw_lines: list[str] = message.splitlines() or [message]
+    formatted_lines: list[str] = []
+    raw_line: str
+    for raw_line in raw_lines[:_MAX_ERROR_LINES]:
+        if len(raw_line) <= _MAX_ERROR_LINE_LENGTH:
+            formatted_lines.append(raw_line)
+            continue
+        formatted_lines.append(raw_line[: _MAX_ERROR_LINE_LENGTH - 3] + "...")
+    if len(raw_lines) > _MAX_ERROR_LINES and formatted_lines:
+        last_line: str = formatted_lines[-1]
+        if len(last_line) > _MAX_ERROR_LINE_LENGTH - 3:
+            formatted_lines[-1] = last_line[: _MAX_ERROR_LINE_LENGTH - 3] + "..."
+        elif not last_line.endswith("..."):
+            formatted_lines[-1] = f"{last_line}..."
+    return formatted_lines
 
 
 def _format_duration(duration_ms: int | None) -> str:

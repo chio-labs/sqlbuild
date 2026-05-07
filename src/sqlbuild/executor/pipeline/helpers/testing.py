@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable, Iterable
 from typing import Any
 
@@ -23,20 +24,42 @@ def run_test_pipeline(
     plan: PlanOutput,
     connection_config: dict[str, object],
     adapter: BaseAdapter,
+    on_connection_start: Callable[[int], None] | None = None,
+    on_connection_complete: Callable[[int, float], None] | None = None,
+    on_connection_error: Callable[[int, float], None] | None = None,
+    on_progress: Callable[[str], None] | None = None,
+    on_test_start: Callable[[SqlTestPlanEntry], None] | None = None,
     on_test_complete: Callable[[SqlTestExecutionResult], None] | None = None,
 ) -> tuple[SqlTestExecutionResult, ...]:
     """Execute all SQL unit tests from a compiled plan."""
 
-    connection: Any = adapter.connect(connection_config)
+    if on_connection_start is not None:
+        on_connection_start(1)
+    start: float = time.monotonic()
     try:
+        connection: Any = adapter.connect(connection_config)
+    except Exception:
+        if on_connection_error is not None:
+            on_connection_error(1, time.monotonic() - start)
+        raise
+    if on_connection_complete is not None:
+        on_connection_complete(1, time.monotonic() - start)
+    try:
+        preflight_start: float = time.monotonic()
+        if on_progress is not None:
+            on_progress("Preparing test functions...")
         missing_functions_by_test: dict[str, tuple[str, ...]] = _prepare_test_functions(
             plan=plan,
             adapter=adapter,
             connection=connection,
         )
+        if on_progress is not None:
+            on_progress(f"Prepared test functions. ({time.monotonic() - preflight_start:.2f}s)")
         results: list[SqlTestExecutionResult] = []
         entry: SqlTestPlanEntry
         for entry in plan.test_entries:
+            if on_test_start is not None:
+                on_test_start(entry)
             missing_functions: tuple[str, ...] = missing_functions_by_test.get(entry.name, ())
             if missing_functions:
                 result: SqlTestExecutionResult = _build_missing_function_result(

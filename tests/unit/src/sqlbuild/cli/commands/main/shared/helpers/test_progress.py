@@ -271,6 +271,29 @@ BUILD_FOOTER_TEST_CASES: list[BuildFooterTestCase] = [
             "fingerprint write skipped",
         ),
     ),
+    BuildFooterTestCase(
+        description="footer failure error text truncates after four lines",
+        result=BuildExecutionResult(
+            status=BuildStatus.FAILED,
+            function_results=(
+                FunctionExecutionResult(
+                    function_name="is_completed_order",
+                    status=ExecutionStatus.FAILED,
+                    error_message=(
+                        "line one\nline two\nline three\nline four\nline five should not appear"
+                    ),
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "Failures:",
+            "error     line one",
+            "line two",
+            "line three",
+            "line four...",
+        ),
+        unexpected_fragments=("line five should not appear",),
+    ),
 ]
 
 BUILD_PROGRESS_FAILURE_OUTPUT_TEST_CASES: list[BuildProgressFailureOutputTestCase] = [
@@ -326,6 +349,24 @@ BUILD_PROGRESS_FAILURE_OUTPUT_TEST_CASES: list[BuildProgressFailureOutputTestCas
             "error     relation raw_orders does not exist",
         ),
         unexpected_fragments=("staging  relation raw_orders does not exist",),
+    ),
+    BuildProgressFailureOutputTestCase(
+        description="live error detail truncates after four lines",
+        node_result=FunctionExecutionResult(
+            function_name="is_completed_order",
+            status=ExecutionStatus.FAILED,
+            duration_ms=110,
+            error_message=(
+                "line one\nline two\nline three\nline four\nline five should not appear"
+            ),
+        ),
+        expected_fragments=(
+            "error     line one",
+            "          line two",
+            "          line three",
+            "          line four...",
+        ),
+        unexpected_fragments=("line five should not appear",),
     ),
 ]
 
@@ -392,6 +433,9 @@ def test_given_failed_resource_result_when_formatting_footer_then_includes_error
     expected_fragment: str
     for expected_fragment in test_case.expected_fragments:
         assert expected_fragment in footer
+    unexpected_fragment: str
+    for unexpected_fragment in test_case.unexpected_fragments:
+        assert unexpected_fragment not in footer
 
 
 @pytest.mark.parametrize(

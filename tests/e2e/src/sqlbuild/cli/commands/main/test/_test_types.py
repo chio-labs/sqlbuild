@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -12,6 +12,8 @@ class SqlTestE2ETestCase:
     description: str
     expected_exit_code: int
     expected_stdout_fragment: str
+    expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_ordered_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
