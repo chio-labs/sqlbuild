@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.6.0](https://github.com/chio-labs/sqlbuild/compare/v0.5.0...v0.6.0) (2026-05-07)
+
+
+### Features
+
+* add column lineage analyzer ([f60c65d](https://github.com/chio-labs/sqlbuild/commit/f60c65d1b4fd7d7d9512d75023f829888e555fb6))
+* add column lineage CLI traces ([83977a0](https://github.com/chio-labs/sqlbuild/commit/83977a048fe6dc978909b85ddbf1c619ba39468f))
+* add compile contract diagnostics ([0ba4d65](https://github.com/chio-labs/sqlbuild/commit/0ba4d65e66a1df8b519ac62a6b9e2941f0998b83))
+* add conservative nullability inference ([74b6bb2](https://github.com/chio-labs/sqlbuild/commit/74b6bb22a614fae5c106a48032e54107b0b8a479))
+* add fast compile lineage mode ([19fb926](https://github.com/chio-labs/sqlbuild/commit/19fb9261d13bb1947b990fe35a5363957cca2bc7))
+* add lineage mode metadata ([726ebb0](https://github.com/chio-labs/sqlbuild/commit/726ebb04fa08178dbf323ad1632e03c341272af4))
+* improve compile output ([8bb26f9](https://github.com/chio-labs/sqlbuild/commit/8bb26f97e5770895ea472dea27f06cda3d50ff9c))
+* make compile offline ([0099e0d](https://github.com/chio-labs/sqlbuild/commit/0099e0d61f458f68ba14b53531826a5ac77c9fa6))
+* scope rich column lineage ([521e47a](https://github.com/chio-labs/sqlbuild/commit/521e47adfde3f6cdb42cc8b5772553df4ca20e91))
+
 ## [0.5.0](https://github.com/chio-labs/sqlbuild/compare/v0.4.0...v0.5.0) (2026-05-06)
 
 
