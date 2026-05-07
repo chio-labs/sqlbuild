@@ -41,6 +41,12 @@ def format_column_lineage_json(trace: ColumnLineageTrace) -> str:
     payload: dict[str, object] = {
         "target": _serialize_column(trace.target),
         "direction": trace.direction,
+        "metadata": {
+            "mode": trace.mode.value,
+            "max_depth": trace.max_depth,
+            "analyzed_models": trace.analyzed_model_count,
+            "truncated": trace.truncated,
+        },
         "trace": [_serialize_column_edge(edge) for edge in trace.trace],
     }
     return json.dumps(payload, indent=2)

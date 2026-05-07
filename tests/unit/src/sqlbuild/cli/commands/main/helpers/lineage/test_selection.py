@@ -17,6 +17,7 @@ from sqlbuild.compiler.lineage.models import (
     ProjectColumnLineage,
     QualifiedLineageColumn,
 )
+from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from tests.unit.src.sqlbuild.cli.commands.main.helpers.lineage._test_types import (
     ColumnLineageSelectionTestCase,
@@ -67,6 +68,7 @@ COLUMN_SELECTION_TEST_CASES: list[ColumnLineageSelectionTestCase] = [
         expected_column_name="order_id",
         expected_trace_ids=("stg_orders.order_id->fact_orders.order_id",),
         expected_analyzed_model_names=("fact_orders", "stg_orders"),
+        expected_truncated=False,
     ),
     ColumnLineageSelectionTestCase(
         description="respects zero depth for column target",
@@ -77,6 +79,7 @@ COLUMN_SELECTION_TEST_CASES: list[ColumnLineageSelectionTestCase] = [
         expected_column_name="order_id",
         expected_trace_ids=(),
         expected_analyzed_model_names=("fact_orders",),
+        expected_truncated=True,
     ),
     ColumnLineageSelectionTestCase(
         description="selects downstream candidate models for column target",
@@ -87,6 +90,7 @@ COLUMN_SELECTION_TEST_CASES: list[ColumnLineageSelectionTestCase] = [
         expected_column_name="order_id",
         expected_trace_ids=("fact_orders.order_id->daily_rollup.order_id",),
         expected_analyzed_model_names=("daily_rollup", "fact_orders"),
+        expected_truncated=False,
     ),
 ]
 
@@ -123,10 +127,12 @@ def test_given_column_target_when_selecting_then_returns_column_trace(
 ) -> None:
     graph: ProjectGraph = build_lineage_test_graph()
     received_model_names: list[frozenset[str]] = []
+    received_modes: list[ColumnLineageMode] = []
 
     def build_column_lineage_spy(*args: object, **kwargs: object) -> ProjectColumnLineage:
         del args
         received_model_names.append(cast(frozenset[str], kwargs["model_names"]))
+        received_modes.append(cast(ColumnLineageMode, kwargs["mode"]))
         return ProjectColumnLineage(
             models={},
             edges=(
@@ -167,6 +173,7 @@ def test_given_column_target_when_selecting_then_returns_column_trace(
         target=test_case.target,
         direction=test_case.direction,
         depth=test_case.depth,
+        mode=ColumnLineageMode.FAST,
     )
 
     assert result is not None
@@ -180,6 +187,11 @@ def test_given_column_target_when_selecting_then_returns_column_trace(
         == test_case.expected_trace_ids
     )
     assert tuple(sorted(received_model_names[0])) == test_case.expected_analyzed_model_names
+    assert received_modes == [ColumnLineageMode.FAST]
+    assert result.mode == ColumnLineageMode.FAST
+    assert result.max_depth == test_case.depth
+    assert result.analyzed_model_count == len(test_case.expected_analyzed_model_names)
+    assert result.truncated is test_case.expected_truncated
 
 
 @pytest.mark.parametrize(

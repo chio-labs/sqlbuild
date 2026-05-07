@@ -167,6 +167,9 @@ def build_column_lineage_trace() -> ColumnLineageTrace:
     return ColumnLineageTrace(
         target=target,
         direction="upstream",
+        max_depth=3,
+        analyzed_model_count=7,
+        truncated=True,
         trace=(
             ColumnLineageEdge(
                 source=QualifiedLineageColumn(
