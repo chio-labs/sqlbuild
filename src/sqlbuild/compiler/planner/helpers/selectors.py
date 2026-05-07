@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.graph import (
     expand_downstream,
     expand_upstream,
@@ -34,7 +35,7 @@ def parse_selector(raw: str) -> ParsedSelector | PathSelector:
 
     stripped: str = raw.strip()
     if not stripped:
-        raise ValueError("Empty selector")
+        raise PlannerInputError("empty selector", code="S001")
 
     upstream: bool = stripped.startswith("+")
     downstream: bool = stripped.endswith("+")
@@ -42,12 +43,18 @@ def parse_selector(raw: str) -> ParsedSelector | PathSelector:
 
     if "~" in core:
         if "+" in core:
-            raise ValueError(f"Selector '{stripped}' contains '+' in an unsupported position")
+            raise PlannerInputError(
+                f"selector '{stripped}' contains '+' in an unsupported position",
+                code="S002",
+            )
         parts: list[str] = core.split("~", 1)
         start_name: str = parts[0].strip()
         end_name: str = parts[1].strip()
         if not start_name or not end_name:
-            raise ValueError(f"Path selector '{stripped}' requires names on both sides of '~'")
+            raise PlannerInputError(
+                f"path selector '{stripped}' requires names on both sides of '~'",
+                code="S003",
+            )
         return PathSelector(
             start_name=start_name,
             end_name=end_name,
@@ -57,9 +64,15 @@ def parse_selector(raw: str) -> ParsedSelector | PathSelector:
 
     name: str = core
     if not name:
-        raise ValueError(f"Selector '{stripped}' has no name after removing '+' markers")
+        raise PlannerInputError(
+            f"selector '{stripped}' has no name after removing '+' markers",
+            code="S004",
+        )
     if "+" in name:
-        raise ValueError(f"Selector '{stripped}' contains '+' in an unsupported position")
+        raise PlannerInputError(
+            f"selector '{stripped}' contains '+' in an unsupported position",
+            code="S002",
+        )
 
     if ":" in name:
         prefix: str
@@ -67,9 +80,11 @@ def parse_selector(raw: str) -> ParsedSelector | PathSelector:
         prefix, value = name.split(":", 1)
         kind: SelectorKind | None = _SELECTOR_KIND_BY_PREFIX.get(prefix)
         if kind is None:
-            raise ValueError(f"Unknown selector type '{prefix}' in '{stripped}'")
+            raise PlannerInputError(
+                f"unknown selector type '{prefix}' in '{stripped}'", code="S005"
+            )
         if not value:
-            raise ValueError(f"Selector '{stripped}' has empty value after ':'")
+            raise PlannerInputError(f"selector '{stripped}' has empty value after ':'", code="S006")
         return ParsedSelector(kind=kind, value=value, upstream=upstream, downstream=downstream)
 
     if "/" in name:
@@ -206,9 +221,9 @@ def _resolve_single(
         start_key: CompiledObjectKey | None = all_keys.get(start_name)
         end_key: CompiledObjectKey | None = all_keys.get(end_name)
         if start_key is None:
-            raise ValueError(f"Unknown selector name '{start_name}'")
+            raise PlannerInputError(f"unknown selector name '{start_name}'", code="S007")
         if end_key is None:
-            raise ValueError(f"Unknown selector name '{end_name}'")
+            raise PlannerInputError(f"unknown selector name '{end_name}'", code="S007")
         result: set[CompiledObjectKey] = set(find_path_keys(start_key, end_key, downstream))
         if parsed.upstream:
             result.update(expand_upstream(start_key, upstream))
@@ -234,7 +249,7 @@ def _resolve_single(
 
     key: CompiledObjectKey | None = _lookup_key(parsed, all_keys)
     if key is None:
-        raise ValueError(f"Unknown selector name '{parsed.value}'")
+        raise PlannerInputError(f"unknown selector name '{parsed.value}'", code="S007")
 
     result: set[CompiledObjectKey] = {key}
     if parsed.upstream:
@@ -255,7 +270,7 @@ def _resolve_tag(
 
     tagged_keys: frozenset[CompiledObjectKey] = tag_index.get(parsed.value, frozenset())
     if not tagged_keys:
-        raise ValueError(f"No models found with tag '{parsed.value}'")
+        raise PlannerInputError(f"no models found with tag '{parsed.value}'", code="S008")
 
     result: set[CompiledObjectKey] = set(tagged_keys)
     key: CompiledObjectKey
@@ -289,9 +304,9 @@ def _resolve_path(
         if folder.startswith("models/"):
             stripped_folder: str = folder[len("models/") :]
             hint = (
-                f" (the 'models/' prefix is stripped automatically — try 'path:{stripped_folder}')"
+                f" (the 'models/' prefix is stripped automatically - try 'path:{stripped_folder}')"
             )
-        raise ValueError(f"No models found under path '{folder}'.{hint}")
+        raise PlannerInputError(f"no models found under path '{folder}'.{hint}", code="S009")
 
     result: set[CompiledObjectKey] = set(matched_keys)
     key: CompiledObjectKey
@@ -315,7 +330,10 @@ def _lookup_key(
 
     resource_type: CompiledResourceType | None = _RESOURCE_TYPE_BY_SELECTOR_KIND.get(parsed.kind)
     if resource_type is None:
-        raise ValueError(f"Selector type '{parsed.kind}' does not map to a resource type yet")
+        raise PlannerInputError(
+            f"selector type '{parsed.kind}' does not map to a resource type yet",
+            code="S010",
+        )
 
     candidate: CompiledObjectKey | None = all_keys.get(parsed.value)
     if candidate is not None and candidate.resource_type == resource_type:

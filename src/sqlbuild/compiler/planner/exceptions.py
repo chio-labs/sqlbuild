@@ -1,12 +1,12 @@
-"""Expected exceptions for the pre-semantic compile attachment layer."""
+"""Expected planner-stage exception types."""
 
 from __future__ import annotations
 
 
-class CompileInputError(ValueError):
-    """Raised when discovered inputs cannot be attached into a compile view."""
+class PlannerInputError(ValueError):
+    """Raised when planner inputs cannot be resolved safely."""
 
-    code: str = "P001"
+    code: str = "S000"
 
     def __init__(self, message: str, *, code: str | None = None, help: str | None = None) -> None:
         super().__init__(message)

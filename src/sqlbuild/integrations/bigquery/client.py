@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.exceptions import AdapterUserError
 from sqlbuild.adapter.shared.inference_rules import (
     conditional_result_nullability,
     first_arg_nullability,
@@ -103,14 +104,19 @@ class BigQueryAdapter(BaseAdapter):
 
         project: object | None = config.get("project")
         if not isinstance(project, str) or not project.strip():
-            raise ValueError("BigQuery connection requires non-empty 'project'")
+            raise AdapterUserError(
+                "BigQuery connection requires non-empty 'project'",
+                code="A101",
+                help="set connection.project in sqlbuild_local.toml or the active environment",
+            )
 
         try:
             from google.cloud import bigquery
         except ImportError as error:
-            raise RuntimeError(
+            raise AdapterUserError(
                 "BigQuery adapter requires optional dependency google-cloud-bigquery. "
-                "Install with: sqlbuild[bigquery]"
+                "Install with: sqlbuild[bigquery]",
+                code="A102",
             ) from error
 
         location: object | None = config.get("location")
@@ -121,8 +127,9 @@ class BigQueryAdapter(BaseAdapter):
             try:
                 from google.oauth2 import service_account
             except ImportError as error:
-                raise RuntimeError(
-                    "BigQuery credentials_path requires google-auth service account support"
+                raise AdapterUserError(
+                    "BigQuery credentials_path requires google-auth service account support",
+                    code="A103",
                 ) from error
             credentials: Any | None = service_account.Credentials.from_service_account_file(
                 str(credentials_path)

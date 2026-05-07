@@ -523,7 +523,7 @@ RESOLVE_PATH_SELECTOR_ERROR_TEST_CASES: list[ResolveSelectorErrorTestCase] = [
         select=("path:nonexistent",),
         exclude=(),
         expected_error_type=ValueError,
-        expected_error_fragment="No models found under path 'nonexistent'",
+        expected_error_fragment="no models found under path 'nonexistent'",
     ),
     ResolveSelectorErrorTestCase(
         description="raises with hint when user includes models prefix",
@@ -537,7 +537,7 @@ RESOLVE_PATH_SELECTOR_ERROR_TEST_CASES: list[ResolveSelectorErrorTestCase] = [
         select=("nonexistent/",),
         exclude=(),
         expected_error_type=ValueError,
-        expected_error_fragment="No models found under path 'nonexistent'",
+        expected_error_fragment="no models found under path 'nonexistent'",
     ),
 ]
 

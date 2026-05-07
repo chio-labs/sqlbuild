@@ -6,6 +6,7 @@ from decimal import Decimal, InvalidOperation
 from typing import cast
 
 from sqlbuild.adapter.shared.models import RowDiffTolerance, RowDiffTolerances
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
 
 
 def parse_row_diff_tolerances(
@@ -18,7 +19,7 @@ def parse_row_diff_tolerances(
     if raw is None:
         return RowDiffTolerances()
     if not isinstance(raw, dict):
-        raise ValueError(f"{label} must be a mapping")
+        raise ExecutorInputError(f"{label} must be a mapping", code="X401")
     raw_mapping: dict[str, object] = cast(dict[str, object], raw)
 
     by_type: dict[str, RowDiffTolerance] = _parse_tolerance_section(
@@ -43,7 +44,7 @@ def _parse_tolerance_section(
     if raw is None:
         return {}
     if not isinstance(raw, dict):
-        raise ValueError(f"{label} must be a mapping")
+        raise ExecutorInputError(f"{label} must be a mapping", code="X401")
     raw_mapping: dict[object, object] = cast(dict[object, object], raw)
 
     parsed: dict[str, RowDiffTolerance] = {}
@@ -51,7 +52,7 @@ def _parse_tolerance_section(
     rule: object
     for key, rule in raw_mapping.items():
         if not isinstance(key, str) or not key:
-            raise ValueError(f"{label} keys must be non-empty strings")
+            raise ExecutorInputError(f"{label} keys must be non-empty strings", code="X402")
         parsed_key: str = key.lower() if normalize_key else key
         parsed[parsed_key] = _parse_tolerance_rule(rule, label=f"{label}.{key}")
     return parsed
@@ -59,7 +60,7 @@ def _parse_tolerance_section(
 
 def _parse_tolerance_rule(raw: object, *, label: str) -> RowDiffTolerance:
     if not isinstance(raw, dict):
-        raise ValueError(f"{label} must be a mapping")
+        raise ExecutorInputError(f"{label} must be a mapping", code="X401")
     raw_mapping: dict[str, object] = cast(dict[str, object], raw)
 
     unsupported_keys: tuple[str, ...] = tuple(
@@ -67,7 +68,7 @@ def _parse_tolerance_rule(raw: object, *, label: str) -> RowDiffTolerance:
     )
     if unsupported_keys:
         unsupported: str = ", ".join(unsupported_keys)
-        raise ValueError(f"{label} contains unsupported keys: {unsupported}")
+        raise ExecutorInputError(f"{label} contains unsupported keys: {unsupported}", code="X403")
 
     absolute: Decimal | None = _parse_optional_decimal(
         raw_mapping.get("absolute"),
@@ -78,7 +79,7 @@ def _parse_tolerance_rule(raw: object, *, label: str) -> RowDiffTolerance:
         label=f"{label}.relative",
     )
     if absolute is None and relative is None:
-        raise ValueError(f"{label} must define absolute or relative")
+        raise ExecutorInputError(f"{label} must define absolute or relative", code="X404")
     return RowDiffTolerance(absolute=absolute, relative=relative)
 
 
@@ -86,10 +87,10 @@ def _parse_optional_decimal(raw: object, *, label: str) -> Decimal | None:
     if raw is None:
         return None
     if isinstance(raw, bool):
-        raise ValueError(f"{label} must be numeric")
+        raise ExecutorInputError(f"{label} must be numeric", code="X405")
     if not isinstance(raw, str | int | float | Decimal):
-        raise ValueError(f"{label} must be numeric")
+        raise ExecutorInputError(f"{label} must be numeric", code="X405")
     try:
         return Decimal(str(raw))
     except InvalidOperation as error:
-        raise ValueError(f"{label} must be numeric") from error
+        raise ExecutorInputError(f"{label} must be numeric", code="X405") from error
