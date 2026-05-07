@@ -38,6 +38,12 @@ def red(text: str) -> str:
     return f"{_RED}{text}{_RESET}"
 
 
+def red_bold(text: str) -> str:
+    """Red bold text for error prefixes."""
+
+    return f"{_RED}{_BOLD}{text}{_RESET}"
+
+
 def bold(text: str) -> str:
     """Bold text for section headers."""
 
