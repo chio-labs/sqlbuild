@@ -1669,7 +1669,7 @@ def validate_model_references(
         ):
             raise CompileInputError(
                 f"Model file {model_file.relative_path} references table function "
-                f"'{reference.ref_name}' with __udf(); use __table_function() in SQL contexts "
+                f"'{reference.ref_name}' with __udf(); use __table_fn() in SQL contexts "
                 "that support table-valued functions"
             )
         if reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION:
@@ -1745,7 +1745,7 @@ def validate_function_references(
         ):
             raise CompileInputError(
                 f"SQL function file {function_file.relative_path} references table function "
-                f"'{reference.ref_name}' with __udf(); use __table_function()"
+                f"'{reference.ref_name}' with __udf(); use __table_fn()"
             )
         if (
             reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION
@@ -1753,7 +1753,7 @@ def validate_function_references(
         ):
             raise CompileInputError(
                 f"SQL function file {function_file.relative_path} references scalar function "
-                f"'{reference.ref_name}' with __table_function(); use __udf() for scalar UDFs"
+                f"'{reference.ref_name}' with __table_fn(); use __udf() for scalar UDFs"
             )
 
 

@@ -8,7 +8,7 @@ _UNRESOLVED_REF_PATTERN: re.Pattern[str] = re.compile(r"__ref\(")
 _UNRESOLVED_SEED_PATTERN: re.Pattern[str] = re.compile(r"__seed\(")
 _UNRESOLVED_SOURCE_PATTERN: re.Pattern[str] = re.compile(r"__source\(")
 _UNRESOLVED_UDF_PATTERN: re.Pattern[str] = re.compile(r"__udf\(")
-_UNRESOLVED_TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(r"__table_function\(")
+_UNRESOLVED_TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(r"__table_fn\(")
 
 
 def assert_no_unresolved_sql_markers(*, sql: str, context: str) -> None:
@@ -36,7 +36,7 @@ def assert_no_unresolved_sql_markers(*, sql: str, context: str) -> None:
         )
     if _UNRESOLVED_TABLE_FUNCTION_PATTERN.search(sql):
         raise _coded_value_error(
-            f"{context} still contains unresolved __table_function() markers",
+            f"{context} still contains unresolved __table_fn() markers",
             code="R005",
         )
 

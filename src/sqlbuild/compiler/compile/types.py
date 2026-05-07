@@ -11,7 +11,7 @@ class SqlReferenceKind(StrEnum):
     SOURCE = "source"
     DBT_REF = "dbt_ref"
     UDF = "udf"
-    TABLE_FUNCTION = "table_function"
+    TABLE_FUNCTION = "table_fn"
 
 
 class AttachedAuditTargetKind(StrEnum):

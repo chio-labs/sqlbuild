@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/chio-labs/sqlbuild/main/.github/sqlbuild-logo-rounded.png" alt="SQLBuild" width="560">
+  <img src=".github/sqlbuild-logo-clean.png" alt="SQLBuild" width="100%">
 </p>
 
 <p align="center">

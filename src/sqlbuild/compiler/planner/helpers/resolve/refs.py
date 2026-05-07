@@ -19,7 +19,7 @@ _SEED_PATTERN: re.Pattern[str] = re.compile(r'__seed\("([^"]+)"\)')
 _DBT_REF_PATTERN: re.Pattern[str] = re.compile(r'__dbt_ref\("([^"]+)"\)')
 _UDF_PATTERN: re.Pattern[str] = re.compile(r'__udf\("([^"]+)"\)')
 _TABLE_FUNCTION_CALL_PATTERN: re.Pattern[str] = re.compile(
-    r'__table_function\("([^"]+)"\)\s*\(([^()]*)\)'
+    r'__table_fn\("([^"]+)"\)\s*\(([^()]*)\)'
 )
 
 
@@ -99,7 +99,7 @@ def resolve_table_function_references(
     function_targets: dict[str, CompiledRelationTarget],
     adapter: BaseAdapter,
 ) -> str:
-    """Replace __table_function() calls with adapter-specific table function calls."""
+    """Replace __table_fn() calls with adapter-specific table function calls."""
 
     def _replace_table_function(match: re.Match[str]) -> str:
         function_name: str = match.group(1)

@@ -512,6 +512,12 @@ OUTPUT_LOCATION_TEST_CASES: tuple[ModelOutputColumnLocationTestCase, ...] = (
         },
     ),
     ModelOutputColumnLocationTestCase(
+        description="skips sqlglot-only aliases when sqlglot is disabled",
+        contents=("MODEL ();\n\nSELECT\n  CAST(amount AS VARCHAR) amount_text\nFROM raw_orders\n"),
+        expected_locations={},
+        sqlglot_enabled=False,
+    ),
+    ModelOutputColumnLocationTestCase(
         description="skips union query after first branch because it is ambiguous",
         contents=("MODEL ();\n\nSELECT id FROM raw_a\nUNION ALL\nSELECT id FROM raw_b\n"),
         expected_locations={},
@@ -530,6 +536,7 @@ def test_given_model_select_outputs_when_locating_then_returns_expected_location
     locations: dict[str, SourceLocation] = model_output_column_locations(
         contents=test_case.contents,
         relative_path=Path("models/orders.sql"),
+        sqlglot_enabled=test_case.sqlglot_enabled,
     )
 
     assert {
