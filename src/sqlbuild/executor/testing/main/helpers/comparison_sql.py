@@ -11,9 +11,13 @@ from sqlbuild.shared.helpers.sqlglot import import_sqlglot
 _IDENTIFIER_CHAR_PATTERN: re.Pattern[str] = re.compile(r"[^a-zA-Z0-9_]+")
 
 
-def lift_step_ctes(sql: str, lifted_ctes: OrderedDict[str, str]) -> str:
+def lift_step_ctes(
+    sql: str, lifted_ctes: OrderedDict[str, str], *, sqlglot_enabled: bool = True
+) -> str:
     """Lift a step's top-level CTEs into the shared comparison query when possible."""
 
+    if not sqlglot_enabled:
+        return sql
     split_sql: tuple[tuple[tuple[str, str], ...], str] | None = _split_top_level_with(sql)
     if split_sql is None:
         return sql
@@ -31,9 +35,13 @@ def lift_step_ctes(sql: str, lifted_ctes: OrderedDict[str, str]) -> str:
     return body_sql
 
 
-def format_sql(sql: str, *, sqlglot_dialect: str | None = None) -> str:
+def format_sql(
+    sql: str, *, sqlglot_dialect: str | None = None, sqlglot_enabled: bool = True
+) -> str:
     """Format generated comparison SQL when SQLGlot is available."""
 
+    if not sqlglot_enabled:
+        return sql
     sqlglot_module: Any | None = import_sqlglot()
     if sqlglot_module is None:
         return sql

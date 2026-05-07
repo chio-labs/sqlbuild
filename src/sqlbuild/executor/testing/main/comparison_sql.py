@@ -36,7 +36,11 @@ def build_sql_test_comparison_sql(
         )
         actual_cte: str = f"__actual__{cte_suffix}"
         expected_cte: str = f"__expected__{cte_suffix}"
-        actual_sql: str = lift_step_ctes(step.resolved_sql, lifted_ctes)
+        actual_sql: str = lift_step_ctes(
+            step.resolved_sql,
+            lifted_ctes,
+            sqlglot_enabled=test_entry.sqlglot_enabled,
+        )
         comparison_ctes.append(f"{actual_cte} AS ({actual_sql})")
         comparison_ctes.append(f"{expected_cte} AS ({step.expected_cte_sql})")
         select_parts.append(
@@ -52,7 +56,11 @@ def build_sql_test_comparison_sql(
     cte_parts: list[str] = [f"{name} AS ({sql})" for name, sql in lifted_ctes.items()]
     cte_parts.extend(comparison_ctes)
     comparison_sql: str = f"WITH {', '.join(cte_parts)} " + " UNION ALL ".join(select_parts)
-    return format_sql(comparison_sql, sqlglot_dialect=sqlglot_dialect)
+    return format_sql(
+        comparison_sql,
+        sqlglot_dialect=sqlglot_dialect,
+        sqlglot_enabled=test_entry.sqlglot_enabled,
+    )
 
 
 def _escape_sql_string(value: str) -> str:

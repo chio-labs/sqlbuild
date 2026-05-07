@@ -50,7 +50,7 @@ class SettingsConfig:
     sqlglot: bool = True
     query_change_tracking: bool = True
     sql_validation: bool = True
-    max_concurrency: int = 1
+    concurrency: int = 1
     table_promotion_mode: str | None = None
     default_audit_severity: str | None = None
     default_audit_run_scope: str | None = None

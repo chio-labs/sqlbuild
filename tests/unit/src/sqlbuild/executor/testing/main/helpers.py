@@ -6,7 +6,7 @@ from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from sqlbuild.integrations.snowflake.client import SnowflakeAdapter
 
 
-def build_comparison_test_entry() -> SqlTestPlanEntry:
+def build_comparison_test_entry(*, sqlglot_enabled: bool = True) -> SqlTestPlanEntry:
     return SqlTestPlanEntry(
         key=CompiledObjectKey(
             resource_type=CompiledResourceType.SQL_TEST,
@@ -20,6 +20,7 @@ def build_comparison_test_entry() -> SqlTestPlanEntry:
                 expected_cte_sql="SELECT 2 AS order_id",
             ),
         ),
+        sqlglot_enabled=sqlglot_enabled,
     )
 
 

@@ -204,12 +204,19 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
     mapping: dict[str, object] = _coerce_mapping(
         payload=payload, label="settings", file_path=file_path
     )
+    canonical_setting_names: frozenset[str] = frozenset(
+        field.name for field in fields(SettingsConfig)
+    )
     _validate_allowed_keys(
         mapping=mapping,
-        allowed_keys=frozenset(field.name for field in fields(SettingsConfig)),
+        allowed_keys=canonical_setting_names | {"max_concurrency"},
         label="settings",
         file_path=file_path,
     )
+    if "concurrency" in mapping and "max_concurrency" in mapping:
+        raise ProjectConfigError(
+            "settings cannot define both 'concurrency' and legacy 'max_concurrency'"
+        )
     sqlglot: bool = _optional_bool(mapping=mapping, key="sqlglot", default=True)
     query_change_tracking: bool = _optional_bool(
         mapping=mapping,
@@ -217,7 +224,8 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         default=True,
     )
     sql_validation: bool = _optional_bool(mapping=mapping, key="sql_validation", default=True)
-    max_concurrency: int = _optional_int(mapping=mapping, key="max_concurrency", default=1)
+    concurrency_key: str = "max_concurrency" if "max_concurrency" in mapping else "concurrency"
+    concurrency: int = _optional_int(mapping=mapping, key=concurrency_key, default=1)
     table_promotion_mode: str | None = _optional_str(payload=mapping, key="table_promotion_mode")
     default_audit_severity: str | None = _optional_str(
         payload=mapping, key="default_audit_severity"
@@ -229,7 +237,7 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         sqlglot=sqlglot,
         query_change_tracking=query_change_tracking,
         sql_validation=sql_validation,
-        max_concurrency=max_concurrency,
+        concurrency=concurrency,
         table_promotion_mode=table_promotion_mode,
         default_audit_severity=default_audit_severity,
         default_audit_run_scope=default_audit_run_scope,
@@ -243,9 +251,16 @@ def _load_local_settings(
         payload=payload, label="settings", file_path=file_path
     )
     setting_names: frozenset[str] = frozenset(field.name for field in fields(SettingsConfig))
+    normalized_overrides: set[str] = set()
+    key: str
+    for key in mapping:
+        if key == "max_concurrency":
+            normalized_overrides.add("concurrency")
+        elif key in setting_names:
+            normalized_overrides.add(key)
     return (
         _load_settings(payload=payload, file_path=file_path),
-        frozenset(key for key in mapping if key in setting_names),
+        frozenset(normalized_overrides),
     )
 
 

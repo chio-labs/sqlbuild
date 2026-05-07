@@ -176,6 +176,7 @@ def plan_test(
         chain=tuple(chain_steps),
         scope_deps=test.scope_deps,
         function_deps=_dedupe_function_deps(function_deps),
+        sqlglot_enabled=sqlglot_enabled,
     )
     return entry, tuple(warnings)
 
