@@ -79,6 +79,14 @@ RENDER_TEST_CASES: list[RenderAuditSqlTestCase] = [
         expected_sql_fragment="SELECT code FROM main.country_codes",
     ),
     RenderAuditSqlTestCase(
+        description="seed call resolves to qualified seed name",
+        unresolved_sql='SELECT code FROM __seed("country_codes")',
+        model_targets={},
+        source_map_entries={},
+        seed_targets={"country_codes": "main.country_codes"},
+        expected_sql_fragment="SELECT code FROM main.country_codes",
+    ),
+    RenderAuditSqlTestCase(
         description="override takes precedence over seed target",
         unresolved_sql='SELECT code FROM __ref("country_codes")',
         model_targets={},
