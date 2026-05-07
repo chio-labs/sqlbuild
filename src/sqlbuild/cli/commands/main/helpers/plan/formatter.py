@@ -23,6 +23,7 @@ from sqlbuild.compiler.planner.types import (
     SchemaChangeKind,
     WarningSeverity,
 )
+from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
 from sqlbuild.shared.helpers.colors import blue_bold, green, green_bold, red, yellow, yellow_bold
 
 _REASON_GROUP_ORDER: tuple[PlanReason, ...] = (
@@ -38,8 +39,6 @@ _REASON_GROUP_LABELS: dict[PlanReason, str] = {
 }
 
 _ANSI_ESCAPE_PATTERN: re.Pattern[str] = re.compile(r"\033\[[0-9;]*m")
-_MIN_NAME_COLUMN_WIDTH: int = 20
-
 _SCHEMA_CHANGE_SYMBOLS: dict[SchemaChangeKind, str] = {
     SchemaChangeKind.COLUMN_ADDED: "+",
     SchemaChangeKind.COLUMN_REMOVED: "-",
@@ -508,14 +507,16 @@ def _format_warnings(lines: list[str], plan: PlanOutput) -> None:
 def _resolve_name_column_width(plan: PlanOutput) -> int:
     names: list[str] = [entry.name for entry in plan.model_entries]
     names.extend(entry.name for entry in plan.function_entries)
-    if not names:
-        return _MIN_NAME_COLUMN_WIDTH
-    return max(_MIN_NAME_COLUMN_WIDTH, max(len(name) for name in names))
+    return resolve_name_column_width(names)
 
 
 def _format_name_value_line(name: str, value: str, *, name_column_width: int) -> str:
-    padding: str = " " * max(0, name_column_width - len(name))
-    return f"  {blue_bold(name)}{padding} {value}"
+    return format_aligned_name_value(
+        plain_name=name,
+        styled_name=blue_bold(name),
+        value=value,
+        name_column_width=name_column_width,
+    )
 
 
 def _format_schema_findings(findings: tuple[SchemaFinding, ...]) -> list[str]:
