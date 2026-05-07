@@ -456,6 +456,34 @@ TEST_CASES: list[FormatPlanTestCase] = [
         ),
         expected_fragments=("atomic_swap (custom)",),
     ),
+    FormatPlanTestCase(
+        description="detail rows align value column to longest displayed name",
+        plan_output=build_plan_output(
+            model_entries=(
+                build_model_entry(
+                    name="hourly_activity_with_daily_context",
+                    action=PlanAction.INCREMENTAL_DELETE_INSERT,
+                    reason=PlanReason.FIRST_RUN,
+                    materialization_type=MaterializationType.INCREMENTAL,
+                    incremental_strategy="delete_insert",
+                    cursor_type="timestamp",
+                    incremental_mode="microbatch",
+                ),
+                build_model_entry(
+                    name="order_status_index",
+                    action=PlanAction.INCREMENTAL_DELETE_INSERT,
+                    reason=PlanReason.FIRST_RUN,
+                    materialization_type=MaterializationType.INCREMENTAL,
+                    incremental_strategy="delete_insert",
+                    cursor_type="integer",
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "  hourly_activity_with_daily_context delete_insert (timestamp, microbatch)",
+            "  order_status_index                 delete_insert (integer)",
+        ),
+    ),
 ]
 
 
@@ -467,7 +495,11 @@ TEST_CASES: list[FormatPlanTestCase] = [
 def test_given_plan_output_when_formatting_then_contains_expected_fragments(
     test_case: FormatPlanTestCase,
 ) -> None:
-    result: str = format_plan(test_case.plan_output, full_refresh=test_case.full_refresh)
+    result: str = format_plan(
+        test_case.plan_output,
+        full_refresh=test_case.full_refresh,
+        use_color=False,
+    )
 
     fragment: str
     for fragment in test_case.expected_fragments:

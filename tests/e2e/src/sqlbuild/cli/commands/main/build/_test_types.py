@@ -163,6 +163,8 @@ class LifecycleCommandsBuildE2ETestCase:
     expected_run_fragment: str
     expected_rerun_reasons: dict[str, str]
     expected_full_refresh_fragment: str
+    expected_plan_ordered_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_build_ordered_fragments: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
