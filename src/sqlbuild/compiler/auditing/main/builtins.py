@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from textwrap import dedent
 
 from sqlbuild.compiler.auditing.constants import (
     BUILT_IN_AUDIT_NAMES,
@@ -22,19 +23,53 @@ def build_builtin_audit_resolution(
     """Return built-in-aware generic audit definitions and shadow diagnostics."""
 
     merged: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]] = {
+        "accepted_values": _build_audit_definition(
+            name="accepted_values",
+            sql_body=dedent(
+                """\
+                SELECT @column
+                FROM @relation
+                WHERE @column IS NOT NULL
+                  AND @column NOT IN (@'values')
+                """
+            ).strip(),
+        ),
         "not_null": _build_audit_definition(
             name="not_null",
-            sql_body="""SELECT @column
-FROM @relation
-WHERE @column IS NULL""",
+            sql_body=dedent(
+                """\
+                SELECT @column
+                FROM @relation
+                WHERE @column IS NULL
+                """
+            ).strip(),
+        ),
+        "relationships": _build_audit_definition(
+            name="relationships",
+            sql_body=dedent(
+                """\
+                SELECT @column
+                FROM @relation
+                WHERE @column IS NOT NULL
+                  AND @column NOT IN (
+                    SELECT @field
+                    FROM @to
+                    WHERE @field IS NOT NULL
+                  )
+                """
+            ).strip(),
         ),
         "unique": _build_audit_definition(
             name="unique",
-            sql_body="""SELECT @column, COUNT(*) AS duplicate_count
-FROM @relation
-WHERE @column IS NOT NULL
-GROUP BY @column
-HAVING COUNT(*) > 1""",
+            sql_body=dedent(
+                """\
+                SELECT @column, COUNT(*) AS duplicate_count
+                FROM @relation
+                WHERE @column IS NOT NULL
+                GROUP BY @column
+                HAVING COUNT(*) > 1
+                """
+            ).strip(),
         ),
     }
     merged.update(project_definitions)

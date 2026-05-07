@@ -4,7 +4,9 @@ MODEL (
   description "Cleaned payment records.",
   columns (
     payment_id (audits [not_null, unique]),
-    order_id (audits [not_null]),
+    order_id (
+      audits [not_null, relationships (to __source("raw_orders"), field id)],
+    ),
   ),
 );
 

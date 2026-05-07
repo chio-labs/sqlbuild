@@ -1464,13 +1464,18 @@ SELECT @column FROM __source("@source") WHERE @column IS NULL
 MODEL (
   columns (
     order_id (nullable false, audits [not_null, unique]),
-    customer_id (nullable true),
+    status (audits [accepted_values (values ["placed", "completed"])]),
+    customer_id (
+      nullable true,
+      audits [relationships (to __ref("customers"), field customer_id)],
+    ),
   ),
 );
 
-select 1 as order_id, null as customer_id
+select 1 as order_id, 'placed' as status, null as customer_id
 """.strip()
             + "\n",
+            "models/marts/customers.sql": "MODEL ();\n\nselect 1 as customer_id\n",
             "sources/raw.yml": """
 sources:
   - name: raw_orders
@@ -1484,11 +1489,14 @@ sources:
         selected_environment=None,
         cli_vars=None,
         run_id=None,
-        expected_model_schema_names=("orders",),
-        expected_model_config_values=({},),
-        expected_model_query_sqls=("select 1 as order_id, null as customer_id",),
-        expected_model_column_nullables=((False, True),),
-        expected_model_path_defaults=(None,),
+        expected_model_schema_names=(None, "orders"),
+        expected_model_config_values=({}, {}),
+        expected_model_query_sqls=(
+            "select 1 as customer_id",
+            "select 1 as order_id, 'placed' as status, null as customer_id",
+        ),
+        expected_model_column_nullables=((), (False, None, True)),
+        expected_model_path_defaults=(None, None),
         expected_seed_names=(),
         expected_source_names=("raw_orders",),
         expected_test_sql_bodies=(),
@@ -1496,15 +1504,25 @@ sources:
             'SELECT order_id\nFROM __ref("orders")\nWHERE order_id IS NULL',
             'SELECT order_id, COUNT(*) AS duplicate_count\nFROM __ref("orders")\n'
             "WHERE order_id IS NOT NULL\nGROUP BY order_id\nHAVING COUNT(*) > 1",
+            'SELECT status\nFROM __ref("orders")\nWHERE status IS NOT NULL\n'
+            "  AND status NOT IN ('placed', 'completed')",
+            'SELECT customer_id\nFROM __ref("orders")\nWHERE customer_id IS NOT NULL\n'
+            "  AND customer_id NOT IN (\n"
+            "    SELECT customer_id\n"
+            '    FROM __ref("customers")\n'
+            "    WHERE customer_id IS NOT NULL\n"
+            "  )",
             'SELECT order_id\nFROM __source("raw_orders")\nWHERE order_id IS NULL',
         ),
         expected_effective_environment_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
-        expected_model_references=((),),
+        expected_model_references=((), ()),
         expected_audit_references=(
             (("ref", "orders"),),
             (("ref", "orders"),),
+            (("ref", "orders"),),
+            (("ref", "orders"), ("ref", "customers")),
             (("source", "raw_orders"),),
         ),
     ),

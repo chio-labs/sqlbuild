@@ -28,6 +28,7 @@ _SYMBOLS: frozenset[str] = frozenset({"(", ")", "[", "]", ","})
 _QUOTE_NAMES: dict[str, str] = {"'": "single", '"': "double"}
 _INTEGER_PATTERN: re.Pattern[str] = re.compile(r"^[+-]?\d+$")
 _FLOAT_PATTERN: re.Pattern[str] = re.compile(r"^[+-]?(?:\d+\.\d*|\d*\.\d+)$")
+_RELATION_CALL_NAMES: frozenset[str] = frozenset({"__ref", "__seed", "__source"})
 
 
 def parse_model_sql(contents: str, file_path: Path) -> tuple[dict[str, object], str]:
@@ -417,6 +418,8 @@ class _ModelHeaderParser:
             self._advance()
             if self._peek().kind == _SYMBOL_TOKEN and self._peek().value == "(":
                 self._advance()
+                if token.value in _RELATION_CALL_NAMES:
+                    return self._parse_relation_call(token.value)
                 return {token.value: self._parse_map(end_symbol=")")}
             return _parse_word_value(token.value)
         if self._match_symbol("["):
@@ -434,6 +437,15 @@ class _ModelHeaderParser:
             self._match_symbol(",")
         self._consume_symbol("]")
         return values
+
+    def _parse_relation_call(self, name: str) -> str:
+        token: _ModelHeaderToken = self._peek()
+        if token.kind != _STRING_TOKEN:
+            raise ValueError(f"{name}(...) requires a double-quoted relation name")
+        self._advance()
+        relation_name: str = token.value.replace('"', '\\"')
+        self._consume_symbol(")")
+        return f'{name}("{relation_name}")'
 
     def _consume_key(self) -> str:
         token: _ModelHeaderToken = self._peek()

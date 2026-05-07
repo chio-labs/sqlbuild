@@ -5,6 +5,9 @@ MODEL (
   columns (
     order_id (nullable false, audits [not_null, unique]),
     customer_id (nullable false, audits [not_null]),
+    waffle_type_id (
+      audits [relationships (to __seed("waffle_types"), field waffle_type_id)],
+    ),
     status (
       audits [
         accepted_values (values ["placed", "preparing", "ready", "completed", "cancelled"]),
