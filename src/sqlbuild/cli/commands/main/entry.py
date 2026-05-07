@@ -134,7 +134,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     lineage_parser.add_argument("--depth", dest="lineage_depth", default="all")
     lineage_parser.add_argument(
-        "--lineage-mode",
+        "--mode",
         dest="lineage_mode",
         choices=COLUMN_LINEAGE_MODE_VALUES,
         default=ColumnLineageMode.RICH.value,

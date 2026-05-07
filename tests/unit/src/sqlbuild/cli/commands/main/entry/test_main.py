@@ -358,7 +358,7 @@ def test_given_debug_command_arguments_when_running_with_dependencies_then_it_di
                 "2",
                 "--format",
                 "json",
-                "--lineage-mode",
+                "--mode",
                 "fast",
             ],
             expected_exit_code=11,
