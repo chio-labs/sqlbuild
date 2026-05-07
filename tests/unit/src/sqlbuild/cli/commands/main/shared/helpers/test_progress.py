@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from io import StringIO
 
 import pytest
@@ -15,6 +16,7 @@ from sqlbuild.cli.commands.main.shared.helpers.progress import (
 )
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
     FunctionExecutionResult,
@@ -26,7 +28,9 @@ from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import (
     AuditAggregationTestCase,
     BuildFooterTestCase,
+    BuildProgressActiveSpinnerTestCase,
     BuildProgressFailureOutputTestCase,
+    BuildProgressSpinnerLifecycleTestCase,
     TruncateNameTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers.helpers import (
@@ -267,6 +271,29 @@ BUILD_FOOTER_TEST_CASES: list[BuildFooterTestCase] = [
             "fingerprint write skipped",
         ),
     ),
+    BuildFooterTestCase(
+        description="footer failure error text truncates after four lines",
+        result=BuildExecutionResult(
+            status=BuildStatus.FAILED,
+            function_results=(
+                FunctionExecutionResult(
+                    function_name="is_completed_order",
+                    status=ExecutionStatus.FAILED,
+                    error_message=(
+                        "line one\nline two\nline three\nline four\nline five should not appear"
+                    ),
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "Failures:",
+            "error     line one",
+            "line two",
+            "line three",
+            "line four...",
+        ),
+        unexpected_fragments=("line five should not appear",),
+    ),
 ]
 
 BUILD_PROGRESS_FAILURE_OUTPUT_TEST_CASES: list[BuildProgressFailureOutputTestCase] = [
@@ -323,6 +350,41 @@ BUILD_PROGRESS_FAILURE_OUTPUT_TEST_CASES: list[BuildProgressFailureOutputTestCas
         ),
         unexpected_fragments=("staging  relation raw_orders does not exist",),
     ),
+    BuildProgressFailureOutputTestCase(
+        description="live error detail truncates after four lines",
+        node_result=FunctionExecutionResult(
+            function_name="is_completed_order",
+            status=ExecutionStatus.FAILED,
+            duration_ms=110,
+            error_message=(
+                "line one\nline two\nline three\nline four\nline five should not appear"
+            ),
+        ),
+        expected_fragments=(
+            "error     line one",
+            "          line two",
+            "          line three",
+            "          line four...",
+        ),
+        unexpected_fragments=("line five should not appear",),
+    ),
+]
+
+BUILD_PROGRESS_ACTIVE_SPINNER_TEST_CASES: list[BuildProgressActiveSpinnerTestCase] = [
+    BuildProgressActiveSpinnerTestCase(
+        description="active function row uses spinner glyph instead of ellipsis",
+        node_name="is_completed_order",
+        node_type="function",
+        expected_fragments=("function", "is_completed_order", "⠋"),
+        unexpected_fragments=("...",),
+    ),
+    BuildProgressActiveSpinnerTestCase(
+        description="active view row uses spinner glyph instead of ellipsis",
+        node_name="stg_customers",
+        node_type=MaterializationType.VIEW,
+        expected_fragments=("view", "stg_customers", "⠋"),
+        unexpected_fragments=("...",),
+    ),
 ]
 
 
@@ -371,6 +433,9 @@ def test_given_failed_resource_result_when_formatting_footer_then_includes_error
     expected_fragment: str
     for expected_fragment in test_case.expected_fragments:
         assert expected_fragment in footer
+    unexpected_fragment: str
+    for unexpected_fragment in test_case.unexpected_fragments:
+        assert unexpected_fragment not in footer
 
 
 @pytest.mark.parametrize(
@@ -398,3 +463,80 @@ def test_given_failed_top_level_node_when_reporting_progress_then_writes_error_d
     unexpected_fragment: str
     for unexpected_fragment in test_case.unexpected_fragments:
         assert unexpected_fragment not in output
+
+
+class _TtyStringIO(StringIO):
+    def isatty(self) -> bool:
+        return True
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    BUILD_PROGRESS_ACTIVE_SPINNER_TEST_CASES,
+    ids=[case.description for case in BUILD_PROGRESS_ACTIVE_SPINNER_TEST_CASES],
+)
+def test_given_active_top_level_node_when_reporting_progress_then_uses_spinner_glyph(
+    test_case: BuildProgressActiveSpinnerTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stream: _TtyStringIO = _TtyStringIO()
+    monkeypatch.setattr("sys.stdout", stream)
+    callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
+        plan=PlanOutput(),
+        use_color=False,
+    )
+
+    callbacks.on_node_start(test_case.node_name, test_case.node_type)
+    output: str = stream.getvalue()
+
+    expected_fragment: str
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in output
+    unexpected_fragment: str
+    for unexpected_fragment in test_case.unexpected_fragments:
+        assert unexpected_fragment not in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildProgressSpinnerLifecycleTestCase(
+            description="active spinner advances frames over time before completion",
+            node_name="stg_orders",
+            node_type=MaterializationType.VIEW,
+            sleep_seconds=0.22,
+            completion_duration_ms=1200,
+            expected_fragments=("view", "stg_orders", "OK", "\033[?25l", "\033[?25h"),
+            expected_spinner_frames=("⠋", "⠙", "⠹"),
+        )
+    ],
+    ids=["active spinner advances frames over time before completion"],
+)
+def test_given_active_top_level_node_when_waiting_then_spinner_advances_frames(
+    test_case: BuildProgressSpinnerLifecycleTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stream: _TtyStringIO = _TtyStringIO()
+    monkeypatch.setattr("sys.stdout", stream)
+    callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
+        plan=PlanOutput(),
+        use_color=False,
+    )
+
+    callbacks.on_node_start(test_case.node_name, test_case.node_type)
+    time.sleep(test_case.sleep_seconds)
+    callbacks.on_node_complete(
+        ModelExecutionResult(
+            model_name=test_case.node_name,
+            status=ExecutionStatus.SUCCESS,
+            duration_ms=test_case.completion_duration_ms,
+        )
+    )
+    output: str = stream.getvalue()
+
+    expected_fragment: str
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in output
+    spinner_frame: str
+    for spinner_frame in test_case.expected_spinner_frames:
+        assert spinner_frame in output

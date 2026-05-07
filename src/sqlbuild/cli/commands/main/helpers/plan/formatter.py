@@ -23,6 +23,7 @@ from sqlbuild.compiler.planner.types import (
     SchemaChangeKind,
     WarningSeverity,
 )
+from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
 from sqlbuild.shared.helpers.colors import blue_bold, green, green_bold, red, yellow, yellow_bold
 
 _REASON_GROUP_ORDER: tuple[PlanReason, ...] = (
@@ -38,7 +39,6 @@ _REASON_GROUP_LABELS: dict[PlanReason, str] = {
 }
 
 _ANSI_ESCAPE_PATTERN: re.Pattern[str] = re.compile(r"\033\[[0-9;]*m")
-
 _SCHEMA_CHANGE_SYMBOLS: dict[SchemaChangeKind, str] = {
     SchemaChangeKind.COLUMN_ADDED: "+",
     SchemaChangeKind.COLUMN_REMOVED: "-",
@@ -58,6 +58,7 @@ def format_plan(plan: PlanOutput, *, full_refresh: bool = False, use_color: bool
 
     active: list[ModelPlanEntry] = [e for e in plan.model_entries if e.action != PlanAction.SKIP]
     selected_count: int = _selected_count(plan)
+    name_column_width: int = _resolve_name_column_width(plan)
 
     header: str = f"Plan ready ({selected_count} selected)"
     lines.append(green_bold(header))
@@ -66,7 +67,7 @@ def format_plan(plan: PlanOutput, *, full_refresh: bool = False, use_color: bool
     cascade: list[ModelPlanEntry] = _collect_upstream_changed(active)
     groups: dict[PlanReason, list[ModelPlanEntry]] = _group_by_reason(active, cascade)
 
-    _format_functions(lines, plan)
+    _format_functions(lines, plan, name_column_width=name_column_width)
 
     if normal:
         lines.append("")
@@ -82,14 +83,14 @@ def format_plan(plan: PlanOutput, *, full_refresh: bool = False, use_color: bool
         lines.append(green_bold(f"{label} ({len(entries)})"))
         entry: ModelPlanEntry
         for entry in entries:
-            _format_detail_entry(lines, entry, reason)
+            _format_detail_entry(lines, entry, reason, name_column_width=name_column_width)
 
     if cascade:
         lines.append("")
         lines.append(green_bold(f"Upstream changed ({len(cascade)})"))
         entry_c: ModelPlanEntry
         for entry_c in cascade:
-            _format_upstream_changed_entry(lines, entry_c)
+            _format_upstream_changed_entry(lines, entry_c, name_column_width=name_column_width)
 
     _format_seeds(lines, plan)
     _format_warnings(lines, plan)
@@ -103,10 +104,11 @@ def _format_full_refresh(lines: list[str], plan: PlanOutput) -> None:
 
     selected_count: int = _selected_count(plan)
     active: list[ModelPlanEntry] = [e for e in plan.model_entries if e.action != PlanAction.SKIP]
+    name_column_width: int = _resolve_name_column_width(plan)
 
     lines.append(green_bold(f"Plan ready (full refresh, {selected_count} selected)"))
 
-    _format_functions(lines, plan)
+    _format_functions(lines, plan, name_column_width=name_column_width)
     lines.append("")
 
     counts: Counter[str] = Counter()
@@ -223,16 +225,22 @@ def _format_detail_entry(
     lines: list[str],
     entry: ModelPlanEntry,
     reason: PlanReason,
+    *,
+    name_column_width: int,
 ) -> None:
     """Format a per-model entry with action text and detail lines."""
 
     if reason == PlanReason.FIRST_RUN:
         mat_label: str = _materialization_label(entry)
-        lines.append(f"  {blue_bold(entry.name):<40s} {mat_label}")
+        lines.append(
+            _format_name_value_line(entry.name, mat_label, name_column_width=name_column_width)
+        )
         return
 
     action_text: str = _action_text(entry)
-    lines.append(f"  {blue_bold(entry.name):<40s} {action_text}")
+    lines.append(
+        _format_name_value_line(entry.name, action_text, name_column_width=name_column_width)
+    )
     _append_cursor_detail(
         lines,
         entry,
@@ -243,12 +251,16 @@ def _format_detail_entry(
     _append_query_diff(lines, entry)
 
 
-def _format_upstream_changed_entry(lines: list[str], entry: ModelPlanEntry) -> None:
+def _format_upstream_changed_entry(
+    lines: list[str], entry: ModelPlanEntry, *, name_column_width: int
+) -> None:
     """Format a per-model entry in the Upstream changed group."""
 
     cascade: CascadeResult | None = entry.cascade
     action_text: str = _cascade_action_text(cascade)
-    lines.append(f"  {blue_bold(entry.name):<40s} {action_text}")
+    lines.append(
+        _format_name_value_line(entry.name, action_text, name_column_width=name_column_width)
+    )
     _append_cursor_detail(
         lines,
         entry,
@@ -399,7 +411,7 @@ def _format_seeds(lines: list[str], plan: PlanOutput) -> None:
         lines.append(f"  {getattr(seed_entry, 'name', str(seed_entry))}")
 
 
-def _format_functions(lines: list[str], plan: PlanOutput) -> None:
+def _format_functions(lines: list[str], plan: PlanOutput, *, name_column_width: int) -> None:
     """Append the functions section."""
 
     if not plan.function_entries:
@@ -415,17 +427,31 @@ def _format_functions(lines: list[str], plan: PlanOutput) -> None:
         lines.append(green_bold(f"Function changed ({len(changed_entries)})"))
         function_entry: FunctionPlanEntry
         for function_entry in changed_entries:
-            _format_function_entry(lines, function_entry, show_details=True)
+            _format_function_entry(
+                lines,
+                function_entry,
+                show_details=True,
+                name_column_width=name_column_width,
+            )
     if not unchanged_entries:
         return
     lines.append("")
     lines.append(green_bold(f"Functions ({len(unchanged_entries)})"))
     for function_entry in unchanged_entries:
-        _format_function_entry(lines, function_entry, show_details=False)
+        _format_function_entry(
+            lines,
+            function_entry,
+            show_details=False,
+            name_column_width=name_column_width,
+        )
 
 
 def _format_function_entry(
-    lines: list[str], function_entry: FunctionPlanEntry, *, show_details: bool
+    lines: list[str],
+    function_entry: FunctionPlanEntry,
+    *,
+    show_details: bool,
+    name_column_width: int,
 ) -> None:
     """Append one function line and optional change details."""
 
@@ -434,7 +460,13 @@ def _format_function_entry(
         if function_entry.return_columns
         else f"{function_entry.language.value} udf"
     )
-    lines.append(f"  {blue_bold(function_entry.name):<40s} {function_kind}")
+    lines.append(
+        _format_name_value_line(
+            function_entry.name,
+            function_kind,
+            name_column_width=name_column_width,
+        )
+    )
     if not show_details:
         return
     if function_entry.reason == PlanReason.FIRST_RUN:
@@ -470,6 +502,21 @@ def _format_warnings(lines: list[str], plan: PlanOutput) -> None:
         if warning.model_name is not None:
             lines.append(f"  {blue_bold(warning.model_name)}")
         lines.append(f"  {yellow(f'- {warning.message}')}")
+
+
+def _resolve_name_column_width(plan: PlanOutput) -> int:
+    names: list[str] = [entry.name for entry in plan.model_entries]
+    names.extend(entry.name for entry in plan.function_entries)
+    return resolve_name_column_width(names)
+
+
+def _format_name_value_line(name: str, value: str, *, name_column_width: int) -> str:
+    return format_aligned_name_value(
+        plain_name=name,
+        styled_name=blue_bold(name),
+        value=value,
+        name_column_width=name_column_width,
+    )
 
 
 def _format_schema_findings(findings: tuple[SchemaFinding, ...]) -> list[str]:

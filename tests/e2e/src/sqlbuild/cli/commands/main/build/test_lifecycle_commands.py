@@ -12,6 +12,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     LifecycleCommandsBuildE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    assert_fragments_in_order,
     prepare_waffle_shop,
     run_sqb,
 )
@@ -26,7 +27,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
             expected_fresh_plan_fragments=(
                 "Plan ready (16 selected)",
                 "Function changed (3)",
-                "customer_orders             table function",
+                "customer_orders",
+                "table function",
                 "First run (12)",
             ),
             expected_test_fragment="PASS=2  FAIL=0  TOTAL=2",
@@ -37,6 +39,29 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 "hourly_order_activity": "normal_incremental",
             },
             expected_full_refresh_fragment="Plan ready (full refresh, 16 selected)",
+            expected_plan_ordered_fragments=(
+                "Connecting to duckdb...",
+                "Connected to duckdb. (<time>)",
+                "Inspecting warehouse state...",
+                "Generated plan. (<time>)",
+                "Plan ready (16 selected)",
+                "Function changed (3)",
+                "First run (12)",
+                "Seeds (1)",
+            ),
+            expected_build_ordered_fragments=(
+                "Connecting to duckdb...",
+                "Connected to duckdb. (<time>)",
+                "Inspecting warehouse state...",
+                "Generated plan. (<time>)",
+                "Plan ready (16 selected)",
+                "Execution  sqb build  (concurrency: 1)",
+                "Connecting to duckdb...",
+                "Connected to duckdb. (<time>)",
+                "function  is_completed_order",
+                "Completed successfully.",
+                "PASS=<n>  WARN=<n>  FAIL=<n>  SKIP=<n>  TOTAL=<n>  (<time>)",
+            ),
         )
     ],
     ids=["waffle shop core lifecycle commands remain consistent"],
@@ -57,6 +82,7 @@ def test_given_waffle_shop_when_running_core_lifecycle_commands_then_outputs_are
     fragment: str
     for fragment in test_case.expected_fresh_plan_fragments:
         assert fragment in fresh_plan.stdout
+    assert_fragments_in_order(fresh_plan.stdout, test_case.expected_plan_ordered_fragments)
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "build"),
@@ -66,6 +92,7 @@ def test_given_waffle_shop_when_running_core_lifecycle_commands_then_outputs_are
         build_result.stdout + build_result.stderr
     )
     assert "PASS=" in build_result.stdout
+    assert_fragments_in_order(build_result.stdout, test_case.expected_build_ordered_fragments)
 
     test_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "test"),

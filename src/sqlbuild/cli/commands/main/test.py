@@ -5,18 +5,25 @@ from __future__ import annotations
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
+from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
+from sqlbuild.cli.commands.main.shared.helpers.nested_progress import NestedCommandProgressCallbacks
+from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
+from sqlbuild.cli.commands.main.shared.helpers.progress import format_build_header
+from sqlbuild.cli.commands.main.shared.helpers.status import TransientStatusReporter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.planner.models import SqlTestPlanEntry
 from sqlbuild.executor.pipeline.main.run import run_test_pipeline
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
-from sqlbuild.shared.helpers.colors import bold, colorize_status, green_bold, supports_color
+from sqlbuild.shared.helpers.colors import blue_bold, dim, green_bold, supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
@@ -44,6 +51,25 @@ def run_test(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
     )
+    use_color: bool = not no_color and supports_color()
+    progress_stream: TextIO = sys.stdout
+    execution_header: str = format_build_header(command="sqb test", target=None, concurrency=1)
+    execution_label: str = blue_bold("Execution") if use_color else "Execution"
+    header_detail: str = dim(execution_header) if use_color else execution_header
+    connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
+        adapter_name=resolve_effective_adapter_name(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+        ),
+        stream=progress_stream,
+        use_color=use_color,
+    )
+    planning_progress: PlanningProgressReporter = PlanningProgressReporter(
+        stream=progress_stream,
+        use_color=use_color,
+    )
+    progress_stream.write(f"\n{execution_label}  {header_detail}\n\n")
+    progress_stream.flush()
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
@@ -51,23 +77,65 @@ def run_test(
         select=select,
         exclude=exclude,
         connection_config=connection_config,
+        on_connection_start=connection_progress.on_connection_start,
+        on_connection_complete=connection_progress.on_connection_complete,
+        on_connection_error=connection_progress.on_connection_error,
+        on_progress=planning_progress.on_progress,
     )
 
-    use_color: bool = not no_color and supports_color()
     test_count: int = len(pipeline_result.plan_output.test_entries)
     model_count: int = len(
         {step.model_name for e in pipeline_result.plan_output.test_entries for step in e.chain}
     )
     header: str = f"Test ({test_count} selected, {model_count} models)"
     styled_header: str = green_bold(header) if use_color else header
-    sys.stdout.write(f"\n{styled_header}\n")
+    progress: NestedCommandProgressCallbacks = NestedCommandProgressCallbacks(
+        total=test_count,
+        label="test",
+        stream=progress_stream,
+        use_color=use_color,
+    )
+    sys.stdout.write(f"\n{styled_header}\n\n")
     sys.stdout.flush()
+    execution_connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
+        adapter_name=resolve_effective_adapter_name(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+        ),
+        stream=progress_stream,
+        use_color=use_color,
+    )
+    preflight_progress: TransientStatusReporter = TransientStatusReporter(
+        stream=progress_stream,
+        use_color=use_color,
+    )
 
-    on_complete: Callable[[SqlTestExecutionResult], None] = _build_on_complete(use_color=use_color)
+    on_complete: Callable[[SqlTestExecutionResult], None] = _build_on_complete(progress=progress)
+    preflight_active: list[bool] = [False]
+
+    def on_test_progress(message: str) -> None:
+        if message.startswith("Prepared "):
+            preflight_progress.complete(message)
+            preflight_active[0] = False
+            return
+        if not preflight_active[0]:
+            preflight_progress.start(message)
+            preflight_active[0] = True
+            return
+        preflight_progress.update(message)
+
     results: tuple[SqlTestExecutionResult, ...] = run_test_pipeline(
         plan=pipeline_result.plan_output,
         connection_config=connection_config,
         adapter=adapter,
+        on_connection_start=execution_connection_progress.on_connection_start,
+        on_connection_complete=execution_connection_progress.on_connection_complete,
+        on_connection_error=execution_connection_progress.on_connection_error,
+        on_progress=on_test_progress,
+        on_test_start=lambda entry: progress.on_item_start(
+            group_name=_test_group_name_from_entry(entry),
+            item_name=entry.name,
+        ),
         on_test_complete=on_complete,
     )
 
@@ -79,24 +147,26 @@ def run_test(
     return 0 if fail_count == 0 else 1
 
 
-def _build_on_complete(*, use_color: bool) -> Callable[[SqlTestExecutionResult], None]:
-    current_group: list[str] = [""]
-
+def _build_on_complete(
+    *, progress: NestedCommandProgressCallbacks
+) -> Callable[[SqlTestExecutionResult], None]:
     def _on_complete(result: SqlTestExecutionResult) -> None:
         model_name: str = ""
         if result.step_results:
             model_name = result.step_results[0].model_name
         group_name: str = model_name or "(unknown)"
-        if group_name != current_group[0]:
-            current_group[0] = group_name
-            group_header: str = bold(group_name) if use_color else group_name
-            sys.stdout.write(f"\n{group_header}\n")
-
         status_text: str = "PASS" if result.outcome == SqlTestOutcome.PASS else "FAIL"
-        status: str = colorize_status(status_text, use_color=use_color)
-        sys.stdout.write(f"    {'test':<10}{result.test_name:<40} {status}\n")
-        if result.error_message is not None:
-            sys.stdout.write(f"{'':>14}{result.error_message}\n")
-        sys.stdout.flush()
+        progress.on_item_complete(
+            group_name=group_name,
+            item_name=result.test_name,
+            status_text=status_text,
+            error_message=result.error_message,
+        )
 
     return _on_complete
+
+
+def _test_group_name_from_entry(entry: SqlTestPlanEntry) -> str:
+    if entry.chain:
+        return entry.chain[0].model_name
+    return "(unknown)"

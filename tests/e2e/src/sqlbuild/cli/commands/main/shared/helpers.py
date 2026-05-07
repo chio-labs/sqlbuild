@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
@@ -100,3 +101,35 @@ def row_count(*, db_path: Path, table_name: str, schema: str = "main") -> int:
         sql=f"SELECT COUNT(*) FROM {schema}.{table_name}",
     )
     return int(rows[0][0])
+
+
+def normalize_cli_output(output: str) -> str:
+    """Normalize dynamic CLI output fragments for stable assertions."""
+
+    normalized: str = re.sub(r"\(\d+\.\d{2}s\)", "(<time>)", output)
+    normalized = re.sub(
+        r"PASS=\d+  WARN=\d+  FAIL=\d+  SKIP=\d+  TOTAL=\d+  \(<time>\)",
+        "PASS=<n>  WARN=<n>  FAIL=<n>  SKIP=<n>  TOTAL=<n>  (<time>)",
+        normalized,
+    )
+    normalized = re.sub(
+        r"PASS=\d+  WARN=\d+  FAIL=\d+  TOTAL=\d+",
+        "PASS=<n>  WARN=<n>  FAIL=<n>  TOTAL=<n>",
+        normalized,
+    )
+    normalized = re.sub(
+        r"PASS=\d+  FAIL=\d+  TOTAL=\d+", "PASS=<n>  FAIL=<n>  TOTAL=<n>", normalized
+    )
+    return normalized
+
+
+def assert_fragments_in_order(output: str, fragments: tuple[str, ...]) -> None:
+    """Assert that fragments appear in order within normalized output."""
+
+    normalized_output: str = normalize_cli_output(output)
+    position: int = 0
+    fragment: str
+    for fragment in fragments:
+        index: int = normalized_output.find(fragment, position)
+        assert index != -1, f"missing fragment in order: {fragment!r}\n\n{normalized_output}"
+        position = index + len(fragment)

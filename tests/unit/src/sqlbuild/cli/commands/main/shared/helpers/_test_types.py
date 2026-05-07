@@ -39,6 +39,7 @@ class BuildFooterTestCase:
     description: str
     result: BuildExecutionResult
     expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,26 @@ class BuildProgressFailureOutputTestCase:
     node_result: object
     expected_fragments: tuple[str, ...]
     unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class BuildProgressActiveSpinnerTestCase:
+    description: str
+    node_name: str
+    node_type: str
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class BuildProgressSpinnerLifecycleTestCase:
+    description: str
+    node_name: str
+    node_type: str
+    sleep_seconds: float
+    completion_duration_ms: int
+    expected_fragments: tuple[str, ...]
+    expected_spinner_frames: tuple[str, ...]
 
 
 @dataclass(frozen=True)

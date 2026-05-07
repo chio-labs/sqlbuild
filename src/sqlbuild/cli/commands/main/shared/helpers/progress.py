@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import threading
 import time
 from dataclasses import dataclass
 
@@ -22,13 +23,36 @@ from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
-from sqlbuild.shared.helpers.colors import blue_dim, colorize_completion, colorize_status, dim
+from sqlbuild.shared.helpers.colors import (
+    blue_dim,
+    colorize_completion,
+    colorize_status,
+    dim,
+    red_bold,
+    red_dim,
+    yellow_bold,
+)
 
 _TYPE_WIDTH: int = 10
 _MAX_NAME_WIDTH: int = 60
 _MIN_NAME_WIDTH: int = 20
 _NAME_PADDING: int = 2
 _SUB_INDENT: int = 2
+_SPINNER_TICK_SECONDS: float = 0.1
+_MAX_ERROR_LINES: int = 4
+_MAX_ERROR_LINE_LENGTH: int = 160
+_ACTIVE_SPINNER_FRAMES: tuple[str, ...] = (
+    "⠋",
+    "⠙",
+    "⠹",
+    "⠸",
+    "⠼",
+    "⠴",
+    "⠦",
+    "⠧",
+    "⠇",
+    "⠏",
+)
 
 
 @dataclass(frozen=True)
@@ -72,6 +96,11 @@ class BuildProgressCallbacks:
         self._current_node_name: str = ""
         self._current_node_type: str = ""
         self._current_sub_message: str = ""
+        self._spinner_frame_index: int = 0
+        self._write_lock: threading.Lock = threading.Lock()
+        self._spinner_stop_event: threading.Event | None = None
+        self._spinner_thread: threading.Thread | None = None
+        self._cursor_hidden: bool = False
 
         ctr_width: int = len(str(self._total)) * 2 + 1
         self._prefix_width: int = 2 + ctr_width + 2
@@ -121,7 +150,9 @@ class BuildProgressCallbacks:
         self._current_node_type = materialization_type
         self._current_sub_message = ""
         if self._is_tty:
+            self._hide_cursor()
             self._write_spinner_line()
+            self._start_spinner_loop()
 
     def on_sub_progress(self, message: str) -> None:
         self._current_sub_message = message
@@ -131,7 +162,11 @@ class BuildProgressCallbacks:
     def _write_spinner_line(self) -> None:
         ctr: str = f"{self._counter + 1}/{self._total}".rjust(len(str(self._total)) * 2 + 1)
         display_type: str = _materialization_type_display(self._current_node_type)
-        status: str = colorize_status("...", use_color=self._use_color)
+        status: str = colorize_status(
+            _ACTIVE_SPINNER_FRAMES[self._spinner_frame_index],
+            use_color=self._use_color,
+        )
+        self._spinner_frame_index = (self._spinner_frame_index + 1) % len(_ACTIVE_SPINNER_FRAMES)
         name_display: str = _truncate_name(self._current_node_name, self._name_width)
         if self._current_sub_message:
             name_display = _truncate_name(
@@ -139,8 +174,49 @@ class BuildProgressCallbacks:
             )
         nw: int = self._name_width
         line: str = f"  {ctr}  {display_type:<{_TYPE_WIDTH}}{name_display:<{nw}} {status}"
-        self._stream.write(f"\r\033[K{line}")
-        self._stream.flush()
+        with self._write_lock:
+            self._stream.write(f"\r\033[K{line}")
+            self._stream.flush()
+
+    def _start_spinner_loop(self) -> None:
+        self._stop_spinner_loop()
+        stop_event: threading.Event = threading.Event()
+        self._spinner_stop_event = stop_event
+        spinner_thread: threading.Thread = threading.Thread(
+            target=self._spin_until_stopped,
+            args=(stop_event,),
+            daemon=True,
+        )
+        self._spinner_thread = spinner_thread
+        spinner_thread.start()
+
+    def _stop_spinner_loop(self) -> None:
+        if self._spinner_stop_event is not None:
+            self._spinner_stop_event.set()
+        if self._spinner_thread is not None and self._spinner_thread.is_alive():
+            self._spinner_thread.join(timeout=0.2)
+        self._spinner_stop_event = None
+        self._spinner_thread = None
+
+    def _spin_until_stopped(self, stop_event: threading.Event) -> None:
+        while not stop_event.wait(_SPINNER_TICK_SECONDS):
+            self._write_spinner_line()
+
+    def _hide_cursor(self) -> None:
+        if self._cursor_hidden:
+            return
+        with self._write_lock:
+            self._stream.write("\033[?25l")
+            self._stream.flush()
+        self._cursor_hidden = True
+
+    def _show_cursor(self) -> None:
+        if not self._cursor_hidden:
+            return
+        with self._write_lock:
+            self._stream.write("\033[?25h")
+            self._stream.flush()
+        self._cursor_hidden = False
 
     def on_node_complete(self, node_result: object) -> None:
         if isinstance(node_result, SqlTestExecutionResult):
@@ -150,8 +226,12 @@ class BuildProgressCallbacks:
                     self._test_results_by_model[step.model_name] = node_result
             return
 
+        self._stop_spinner_loop()
         if self._is_tty:
-            self._stream.write("\r\033[K")
+            with self._write_lock:
+                self._stream.write("\r\033[K")
+                self._stream.flush()
+            self._show_cursor()
 
         self._counter += 1
         ctr: str = f"{self._counter}/{self._total}".rjust(len(str(self._total)) * 2 + 1)
@@ -301,9 +381,9 @@ class BuildProgressCallbacks:
 
     def _write_error_detail(self, message: str) -> None:
         pad: str = " " * self._prefix_width
-        label: str = "error"
+        label: str = red_dim("error") if self._use_color else "error"
         line: str
-        for line_index, line in enumerate(message.splitlines() or [message]):
+        for line_index, line in enumerate(_format_error_lines(message)):
             display_label: str = label if line_index == 0 else ""
             self._stream.write(f"{pad}{display_label:<{_TYPE_WIDTH}}{line}\n")
 
@@ -389,18 +469,18 @@ def format_build_footer(
         f"SKIP={skip_count}  TOTAL={total_count}  ({elapsed_str})"
     )
 
-    failure_lines: list[str] = _format_failure_details(result)
+    failure_lines: list[str] = _format_failure_details(result, use_color=use_color)
     if failure_lines:
         lines.extend(failure_lines)
 
-    warning_lines: list[str] = _format_warning_details(result)
+    warning_lines: list[str] = _format_warning_details(result, use_color=use_color)
     if warning_lines:
         lines.extend(warning_lines)
 
     return "\n".join(lines)
 
 
-def _format_failure_details(result: BuildExecutionResult) -> list[str]:
+def _format_failure_details(result: BuildExecutionResult, *, use_color: bool) -> list[str]:
     lines: list[str] = []
     has_failures: bool = False
 
@@ -410,12 +490,14 @@ def _format_failure_details(result: BuildExecutionResult) -> list[str]:
             continue
         if not has_failures:
             lines.append("")
-            lines.append("Failures:")
+            lines.append(red_bold("Failures:") if use_color else "Failures:")
             lines.append("")
             has_failures = True
         lines.append(f"  {seed_result.seed_name}  (seed)")
         if seed_result.error_message is not None:
-            lines.append(f"    {seed_result.error_message}")
+            lines.extend(
+                _format_failure_error_block(seed_result.error_message, use_color=use_color)
+            )
         lines.append("")
 
     model_result: ModelExecutionResult
@@ -424,13 +506,15 @@ def _format_failure_details(result: BuildExecutionResult) -> list[str]:
             continue
         if not has_failures:
             lines.append("")
-            lines.append("Failures:")
+            lines.append(red_bold("Failures:") if use_color else "Failures:")
             lines.append("")
             has_failures = True
         phase_str: str = f"  ({model_result.failed_phase})" if model_result.failed_phase else ""
         lines.append(f"  {model_result.model_name}{phase_str}")
         if model_result.error_message is not None:
-            lines.append(f"    {model_result.error_message}")
+            lines.extend(
+                _format_failure_error_block(model_result.error_message, use_color=use_color)
+            )
         if model_result.staging_relation is not None:
             lines.append(f"    {_inspection_relation_message(model_result.staging_relation)}")
         lines.append("")
@@ -441,12 +525,14 @@ def _format_failure_details(result: BuildExecutionResult) -> list[str]:
             continue
         if not has_failures:
             lines.append("")
-            lines.append("Failures:")
+            lines.append(red_bold("Failures:") if use_color else "Failures:")
             lines.append("")
             has_failures = True
         lines.append(f"  {function_result.function_name}  (function)")
         if function_result.error_message is not None:
-            lines.append(f"    {function_result.error_message}")
+            lines.extend(
+                _format_failure_error_block(function_result.error_message, use_color=use_color)
+            )
         lines.append("")
 
     test_r: SqlTestExecutionResult
@@ -455,18 +541,18 @@ def _format_failure_details(result: BuildExecutionResult) -> list[str]:
             continue
         if not has_failures:
             lines.append("")
-            lines.append("Failures:")
+            lines.append(red_bold("Failures:") if use_color else "Failures:")
             lines.append("")
             has_failures = True
         lines.append(f"  {test_r.test_name}  (test)")
         if test_r.error_message is not None:
-            lines.append(f"    {test_r.error_message}")
+            lines.extend(_format_failure_error_block(test_r.error_message, use_color=use_color))
         lines.append("")
 
     return lines
 
 
-def _format_warning_details(result: BuildExecutionResult) -> list[str]:
+def _format_warning_details(result: BuildExecutionResult, *, use_color: bool) -> list[str]:
     lines: list[str] = []
     has_warnings: bool = False
 
@@ -487,7 +573,7 @@ def _format_warning_details(result: BuildExecutionResult) -> list[str]:
         if model_warnings:
             if not has_warnings:
                 lines.append("")
-                lines.append("Warnings:")
+                lines.append(yellow_bold("Warnings:") if use_color else "Warnings:")
                 lines.append("")
                 has_warnings = True
             lines.append(f"  {model_result.model_name}")
@@ -502,7 +588,7 @@ def _format_warning_details(result: BuildExecutionResult) -> list[str]:
             continue
         if not has_warnings:
             lines.append("")
-            lines.append("Warnings:")
+            lines.append(yellow_bold("Warnings:") if use_color else "Warnings:")
             lines.append("")
             has_warnings = True
         lines.append(f"  {function_result.function_name}  (function)")
@@ -518,6 +604,34 @@ def _inspection_relation_message(relation_name: str) -> str:
     if relation_name.endswith("__delta"):
         return f"delta table kept for inspection: {relation_name}"
     return f"staging table kept for inspection: {relation_name}"
+
+
+def _format_failure_error_block(message: str, *, use_color: bool) -> list[str]:
+    lines: list[str] = []
+    label: str = red_dim("error") if use_color else "error"
+    formatted_line: str
+    for index, formatted_line in enumerate(_format_error_lines(message)):
+        display_label: str = label if index == 0 else ""
+        lines.append(f"    {display_label:<{_TYPE_WIDTH}}{formatted_line}")
+    return lines
+
+
+def _format_error_lines(message: str) -> list[str]:
+    raw_lines: list[str] = message.splitlines() or [message]
+    formatted_lines: list[str] = []
+    raw_line: str
+    for raw_line in raw_lines[:_MAX_ERROR_LINES]:
+        if len(raw_line) <= _MAX_ERROR_LINE_LENGTH:
+            formatted_lines.append(raw_line)
+            continue
+        formatted_lines.append(raw_line[: _MAX_ERROR_LINE_LENGTH - 3] + "...")
+    if len(raw_lines) > _MAX_ERROR_LINES and formatted_lines:
+        last_line: str = formatted_lines[-1]
+        if len(last_line) > _MAX_ERROR_LINE_LENGTH - 3:
+            formatted_lines[-1] = last_line[: _MAX_ERROR_LINE_LENGTH - 3] + "..."
+        elif not last_line.endswith("..."):
+            formatted_lines[-1] = f"{last_line}..."
+    return formatted_lines
 
 
 def _format_duration(duration_ms: int | None) -> str:
