@@ -484,7 +484,7 @@ def _execute_cursor_queries_batched(
 
         completed = batch_end
         if on_progress is not None:
-            on_progress(f"Gathering cursor bounds ({completed}/{total})")
+            on_progress(f"Gathering cursor bounds ({completed}/{total})...")
 
         batch_start = batch_end
 
