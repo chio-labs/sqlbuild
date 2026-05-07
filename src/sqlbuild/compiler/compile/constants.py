@@ -21,10 +21,10 @@ GENERIC_AUDIT_DIRECTORY_NAME: str = "generic"
 TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{([^{}]+)\}")
 MACRO_CALL_PATTERN: re.Pattern[str] = re.compile(r"@[A-Za-z_][A-Za-z0-9_]*\s*\(")
 GENERIC_AUDIT_QUOTED_PARAMETER_PATTERN: re.Pattern[str] = re.compile(
-    r"@'(?P<name>[A-Za-z_][A-Za-z0-9_]*)'"
+    r"(?<!@)@'(?P<name>[A-Za-z_][A-Za-z0-9_]*)'"
 )
 GENERIC_AUDIT_RAW_PARAMETER_PATTERN: re.Pattern[str] = re.compile(
-    r"@(?!')(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?!\s*\()"
+    r"(?<!@)@(?!')(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?!\s*\()"
 )
 EXPECTED_TEST_CTE_PREFIX: str = "__expected__"
 REF_TEST_CTE_PREFIX: str = "__ref__"

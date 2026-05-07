@@ -29,6 +29,6 @@ SELECT
   SUM(o.quantity) AS waffles_ordered,
   COUNT(DISTINCT o.customer_id) AS unique_customers
 FROM __ref("stg_orders") o
-WHERE CAST(o.ordered_at AS DATE) >= CAST(@@partition_start AS DATE)
-  AND CAST(o.ordered_at AS DATE) < CAST(@@partition_end AS DATE)
+WHERE CAST(o.ordered_at AS DATE) >= CAST(@@@partition_start AS DATE)
+  AND CAST(o.ordered_at AS DATE) < CAST(@@@partition_end AS DATE)
 GROUP BY CAST(o.ordered_at AS DATE)
