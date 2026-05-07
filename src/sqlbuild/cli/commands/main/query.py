@@ -26,7 +26,11 @@ def run_query(
 
     query_sql: str = _resolve_query_sql(sql=sql)
     if limit is not None and limit < 0:
-        raise CliUserError("query --limit must be greater than or equal to 0")
+        raise CliUserError(
+            "query --limit must be greater than or equal to 0",
+            code="C101",
+            help="pass a non-negative integer or use --no-limit",
+        )
 
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
@@ -56,8 +60,8 @@ def run_query(
 
 def _resolve_query_sql(*, sql: str | None) -> str:
     if sql is None:
-        raise CliUserError("query requires SQL")
+        raise CliUserError("query requires SQL", code="C102", help="pass SQL as the query argument")
     query_sql: str = sql
     if not query_sql.strip():
-        raise CliUserError("query SQL must not be empty")
+        raise CliUserError("query SQL must not be empty", code="C103")
     return query_sql

@@ -6,6 +6,7 @@ import re
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.compiler.shared.helpers.sources import render_source_relation
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
@@ -122,8 +123,9 @@ def _validate_declared_columns(
     if not missing_names:
         return
     missing_columns: str = ", ".join(missing_names)
-    raise ValueError(
-        f"Source {qualified_name} declares columns not found in warehouse: {missing_columns}"
+    raise PlannerInputError(
+        f"source {qualified_name} declares columns not found in warehouse: {missing_columns}",
+        code="S401",
     )
 
 
@@ -142,9 +144,10 @@ def _build_expression_cast_subquery(
     if not enforced_map:
         return source_relation
     if expression_columns is None:
-        raise ValueError(
-            f"Source expression '{source_name}' type enforcement requires query output "
-            "column metadata"
+        raise PlannerInputError(
+            f"source expression '{source_name}' type enforcement requires query output "
+            "column metadata",
+            code="S402",
         )
 
     expression_names: tuple[str, ...] = tuple(col.name for col in expression_columns)
@@ -154,9 +157,10 @@ def _build_expression_cast_subquery(
     if missing_names:
         missing_columns: str = ", ".join(missing_names)
         available_columns: str = ", ".join(expression_names) if expression_names else "<none>"
-        raise ValueError(
-            f"Source expression '{source_name}' declares columns not found in query output: "
-            f"{missing_columns}. Available query output columns: {available_columns}"
+        raise PlannerInputError(
+            f"source expression '{source_name}' declares columns not found in query output: "
+            f"{missing_columns}. Available query output columns: {available_columns}",
+            code="S403",
         )
 
     projections: list[str] = [

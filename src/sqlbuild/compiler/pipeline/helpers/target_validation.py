@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.adapter.shared.types import BuiltinAdapter
 from sqlbuild.compiler.compile.models import CompiledProject, CompiledRelationTarget
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 
 
 def validate_project_targets(*, adapter_name: str, project: CompiledProject) -> None:
@@ -44,9 +45,10 @@ def _validate_required_target_parts(
         if not missing_parts:
             continue
         missing_text: str = ", ".join(missing_parts)
-        raise ValueError(
+        raise PlannerInputError(
             f"{adapter_name} execution requires explicit target {missing_text}. "
             f"{resource_kind} '{resource_name}' resolved to "
             f"database={target.database!r} schema={target.schema!r}. "
-            "Set them in sqlbuild_project.toml defaults, environment config, or model config."
+            "Set them in sqlbuild_project.toml defaults, environment config, or model config.",
+            code="S101",
         )

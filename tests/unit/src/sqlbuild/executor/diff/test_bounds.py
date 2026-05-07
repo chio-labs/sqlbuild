@@ -5,6 +5,7 @@ import pytest
 from sqlbuild.adapter.shared.models import CursorValue
 from sqlbuild.adapter.shared.types import CursorKind
 from sqlbuild.executor.diff.helpers.bounds import resolve_bounded_cursors
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from tests.unit.src.sqlbuild.executor.diff._test_types import (
     ResolveBoundedCursorsErrorTestCase,
     ResolveBoundedCursorsTestCase,
@@ -59,12 +60,14 @@ RESOLVE_BOUNDED_CURSORS_ERROR_TEST_CASES: list[ResolveBoundedCursorsErrorTestCas
         config_values={"cursor": "id", "cursor_type": "integer"},
         bounded="30d",
         expected_error_fragment="requires an integer bound",
+        expected_code="X102",
     ),
     ResolveBoundedCursorsErrorTestCase(
         description="rejects invalid timestamp duration",
         config_values={"cursor": "event_time", "cursor_type": "timestamp"},
         bounded="30x",
         expected_error_fragment="requires duration like",
+        expected_code="X103",
     ),
 ]
 
@@ -108,8 +111,10 @@ def test_given_bounded_diff_config_when_resolving_cursors_then_returns_expected_
 def test_given_invalid_bounded_diff_config_when_resolving_cursors_then_raises_clear_error(
     test_case: ResolveBoundedCursorsErrorTestCase,
 ) -> None:
-    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+    with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment) as error_info:
         resolve_bounded_cursors(
             model=build_fake_model(config_values=test_case.config_values),
             bounded=test_case.bounded,
         )
+
+    assert error_info.value.code == test_case.expected_code

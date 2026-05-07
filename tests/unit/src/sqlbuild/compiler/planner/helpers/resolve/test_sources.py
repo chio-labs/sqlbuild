@@ -291,7 +291,7 @@ ERROR_TEST_CASES: list[SourceResolutionErrorTestCase] = [
             ),
         },
         expected_error_fragment=(
-            "Source raw.public.partial declares columns not found in warehouse: missing_col"
+            "source raw.public.partial declares columns not found in warehouse: missing_col"
         ),
     ),
     SourceResolutionErrorTestCase(
@@ -317,7 +317,7 @@ ERROR_TEST_CASES: list[SourceResolutionErrorTestCase] = [
             ),
         },
         expected_error_fragment=(
-            "Source raw.public.partial declares columns not found in warehouse: missing_col"
+            "source raw.public.partial declares columns not found in warehouse: missing_col"
         ),
     ),
     SourceResolutionErrorTestCase(
@@ -339,7 +339,7 @@ ERROR_TEST_CASES: list[SourceResolutionErrorTestCase] = [
             ),
         },
         expected_error_fragment=(
-            "Source expression 'raw_payments' declares columns not found in query output: "
+            "source expression 'raw_payments' declares columns not found in query output: "
             "amount_cents. Available query output columns: id, status"
         ),
     ),
@@ -365,7 +365,7 @@ ERROR_TEST_CASES: list[SourceResolutionErrorTestCase] = [
             ),
         },
         expected_error_fragment=(
-            "Source expression 'raw_payments' declares columns not found in query output: "
+            "source expression 'raw_payments' declares columns not found in query output: "
             "status. Available query output columns: id, amount_cents"
         ),
     ),
@@ -383,7 +383,7 @@ ERROR_TEST_CASES: list[SourceResolutionErrorTestCase] = [
         },
         source_warehouse_columns={},
         expected_error_fragment=(
-            "Source expression 'raw_payments' type enforcement requires "
+            "source expression 'raw_payments' type enforcement requires "
             "query output column metadata"
         ),
     ),

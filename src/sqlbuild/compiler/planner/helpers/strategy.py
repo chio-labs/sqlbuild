@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledRelationTarget
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     PlanWarning,
@@ -311,8 +312,9 @@ def _incremental_action(
 
     raw_strategy: object | None = model.config.values.get("incremental_strategy")
     if not isinstance(raw_strategy, str):
-        raise ValueError(
-            f"incremental model '{model.name}' is missing required incremental_strategy"
+        raise PlannerInputError(
+            f"incremental model '{model.name}' is missing required incremental_strategy",
+            code="S201",
         )
 
     reason: PlanReason
@@ -330,7 +332,10 @@ def _incremental_action(
     }
     action: PlanAction | None = action_map.get(raw_strategy)
     if action is None:
-        raise ValueError(f"incremental model '{model.name}' has unknown strategy '{raw_strategy}'")
+        raise PlannerInputError(
+            f"incremental model '{model.name}' has unknown strategy '{raw_strategy}'",
+            code="S202",
+        )
 
     return action, reason
 

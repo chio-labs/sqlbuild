@@ -21,6 +21,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledSqlTest,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.audit_entry import plan_audit
 from sqlbuild.compiler.planner.helpers.buildability import check_buildability
 from sqlbuild.compiler.planner.helpers.cascade import build_self_cascade, resolve_cascade
@@ -134,8 +135,9 @@ def build_execution_plan(
     )
     if missing:
         names: str = ", ".join(m.key.name for m in missing[:5])
-        raise ValueError(
-            f"Cannot build selected scope: {len(missing)} missing upstream dependencies ({names})"
+        raise PlannerInputError(
+            f"cannot build selected scope: {len(missing)} missing upstream dependencies ({names})",
+            code="S301",
         )
 
     model_targets: dict[str, CompiledRelationTarget] = build_model_targets(project.models)
