@@ -23,6 +23,7 @@ from sqlbuild.spec.models.project import (
 )
 from tests.unit.src.sqlbuild.compiler.compile._test_helpers import (
     base_repo_files,
+    expected_or_actual,
 )
 from tests.unit.src.sqlbuild.compiler.compile._test_types import (
     BuildCompileInputsErrorTestCase,
@@ -1456,11 +1457,81 @@ SELECT @column FROM __source("@source") WHERE @column IS NULL
         ),
     ),
     BuildCompileInputsTestCase(
+        description="renders built-in attached audits when no project generic definition exists",
+        repo_files=base_repo_files()
+        | {
+            "models/marts/orders.sql": """
+MODEL (
+  columns (
+    order_id (nullable false, audits [not_null, unique]),
+    status (audits [accepted_values (values ["placed", "completed"])]),
+    customer_id (
+      nullable true,
+      audits [relationships (to __ref("customers"), field customer_id)],
+    ),
+  ),
+);
+
+select 1 as order_id, 'placed' as status, null as customer_id
+""".strip()
+            + "\n",
+            "models/marts/customers.sql": "MODEL ();\n\nselect 1 as customer_id\n",
+            "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    columns:
+      - name: order_id
+        audits:
+          - not_null
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        cli_vars=None,
+        run_id=None,
+        expected_model_schema_names=(None, "orders"),
+        expected_model_config_values=({}, {}),
+        expected_model_query_sqls=(
+            "select 1 as customer_id",
+            "select 1 as order_id, 'placed' as status, null as customer_id",
+        ),
+        expected_model_column_nullables=((), (False, None, True)),
+        expected_model_path_defaults=(None, None),
+        expected_seed_names=(),
+        expected_source_names=("raw_orders",),
+        expected_test_sql_bodies=(),
+        expected_audit_sql_bodies=(
+            'SELECT order_id\nFROM __ref("orders")\nWHERE order_id IS NULL',
+            'SELECT order_id, COUNT(*) AS duplicate_count\nFROM __ref("orders")\n'
+            "WHERE order_id IS NOT NULL\nGROUP BY order_id\nHAVING COUNT(*) > 1",
+            'SELECT status\nFROM __ref("orders")\nWHERE status IS NOT NULL\n'
+            "  AND status NOT IN ('placed', 'completed')",
+            'SELECT customer_id\nFROM __ref("orders")\nWHERE customer_id IS NOT NULL\n'
+            "  AND customer_id NOT IN (\n"
+            "    SELECT customer_id\n"
+            '    FROM __ref("customers")\n'
+            "    WHERE customer_id IS NOT NULL\n"
+            "  )",
+            'SELECT order_id\nFROM __source("raw_orders")\nWHERE order_id IS NULL',
+        ),
+        expected_effective_environment_name=None,
+        expected_effective_connection={},
+        expected_effective_vars={},
+        expected_model_references=((), ()),
+        expected_audit_references=(
+            (("ref", "orders"),),
+            (("ref", "orders"),),
+            (("ref", "orders"),),
+            (("ref", "orders"), ("ref", "customers")),
+            (("source", "raw_orders"),),
+        ),
+    ),
+    BuildCompileInputsTestCase(
         description="skips generic audit definitions as direct executable audits",
         repo_files=base_repo_files()
         | {
             "models/marts/orders.sql": "MODEL ();\n\nselect 1\n",
-            "audits/generic/not_null.sql": """
+            "audits/generic/custom_check.sql": """
 AUDIT ();
 
 SELECT 1
@@ -1483,6 +1554,34 @@ SELECT 1
         expected_effective_vars={},
         expected_model_references=((),),
         expected_audit_references=(),
+    ),
+    BuildCompileInputsTestCase(
+        description="warns when project generic audit shadows built-in audit",
+        repo_files=base_repo_files()
+        | {
+            "models/marts/orders.sql": "MODEL ();\n\nselect 1\n",
+            "audits/generic/not_null.sql": "AUDIT ();\n\nSELECT 1\n",
+        },
+        selected_environment=None,
+        cli_vars=None,
+        run_id=None,
+        expected_model_schema_names=(None,),
+        expected_model_config_values=({},),
+        expected_model_query_sqls=("select 1",),
+        expected_model_path_defaults=(None,),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_test_sql_bodies=(),
+        expected_audit_sql_bodies=(),
+        expected_effective_environment_name=None,
+        expected_effective_connection={},
+        expected_effective_vars={},
+        expected_model_references=((),),
+        expected_audit_references=(),
+        expected_diagnostic_codes=("P003",),
+        expected_diagnostic_messages=(
+            "project audit 'not_null' overrides built-in audit 'not_null'",
+        ),
     ),
     BuildCompileInputsTestCase(
         description="generates clickstate style run ids when none are provided",
@@ -1629,6 +1728,15 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
         tuple(model_input.query_sql for model_input in compile_inputs.model_inputs)
         == test_case.expected_model_query_sqls
     )
+    actual_model_column_nullables: tuple[tuple[bool | None, ...], ...] = tuple(
+        tuple(column.nullable for column in model_input.schema_entry.columns)
+        if model_input.schema_entry is not None
+        else ()
+        for model_input in compile_inputs.model_inputs
+    )
+    assert actual_model_column_nullables == expected_or_actual(
+        test_case.expected_model_column_nullables, actual_model_column_nullables
+    )
     assert (
         tuple(
             model_input.config.matched_path_default for model_input in compile_inputs.model_inputs
@@ -1673,6 +1781,14 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
     assert (
         tuple(audit_input.sql_body for audit_input in compile_inputs.audit_inputs)
         == test_case.expected_audit_sql_bodies
+    )
+    assert (
+        tuple(diagnostic.code for diagnostic in compile_inputs.diagnostics)
+        == test_case.expected_diagnostic_codes
+    )
+    assert (
+        tuple(diagnostic.message for diagnostic in compile_inputs.diagnostics)
+        == test_case.expected_diagnostic_messages
     )
     assert (
         tuple(function_input.name for function_input in compile_inputs.sql_function_inputs)
@@ -1961,6 +2077,25 @@ SELECT 1 FROM __source("@source")
         selected_environment=None,
         run_id=None,
         expected_error_fragment="must not override implicit source from attached context",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when model column allows nulls and uses not null audit",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/orders.sql": """
+MODEL (
+  columns (
+    order_id (nullable true, audits [not_null]),
+  ),
+);
+
+SELECT 1 AS order_id
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment=("column 'order_id' cannot set nullable = true and audit not_null"),
     ),
     BuildCompileInputsErrorTestCase(
         description="raises when an attached source audit references an unknown generic definition",

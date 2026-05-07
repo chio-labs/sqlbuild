@@ -16,6 +16,7 @@ from sqlbuild.compiler.discovery.helpers.yml_primitives import (
     parse_audit_instances,
     require_non_empty_string,
 )
+from sqlbuild.spec.models.schema import SchemaAuditInstance
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 
 
@@ -162,15 +163,35 @@ def _parse_columns(*, entry: dict[str, object], file_path: Path) -> tuple[Source
             raise SourceParseError(f"{file_path} source columns must contain only mappings")
         column: dict[str, object] = cast(dict[str, object], raw_column)
         column_label: str = "source column"
+        column_name: str = require_non_empty_string(
+            entry=column,
+            key="name",
+            file_path=file_path,
+            label=column_label,
+            error_class=SourceParseError,
+        )
+        nullable: bool | None = optional_bool(
+            entry=column,
+            key="nullable",
+            file_path=file_path,
+            label=column_label,
+            error_class=SourceParseError,
+        )
+        audits: tuple[SchemaAuditInstance, ...] = parse_audit_instances(
+            entry=column,
+            file_path=file_path,
+            label=column_label,
+            error_class=SourceParseError,
+        )
+        _validate_nullable_audits(
+            file_path=file_path,
+            column_name=column_name,
+            nullable=nullable,
+            audit_names=tuple(audit.definition_name for audit in audits),
+        )
         parsed_columns.append(
             SourceColumnEntry(
-                name=require_non_empty_string(
-                    entry=column,
-                    key="name",
-                    file_path=file_path,
-                    label=column_label,
-                    error_class=SourceParseError,
-                ),
+                name=column_name,
                 type=optional_non_empty_string(
                     entry=column,
                     key="type",
@@ -178,6 +199,7 @@ def _parse_columns(*, entry: dict[str, object], file_path: Path) -> tuple[Source
                     label=column_label,
                     error_class=SourceParseError,
                 ),
+                nullable=nullable,
                 description=optional_non_empty_string(
                     entry=column,
                     key="description",
@@ -192,12 +214,16 @@ def _parse_columns(*, entry: dict[str, object], file_path: Path) -> tuple[Source
                     label=column_label,
                     error_class=SourceParseError,
                 ),
-                audits=parse_audit_instances(
-                    entry=column,
-                    file_path=file_path,
-                    label=column_label,
-                    error_class=SourceParseError,
-                ),
+                audits=audits,
             )
         )
     return tuple(parsed_columns)
+
+
+def _validate_nullable_audits(
+    *, file_path: Path, column_name: str, nullable: bool | None, audit_names: tuple[str, ...]
+) -> None:
+    if nullable is True and "not_null" in audit_names:
+        raise SourceParseError(
+            f"{file_path} column '{column_name}' cannot set nullable = true and audit not_null"
+        )

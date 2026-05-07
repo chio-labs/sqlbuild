@@ -226,6 +226,35 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
         },
         expected_query="SELECT 1",
     ),
+    ParseModelSqlHeaderTestCase(
+        description="accepts relation calls as audit argument values",
+        contents="""
+        MODEL (
+          columns (
+            customer_id (
+              audits [relationships (to __ref("dim_customers"), field customer_id)],
+            ),
+          ),
+        );
+
+        SELECT 1
+        """,
+        expected_header_values={
+            "columns": {
+                "customer_id": {
+                    "audits": [
+                        {
+                            "relationships": {
+                                "to": '__ref("dim_customers")',
+                                "field": "customer_id",
+                            }
+                        },
+                    ],
+                },
+            },
+        },
+        expected_query="SELECT 1",
+    ),
 ]
 
 

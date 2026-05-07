@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild.compiler.auditing.main.builtins import build_builtin_audit_resolution
 from sqlbuild.compiler.compile.helpers.attachment import (
     build_audit_inputs,
     build_effective_connection,
@@ -12,6 +13,7 @@ from sqlbuild.compiler.compile.helpers.attachment import (
     build_source_inputs,
     build_sql_function_inputs,
     build_test_inputs,
+    index_generic_audit_definitions,
     resolve_environment_config,
     resolve_environment_name,
     resolve_run_id,
@@ -28,7 +30,12 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredAuditBlock,
+    DiscoveredAuditFile,
+    DiscoveredProjectInputs,
+)
 from sqlbuild.spec.models.project import (
     EnvironmentConfig,
     SettingsConfig,
@@ -113,12 +120,21 @@ def build_compile_inputs(
         effective_vars=effective_vars,
         macro_context=macro_context,
     )
+    project_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]] = (
+        index_generic_audit_definitions(discovered_inputs.audit_files)
+    )
+    generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]]
+    diagnostics: tuple[CompilerDiagnostic, ...]
+    generic_audit_definitions, diagnostics = build_builtin_audit_resolution(
+        project_audit_definitions
+    )
     audit_inputs: tuple[CompileAuditInput, ...] = build_audit_inputs(
         discovered_inputs,
         effective_settings=effective_settings,
         model_inputs=model_inputs,
         source_inputs=source_inputs,
         macro_context=macro_context,
+        generic_audit_definitions=generic_audit_definitions,
     )
     return CompileProjectInputs(
         project_config=discovered_inputs.project_config,
@@ -142,4 +158,5 @@ def build_compile_inputs(
         sql_function_inputs=sql_function_inputs,
         test_inputs=test_inputs,
         audit_inputs=audit_inputs,
+        diagnostics=diagnostics,
     )

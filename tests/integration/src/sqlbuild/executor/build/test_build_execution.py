@@ -281,6 +281,74 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         expected_query_results=(("SELECT id FROM main.orders", ((1,),)),),
     ),
     BuildExecutionTestCase(
+        description="built-in not null audit does not require project generic definition",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT 1 AS id",
+        },
+        expected_status=BuildStatus.SUCCESS,
+        expected_success_count=1,
+        expected_model_audit_count=1,
+        expected_query_results=(("SELECT id FROM main.orders", ((1,),)),),
+    ),
+    BuildExecutionTestCase(
+        description="built-in unique audit ignores duplicate null values",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "models/orders.sql": (
+                "MODEL (materialized table, columns (id (audits [unique])));\n\n"
+                "SELECT * FROM (VALUES (1), (NULL), (NULL)) AS input(id)"
+            ),
+        },
+        expected_status=BuildStatus.SUCCESS,
+        expected_success_count=1,
+        expected_model_audit_count=1,
+        expected_query_results=(
+            ("SELECT id FROM main.orders ORDER BY id NULLS LAST", ((1,), (None,), (None,))),
+        ),
+    ),
+    BuildExecutionTestCase(
+        description="built-in accepted values audit ignores nulls and allows listed values",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "models/orders.sql": (
+                "MODEL (materialized table, columns (status (audits [accepted_values "
+                '(values ["placed", "completed"])])));\n\n'
+                "SELECT * FROM (VALUES ('placed'), ('completed'), (NULL)) AS input(status)"
+            ),
+        },
+        expected_status=BuildStatus.SUCCESS,
+        expected_success_count=1,
+        expected_model_audit_count=1,
+        expected_query_results=(
+            (
+                "SELECT status FROM main.orders ORDER BY status NULLS LAST",
+                (("completed",), ("placed",), (None,)),
+            ),
+        ),
+    ),
+    BuildExecutionTestCase(
+        description="built-in relationships audit allows matching referenced values",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "models/customers.sql": "MODEL (materialized table);\n\nSELECT 1 AS id",
+            "models/orders.sql": (
+                "MODEL (materialized table, columns (customer_id (audits [relationships "
+                '(to __ref("customers"), field id)])));\n\n'
+                'SELECT id AS customer_id FROM __ref("customers") UNION ALL SELECT NULL'
+            ),
+        },
+        expected_status=BuildStatus.SUCCESS,
+        expected_success_count=2,
+        expected_model_audit_count=1,
+        expected_query_results=(
+            (
+                "SELECT customer_id FROM main.orders ORDER BY customer_id NULLS LAST",
+                ((1,), (None,)),
+            ),
+        ),
+    ),
+    BuildExecutionTestCase(
         description="warn audit records warning but build succeeds",
         project_files={
             "sqlbuild_project.toml": _PROJECT_YML_WARN,
@@ -508,6 +576,58 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         expected_failure_count=1,
         expected_model_audit_count=1,
         expected_model_statuses=(("orders", ExecutionStatus.FAILED),),
+        expected_missing_relations=("main.orders",),
+    ),
+    BuildExecutionTestCase(
+        description="built-in unique audit blocks duplicate non-null values",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "models/orders.sql": (
+                "MODEL (materialized table, columns (id (audits [unique])));\n\n"
+                "SELECT * FROM (VALUES (1), (1), (NULL)) AS input(id)"
+            ),
+        },
+        expected_status=BuildStatus.FAILED,
+        expected_failure_count=1,
+        expected_model_audit_count=1,
+        expected_model_statuses=(("orders", ExecutionStatus.FAILED),),
+        expected_missing_relations=("main.orders",),
+    ),
+    BuildExecutionTestCase(
+        description="built-in accepted values audit blocks unlisted values",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "models/orders.sql": (
+                "MODEL (materialized table, columns (status (audits [accepted_values "
+                '(values ["placed", "completed"])])));\n\n'
+                "SELECT 'cancelled' AS status"
+            ),
+        },
+        expected_status=BuildStatus.FAILED,
+        expected_failure_count=1,
+        expected_model_audit_count=1,
+        expected_model_statuses=(("orders", ExecutionStatus.FAILED),),
+        expected_missing_relations=("main.orders",),
+    ),
+    BuildExecutionTestCase(
+        description="built-in relationships audit blocks missing referenced values",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "models/customers.sql": "MODEL (materialized table);\n\nSELECT 1 AS id",
+            "models/orders.sql": (
+                "MODEL (materialized table, columns (customer_id (audits [relationships "
+                '(to __ref("customers"), field id)])));\n\n'
+                'SELECT 2 AS customer_id FROM __ref("customers")'
+            ),
+        },
+        expected_status=BuildStatus.FAILED,
+        expected_success_count=1,
+        expected_failure_count=1,
+        expected_model_audit_count=1,
+        expected_model_statuses=(
+            ("customers", ExecutionStatus.SUCCESS),
+            ("orders", ExecutionStatus.FAILED),
+        ),
         expected_missing_relations=("main.orders",),
     ),
     BuildExecutionTestCase(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from sqlbuild.compiler.auditing.constants import REF_PATTERN, SOURCE_PATTERN
+from sqlbuild.compiler.auditing.constants import REF_PATTERN, SEED_PATTERN, SOURCE_PATTERN
 from sqlbuild.compiler.compile.models import CompiledRelationTarget
 from sqlbuild.compiler.shared.helpers.sources import render_source_relation
 from sqlbuild.spec.models.source import SourceEntry
@@ -49,7 +49,7 @@ def _render_refs(
 ) -> str:
     """Replace __ref() calls using overrides first, then normal targets."""
 
-    def _replace(match: re.Match[str]) -> str:
+    def _replace_ref(match: re.Match[str]) -> str:
         ref_name: str = match.group(1)
         override: str | None = relation_overrides.get(ref_name)
         if override is not None:
@@ -61,7 +61,15 @@ def _render_refs(
             return match.group(0)
         return target.qualified_name
 
-    return REF_PATTERN.sub(_replace, sql)
+    def _replace_seed(match: re.Match[str]) -> str:
+        seed_name: str = match.group(1)
+        target: CompiledRelationTarget | None = seed_targets.get(seed_name)
+        if target is None or target.qualified_name is None:
+            return match.group(0)
+        return target.qualified_name
+
+    resolved: str = REF_PATTERN.sub(_replace_ref, sql)
+    return SEED_PATTERN.sub(_replace_seed, resolved)
 
 
 def _render_sources(
