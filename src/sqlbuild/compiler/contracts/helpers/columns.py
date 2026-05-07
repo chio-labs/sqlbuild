@@ -74,7 +74,7 @@ def _nullability_diagnostics(
             phase=DiagnosticPhase.CONTRACT,
             severity=DiagnosticSeverity.ERROR,
             code=_NULLABILITY_MISMATCH_CODE,
-            message=f"column '{declared_column.name}' is declared not_null but may be nullable",
+            message=f"column '{declared_column.name}' is declared non-null but may be nullable",
             resource_type=CompiledResourceType.MODEL,
             resource_name=model.name,
             column_name=declared_column.name,
@@ -85,12 +85,14 @@ def _nullability_diagnostics(
                 column_name=declared_column.name,
                 message="output expression proven nullable",
             ),
-            help="use COALESCE, filter nulls explicitly, or remove the not_null audit",
+            help="use COALESCE, filter nulls explicitly, or remove the non-null contract",
         ),
     )
 
 
 def _declares_not_null(column: SchemaColumn) -> bool:
+    if column.nullable is False:
+        return True
     return any(audit.definition_name == "not_null" for audit in column.audits)
 
 

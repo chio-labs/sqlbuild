@@ -49,8 +49,11 @@ def test_given_waffle_shop_when_running_compile_json_then_it_reports_offline_que
     summary: dict[str, object] = payload["summary"]
     assert summary["models"] >= len(test_case.expected_model_names)
     assert summary["errors"] == 0
-    assert summary["warnings"] == 0
-    assert payload["diagnostics"] == []
+    assert summary["warnings"] == test_case.expected_warning_count
+    diagnostics: list[dict[str, object]] = payload["diagnostics"]
+    assert tuple(diagnostic["code"] for diagnostic in diagnostics) == (
+        test_case.expected_diagnostic_codes
+    )
     timings: dict[str, object] = payload["compile_timings"]
     assert "total_ms" in timings
     artifacts: dict[str, object] = payload["artifacts"]

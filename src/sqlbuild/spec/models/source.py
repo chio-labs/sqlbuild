@@ -13,6 +13,7 @@ class SourceColumnEntry:
 
     name: str
     type: str | None = None
+    nullable: bool | None = None
     description: str | None = None
     meta: dict[str, object] = field(default_factory=dict)
     audits: tuple[SchemaAuditInstance, ...] = field(default_factory=tuple)
