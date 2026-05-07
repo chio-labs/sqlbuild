@@ -9,8 +9,13 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.inference_rules import (
+    conditional_result_nullability,
+    first_arg_nullability,
+)
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
+    ExpressionInferenceProfile,
     FunctionInfo,
     QueryResult,
     RowDiffColumnResult,
@@ -376,6 +381,16 @@ class SnowflakeAdapter(BaseAdapter):
 
     def sqlglot_dialect(self) -> str | None:
         return "snowflake"
+
+    def expression_inference_profile(self) -> ExpressionInferenceProfile:
+        return ExpressionInferenceProfile(
+            sqlglot_dialect=self.sqlglot_dialect(),
+            function_nullability_rules={
+                "IFF": conditional_result_nullability,
+                "LOWER": first_arg_nullability,
+                "UPPER": first_arg_nullability,
+            },
+        )
 
     def supports_table_functions(self) -> bool:
         return True

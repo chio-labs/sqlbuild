@@ -94,6 +94,7 @@ from sqlbuild.spec.models.schema import (
     SchemaColumn,
     SchemaModelEntry,
     SchemaSeedEntry,
+    SourceLocation,
 )
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 
@@ -234,6 +235,7 @@ def build_model_inputs(
             model_name=model_file.file_path.stem,
             model_header_values=expanded_config.values,
             file_path=model_file.relative_path,
+            column_locations=model_file.header_column_locations,
         )
         model_config: CompileModelConfig = strip_model_header_metadata_from_config(expanded_config)
         schema_match: tuple[SchemaModelEntry, DiscoveredSchemaFile] | None = (
@@ -2091,6 +2093,7 @@ def build_model_header_schema_entry(
     model_name: str,
     model_header_values: dict[str, object],
     file_path: Path,
+    column_locations: dict[str, SourceLocation] | None = None,
 ) -> SchemaModelEntry | None:
     """Normalize model-owned MODEL(...) metadata into the existing schema entry shape."""
 
@@ -2109,6 +2112,7 @@ def build_model_header_schema_entry(
     columns: tuple[SchemaColumn, ...] = _parse_model_header_columns(
         raw_columns=raw_columns,
         file_path=file_path,
+        column_locations=column_locations or {},
     )
     audits: tuple[SchemaAuditInstance, ...] = _parse_model_header_audits(
         raw_audits=raw_audits,
@@ -2146,7 +2150,7 @@ def strip_model_header_metadata_from_config(config: CompileModelConfig) -> Compi
 
 
 def _parse_model_header_columns(
-    *, raw_columns: object | None, file_path: Path
+    *, raw_columns: object | None, file_path: Path, column_locations: dict[str, SourceLocation]
 ) -> tuple[SchemaColumn, ...]:
     if raw_columns is None:
         return ()
@@ -2193,6 +2197,7 @@ def _parse_model_header_columns(
                     file_path=file_path,
                     label=f"model column '{raw_column_name}'",
                 ),
+                location=column_locations.get(raw_column_name),
             )
         )
     return tuple(parsed_columns)

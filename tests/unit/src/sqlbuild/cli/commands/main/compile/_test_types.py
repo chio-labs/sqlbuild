@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
+
 
 @dataclass(frozen=True)
 class TargetWriterTestCase:
@@ -15,7 +17,35 @@ class TargetWriterTestCase:
 class CompileCommandTestCase:
     description: str
     expected_exit_code: int
-    expected_stdout_fragment: str
+    expected_stdout_fragments: tuple[str, ...]
+    model_sql: str | None = None
+
+
+@dataclass(frozen=True)
+class CompileTextOutputTestCase:
+    description: str
+    model_count: int
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class CompileJsonDiagnosticsTestCase:
+    description: str
+    model_sql: str
+    expected_exit_code: int
+    expected_code: str
+    expected_severity: str
+    expected_message: str
+    expected_line: int
+    expected_column: int
+
+
+@dataclass(frozen=True)
+class CompileLineageModeTestCase:
+    description: str
+    lineage_mode: CompileLineageMode
+    expected_lineage_mode_values: tuple[str, ...]
 
 
 @dataclass(frozen=True)

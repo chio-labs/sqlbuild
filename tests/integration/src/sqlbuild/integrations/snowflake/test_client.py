@@ -7,6 +7,7 @@ import pytest
 
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
+    ExpressionInferenceProfile,
     QueryResult,
     RowDiffResult,
     RowDiffSampleCell,
@@ -14,9 +15,12 @@ from sqlbuild.adapter.shared.models import (
     SchemaDiffResult,
     StatementRecorder,
 )
+from sqlbuild.adapter.shared.types import FunctionNullabilityRule
+from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.integrations.snowflake.client import SnowflakeAdapter
 from tests.integration.src.sqlbuild.integrations.snowflake._test_types import (
     SnowflakeBuildFlowTestCase,
+    SnowflakeExpressionNullabilityRuleTestCase,
     SnowflakeMergeTestCase,
     SnowflakeQueryTestCase,
     SnowflakeRowDiffSampleTestCase,
@@ -31,6 +35,76 @@ from tests.integration.src.sqlbuild.integrations.snowflake.helpers import (
     qualified_name,
     write_seed_file,
 )
+
+EXPRESSION_NULLABILITY_RULE_TEST_CASES: list[SnowflakeExpressionNullabilityRuleTestCase] = [
+    SnowflakeExpressionNullabilityRuleTestCase(
+        description="UPPER preserves non-null literal",
+        function_name="UPPER",
+        sql_expression="UPPER('ready')",
+        rule_args=(InferredNullability.NON_NULL,),
+        expected_nullability=InferredNullability.NON_NULL,
+        expected_is_null=False,
+    ),
+    SnowflakeExpressionNullabilityRuleTestCase(
+        description="UPPER preserves nullable input",
+        function_name="UPPER",
+        sql_expression="UPPER(CAST(NULL AS VARCHAR))",
+        rule_args=(InferredNullability.NULLABLE,),
+        expected_nullability=InferredNullability.NULLABLE,
+        expected_is_null=True,
+    ),
+    SnowflakeExpressionNullabilityRuleTestCase(
+        description="IFF with non-null result branches is non-null",
+        function_name="IFF",
+        sql_expression="IFF(TRUE, 'yes', 'no')",
+        rule_args=(
+            InferredNullability.UNKNOWN,
+            InferredNullability.NON_NULL,
+            InferredNullability.NON_NULL,
+        ),
+        expected_nullability=InferredNullability.NON_NULL,
+        expected_is_null=False,
+    ),
+    SnowflakeExpressionNullabilityRuleTestCase(
+        description="IFF with nullable result branch can be null",
+        function_name="IFF",
+        sql_expression="IFF(TRUE, CAST(NULL AS VARCHAR), 'no')",
+        rule_args=(
+            InferredNullability.UNKNOWN,
+            InferredNullability.NULLABLE,
+            InferredNullability.NON_NULL,
+        ),
+        expected_nullability=InferredNullability.NULLABLE,
+        expected_is_null=True,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    EXPRESSION_NULLABILITY_RULE_TEST_CASES,
+    ids=[case.description for case in EXPRESSION_NULLABILITY_RULE_TEST_CASES],
+)
+def test_given_expression_rule_when_querying_then_snowflake_matches_nullability_expectation(
+    test_case: SnowflakeExpressionNullabilityRuleTestCase,
+    adapter: SnowflakeAdapter,
+    connection: Any,
+) -> None:
+    profile: ExpressionInferenceProfile = adapter.expression_inference_profile()
+    rule: FunctionNullabilityRule | None = profile.function_nullability_rule(
+        test_case.function_name
+    )
+    assert rule is not None
+
+    result: QueryResult = adapter.query(
+        connection,
+        f"SELECT {test_case.sql_expression} IS NULL AS is_null",
+        limit=None,
+    )
+
+    assert rule(test_case.rule_args) == test_case.expected_nullability
+    assert result.rows == ((test_case.expected_is_null,),)
+
 
 QUERY_TEST_CASES: list[SnowflakeQueryTestCase] = [
     SnowflakeQueryTestCase(

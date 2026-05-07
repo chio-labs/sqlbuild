@@ -2,13 +2,42 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.shared.types import CursorKind
+from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
+from sqlbuild.adapter.shared.types import CursorKind, FunctionNullabilityRule
 from sqlbuild.compiler.compile.models import FunctionArgument, FunctionReturnColumn
+from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.unit.src.sqlbuild.integrations.duckdb._test_types import (
+    DuckDbExpressionInferenceProfileTestCase,
     DuckDbRenderCursorBoundLiteralTestCase,
     DuckDbRenderTableFunctionTestCase,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbExpressionInferenceProfileTestCase(
+            description="returns DuckDB inference rules",
+            expected_sqlglot_dialect="duckdb",
+            expected_rule_results={"LOWER": InferredNullability.NON_NULL},
+        )
+    ],
+    ids=["returns DuckDB inference rules"],
+)
+def test_given_duckdb_adapter_when_getting_inference_profile_then_returns_expected_rules(
+    test_case: DuckDbExpressionInferenceProfileTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+
+    profile: ExpressionInferenceProfile = adapter.expression_inference_profile()
+
+    assert profile.sqlglot_dialect == test_case.expected_sqlglot_dialect
+    for rule_name, expected in test_case.expected_rule_results.items():
+        rule: FunctionNullabilityRule | None = profile.function_nullability_rule(rule_name)
+        assert rule is not None
+        assert rule((InferredNullability.NON_NULL,)) == expected
+
 
 TEST_CASES: list[DuckDbRenderCursorBoundLiteralTestCase] = [
     DuckDbRenderCursorBoundLiteralTestCase(

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
-from sqlbuild.cli.commands.main.helpers.lineage.models import LineageNode
+from sqlbuild.cli.commands.main.helpers.lineage.models import ColumnLineageTrace, LineageNode
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
@@ -14,6 +14,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledSeed,
     CompiledSource,
     CompileModelConfig,
+    InferredColumn,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import (
@@ -21,6 +22,8 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSeedFile,
     DiscoveredSourceFile,
 )
+from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
+from sqlbuild.compiler.lineage.types import ColumnLineageConfidence, ColumnTransformKind
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.spec.models.project import SettingsConfig
 from sqlbuild.spec.models.schema import SchemaSeedEntry
@@ -56,12 +59,21 @@ def build_lineage_test_graph() -> ProjectGraph:
         effective_vars={},
         settings=SettingsConfig(),
         models=(
-            _model("stg_orders", stg_orders_key, (raw_orders_key,), "models/stg_orders.sql"),
+            _model(
+                "stg_orders",
+                stg_orders_key,
+                (raw_orders_key,),
+                "models/stg_orders.sql",
+                query_sql="SELECT 1 AS order_id",
+                inferred_columns=("order_id",),
+            ),
             _model(
                 "fact_orders",
                 fact_orders_key,
                 (stg_orders_key, waffle_types_key),
                 "models/fact_orders.sql",
+                query_sql='SELECT order_id FROM __ref("stg_orders")',
+                inferred_columns=("order_id",),
             ),
             _model(
                 "daily_rollup",
@@ -146,20 +158,85 @@ def edge_ids(
     )
 
 
+def build_column_lineage_trace() -> ColumnLineageTrace:
+    target: QualifiedLineageColumn = QualifiedLineageColumn(
+        resource_type=CompiledResourceType.MODEL,
+        resource_name="fact_orders",
+        column_name="line_total_cents",
+    )
+    return ColumnLineageTrace(
+        target=target,
+        direction="upstream",
+        max_depth=3,
+        analyzed_model_count=7,
+        truncated=True,
+        trace=(
+            ColumnLineageEdge(
+                source=QualifiedLineageColumn(
+                    resource_type=CompiledResourceType.MODEL,
+                    resource_name="stg_orders",
+                    column_name="quantity",
+                ),
+                target=target,
+                transform_kind=ColumnTransformKind.EXPRESSION,
+                confidence=ColumnLineageConfidence.HIGH,
+            ),
+            ColumnLineageEdge(
+                source=QualifiedLineageColumn(
+                    resource_type=CompiledResourceType.MODEL,
+                    resource_name="wide_model_1",
+                    column_name="line_total_cents",
+                ),
+                target=target,
+                transform_kind=ColumnTransformKind.STAR,
+                confidence=ColumnLineageConfidence.MEDIUM,
+            ),
+        ),
+    )
+
+
+def build_large_column_lineage_trace() -> ColumnLineageTrace:
+    target: QualifiedLineageColumn = QualifiedLineageColumn(
+        resource_type=CompiledResourceType.MODEL,
+        resource_name="fact_orders",
+        column_name="order_id",
+    )
+    return ColumnLineageTrace(
+        target=target,
+        direction="downstream",
+        trace=tuple(
+            ColumnLineageEdge(
+                source=target,
+                target=QualifiedLineageColumn(
+                    resource_type=CompiledResourceType.MODEL,
+                    resource_name=f"consumer_{index:02d}",
+                    column_name="order_id",
+                ),
+                transform_kind=ColumnTransformKind.DIRECT,
+                confidence=ColumnLineageConfidence.HIGH,
+            )
+            for index in range(30)
+        ),
+    )
+
+
 def _model(
     name: str,
     key: CompiledObjectKey,
     deps: tuple[CompiledObjectKey, ...],
     relative_path: str,
+    query_sql: str = "SELECT 1",
+    inferred_columns: tuple[str, ...] = (),
 ) -> CompiledModel:
     return CompiledModel(
         key=key,
         deps=deps,
         name=name,
         relative_path=Path(relative_path),
-        query_sql="SELECT 1",
+        query_sql=query_sql,
         config=CompileModelConfig(),
         target=_target(name),
+        inferred_columns=tuple(InferredColumn(column) for column in inferred_columns),
     )
 
 

@@ -2,15 +2,59 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
+from sqlbuild.adapter.shared.types import FunctionNullabilityRule
 from sqlbuild.compiler.compile.models import FunctionArgument, FunctionReturnColumn
 from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.integrations.databricks.client import DatabricksAdapter
 from tests.unit.src.sqlbuild.integrations.databricks._test_types import (
+    DatabricksExpressionInferenceProfileTestCase,
     DatabricksPythonFunctionSupportTestCase,
     DatabricksRenderDeleteInsertCursorTestCase,
     DatabricksRenderPythonFunctionTestCase,
     DatabricksRenderTableFunctionTestCase,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksExpressionInferenceProfileTestCase(
+            description="returns Databricks inference rules",
+            expected_sqlglot_dialect="databricks",
+            expected_rule_results={
+                "IF": InferredNullability.NON_NULL,
+                "LOWER": InferredNullability.NON_NULL,
+            },
+        )
+    ],
+    ids=["returns Databricks inference rules"],
+)
+def test_given_databricks_adapter_when_getting_inference_profile_then_returns_expected_rules(
+    test_case: DatabricksExpressionInferenceProfileTestCase,
+) -> None:
+    adapter: DatabricksAdapter = DatabricksAdapter()
+
+    profile: ExpressionInferenceProfile = adapter.expression_inference_profile()
+
+    assert profile.sqlglot_dialect == test_case.expected_sqlglot_dialect
+    if_rule: FunctionNullabilityRule | None = profile.function_nullability_rule("IF")
+    lower_rule: FunctionNullabilityRule | None = profile.function_nullability_rule("LOWER")
+    assert if_rule is not None
+    assert lower_rule is not None
+    assert (
+        if_rule(
+            (
+                InferredNullability.UNKNOWN,
+                InferredNullability.NON_NULL,
+                InferredNullability.NON_NULL,
+            )
+        )
+        == test_case.expected_rule_results["IF"]
+    )
+    assert lower_rule((InferredNullability.NON_NULL,)) == test_case.expected_rule_results["LOWER"]
+
 
 TEST_CASES: list[DatabricksRenderDeleteInsertCursorTestCase] = [
     DatabricksRenderDeleteInsertCursorTestCase(

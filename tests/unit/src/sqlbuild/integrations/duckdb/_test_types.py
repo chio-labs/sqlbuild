@@ -1,5 +1,14 @@
 from dataclasses import dataclass
 
+from sqlbuild.compiler.lineage.types import InferredNullability
+
+
+@dataclass(frozen=True)
+class DuckDbExpressionInferenceProfileTestCase:
+    description: str
+    expected_sqlglot_dialect: str
+    expected_rule_results: dict[str, InferredNullability]
+
 
 @dataclass(frozen=True)
 class DuckDbRenderCursorBoundLiteralTestCase:

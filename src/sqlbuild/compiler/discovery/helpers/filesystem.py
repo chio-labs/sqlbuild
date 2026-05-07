@@ -8,7 +8,11 @@ from sqlbuild.compiler.discovery.exceptions import SchemaParseError
 from sqlbuild.compiler.discovery.helpers.python_functions import parse_python_function
 from sqlbuild.compiler.discovery.helpers.sql_audits import parse_sql_audit_file
 from sqlbuild.compiler.discovery.helpers.sql_functions import parse_function_sql
-from sqlbuild.compiler.discovery.helpers.sql_models import parse_model_sql
+from sqlbuild.compiler.discovery.helpers.sql_models import (
+    model_header_column_locations,
+    model_output_column_locations,
+    parse_model_sql,
+)
 from sqlbuild.compiler.discovery.helpers.sql_tests import parse_sql_test_file
 from sqlbuild.compiler.discovery.helpers.yml_schema import parse_schema_yml
 from sqlbuild.compiler.discovery.helpers.yml_sources import parse_sources_yml
@@ -55,6 +59,14 @@ def discover_model_files(*, project_dir: Path) -> tuple[DiscoveredSqlModelFile, 
                 relative_path=file_path.relative_to(project_dir),
                 contents=contents,
                 header_values=header_values,
+                header_column_locations=model_header_column_locations(
+                    contents=contents,
+                    relative_path=file_path.relative_to(project_dir),
+                ),
+                output_column_locations=model_output_column_locations(
+                    contents=contents,
+                    relative_path=file_path.relative_to(project_dir),
+                ),
                 query_sql=query_sql,
             )
         )

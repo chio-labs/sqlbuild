@@ -4,12 +4,19 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.adapter.shared.models import ColumnInfo, SchemaDiffResult, StatementRecorder
-from sqlbuild.adapter.shared.types import CursorKind
+from sqlbuild.adapter.shared.models import (
+    ColumnInfo,
+    ExpressionInferenceProfile,
+    SchemaDiffResult,
+    StatementRecorder,
+)
+from sqlbuild.adapter.shared.types import CursorKind, FunctionNullabilityRule
 from sqlbuild.compiler.compile.models import FunctionArgument, FunctionReturnColumn
 from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.integrations.snowflake.client import SnowflakeAdapter
 from tests.unit.src.sqlbuild.integrations.snowflake._test_types import (
+    SnowflakeExpressionInferenceProfileTestCase,
     SnowflakeLoadSeedTestCase,
     SnowflakeQueryColumnNamesTestCase,
     SnowflakeRenderCursorBoundLiteralTestCase,
@@ -21,6 +28,46 @@ from tests.unit.src.sqlbuild.integrations.snowflake.helpers import (
     FakeSnowflakeDescribeConnection,
     FakeSnowflakeDescribeCursor,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeExpressionInferenceProfileTestCase(
+            description="returns Snowflake inference rules",
+            expected_sqlglot_dialect="snowflake",
+            expected_rule_results={
+                "IFF": InferredNullability.NON_NULL,
+                "UPPER": InferredNullability.NON_NULL,
+            },
+        )
+    ],
+    ids=["returns Snowflake inference rules"],
+)
+def test_given_snowflake_adapter_when_getting_inference_profile_then_returns_expected_rules(
+    test_case: SnowflakeExpressionInferenceProfileTestCase,
+) -> None:
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+
+    profile: ExpressionInferenceProfile = adapter.expression_inference_profile()
+
+    assert profile.sqlglot_dialect == test_case.expected_sqlglot_dialect
+    iff_rule: FunctionNullabilityRule | None = profile.function_nullability_rule("IFF")
+    upper_rule: FunctionNullabilityRule | None = profile.function_nullability_rule("UPPER")
+    assert iff_rule is not None
+    assert upper_rule is not None
+    assert (
+        iff_rule(
+            (
+                InferredNullability.UNKNOWN,
+                InferredNullability.NON_NULL,
+                InferredNullability.NON_NULL,
+            )
+        )
+        == test_case.expected_rule_results["IFF"]
+    )
+    assert upper_rule((InferredNullability.NON_NULL,)) == test_case.expected_rule_results["UPPER"]
+
 
 TEST_CASES: list[SnowflakeRenderCursorBoundLiteralTestCase] = [
     SnowflakeRenderCursorBoundLiteralTestCase(
