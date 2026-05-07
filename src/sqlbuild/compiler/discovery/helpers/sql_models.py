@@ -92,7 +92,7 @@ def model_header_column_locations(
 
 
 def model_output_column_locations(
-    *, contents: str, relative_path: Path
+    *, contents: str, relative_path: Path, sqlglot_enabled: bool = True
 ) -> dict[str, SourceLocation]:
     """Return authored locations for simple SELECT output expressions."""
 
@@ -101,7 +101,9 @@ def model_output_column_locations(
         return {}
     sql_start: int = header_match.start("sql")
     sql: str = header_match.group("sql")
-    sqlglot_output_names: tuple[str | None, ...] | None = _sqlglot_projection_output_names(sql)
+    sqlglot_output_names: tuple[str | None, ...] | None = (
+        _sqlglot_projection_output_names(sql) if sqlglot_enabled else None
+    )
     if sqlglot_output_names == ():
         return {}
     projection_ranges: tuple[tuple[int, int], ...] | None = _top_level_select_projection_ranges(sql)

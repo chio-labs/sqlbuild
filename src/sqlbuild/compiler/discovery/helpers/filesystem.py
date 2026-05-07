@@ -39,7 +39,9 @@ from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
 
 
-def discover_model_files(*, project_dir: Path) -> tuple[DiscoveredSqlModelFile, ...]:
+def discover_model_files(
+    *, project_dir: Path, sqlglot_enabled: bool = True
+) -> tuple[DiscoveredSqlModelFile, ...]:
     """Discover SQL model files under models/."""
 
     model_root: Path = project_dir / "models"
@@ -66,6 +68,7 @@ def discover_model_files(*, project_dir: Path) -> tuple[DiscoveredSqlModelFile, 
                 output_column_locations=model_output_column_locations(
                     contents=contents,
                     relative_path=file_path.relative_to(project_dir),
+                    sqlglot_enabled=sqlglot_enabled,
                 ),
                 query_sql=query_sql,
             )

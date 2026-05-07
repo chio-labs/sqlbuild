@@ -84,6 +84,7 @@ class ModelOutputColumnLocationTestCase:
     description: str
     contents: str
     expected_locations: dict[str, tuple[Path, int, int, int | None, int | None]]
+    sqlglot_enabled: bool = True
 
 
 @dataclass(frozen=True)
