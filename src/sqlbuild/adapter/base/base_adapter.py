@@ -9,6 +9,7 @@ from typing import Any
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
     CursorValue,
+    ExpressionInferenceProfile,
     FunctionInfo,
     QueryResult,
     RelationInfo,
@@ -904,6 +905,11 @@ class BaseAdapter(StrictAdapter):
         """Return no adapter-specific SQLGlot dialect by default."""
 
         return None
+
+    def expression_inference_profile(self) -> ExpressionInferenceProfile:
+        """Return portable static expression inference behavior by default."""
+
+        return ExpressionInferenceProfile(sqlglot_dialect=self.sqlglot_dialect())
 
     def render_cursor_bound_literal(self, value: str, cursor_type: str | None) -> str:
         """Render one generic cursor bound literal from a normalized string value."""

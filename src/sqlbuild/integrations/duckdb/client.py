@@ -11,9 +11,11 @@ from types import ModuleType
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.inference_rules import first_arg_nullability
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
     CursorValue,
+    ExpressionInferenceProfile,
     FunctionInfo,
     QueryResult,
     RelationInfo,
@@ -76,6 +78,15 @@ class DuckDbAdapter(BaseAdapter):
 
     def sqlglot_dialect(self) -> str | None:
         return "duckdb"
+
+    def expression_inference_profile(self) -> ExpressionInferenceProfile:
+        return ExpressionInferenceProfile(
+            sqlglot_dialect=self.sqlglot_dialect(),
+            function_nullability_rules={
+                "LOWER": first_arg_nullability,
+                "UPPER": first_arg_nullability,
+            },
+        )
 
     def render_cursor_bound_literal(self, value: str, cursor_type: str | None) -> str:
         if cursor_type == CursorKind.INTEGER:

@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from enum import StrEnum
+
+from sqlbuild.compiler.lineage.types import InferredNullability
+
+type FunctionNullabilityRule = Callable[[tuple[InferredNullability, ...]], InferredNullability]
 
 
 class BuiltinAdapter(StrEnum):

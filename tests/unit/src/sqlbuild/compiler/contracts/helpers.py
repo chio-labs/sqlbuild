@@ -11,7 +11,13 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry, SourceLocation
+from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.spec.models.schema import (
+    SchemaAuditInstance,
+    SchemaColumn,
+    SchemaModelEntry,
+    SourceLocation,
+)
 
 
 def make_contract_project(
@@ -21,6 +27,8 @@ def make_contract_project(
     type_enforcement: bool | None,
     model_name: str = "orders",
     column_locations: dict[str, SourceLocation] | None = None,
+    declared_not_null_columns: tuple[str, ...] = (),
+    inferred_nullability_by_column: dict[str, InferredNullability] | None = None,
 ) -> CompiledProject:
     """Build a compiled project for contract validation tests."""
 
@@ -54,6 +62,10 @@ def make_contract_project(
                         SchemaColumn(
                             name=name,
                             type=column_type,
+                            audits=_column_audits(
+                                name=name,
+                                declared_not_null_columns=declared_not_null_columns,
+                            ),
                             location=(column_locations or {}).get(name),
                         )
                         for name, column_type in declared_columns
@@ -62,9 +74,23 @@ def make_contract_project(
                 inferred_columns=None
                 if inferred_columns is None
                 else tuple(
-                    InferredColumn(name=name, type=column_type)
+                    InferredColumn(
+                        name=name,
+                        type=column_type,
+                        nullability=(inferred_nullability_by_column or {}).get(
+                            name, InferredNullability.UNKNOWN
+                        ),
+                    )
                     for name, column_type in inferred_columns
                 ),
             ),
         ),
     )
+
+
+def _column_audits(
+    *, name: str, declared_not_null_columns: tuple[str, ...]
+) -> tuple[SchemaAuditInstance, ...]:
+    if name not in declared_not_null_columns:
+        return ()
+    return (SchemaAuditInstance(definition_name="not_null"),)

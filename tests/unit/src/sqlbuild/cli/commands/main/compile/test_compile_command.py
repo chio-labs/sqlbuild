@@ -52,14 +52,14 @@ CONTRACT_DIAGNOSTIC_TEST_CASES: tuple[CompileCommandTestCase, ...] = (
         description="reports contract and output locations for type diagnostics",
         expected_exit_code=1,
         expected_stdout_fragments=(
-            "error[K002]: column 'amount_cents' inferred as VARCHAR but contract declares INTEGER",
+            "error[K002]: column 'amount_cents' inferred as TEXT but contract declares INTEGER",
             "  --> models/orders.sql:4:5",
             "  4 |     amount_cents (type INTEGER),",
             "    |     ^^^^^^^^^^^^",
             "  output:",
             "  --> models/orders.sql:9:3",
             "  9 |   CAST('1' AS VARCHAR) AS amount_cents",
-            "inferred VARCHAR",
+            "inferred TEXT",
             "  = help: change the declared type or cast the expression explicitly",
         ),
         model_sql=(

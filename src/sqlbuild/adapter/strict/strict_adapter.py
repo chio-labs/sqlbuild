@@ -13,6 +13,7 @@ from sqlbuild.adapter.shared.classes.schema import SchemaMixin
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
     CursorValue,
+    ExpressionInferenceProfile,
     RowDiffTolerance,
     RowDiffTolerances,
     StatementRecorder,
@@ -343,6 +344,11 @@ class StrictAdapter(
     @abstractmethod
     def sqlglot_dialect(self) -> str | None:
         """Return the SQLGlot dialect name for this adapter, if any."""
+        ...
+
+    @abstractmethod
+    def expression_inference_profile(self) -> ExpressionInferenceProfile:
+        """Return static SQL expression inference behavior for this adapter."""
         ...
 
     @abstractmethod
