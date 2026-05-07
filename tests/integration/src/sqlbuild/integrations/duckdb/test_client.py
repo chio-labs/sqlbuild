@@ -10,6 +10,7 @@ import pytest
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
     CursorValue,
+    ExpressionInferenceProfile,
     QueryResult,
     RowDiffColumnResult,
     RowDiffResult,
@@ -18,7 +19,8 @@ from sqlbuild.adapter.shared.models import (
     SchemaDiffResult,
     StatementRecorder,
 )
-from sqlbuild.adapter.shared.types import CursorKind
+from sqlbuild.adapter.shared.types import CursorKind, FunctionNullabilityRule
+from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from sqlbuild.spec.models.schema import SeedCsvSettings
 from tests.integration.src.sqlbuild.integrations.duckdb._test_types import (
@@ -30,6 +32,7 @@ from tests.integration.src.sqlbuild.integrations.duckdb._test_types import (
     DiffRowsTestCase,
     DiffSchemaTestCase,
     DropTestCase,
+    ExpressionNullabilityRuleTestCase,
     GetAllColumnsTestCase,
     GetColumnsTestCase,
     ListRelationsTestCase,
@@ -43,6 +46,52 @@ from tests.integration.src.sqlbuild.integrations.duckdb._test_types import (
     SwapTestCase,
     TransactionalAtomicityTestCase,
 )
+
+EXPRESSION_NULLABILITY_RULE_TEST_CASES: list[ExpressionNullabilityRuleTestCase] = [
+    ExpressionNullabilityRuleTestCase(
+        description="LOWER preserves non-null literal",
+        function_name="LOWER",
+        sql_expression="LOWER('READY')",
+        rule_args=(InferredNullability.NON_NULL,),
+        expected_nullability=InferredNullability.NON_NULL,
+        expected_is_null=False,
+    ),
+    ExpressionNullabilityRuleTestCase(
+        description="LOWER preserves nullable input",
+        function_name="LOWER",
+        sql_expression="LOWER(CAST(NULL AS VARCHAR))",
+        rule_args=(InferredNullability.NULLABLE,),
+        expected_nullability=InferredNullability.NULLABLE,
+        expected_is_null=True,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    EXPRESSION_NULLABILITY_RULE_TEST_CASES,
+    ids=[case.description for case in EXPRESSION_NULLABILITY_RULE_TEST_CASES],
+)
+def test_given_expression_rule_when_querying_then_duckdb_matches_nullability_expectation(
+    test_case: ExpressionNullabilityRuleTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    profile: ExpressionInferenceProfile = adapter.expression_inference_profile()
+    rule: FunctionNullabilityRule | None = profile.function_nullability_rule(
+        test_case.function_name
+    )
+    assert rule is not None
+
+    result: QueryResult = adapter.query(
+        connection,
+        f"SELECT {test_case.sql_expression} IS NULL AS is_null",
+        limit=None,
+    )
+
+    assert rule(test_case.rule_args) == test_case.expected_nullability
+    assert result.rows == ((test_case.expected_is_null,),)
+
 
 CONNECT_TEST_CASES: list[ConnectTestCase] = [
     ConnectTestCase(
