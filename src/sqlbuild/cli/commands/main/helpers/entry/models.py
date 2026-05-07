@@ -53,6 +53,7 @@ class CliNamespace:
     no_connection: bool = False
     full: bool = False
     schema_only: bool = False
+    playground_path: str = "sqlbuild-playground"
     select: list[str] = field(default_factory=list)
     exclude: list[str] = field(default_factory=list)
 
@@ -156,3 +157,4 @@ class CliEntrypointHandlers:
         int,
     ]
     run_janitor: Callable[[Path | None, bool, bool, int | None], int]
+    run_playground: Callable[[Path | None, str], int]

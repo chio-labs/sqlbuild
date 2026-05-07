@@ -154,6 +154,13 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     janitor_parser.add_argument("--auto-approve", action="store_true", default=False)
     janitor_parser.add_argument("--retention-days", type=int, default=None)
     subparsers.add_parser(CliCommand.INIT)
+    playground_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PLAYGROUND)
+    playground_parser.add_argument(
+        "playground_path",
+        nargs="?",
+        default="sqlbuild-playground",
+        metavar="path",
+    )
     return parser
 
 
@@ -169,6 +176,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.janitor import run_janitor
     from sqlbuild.cli.commands.main.lineage import run_lineage
     from sqlbuild.cli.commands.main.plan import run_plan
+    from sqlbuild.cli.commands.main.playground import run_playground
     from sqlbuild.cli.commands.main.query import run_query
     from sqlbuild.cli.commands.main.run import run_run
     from sqlbuild.cli.commands.main.seed import run_seed
@@ -188,6 +196,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_debug=run_debug,
         run_lineage=run_lineage,
         run_janitor=run_janitor,
+        run_playground=run_playground,
     )
     return _main_with_dependencies(argv=argv, handlers=handlers)
 
@@ -381,6 +390,8 @@ def _main_with_dependencies(
                 args.auto_approve,
                 args.retention_days,
             )
+        if args.command == CliCommand.PLAYGROUND:
+            return handlers.run_playground(project_dir, args.playground_path)
         return 0
     except CliUserError as error:
         logging.getLogger("sqlbuild.cli").exception("cli user error")
