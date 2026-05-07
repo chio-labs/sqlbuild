@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import fields
+from dataclasses import fields, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -29,8 +29,8 @@ from sqlbuild.compiler.compile.helpers.model_config_validation import (
 )
 from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
 from sqlbuild.compiler.compile.helpers.sql_vars import (
+    expand_authored_sql,
     substitute_sql_vars,
-    validate_var_macro_collision,
 )
 from sqlbuild.compiler.compile.helpers.sqlglot_validation import (
     validate_function_sql_syntax,
@@ -113,7 +113,6 @@ def build_model_inputs(
     """Attach schema metadata to discovered model files."""
 
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
-    validate_var_macro_collision(effective_vars=effective_vars, loaded_macros=loaded_macros)
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
     known_seed_names: set[str] = build_known_seed_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
@@ -140,6 +139,7 @@ def build_model_inputs(
             effective_environment_name=effective_environment_name,
             run_id=run_id,
         )
+        # Keep the interpolated-but-unexpanded form for SQL test macro mocks.
         var_substituted_sql: str = substitute_sql_vars(
             sql=model_file.query_sql,
             file_path=model_file.file_path,
@@ -207,6 +207,7 @@ def build_model_inputs(
             values=expand_model_hook_macros(
                 values=effective_config.values,
                 file_path=model_file.file_path,
+                effective_vars=effective_vars,
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
             ),
@@ -387,14 +388,10 @@ def build_sql_function_inputs(
             if isinstance(raw_schema, str)
             else schema
         )
-        var_substituted_body_sql: str = substitute_sql_vars(
+        expanded_body_sql: str = expand_authored_sql(
             sql=function_file.body_sql,
             file_path=function_file.file_path,
             effective_vars=effective_vars,
-        )
-        expanded_body_sql: str = expand_sql_macros(
-            sql=var_substituted_body_sql,
-            file_path=function_file.file_path,
             loaded_macros=loaded_macros,
             macro_context=macro_context,
         )
@@ -825,11 +822,14 @@ def _expand_function_environment_value(
 def build_source_inputs(
     discovered_inputs: DiscoveredProjectInputs,
     *,
+    effective_vars: dict[str, str],
     effective_settings: SettingsConfig,
+    macro_context: MacroContext,
     no_sql_validation: bool = False,
 ) -> tuple[CompileSourceInput, ...]:
     """Normalize discovered source declarations into one collection."""
 
+    loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     source_inputs: list[CompileSourceInput] = []
     sql_validation_enabled: bool = (
         effective_settings.sqlglot and effective_settings.sql_validation and not no_sql_validation
@@ -837,7 +837,14 @@ def build_source_inputs(
     source_file: DiscoveredSourceFile
     for source_file in discovered_inputs.source_files:
         source_entry: SourceEntry
-        for source_entry in source_file.source_entries:
+        for raw_source_entry in source_file.source_entries:
+            source_entry = expand_source_entry_templates(
+                source_entry=raw_source_entry,
+                file_path=source_file.file_path,
+                effective_vars=effective_vars,
+                loaded_macros=loaded_macros,
+                macro_context=macro_context,
+            )
             source_expression: str | None = source_entry.expression
             should_validate_expression: bool = (
                 source_expression is not None and sql_validation_enabled
@@ -855,6 +862,164 @@ def build_source_inputs(
                 )
             )
     return tuple(source_inputs)
+
+
+def expand_source_entry_templates(
+    *,
+    source_entry: SourceEntry,
+    file_path: Path,
+    effective_vars: dict[str, str],
+    loaded_macros: dict[str, LoadedMacro],
+    macro_context: MacroContext,
+) -> SourceEntry:
+    """Apply config templating and SQL interpolation to source metadata."""
+
+    expression: str | None = None
+    if source_entry.expression is not None:
+        expression = expand_authored_sql(
+            sql=source_entry.expression,
+            file_path=file_path,
+            effective_vars=effective_vars,
+            loaded_macros=loaded_macros,
+            macro_context=macro_context,
+        )
+    return replace(
+        source_entry,
+        database=_expand_source_template_value(
+            raw_value=source_entry.database,
+            effective_vars=effective_vars,
+            context_label=f"source {source_entry.name} database",
+        ),
+        schema=_expand_source_template_value(
+            raw_value=source_entry.schema,
+            effective_vars=effective_vars,
+            context_label=f"source {source_entry.name} schema",
+        ),
+        table=_expand_source_template_value(
+            raw_value=source_entry.table,
+            effective_vars=effective_vars,
+            context_label=f"source {source_entry.name} table",
+        ),
+        expression=expression,
+        description=_expand_source_template_value(
+            raw_value=source_entry.description,
+            effective_vars=effective_vars,
+            context_label=f"source {source_entry.name} description",
+        ),
+        meta=cast(
+            dict[str, object],
+            _expand_source_template_object(
+                value=source_entry.meta,
+                effective_vars=effective_vars,
+                context_label=f"source {source_entry.name} meta",
+            ),
+        ),
+        columns=tuple(
+            expand_source_column_templates(
+                source_name=source_entry.name,
+                column=column,
+                effective_vars=effective_vars,
+            )
+            for column in source_entry.columns
+        ),
+        audits=tuple(
+            expand_schema_audit_instance_templates(
+                audit_instance=audit_instance,
+                effective_vars=effective_vars,
+                context_label=f"source {source_entry.name} audit {audit_instance.definition_name}",
+            )
+            for audit_instance in source_entry.audits
+        ),
+    )
+
+
+def expand_source_column_templates(
+    *, source_name: str, column: SourceColumnEntry, effective_vars: dict[str, str]
+) -> SourceColumnEntry:
+    return replace(
+        column,
+        type=_expand_source_template_value(
+            raw_value=column.type,
+            effective_vars=effective_vars,
+            context_label=f"source {source_name} column {column.name} type",
+        ),
+        description=_expand_source_template_value(
+            raw_value=column.description,
+            effective_vars=effective_vars,
+            context_label=f"source {source_name} column {column.name} description",
+        ),
+        meta=cast(
+            dict[str, object],
+            _expand_source_template_object(
+                value=column.meta,
+                effective_vars=effective_vars,
+                context_label=f"source {source_name} column {column.name} meta",
+            ),
+        ),
+        audits=tuple(
+            expand_schema_audit_instance_templates(
+                audit_instance=audit_instance,
+                effective_vars=effective_vars,
+                context_label=(
+                    f"source {source_name} column {column.name} audit "
+                    f"{audit_instance.definition_name}"
+                ),
+            )
+            for audit_instance in column.audits
+        ),
+    )
+
+
+def expand_schema_audit_instance_templates(
+    *,
+    audit_instance: SchemaAuditInstance,
+    effective_vars: dict[str, str],
+    context_label: str,
+) -> SchemaAuditInstance:
+    return replace(
+        audit_instance,
+        arguments=cast(
+            dict[str, object],
+            _expand_source_template_object(
+                value=audit_instance.arguments,
+                effective_vars=effective_vars,
+                context_label=f"{context_label} arguments",
+            ),
+        ),
+        description=_expand_source_template_value(
+            raw_value=audit_instance.description,
+            effective_vars=effective_vars,
+            context_label=f"{context_label} description",
+        ),
+    )
+
+
+def _expand_source_template_value(
+    *, raw_value: str | None, effective_vars: dict[str, str], context_label: str
+) -> str | None:
+    if raw_value is None:
+        return None
+    return str(
+        _expand_source_template_object(
+            value=raw_value,
+            effective_vars=effective_vars,
+            context_label=context_label,
+        )
+    )
+
+
+def _expand_source_template_object(
+    *, value: object, effective_vars: dict[str, str], context_label: str
+) -> object:
+    return expand_template_data(
+        value,
+        variables=effective_vars,
+        context_values={},
+        context_label=context_label,
+        allow_context=False,
+        preserve_context_tokens=False,
+        preserve_unknown_context=False,
+    )
 
 
 def build_test_inputs(
@@ -875,14 +1040,10 @@ def build_test_inputs(
     for test_file in discovered_inputs.test_files:
         test_block: DiscoveredSqlTestBlock
         for test_block in test_file.blocks:
-            var_substituted_body: str = substitute_sql_vars(
+            expanded_sql_body: str = expand_authored_sql(
                 sql=test_block.sql_body,
                 file_path=test_file.file_path,
                 effective_vars=vars_for_substitution,
-            )
-            expanded_sql_body: str = expand_sql_macros(
-                sql=var_substituted_body,
-                file_path=test_file.file_path,
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
             )
@@ -964,6 +1125,7 @@ def build_audit_inputs(
     effective_settings: SettingsConfig,
     model_inputs: tuple[CompileModelInput, ...],
     source_inputs: tuple[CompileSourceInput, ...],
+    effective_vars: dict[str, str],
     macro_context: MacroContext,
     generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]]
     | None = None,
@@ -985,9 +1147,10 @@ def build_audit_inputs(
             continue
         audit_block: DiscoveredAuditBlock
         for audit_block in audit_file.blocks:
-            expanded_sql_body: str = expand_sql_macros(
+            expanded_sql_body: str = expand_authored_sql(
                 sql=audit_block.sql_body,
                 file_path=audit_file.file_path,
+                effective_vars=effective_vars,
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
             )
@@ -1034,6 +1197,7 @@ def build_audit_inputs(
                 known_source_names=known_source_names,
                 default_audit_severity=default_audit_severity,
                 default_audit_run_scope=default_audit_run_scope,
+                effective_vars=effective_vars,
                 macro_context=macro_context,
             )
         )
@@ -1049,6 +1213,7 @@ def build_audit_inputs(
                 known_source_names=known_source_names,
                 default_audit_severity=default_audit_severity,
                 default_audit_run_scope=default_audit_run_scope,
+                effective_vars=effective_vars,
                 macro_context=macro_context,
             )
         )
@@ -1065,6 +1230,7 @@ def build_model_attached_audit_inputs(
     known_source_names: set[str],
     default_audit_severity: str | None,
     default_audit_run_scope: str | None,
+    effective_vars: dict[str, str],
     macro_context: MacroContext,
 ) -> tuple[CompileAuditInput, ...]:
     """Render schema-attached model audits into compile audit inputs."""
@@ -1096,6 +1262,7 @@ def build_model_attached_audit_inputs(
                 known_source_names=known_source_names,
                 default_audit_severity=default_audit_severity,
                 default_audit_run_scope=default_audit_run_scope,
+                effective_vars=effective_vars,
                 macro_context=macro_context,
             )
         )
@@ -1121,6 +1288,7 @@ def build_model_attached_audit_inputs(
                     known_source_names=known_source_names,
                     default_audit_severity=default_audit_severity,
                     default_audit_run_scope=default_audit_run_scope,
+                    effective_vars=effective_vars,
                     macro_context=macro_context,
                 )
             )
@@ -1137,6 +1305,7 @@ def build_source_attached_audit_inputs(
     known_source_names: set[str],
     default_audit_severity: str | None,
     default_audit_run_scope: str | None,
+    effective_vars: dict[str, str],
     macro_context: MacroContext,
 ) -> tuple[CompileAuditInput, ...]:
     """Render source-attached audits into compile audit inputs."""
@@ -1162,6 +1331,7 @@ def build_source_attached_audit_inputs(
                 known_source_names=known_source_names,
                 default_audit_severity=default_audit_severity,
                 default_audit_run_scope=default_audit_run_scope,
+                effective_vars=effective_vars,
                 macro_context=macro_context,
             )
         )
@@ -1187,6 +1357,7 @@ def build_source_attached_audit_inputs(
                     known_source_names=known_source_names,
                     default_audit_severity=default_audit_severity,
                     default_audit_run_scope=default_audit_run_scope,
+                    effective_vars=effective_vars,
                     macro_context=macro_context,
                 )
             )
@@ -1208,6 +1379,7 @@ def build_attached_audit_input(
     known_source_names: set[str],
     default_audit_severity: str | None,
     default_audit_run_scope: str | None,
+    effective_vars: dict[str, str],
     macro_context: MacroContext,
 ) -> CompileAuditInput:
     """Render one attached generic audit instance into a compile audit input."""
@@ -1231,9 +1403,10 @@ def build_attached_audit_input(
         owner_file=owner_file,
         definition_name=audit_instance.definition_name,
     )
-    expanded_sql_body: str = expand_sql_macros(
+    expanded_sql_body: str = expand_authored_sql(
         sql=rendered_sql_body,
         file_path=definition[0].file_path,
+        effective_vars=effective_vars,
         loaded_macros=loaded_macros,
         macro_context=macro_context,
     )
@@ -1896,10 +2069,11 @@ def expand_model_hook_macros(
     *,
     values: dict[str, object],
     file_path: Path,
+    effective_vars: dict[str, str],
     loaded_macros: dict[str, LoadedMacro],
     macro_context: MacroContext,
 ) -> dict[str, object]:
-    """Expand macros only within executable hook SQL strings."""
+    """Expand SQL interpolation and macros within executable hook SQL strings."""
 
     expanded_values: dict[str, object] = dict(values)
     hook_key: str
@@ -1910,6 +2084,7 @@ def expand_model_hook_macros(
         expanded_values[hook_key] = expand_sql_macros_in_value(
             value=raw_hook_value,
             file_path=file_path,
+            effective_vars=effective_vars,
             loaded_macros=loaded_macros,
             macro_context=macro_context,
         )
@@ -1920,15 +2095,17 @@ def expand_sql_macros_in_value(
     *,
     value: object,
     file_path: Path,
+    effective_vars: dict[str, str],
     loaded_macros: dict[str, LoadedMacro],
     macro_context: MacroContext,
 ) -> object:
-    """Recursively expand macros inside supported SQL hook container shapes."""
+    """Recursively expand SQL interpolation and macros in hook container shapes."""
 
     if isinstance(value, str):
-        return expand_sql_macros(
+        return expand_authored_sql(
             sql=value,
             file_path=file_path,
+            effective_vars=effective_vars,
             loaded_macros=loaded_macros,
             macro_context=macro_context,
         )
@@ -1937,6 +2114,7 @@ def expand_sql_macros_in_value(
             expand_sql_macros_in_value(
                 value=item,
                 file_path=file_path,
+                effective_vars=effective_vars,
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
             )
@@ -1947,6 +2125,7 @@ def expand_sql_macros_in_value(
             expand_sql_macros_in_value(
                 value=item,
                 file_path=file_path,
+                effective_vars=effective_vars,
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
             )

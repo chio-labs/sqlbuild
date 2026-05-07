@@ -1,11 +1,12 @@
-"""SQL project variable substitution (@name without parens)."""
+"""SQL project variable and environment interpolation helpers."""
 
 from __future__ import annotations
 
-import re
+import os
 from pathlib import Path
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.helpers.macros import expand_sql_macros
 from sqlbuild.compiler.compile.helpers.sql_scanning import (
     is_identifier_character as _is_identifier_continue,
 )
@@ -17,10 +18,9 @@ from sqlbuild.compiler.compile.helpers.sql_scanning import (
     skip_line_comment,
     skip_quoted_text,
 )
-from sqlbuild.compiler.compile.models import LoadedMacro
+from sqlbuild.compiler.compile.models import LoadedMacro, MacroContext
 
-_CONTEXT: str = "Variable substitution"
-_VAR_PATTERN: re.Pattern[str] = re.compile(r"@([a-zA-Z_][a-zA-Z0-9_]*)")
+_CONTEXT: str = "SQL interpolation"
 
 
 def validate_var_macro_collision(
@@ -39,19 +39,42 @@ def validate_var_macro_collision(
         )
 
 
+def expand_authored_sql(
+    *,
+    sql: str,
+    file_path: Path,
+    effective_vars: dict[str, str],
+    loaded_macros: dict[str, LoadedMacro],
+    macro_context: MacroContext,
+) -> str:
+    """Apply SQL interpolation and macro expansion to authored SQL text."""
+
+    interpolated_sql: str = substitute_sql_vars(
+        sql=sql,
+        file_path=file_path,
+        effective_vars=effective_vars,
+    )
+    return expand_sql_macros(
+        sql=interpolated_sql,
+        file_path=file_path,
+        loaded_macros=loaded_macros,
+        macro_context=macro_context,
+    )
+
+
 def substitute_sql_vars(
     *,
     sql: str,
     file_path: Path,
     effective_vars: dict[str, str],
 ) -> str:
-    """Replace bare @name references with project variable values.
+    """Replace @@name and @@ENV:NAME references in SQL text.
 
-    Only replaces @name that is NOT followed by '(' (those are macro calls).
-    Skips quoted strings and comments.
+    Interpolation works inside quoted SQL strings. Comments are preserved as
+    authored. Deferred @@@name placeholders are preserved for later phases.
     """
 
-    if "@" not in sql or not effective_vars:
+    if "@@" not in sql:
         return sql
 
     parts: list[str] = []
@@ -60,7 +83,13 @@ def substitute_sql_vars(
         character: str = sql[cursor]
         if character in {"'", '"', "`"}:
             end: int = skip_quoted_text(sql=sql, start=cursor, context=_CONTEXT)
-            parts.append(sql[cursor:end])
+            parts.append(
+                _interpolate_sql_segment(
+                    segment=sql[cursor:end],
+                    file_path=file_path,
+                    effective_vars=effective_vars,
+                )
+            )
             cursor = end
             continue
         if sql.startswith("--", cursor):
@@ -73,27 +102,103 @@ def substitute_sql_vars(
             parts.append(sql[cursor:end])
             cursor = end
             continue
-        if character == "@" and cursor + 1 < len(sql) and _is_identifier_start(sql[cursor + 1]):
-            name_start: int = cursor + 1
-            name_end: int = name_start + 1
-            while name_end < len(sql) and _is_identifier_continue(sql[name_end]):
-                name_end += 1
-            paren_check: int = name_end
-            while paren_check < len(sql) and sql[paren_check].isspace():
-                paren_check += 1
-            if paren_check < len(sql) and sql[paren_check] == "(":
-                parts.append(sql[cursor:name_end])
-                cursor = name_end
-                continue
-            var_name: str = sql[name_start:name_end]
-            if var_name not in effective_vars:
-                raise CompileInputError(
-                    f"unknown project variable '@{var_name}' in '{file_path}'. "
-                    f"Available vars: {', '.join(sorted(effective_vars)) or 'none'}"
-                )
-            parts.append(effective_vars[var_name])
-            cursor = name_end
+        if sql.startswith("@@", cursor):
+            rendered_token: str
+            next_cursor: int
+            rendered_token, next_cursor = _render_interpolation_token(
+                sql=sql,
+                start=cursor,
+                file_path=file_path,
+                effective_vars=effective_vars,
+            )
+            parts.append(rendered_token)
+            cursor = next_cursor
             continue
         parts.append(character)
         cursor += 1
     return "".join(parts)
+
+
+def _interpolate_sql_segment(
+    *,
+    segment: str,
+    file_path: Path,
+    effective_vars: dict[str, str],
+) -> str:
+    if "@@" not in segment:
+        return segment
+    parts: list[str] = []
+    cursor: int = 0
+    while cursor < len(segment):
+        if segment.startswith("@@", cursor):
+            rendered_token: str
+            next_cursor: int
+            rendered_token, next_cursor = _render_interpolation_token(
+                sql=segment,
+                start=cursor,
+                file_path=file_path,
+                effective_vars=effective_vars,
+            )
+            parts.append(rendered_token)
+            cursor = next_cursor
+            continue
+        parts.append(segment[cursor])
+        cursor += 1
+    return "".join(parts)
+
+
+def _render_interpolation_token(
+    *,
+    sql: str,
+    start: int,
+    file_path: Path,
+    effective_vars: dict[str, str],
+) -> tuple[str, int]:
+    if sql.startswith("@@@", start):
+        name_start: int = start + 3
+        if name_start < len(sql) and _is_identifier_start(sql[name_start]):
+            name_end: int = _consume_identifier(sql=sql, start=name_start)
+            return sql[start:name_end], name_end
+        return "@@@", start + 3
+
+    token_start: int = start + 2
+    if sql.startswith("ENV:", token_start):
+        env_name_start: int = token_start + len("ENV:")
+        env_name_end: int = _consume_env_name(sql=sql, start=env_name_start)
+        if env_name_end == env_name_start:
+            raise CompileInputError(f"invalid environment interpolation token in '{file_path}'")
+        env_name: str = sql[env_name_start:env_name_end]
+        if env_name not in os.environ:
+            raise CompileInputError(
+                f"unknown environment variable '@@ENV:{env_name}' in '{file_path}'"
+            )
+        return os.environ[env_name], env_name_end
+
+    if sql.startswith("CTX:", token_start):
+        raise CompileInputError(f"SQL text in '{file_path}' does not allow @@CTX templates")
+
+    if token_start < len(sql) and _is_identifier_start(sql[token_start]):
+        name_end = _consume_identifier(sql=sql, start=token_start)
+        var_name: str = sql[token_start:name_end]
+        if var_name not in effective_vars:
+            raise CompileInputError(
+                f"unknown project variable '@@{var_name}' in '{file_path}'. "
+                f"Available vars: {', '.join(sorted(effective_vars)) or 'none'}"
+            )
+        return effective_vars[var_name], name_end
+
+    return "@@", start + 2
+
+
+def _consume_identifier(*, sql: str, start: int) -> int:
+    cursor: int = start + 1
+    while cursor < len(sql) and _is_identifier_continue(sql[cursor]):
+        cursor += 1
+    return cursor
+
+
+def _consume_env_name(*, sql: str, start: int) -> int:
+    cursor: int = start
+    while cursor < len(sql) and (sql[cursor].isalnum() or sql[cursor] == "_"):
+        cursor += 1
+    return cursor

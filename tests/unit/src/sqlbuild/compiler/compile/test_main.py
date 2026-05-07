@@ -913,6 +913,87 @@ select 1
         expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
+        description="expands config templates in model header metadata fields",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+
+[settings]
+default_audit_severity = "warn"
+sql_validation = false
+
+[vars]
+model_schema = "marts"
+tag_name = "finance"
+id_type = "INTEGER"
+source_name = "orders_api"
+valid_order_id = "1"
+""".strip()
+            + "\n",
+            "models/marts/orders.sql": """
+MODEL (
+  schema "${model_schema}",
+  alias "orders_${ENV:ENV_NAME}",
+  description "Orders for ${ENV:ENV_NAME}",
+  tags ["orders", "${tag_name}"],
+  columns (
+    order_id (
+      type ${id_type},
+      description "Order id from ${source_name}",
+      audits [accepted_values (values ["${valid_order_id}"])],
+    ),
+  ),
+);
+
+select 1 as order_id
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        cli_vars=None,
+        run_id=None,
+        expected_model_schema_names=("orders",),
+        expected_model_schema_descriptions=("Orders for dev",),
+        expected_model_column_metadata=(
+            (
+                (
+                    "order_id",
+                    "INTEGER",
+                    "Order id from orders_api",
+                    (("accepted_values", {"values": ["1"]}),),
+                ),
+            ),
+        ),
+        expected_model_config_values=(
+            {"schema": "marts", "alias": "orders_dev", "tags": ["orders", "finance"]},
+        ),
+        expected_model_query_sqls=("select 1 as order_id",),
+        expected_model_path_defaults=(None,),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_audit_sql_bodies=(
+            "SELECT order_id\n"
+            'FROM __ref("orders")\n'
+            "WHERE order_id IS NOT NULL\n"
+            "  AND order_id NOT IN ('1')",
+        ),
+        expected_effective_environment_name=None,
+        expected_effective_connection={},
+        expected_effective_vars={
+            "model_schema": "marts",
+            "tag_name": "finance",
+            "id_type": "INTEGER",
+            "source_name": "orders_api",
+            "valid_order_id": "1",
+        },
+        environment_variables={"ENV_NAME": "dev"},
+        expected_effective_sql_validation=False,
+        expected_model_references=((),),
+        expected_audit_references=((("ref", "orders"),),),
+    ),
+    BuildCompileInputsTestCase(
         description="supports multi hop var expansion and preserve environment overrides",
         repo_files=base_repo_files()
         | {
@@ -1074,6 +1155,166 @@ SELECT 1
         expected_audit_references=((("source", "raw_orders"),),),
     ),
     BuildCompileInputsTestCase(
+        description="applies sql interpolation across all authored sql text fields",
+        repo_files=base_repo_files()
+        | {
+            "macros/common.py": """
+def source_columns() -> str:
+    return "1 AS id"
+""".strip()
+            + "\n",
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+
+[settings]
+sql_validation = false
+default_audit_severity = "warn"
+
+[vars]
+raw_database = "raw_db"
+raw_schema = "analytics_raw"
+domain = "example.com"
+audit_schema = "audit"
+min_amount = "100"
+""".strip()
+            + "\n",
+            "models/orders.sql": """
+MODEL (
+  pre_hook "insert into @@audit_schema.load_log select '@@ENV:USER_NAME'",
+  columns (order_id (audits [source_filter])),
+);
+
+SELECT *
+FROM @@raw_schema.orders
+WHERE email LIKE '%@@domain'
+  AND event_date >= CURRENT_DATE
+""".strip()
+            + "\n",
+            "functions/sql/is_large_order.sql": """
+FUNCTION (
+  arguments (amount INTEGER),
+  returns BOOLEAN,
+);
+
+amount > @@min_amount AND '@@ENV:USER_NAME' = 'runner'
+""".strip()
+            + "\n",
+            "tests/unit/orders.sql": """
+TEST ();
+
+WITH
+__ref__orders AS (
+  SELECT * FROM @@raw_schema.orders WHERE loaded_by = '@@ENV:USER_NAME'
+),
+__expected__orders AS (
+  SELECT 1 AS id
+)
+SELECT 1
+""".strip()
+            + "\n",
+            "audits/orders.sql": """
+AUDIT ();
+
+SELECT * FROM @@raw_schema.orders WHERE loaded_by = '@@ENV:USER_NAME'
+""".strip()
+            + "\n",
+            "audits/generic/source_filter.sql": """
+AUDIT ();
+
+SELECT @column
+FROM @relation
+WHERE @column IS NOT NULL
+  AND source_system = '@@ENV:SOURCE_SYSTEM'
+""".strip()
+            + "\n",
+            "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    expression: |
+      SELECT @source_columns(), '@@ENV:USER_NAME' AS loaded_by
+      FROM @@raw_schema.raw_orders
+  - name: raw_table
+    database: ${raw_database}
+    schema: ${raw_schema}
+    table: orders_${ENV:USER_NAME}
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        cli_vars=None,
+        run_id=None,
+        expected_model_schema_names=("orders",),
+        expected_model_config_values=({"pre_hook": "insert into audit.load_log select 'runner'"},),
+        expected_model_query_sqls=(
+            "SELECT *\n"
+            "FROM analytics_raw.orders\n"
+            "WHERE email LIKE '%example.com'\n"
+            "  AND event_date >= CURRENT_DATE",
+        ),
+        expected_model_path_defaults=(None,),
+        expected_seed_names=(),
+        expected_source_names=("raw_orders", "raw_table"),
+        expected_source_expressions=(
+            "SELECT 1 AS id, 'runner' AS loaded_by\nFROM analytics_raw.raw_orders\n",
+            None,
+        ),
+        expected_source_relations=(
+            (None, None, None),
+            ("raw_db", "analytics_raw", "orders_runner"),
+        ),
+        expected_test_sql_bodies=(
+            "WITH\n"
+            "__ref__orders AS (\n"
+            "  SELECT * FROM analytics_raw.orders WHERE loaded_by = 'runner'\n"
+            "),\n"
+            "__expected__orders AS (\n"
+            "  SELECT 1 AS id\n"
+            ")\n"
+            "SELECT 1",
+        ),
+        expected_test_authored_cte_names=(("__ref__orders",),),
+        expected_test_mock_model_names=(("orders",),),
+        expected_test_mock_source_names=((),),
+        expected_test_mock_seed_names=((),),
+        expected_test_expected_model_names=(("orders",),),
+        expected_audit_sql_bodies=(
+            "SELECT * FROM analytics_raw.orders WHERE loaded_by = 'runner'",
+            "SELECT order_id\n"
+            'FROM __ref("orders")\n'
+            "WHERE order_id IS NOT NULL\n"
+            "  AND source_system = 'crm'",
+        ),
+        expected_sql_function_names=("is_large_order",),
+        expected_sql_function_arguments=((("amount", "INTEGER"),),),
+        expected_sql_function_returns=("BOOLEAN",),
+        expected_sql_function_return_columns=((),),
+        expected_sql_function_body_sqls=("amount > 100 AND 'runner' = 'runner'",),
+        expected_sql_function_databases=(None,),
+        expected_sql_function_schemas=(None,),
+        expected_sql_function_languages=("sql",),
+        expected_sql_function_runtime_versions=(None,),
+        expected_sql_function_entry_points=(None,),
+        expected_sql_function_packages=((),),
+        expected_sql_function_query_change_backfills=(None,),
+        expected_effective_environment_name=None,
+        expected_effective_connection={},
+        expected_effective_vars={
+            "raw_database": "raw_db",
+            "raw_schema": "analytics_raw",
+            "domain": "example.com",
+            "audit_schema": "audit",
+            "min_amount": "100",
+        },
+        expected_effective_sql_validation=False,
+        expected_model_references=((),),
+        expected_audit_references=((), (("ref", "orders"),)),
+        environment_variables={
+            "USER_NAME": "runner",
+            "SOURCE_SYSTEM": "crm",
+        },
+    ),
+    BuildCompileInputsTestCase(
         description="expands vars and macros in sql function bodies and headers",
         repo_files=base_repo_files()
         | {
@@ -1111,7 +1352,7 @@ FUNCTION (
   query_change_backfill bounded-${backfill_days}d
 );
 
-@status_match("order_status", "completed") AND order_status <> @cancelled_status
+@status_match("order_status", "completed") AND order_status <> @@cancelled_status
 """.strip()
             + "\n",
         },
@@ -1737,6 +1978,43 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
     assert actual_model_column_nullables == expected_or_actual(
         test_case.expected_model_column_nullables, actual_model_column_nullables
     )
+    actual_model_schema_descriptions: tuple[str | None, ...] = tuple(
+        None if model_input.schema_entry is None else model_input.schema_entry.description
+        for model_input in compile_inputs.model_inputs
+    )
+    assert actual_model_schema_descriptions == expected_or_actual(
+        test_case.expected_model_schema_descriptions,
+        actual_model_schema_descriptions,
+    )
+    actual_model_column_metadata: tuple[
+        tuple[
+            tuple[
+                str,
+                str | None,
+                str | None,
+                tuple[tuple[str, dict[str, object]], ...],
+            ],
+            ...,
+        ],
+        ...,
+    ] = tuple(
+        tuple(
+            (
+                column.name,
+                column.type,
+                column.description,
+                tuple((audit.definition_name, audit.arguments) for audit in column.audits),
+            )
+            for column in model_input.schema_entry.columns
+        )
+        if model_input.schema_entry is not None
+        else ()
+        for model_input in compile_inputs.model_inputs
+    )
+    assert actual_model_column_metadata == expected_or_actual(
+        test_case.expected_model_column_metadata,
+        actual_model_column_metadata,
+    )
     assert (
         tuple(
             model_input.config.matched_path_default for model_input in compile_inputs.model_inputs
@@ -1750,6 +2028,25 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
     assert (
         tuple(source_input.source_entry.name for source_input in compile_inputs.source_inputs)
         == test_case.expected_source_names
+    )
+    actual_source_expressions: tuple[str | None, ...] = tuple(
+        source_input.source_entry.expression for source_input in compile_inputs.source_inputs
+    )
+    assert actual_source_expressions == expected_or_actual(
+        test_case.expected_source_expressions,
+        actual_source_expressions,
+    )
+    actual_source_relations: tuple[tuple[str | None, str | None, str | None], ...] = tuple(
+        (
+            source_input.source_entry.database,
+            source_input.source_entry.schema,
+            source_input.source_entry.table,
+        )
+        for source_input in compile_inputs.source_inputs
+    )
+    assert actual_source_relations == expected_or_actual(
+        test_case.expected_source_relations,
+        actual_source_relations,
     )
     assert (
         tuple(test_input.sql_body for test_input in compile_inputs.test_inputs)
