@@ -2,25 +2,31 @@
 
 from __future__ import annotations
 
+from io import StringIO
+
 import pytest
 
 from sqlbuild.cli.commands.main.shared.helpers.progress import (
+    BuildProgressCallbacks,
     _aggregate_audit_results,
     _AuditDisplayEntry,
     _truncate_name,
     format_build_footer,
 )
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
+from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
     FunctionExecutionResult,
     SeedExecutionResult,
 )
 from sqlbuild.executor.build.types import BuildStatus
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import (
     AuditAggregationTestCase,
     BuildFooterTestCase,
+    BuildProgressFailureOutputTestCase,
     TruncateNameTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers.helpers import (
@@ -263,6 +269,62 @@ BUILD_FOOTER_TEST_CASES: list[BuildFooterTestCase] = [
     ),
 ]
 
+BUILD_PROGRESS_FAILURE_OUTPUT_TEST_CASES: list[BuildProgressFailureOutputTestCase] = [
+    BuildProgressFailureOutputTestCase(
+        description="failed seed writes error detail below result row",
+        node_result=SeedExecutionResult(
+            seed_name="waffle_types",
+            status=ExecutionStatus.FAILED,
+            duration_ms=30,
+            error_message="failed to load seed CSV",
+        ),
+        expected_fragments=(
+            "seed      waffle_types",
+            "FAIL",
+            "0.03s",
+            "error     failed to load seed CSV",
+        ),
+        unexpected_fragments=("0.03s  failed to load seed CSV",),
+    ),
+    BuildProgressFailureOutputTestCase(
+        description="failed function writes multiline error detail below result row",
+        node_result=FunctionExecutionResult(
+            function_name="is_completed_order",
+            status=ExecutionStatus.FAILED,
+            duration_ms=110,
+            error_message=(
+                "003001 (42501): SQL access control error:\n"
+                "Insufficient privileges to operate on schema 'TEST'."
+            ),
+        ),
+        expected_fragments=(
+            "function  is_completed_order",
+            "FAIL",
+            "0.11s",
+            "error     003001 (42501): SQL access control error:",
+            "          Insufficient privileges to operate on schema 'TEST'.",
+        ),
+        unexpected_fragments=("0.11s  003001",),
+    ),
+    BuildProgressFailureOutputTestCase(
+        description="failed model keeps phase on row and writes error below",
+        node_result=ModelExecutionResult(
+            model_name="fact_orders",
+            status=ExecutionStatus.FAILED,
+            failed_phase=ExecutionPhase.STAGING,
+            duration_ms=420,
+            error_message="relation raw_orders does not exist",
+        ),
+        expected_fragments=(
+            "table     fact_orders",
+            "FAIL",
+            "0.42s  staging",
+            "error     relation raw_orders does not exist",
+        ),
+        unexpected_fragments=("staging  relation raw_orders does not exist",),
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -309,3 +371,30 @@ def test_given_failed_resource_result_when_formatting_footer_then_includes_error
     expected_fragment: str
     for expected_fragment in test_case.expected_fragments:
         assert expected_fragment in footer
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    BUILD_PROGRESS_FAILURE_OUTPUT_TEST_CASES,
+    ids=[case.description for case in BUILD_PROGRESS_FAILURE_OUTPUT_TEST_CASES],
+)
+def test_given_failed_top_level_node_when_reporting_progress_then_writes_error_detail_below_row(
+    test_case: BuildProgressFailureOutputTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stream: StringIO = StringIO()
+    monkeypatch.setattr("sys.stdout", stream)
+    callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
+        plan=PlanOutput(),
+        use_color=False,
+    )
+
+    callbacks.on_node_complete(test_case.node_result)
+    output: str = stream.getvalue()
+
+    expected_fragment: str
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in output
+    unexpected_fragment: str
+    for unexpected_fragment in test_case.unexpected_fragments:
+        assert unexpected_fragment not in output
