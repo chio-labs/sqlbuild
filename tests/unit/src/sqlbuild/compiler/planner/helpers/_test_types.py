@@ -341,6 +341,7 @@ class DetectFunctionChangeTestCase:
     expected_action: BackfillAction
     expected_duration: str | None = None
     existing_fingerprint: bool = True
+    target_schema: str = "main"
 
 
 @dataclass(frozen=True)

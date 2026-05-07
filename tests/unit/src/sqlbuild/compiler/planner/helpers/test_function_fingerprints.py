@@ -56,6 +56,25 @@ DETECT_FUNCTION_CHANGE_TEST_CASES: list[DetectFunctionChangeTestCase] = [
         expected_reason=PlanReason.QUERY_CHANGED,
         expected_action=BackfillAction.WARN_ONLY,
     ),
+    DetectFunctionChangeTestCase(
+        description="target schema case change does not cause function query change",
+        body_sql="order_status = 'completed'",
+        previous_query_sql=(
+            "language=sql\n"
+            "arguments=order_status:STRING\n"
+            "returns=BOOLEAN\n"
+            "return_columns=\n"
+            "runtime_version=\n"
+            "entry_point=\n"
+            "packages=\n"
+            "body=\n"
+            "order_status = 'completed'"
+        ),
+        query_change_backfill=None,
+        expected_reason=PlanReason.NO_CHANGE,
+        expected_action=BackfillAction.WARN_ONLY,
+        target_schema="DEV",
+    ),
 ]
 
 
@@ -70,6 +89,7 @@ def test_given_function_fingerprint_when_detecting_change_then_returns_reason_an
     function: CompiledFunction = build_compiled_function(
         body_sql=test_case.body_sql,
         query_change_backfill=test_case.query_change_backfill,
+        target_schema=test_case.target_schema,
     )
     snapshot: WarehouseSnapshot = WarehouseSnapshot(
         fingerprints=(
