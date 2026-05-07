@@ -16,6 +16,24 @@ class BuildCompileInputsTestCase:
     expected_effective_environment_name: str | None
     expected_effective_connection: dict[str, object]
     expected_effective_vars: dict[str, str]
+    expected_source_expressions: tuple[str | None, ...] | None = None
+    expected_source_relations: tuple[tuple[str | None, str | None, str | None], ...] | None = None
+    expected_model_schema_descriptions: tuple[str | None, ...] | None = None
+    expected_model_column_metadata: (
+        tuple[
+            tuple[
+                tuple[
+                    str,
+                    str | None,
+                    str | None,
+                    tuple[tuple[str, dict[str, object]], ...],
+                ],
+                ...,
+            ],
+            ...,
+        ]
+        | None
+    ) = None
     expected_effective_sqlglot: bool = True
     expected_effective_sql_validation: bool = True
     expected_effective_max_concurrency: int = 1

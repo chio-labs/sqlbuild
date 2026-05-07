@@ -272,21 +272,21 @@ def test_given_query_sql_when_inferring_columns_then_returns_expected(
 SUBSTITUTE_PLACEHOLDER_TEST_CASES: list[SubstitutePlaceholderDefaultsTestCase] = [
     SubstitutePlaceholderDefaultsTestCase(
         description="substitutes single placeholder",
-        query_sql="SELECT * FROM t WHERE d >= @@partition_start",
+        query_sql="SELECT * FROM t WHERE d >= @@@partition_start",
         placeholders={"partition_start": "'2020-01-01'"},
         expected_sql="SELECT * FROM t WHERE d >= '2020-01-01'",
     ),
     SubstitutePlaceholderDefaultsTestCase(
         description="substitutes multiple placeholders",
-        query_sql="SELECT * FROM t WHERE d >= @@start AND d < @@end",
+        query_sql="SELECT * FROM t WHERE d >= @@@start AND d < @@@end",
         placeholders={"start": "'2020-01-01'", "end": "'2099-12-31'"},
         expected_sql="SELECT * FROM t WHERE d >= '2020-01-01' AND d < '2099-12-31'",
     ),
     SubstitutePlaceholderDefaultsTestCase(
         description="returns sql unchanged when no placeholders defined",
-        query_sql="SELECT * FROM t WHERE d >= @@start",
+        query_sql="SELECT * FROM t WHERE d >= @@@start",
         placeholders={},
-        expected_sql="SELECT * FROM t WHERE d >= @@start",
+        expected_sql="SELECT * FROM t WHERE d >= @@@start",
     ),
     SubstitutePlaceholderDefaultsTestCase(
         description="returns sql unchanged when no placeholders in sql",

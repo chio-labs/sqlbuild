@@ -112,7 +112,9 @@ def build_compile_inputs(
     )
     source_inputs: tuple[CompileSourceInput, ...] = build_source_inputs(
         discovered_inputs,
+        effective_vars=effective_vars,
         effective_settings=effective_settings,
+        macro_context=macro_context,
         no_sql_validation=no_sql_validation,
     )
     test_inputs: tuple[CompileSqlTestInput, ...] = build_test_inputs(
@@ -133,6 +135,7 @@ def build_compile_inputs(
         effective_settings=effective_settings,
         model_inputs=model_inputs,
         source_inputs=source_inputs,
+        effective_vars=effective_vars,
         macro_context=macro_context,
         generic_audit_definitions=generic_audit_definitions,
     )

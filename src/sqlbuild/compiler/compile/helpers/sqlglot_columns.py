@@ -19,7 +19,7 @@ _UDF_PATTERN: re.Pattern[str] = re.compile(r'__udf\("([A-Za-z_][A-Za-z0-9_]*)"\)
 _TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(
     r'__table_function\("([A-Za-z_][A-Za-z0-9_]*)"\)\s*(?=\()'
 )
-_PLACEHOLDER_PATTERN: re.Pattern[str] = re.compile(r"@@(\w+)")
+_PLACEHOLDER_PATTERN: re.Pattern[str] = re.compile(r"@@@(\w+)")
 
 
 def infer_columns_with_sqlglot(
@@ -70,7 +70,7 @@ def infer_columns_with_sqlglot(
 
 
 def substitute_placeholder_defaults(query_sql: str, placeholders: dict[str, str]) -> str:
-    """Replace @@name tokens with their default values for SQLGlot parsing."""
+    """Replace @@@name tokens with their default values for SQLGlot parsing."""
 
     if not placeholders:
         return query_sql

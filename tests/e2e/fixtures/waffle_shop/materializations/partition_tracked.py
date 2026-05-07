@@ -59,8 +59,8 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
     partition_value: str
     for i, partition_value in enumerate(stale):
         next_day: str = _next_date(partition_value)
-        partition_sql: str = ctx.sql.replace("@@partition_start", f"'{partition_value}'").replace(
-            "@@partition_end", f"'{next_day}'"
+        partition_sql: str = ctx.sql.replace("@@@partition_start", f"'{partition_value}'").replace(
+            "@@@partition_end", f"'{next_day}'"
         )
 
         if ctx.on_progress is not None:

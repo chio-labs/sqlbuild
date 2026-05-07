@@ -521,7 +521,7 @@ PLACEHOLDER_VALID_TEST_CASES: list[PlaceholderConfigValidTestCase] = [
             "materialized": "partition_tracked",
             "placeholders": {"partition_start": "'2020-01-01'", "partition_end": "'2099-12-31'"},
         },
-        query_sql="SELECT * FROM t WHERE d >= @@partition_start AND d < @@partition_end",
+        query_sql="SELECT * FROM t WHERE d >= @@@partition_start AND d < @@@partition_end",
         custom_materialization_names=frozenset({"partition_tracked"}),
     ),
     PlaceholderConfigValidTestCase(
@@ -534,6 +534,12 @@ PLACEHOLDER_VALID_TEST_CASES: list[PlaceholderConfigValidTestCase] = [
         description="built-in table materialization without placeholders",
         config_values={"materialized": "table"},
         query_sql="SELECT * FROM t",
+        custom_materialization_names=frozenset(),
+    ),
+    PlaceholderConfigValidTestCase(
+        description="built-in table materialization ignores compile-time interpolation tokens",
+        config_values={"materialized": "table"},
+        query_sql="SELECT * FROM @@schema_name.t",
         custom_materialization_names=frozenset(),
     ),
 ]
@@ -561,11 +567,11 @@ def test_given_valid_placeholder_config_when_validating_then_passes(
 
 PLACEHOLDER_ERROR_TEST_CASES: list[PlaceholderConfigErrorTestCase] = [
     PlaceholderConfigErrorTestCase(
-        description="@@placeholder on built-in materialization",
+        description="@@@placeholder on built-in materialization",
         config_values={"materialized": "table"},
-        query_sql="SELECT * FROM t WHERE d >= @@partition_start",
+        query_sql="SELECT * FROM t WHERE d >= @@@partition_start",
         custom_materialization_names=frozenset(),
-        expected_error_fragment="@@placeholders are only allowed on custom materializations",
+        expected_error_fragment="@@@placeholders are only allowed on custom materializations",
     ),
     PlaceholderConfigErrorTestCase(
         description="placeholders config on built-in materialization",
@@ -575,11 +581,11 @@ PLACEHOLDER_ERROR_TEST_CASES: list[PlaceholderConfigErrorTestCase] = [
         expected_error_fragment="placeholders config is only allowed on custom materializations",
     ),
     PlaceholderConfigErrorTestCase(
-        description="@@placeholder without default in config",
+        description="@@@placeholder without default in config",
         config_values={"materialized": "partition_tracked"},
-        query_sql="SELECT * FROM t WHERE d >= @@partition_start",
+        query_sql="SELECT * FROM t WHERE d >= @@@partition_start",
         custom_materialization_names=frozenset({"partition_tracked"}),
-        expected_error_fragment="@@placeholders without default values",
+        expected_error_fragment="@@@placeholders without default values",
     ),
     PlaceholderConfigErrorTestCase(
         description="placeholder default not used in SQL",
@@ -587,7 +593,7 @@ PLACEHOLDER_ERROR_TEST_CASES: list[PlaceholderConfigErrorTestCase] = [
             "materialized": "partition_tracked",
             "placeholders": {"partition_start": "'2020-01-01'", "unused_var": "'x'"},
         },
-        query_sql="SELECT * FROM t WHERE d >= @@partition_start",
+        query_sql="SELECT * FROM t WHERE d >= @@@partition_start",
         custom_materialization_names=frozenset({"partition_tracked"}),
         expected_error_fragment="placeholders config entries not used in SQL",
     ),
@@ -597,9 +603,9 @@ PLACEHOLDER_ERROR_TEST_CASES: list[PlaceholderConfigErrorTestCase] = [
             "materialized": "partition_tracked",
             "placeholders": {"partition_start": "'2020-01-01'"},
         },
-        query_sql="SELECT * FROM t WHERE d >= @@partition_start AND d < @@partition_end",
+        query_sql="SELECT * FROM t WHERE d >= @@@partition_start AND d < @@@partition_end",
         custom_materialization_names=frozenset({"partition_tracked"}),
-        expected_error_fragment="@@placeholders without default values.*partition_end",
+        expected_error_fragment="@@@placeholders without default values.*partition_end",
     ),
 ]
 

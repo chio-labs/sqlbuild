@@ -288,8 +288,8 @@ def build_partition_tracking_fn() -> Callable[[MaterializationContext], Material
 
         target_exists: bool = ctx.existing_relation is not None
         if not target_exists:
-            full_sql: str = ctx.sql.replace("@@partition_start", "'2024-01-01'")
-            full_sql = full_sql.replace("@@partition_end", "'2024-01-04'")
+            full_sql: str = ctx.sql.replace("@@@partition_start", "'2024-01-01'")
+            full_sql = full_sql.replace("@@@partition_end", "'2024-01-04'")
             ctx.log("building initial partition range")
             ctx.adapter.create_table_as(
                 ctx.connection,
@@ -304,8 +304,8 @@ def build_partition_tracking_fn() -> Callable[[MaterializationContext], Material
                 )
             return MaterializationResult(relation=ctx.target)
 
-        full_range_sql: str = ctx.sql.replace("@@partition_start", "'2024-01-01'").replace(
-            "@@partition_end", "'2024-01-04'"
+        full_range_sql: str = ctx.sql.replace("@@@partition_start", "'2024-01-01'").replace(
+            "@@@partition_end", "'2024-01-04'"
         )
         cursor: Any = ctx.execute_sql(
             f"SELECT DISTINCT {partition_col} FROM ({full_range_sql}) sub "
@@ -317,8 +317,8 @@ def build_partition_tracking_fn() -> Callable[[MaterializationContext], Material
         stale: str
         for stale in stale_partitions:
             next_day: str = stale[:8] + str(int(stale[8:]) + 1).zfill(2)
-            partition_sql: str = ctx.sql.replace("@@partition_start", f"'{stale}'")
-            partition_sql = partition_sql.replace("@@partition_end", f"'{next_day}'")
+            partition_sql: str = ctx.sql.replace("@@@partition_start", f"'{stale}'")
+            partition_sql = partition_sql.replace("@@@partition_end", f"'{next_day}'")
             ctx.adapter.append(
                 ctx.connection,
                 target=ctx.target,
@@ -354,14 +354,14 @@ def build_existing_relation_capture_fn(
 def build_placeholder_execution_fn(
     substitutions: dict[str, str],
 ) -> Callable[[MaterializationContext], MaterializationResult]:
-    """Build a materialize function that substitutes @@placeholders and executes."""
+    """Build a materialize function that substitutes @@@placeholders and executes."""
 
     def materialize(ctx: MaterializationContext) -> MaterializationResult:
         sql: str = ctx.sql
         placeholder_name: str
         placeholder_value: str
         for placeholder_name, placeholder_value in substitutions.items():
-            sql = sql.replace(f"@@{placeholder_name}", placeholder_value)
+            sql = sql.replace(f"@@@{placeholder_name}", placeholder_value)
         ctx.adapter.create_table_as(
             ctx.connection,
             target=ctx.target,
