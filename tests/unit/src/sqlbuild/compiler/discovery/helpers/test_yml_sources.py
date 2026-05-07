@@ -10,6 +10,7 @@ from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
     ParseSourcesYamlErrorTestCase,
     ParseSourcesYamlTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.discovery.helpers.helpers import expected_or_actual
 
 TEST_CASES: list[ParseSourcesYamlTestCase] = [
     ParseSourcesYamlTestCase(
@@ -30,11 +31,13 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
             columns:
               - name: order_id
                 type: VARCHAR
+                nullable: false
                 description: Stable order identifier.
                 audits:
                   - not_null
               - name: created_at
                 type: TIMESTAMP_NTZ
+                nullable: true
                 audits:
                   - recency:
                       max_age_hours: 24
@@ -48,6 +51,7 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
         expected_expressions=(None, None),
         expected_source_audit_names=(("source_freshness",), ()),
         expected_column_audit_names=((("not_null",), ("recency",)), ()),
+        expected_column_nullables=((False, True), ()),
     ),
     ParseSourcesYamlTestCase(
         description="defaults expression source type enforcement from typed columns",
@@ -154,6 +158,12 @@ def test_given_sources_yaml_variants_when_parsing_then_it_returns_expected_raw_m
     assert (
         tuple(tuple(column.name for column in entry.columns) for entry in source_entries)
         == test_case.expected_column_names
+    )
+    actual_column_nullables: tuple[tuple[bool | None, ...], ...] = tuple(
+        tuple(column.nullable for column in entry.columns) for entry in source_entries
+    )
+    assert actual_column_nullables == expected_or_actual(
+        test_case.expected_column_nullables, actual_column_nullables
     )
     assert (
         tuple(entry.type_enforcement for entry in source_entries)
@@ -337,6 +347,30 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
                 audits: {}
         """,
         expected_error_fragment="source column audits must be a list",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source column nullable is not a boolean",
+        contents="""
+        sources:
+          - name: raw_orders
+            columns:
+              - name: order_id
+                nullable: 123
+        """,
+        expected_error_fragment="source column 'nullable' must be a boolean",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source column allows nulls and uses not null audit",
+        contents="""
+        sources:
+          - name: raw_orders
+            columns:
+              - name: order_id
+                nullable: true
+                audits:
+                  - not_null
+        """,
+        expected_error_fragment=("column 'order_id' cannot set nullable = true and audit not_null"),
     ),
     ParseSourcesYamlErrorTestCase(
         description="raises when source column type is blank",

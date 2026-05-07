@@ -128,6 +128,8 @@ class ParseSchemaYamlTestCase:
     expected_seed_column_names: tuple[tuple[str, ...], ...]
     expected_model_audit_names: tuple[tuple[str, ...], ...]
     expected_column_audit_names: tuple[tuple[tuple[str, ...], ...], ...]
+    expected_model_column_nullables: tuple[tuple[bool | None, ...], ...] | None = None
+    expected_seed_column_nullables: tuple[tuple[bool | None, ...], ...] | None = None
     expected_seed_databases: tuple[str | None, ...] = ()
     expected_seed_schemas: tuple[str | None, ...] = ()
 
@@ -171,6 +173,7 @@ class ParseSourcesYamlTestCase:
     expected_expressions: tuple[str | None, ...]
     expected_source_audit_names: tuple[tuple[str, ...], ...] = ()
     expected_column_audit_names: tuple[tuple[tuple[str, ...], ...], ...] = ()
+    expected_column_nullables: tuple[tuple[bool | None, ...], ...] | None = None
 
 
 @dataclass(frozen=True)

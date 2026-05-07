@@ -20,6 +20,7 @@ class BuildCompileInputsTestCase:
     expected_effective_sql_validation: bool = True
     expected_effective_max_concurrency: int = 1
     expected_model_query_sqls: tuple[str, ...] = field(default_factory=tuple)
+    expected_model_column_nullables: tuple[tuple[bool | None, ...], ...] | None = None
     expected_test_sql_bodies: tuple[str, ...] = field(default_factory=tuple)
     expected_test_authored_cte_names: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     expected_test_mock_model_names: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
@@ -27,6 +28,8 @@ class BuildCompileInputsTestCase:
     expected_test_mock_seed_names: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     expected_test_expected_model_names: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     expected_audit_sql_bodies: tuple[str, ...] = field(default_factory=tuple)
+    expected_diagnostic_codes: tuple[str, ...] = field(default_factory=tuple)
+    expected_diagnostic_messages: tuple[str, ...] = field(default_factory=tuple)
     expected_sql_function_names: tuple[str, ...] = field(default_factory=tuple)
     expected_sql_function_arguments: tuple[tuple[tuple[str, str], ...], ...] = field(
         default_factory=tuple

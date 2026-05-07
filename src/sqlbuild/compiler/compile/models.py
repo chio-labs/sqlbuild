@@ -12,6 +12,7 @@ from sqlbuild.compiler.compile.types import (
     FunctionLanguage,
     SqlReferenceKind,
 )
+from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
@@ -244,6 +245,7 @@ class CompileProjectInputs:
     sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = field(default_factory=tuple)
     test_inputs: tuple[CompileSqlTestInput, ...] = field(default_factory=tuple)
     audit_inputs: tuple[CompileAuditInput, ...] = field(default_factory=tuple)
+    diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -375,3 +377,4 @@ class CompiledProject:
     functions: tuple[CompiledFunction, ...] = field(default_factory=tuple)
     audits: tuple[CompiledAudit, ...] = field(default_factory=tuple)
     sql_tests: tuple[CompiledSqlTest, ...] = field(default_factory=tuple)
+    diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)

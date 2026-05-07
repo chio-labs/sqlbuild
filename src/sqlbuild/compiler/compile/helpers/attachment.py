@@ -965,6 +965,8 @@ def build_audit_inputs(
     model_inputs: tuple[CompileModelInput, ...],
     source_inputs: tuple[CompileSourceInput, ...],
     macro_context: MacroContext,
+    generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]]
+    | None = None,
 ) -> tuple[CompileAuditInput, ...]:
     """Build compile-time audit inputs from discovered SQL audit blocks."""
 
@@ -972,9 +974,8 @@ def build_audit_inputs(
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
     known_seed_names: set[str] = build_known_seed_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
-    generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]] = (
-        index_generic_audit_definitions(discovered_inputs.audit_files)
-    )
+    if generic_audit_definitions is None:
+        generic_audit_definitions = index_generic_audit_definitions(discovered_inputs.audit_files)
     default_audit_severity: str | None = effective_settings.default_audit_severity
     default_audit_run_scope: str | None = effective_settings.default_audit_run_scope
     audit_inputs: list[CompileAuditInput] = []
@@ -1082,7 +1083,10 @@ def build_model_attached_audit_inputs(
                 audit_instance=audit_instance,
                 owner_file=owner_file,
                 generic_audit_definitions=generic_audit_definitions,
-                implicit_arguments={"model": model_input.model_file.file_path.stem},
+                implicit_arguments={
+                    "model": model_input.model_file.file_path.stem,
+                    "relation": f'__ref("{model_input.model_file.file_path.stem}")',
+                },
                 attached_target_kind=AttachedAuditTargetKind.MODEL,
                 attached_target_name=model_input.model_file.file_path.stem,
                 attached_column_name=None,
@@ -1105,6 +1109,7 @@ def build_model_attached_audit_inputs(
                     generic_audit_definitions=generic_audit_definitions,
                     implicit_arguments={
                         "model": model_input.model_file.file_path.stem,
+                        "relation": f'__ref("{model_input.model_file.file_path.stem}")',
                         "column": column_entry.name,
                     },
                     attached_target_kind=AttachedAuditTargetKind.MODEL,
@@ -1144,7 +1149,10 @@ def build_source_attached_audit_inputs(
                 audit_instance=audit_instance,
                 owner_file=source_input.source_file.relative_path,
                 generic_audit_definitions=generic_audit_definitions,
-                implicit_arguments={"source": source_input.source_entry.name},
+                implicit_arguments={
+                    "source": source_input.source_entry.name,
+                    "relation": f'__source("{source_input.source_entry.name}")',
+                },
                 attached_target_kind=AttachedAuditTargetKind.SOURCE,
                 attached_target_name=source_input.source_entry.name,
                 attached_column_name=None,
@@ -1167,6 +1175,7 @@ def build_source_attached_audit_inputs(
                     generic_audit_definitions=generic_audit_definitions,
                     implicit_arguments={
                         "source": source_input.source_entry.name,
+                        "relation": f'__source("{source_input.source_entry.name}")',
                         "column": column_entry.name,
                     },
                     attached_target_kind=AttachedAuditTargetKind.SOURCE,
@@ -2171,12 +2180,34 @@ def _parse_model_header_columns(
                 f"{file_path} model column '{raw_column_name}' metadata must be a mapping"
             )
         column_metadata: dict[str, object] = cast(dict[str, object], raw_column_metadata)
-        unknown_keys: set[str] = set(column_metadata) - {"type", "description", "audits"}
+        unknown_keys: set[str] = set(column_metadata) - {
+            "type",
+            "nullable",
+            "description",
+            "audits",
+        }
         if unknown_keys:
             raise CompileInputError(
                 f"{file_path} model column '{raw_column_name}' has unknown metadata keys: "
                 f"{', '.join(sorted(unknown_keys))}"
             )
+        nullable: bool | None = _optional_model_header_bool(
+            raw_value=column_metadata.get("nullable"),
+            file_path=file_path,
+            label=f"model column '{raw_column_name}'",
+            key="nullable",
+        )
+        audits: tuple[SchemaAuditInstance, ...] = _parse_model_header_audits(
+            raw_audits=column_metadata.get("audits"),
+            file_path=file_path,
+            label=f"model column '{raw_column_name}'",
+        )
+        _validate_nullable_audits(
+            file_path=file_path,
+            column_name=raw_column_name,
+            nullable=nullable,
+            audit_names=tuple(audit.definition_name for audit in audits),
+        )
         parsed_columns.append(
             SchemaColumn(
                 name=raw_column_name,
@@ -2186,17 +2217,14 @@ def _parse_model_header_columns(
                     label=f"model column '{raw_column_name}'",
                     key="type",
                 ),
+                nullable=nullable,
                 description=_optional_model_header_string(
                     raw_value=column_metadata.get("description"),
                     file_path=file_path,
                     label=f"model column '{raw_column_name}'",
                     key="description",
                 ),
-                audits=_parse_model_header_audits(
-                    raw_audits=column_metadata.get("audits"),
-                    file_path=file_path,
-                    label=f"model column '{raw_column_name}'",
-                ),
+                audits=audits,
                 location=column_locations.get(raw_column_name),
             )
         )
@@ -2229,6 +2257,27 @@ def _optional_model_header_string(
     if not isinstance(raw_value, str) or not raw_value.strip():
         raise CompileInputError(f"{file_path} {label} '{key}' must be a non-empty string")
     return raw_value
+
+
+def _optional_model_header_bool(
+    *, raw_value: object | None, file_path: Path, label: str, key: str
+) -> bool | None:
+    if raw_value is None:
+        return None
+    if not isinstance(raw_value, bool):
+        raise CompileInputError(f"{file_path} {label} '{key}' must be a boolean")
+    return raw_value
+
+
+def _validate_nullable_audits(
+    *, file_path: Path, column_name: str, nullable: bool | None, audit_names: tuple[str, ...]
+) -> None:
+    if nullable is True and "not_null" in audit_names:
+        raise CompileInputError(
+            f"{file_path} column '{column_name}' cannot set nullable = true and audit not_null",
+            code="P002",
+            help="remove the not_null audit or set nullable = false",
+        )
 
 
 def _merge_schema_tags(
