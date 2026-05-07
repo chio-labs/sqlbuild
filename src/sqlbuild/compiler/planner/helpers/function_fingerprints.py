@@ -18,10 +18,6 @@ def build_compiled_function_fingerprint_sql(function: CompiledFunction) -> str:
     """Build stable function definition text used for change fingerprints."""
 
     return build_function_fingerprint_sql(
-        name=function.name,
-        target_database=function.target.database,
-        target_schema=function.target.schema,
-        target_name=function.target.name,
         arguments=function.arguments,
         returns=function.returns,
         return_columns=function.return_columns,
@@ -81,10 +77,6 @@ def detect_function_change(
 
 def build_function_fingerprint_sql(
     *,
-    name: str,
-    target_database: str | None,
-    target_schema: str | None,
-    target_name: str,
     arguments: tuple[FunctionArgument | object, ...],
     returns: str,
     body_sql: str,
@@ -103,10 +95,6 @@ def build_function_fingerprint_sql(
     rendered_packages: str = ",".join(packages)
     return "\n".join(
         (
-            f"name={name}",
-            f"target_database={target_database or ''}",
-            f"target_schema={target_schema or ''}",
-            f"target_name={target_name}",
             f"language={language}",
             f"arguments={rendered_arguments}",
             f"returns={returns}",

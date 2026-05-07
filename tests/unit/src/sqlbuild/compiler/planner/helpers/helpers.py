@@ -548,7 +548,7 @@ def build_cascade_upstream_state(
 
 
 def build_compiled_function(
-    *, body_sql: str, query_change_backfill: str | None = None
+    *, body_sql: str, query_change_backfill: str | None = None, target_schema: str = "main"
 ) -> CompiledFunction:
     """Build a minimal compiled function for planner tests."""
 
@@ -565,15 +565,15 @@ def build_compiled_function(
         body_sql=body_sql,
         target=CompiledRelationTarget(
             database=None,
-            schema="main",
+            schema=target_schema,
             name="is_completed_order",
-            qualified_name="main.is_completed_order",
+            qualified_name=f"{target_schema}.is_completed_order",
         ),
         fingerprint_target=CompiledRelationTarget(
             database=None,
-            schema="main",
+            schema=target_schema,
             name="is_completed_order",
-            qualified_name="main.is_completed_order",
+            qualified_name=f"{target_schema}.is_completed_order",
         ),
         query_change_backfill=query_change_backfill,
     )
