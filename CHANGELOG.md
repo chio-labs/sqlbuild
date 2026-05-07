@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.7.0](https://github.com/chio-labs/sqlbuild/compare/v0.6.0...v0.7.0) (2026-05-07)
+
+
+### Features
+
+* add accepted values and relationships audits ([7a12fd3](https://github.com/chio-labs/sqlbuild/commit/7a12fd3098dfe885a73f7a8922daa28e3893a1e0))
+* add nullable contracts and built-in audits ([611f99a](https://github.com/chio-labs/sqlbuild/commit/611f99a689440b29af5ebe835e27de6967c60d8d))
+* add spinner based CLI progress ([9cce465](https://github.com/chio-labs/sqlbuild/commit/9cce465c454895bc79a35e9bee3cadbcd2ca34b3))
+* add spinner based CLI progress ([9664cd9](https://github.com/chio-labs/sqlbuild/commit/9664cd9eb608819806cc2d7f9d59d57ecedbf987))
+* align config and table function names ([b011ead](https://github.com/chio-labs/sqlbuild/commit/b011eadb0b9d3991dcdf53f522bb8d6f73682974))
+* align config and table function names ([ec77895](https://github.com/chio-labs/sqlbuild/commit/ec7789511c095bd1d572a570e73a5a8e5867598d))
+* show progress errors below rows ([cbe4a2a](https://github.com/chio-labs/sqlbuild/commit/cbe4a2a76232c0b854a369e5af02f5ebb0fbc5d8))
+* show progress errors below rows ([4908b24](https://github.com/chio-labs/sqlbuild/commit/4908b24ef7e9d627d5c354dc5ebebdc255a38991))
+* unify authored SQL interpolation ([c1d7e77](https://github.com/chio-labs/sqlbuild/commit/c1d7e77ec2545877949d59288d7c942afe031de3))
+* unify CLI progress output ([0695eea](https://github.com/chio-labs/sqlbuild/commit/0695eeaca6b49e15152bead00e578c1f647c4936))
+
+
+### Bug Fixes
+
+* align plan output columns ([8af7b74](https://github.com/chio-labs/sqlbuild/commit/8af7b740be77138b773fb44a4366a14bbad5d828))
+* narrow function change fingerprints ([5bc5896](https://github.com/chio-labs/sqlbuild/commit/5bc58967bfa26e6330a78d4657f19a2bb4fd13ee))
+* narrow function change fingerprints ([a0bf9bf](https://github.com/chio-labs/sqlbuild/commit/a0bf9bf4a020a84066078d798b9b9fc76af7b591))
+* respect disabled sqlglot setting ([11ca558](https://github.com/chio-labs/sqlbuild/commit/11ca55858ac91a9be060f22b100fca4a938c80ac))
+
+
+### Documentation
+
+* add contributing guide and update logo ([4e3ce74](https://github.com/chio-labs/sqlbuild/commit/4e3ce748497d3eec80b85387f9f9e261ee715c30))
+* use relative README logo path ([0203ad8](https://github.com/chio-labs/sqlbuild/commit/0203ad8ca827f8d9c23309432601ce27b27b4b82))
+
 ## [0.6.0](https://github.com/chio-labs/sqlbuild/compare/v0.5.0...v0.6.0) (2026-05-07)
 
 
