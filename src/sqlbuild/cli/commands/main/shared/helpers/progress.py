@@ -163,10 +163,15 @@ class BuildProgressCallbacks:
             )
             duration: str = _format_duration(node_result.duration_ms)
             seed_name: str = _truncate_name(node_result.seed_name, self._name_width)
-            nw: int = self._name_width
-            self._stream.write(
-                f"  {ctr}  {'seed':<{_TYPE_WIDTH}}{seed_name:<{nw}} {status:<6} {duration}\n"
+            self._write_top_level_result_line(
+                ctr=ctr,
+                resource_type="seed",
+                name=seed_name,
+                status=status,
+                duration=duration,
             )
+            if node_result.status == ExecutionStatus.FAILED and node_result.error_message:
+                self._write_error_detail(node_result.error_message)
             self._stream.flush()
             return
 
@@ -177,15 +182,15 @@ class BuildProgressCallbacks:
             )
             duration: str = _format_duration(node_result.duration_ms)
             function_name: str = _truncate_name(node_result.function_name, self._name_width)
-            detail: str = ""
-            if node_result.status == ExecutionStatus.FAILED and node_result.error_message:
-                detail = f"  {node_result.error_message}"
-            nw = self._name_width
-            line: str = (
-                f"  {ctr}  {'function':<{_TYPE_WIDTH}}{function_name:<{nw}} "
-                f"{status:<6} {duration}{detail}\n"
+            self._write_top_level_result_line(
+                ctr=ctr,
+                resource_type="function",
+                name=function_name,
+                status=status,
+                duration=duration,
             )
-            self._stream.write(line)
+            if node_result.status == ExecutionStatus.FAILED and node_result.error_message:
+                self._write_error_detail(node_result.error_message)
             self._stream.flush()
             return
 
@@ -214,12 +219,16 @@ class BuildProgressCallbacks:
         elif model_result.status == ExecutionStatus.SKIPPED:
             duration = ""
 
-        nw: int = self._name_width
-        line: str = (
-            f"  {ctr}  {display_type:<{_TYPE_WIDTH}}{name_display:<{nw}}"
-            f" {status:<6} {duration}{detail}\n"
+        self._write_top_level_result_line(
+            ctr=ctr,
+            resource_type=display_type,
+            name=name_display,
+            status=status,
+            duration=duration,
+            detail=detail,
         )
-        self._stream.write(line)
+        if model_result.status == ExecutionStatus.FAILED and model_result.error_message:
+            self._write_error_detail(model_result.error_message)
 
         if self._verbose:
             event: LifeCycleEvent
@@ -274,6 +283,29 @@ class BuildProgressCallbacks:
                 self._write_sql_block(entry.executed_sql)
 
         self._stream.flush()
+
+    def _write_top_level_result_line(
+        self,
+        *,
+        ctr: str,
+        resource_type: str,
+        name: str,
+        status: str,
+        duration: str,
+        detail: str = "",
+    ) -> None:
+        nw: int = self._name_width
+        self._stream.write(
+            f"  {ctr}  {resource_type:<{_TYPE_WIDTH}}{name:<{nw}} {status:<6} {duration}{detail}\n"
+        )
+
+    def _write_error_detail(self, message: str) -> None:
+        pad: str = " " * self._prefix_width
+        label: str = "error"
+        line: str
+        for line_index, line in enumerate(message.splitlines() or [message]):
+            display_label: str = label if line_index == 0 else ""
+            self._stream.write(f"{pad}{display_label:<{_TYPE_WIDTH}}{line}\n")
 
 
 def format_build_header(*, command: str, target: str | None, concurrency: int) -> str:
