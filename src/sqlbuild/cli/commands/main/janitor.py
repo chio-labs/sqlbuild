@@ -47,7 +47,7 @@ def run_janitor(
         else discovered_inputs.project_config.janitor.retention_days
     )
     if effective_retention_days < 0:
-        raise CliUserError("janitor --retention-days must be >= 0")
+        raise CliUserError("janitor --retention-days must be >= 0", code="C501")
 
     effective_adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,

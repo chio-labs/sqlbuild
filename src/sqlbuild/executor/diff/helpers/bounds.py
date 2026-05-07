@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlbuild.adapter.shared.models import CursorValue
 from sqlbuild.adapter.shared.types import CursorKind
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
 
 
 def resolve_bounded_cursors(
@@ -38,7 +39,7 @@ def resolve_bounded_cursors(
             CursorValue(kind=CursorKind.TIMESTAMP, value=end),
             False,
         )
-    raise ValueError(f"model '{model.name}' bounded diff requires cursor_type")
+    raise ExecutorInputError(f"model '{model.name}' bounded diff requires cursor_type", code="X101")
 
 
 def _get_config_str(model: Any, key: str) -> str | None:
@@ -50,26 +51,36 @@ def _parse_integer_bound(raw: str) -> int:
     try:
         return int(raw)
     except ValueError as error:
-        raise ValueError("integer cursor bounded diff requires an integer bound") from error
+        raise ExecutorInputError(
+            "integer cursor bounded diff requires an integer bound",
+            code="X102",
+        ) from error
 
 
 def _parse_duration_bound(raw: str) -> timedelta:
     if len(raw) < 2:
-        raise ValueError("timestamp cursor bounded diff requires duration like 30d, 12h, or 15m")
+        raise ExecutorInputError(
+            "timestamp cursor bounded diff requires duration like 30d, 12h, or 15m",
+            code="X103",
+        )
     amount_text: str = raw[:-1]
     unit: str = raw[-1]
     try:
         amount: int = int(amount_text)
     except ValueError as error:
-        raise ValueError(
-            "timestamp cursor bounded diff requires duration like 30d, 12h, or 15m"
+        raise ExecutorInputError(
+            "timestamp cursor bounded diff requires duration like 30d, 12h, or 15m",
+            code="X103",
         ) from error
     if amount <= 0:
-        raise ValueError("bounded diff duration must be positive")
+        raise ExecutorInputError("bounded diff duration must be positive", code="X104")
     if unit == "d":
         return timedelta(days=amount)
     if unit == "h":
         return timedelta(hours=amount)
     if unit == "m":
         return timedelta(minutes=amount)
-    raise ValueError("timestamp cursor bounded diff requires duration like 30d, 12h, or 15m")
+    raise ExecutorInputError(
+        "timestamp cursor bounded diff requires duration like 30d, 12h, or 15m",
+        code="X103",
+    )

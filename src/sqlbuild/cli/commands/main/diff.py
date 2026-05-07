@@ -44,22 +44,25 @@ def run_diff(
         pass
     selected_modes: int = int(full) + int(schema_only) + int(bounded is not None)
     if selected_modes != 1:
-        raise CliUserError("diff requires exactly one of --full, --schema-only, or --bounded")
+        raise CliUserError(
+            "diff requires exactly one of --full, --schema-only, or --bounded",
+            code="C201",
+        )
     if max_column_examples is not None and max_column_examples <= 0:
-        raise CliUserError("diff --max-column-examples must be positive")
+        raise CliUserError("diff --max-column-examples must be positive", code="C202")
     if max_row_only_examples is not None and max_row_only_examples <= 0:
-        raise CliUserError("diff --max-row-only-examples must be positive")
+        raise CliUserError("diff --max-row-only-examples must be positive", code="C203")
     if not select:
-        raise CliUserError("diff requires --select in v1")
+        raise CliUserError("diff requires --select in v1", code="C204")
 
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
     if from_environment not in discovered_inputs.project_config.environments:
-        raise CliUserError(f"unknown diff FROM environment '{from_environment}'")
+        raise CliUserError(f"unknown diff FROM environment '{from_environment}'", code="C205")
     if to_environment not in discovered_inputs.project_config.environments:
-        raise CliUserError(f"unknown diff TO environment '{to_environment}'")
+        raise CliUserError(f"unknown diff TO environment '{to_environment}'", code="C206")
 
     effective_adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
@@ -81,7 +84,7 @@ def run_diff(
         exclude=exclude,
     )
     if not selected_names:
-        raise CliUserError("No diffable models found in the selected scope")
+        raise CliUserError("no diffable models found in the selected scope", code="C207")
     effective_max_column_examples: int = (
         max_column_examples if max_column_examples is not None else (10 if verbose else 3)
     )

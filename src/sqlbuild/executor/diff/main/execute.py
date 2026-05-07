@@ -15,6 +15,7 @@ from sqlbuild.executor.diff.helpers.selection import (
     qualified_name,
 )
 from sqlbuild.executor.diff.models import DiffExecutionResult, ModelDiffResult
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
 
 
 def execute_diff(
@@ -44,7 +45,10 @@ def execute_diff(
         left_model: Any | None = left_models.get(name)
         right_model: Any | None = right_models.get(name)
         if left_model is None or right_model is None:
-            raise ValueError(f"diff selected model '{name}' does not exist in both environments")
+            raise ExecutorInputError(
+                f"diff selected model '{name}' does not exist in both environments",
+                code="X301",
+            )
 
         left_relation: str = qualified_name(adapter=adapter, model=left_model)
         right_relation: str = qualified_name(adapter=adapter, model=right_model)
@@ -70,8 +74,9 @@ def execute_diff(
             )
             if intersection:
                 columns: str = ", ".join(intersection)
-                raise ValueError(
-                    f"model '{name}' row_diff_exclude_columns intersects unique_key: {columns}"
+                raise ExecutorInputError(
+                    f"model '{name}' row_diff_exclude_columns intersects unique_key: {columns}",
+                    code="X302",
                 )
             cursor_column: str | None
             start_cursor: Any | None

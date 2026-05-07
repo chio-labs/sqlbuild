@@ -80,7 +80,7 @@ def run_clone(
         target_model_entries: tuple[ModelPlanEntry, ...] = clone_pipeline.target_model_entries
         target_seed_entries: tuple[SeedPlanEntry, ...] = clone_pipeline.target_seed_entries
         if not target_model_entries and not target_seed_entries:
-            raise CliUserError("No cloneable resources found in the selected scope")
+            raise CliUserError("no cloneable resources found in the selected scope", code="C407")
 
         result: CloneExecutionResult = execute_clone(
             source_model_entries=clone_pipeline.source_model_entries,

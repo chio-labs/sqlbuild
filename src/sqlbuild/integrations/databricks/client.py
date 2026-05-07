@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.exceptions import AdapterUserError
 from sqlbuild.adapter.shared.inference_rules import (
     conditional_result_nullability,
     first_arg_nullability,
@@ -80,20 +81,30 @@ class DatabricksAdapter(BaseAdapter):
         token: object | None = config.get("token")
         catalog: object | None = config.get("catalog")
         if not isinstance(server_hostname, str) or not server_hostname.strip():
-            raise ValueError("Databricks connection requires non-empty 'server_hostname'")
+            raise AdapterUserError(
+                "Databricks connection requires non-empty 'server_hostname'",
+                code="A201",
+            )
         if not isinstance(http_path, str) or not http_path.strip():
-            raise ValueError("Databricks connection requires non-empty 'http_path'")
+            raise AdapterUserError(
+                "Databricks connection requires non-empty 'http_path'",
+                code="A202",
+            )
         if not isinstance(token, str) or not token.strip():
-            raise ValueError("Databricks connection requires non-empty 'token'")
+            raise AdapterUserError("Databricks connection requires non-empty 'token'", code="A203")
         if not isinstance(catalog, str) or not catalog.strip():
-            raise ValueError("Databricks connection requires non-empty 'catalog'")
+            raise AdapterUserError(
+                "Databricks connection requires non-empty 'catalog'",
+                code="A204",
+            )
 
         try:
             from databricks import sql
         except ImportError as error:
-            raise RuntimeError(
+            raise AdapterUserError(
                 "Databricks adapter requires optional dependency databricks-sql-connector. "
-                "Install with: sqlbuild[databricks]"
+                "Install with: sqlbuild[databricks]",
+                code="A205",
             ) from error
 
         raw_connection: Any = sql.connect(

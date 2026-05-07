@@ -15,6 +15,7 @@ class ParseRowDiffTolerancesErrorTestCase:
     description: str
     raw: object
     expected_error_fragment: str
+    expected_code: str
 
 
 @dataclass(frozen=True)
@@ -34,3 +35,4 @@ class ResolveBoundedCursorsErrorTestCase:
     config_values: dict[str, object]
     bounded: str | None
     expected_error_fragment: str
+    expected_code: str

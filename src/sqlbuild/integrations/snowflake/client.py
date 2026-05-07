@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.exceptions import AdapterUserError
 from sqlbuild.adapter.shared.inference_rules import (
     conditional_result_nullability,
     first_arg_nullability,
@@ -63,9 +64,10 @@ class SnowflakeAdapter(BaseAdapter):
         try:
             import snowflake.connector
         except ImportError as error:
-            raise RuntimeError(
+            raise AdapterUserError(
                 "Snowflake adapter requires optional dependency "
-                "snowflake-connector-python. Install with: sqlbuild[snowflake]"
+                "snowflake-connector-python. Install with: sqlbuild[snowflake]",
+                code="A301",
             ) from error
 
         connect_config: dict[str, Any] = dict(config)

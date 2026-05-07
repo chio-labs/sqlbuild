@@ -1,12 +1,12 @@
-"""Expected exceptions for the pre-semantic compile attachment layer."""
+"""Expected executor-stage exception types."""
 
 from __future__ import annotations
 
 
-class CompileInputError(ValueError):
-    """Raised when discovered inputs cannot be attached into a compile view."""
+class ExecutorInputError(ValueError):
+    """Raised when runtime execution inputs are invalid."""
 
-    code: str = "P001"
+    code: str = "X000"
 
     def __init__(self, message: str, *, code: str | None = None, help: str | None = None) -> None:
         super().__init__(message)
