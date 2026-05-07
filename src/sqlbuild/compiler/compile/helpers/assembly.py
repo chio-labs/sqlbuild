@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.helpers.deps import (
     audit_scope_deps,
     function_build_deps,
@@ -32,20 +33,29 @@ from sqlbuild.compiler.compile.models import (
     MacroContext,
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledResourceType
+from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.spec.models.project import (
     DefaultsConfig,
     EnvironmentConfig,
     resolve_effective_adapter_name,
 )
-from sqlbuild.spec.models.schema import SchemaSeedEntry
+from sqlbuild.spec.models.schema import SchemaAuditInstance, SchemaColumn, SchemaSeedEntry
+from sqlbuild.spec.models.source import SourceColumnEntry
 
 
-def assemble_compiled_project(inputs: CompileProjectInputs) -> CompiledProject:
+def assemble_compiled_project(
+    inputs: CompileProjectInputs,
+    *,
+    inference_profile: ExpressionInferenceProfile | None = None,
+) -> CompiledProject:
     """Convert attached compile inputs into the planner-ready project view."""
 
     sqlglot_enabled: bool = inputs.effective_settings.sqlglot
     seed_names: frozenset[str] = frozenset(
         seed_input.schema_entry.name for seed_input in inputs.seed_inputs
+    )
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]] = (
+        _build_column_nullability_by_table(inputs)
     )
     return CompiledProject(
         run_id=inputs.run_id,
@@ -55,7 +65,11 @@ def assemble_compiled_project(inputs: CompileProjectInputs) -> CompiledProject:
         settings=inputs.effective_settings,
         models=tuple(
             _assemble_compiled_model(
-                model_input, sqlglot_enabled=sqlglot_enabled, seed_names=seed_names
+                model_input,
+                sqlglot_enabled=sqlglot_enabled,
+                seed_names=seed_names,
+                column_nullability_by_table=column_nullability_by_table,
+                inference_profile=inference_profile,
             )
             for model_input in inputs.model_inputs
         ),
@@ -88,6 +102,8 @@ def _assemble_compiled_model(
     *,
     sqlglot_enabled: bool,
     seed_names: frozenset[str] = frozenset(),
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
+    inference_profile: ExpressionInferenceProfile | None = None,
 ) -> CompiledModel:
     model_name: str = model_input.model_file.file_path.stem
     inferred_columns: tuple[InferredColumn, ...] | None = None
@@ -99,7 +115,10 @@ def _assemble_compiled_model(
     )
     if sqlglot_enabled:
         inferred_columns = infer_columns_with_sqlglot(
-            query_sql=model_input.query_sql, placeholders=placeholders
+            query_sql=model_input.query_sql,
+            placeholders=placeholders,
+            column_nullability_by_table=column_nullability_by_table,
+            inference_profile=inference_profile,
         )
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=model_name),
@@ -115,6 +134,47 @@ def _assemble_compiled_model(
         authored_sql=model_input.model_file.contents,
         output_column_locations=model_input.model_file.output_column_locations,
     )
+
+
+def _build_column_nullability_by_table(
+    inputs: CompileProjectInputs,
+) -> dict[str, dict[str, InferredNullability]]:
+    facts: dict[str, dict[str, InferredNullability]] = {}
+    for model_input in inputs.model_inputs:
+        if model_input.schema_entry is None:
+            continue
+        facts[model_input.schema_entry.name] = _schema_column_nullability(
+            model_input.schema_entry.columns
+        )
+    for seed_input in inputs.seed_inputs:
+        facts[seed_input.schema_entry.name] = _schema_column_nullability(
+            seed_input.schema_entry.columns
+        )
+    for source_input in inputs.source_inputs:
+        facts[source_input.source_entry.name] = _source_column_nullability(
+            source_input.source_entry.columns
+        )
+    return facts
+
+
+def _schema_column_nullability(
+    columns: tuple[SchemaColumn, ...],
+) -> dict[str, InferredNullability]:
+    return {column.name: _declared_column_nullability(column.audits) for column in columns}
+
+
+def _source_column_nullability(
+    columns: tuple[SourceColumnEntry, ...],
+) -> dict[str, InferredNullability]:
+    return {column.name: _declared_column_nullability(column.audits) for column in columns}
+
+
+def _declared_column_nullability(
+    audits: tuple[SchemaAuditInstance, ...],
+) -> InferredNullability:
+    if any(audit.definition_name == "not_null" for audit in audits):
+        return InferredNullability.NON_NULL
+    return InferredNullability.UNKNOWN
 
 
 def _assemble_compiled_source(source_input: CompileSourceInput) -> CompiledSource:

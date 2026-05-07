@@ -7,6 +7,7 @@ import pytest
 from sqlbuild.adapter.shared.types import TypeDialect
 from sqlbuild.compiler.contracts.main.validate import validate_model_contracts
 from sqlbuild.compiler.contracts.models import ContractValidationResult
+from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.spec.models.schema import SourceLocation
 from tests.unit.src.sqlbuild.compiler.contracts._test_types import (
     ContractLocationTestCase,
@@ -93,6 +94,28 @@ TEST_CASES: tuple[ContractValidationTestCase, ...] = (
         expected_severities=(),
         expected_messages=(),
     ),
+    ContractValidationTestCase(
+        description="declared not null ignores unknown inferred nullability",
+        declared_columns=(("order_id", None),),
+        declared_not_null_columns=("order_id",),
+        inferred_columns=(("order_id", None),),
+        inferred_nullability_by_column={"order_id": InferredNullability.UNKNOWN},
+        type_enforcement=None,
+        expected_codes=(),
+        expected_severities=(),
+        expected_messages=(),
+    ),
+    ContractValidationTestCase(
+        description="declared not null fails when output is proven nullable",
+        declared_columns=(("customer_name", None),),
+        declared_not_null_columns=("customer_name",),
+        inferred_columns=(("customer_name", None),),
+        inferred_nullability_by_column={"customer_name": InferredNullability.NULLABLE},
+        type_enforcement=None,
+        expected_codes=("K004",),
+        expected_severities=("error",),
+        expected_messages=("column 'customer_name' is declared not_null but may be nullable",),
+    ),
 )
 
 
@@ -105,6 +128,8 @@ def test_given_compiled_project_when_validating_contracts_then_returns_expected_
             declared_columns=test_case.declared_columns,
             inferred_columns=test_case.inferred_columns,
             type_enforcement=test_case.type_enforcement,
+            declared_not_null_columns=test_case.declared_not_null_columns,
+            inferred_nullability_by_column=test_case.inferred_nullability_by_column,
         ),
         dialect=TypeDialect.DUCKDB,
     )

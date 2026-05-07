@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.helpers.sqlglot_columns import (
     infer_columns_with_sqlglot,
     substitute_placeholder_defaults,
 )
 from sqlbuild.compiler.compile.models import InferredColumn
+from sqlbuild.compiler.lineage.types import InferredNullability
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     InferColumnsTestCase,
     SubstitutePlaceholderDefaultsTestCase,
@@ -128,6 +130,125 @@ INFER_COLUMNS_TEST_CASES: list[InferColumnsTestCase] = [
         query_sql="NOT VALID SQL {{{{ }}}}",
         expected_columns=None,
     ),
+    InferColumnsTestCase(
+        description="infers safe literal nullability",
+        query_sql="SELECT 1 AS one, NULL AS missing",
+        expected_columns=(
+            InferredColumn(name="one", nullability=InferredNullability.NON_NULL),
+            InferredColumn(name="missing", nullability=InferredNullability.NULLABLE),
+        ),
+    ),
+    InferColumnsTestCase(
+        description="inherits direct passthrough nullability from known table facts",
+        query_sql='SELECT order_id, status FROM __ref("orders")',
+        column_nullability_by_table={
+            "orders": {
+                "order_id": InferredNullability.NON_NULL,
+                "status": InferredNullability.UNKNOWN,
+            }
+        },
+        expected_columns=(
+            InferredColumn(name="order_id", nullability=InferredNullability.NON_NULL),
+            InferredColumn(name="status", nullability=InferredNullability.UNKNOWN),
+        ),
+    ),
+    InferColumnsTestCase(
+        description="marks right side of left join nullable",
+        query_sql=(
+            'SELECT o.order_id, c.name FROM __ref("orders") o '
+            'LEFT JOIN __ref("customers") c ON o.customer_id = c.customer_id'
+        ),
+        column_nullability_by_table={
+            "orders": {"order_id": InferredNullability.NON_NULL},
+            "customers": {"name": InferredNullability.NON_NULL},
+        },
+        expected_columns=(
+            InferredColumn(name="order_id", nullability=InferredNullability.NON_NULL),
+            InferredColumn(name="name", nullability=InferredNullability.NULLABLE),
+        ),
+    ),
+    InferColumnsTestCase(
+        description="marks left side of right join nullable",
+        query_sql=(
+            'SELECT o.order_id, c.name FROM __ref("orders") o '
+            'RIGHT JOIN __ref("customers") c ON o.customer_id = c.customer_id'
+        ),
+        column_nullability_by_table={
+            "orders": {"order_id": InferredNullability.NON_NULL},
+            "customers": {"name": InferredNullability.NON_NULL},
+        },
+        expected_columns=(
+            InferredColumn(name="order_id", nullability=InferredNullability.NULLABLE),
+            InferredColumn(name="name", nullability=InferredNullability.NON_NULL),
+        ),
+    ),
+    InferColumnsTestCase(
+        description="marks both sides of full join nullable",
+        query_sql=(
+            'SELECT o.order_id, c.name FROM __ref("orders") o '
+            'FULL JOIN __ref("customers") c ON o.customer_id = c.customer_id'
+        ),
+        column_nullability_by_table={
+            "orders": {"order_id": InferredNullability.NON_NULL},
+            "customers": {"name": InferredNullability.NON_NULL},
+        },
+        expected_columns=(
+            InferredColumn(name="order_id", nullability=InferredNullability.NULLABLE),
+            InferredColumn(name="name", nullability=InferredNullability.NULLABLE),
+        ),
+    ),
+    InferColumnsTestCase(
+        description="infers count as non null",
+        query_sql='SELECT COUNT(*) AS order_count FROM __ref("orders")',
+        expected_columns=(
+            InferredColumn(name="order_count", nullability=InferredNullability.NON_NULL),
+        ),
+    ),
+    InferColumnsTestCase(
+        description="infers coalesce with literal fallback as non null",
+        query_sql="SELECT COALESCE(status, 'unknown') AS status FROM __ref(\"orders\")",
+        expected_columns=(InferredColumn(name="status", nullability=InferredNullability.NON_NULL),),
+    ),
+    InferColumnsTestCase(
+        description="preserves cast input nullability",
+        query_sql='SELECT CAST(order_id AS BIGINT) AS order_id FROM __ref("orders")',
+        column_nullability_by_table={"orders": {"order_id": InferredNullability.NON_NULL}},
+        expected_columns=(
+            InferredColumn(
+                name="order_id", type="BIGINT", nullability=InferredNullability.NON_NULL
+            ),
+        ),
+    ),
+    InferColumnsTestCase(
+        description="leaves arbitrary expressions unknown",
+        query_sql='SELECT quantity * price AS total FROM __ref("orders")',
+        column_nullability_by_table={
+            "orders": {
+                "quantity": InferredNullability.NON_NULL,
+                "price": InferredNullability.NON_NULL,
+            }
+        },
+        expected_columns=(InferredColumn(name="total"),),
+    ),
+    InferColumnsTestCase(
+        description="leaves set operation nullability unknown",
+        query_sql="SELECT 1 AS value UNION ALL SELECT NULL AS value",
+        expected_columns=(InferredColumn(name="value"),),
+    ),
+    InferColumnsTestCase(
+        description="uses adapter function nullability rule",
+        query_sql="SELECT LOWER('READY') AS status",
+        inference_profile=ExpressionInferenceProfile(
+            function_nullability_rules={
+                "LOWER": lambda args: (
+                    InferredNullability.NON_NULL
+                    if args == (InferredNullability.NON_NULL,)
+                    else InferredNullability.UNKNOWN
+                ),
+            }
+        ),
+        expected_columns=(InferredColumn(name="status", nullability=InferredNullability.NON_NULL),),
+    ),
 ]
 
 
@@ -141,6 +262,8 @@ def test_given_query_sql_when_inferring_columns_then_returns_expected(
 ) -> None:
     result: tuple[InferredColumn, ...] | None = infer_columns_with_sqlglot(
         query_sql=test_case.query_sql,
+        column_nullability_by_table=test_case.column_nullability_by_table,
+        inference_profile=test_case.inference_profile,
     )
 
     assert result == test_case.expected_columns

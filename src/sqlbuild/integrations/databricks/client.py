@@ -11,9 +11,14 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.inference_rules import (
+    conditional_result_nullability,
+    first_arg_nullability,
+)
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
     CursorValue,
+    ExpressionInferenceProfile,
     FunctionInfo,
     QueryResult,
     RelationInfo,
@@ -339,6 +344,16 @@ class DatabricksAdapter(BaseAdapter):
 
     def sqlglot_dialect(self) -> str | None:
         return "databricks"
+
+    def expression_inference_profile(self) -> ExpressionInferenceProfile:
+        return ExpressionInferenceProfile(
+            sqlglot_dialect=self.sqlglot_dialect(),
+            function_nullability_rules={
+                "IF": conditional_result_nullability,
+                "LOWER": first_arg_nullability,
+                "UPPER": first_arg_nullability,
+            },
+        )
 
     def default_promotion_strategy(self) -> PromotionStrategy:
         return PromotionStrategy.ATOMIC_REPLACE

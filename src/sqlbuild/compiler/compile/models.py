@@ -25,6 +25,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
+from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.spec.models.project import (
     EnvironmentConfig,
     LocalConfig,
@@ -41,6 +42,7 @@ class InferredColumn:
 
     name: str
     type: str | None = None
+    nullability: InferredNullability = InferredNullability.UNKNOWN
 
 
 @dataclass(frozen=True)

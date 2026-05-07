@@ -5,3 +5,10 @@ from dataclasses import dataclass
 class BaseAdapterPythonFunctionSupportTestCase:
     description: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class BaseAdapterExpressionInferenceProfileTestCase:
+    description: str
+    expected_sqlglot_dialect: str | None
+    expected_function_rules_count: int

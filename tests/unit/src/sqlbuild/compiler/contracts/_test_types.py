@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from sqlbuild.compiler.lineage.types import InferredNullability
+
 
 @dataclass(frozen=True)
 class ContractValidationTestCase:
@@ -13,6 +15,8 @@ class ContractValidationTestCase:
     expected_codes: tuple[str, ...]
     expected_severities: tuple[str, ...]
     expected_messages: tuple[str, ...]
+    declared_not_null_columns: tuple[str, ...] = ()
+    inferred_nullability_by_column: dict[str, InferredNullability] | None = None
 
 
 @dataclass(frozen=True)
