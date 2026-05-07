@@ -8,6 +8,9 @@ MODEL (
       expression "total_revenue_cents >= 0",
     ),
   ],
+  columns (
+    revenue_date (nullable false),
+  ),
 );
 
 SELECT

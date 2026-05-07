@@ -81,7 +81,10 @@ def run_compile(
         dialect=adapter.sqlglot_dialect(),
     )
     contract_ms: int = _elapsed_ms(contracts_start)
-    diagnostics: tuple[CompilerDiagnostic, ...] = contract_result.diagnostics
+    diagnostics: tuple[CompilerDiagnostic, ...] = (
+        *graph.project.diagnostics,
+        *contract_result.diagnostics,
+    )
     manifest_payload: dict[str, object] | None = None
     if manifest:
         loaded_macros: dict[str, LoadedMacro] = load_macros(discovered_inputs.macro_files)

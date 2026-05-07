@@ -218,6 +218,8 @@ class CompileJsonBuildE2ETestCase:
     expected_exit_code: int
     expected_model_names: tuple[str, ...]
     expected_sql_fragments: tuple[str, ...]
+    expected_warning_count: int = 0
+    expected_diagnostic_codes: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

@@ -94,6 +94,7 @@ def assemble_compiled_project(
             _assemble_compiled_sql_test(test_input, model_inputs=inputs.model_inputs, inputs=inputs)
             for test_input in inputs.test_inputs
         ),
+        diagnostics=inputs.diagnostics,
     )
 
 
@@ -160,18 +161,27 @@ def _build_column_nullability_by_table(
 def _schema_column_nullability(
     columns: tuple[SchemaColumn, ...],
 ) -> dict[str, InferredNullability]:
-    return {column.name: _declared_column_nullability(column.audits) for column in columns}
+    return {
+        column.name: _declared_column_nullability(column.nullable, column.audits)
+        for column in columns
+    }
 
 
 def _source_column_nullability(
     columns: tuple[SourceColumnEntry, ...],
 ) -> dict[str, InferredNullability]:
-    return {column.name: _declared_column_nullability(column.audits) for column in columns}
+    return {
+        column.name: _declared_column_nullability(column.nullable, column.audits)
+        for column in columns
+    }
 
 
 def _declared_column_nullability(
+    nullable: bool | None,
     audits: tuple[SchemaAuditInstance, ...],
 ) -> InferredNullability:
+    if nullable is False:
+        return InferredNullability.NON_NULL
     if any(audit.definition_name == "not_null" for audit in audits):
         return InferredNullability.NON_NULL
     return InferredNullability.UNKNOWN

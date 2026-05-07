@@ -5,7 +5,7 @@ MODEL (
   tags [marts],
   description "Customer dimension with lifetime metrics.",
   columns (
-    customer_id (audits [not_null, unique]),
+    customer_id (nullable false, audits [not_null, unique]),
   ),
 );
 

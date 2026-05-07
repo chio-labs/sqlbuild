@@ -281,6 +281,33 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         expected_query_results=(("SELECT id FROM main.orders", ((1,),)),),
     ),
     BuildExecutionTestCase(
+        description="built-in not null audit does not require project generic definition",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT 1 AS id",
+        },
+        expected_status=BuildStatus.SUCCESS,
+        expected_success_count=1,
+        expected_model_audit_count=1,
+        expected_query_results=(("SELECT id FROM main.orders", ((1,),)),),
+    ),
+    BuildExecutionTestCase(
+        description="built-in unique audit ignores duplicate null values",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "models/orders.sql": (
+                "MODEL (materialized table, columns (id (audits [unique])));\n\n"
+                "SELECT * FROM (VALUES (1), (NULL), (NULL)) AS input(id)"
+            ),
+        },
+        expected_status=BuildStatus.SUCCESS,
+        expected_success_count=1,
+        expected_model_audit_count=1,
+        expected_query_results=(
+            ("SELECT id FROM main.orders ORDER BY id NULLS LAST", ((1,), (None,), (None,))),
+        ),
+    ),
+    BuildExecutionTestCase(
         description="warn audit records warning but build succeeds",
         project_files={
             "sqlbuild_project.toml": _PROJECT_YML_WARN,
@@ -503,6 +530,21 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
             "sqlbuild_project.toml": _PROJECT_YML,
             "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT NULL AS id",
             "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
+        },
+        expected_status=BuildStatus.FAILED,
+        expected_failure_count=1,
+        expected_model_audit_count=1,
+        expected_model_statuses=(("orders", ExecutionStatus.FAILED),),
+        expected_missing_relations=("main.orders",),
+    ),
+    BuildExecutionTestCase(
+        description="built-in unique audit blocks duplicate non-null values",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "models/orders.sql": (
+                "MODEL (materialized table, columns (id (audits [unique])));\n\n"
+                "SELECT * FROM (VALUES (1), (1), (NULL)) AS input(id)"
+            ),
         },
         expected_status=BuildStatus.FAILED,
         expected_failure_count=1,

@@ -11,6 +11,7 @@ from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
     ParseSchemaYamlTestCase,
     ParseSeedCsvSettingsYamlTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.discovery.helpers.helpers import expected_or_actual
 
 TEST_CASES: list[ParseSchemaYamlTestCase] = [
     ParseSchemaYamlTestCase(
@@ -21,8 +22,10 @@ TEST_CASES: list[ParseSchemaYamlTestCase] = [
             columns:
               - name: country_code
                 type: VARCHAR
+                nullable: false
               - name: country_name
                 type: VARCHAR
+                nullable: true
         """,
         expected_model_names=(),
         expected_seed_names=("country_codes",),
@@ -30,6 +33,7 @@ TEST_CASES: list[ParseSchemaYamlTestCase] = [
         expected_seed_column_names=(("country_code", "country_name"),),
         expected_model_audit_names=(),
         expected_column_audit_names=(),
+        expected_seed_column_nullables=((False, True),),
         expected_seed_databases=(None,),
         expected_seed_schemas=(None,),
     ),
@@ -89,6 +93,18 @@ def test_given_schema_yaml_variants_when_parsing_then_it_returns_expected_raw_me
     assert (
         tuple(tuple(column.name for column in entry.columns) for entry in seed_entries)
         == test_case.expected_seed_column_names
+    )
+    actual_model_column_nullables: tuple[tuple[bool | None, ...], ...] = tuple(
+        tuple(column.nullable for column in entry.columns) for entry in model_entries
+    )
+    assert actual_model_column_nullables == expected_or_actual(
+        test_case.expected_model_column_nullables, actual_model_column_nullables
+    )
+    actual_seed_column_nullables: tuple[tuple[bool | None, ...], ...] = tuple(
+        tuple(column.nullable for column in entry.columns) for entry in seed_entries
+    )
+    assert actual_seed_column_nullables == expected_or_actual(
+        test_case.expected_seed_column_nullables, actual_seed_column_nullables
     )
     assert tuple(entry.database for entry in seed_entries) == test_case.expected_seed_databases
     assert tuple(entry.schema for entry in seed_entries) == test_case.expected_seed_schemas
@@ -249,6 +265,34 @@ ERROR_TEST_CASES: list[ParseSchemaYamlErrorTestCase] = [
                 type: VARCHAR
         """,
         expected_error_fragment="seed column must define non-empty string 'name'",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when seed column nullable is not a boolean",
+        contents="""
+        seeds:
+          - name: country_codes
+            columns:
+              - name: country_code
+                type: VARCHAR
+                nullable: 123
+        """,
+        expected_error_fragment="seed column 'nullable' must be a boolean",
+    ),
+    ParseSchemaYamlErrorTestCase(
+        description="raises when seed column allows nulls and uses not null audit",
+        contents="""
+        seeds:
+          - name: country_codes
+            columns:
+              - name: country_code
+                type: VARCHAR
+                nullable: true
+                audits:
+                  - not_null
+        """,
+        expected_error_fragment=(
+            "column 'country_code' cannot set nullable = true and audit not_null"
+        ),
     ),
     ParseSchemaYamlErrorTestCase(
         description="raises when seed csv settings is not a mapping",

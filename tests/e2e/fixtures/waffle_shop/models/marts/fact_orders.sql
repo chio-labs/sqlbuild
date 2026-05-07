@@ -3,7 +3,7 @@ MODEL (
   tags [marts],
   description "Order fact table with waffle and payment details.",
   columns (
-    order_id (audits [not_null]),
+    order_id (nullable false, audits [not_null]),
   ),
 );
 

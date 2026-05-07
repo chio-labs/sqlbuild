@@ -28,6 +28,7 @@ def make_contract_project(
     model_name: str = "orders",
     column_locations: dict[str, SourceLocation] | None = None,
     declared_not_null_columns: tuple[str, ...] = (),
+    declared_nullable_by_column: dict[str, bool | None] | None = None,
     inferred_nullability_by_column: dict[str, InferredNullability] | None = None,
 ) -> CompiledProject:
     """Build a compiled project for contract validation tests."""
@@ -66,6 +67,7 @@ def make_contract_project(
                                 name=name,
                                 declared_not_null_columns=declared_not_null_columns,
                             ),
+                            nullable=(declared_nullable_by_column or {}).get(name),
                             location=(column_locations or {}).get(name),
                         )
                         for name, column_type in declared_columns
