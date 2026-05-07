@@ -5,18 +5,24 @@ from __future__ import annotations
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
+from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
+from sqlbuild.cli.commands.main.shared.helpers.nested_progress import NestedCommandProgressCallbacks
+from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
+from sqlbuild.cli.commands.main.shared.helpers.progress import format_build_header
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.pipeline.main.run import run_audit_pipeline
-from sqlbuild.shared.helpers.colors import bold, colorize_status, green_bold, supports_color
+from sqlbuild.shared.helpers.colors import blue_bold, dim, green_bold, supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
@@ -45,6 +51,25 @@ def run_audit(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
     )
+    use_color: bool = not no_color and supports_color()
+    progress_stream: TextIO = sys.stdout
+    execution_header: str = format_build_header(command="sqb audit", target=None, concurrency=1)
+    execution_label: str = blue_bold("Execution") if use_color else "Execution"
+    header_detail: str = dim(execution_header) if use_color else execution_header
+    connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
+        adapter_name=resolve_effective_adapter_name(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+        ),
+        stream=progress_stream,
+        use_color=use_color,
+    )
+    planning_progress: PlanningProgressReporter = PlanningProgressReporter(
+        stream=progress_stream,
+        use_color=use_color,
+    )
+    progress_stream.write(f"\n{execution_label}  {header_detail}\n\n")
+    progress_stream.flush()
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
@@ -53,9 +78,12 @@ def run_audit(
         select=select,
         exclude=exclude,
         connection_config=connection_config,
+        on_connection_start=connection_progress.on_connection_start,
+        on_connection_complete=connection_progress.on_connection_complete,
+        on_connection_error=connection_progress.on_connection_error,
+        on_progress=planning_progress.on_progress,
     )
 
-    use_color: bool = not no_color and supports_color()
     audit_count: int = len(pipeline_result.plan_output.audit_entries)
     model_count: int = len(
         {
@@ -66,14 +94,35 @@ def run_audit(
     )
     header: str = f"Audit ({audit_count} selected, {model_count} models)"
     styled_header: str = green_bold(header) if use_color else header
-    sys.stdout.write(f"\n{styled_header}\n")
+    progress: NestedCommandProgressCallbacks = NestedCommandProgressCallbacks(
+        total=audit_count,
+        label="audit",
+        stream=progress_stream,
+        use_color=use_color,
+    )
+    sys.stdout.write(f"\n{styled_header}\n\n")
     sys.stdout.flush()
+    execution_connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
+        adapter_name=resolve_effective_adapter_name(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+        ),
+        stream=progress_stream,
+        use_color=use_color,
+    )
 
-    on_complete: Callable[[AuditExecutionResult], None] = _build_on_complete(use_color=use_color)
+    on_complete: Callable[[AuditExecutionResult], None] = _build_on_complete(progress=progress)
     results: tuple[AuditExecutionResult, ...] = run_audit_pipeline(
         plan=pipeline_result.plan_output,
         connection_config=connection_config,
         adapter=adapter,
+        on_connection_start=execution_connection_progress.on_connection_start,
+        on_connection_complete=execution_connection_progress.on_connection_complete,
+        on_connection_error=execution_connection_progress.on_connection_error,
+        on_audit_start=lambda entry: progress.on_item_start(
+            group_name=entry.attached_target_name or "(unattached)",
+            item_name=_audit_display_name_from_entry(entry),
+        ),
         on_audit_complete=on_complete,
     )
 
@@ -88,16 +137,11 @@ def run_audit(
     return 0 if fail_count == 0 else 1
 
 
-def _build_on_complete(*, use_color: bool) -> Callable[[AuditExecutionResult], None]:
-    current_group: list[str] = [""]
-
+def _build_on_complete(
+    *, progress: NestedCommandProgressCallbacks
+) -> Callable[[AuditExecutionResult], None]:
     def _on_complete(result: AuditExecutionResult) -> None:
         group_name: str = result.attached_target_name or "(unattached)"
-        if group_name != current_group[0]:
-            current_group[0] = group_name
-            group_header: str = bold(group_name) if use_color else group_name
-            sys.stdout.write(f"\n{group_header}\n")
-
         status_text: str
         if result.outcome == AuditOutcome.PASS:
             status_text = "PASS"
@@ -105,7 +149,6 @@ def _build_on_complete(*, use_color: bool) -> Callable[[AuditExecutionResult], N
             status_text = "WARN"
         else:
             status_text = "FAIL"
-        status: str = colorize_status(status_text, use_color=use_color)
         audit_name: str = result.audit_name
         if result.attached_column_name is not None:
             audit_name = f"{result.audit_name} ({result.attached_column_name})"
@@ -113,7 +156,17 @@ def _build_on_complete(*, use_color: bool) -> Callable[[AuditExecutionResult], N
         if result.outcome != AuditOutcome.PASS and result.row_count > 0:
             row_label: str = "row" if result.row_count == 1 else "rows"
             detail = f"  {result.row_count} {row_label}"
-        sys.stdout.write(f"    {'audit':<10}{audit_name:<40} {status}{detail}\n")
-        sys.stdout.flush()
+        progress.on_item_complete(
+            group_name=group_name,
+            item_name=audit_name,
+            status_text=status_text,
+            detail=detail,
+        )
 
     return _on_complete
+
+
+def _audit_display_name_from_entry(entry: AuditPlanEntry) -> str:
+    if entry.attached_column_name is not None:
+        return f"{entry.name} ({entry.attached_column_name})"
+    return entry.name

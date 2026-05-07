@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    assert_fragments_in_order,
     prepare_inline_project,
     prepare_waffle_shop,
     run_sqb,
@@ -63,6 +64,25 @@ SQLGLOT_CHAIN_TEST_CASES: list[SqlglotChainSqlTestE2ETestCase] = [
             description="test runs SQL unit tests and all pass",
             expected_exit_code=0,
             expected_stdout_fragment="PASS=2",
+            expected_stdout_fragments=(
+                "Execution  sqb test  (concurrency: 1)",
+                "Connecting to duckdb...",
+                "Connected to duckdb.",
+            ),
+            expected_ordered_stdout_fragments=(
+                "Execution  sqb test  (concurrency: 1)",
+                "Connecting to duckdb...",
+                "Connected to duckdb. (<time>)",
+                "Inspecting warehouse state...",
+                "Generated plan. (<time>)",
+                "Test (2 selected, 2 models)",
+                "Connecting to duckdb...",
+                "Connected to duckdb. (<time>)",
+                "Preparing test functions...",
+                "Prepared test functions. (<time>)",
+                "fact_orders",
+                "PASS=<n>  FAIL=<n>  TOTAL=<n>",
+            ),
         ),
     ],
     ids=["test runs SQL unit tests and all pass"],
@@ -84,6 +104,10 @@ def test_given_waffle_shop_project_when_running_test_then_all_tests_pass(
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
     assert test_case.expected_stdout_fragment in result.stdout
+    expected_fragment: str
+    for expected_fragment in test_case.expected_stdout_fragments:
+        assert expected_fragment in result.stdout
+    assert_fragments_in_order(result.stdout, test_case.expected_ordered_stdout_fragments)
 
 
 @pytest.mark.parametrize(

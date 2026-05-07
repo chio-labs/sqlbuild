@@ -44,6 +44,12 @@ def red_bold(text: str) -> str:
     return f"{_RED}{_BOLD}{text}{_RESET}"
 
 
+def red_dim(text: str) -> str:
+    """Muted red text for softer error labels."""
+
+    return f"{_RED}{_DIM}{text}{_RESET}"
+
+
 def bold(text: str) -> str:
     """Bold text for section headers."""
 

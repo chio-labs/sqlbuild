@@ -39,6 +39,7 @@ class BuildFooterTestCase:
     description: str
     result: BuildExecutionResult
     expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

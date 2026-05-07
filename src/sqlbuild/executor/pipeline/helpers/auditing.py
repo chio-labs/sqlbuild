@@ -17,15 +17,33 @@ def run_audit_pipeline(
     plan: PlanOutput,
     connection_config: dict[str, object],
     adapter: BaseAdapter,
+    on_connection_start: Callable[[int], None] | None = None,
+    on_connection_complete: Callable[[int, float], None] | None = None,
+    on_connection_error: Callable[[int, float], None] | None = None,
+    on_audit_start: Callable[[AuditPlanEntry], None] | None = None,
     on_audit_complete: Callable[[AuditExecutionResult], None] | None = None,
 ) -> tuple[AuditExecutionResult, ...]:
     """Execute all audits from a compiled plan against existing relations."""
 
-    connection: Any = adapter.connect(connection_config)
+    if on_connection_start is not None:
+        on_connection_start(1)
+    import time
+
+    start: float = time.monotonic()
+    try:
+        connection: Any = adapter.connect(connection_config)
+    except Exception:
+        if on_connection_error is not None:
+            on_connection_error(1, time.monotonic() - start)
+        raise
+    if on_connection_complete is not None:
+        on_connection_complete(1, time.monotonic() - start)
     try:
         results: list[AuditExecutionResult] = []
         entry: AuditPlanEntry
         for entry in plan.audit_entries:
+            if on_audit_start is not None:
+                on_audit_start(entry)
             result: AuditExecutionResult = execute_audit(
                 audit=entry,
                 adapter=adapter,
