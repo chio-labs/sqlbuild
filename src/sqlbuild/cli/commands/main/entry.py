@@ -12,6 +12,7 @@ from sqlbuild.cli.commands.main.helpers.compile.constants import COMPILE_LINEAGE
 from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
 from sqlbuild.cli.commands.main.helpers.diff.validation import parse_diff_environment_range
 from sqlbuild.cli.commands.main.helpers.entry.models import CliEntrypointHandlers, CliNamespace
+from sqlbuild.cli.commands.main.helpers.lineage.constants import COLUMN_LINEAGE_MODE_VALUES
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.parsers import (
     add_cursor_override_args,
@@ -20,6 +21,7 @@ from sqlbuild.cli.commands.main.shared.helpers.parsers import (
 )
 from sqlbuild.cli.commands.main.shared.types import CliCommand
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
+from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
 from sqlbuild.shared.helpers.colors import supports_color
@@ -131,6 +133,13 @@ def _build_parser() -> argparse.ArgumentParser:
         default="upstream",
     )
     lineage_parser.add_argument("--depth", dest="lineage_depth", default="all")
+    lineage_parser.add_argument(
+        "--lineage-mode",
+        dest="lineage_mode",
+        choices=COLUMN_LINEAGE_MODE_VALUES,
+        default=ColumnLineageMode.RICH.value,
+        help="Column lineage mode: rich (default) or fast",
+    )
     add_select_args(lineage_parser)
     subparsers.add_parser(CliCommand.CLEAN)
     janitor_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.JANITOR)
@@ -307,6 +316,7 @@ def _main_with_dependencies(
                 args.lineage_depth,
                 tuple(args.select),
                 tuple(args.exclude),
+                ColumnLineageMode(args.lineage_mode),
             )
         if args.command == CliCommand.CLONE:
             if args.from_environment is None or args.to_environment is None:

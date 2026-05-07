@@ -8,6 +8,7 @@ from sqlbuild.cli.commands.main.entry import _main_with_dependencies, main
 from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
+from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
     MainErrorRenderingTestCase,
     MainTestCase,
@@ -357,8 +358,11 @@ def test_given_debug_command_arguments_when_running_with_dependencies_then_it_di
                 "2",
                 "--format",
                 "json",
+                "--lineage-mode",
+                "fast",
             ],
             expected_exit_code=11,
+            expected_column_lineage_mode=ColumnLineageMode.FAST,
         )
     ],
     ids=["dispatches lineage command through injected handler"],
@@ -367,7 +371,17 @@ def test_given_lineage_command_arguments_when_running_with_dependencies_then_it_
     test_case: MainTestCase,
 ) -> None:
     received_args: list[
-        tuple[Path | None, bool, str | None, str, str, str, tuple[str, ...], tuple[str, ...]]
+        tuple[
+            Path | None,
+            bool,
+            str | None,
+            str,
+            str,
+            str,
+            tuple[str, ...],
+            tuple[str, ...],
+            ColumnLineageMode,
+        ]
     ] = []
 
     def run_lineage(
@@ -379,6 +393,7 @@ def test_given_lineage_command_arguments_when_running_with_dependencies_then_it_
         depth: str,
         select: tuple[str, ...],
         exclude: tuple[str, ...],
+        lineage_mode: ColumnLineageMode,
     ) -> int:
         received_args.append(
             (
@@ -390,6 +405,7 @@ def test_given_lineage_command_arguments_when_running_with_dependencies_then_it_
                 depth,
                 select,
                 exclude,
+                lineage_mode,
             )
         )
         return test_case.expected_exit_code
@@ -400,7 +416,19 @@ def test_given_lineage_command_arguments_when_running_with_dependencies_then_it_
     )
 
     assert exit_code == test_case.expected_exit_code
-    assert received_args == [(None, False, "fact_orders", "json", "both", "2", (), ())]
+    assert received_args == [
+        (
+            None,
+            False,
+            "fact_orders",
+            "json",
+            "both",
+            "2",
+            (),
+            (),
+            test_case.expected_column_lineage_mode,
+        )
+    ]
 
 
 @pytest.mark.parametrize(

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
+from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.models import CursorOverrides
 
 
@@ -48,6 +49,7 @@ class CliNamespace:
     lineage_format: str = "tree"
     lineage_direction: str = "upstream"
     lineage_depth: str = "all"
+    lineage_mode: ColumnLineageMode = ColumnLineageMode.RICH
     no_connection: bool = False
     full: bool = False
     schema_only: bool = False
@@ -140,7 +142,17 @@ class CliEntrypointHandlers:
     run_query: Callable[[Path | None, str | None, str, int | None], int]
     run_debug: Callable[[Path | None, bool, bool, bool], int]
     run_lineage: Callable[
-        [Path | None, bool, str | None, str, str, str, tuple[str, ...], tuple[str, ...]],
+        [
+            Path | None,
+            bool,
+            str | None,
+            str,
+            str,
+            str,
+            tuple[str, ...],
+            tuple[str, ...],
+            ColumnLineageMode,
+        ],
         int,
     ]
     run_janitor: Callable[[Path | None, bool, bool, int | None], int]

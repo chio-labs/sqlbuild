@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 from sqlbuild.cli.commands.main.helpers.lineage.constants import RICH_LINEAGE_STATUS_MODEL_THRESHOLD
 from sqlbuild.cli.commands.main.helpers.lineage.models import (
@@ -23,7 +24,14 @@ from sqlbuild.compiler.lineage.models import (
     ProjectColumnLineage,
     QualifiedLineageColumn,
 )
+from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+
+
+@dataclass(frozen=True)
+class _ColumnLineageCandidateSelection:
+    model_names: frozenset[str]
+    truncated: bool
 
 
 def parse_depth(raw_depth: str) -> int | None:
@@ -73,6 +81,7 @@ def select_column_target_lineage(
     target: str,
     direction: str,
     depth: int | None,
+    mode: ColumnLineageMode = ColumnLineageMode.RICH,
 ) -> ColumnLineageTrace | None:
     """Select column-level lineage when target uses model.column syntax."""
 
@@ -87,19 +96,23 @@ def select_column_target_lineage(
     if direction == "both":
         raise CliUserError("Column lineage supports --direction upstream or downstream, not both")
 
-    candidate_model_names: frozenset[str] = _column_lineage_candidate_model_names(
+    candidate_selection: _ColumnLineageCandidateSelection = _column_lineage_candidate_selection(
         graph=graph,
         key=key,
         direction=direction,
         depth=depth,
     )
     with maybe_status(
-        f"Analyzing rich column lineage for {len(candidate_model_names)} models...",
-        enabled=len(candidate_model_names) >= RICH_LINEAGE_STATUS_MODEL_THRESHOLD,
+        f"Analyzing rich column lineage for {len(candidate_selection.model_names)} models...",
+        enabled=(
+            mode == ColumnLineageMode.RICH
+            and len(candidate_selection.model_names) >= RICH_LINEAGE_STATUS_MODEL_THRESHOLD
+        ),
     ):
         column_lineage: ProjectColumnLineage | None = build_project_column_lineage(
             graph.project,
-            model_names=candidate_model_names,
+            mode=mode,
+            model_names=candidate_selection.model_names,
         )
     if column_lineage is None:
         raise CliUserError("Column lineage requires SQLGlot analysis to be enabled and available")
@@ -120,25 +133,37 @@ def select_column_target_lineage(
         target=target_column,
         trace=trace,
         direction=direction,
+        mode=mode,
+        max_depth=depth,
+        analyzed_model_count=len(candidate_selection.model_names),
+        truncated=candidate_selection.truncated,
     )
 
 
-def _column_lineage_candidate_model_names(
+def _column_lineage_candidate_selection(
     *,
     graph: ProjectGraph,
     key: CompiledObjectKey,
     direction: str,
     depth: int | None,
-) -> frozenset[str]:
+) -> _ColumnLineageCandidateSelection:
     selected: set[CompiledObjectKey] = {key}
     deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
         graph.downstream_deps if direction == "downstream" else graph.upstream_deps
     )
     selected.update(_walk_bounded(anchors=(key,), deps=deps, max_depth=depth))
-    return frozenset(
+    model_names: frozenset[str] = frozenset(
         selected_key.name
         for selected_key in selected
         if selected_key.resource_type == CompiledResourceType.MODEL
+    )
+    if depth is None:
+        return _ColumnLineageCandidateSelection(model_names=model_names, truncated=False)
+    extended: set[CompiledObjectKey] = {key}
+    extended.update(_walk_bounded(anchors=(key,), deps=deps, max_depth=depth + 1))
+    return _ColumnLineageCandidateSelection(
+        model_names=model_names,
+        truncated=extended != selected,
     )
 
 

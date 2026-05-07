@@ -24,6 +24,7 @@ from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.shared.helpers.colors import supports_color
@@ -39,6 +40,7 @@ def run_lineage(
     depth: str = "all",
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
+    lineage_mode: ColumnLineageMode = ColumnLineageMode.RICH,
 ) -> int:
     """Execute the lineage command."""
 
@@ -73,6 +75,7 @@ def run_lineage(
             target=target,
             direction=direction,
             depth=parsed_depth,
+            mode=lineage_mode,
         )
         if column_trace is not None:
             if output_format == "json":
