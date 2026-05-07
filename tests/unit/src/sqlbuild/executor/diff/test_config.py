@@ -6,6 +6,7 @@ import pytest
 
 from sqlbuild.adapter.shared.models import RowDiffTolerance, RowDiffTolerances
 from sqlbuild.executor.diff.helpers.config import parse_row_diff_tolerances
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from tests.unit.src.sqlbuild.executor.diff._test_types import (
     ParseRowDiffTolerancesErrorTestCase,
     ParseRowDiffTolerancesTestCase,
@@ -53,21 +54,25 @@ PARSE_ROW_DIFF_TOLERANCES_ERROR_TEST_CASES: list[ParseRowDiffTolerancesErrorTest
         description="rejects non mapping root",
         raw=[],
         expected_error_fragment="row_diff_tolerances must be a mapping",
+        expected_code="X401",
     ),
     ParseRowDiffTolerancesErrorTestCase(
         description="rejects empty tolerance rule",
         raw={"by_column": {"revenue": {}}},
         expected_error_fragment="must define absolute or relative",
+        expected_code="X404",
     ),
     ParseRowDiffTolerancesErrorTestCase(
         description="rejects unsupported rule keys",
         raw={"by_type": {"float": {"disabled": True}}},
         expected_error_fragment="contains unsupported keys: disabled",
+        expected_code="X403",
     ),
     ParseRowDiffTolerancesErrorTestCase(
         description="rejects boolean threshold",
         raw={"by_column": {"revenue": {"absolute": True}}},
         expected_error_fragment="absolute must be numeric",
+        expected_code="X405",
     ),
 ]
 
@@ -93,5 +98,7 @@ def test_given_raw_row_diff_tolerances_when_parsing_then_returns_typed_tolerance
 def test_given_invalid_row_diff_tolerances_when_parsing_then_raises_clear_error(
     test_case: ParseRowDiffTolerancesErrorTestCase,
 ) -> None:
-    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+    with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment) as error_info:
         parse_row_diff_tolerances(test_case.raw)
+
+    assert error_info.value.code == test_case.expected_code

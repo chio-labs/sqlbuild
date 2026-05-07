@@ -7,6 +7,7 @@ import pytest
 from sqlbuild.cli.commands.main.entry import _main_with_dependencies, main
 from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
@@ -24,7 +25,7 @@ ERROR_RENDERING_TEST_CASES: list[MainErrorRenderingTestCase] = [
             f"{project_dir / 'sqlbuild_project.toml'} must define non-empty string 'name'"
         ),
         expected_stderr_fragment=(
-            "/tmp/demo/sqlbuild_project.toml must define non-empty string 'name'"
+            "error[D001]: /tmp/demo/sqlbuild_project.toml must define non-empty string 'name'"
         ),
         expected_exit_code=1,
     ),
@@ -32,8 +33,16 @@ ERROR_RENDERING_TEST_CASES: list[MainErrorRenderingTestCase] = [
         description="renders cli user errors without a traceback",
         argv=["--project-dir", "/tmp/demo", "compile"],
         error_type=CliUserError,
-        error_factory=lambda project_dir: CliUserError("bad command usage"),
-        expected_stderr_fragment="bad command usage",
+        error_factory=lambda project_dir: CliUserError("bad command usage", code="C999"),
+        expected_stderr_fragment="error[C999]: bad command usage",
+        expected_exit_code=1,
+    ),
+    MainErrorRenderingTestCase(
+        description="renders compile input errors with a code",
+        argv=["--project-dir", "/tmp/demo", "compile"],
+        error_type=CompileInputError,
+        error_factory=lambda project_dir: CompileInputError("model config is invalid"),
+        expected_stderr_fragment="error[P001]: model config is invalid",
         expected_exit_code=1,
     ),
     MainErrorRenderingTestCase(
@@ -41,15 +50,21 @@ ERROR_RENDERING_TEST_CASES: list[MainErrorRenderingTestCase] = [
         argv=["--project-dir", "/tmp/demo", "compile"],
         error_type=ValueError,
         error_factory=lambda project_dir: ValueError("invalid compile request"),
-        expected_stderr_fragment="invalid compile request",
+        expected_stderr_fragment="error[E001]: invalid compile request",
         expected_exit_code=1,
     ),
     MainErrorRenderingTestCase(
         description="renders query user errors without a traceback",
         argv=["query", "SELECT 1"],
         error_type=CliUserError,
-        error_factory=lambda project_dir: CliUserError("query requires SQL"),
-        expected_stderr_fragment="query requires SQL",
+        error_factory=lambda project_dir: CliUserError(
+            "query requires SQL",
+            code="C102",
+            help="pass SQL as the query argument",
+        ),
+        expected_stderr_fragment=(
+            "error[C102]: query requires SQL\n  = help: pass SQL as the query argument"
+        ),
         expected_exit_code=1,
     ),
 ]
@@ -818,10 +833,13 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
 )
 def test_given_command_local_global_flags_when_running_main_then_it_returns_parser_error(
     test_case: MainTestCase,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     exit_code: int = main(test_case.argv)
+    rendered_stderr: str = capsys.readouterr().err
 
     assert exit_code == test_case.expected_exit_code
+    assert "error[C900]:" in rendered_stderr
 
 
 @pytest.mark.parametrize(

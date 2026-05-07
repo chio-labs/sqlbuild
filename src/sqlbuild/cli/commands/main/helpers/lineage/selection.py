@@ -42,9 +42,9 @@ def parse_depth(raw_depth: str) -> int | None:
     try:
         depth: int = int(raw_depth)
     except ValueError:
-        raise CliUserError("--depth must be a non-negative integer or 'all'") from None
+        raise CliUserError("--depth must be a non-negative integer or 'all'", code="C304") from None
     if depth < 0:
-        raise CliUserError("--depth must be a non-negative integer or 'all'")
+        raise CliUserError("--depth must be a non-negative integer or 'all'", code="C304")
     return depth
 
 
@@ -59,7 +59,7 @@ def select_target_lineage(
 
     key: CompiledObjectKey | None = graph.all_keys.get(target)
     if key is None:
-        raise CliUserError(f"Unknown lineage target '{target}'")
+        raise CliUserError(f"unknown lineage target '{target}'", code="C305")
 
     selected: set[CompiledObjectKey] = {key}
     if direction in {"upstream", "both"}:
@@ -94,7 +94,10 @@ def select_column_target_lineage(
     if key is None or key.resource_type != CompiledResourceType.MODEL:
         return None
     if direction == "both":
-        raise CliUserError("Column lineage supports --direction upstream or downstream, not both")
+        raise CliUserError(
+            "column lineage supports --direction upstream or downstream, not both",
+            code="C306",
+        )
 
     candidate_selection: _ColumnLineageCandidateSelection = _column_lineage_candidate_selection(
         graph=graph,
@@ -115,7 +118,11 @@ def select_column_target_lineage(
             model_names=candidate_selection.model_names,
         )
     if column_lineage is None:
-        raise CliUserError("Column lineage requires SQLGlot analysis to be enabled and available")
+        raise CliUserError(
+            "column lineage requires SQLGlot analysis to be enabled and available",
+            code="C307",
+            help="enable SQLGlot analysis or install SQLGlot for column lineage",
+        )
 
     target_column: QualifiedLineageColumn = QualifiedLineageColumn(
         resource_type=key.resource_type,
@@ -301,7 +308,10 @@ def _resolve_selector_anchors(
     for raw_select in select:
         for token in raw_select.split():
             if "," in token and require_clear_anchors:
-                raise CliUserError("--depth cannot be combined with comma-intersection selectors")
+                raise CliUserError(
+                    "--depth cannot be combined with comma-intersection selectors",
+                    code="C308",
+                )
             parts: list[str] = token.split(",")
             for part in parts:
                 parsed: ParsedLineageSelector | ParsedLineagePathSelector = _parse_selector(part)
@@ -315,7 +325,8 @@ def _resolve_selector_anchors(
                 if parsed.kind in {"tag", "path"}:
                     if require_clear_anchors:
                         raise CliUserError(
-                            "--depth requires name, source, seed, or path-between selectors"
+                            "--depth requires name, source, seed, or path-between selectors",
+                            code="C309",
                         )
                     matched: frozenset[CompiledObjectKey]
                     if parsed.kind == "tag":
@@ -405,7 +416,7 @@ def _walk_all(
 def _lookup_name(name: str, all_keys: dict[str, CompiledObjectKey]) -> CompiledObjectKey:
     key: CompiledObjectKey | None = all_keys.get(name)
     if key is None:
-        raise CliUserError(f"Unknown lineage target '{name}'")
+        raise CliUserError(f"unknown lineage target '{name}'", code="C305")
     return key
 
 
@@ -502,12 +513,12 @@ def _resolve_single(
     if parsed.kind == "tag":
         matched_keys: frozenset[CompiledObjectKey] = tag_index.get(parsed.value, frozenset())
         if not matched_keys:
-            raise CliUserError(f"No models found with tag '{parsed.value}'")
+            raise CliUserError(f"no models found with tag '{parsed.value}'", code="C310")
         return _apply_selector_expansion(matched_keys, parsed, upstream, downstream)
     if parsed.kind == "path":
         matched_keys = _match_path(parsed.value, path_index)
         if not matched_keys:
-            raise CliUserError(f"No models found under path '{parsed.value}'.")
+            raise CliUserError(f"no models found under path '{parsed.value}'", code="C311")
         return _apply_selector_expansion(matched_keys, parsed, upstream, downstream)
     key: CompiledObjectKey = _lookup_parsed_selector(parsed, all_keys)
     return _apply_selector_expansion(frozenset({key}), parsed, upstream, downstream)
@@ -531,14 +542,17 @@ def _apply_selector_expansion(
 def _parse_selector(raw: str) -> ParsedLineageSelector | ParsedLineagePathSelector:
     stripped: str = raw.strip()
     if not stripped:
-        raise CliUserError("Empty selector")
+        raise CliUserError("empty selector", code="C312")
     upstream: bool = stripped.startswith("+")
     downstream: bool = stripped.endswith("+")
     core: str = stripped.lstrip("+").rstrip("+")
     if "~" in core:
         start_name, end_name = (part.strip() for part in core.split("~", 1))
         if not start_name or not end_name:
-            raise CliUserError(f"Path selector '{stripped}' requires names on both sides of '~'")
+            raise CliUserError(
+                f"path selector '{stripped}' requires names on both sides of '~'",
+                code="C313",
+            )
         return ParsedLineagePathSelector(
             start_name=start_name,
             end_name=end_name,
@@ -546,13 +560,16 @@ def _parse_selector(raw: str) -> ParsedLineageSelector | ParsedLineagePathSelect
             downstream=downstream,
         )
     if not core:
-        raise CliUserError(f"Selector '{stripped}' has no name after removing '+' markers")
+        raise CliUserError(
+            f"selector '{stripped}' has no name after removing '+' markers",
+            code="C314",
+        )
     if ":" in core:
         prefix, value = core.split(":", 1)
         if prefix not in {"seed", "source", "tag", "path"}:
-            raise CliUserError(f"Unknown selector type '{prefix}' in '{stripped}'")
+            raise CliUserError(f"unknown selector type '{prefix}' in '{stripped}'", code="C315")
         if not value:
-            raise CliUserError(f"Selector '{stripped}' has empty value after ':'")
+            raise CliUserError(f"selector '{stripped}' has empty value after ':'", code="C316")
         return ParsedLineageSelector(
             kind=prefix,
             value=value,
@@ -580,11 +597,11 @@ def _lookup_parsed_selector(
 ) -> CompiledObjectKey:
     key: CompiledObjectKey | None = all_keys.get(parsed.value)
     if key is None:
-        raise CliUserError(f"Unknown lineage target '{parsed.value}'")
+        raise CliUserError(f"unknown lineage target '{parsed.value}'", code="C305")
     if parsed.kind == "source" and key.resource_type != CompiledResourceType.SOURCE:
-        raise CliUserError(f"Unknown lineage source '{parsed.value}'")
+        raise CliUserError(f"unknown lineage source '{parsed.value}'", code="C317")
     if parsed.kind == "seed" and key.resource_type != CompiledResourceType.SEED:
-        raise CliUserError(f"Unknown lineage seed '{parsed.value}'")
+        raise CliUserError(f"unknown lineage seed '{parsed.value}'", code="C318")
     return key
 
 
@@ -597,7 +614,8 @@ def _find_path_keys(
     if end not in reachable_from_start:
         raise CliUserError(
             f"'{end.resource_type}:{end.name}' is not downstream of "
-            f"'{start.resource_type}:{start.name}'"
+            f"'{start.resource_type}:{start.name}'",
+            code="C319",
         )
     upstream: dict[CompiledObjectKey, list[CompiledObjectKey]] = {}
     for key, dep_keys in downstream.items():

@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, resolve_effective_adapter_name
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
@@ -59,17 +60,18 @@ def test_given_adapter_name_when_resolving_adapter_then_returns_expected_adapter
         ResolveAdapterErrorTestCase(
             description="raises for unknown adapter",
             adapter_name="unknown",
-            expected_error_fragment="Unknown adapter 'unknown'",
+            expected_error_fragment="unknown adapter 'unknown'",
         )
     ],
     ids=["raises for unknown adapter"],
 )
-def test_given_unknown_adapter_when_resolving_adapter_then_raises_value_error(
+def test_given_unknown_adapter_when_resolving_adapter_then_raises_cli_user_error(
     test_case: ResolveAdapterErrorTestCase,
 ) -> None:
-    with pytest.raises(ValueError) as error_info:
+    with pytest.raises(CliUserError) as error_info:
         resolve_adapter(test_case.adapter_name)
 
+    assert error_info.value.code == "C601"
     assert test_case.expected_error_fragment in str(error_info.value)
 
 

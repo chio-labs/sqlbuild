@@ -8,6 +8,7 @@ from typing import cast
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.types import BuiltinAdapter
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
+from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.shared.helpers.adapters import discover_project_adapters
 
 
@@ -29,9 +30,10 @@ def resolve_adapter(adapter_name: str, *, project_dir: Path | None = None) -> Ba
         local_text: str = ""
         if project_dir is not None:
             local_text = " Project-local adapters are discovered from adapters/**/*.py."
-        raise ValueError(
-            f"Unknown adapter '{adapter_name}'. Available built-in adapters: "
-            f"{', '.join(available)}.{local_text}"
+        raise CliUserError(
+            f"unknown adapter '{adapter_name}'. Available built-in adapters: "
+            f"{', '.join(available)}.{local_text}",
+            code="C601",
         )
     return cast(BaseAdapter, adapter_class())
 

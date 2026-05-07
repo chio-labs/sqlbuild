@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
 
 
@@ -24,7 +25,7 @@ def get_unique_key(model: Any) -> tuple[str, ...]:
         values: tuple[str, ...] = tuple(str(item) for item in raw)
         if values:
             return values
-    raise ValueError(f"model '{model.name}' requires unique_key for row diff")
+    raise ExecutorInputError(f"model '{model.name}' requires unique_key for row diff", code="X201")
 
 
 def get_row_diff_exclude_columns(model: Any) -> tuple[str, ...]:
@@ -37,7 +38,10 @@ def get_row_diff_exclude_columns(model: Any) -> tuple[str, ...]:
         return (raw,)
     if isinstance(raw, list | tuple) and all(isinstance(item, str) for item in raw):
         return tuple(str(item) for item in raw)
-    raise ValueError(f"model '{model.name}' row_diff_exclude_columns must be strings")
+    raise ExecutorInputError(
+        f"model '{model.name}' row_diff_exclude_columns must be strings",
+        code="X202",
+    )
 
 
 def is_disabled(model: Any) -> bool:

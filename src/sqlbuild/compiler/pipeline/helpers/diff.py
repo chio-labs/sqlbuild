@@ -10,6 +10,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 
 
 def compile_project_for_diff_environment(
@@ -185,11 +186,14 @@ def _resolve_selector_token(
     downstream_requested: bool = token.endswith("+")
     core: str = token.lstrip("+").rstrip("+")
     if not core:
-        raise ValueError("Empty selector")
+        raise PlannerInputError("empty selector", code="S001")
     if core.startswith("tag:"):
         keys: frozenset[CompiledObjectKey] = tag_index.get(core.removeprefix("tag:"), frozenset())
         if not keys:
-            raise ValueError(f"No models found with tag '{core.removeprefix('tag:')}'")
+            raise PlannerInputError(
+                f"no models found with tag '{core.removeprefix('tag:')}'",
+                code="S008",
+            )
         return _expand_keys(keys, upstream_requested, downstream_requested, upstream, downstream)
     if core.startswith("path:") or "/" in core:
         path_value: str = core.removeprefix("path:").strip("/")
@@ -199,12 +203,12 @@ def _resolve_selector_token(
             if folder == path_value or folder.startswith(f"{path_value}/")
         )
         if not keys:
-            raise ValueError(f"No models found under path '{path_value}'")
+            raise PlannerInputError(f"no models found under path '{path_value}'", code="S009")
         return _expand_keys(keys, upstream_requested, downstream_requested, upstream, downstream)
 
     key: CompiledObjectKey | None = all_keys.get(core)
     if key is None:
-        raise ValueError(f"Unknown selector name '{core}'")
+        raise PlannerInputError(f"unknown selector name '{core}'", code="S007")
     return _expand_keys(
         frozenset((key,)), upstream_requested, downstream_requested, upstream, downstream
     )

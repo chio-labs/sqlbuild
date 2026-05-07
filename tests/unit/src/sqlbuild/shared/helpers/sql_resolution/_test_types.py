@@ -7,3 +7,4 @@ class AssertNoUnresolvedSqlMarkersTestCase:
     sql: str
     context: str
     expected_error_fragment: str
+    expected_code: str | None = None

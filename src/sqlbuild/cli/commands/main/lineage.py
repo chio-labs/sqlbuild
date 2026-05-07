@@ -45,11 +45,11 @@ def run_lineage(
     """Execute the lineage command."""
 
     if target is not None and select:
-        raise CliUserError("lineage accepts either a target or --select, not both")
+        raise CliUserError("lineage accepts either a target or --select, not both", code="C301")
     if target is None and not select:
-        raise CliUserError("lineage requires a target or --select")
+        raise CliUserError("lineage requires a target or --select", code="C302")
     if exclude and not select:
-        raise CliUserError("--exclude can only be used with --select")
+        raise CliUserError("--exclude can only be used with --select", code="C303")
 
     parsed_depth: int | None = parse_depth(depth)
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
