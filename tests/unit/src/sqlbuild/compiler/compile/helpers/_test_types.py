@@ -1,11 +1,13 @@
 from dataclasses import dataclass, field
 
+from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompileSqlReference,
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
+from sqlbuild.compiler.lineage.types import InferredNullability
 
 
 @dataclass(frozen=True)
@@ -108,6 +110,10 @@ class InferColumnsTestCase:
     description: str
     query_sql: str
     expected_columns: tuple[InferredColumn, ...] | None
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]] = field(
+        default_factory=dict
+    )
+    inference_profile: ExpressionInferenceProfile | None = None
 
 
 @dataclass(frozen=True)

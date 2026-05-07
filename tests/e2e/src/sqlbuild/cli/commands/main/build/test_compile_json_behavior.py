@@ -44,7 +44,20 @@ def test_given_waffle_shop_when_running_compile_json_then_it_reports_offline_que
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
     payload: dict[str, object] = json.loads(result.stdout)
     assert payload["offline"] is True
-    models: list[dict[str, object]] = payload["models"]
+    assert payload["command"] == "compile"
+    assert payload["has_errors"] is False
+    summary: dict[str, object] = payload["summary"]
+    assert summary["models"] >= len(test_case.expected_model_names)
+    assert summary["errors"] == 0
+    assert summary["warnings"] == 0
+    assert payload["diagnostics"] == []
+    timings: dict[str, object] = payload["compile_timings"]
+    assert "total_ms" in timings
+    artifacts: dict[str, object] = payload["artifacts"]
+    assert artifacts["compiled_sql_dir"] == "target/compiled/"
+    assert artifacts["manifest"] is None
+    resources: dict[str, object] = payload["resources"]
+    models: list[dict[str, object]] = resources["models"]
     selected_models: list[dict[str, object]] = [
         model for model in models if str(model["name"]) in test_case.expected_model_names
     ]
@@ -52,5 +65,25 @@ def test_given_waffle_shop_when_running_compile_json_then_it_reports_offline_que
     fragment: str
     for fragment in test_case.expected_sql_fragments:
         assert any(fragment in str(model["query_sql"]) for model in selected_models)
+    fact_orders: dict[str, object] = next(
+        model for model in models if model["name"] == "fact_orders"
+    )
+    assert fact_orders["materialized"] == "table"
+    assert fact_orders["column_count"] == 14
+    assert fact_orders["lineage"] == {
+        "available": True,
+        "column_count": 14,
+        "edge_count": 15,
+        "has_star": False,
+    }
+    assert {dep["name"] for dep in fact_orders["depends_on"]} >= {
+        "stg_orders",
+        "stg_payments",
+        "waffle_types",
+    }
+    assert resources["seeds"]
+    assert resources["functions"]
+    assert resources["audits"]
+    assert resources["tests"]
     assert all("logical_ddl" not in model for model in models)
     assert all("action" not in model for model in models)

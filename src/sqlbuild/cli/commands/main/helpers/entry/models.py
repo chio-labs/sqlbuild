@@ -6,6 +6,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
+from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.models import CursorOverrides
 
 
@@ -23,6 +25,7 @@ class CliNamespace:
     hard_copy: bool = False
     json: bool = False
     manifest: bool = False
+    compile_lineage_mode: CompileLineageMode = CompileLineageMode.FAST
     start_cursor_ts: str | None = None
     end_cursor_ts: str | None = None
     start_cursor_int: str | None = None
@@ -46,6 +49,7 @@ class CliNamespace:
     lineage_format: str = "tree"
     lineage_direction: str = "upstream"
     lineage_depth: str = "all"
+    lineage_mode: ColumnLineageMode = ColumnLineageMode.RICH
     no_connection: bool = False
     full: bool = False
     schema_only: bool = False
@@ -57,7 +61,9 @@ class CliNamespace:
 class CliEntrypointHandlers:
     """Injected command handlers for the CLI entrypoint."""
 
-    run_compile: Callable[[Path | None, bool, str | None, bool, bool], int]
+    run_compile: Callable[
+        [Path | None, bool, str | None, bool, bool, bool, CompileLineageMode], int
+    ]
     run_plan: Callable[
         [
             Path | None,
@@ -136,7 +142,17 @@ class CliEntrypointHandlers:
     run_query: Callable[[Path | None, str | None, str, int | None], int]
     run_debug: Callable[[Path | None, bool, bool, bool], int]
     run_lineage: Callable[
-        [Path | None, bool, str | None, str, str, str, tuple[str, ...], tuple[str, ...]],
+        [
+            Path | None,
+            bool,
+            str | None,
+            str,
+            str,
+            str,
+            tuple[str, ...],
+            tuple[str, ...],
+            ColumnLineageMode,
+        ],
         int,
     ]
     run_janitor: Callable[[Path | None, bool, bool, int | None], int]

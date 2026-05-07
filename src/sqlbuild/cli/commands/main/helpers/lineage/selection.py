@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 
+from sqlbuild.cli.commands.main.helpers.lineage.constants import RICH_LINEAGE_STATUS_MODEL_THRESHOLD
 from sqlbuild.cli.commands.main.helpers.lineage.models import (
+    ColumnLineageTrace,
     LineageGraph,
     LineageNode,
     LineageSelectionAnchors,
@@ -12,9 +15,23 @@ from sqlbuild.cli.commands.main.helpers.lineage.models import (
     ParsedLineageSelector,
 )
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
+from sqlbuild.cli.commands.main.shared.helpers.status import maybe_status
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.lineage.main.columns import build_project_column_lineage
+from sqlbuild.compiler.lineage.models import (
+    ColumnLineageEdge,
+    ProjectColumnLineage,
+    QualifiedLineageColumn,
+)
+from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+
+
+@dataclass(frozen=True)
+class _ColumnLineageCandidateSelection:
+    model_names: frozenset[str]
+    truncated: bool
 
 
 def parse_depth(raw_depth: str) -> int | None:
@@ -56,6 +73,142 @@ def select_target_lineage(
         focus_keys=(key,),
         direction=direction,
     )
+
+
+def select_column_target_lineage(
+    *,
+    graph: ProjectGraph,
+    target: str,
+    direction: str,
+    depth: int | None,
+    mode: ColumnLineageMode = ColumnLineageMode.RICH,
+) -> ColumnLineageTrace | None:
+    """Select column-level lineage when target uses model.column syntax."""
+
+    if "." not in target:
+        return None
+    resource_name: str
+    column_name: str
+    resource_name, column_name = target.rsplit(".", 1)
+    key: CompiledObjectKey | None = graph.all_keys.get(resource_name)
+    if key is None or key.resource_type != CompiledResourceType.MODEL:
+        return None
+    if direction == "both":
+        raise CliUserError("Column lineage supports --direction upstream or downstream, not both")
+
+    candidate_selection: _ColumnLineageCandidateSelection = _column_lineage_candidate_selection(
+        graph=graph,
+        key=key,
+        direction=direction,
+        depth=depth,
+    )
+    with maybe_status(
+        f"Analyzing rich column lineage for {len(candidate_selection.model_names)} models...",
+        enabled=(
+            mode == ColumnLineageMode.RICH
+            and len(candidate_selection.model_names) >= RICH_LINEAGE_STATUS_MODEL_THRESHOLD
+        ),
+    ):
+        column_lineage: ProjectColumnLineage | None = build_project_column_lineage(
+            graph.project,
+            mode=mode,
+            model_names=candidate_selection.model_names,
+        )
+    if column_lineage is None:
+        raise CliUserError("Column lineage requires SQLGlot analysis to be enabled and available")
+
+    target_column: QualifiedLineageColumn = QualifiedLineageColumn(
+        resource_type=key.resource_type,
+        resource_name=key.name,
+        column_name=column_name,
+    )
+    trace: tuple[ColumnLineageEdge, ...] = _trace_column_with_depth(
+        column_lineage=column_lineage,
+        resource_name=key.name,
+        column_name=column_name,
+        direction=direction,
+        max_depth=depth,
+    )
+    return ColumnLineageTrace(
+        target=target_column,
+        trace=trace,
+        direction=direction,
+        mode=mode,
+        max_depth=depth,
+        analyzed_model_count=len(candidate_selection.model_names),
+        truncated=candidate_selection.truncated,
+    )
+
+
+def _column_lineage_candidate_selection(
+    *,
+    graph: ProjectGraph,
+    key: CompiledObjectKey,
+    direction: str,
+    depth: int | None,
+) -> _ColumnLineageCandidateSelection:
+    selected: set[CompiledObjectKey] = {key}
+    deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
+        graph.downstream_deps if direction == "downstream" else graph.upstream_deps
+    )
+    selected.update(_walk_bounded(anchors=(key,), deps=deps, max_depth=depth))
+    model_names: frozenset[str] = frozenset(
+        selected_key.name
+        for selected_key in selected
+        if selected_key.resource_type == CompiledResourceType.MODEL
+    )
+    if depth is None:
+        return _ColumnLineageCandidateSelection(model_names=model_names, truncated=False)
+    extended: set[CompiledObjectKey] = {key}
+    extended.update(_walk_bounded(anchors=(key,), deps=deps, max_depth=depth + 1))
+    return _ColumnLineageCandidateSelection(
+        model_names=model_names,
+        truncated=extended != selected,
+    )
+
+
+def _trace_column_with_depth(
+    *,
+    column_lineage: ProjectColumnLineage,
+    resource_name: str,
+    column_name: str,
+    direction: str,
+    max_depth: int | None,
+) -> tuple[ColumnLineageEdge, ...]:
+    if max_depth == 0:
+        return ()
+    result: list[ColumnLineageEdge] = []
+    stack: list[tuple[str, str, int]] = [(resource_name, column_name, 0)]
+    visited: set[tuple[str, str]] = set()
+    while stack:
+        current_resource: str
+        current_column: str
+        current_depth: int
+        current_resource, current_column, current_depth = stack.pop()
+        if (current_resource, current_column) in visited:
+            continue
+        visited.add((current_resource, current_column))
+        if max_depth is not None and current_depth >= max_depth:
+            continue
+        if direction == "downstream":
+            edges: tuple[ColumnLineageEdge, ...] = column_lineage.column_consumers(
+                current_resource,
+                current_column,
+            )
+            for edge in edges:
+                result.append(edge)
+                stack.append(
+                    (edge.target.resource_name, edge.target.column_name, current_depth + 1)
+                )
+        else:
+            for edge in column_lineage.edges_targeting(current_resource):
+                if edge.target.column_name != current_column:
+                    continue
+                result.append(edge)
+                stack.append(
+                    (edge.source.resource_name, edge.source.column_name, current_depth + 1)
+                )
+    return tuple(result)
 
 
 def select_selector_lineage(

@@ -6,6 +6,14 @@ from sqlbuild.adapter.shared.models import (
     RowDiffSampleRow,
     SchemaDiffResult,
 )
+from sqlbuild.compiler.lineage.types import InferredNullability
+
+
+@dataclass(frozen=True)
+class BigQueryExpressionInferenceProfileTestCase:
+    description: str
+    expected_sqlglot_dialect: str
+    expected_rule_results: dict[str, InferredNullability]
 
 
 @dataclass(frozen=True)

@@ -8,9 +8,14 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.inference_rules import (
+    conditional_result_nullability,
+    first_arg_nullability,
+)
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
     CursorValue,
+    ExpressionInferenceProfile,
     FunctionInfo,
     QueryResult,
     RelationInfo,
@@ -218,6 +223,16 @@ class BigQueryAdapter(BaseAdapter):
 
     def sqlglot_dialect(self) -> str | None:
         return "bigquery"
+
+    def expression_inference_profile(self) -> ExpressionInferenceProfile:
+        return ExpressionInferenceProfile(
+            sqlglot_dialect=self.sqlglot_dialect(),
+            function_nullability_rules={
+                "IF": conditional_result_nullability,
+                "LOWER": first_arg_nullability,
+                "UPPER": first_arg_nullability,
+            },
+        )
 
     def render_cursor_bound_literal(self, value: str, cursor_type: str | None) -> str:
         if cursor_type == CursorKind.INTEGER:

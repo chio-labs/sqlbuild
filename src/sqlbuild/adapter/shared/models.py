@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 
-from sqlbuild.adapter.shared.types import CursorKind, LifeCycleEventKind, TypeFamily
+from sqlbuild.adapter.shared.types import (
+    CursorKind,
+    FunctionNullabilityRule,
+    LifeCycleEventKind,
+    TypeFamily,
+)
 
 
 @dataclass(frozen=True)
@@ -39,6 +44,19 @@ class NormalizedType:
     precision: int | None = None
     scale: int | None = None
     length: int | None = None
+
+
+@dataclass(frozen=True)
+class ExpressionInferenceProfile:
+    """Static SQL expression inference behavior exposed by an adapter."""
+
+    sqlglot_dialect: str | None = None
+    function_nullability_rules: Mapping[str, FunctionNullabilityRule] = field(default_factory=dict)
+
+    def function_nullability_rule(self, function_name: str) -> FunctionNullabilityRule | None:
+        """Return the adapter rule for a function name, if one is registered."""
+
+        return self.function_nullability_rules.get(function_name.upper())
 
 
 @dataclass(frozen=True)

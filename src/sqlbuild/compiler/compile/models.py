@@ -25,13 +25,14 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
+from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.spec.models.project import (
     EnvironmentConfig,
     LocalConfig,
     ProjectConfig,
     SettingsConfig,
 )
-from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
+from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry, SourceLocation
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -41,6 +42,7 @@ class InferredColumn:
 
     name: str
     type: str | None = None
+    nullability: InferredNullability = InferredNullability.UNKNOWN
 
 
 @dataclass(frozen=True)
@@ -270,6 +272,8 @@ class CompiledModel:
     references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
     schema_entry: SchemaModelEntry | None = None
     inferred_columns: tuple[InferredColumn, ...] | None = None
+    authored_sql: str = ""
+    output_column_locations: dict[str, SourceLocation] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

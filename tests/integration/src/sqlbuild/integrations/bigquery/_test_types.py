@@ -7,6 +7,17 @@ from sqlbuild.adapter.shared.models import (
     RowDiffSampleRow,
     SchemaDiffResult,
 )
+from sqlbuild.compiler.lineage.types import InferredNullability
+
+
+@dataclass(frozen=True)
+class BigQueryExpressionNullabilityRuleTestCase:
+    description: str
+    function_name: str
+    sql_expression: str
+    rule_args: tuple[InferredNullability, ...]
+    expected_nullability: InferredNullability
+    expected_is_null: bool
 
 
 @dataclass(frozen=True)

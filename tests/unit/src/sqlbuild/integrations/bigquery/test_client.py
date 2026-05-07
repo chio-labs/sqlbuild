@@ -7,6 +7,7 @@ import pytest
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
     CursorValue,
+    ExpressionInferenceProfile,
     QueryResult,
     RowDiffColumnResult,
     RowDiffResult,
@@ -14,13 +15,15 @@ from sqlbuild.adapter.shared.models import (
     RowDiffSampleRow,
     SchemaDiffResult,
 )
-from sqlbuild.adapter.shared.types import CursorKind
+from sqlbuild.adapter.shared.types import CursorKind, FunctionNullabilityRule
 from sqlbuild.compiler.compile.models import FunctionArgument, FunctionReturnColumn
 from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.integrations.bigquery.client import BigQueryAdapter, _BigQueryConnection
 from tests.unit.src.sqlbuild.integrations.bigquery._test_types import (
     BigQueryConnectErrorTestCase,
     BigQueryCountRowsTestCase,
+    BigQueryExpressionInferenceProfileTestCase,
     BigQueryQueryTestCase,
     BigQueryRenderCursorBoundLiteralTestCase,
     BigQueryRenderDeleteInsertTestCase,
@@ -41,6 +44,46 @@ from tests.unit.src.sqlbuild.integrations.bigquery.helpers import (
     build_sample_rows_execute,
     fake_row_diff_describe_relation,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryExpressionInferenceProfileTestCase(
+            description="returns BigQuery inference rules",
+            expected_sqlglot_dialect="bigquery",
+            expected_rule_results={
+                "IF": InferredNullability.NON_NULL,
+                "LOWER": InferredNullability.NON_NULL,
+            },
+        )
+    ],
+    ids=["returns BigQuery inference rules"],
+)
+def test_given_bigquery_adapter_when_getting_inference_profile_then_returns_expected_rules(
+    test_case: BigQueryExpressionInferenceProfileTestCase,
+) -> None:
+    adapter: BigQueryAdapter = BigQueryAdapter()
+
+    profile: ExpressionInferenceProfile = adapter.expression_inference_profile()
+
+    assert profile.sqlglot_dialect == test_case.expected_sqlglot_dialect
+    if_rule: FunctionNullabilityRule | None = profile.function_nullability_rule("IF")
+    lower_rule: FunctionNullabilityRule | None = profile.function_nullability_rule("LOWER")
+    assert if_rule is not None
+    assert lower_rule is not None
+    assert (
+        if_rule(
+            (
+                InferredNullability.UNKNOWN,
+                InferredNullability.NON_NULL,
+                InferredNullability.NON_NULL,
+            )
+        )
+        == test_case.expected_rule_results["IF"]
+    )
+    assert lower_rule((InferredNullability.NON_NULL,)) == test_case.expected_rule_results["LOWER"]
+
 
 BIGQUERY_QUERY_TEST_CASES: list[BigQueryQueryTestCase] = [
     BigQueryQueryTestCase(

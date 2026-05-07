@@ -30,7 +30,10 @@ def build_compiled_project(
         ),
     )
     project: CompiledProject = apply_target_defaults(
-        assemble_project(compile_inputs),
+        assemble_project(
+            compile_inputs,
+            inference_profile=adapter.expression_inference_profile(),
+        ),
         default_schema=adapter.default_schema(),
         default_database=adapter.default_database(),
         render_qualified_name=adapter.render_qualified_name,

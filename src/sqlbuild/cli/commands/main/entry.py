@@ -8,8 +8,11 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from sqlbuild.cli.commands.main.helpers.compile.constants import COMPILE_LINEAGE_MODE_VALUES
+from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
 from sqlbuild.cli.commands.main.helpers.diff.validation import parse_diff_environment_range
 from sqlbuild.cli.commands.main.helpers.entry.models import CliEntrypointHandlers, CliNamespace
+from sqlbuild.cli.commands.main.helpers.lineage.constants import COLUMN_LINEAGE_MODE_VALUES
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.parsers import (
     add_cursor_override_args,
@@ -18,6 +21,7 @@ from sqlbuild.cli.commands.main.shared.helpers.parsers import (
 )
 from sqlbuild.cli.commands.main.shared.types import CliCommand
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
+from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
 from sqlbuild.shared.helpers.colors import supports_color
@@ -39,6 +43,13 @@ def _build_parser() -> argparse.ArgumentParser:
     compile_parser.add_argument("--defer-to", default=None)
     compile_parser.add_argument("--json", action="store_true", default=False)
     compile_parser.add_argument("--manifest", action="store_true", default=False)
+    compile_parser.add_argument(
+        "--lineage-mode",
+        dest="compile_lineage_mode",
+        choices=COMPILE_LINEAGE_MODE_VALUES,
+        default=CompileLineageMode.FAST.value,
+        help="Column lineage mode: fast (default), rich (slower), or none",
+    )
 
     plan_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PLAN)
     plan_parser.add_argument("--no-sql-validation", action="store_true", default=False)
@@ -122,6 +133,13 @@ def _build_parser() -> argparse.ArgumentParser:
         default="upstream",
     )
     lineage_parser.add_argument("--depth", dest="lineage_depth", default="all")
+    lineage_parser.add_argument(
+        "--mode",
+        dest="lineage_mode",
+        choices=COLUMN_LINEAGE_MODE_VALUES,
+        default=ColumnLineageMode.RICH.value,
+        help="Column lineage mode: rich (default) or fast",
+    )
     add_select_args(lineage_parser)
     subparsers.add_parser(CliCommand.CLEAN)
     janitor_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.JANITOR)
@@ -196,7 +214,13 @@ def _main_with_dependencies(
             )
         if args.command == CliCommand.COMPILE:
             return handlers.run_compile(
-                project_dir, args.no_sql_validation, args.defer_to, args.json, args.manifest
+                project_dir,
+                args.no_sql_validation,
+                args.defer_to,
+                args.json,
+                args.manifest,
+                args.no_color,
+                CompileLineageMode(args.compile_lineage_mode),
             )
         if args.command == CliCommand.PLAN:
             cursor_overrides: CursorOverrides = CursorOverrides(
@@ -292,6 +316,7 @@ def _main_with_dependencies(
                 args.lineage_depth,
                 tuple(args.select),
                 tuple(args.exclude),
+                ColumnLineageMode(args.lineage_mode),
             )
         if args.command == CliCommand.CLONE:
             if args.from_environment is None or args.to_environment is None:

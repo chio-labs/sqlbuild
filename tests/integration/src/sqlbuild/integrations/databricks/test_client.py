@@ -8,6 +8,7 @@ import pytest
 
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
+    ExpressionInferenceProfile,
     QueryResult,
     RowDiffResult,
     RowDiffSampleCell,
@@ -15,12 +16,15 @@ from sqlbuild.adapter.shared.models import (
     SchemaDiffResult,
     StatementRecorder,
 )
+from sqlbuild.adapter.shared.types import FunctionNullabilityRule
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
+from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.integrations.databricks.client import DatabricksAdapter
 from tests.integration.src.sqlbuild.integrations.databricks._test_types import (
     DatabricksBuildFlowTestCase,
+    DatabricksExpressionNullabilityRuleTestCase,
     DatabricksFingerprintTestCase,
     DatabricksMergeTestCase,
     DatabricksQueryTestCase,
@@ -36,6 +40,76 @@ from tests.integration.src.sqlbuild.integrations.databricks.helpers import (
     qualified_name,
     write_seed_file,
 )
+
+EXPRESSION_NULLABILITY_RULE_TEST_CASES: list[DatabricksExpressionNullabilityRuleTestCase] = [
+    DatabricksExpressionNullabilityRuleTestCase(
+        description="LOWER preserves non-null literal",
+        function_name="LOWER",
+        sql_expression="LOWER('READY')",
+        rule_args=(InferredNullability.NON_NULL,),
+        expected_nullability=InferredNullability.NON_NULL,
+        expected_is_null=False,
+    ),
+    DatabricksExpressionNullabilityRuleTestCase(
+        description="LOWER preserves nullable input",
+        function_name="LOWER",
+        sql_expression="LOWER(CAST(NULL AS STRING))",
+        rule_args=(InferredNullability.NULLABLE,),
+        expected_nullability=InferredNullability.NULLABLE,
+        expected_is_null=True,
+    ),
+    DatabricksExpressionNullabilityRuleTestCase(
+        description="IF with non-null result branches is non-null",
+        function_name="IF",
+        sql_expression="IF(TRUE, 'yes', 'no')",
+        rule_args=(
+            InferredNullability.UNKNOWN,
+            InferredNullability.NON_NULL,
+            InferredNullability.NON_NULL,
+        ),
+        expected_nullability=InferredNullability.NON_NULL,
+        expected_is_null=False,
+    ),
+    DatabricksExpressionNullabilityRuleTestCase(
+        description="IF with nullable result branch can be null",
+        function_name="IF",
+        sql_expression="IF(TRUE, CAST(NULL AS STRING), 'no')",
+        rule_args=(
+            InferredNullability.UNKNOWN,
+            InferredNullability.NULLABLE,
+            InferredNullability.NON_NULL,
+        ),
+        expected_nullability=InferredNullability.NULLABLE,
+        expected_is_null=True,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    EXPRESSION_NULLABILITY_RULE_TEST_CASES,
+    ids=[case.description for case in EXPRESSION_NULLABILITY_RULE_TEST_CASES],
+)
+def test_given_expression_rule_when_querying_then_databricks_matches_nullability_expectation(
+    test_case: DatabricksExpressionNullabilityRuleTestCase,
+    adapter: DatabricksAdapter,
+    connection: Any,
+) -> None:
+    profile: ExpressionInferenceProfile = adapter.expression_inference_profile()
+    rule: FunctionNullabilityRule | None = profile.function_nullability_rule(
+        test_case.function_name
+    )
+    assert rule is not None
+
+    result: QueryResult = adapter.query(
+        connection,
+        f"SELECT {test_case.sql_expression} IS NULL AS is_null",
+        limit=None,
+    )
+
+    assert rule(test_case.rule_args) == test_case.expected_nullability
+    assert result.rows == ((test_case.expected_is_null,),)
+
 
 QUERY_TEST_CASES: list[DatabricksQueryTestCase] = [
     DatabricksQueryTestCase(
