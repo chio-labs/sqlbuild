@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import threading
 import time
 from dataclasses import dataclass
 
@@ -29,6 +30,19 @@ _MAX_NAME_WIDTH: int = 60
 _MIN_NAME_WIDTH: int = 20
 _NAME_PADDING: int = 2
 _SUB_INDENT: int = 2
+_SPINNER_TICK_SECONDS: float = 0.1
+_ACTIVE_SPINNER_FRAMES: tuple[str, ...] = (
+    "⠋",
+    "⠙",
+    "⠹",
+    "⠸",
+    "⠼",
+    "⠴",
+    "⠦",
+    "⠧",
+    "⠇",
+    "⠏",
+)
 
 
 @dataclass(frozen=True)
@@ -72,6 +86,11 @@ class BuildProgressCallbacks:
         self._current_node_name: str = ""
         self._current_node_type: str = ""
         self._current_sub_message: str = ""
+        self._spinner_frame_index: int = 0
+        self._write_lock: threading.Lock = threading.Lock()
+        self._spinner_stop_event: threading.Event | None = None
+        self._spinner_thread: threading.Thread | None = None
+        self._cursor_hidden: bool = False
 
         ctr_width: int = len(str(self._total)) * 2 + 1
         self._prefix_width: int = 2 + ctr_width + 2
@@ -121,7 +140,9 @@ class BuildProgressCallbacks:
         self._current_node_type = materialization_type
         self._current_sub_message = ""
         if self._is_tty:
+            self._hide_cursor()
             self._write_spinner_line()
+            self._start_spinner_loop()
 
     def on_sub_progress(self, message: str) -> None:
         self._current_sub_message = message
@@ -131,7 +152,11 @@ class BuildProgressCallbacks:
     def _write_spinner_line(self) -> None:
         ctr: str = f"{self._counter + 1}/{self._total}".rjust(len(str(self._total)) * 2 + 1)
         display_type: str = _materialization_type_display(self._current_node_type)
-        status: str = colorize_status("...", use_color=self._use_color)
+        status: str = colorize_status(
+            _ACTIVE_SPINNER_FRAMES[self._spinner_frame_index],
+            use_color=self._use_color,
+        )
+        self._spinner_frame_index = (self._spinner_frame_index + 1) % len(_ACTIVE_SPINNER_FRAMES)
         name_display: str = _truncate_name(self._current_node_name, self._name_width)
         if self._current_sub_message:
             name_display = _truncate_name(
@@ -139,8 +164,49 @@ class BuildProgressCallbacks:
             )
         nw: int = self._name_width
         line: str = f"  {ctr}  {display_type:<{_TYPE_WIDTH}}{name_display:<{nw}} {status}"
-        self._stream.write(f"\r\033[K{line}")
-        self._stream.flush()
+        with self._write_lock:
+            self._stream.write(f"\r\033[K{line}")
+            self._stream.flush()
+
+    def _start_spinner_loop(self) -> None:
+        self._stop_spinner_loop()
+        stop_event: threading.Event = threading.Event()
+        self._spinner_stop_event = stop_event
+        spinner_thread: threading.Thread = threading.Thread(
+            target=self._spin_until_stopped,
+            args=(stop_event,),
+            daemon=True,
+        )
+        self._spinner_thread = spinner_thread
+        spinner_thread.start()
+
+    def _stop_spinner_loop(self) -> None:
+        if self._spinner_stop_event is not None:
+            self._spinner_stop_event.set()
+        if self._spinner_thread is not None and self._spinner_thread.is_alive():
+            self._spinner_thread.join(timeout=0.2)
+        self._spinner_stop_event = None
+        self._spinner_thread = None
+
+    def _spin_until_stopped(self, stop_event: threading.Event) -> None:
+        while not stop_event.wait(_SPINNER_TICK_SECONDS):
+            self._write_spinner_line()
+
+    def _hide_cursor(self) -> None:
+        if self._cursor_hidden:
+            return
+        with self._write_lock:
+            self._stream.write("\033[?25l")
+            self._stream.flush()
+        self._cursor_hidden = True
+
+    def _show_cursor(self) -> None:
+        if not self._cursor_hidden:
+            return
+        with self._write_lock:
+            self._stream.write("\033[?25h")
+            self._stream.flush()
+        self._cursor_hidden = False
 
     def on_node_complete(self, node_result: object) -> None:
         if isinstance(node_result, SqlTestExecutionResult):
@@ -150,8 +216,12 @@ class BuildProgressCallbacks:
                     self._test_results_by_model[step.model_name] = node_result
             return
 
+        self._stop_spinner_loop()
         if self._is_tty:
-            self._stream.write("\r\033[K")
+            with self._write_lock:
+                self._stream.write("\r\033[K")
+                self._stream.flush()
+            self._show_cursor()
 
         self._counter += 1
         ctr: str = f"{self._counter}/{self._total}".rjust(len(str(self._total)) * 2 + 1)
