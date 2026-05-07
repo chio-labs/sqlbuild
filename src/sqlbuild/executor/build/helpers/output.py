@@ -26,6 +26,7 @@ from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
 
 
 @dataclass(frozen=True)
@@ -63,6 +64,8 @@ def format_build_output(
 
     counter: int = 0
     total: int = _count_top_level_nodes(result)
+    top_level_name_width: int = _top_level_name_width(result=result, plan=plan)
+    sub_name_width: int = _sub_name_width(result)
 
     seed_result: SeedExecutionResult
     for seed_result in result.seed_results:
@@ -73,6 +76,7 @@ def format_build_output(
                 counter=counter,
                 total=total,
                 use_color=use_color,
+                name_width=top_level_name_width,
             )
         )
 
@@ -91,6 +95,7 @@ def format_build_output(
                 counter=counter,
                 total=total,
                 use_color=use_color,
+                name_width=top_level_name_width,
             )
         )
 
@@ -115,6 +120,7 @@ def format_build_output(
                     name=test_result.test_name,
                     status=_test_outcome_to_status(test_result.outcome),
                     use_color=use_color,
+                    name_width=sub_name_width,
                 )
             )
 
@@ -123,7 +129,13 @@ def format_build_output(
         )
         audit_entry: _AuditDisplayEntry
         for audit_entry in audit_entries:
-            lines.append(_format_audit_sub_line(audit_entry, use_color=use_color))
+            lines.append(
+                _format_audit_sub_line(
+                    audit_entry,
+                    use_color=use_color,
+                    name_width=sub_name_width,
+                )
+            )
             if verbose and audit_entry.executed_sql is not None:
                 lines.extend(_format_sql_block(audit_entry.executed_sql))
 
@@ -163,12 +175,19 @@ def _format_seed_line(
     counter: int,
     total: int,
     use_color: bool,
+    name_width: int,
 ) -> str:
     counter_str: str = f"{counter}/{total}".rjust(len(str(total)) * 2 + 1)
     status: str = _execution_status_to_display(seed_result.status)
     colored_status: str = colorize_status(status, use_color=use_color)
     duration: str = _format_duration(seed_result.duration_ms)
-    return f"  {counter_str}  seed   {seed_result.seed_name:<40} {colored_status:<6} {duration}"
+    return format_aligned_name_value(
+        plain_name=seed_result.seed_name,
+        styled_name=seed_result.seed_name,
+        value=f"{colored_status:<6} {duration}",
+        name_column_width=name_width,
+        prefix=f"  {counter_str}  seed   ",
+    )
 
 
 def _format_model_line(
@@ -179,6 +198,7 @@ def _format_model_line(
     counter: int,
     total: int,
     use_color: bool,
+    name_width: int,
 ) -> str:
     counter_str: str = f"{counter}/{total}".rjust(len(str(total)) * 2 + 1)
     name_and_annotation: str = model_result.model_name
@@ -193,9 +213,12 @@ def _format_model_line(
         detail = f"  {model_result.failed_phase}"
     elif model_result.status == ExecutionStatus.SKIPPED:
         duration = ""
-    line: str = (
-        f"  {counter_str}  {resource_type:<6} {name_and_annotation:<40} "
-        f"{colored_status:<6} {duration}{detail}"
+    line: str = format_aligned_name_value(
+        plain_name=name_and_annotation,
+        styled_name=name_and_annotation,
+        value=f"{colored_status:<6} {duration}{detail}",
+        name_column_width=name_width,
+        prefix=f"  {counter_str}  {resource_type:<6} ",
     )
     return line
 
@@ -239,13 +262,21 @@ def _format_log_block(message: str, *, use_color: bool) -> list[str]:
     return ["", line, ""]
 
 
-def _format_sub_line(*, sub_type: str, name: str, status: str, use_color: bool) -> str:
+def _format_sub_line(
+    *, sub_type: str, name: str, status: str, use_color: bool, name_width: int
+) -> str:
     colored_status: str = colorize_status(status, use_color=use_color)
     padding: str = " " * 10
-    return f"{padding}  {sub_type:<6} {name:<40} {colored_status}"
+    return format_aligned_name_value(
+        plain_name=name,
+        styled_name=name,
+        value=colored_status,
+        name_column_width=name_width,
+        prefix=f"{padding}  {sub_type:<6} ",
+    )
 
 
-def _format_audit_sub_line(entry: _AuditDisplayEntry, *, use_color: bool) -> str:
+def _format_audit_sub_line(entry: _AuditDisplayEntry, *, use_color: bool, name_width: int) -> str:
     status: str = _audit_outcome_to_display(entry.outcome)
     detail: str = ""
     if entry.outcome != AuditOutcome.PASS and entry.total_row_count > 0:
@@ -258,6 +289,7 @@ def _format_audit_sub_line(entry: _AuditDisplayEntry, *, use_color: bool) -> str
         name=entry.display_name,
         status=f"{status}{detail}",
         use_color=use_color,
+        name_width=name_width,
     )
 
 
@@ -267,6 +299,34 @@ def _format_completion_message(status: BuildStatus, warning_count: int, *, use_c
     if warning_count > 0:
         return colorize_completion("Completed with warnings.", use_color=use_color)
     return colorize_completion("Completed successfully.", use_color=use_color)
+
+
+def _top_level_name_width(*, result: BuildExecutionResult, plan: PlanOutput) -> int:
+    model_entry_map: dict[str, ModelPlanEntry] = {entry.name: entry for entry in plan.model_entries}
+    names: list[str] = [seed_result.seed_name for seed_result in result.seed_results]
+    names.extend(function_result.function_name for function_result in result.function_results)
+    model_result: ModelExecutionResult
+    for model_result in result.model_results:
+        plan_entry: ModelPlanEntry | None = model_entry_map.get(model_result.model_name)
+        annotation: str = _resolve_annotation(plan_entry)
+        if annotation:
+            names.append(f"{model_result.model_name}  ({annotation})")
+        else:
+            names.append(model_result.model_name)
+    return resolve_name_column_width(names)
+
+
+def _sub_name_width(result: BuildExecutionResult) -> int:
+    names: list[str] = []
+    test_result: SqlTestExecutionResult
+    for test_result in result.test_results:
+        names.append(test_result.test_name)
+    model_result: ModelExecutionResult
+    for model_result in result.model_results:
+        audit_entry: _AuditDisplayEntry
+        for audit_entry in _aggregate_audit_results(model_result.audit_results):
+            names.append(audit_entry.display_name)
+    return resolve_name_column_width(names)
 
 
 def _format_summary_counts(
