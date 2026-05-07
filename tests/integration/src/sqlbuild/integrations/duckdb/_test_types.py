@@ -8,7 +8,18 @@ from sqlbuild.adapter.shared.models import (
     RowDiffTolerances,
     SchemaDiffResult,
 )
+from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.spec.models.schema import SeedCsvSettings
+
+
+@dataclass(frozen=True)
+class ExpressionNullabilityRuleTestCase:
+    description: str
+    function_name: str
+    sql_expression: str
+    rule_args: tuple[InferredNullability, ...]
+    expected_nullability: InferredNullability
+    expected_is_null: bool
 
 
 @dataclass(frozen=True)
