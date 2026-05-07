@@ -32,11 +32,19 @@ def discover_project_inputs(*, project_dir: Path) -> DiscoveredProjectInputs:
 
     project_config: ProjectConfig = load_project_config(project_dir=project_dir)
     local_config: LocalConfig = load_local_config(project_dir=project_dir)
+    sqlglot_enabled: bool = (
+        local_config.settings.sqlglot
+        if "sqlglot" in local_config.setting_overrides
+        else project_config.settings.sqlglot
+    )
 
     discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
         project_config=project_config,
         local_config=local_config,
-        model_files=discover_model_files(project_dir=project_dir),
+        model_files=discover_model_files(
+            project_dir=project_dir,
+            sqlglot_enabled=sqlglot_enabled,
+        ),
         sql_function_files=discover_sql_function_files(project_dir=project_dir),
         python_function_files=discover_python_function_files(project_dir=project_dir),
         schema_files=discover_schema_files(project_dir=project_dir),

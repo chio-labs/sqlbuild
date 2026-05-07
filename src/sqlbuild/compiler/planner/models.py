@@ -338,6 +338,7 @@ class SqlTestPlanEntry:
     chain: tuple[ChainStep, ...] = field(default_factory=tuple)
     scope_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
     function_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
+    sqlglot_enabled: bool = True
 
 
 @dataclass(frozen=True)
