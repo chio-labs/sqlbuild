@@ -844,6 +844,57 @@ def test_given_command_local_global_flags_when_running_main_then_it_returns_pars
 
 @pytest.mark.parametrize(
     "test_case",
+    [
+        MainTestCase(
+            description="colorizes parser error prefix when color is supported",
+            argv=["build", "--debug"],
+            expected_exit_code=2,
+        )
+    ],
+    ids=["colorizes parser error prefix when color is supported"],
+)
+def test_given_parser_error_and_color_support_when_running_main_then_it_colorizes_error_prefix(
+    test_case: MainTestCase,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("sqlbuild.cli.commands.main.entry.supports_color", lambda: True)
+
+    exit_code: int = main(test_case.argv)
+    rendered_stderr: str = capsys.readouterr().err
+
+    assert exit_code == test_case.expected_exit_code
+    assert "\033[31m\033[1merror[C900]:\033[0m" in rendered_stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="leaves parser error plain when no color is requested",
+            argv=["--no-color", "build", "--debug"],
+            expected_exit_code=2,
+        )
+    ],
+    ids=["leaves parser error plain when no color is requested"],
+)
+def test_given_parser_error_and_no_color_when_running_main_then_it_renders_plain_error_prefix(
+    test_case: MainTestCase,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("sqlbuild.cli.commands.main.entry.supports_color", lambda: True)
+
+    exit_code: int = main(test_case.argv)
+    rendered_stderr: str = capsys.readouterr().err
+
+    assert exit_code == test_case.expected_exit_code
+    assert "error[C900]:" in rendered_stderr
+    assert "\033[31m" not in rendered_stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
     ERROR_RENDERING_TEST_CASES,
     ids=[case.description for case in ERROR_RENDERING_TEST_CASES],
 )
@@ -881,6 +932,53 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
     exit_code: int = _main_with_dependencies(
         argv=test_case.argv,
         handlers=build_handlers(run_compile=run_compile, run_query=run_query),
+    )
+    rendered_stderr: str = capsys.readouterr().err
+
+    assert exit_code == test_case.expected_exit_code
+    assert test_case.expected_stderr_fragment in rendered_stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainErrorRenderingTestCase(
+            description="colorizes expected cli error prefix and help label",
+            argv=["query", "SELECT 1"],
+            error_type=CliUserError,
+            error_factory=lambda project_dir: CliUserError(
+                "query requires SQL",
+                code="C102",
+                help="pass SQL as the query argument",
+            ),
+            expected_stderr_fragment=(
+                "\033[31m\033[1merror[C102]:\033[0m query requires SQL\n"
+                "  \033[2m= help:\033[0m pass SQL as the query argument"
+            ),
+            expected_exit_code=1,
+        )
+    ],
+    ids=["colorizes expected cli error prefix and help label"],
+)
+def test_given_expected_cli_error_and_color_support_when_running_main_then_it_colorizes_stderr(
+    test_case: MainErrorRenderingTestCase,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("sqlbuild.cli.commands.main.entry.supports_color", lambda: True)
+
+    def run_query(
+        project_dir: Path | None,
+        sql: str | None,
+        output_format: str,
+        limit: int | None,
+    ) -> int:
+        del project_dir, sql, output_format, limit
+        raise test_case.error_factory(Path("/tmp/demo"))
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_query=run_query),
     )
     rendered_stderr: str = capsys.readouterr().err
 

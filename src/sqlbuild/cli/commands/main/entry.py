@@ -13,6 +13,8 @@ from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
 from sqlbuild.cli.commands.main.helpers.diff.validation import parse_diff_environment_range
 from sqlbuild.cli.commands.main.helpers.entry.errors import (
     SqlbuildArgumentParser,
+    build_argument_parser_class,
+    cli_error_use_color,
     format_expected_error,
 )
 from sqlbuild.cli.commands.main.helpers.entry.models import CliEntrypointHandlers, CliNamespace
@@ -31,17 +33,18 @@ from sqlbuild.diagnostics.main.configure import configure_diagnostics
 from sqlbuild.shared.helpers.colors import supports_color
 
 
-def _build_parser() -> argparse.ArgumentParser:
+def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     """Build the root CLI parser."""
 
-    parser: argparse.ArgumentParser = SqlbuildArgumentParser(prog="sqb")
+    parser_class: type[SqlbuildArgumentParser] = build_argument_parser_class(use_color=use_color)
+    parser: argparse.ArgumentParser = parser_class(prog="sqb")
     parser.add_argument("--project-dir", default=None)
     parser.add_argument("--no-color", action="store_true", default=False)
     parser.add_argument("--debug", action="store_true", default=False)
 
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser] = parser.add_subparsers(
         dest="command",
-        parser_class=SqlbuildArgumentParser,
+        parser_class=parser_class,
     )
     compile_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.COMPILE)
     compile_parser.add_argument("--no-sql-validation", action="store_true", default=False)
@@ -196,7 +199,8 @@ def _main_with_dependencies(
 ) -> int:
     """Run the CLI entrypoint with injected handlers for testing."""
 
-    parser: argparse.ArgumentParser = _build_parser()
+    use_color: bool = cli_error_use_color(argv, supports_color=supports_color)
+    parser: argparse.ArgumentParser = _build_parser(use_color=use_color)
     try:
         args: CliNamespace = CliNamespace()
         parser.parse_args(argv, namespace=args)
@@ -380,9 +384,15 @@ def _main_with_dependencies(
         return 0
     except CliUserError as error:
         logging.getLogger("sqlbuild.cli").exception("cli user error")
-        print(format_expected_error(error, fallback_code="C000"), file=sys.stderr)
+        print(
+            format_expected_error(error, fallback_code="C000", use_color=use_color),
+            file=sys.stderr,
+        )
         return 1
     except (DiscoveryError, ValueError) as error:
         logging.getLogger("sqlbuild.cli").exception("command failed")
-        print(format_expected_error(error, fallback_code="E001"), file=sys.stderr)
+        print(
+            format_expected_error(error, fallback_code="E001", use_color=use_color),
+            file=sys.stderr,
+        )
         return 1
