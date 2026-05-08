@@ -1,0 +1,1 @@
+"""Packaged playground project templates."""
