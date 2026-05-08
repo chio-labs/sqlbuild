@@ -31,6 +31,7 @@ REF_TEST_CTE_PREFIX: str = "__ref__"
 SOURCE_TEST_CTE_PREFIX: str = "__source__"
 SEED_TEST_CTE_PREFIX: str = "__seed__"
 MACRO_TEST_CTE_PREFIX: str = "__macro__"
+ASSERT_SCENARIO_CTE_PREFIX: str = "__assert__"
 RESERVED_SQL_TEST_CTE_NAMES: frozenset[str] = frozenset(
     {
         "__actual",
