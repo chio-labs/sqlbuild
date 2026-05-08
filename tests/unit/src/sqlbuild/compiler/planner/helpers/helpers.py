@@ -269,6 +269,27 @@ def build_scenario_from_test_case(
     )
 
 
+def build_compiled_scenario_with_name(name: str) -> CompiledSqlScenario:
+    """Build a minimal compiled SQL scenario with a specific name."""
+
+    return CompiledSqlScenario(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.SQL_SCENARIO,
+            name=name,
+        ),
+        name=name,
+        scenario_file=DiscoveredSqlScenarioFile(
+            file_path=Path(f"tests/scenarios/{name}.sql"),
+            relative_path=Path(f"tests/scenarios/{name}.sql"),
+            contents="",
+            header_values={},
+            name=name,
+            sql_body="SELECT 1",
+        ),
+        sql_body="SELECT 1",
+    )
+
+
 def build_test_project_with_source_entry(source_entry: SourceEntry) -> CompiledProject:
     """Build a minimal CompiledProject containing one source entry."""
 

@@ -28,6 +28,7 @@ from sqlbuild.compiler.planner.types import (
     OnSchemaChange,
     PlanAction,
     PlanReason,
+    ScenarioArtifactKind,
     SchemaActionKind,
     SchemaChangeKind,
     SchemaColumnSource,
@@ -354,6 +355,34 @@ class ScenarioGraphPlan:
     ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     function_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class ScenarioArtifactIdentity:
+    """Logical identity for one scenario-owned physical artifact."""
+
+    kind: ScenarioArtifactKind | str
+    logical_name: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "kind", ScenarioArtifactKind(self.kind))
+
+
+@dataclass(frozen=True)
+class ScenarioArtifactName:
+    """Resolved physical relation name for one scenario artifact."""
+
+    identity: ScenarioArtifactIdentity
+    physical_name: str
+
+
+@dataclass(frozen=True)
+class ScenarioRelationMap:
+    """Resolved scenario hash prefix and scenario-owned relation names."""
+
+    scenario_name: str
+    hash_prefix: str
+    artifacts: tuple[ScenarioArtifactName, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
