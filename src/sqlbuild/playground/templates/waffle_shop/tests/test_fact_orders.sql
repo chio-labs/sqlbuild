@@ -38,7 +38,6 @@ __expected__fact_orders AS (
     CAST('2026-04-01 10:00:00' AS TIMESTAMP) AS ordered_at,
     'completed' AS order_status,
     TRUE AS is_completed_order,
-    TRUE AS is_completed_order_py,
     'card' AS payment_method,
     'success' AS payment_status,
     2850 AS payment_amount_cents

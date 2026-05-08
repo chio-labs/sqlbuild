@@ -30,7 +30,6 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
                 Path("tests/test_daily_revenue_chain.sql"),
                 Path("audits/generic/expression_is_true.sql"),
                 Path("functions/sql/is_completed_order.sql"),
-                Path("functions/python/is_completed_order_py.py"),
                 Path("macros/currency.py"),
                 Path("materializations/partition_tracked.py"),
             ),

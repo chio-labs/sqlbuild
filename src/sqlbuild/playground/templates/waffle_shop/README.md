@@ -41,7 +41,7 @@ sqb lineage fact_orders
 - Seeds and sources
 - SQL unit tests and chain tests
 - Built-in and custom audits
-- SQL and Python functions
+- SQL functions
 - Macros and custom materialization hooks
 - Incremental and partition-oriented model patterns
 

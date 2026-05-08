@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.cli.commands.main.helpers.playground.copy import create_playground_project
+from sqlbuild.shared.helpers.colors import blue_bold, dim, green_bold, supports_color
 
 
 def run_playground(project_dir: Path | None, target_path: str) -> int:
@@ -17,16 +18,26 @@ def run_playground(project_dir: Path | None, target_path: str) -> int:
 
     create_playground_project(target_dir=target_dir)
     display_path: str = str(target_path)
-    print("SQLBuild playground created")
+    use_color: bool = supports_color()
+    heading: str = (
+        green_bold("SQLBuild playground created") if use_color else "SQLBuild playground created"
+    )
+    project_label: str = blue_bold("Project") if use_color else "Project"
+    adapter_label: str = blue_bold("Adapter") if use_color else "Adapter"
+    example_label: str = blue_bold("Example") if use_color else "Example"
+    try_label: str = green_bold("Try") if use_color else "Try"
+    command_prefix: str = dim("  ") if use_color else "  "
+
+    print(heading)
     print()
-    print(f"  Project: {display_path}")
-    print("  Adapter: DuckDB")
-    print("  Example: waffle shop")
+    print(f"  {project_label}: {display_path}")
+    print(f"  {adapter_label}: DuckDB")
+    print(f"  {example_label}: waffle shop")
     print()
-    print("Try:")
-    print(f"  cd {display_path}")
-    print("  sqb compile")
-    print("  sqb build")
-    print("  sqb test")
-    print("  sqb audit")
+    print(f"{try_label}:")
+    print(f"{command_prefix}cd {display_path}")
+    print(f"{command_prefix}sqb compile")
+    print(f"{command_prefix}sqb build")
+    print(f"{command_prefix}sqb test")
+    print(f"{command_prefix}sqb audit")
     return 0
