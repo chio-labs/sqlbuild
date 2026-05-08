@@ -2,23 +2,28 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.planner.helpers.scenario_relations import (
+    build_scenario_execution_plan,
     build_scenario_fixture_plans,
     build_scenario_relation_plan,
     resolve_scenario_check_sql,
 )
 from sqlbuild.compiler.planner.models import (
+    ScenarioExecutionPlan,
     ScenarioFixturePlan,
     ScenarioGraphPlan,
     ScenarioRelationPlan,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     ScenarioCheckSqlResolutionTestCase,
+    ScenarioExecutionPlanTestCase,
     ScenarioFixturePlanTestCase,
     ScenarioRelationPlanErrorTestCase,
     ScenarioRelationPlanTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
+    PlannerTestAdapter,
     build_scenario_relation_test_map,
     build_scenario_relation_test_project,
     build_scenario_relation_test_scenario,
@@ -137,6 +142,97 @@ def test_given_scenario_helpers_when_building_fixture_plans_then_fixtures_are_se
         f"{fixture.kind.value}:{fixture.logical_name}": fixture.target.qualified_name
         for fixture in result
     } == test_case.expected_fixture_targets
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScenarioExecutionPlanTestCase(
+            description="builds dry run scenario execution plan with scenario targets",
+            graph_plan=ScenarioGraphPlan(
+                key=build_scenario_relation_test_project().models[0].key,
+                name=SCENARIO_NAME,
+                target_model_names=("daily_revenue",),
+                assertion_target_model_names=("daily_revenue",),
+                model_names=("daily_revenue",),
+                source_fixture_names=("raw__orders",),
+                ref_fixture_names=("stg_customers",),
+                seed_fixture_names=("country_codes",),
+            ),
+            expected_model_entry_targets={
+                "daily_revenue": "scenario_schema.__sqb_51b385aebe20__model__daily_revenue",
+            },
+            expected_model_entry_sql_fragments={
+                "daily_revenue": (
+                    "scenario_schema.__sqb_51b385aebe20__source__raw__orders",
+                    "scenario_schema.__sqb_51b385aebe20__ref__stg_customers",
+                    "scenario_schema.__sqb_51b385aebe20__seed__country_codes",
+                ),
+            },
+            expected_fixture_targets={
+                "source:raw__orders": "scenario_schema.__sqb_51b385aebe20__source__raw__orders",
+                "ref:stg_customers": "scenario_schema.__sqb_51b385aebe20__ref__stg_customers",
+                "seed:country_codes": "scenario_schema.__sqb_51b385aebe20__seed__country_codes",
+            },
+            expected_expected_actual_targets={
+                "daily_revenue": "scenario_schema.__sqb_51b385aebe20__model__daily_revenue",
+            },
+            expected_expected_sql={
+                "daily_revenue": (
+                    "SELECT * FROM scenario_schema.__sqb_51b385aebe20__model__daily_revenue"
+                ),
+            },
+            expected_assertion_sql={
+                "no_negative_revenue": (
+                    "SELECT * FROM "
+                    "scenario_schema.__sqb_51b385aebe20__model__daily_revenue "
+                    "WHERE revenue < 0"
+                ),
+            },
+        )
+    ],
+    ids=["builds dry run scenario execution plan with scenario targets"],
+)
+def test_given_scenario_graph_when_building_execution_plan_then_returns_scenario_plan(
+    test_case: ScenarioExecutionPlanTestCase,
+) -> None:
+    project: CompiledProject = build_scenario_relation_test_project()
+    relation_plan: ScenarioRelationPlan = build_scenario_relation_plan(
+        project=project,
+        graph_plan=test_case.graph_plan,
+        relation_map=build_scenario_relation_test_map(),
+        schema="scenario_schema",
+    )
+
+    result, warnings = build_scenario_execution_plan(
+        scenario=build_scenario_relation_test_scenario(),
+        project=project,
+        adapter=PlannerTestAdapter(),
+        graph_plan=test_case.graph_plan,
+        relation_plan=relation_plan,
+    )
+
+    assert warnings == ()
+    assert isinstance(result, ScenarioExecutionPlan)
+    assert {
+        entry.name: entry.target.qualified_name for entry in result.model_entries
+    } == test_case.expected_model_entry_targets
+    for entry in result.model_entries:
+        for expected_fragment in test_case.expected_model_entry_sql_fragments[entry.name]:
+            assert expected_fragment in entry.resolved_sql
+    assert {
+        f"{fixture.kind.value}:{fixture.logical_name}": fixture.target.qualified_name
+        for fixture in result.fixture_plans
+    } == test_case.expected_fixture_targets
+    assert {
+        check.model_name: check.actual_target.qualified_name for check in result.expected_checks
+    } == test_case.expected_expected_actual_targets
+    assert {
+        check.model_name: check.expected_sql for check in result.expected_checks
+    } == test_case.expected_expected_sql
+    assert {
+        check.name: check.sql for check in result.assertion_checks
+    } == test_case.expected_assertion_sql
 
 
 CHECK_SQL_TEST_CASES: list[ScenarioCheckSqlResolutionTestCase] = [

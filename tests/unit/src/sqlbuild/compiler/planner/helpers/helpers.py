@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
@@ -59,6 +61,21 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     PlanScenarioGraphTestCase,
     ResolveModelPlanActionTestCase,
 )
+
+
+class PlannerTestAdapter(BaseAdapter):
+    """Minimal adapter for planner helper tests."""
+
+    def connect(self, config: dict[str, object]) -> object:
+        del config
+        return object()
+
+    def execute(self, connection: object, sql: str) -> object:
+        del connection, sql
+        return object()
+
+    def close(self, connection: object) -> None:
+        del connection
 
 
 def model_key(name: str) -> CompiledObjectKey:
@@ -312,7 +329,7 @@ def build_scenario_relation_test_map() -> ScenarioRelationMap:
 def build_scenario_relation_test_project() -> CompiledProject:
     """Build a project covering scenario relation planning tests."""
 
-    return build_test_project(
+    project: CompiledProject = build_test_project(
         model_deps={
             "daily_revenue": ("raw__orders", "stg_customers", "country_codes"),
             "customer_revenue": ("raw__orders",),
@@ -321,6 +338,23 @@ def build_scenario_relation_test_project() -> CompiledProject:
         source_names=("raw__orders",),
         seed_names=("country_codes",),
     )
+    models: list[CompiledModel] = []
+    model: CompiledModel
+    for model in project.models:
+        if model.name == "daily_revenue":
+            models.append(
+                replace(
+                    model,
+                    query_sql=(
+                        'SELECT * FROM __source("raw__orders") '
+                        'JOIN __ref("stg_customers") USING (customer_id) '
+                        'JOIN __seed("country_codes") USING (country_code)'
+                    ),
+                )
+            )
+            continue
+        models.append(model)
+    return replace(project, models=tuple(models))
 
 
 def build_scenario_relation_test_scenario() -> CompiledSqlScenario:
@@ -362,13 +396,20 @@ def build_scenario_relation_test_scenario() -> CompiledSqlScenario:
         expected_ctes=(
             CompileSqlScenarioCte(
                 name="__expected__daily_revenue",
-                sql_body="SELECT 1 AS order_id",
+                sql_body='SELECT * FROM __ref("daily_revenue")',
+            ),
+        ),
+        assertion_ctes=(
+            CompileSqlScenarioCte(
+                name="__assert__no_negative_revenue",
+                sql_body='SELECT * FROM __ref("daily_revenue") WHERE revenue < 0',
             ),
         ),
         source_fixture_names=("raw__orders",),
         ref_fixture_names=("stg_customers",),
         seed_fixture_names=("country_codes",),
         expected_model_names=("daily_revenue",),
+        assertion_names=("no_negative_revenue",),
     )
 
 
