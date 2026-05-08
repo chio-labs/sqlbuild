@@ -61,6 +61,25 @@ PLAN_TEST_CASES: list[PlanScenarioGraphTestCase] = [
         ),
     ),
     PlanScenarioGraphTestCase(
+        description="sqlglot assertion target inference ignores strings and comments",
+        model_deps={"daily_revenue": ("raw__orders",)},
+        source_names=("raw__orders",),
+        seed_names=(),
+        assertion_sql_bodies=(
+            "SELECT '__ref(not_a_model)' AS marker_text "
+            "FROM __ref(daily_revenue) -- __ref(commented_model)",
+        ),
+        source_fixture_names=("raw__orders",),
+        expected_plan=ScenarioGraphPlan(
+            key=SCENARIO_KEY,
+            name="revenue__customer_refund",
+            target_model_names=("daily_revenue",),
+            assertion_target_model_names=("daily_revenue",),
+            model_names=("daily_revenue",),
+            source_fixture_names=("raw__orders",),
+        ),
+    ),
+    PlanScenarioGraphTestCase(
         description="mixed expected and assertion targets are unioned",
         model_deps={
             "daily_revenue": ("raw__orders",),
@@ -171,6 +190,14 @@ ERROR_TEST_CASES: list[PlanScenarioGraphErrorTestCase] = [
         seed_names=(),
         assertion_sql_bodies=("SELECT * FROM __ref(daily_revenue)",),
         expected_error_fragment="assertion references unknown model 'daily_revenue'",
+    ),
+    PlanScenarioGraphErrorTestCase(
+        description="sqlglot assertion parse failure fails clearly without regex fallback",
+        model_deps={"daily_revenue": ()},
+        source_names=(),
+        seed_names=(),
+        assertion_sql_bodies=("SELECT * FROM __ref(daily_revenue) WHERE (",),
+        expected_error_fragment="could not be parsed with SQLGlot",
     ),
     PlanScenarioGraphErrorTestCase(
         description="unknown ref fixture fails clearly",

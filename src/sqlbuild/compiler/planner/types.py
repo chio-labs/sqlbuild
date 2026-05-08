@@ -119,4 +119,5 @@ class WarningSeverity(StrEnum):
 class ScenarioArtifactKind(StrEnum):
     SOURCE = "source"
     REF = "ref"
+    SEED = "seed"
     MODEL = "model"

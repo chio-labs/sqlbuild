@@ -38,10 +38,13 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.planner.helpers.scenario_artifacts import build_scenario_relation_map
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeResult,
     ChangeDetectionResult,
+    ScenarioArtifactIdentity,
+    ScenarioRelationMap,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction
@@ -287,6 +290,36 @@ def build_compiled_scenario_with_name(name: str) -> CompiledSqlScenario:
             sql_body="SELECT 1",
         ),
         sql_body="SELECT 1",
+    )
+
+
+def build_scenario_relation_test_map() -> ScenarioRelationMap:
+    """Build a relation map covering scenario relation planning tests."""
+
+    return build_scenario_relation_map(
+        scenario_name="revenue__customer_refund",
+        hash_prefix="51b385aebe20",
+        artifacts=(
+            ScenarioArtifactIdentity(kind="source", logical_name="raw__orders"),
+            ScenarioArtifactIdentity(kind="ref", logical_name="stg_customers"),
+            ScenarioArtifactIdentity(kind="seed", logical_name="country_codes"),
+            ScenarioArtifactIdentity(kind="model", logical_name="daily_revenue"),
+            ScenarioArtifactIdentity(kind="model", logical_name="customer_revenue"),
+        ),
+    )
+
+
+def build_scenario_relation_test_project() -> CompiledProject:
+    """Build a project covering scenario relation planning tests."""
+
+    return build_test_project(
+        model_deps={
+            "daily_revenue": ("raw__orders", "stg_customers", "country_codes"),
+            "customer_revenue": ("raw__orders",),
+            "stg_customers": ("raw__orders",),
+        },
+        source_names=("raw__orders",),
+        seed_names=("country_codes",),
     )
 
 
