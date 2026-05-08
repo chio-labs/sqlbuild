@@ -77,6 +77,8 @@ def _classify_sql_scenario_ctes(
     *, ctes: tuple[CompileSqlScenarioCte, ...], file_label: str
 ) -> CompileSqlScenarioCtes:
     authored_ctes: list[CompileSqlScenarioCte] = []
+    expected_ctes: list[CompileSqlScenarioCte] = []
+    assertion_ctes: list[CompileSqlScenarioCte] = []
     source_fixture_names: list[str] = []
     ref_fixture_names: list[str] = []
     seed_fixture_names: list[str] = []
@@ -127,6 +129,7 @@ def _classify_sql_scenario_ctes(
                     file_label=file_label,
                 )
             )
+            expected_ctes.append(cte)
             continue
         if cte.name.startswith(ASSERT_SCENARIO_CTE_PREFIX):
             assertion_names.append(
@@ -137,6 +140,7 @@ def _classify_sql_scenario_ctes(
                     file_label=file_label,
                 )
             )
+            assertion_ctes.append(cte)
             continue
         if cte.name.startswith(MACRO_TEST_CTE_PREFIX):
             raise CompileInputError(
@@ -157,6 +161,8 @@ def _classify_sql_scenario_ctes(
         )
     return CompileSqlScenarioCtes(
         authored_ctes=tuple(authored_ctes),
+        expected_ctes=tuple(expected_ctes),
+        assertion_ctes=tuple(assertion_ctes),
         source_fixture_names=tuple(source_fixture_names),
         ref_fixture_names=tuple(ref_fixture_names),
         seed_fixture_names=tuple(seed_fixture_names),

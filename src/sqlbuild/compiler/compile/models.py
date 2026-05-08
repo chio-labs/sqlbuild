@@ -133,6 +133,8 @@ class CompileSqlScenarioCtes:
     """Extracted top-level SQL-native scenario CTE semantics."""
 
     authored_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
+    expected_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
+    assertion_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
     source_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
@@ -230,6 +232,8 @@ class CompileSqlScenarioInput:
     scenario_file: DiscoveredSqlScenarioFile
     sql_body: str
     authored_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
+    expected_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
+    assertion_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
     source_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
@@ -399,6 +403,24 @@ class CompiledSqlTest:
 
 
 @dataclass(frozen=True)
+class CompiledSqlScenario:
+    """Compiled SQL-native scenario metadata selected by inferred graph targets."""
+
+    key: CompiledObjectKey
+    name: str
+    scenario_file: DiscoveredSqlScenarioFile
+    sql_body: str
+    authored_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
+    expected_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
+    assertion_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
+    source_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    expected_model_names: tuple[str, ...] = field(default_factory=tuple)
+    assertion_names: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class CompiledProject:
     """Planner-ready whole-project compile output."""
 
@@ -413,4 +435,5 @@ class CompiledProject:
     functions: tuple[CompiledFunction, ...] = field(default_factory=tuple)
     audits: tuple[CompiledAudit, ...] = field(default_factory=tuple)
     sql_tests: tuple[CompiledSqlTest, ...] = field(default_factory=tuple)
+    sql_scenarios: tuple[CompiledSqlScenario, ...] = field(default_factory=tuple)
     diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)

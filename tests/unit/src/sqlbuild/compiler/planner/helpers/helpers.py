@@ -15,9 +15,11 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationTarget,
     CompiledSeed,
     CompiledSource,
+    CompiledSqlScenario,
     CompiledSqlTest,
     CompileModelConfig,
     CompileSqlReference,
+    CompileSqlScenarioCte,
     FunctionArgument,
 )
 from sqlbuild.compiler.compile.types import (
@@ -31,6 +33,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
+    DiscoveredSqlScenarioFile,
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
@@ -49,6 +52,8 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     BuildModelWarningsTestCase,
     IncrementalStrategyErrorTestCase,
     PlanAuditTestCase,
+    PlanScenarioGraphErrorTestCase,
+    PlanScenarioGraphTestCase,
     ResolveModelPlanActionTestCase,
 )
 
@@ -223,6 +228,45 @@ def build_snapshot_from_relation_names(relation_names: tuple[str, ...]) -> Wareh
         for name in relation_names
     }
     return WarehouseSnapshot(existing_relations=existing_relations)
+
+
+def build_scenario_from_test_case(
+    test_case: PlanScenarioGraphTestCase | PlanScenarioGraphErrorTestCase,
+) -> CompiledSqlScenario:
+    """Build a minimal compiled SQL scenario from a graph test case."""
+
+    scenario_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.SQL_SCENARIO,
+        name="revenue__customer_refund",
+    )
+    assertion_ctes: tuple[CompileSqlScenarioCte, ...] = tuple(
+        CompileSqlScenarioCte(name=f"__assert__assertion_{index}", sql_body=sql_body)
+        for index, sql_body in enumerate(test_case.assertion_sql_bodies)
+    )
+    expected_ctes: tuple[CompileSqlScenarioCte, ...] = tuple(
+        CompileSqlScenarioCte(name=f"__expected__{model_name}", sql_body="SELECT 1")
+        for model_name in test_case.expected_model_names
+    )
+    return CompiledSqlScenario(
+        key=scenario_key,
+        name="revenue__customer_refund",
+        scenario_file=DiscoveredSqlScenarioFile(
+            file_path=Path("tests/scenarios/revenue__customer_refund.sql"),
+            relative_path=Path("tests/scenarios/revenue__customer_refund.sql"),
+            contents="",
+            header_values={},
+            name="revenue__customer_refund",
+            sql_body="SELECT 1",
+        ),
+        sql_body="SELECT 1",
+        expected_ctes=expected_ctes,
+        assertion_ctes=assertion_ctes,
+        source_fixture_names=test_case.source_fixture_names,
+        ref_fixture_names=test_case.ref_fixture_names,
+        seed_fixture_names=test_case.seed_fixture_names,
+        expected_model_names=test_case.expected_model_names,
+        assertion_names=tuple(cte.name.removeprefix("__assert__") for cte in assertion_ctes),
+    )
 
 
 def build_test_project_with_source_entry(source_entry: SourceEntry) -> CompiledProject:

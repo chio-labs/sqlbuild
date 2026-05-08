@@ -11,6 +11,7 @@ from sqlbuild.compiler.planner.models import (
     MissingUpstream,
     ParsedSelector,
     PathSelector,
+    ScenarioGraphPlan,
     SchemaAction,
     SchemaFinding,
 )
@@ -213,6 +214,34 @@ class BuildPathIndexTestCase:
     description: str
     model_paths: dict[str, str]
     expected_folders: dict[str, str]
+
+
+@dataclass(frozen=True)
+class PlanScenarioGraphTestCase:
+    description: str
+    model_deps: dict[str, tuple[str, ...]]
+    source_names: tuple[str, ...]
+    seed_names: tuple[str, ...]
+    expected_model_names: tuple[str, ...] = field(default_factory=tuple)
+    assertion_sql_bodies: tuple[str, ...] = field(default_factory=tuple)
+    source_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    expected_plan: ScenarioGraphPlan | None = None
+
+
+@dataclass(frozen=True)
+class PlanScenarioGraphErrorTestCase:
+    description: str
+    model_deps: dict[str, tuple[str, ...]]
+    source_names: tuple[str, ...]
+    seed_names: tuple[str, ...]
+    expected_model_names: tuple[str, ...] = field(default_factory=tuple)
+    assertion_sql_bodies: tuple[str, ...] = field(default_factory=tuple)
+    source_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    expected_error_fragment: str = ""
 
 
 @dataclass(frozen=True)

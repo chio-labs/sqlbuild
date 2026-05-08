@@ -22,12 +22,14 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationTarget,
     CompiledSeed,
     CompiledSource,
+    CompiledSqlScenario,
     CompiledSqlTest,
     CompileModelInput,
     CompileProjectInputs,
     CompileSeedInput,
     CompileSourceInput,
     CompileSqlFunctionInput,
+    CompileSqlScenarioInput,
     CompileSqlTestInput,
     InferredColumn,
     MacroContext,
@@ -93,6 +95,10 @@ def assemble_compiled_project(
         sql_tests=tuple(
             _assemble_compiled_sql_test(test_input, model_inputs=inputs.model_inputs, inputs=inputs)
             for test_input in inputs.test_inputs
+        ),
+        sql_scenarios=tuple(
+            _assemble_compiled_sql_scenario(scenario_input)
+            for scenario_input in inputs.scenario_inputs
         ),
         diagnostics=inputs.diagnostics,
     )
@@ -349,6 +355,29 @@ def _build_test_model_query_overrides(
             macro_context=macro_context,
         )
     return overrides
+
+
+def _assemble_compiled_sql_scenario(
+    scenario_input: CompileSqlScenarioInput,
+) -> CompiledSqlScenario:
+    scenario_name: str = scenario_input.scenario_file.name
+    return CompiledSqlScenario(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.SQL_SCENARIO,
+            name=scenario_name,
+        ),
+        name=scenario_name,
+        scenario_file=scenario_input.scenario_file,
+        sql_body=scenario_input.sql_body,
+        authored_ctes=scenario_input.authored_ctes,
+        expected_ctes=scenario_input.expected_ctes,
+        assertion_ctes=scenario_input.assertion_ctes,
+        source_fixture_names=scenario_input.source_fixture_names,
+        ref_fixture_names=scenario_input.ref_fixture_names,
+        seed_fixture_names=scenario_input.seed_fixture_names,
+        expected_model_names=scenario_input.expected_model_names,
+        assertion_names=scenario_input.assertion_names,
+    )
 
 
 def _resolve_audit_name(audit_input: CompileAuditInput) -> str:
