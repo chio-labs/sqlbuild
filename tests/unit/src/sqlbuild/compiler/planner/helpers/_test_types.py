@@ -289,6 +289,31 @@ class ScenarioRelationMapErrorTestCase:
 
 
 @dataclass(frozen=True)
+class ScenarioRelationPlanTestCase:
+    description: str
+    graph_plan: ScenarioGraphPlan
+    expected_model_target_names: dict[str, str]
+    expected_seed_target_names: dict[str, str]
+    expected_source_expressions: dict[str, str]
+
+
+@dataclass(frozen=True)
+class ScenarioCheckSqlResolutionTestCase:
+    description: str
+    sql: str
+    expected_sql: str
+    sqlglot_enabled: bool = True
+    sqlglot_dialect: str | None = None
+
+
+@dataclass(frozen=True)
+class ScenarioRelationPlanErrorTestCase:
+    description: str
+    graph_plan: ScenarioGraphPlan
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class PlanAuditTestCase:
     description: str
     sql_body: str

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
@@ -14,6 +15,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import PlanWarning, ScenarioGraphPlan
 from sqlbuild.compiler.planner.types import WarningSeverity
+from sqlbuild.shared.helpers.sqlglot import import_sqlglot, import_sqlglot_expressions
 
 _REF_PATTERN: re.Pattern[str] = re.compile(
     r"__ref\(\s*[\"']?(?P<name>[A-Za-z_][A-Za-z0-9_.]*)[\"']?\s*\)"
@@ -24,20 +26,26 @@ def plan_scenario_graph(
     *,
     scenario: CompiledSqlScenario,
     project: CompiledProject,
+    sqlglot_enabled: bool = True,
+    sqlglot_dialect: str | None = None,
 ) -> tuple[ScenarioGraphPlan, tuple[PlanWarning, ...]]:
     """Infer scenario target models, build closure, and required fixtures."""
 
     model_map: dict[str, CompiledModel] = {model.name: model for model in project.models}
     source_names: frozenset[str] = frozenset(source.name for source in project.sources)
     seed_names: frozenset[str] = frozenset(seed.name for seed in project.seeds)
-    assertion_target_names: tuple[str, ...] = _extract_assertion_target_names(
-        scenario.assertion_ctes
+    assertion_target_names, assertion_warnings = _extract_assertion_target_names(
+        scenario.assertion_ctes,
+        scenario_name=scenario.name,
+        sqlglot_enabled=sqlglot_enabled,
+        sqlglot_dialect=sqlglot_dialect,
     )
     target_model_names: tuple[str, ...] = _dedupe_names(
         (*scenario.expected_model_names, *assertion_target_names)
     )
 
     warnings: list[PlanWarning] = []
+    warnings.extend(assertion_warnings)
     _validate_declared_names(
         scenario=scenario,
         target_model_names=target_model_names,
@@ -122,14 +130,72 @@ def plan_scenario_graph(
 
 def _extract_assertion_target_names(
     assertion_ctes: tuple[CompileSqlScenarioCte, ...],
-) -> tuple[str, ...]:
+    *,
+    scenario_name: str,
+    sqlglot_enabled: bool,
+    sqlglot_dialect: str | None,
+) -> tuple[tuple[str, ...], tuple[PlanWarning, ...]]:
     names: list[str] = []
+    warnings: list[PlanWarning] = []
     cte: CompileSqlScenarioCte
     for cte in assertion_ctes:
+        if sqlglot_enabled:
+            try:
+                names.extend(
+                    _extract_assertion_target_names_with_sqlglot(
+                        cte.sql_body,
+                        sqlglot_dialect=sqlglot_dialect,
+                    )
+                )
+            except ValueError as error:
+                warnings.append(
+                    _error(
+                        f"Scenario '{scenario_name}' assertion CTE '{cte.name}' could not be "
+                        f"parsed with SQLGlot: {error}"
+                    )
+                )
+            continue
         match: re.Match[str]
         for match in _REF_PATTERN.finditer(cte.sql_body):
             names.append(match.group("name"))
-    return _dedupe_names(tuple(names))
+    return _dedupe_names(tuple(names)), tuple(warnings)
+
+
+def _extract_assertion_target_names_with_sqlglot(
+    sql: str, *, sqlglot_dialect: str | None
+) -> tuple[str, ...]:
+    sqlglot_module: Any | None = import_sqlglot()
+    expressions_module: Any | None = import_sqlglot_expressions()
+    if sqlglot_module is None or expressions_module is None:
+        raise ValueError("SQLGlot is enabled but unavailable")
+    try:
+        parsed: Any = (
+            sqlglot_module.parse_one(sql, read=sqlglot_dialect)
+            if sqlglot_dialect is not None
+            else sqlglot_module.parse_one(sql)
+        )
+    except Exception as error:
+        raise ValueError(str(error)) from None
+
+    table_type: type[Any] = expressions_module.Table
+    anonymous_type: type[Any] = expressions_module.Anonymous
+    names: list[str] = []
+    table: Any
+    for table in parsed.find_all(table_type):
+        anonymous: Any = table.this
+        if not isinstance(anonymous, anonymous_type):
+            continue
+        function_name: str = str(anonymous.this).lower()
+        if function_name != "__ref":
+            continue
+        expressions: list[Any] = list(anonymous.expressions)
+        if len(expressions) != 1:
+            continue
+        argument: Any = expressions[0]
+        if not hasattr(argument, "name"):
+            continue
+        names.append(str(argument.name))
+    return tuple(names)
 
 
 def _validate_declared_names(
