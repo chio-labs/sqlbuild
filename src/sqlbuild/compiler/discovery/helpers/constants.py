@@ -29,6 +29,11 @@ AUDIT_HEADER_ONLY_PATTERN: re.Pattern[str] = re.compile(
     re.DOTALL | re.MULTILINE,
 )
 
+SCENARIO_HEADER_PATTERN: re.Pattern[str] = re.compile(
+    r"^\s*SCENARIO\s*\((?P<header>.*?)\)\s*;\s*(?P<sql>.*)\Z",
+    re.DOTALL,
+)
+
 FUNCTION_HEADER_PATTERN: re.Pattern[str] = re.compile(
     r"^\s*FUNCTION\s*\((?P<header>.*?)\)\s*;\s*(?P<sql>.*)\Z",
     re.DOTALL,

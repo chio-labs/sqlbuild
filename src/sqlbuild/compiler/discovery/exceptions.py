@@ -61,3 +61,9 @@ class SeedDiscoveryError(DiscoveryError):
     """Raised when declared seed metadata does not match local seed files."""
 
     code: str = "D008"
+
+
+class SqlScenarioParseError(DiscoveryError):
+    """Raised when an authored SQL scenario file has an invalid shape."""
+
+    code: str = "D009"
