@@ -342,6 +342,21 @@ class SqlTestPlanEntry:
 
 
 @dataclass(frozen=True)
+class ScenarioGraphPlan:
+    """Inferred graph slice and fixture boundaries for one SQL scenario."""
+
+    key: CompiledObjectKey
+    name: str
+    target_model_names: tuple[str, ...] = field(default_factory=tuple)
+    assertion_target_model_names: tuple[str, ...] = field(default_factory=tuple)
+    model_names: tuple[str, ...] = field(default_factory=tuple)
+    source_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    function_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class PlanOutput:
     """Complete execution plan produced by the planner."""
 

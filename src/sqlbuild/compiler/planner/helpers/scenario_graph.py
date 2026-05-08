@@ -1,0 +1,288 @@
+"""Graph inference and validation for SQL-native scenarios."""
+
+from __future__ import annotations
+
+import re
+
+from sqlbuild.compiler.compile.models import (
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledSqlScenario,
+    CompileSqlScenarioCte,
+)
+from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner.models import PlanWarning, ScenarioGraphPlan
+from sqlbuild.compiler.planner.types import WarningSeverity
+
+_REF_PATTERN: re.Pattern[str] = re.compile(
+    r"__ref\(\s*[\"']?(?P<name>[A-Za-z_][A-Za-z0-9_.]*)[\"']?\s*\)"
+)
+
+
+def plan_scenario_graph(
+    *,
+    scenario: CompiledSqlScenario,
+    project: CompiledProject,
+) -> tuple[ScenarioGraphPlan, tuple[PlanWarning, ...]]:
+    """Infer scenario target models, build closure, and required fixtures."""
+
+    model_map: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    source_names: frozenset[str] = frozenset(source.name for source in project.sources)
+    seed_names: frozenset[str] = frozenset(seed.name for seed in project.seeds)
+    assertion_target_names: tuple[str, ...] = _extract_assertion_target_names(
+        scenario.assertion_ctes
+    )
+    target_model_names: tuple[str, ...] = _dedupe_names(
+        (*scenario.expected_model_names, *assertion_target_names)
+    )
+
+    warnings: list[PlanWarning] = []
+    _validate_declared_names(
+        scenario=scenario,
+        target_model_names=target_model_names,
+        assertion_target_names=assertion_target_names,
+        model_map=model_map,
+        source_names=source_names,
+        seed_names=seed_names,
+        warnings=warnings,
+    )
+
+    ref_fixture_names: frozenset[str] = frozenset(scenario.ref_fixture_names)
+    source_fixture_names: frozenset[str] = frozenset(scenario.source_fixture_names)
+    seed_fixture_names: frozenset[str] = frozenset(scenario.seed_fixture_names)
+    model_names: set[str] = set()
+    required_ref_fixture_names: set[str] = set()
+    required_source_names: set[str] = set()
+    required_seed_names: set[str] = set()
+    function_deps: list[CompiledObjectKey] = []
+    seen_function_deps: set[CompiledObjectKey] = set()
+
+    target_model_name: str
+    for target_model_name in target_model_names:
+        _walk_model_upstream(
+            model_name=target_model_name,
+            scenario_name=scenario.name,
+            model_map=model_map,
+            ref_fixture_names=ref_fixture_names,
+            model_names=model_names,
+            required_ref_fixture_names=required_ref_fixture_names,
+            required_source_names=required_source_names,
+            required_seed_names=required_seed_names,
+            function_deps=function_deps,
+            seen_function_deps=seen_function_deps,
+            warnings=warnings,
+        )
+
+    missing_source_names: tuple[str, ...] = tuple(
+        sorted(required_source_names - source_fixture_names)
+    )
+    source_name: str
+    for source_name in missing_source_names:
+        warnings.append(
+            PlanWarning(
+                model_name=None,
+                severity=WarningSeverity.ERROR,
+                message=(
+                    f"Scenario '{scenario.name}' requires source '{source_name}', "
+                    "but no fixture was provided. Add a CTE named "
+                    f"__source__{_fixture_name_for(source_name)} AS (...)."
+                ),
+            )
+        )
+
+    missing_seed_names: tuple[str, ...] = tuple(sorted(required_seed_names - seed_fixture_names))
+    seed_name: str
+    for seed_name in missing_seed_names:
+        warnings.append(
+            PlanWarning(
+                model_name=None,
+                severity=WarningSeverity.ERROR,
+                message=(
+                    f"Scenario '{scenario.name}' requires seed '{seed_name}', "
+                    "but no fixture was provided. Add a CTE named "
+                    f"__seed__{_fixture_name_for(seed_name)} AS (...)."
+                ),
+            )
+        )
+
+    plan: ScenarioGraphPlan = ScenarioGraphPlan(
+        key=scenario.key,
+        name=scenario.name,
+        target_model_names=tuple(sorted(target_model_names)),
+        assertion_target_model_names=tuple(sorted(assertion_target_names)),
+        model_names=tuple(sorted(model_names)),
+        source_fixture_names=tuple(sorted(required_source_names)),
+        ref_fixture_names=tuple(sorted(required_ref_fixture_names)),
+        seed_fixture_names=tuple(sorted(required_seed_names)),
+        function_deps=tuple(function_deps),
+    )
+    return plan, tuple(warnings)
+
+
+def _extract_assertion_target_names(
+    assertion_ctes: tuple[CompileSqlScenarioCte, ...],
+) -> tuple[str, ...]:
+    names: list[str] = []
+    cte: CompileSqlScenarioCte
+    for cte in assertion_ctes:
+        match: re.Match[str]
+        for match in _REF_PATTERN.finditer(cte.sql_body):
+            names.append(match.group("name"))
+    return _dedupe_names(tuple(names))
+
+
+def _validate_declared_names(
+    *,
+    scenario: CompiledSqlScenario,
+    target_model_names: tuple[str, ...],
+    assertion_target_names: tuple[str, ...],
+    model_map: dict[str, CompiledModel],
+    source_names: frozenset[str],
+    seed_names: frozenset[str],
+    warnings: list[PlanWarning],
+) -> None:
+    expected_model_name: str
+    for expected_model_name in scenario.expected_model_names:
+        if expected_model_name not in model_map:
+            warnings.append(
+                _error(f"Scenario '{scenario.name}' expects unknown model '{expected_model_name}'.")
+            )
+
+    assertion_target_name: str
+    for assertion_target_name in assertion_target_names:
+        if assertion_target_name not in model_map:
+            warnings.append(
+                _error(
+                    f"Scenario '{scenario.name}' assertion references unknown model "
+                    f"'{assertion_target_name}'."
+                )
+            )
+
+    if not target_model_names:
+        warnings.append(
+            _error(
+                f"Scenario '{scenario.name}' has no target models. Add __expected__<model> "
+                "or reference a model with __ref(...) inside an __assert__ CTE."
+            )
+        )
+
+    ref_fixture_name: str
+    for ref_fixture_name in scenario.ref_fixture_names:
+        if ref_fixture_name not in model_map:
+            warnings.append(
+                _error(
+                    f"Scenario '{scenario.name}' provides fixture for unknown model "
+                    f"'{ref_fixture_name}'."
+                )
+            )
+
+    source_fixture_name: str
+    for source_fixture_name in scenario.source_fixture_names:
+        if source_fixture_name not in source_names:
+            warnings.append(
+                _error(
+                    f"Scenario '{scenario.name}' provides fixture for unknown source "
+                    f"'{source_fixture_name}'."
+                )
+            )
+
+    seed_fixture_name: str
+    for seed_fixture_name in scenario.seed_fixture_names:
+        if seed_fixture_name not in seed_names:
+            warnings.append(
+                _error(
+                    f"Scenario '{scenario.name}' provides fixture for unknown seed "
+                    f"'{seed_fixture_name}'."
+                )
+            )
+
+
+def _walk_model_upstream(
+    *,
+    model_name: str,
+    scenario_name: str,
+    model_map: dict[str, CompiledModel],
+    ref_fixture_names: frozenset[str],
+    model_names: set[str],
+    required_ref_fixture_names: set[str],
+    required_source_names: set[str],
+    required_seed_names: set[str],
+    function_deps: list[CompiledObjectKey],
+    seen_function_deps: set[CompiledObjectKey],
+    warnings: list[PlanWarning],
+) -> None:
+    if model_name in ref_fixture_names:
+        required_ref_fixture_names.add(model_name)
+        return
+    if model_name in model_names:
+        return
+
+    model: CompiledModel | None = model_map.get(model_name)
+    if model is None:
+        return
+    model_names.add(model_name)
+
+    dep_key: CompiledObjectKey
+    for dep_key in model.deps:
+        if dep_key.resource_type == CompiledResourceType.MODEL:
+            if dep_key.name in ref_fixture_names:
+                required_ref_fixture_names.add(dep_key.name)
+                continue
+            if dep_key.name not in model_map:
+                warnings.append(
+                    _error(
+                        f"Scenario '{scenario_name}' requires model '{dep_key.name}', "
+                        "but it does not exist and no __ref__ fixture was provided."
+                    )
+                )
+                continue
+            _walk_model_upstream(
+                model_name=dep_key.name,
+                scenario_name=scenario_name,
+                model_map=model_map,
+                ref_fixture_names=ref_fixture_names,
+                model_names=model_names,
+                required_ref_fixture_names=required_ref_fixture_names,
+                required_source_names=required_source_names,
+                required_seed_names=required_seed_names,
+                function_deps=function_deps,
+                seen_function_deps=seen_function_deps,
+                warnings=warnings,
+            )
+            continue
+        if dep_key.resource_type == CompiledResourceType.SOURCE:
+            required_source_names.add(dep_key.name)
+            continue
+        if dep_key.resource_type == CompiledResourceType.SEED:
+            required_seed_names.add(dep_key.name)
+            continue
+        if dep_key.resource_type == CompiledResourceType.FUNCTION:
+            if dep_key in seen_function_deps:
+                continue
+            seen_function_deps.add(dep_key)
+            function_deps.append(dep_key)
+
+
+def _dedupe_names(names: tuple[str, ...]) -> tuple[str, ...]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    name: str
+    for name in names:
+        if name in seen:
+            continue
+        seen.add(name)
+        deduped.append(name)
+    return tuple(deduped)
+
+
+def _fixture_name_for(name: str) -> str:
+    return name.replace(".", "__")
+
+
+def _error(message: str) -> PlanWarning:
+    return PlanWarning(
+        model_name=None,
+        severity=WarningSeverity.ERROR,
+        message=message,
+    )

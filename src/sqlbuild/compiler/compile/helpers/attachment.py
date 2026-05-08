@@ -1108,6 +1108,8 @@ def build_scenario_inputs(
                 scenario_file=scenario_file,
                 sql_body=expanded_sql_body,
                 authored_ctes=scenario_ctes.authored_ctes,
+                expected_ctes=scenario_ctes.expected_ctes,
+                assertion_ctes=scenario_ctes.assertion_ctes,
                 source_fixture_names=scenario_ctes.source_fixture_names,
                 ref_fixture_names=scenario_ctes.ref_fixture_names,
                 seed_fixture_names=scenario_ctes.seed_fixture_names,

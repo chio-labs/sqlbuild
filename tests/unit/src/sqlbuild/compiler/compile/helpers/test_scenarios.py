@@ -76,6 +76,21 @@ TEST_CASES: list[ExtractSqlScenarioCtesTestCase] = [
         expected_expected_model_names=("fact_orders",),
         expected_assertion_names=(),
     ),
+    ExtractSqlScenarioCtesTestCase(
+        description="allows expected only scenario with seed fixture",
+        sql="""
+        WITH
+        __seed__country_codes AS (SELECT 'US' AS country_code),
+        __expected__dim_countries AS (SELECT 'US' AS country_code)
+        SELECT 1
+        """.strip(),
+        expected_authored_cte_names=("__seed__country_codes",),
+        expected_source_fixture_names=(),
+        expected_ref_fixture_names=(),
+        expected_seed_fixture_names=("country_codes",),
+        expected_expected_model_names=("dim_countries",),
+        expected_assertion_names=(),
+    ),
 ]
 
 
@@ -174,27 +189,46 @@ def test_given_invalid_sql_scenario_ctes_when_extracting_then_it_raises_clear_er
         )
 
 
+BUILD_SCENARIO_INPUTS_TEST_CASES: list[BuildScenarioInputsTestCase] = [
+    BuildScenarioInputsTestCase(
+        description="attaches scenario cte roles after authored sql expansion",
+        sql_body="""
+        WITH
+        __source__raw__orders AS (SELECT @@customer_id AS customer_id),
+        __expected__daily_revenue AS (SELECT @@customer_id AS customer_id)
+        SELECT 1
+        """.strip(),
+        effective_vars={"customer_id": "10"},
+        expected_source_fixture_names=("raw__orders",),
+        expected_ref_fixture_names=(),
+        expected_seed_fixture_names=(),
+        expected_expected_model_names=("daily_revenue",),
+        expected_assertion_names=(),
+        expected_sql_fragment="SELECT 10 AS customer_id",
+    ),
+    BuildScenarioInputsTestCase(
+        description="attaches seed only scenario fixture roles",
+        sql_body="""
+        WITH
+        __seed__country_codes AS (SELECT '@@country_code' AS country_code),
+        __expected__dim_countries AS (SELECT '@@country_code' AS country_code)
+        SELECT 1
+        """.strip(),
+        effective_vars={"country_code": "US"},
+        expected_source_fixture_names=(),
+        expected_ref_fixture_names=(),
+        expected_seed_fixture_names=("country_codes",),
+        expected_expected_model_names=("dim_countries",),
+        expected_assertion_names=(),
+        expected_sql_fragment="SELECT 'US' AS country_code",
+    ),
+]
+
+
 @pytest.mark.parametrize(
     "test_case",
-    [
-        BuildScenarioInputsTestCase(
-            description="attaches scenario cte roles after authored sql expansion",
-            sql_body="""
-            WITH
-            __source__raw__orders AS (SELECT @@customer_id AS customer_id),
-            __expected__daily_revenue AS (SELECT @@customer_id AS customer_id)
-            SELECT 1
-            """.strip(),
-            effective_vars={"customer_id": "10"},
-            expected_source_fixture_names=("raw__orders",),
-            expected_ref_fixture_names=(),
-            expected_seed_fixture_names=(),
-            expected_expected_model_names=("daily_revenue",),
-            expected_assertion_names=(),
-            expected_sql_fragment="SELECT 10 AS customer_id",
-        )
-    ],
-    ids=["attaches scenario cte roles after authored sql expansion"],
+    BUILD_SCENARIO_INPUTS_TEST_CASES,
+    ids=[case.description for case in BUILD_SCENARIO_INPUTS_TEST_CASES],
 )
 def test_given_discovered_scenario_when_building_scenario_inputs_then_it_attaches_cte_roles(
     test_case: BuildScenarioInputsTestCase,
