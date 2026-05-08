@@ -21,3 +21,4 @@ class CliCommand(StrEnum):
     CLEAN = "clean"
     JANITOR = "janitor"
     INIT = "init"
+    PLAYGROUND = "playground"

@@ -28,4 +28,5 @@ def build_handlers(**overrides: Any) -> CliEntrypointHandlers:
         run_debug=overrides.get("run_debug", noop_handler),
         run_lineage=overrides.get("run_lineage", noop_handler),
         run_janitor=overrides.get("run_janitor", noop_handler),
+        run_playground=overrides.get("run_playground", noop_handler),
     )
