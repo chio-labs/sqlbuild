@@ -400,6 +400,47 @@ class ScenarioRelationPlan:
 
 
 @dataclass(frozen=True)
+class ScenarioFixturePlan:
+    """Self-contained fixture SQL planned for scenario materialization."""
+
+    kind: ScenarioArtifactKind
+    logical_name: str
+    target: CompiledRelationTarget
+    sql: str
+
+
+@dataclass(frozen=True)
+class ScenarioExpectedCheckPlan:
+    """Expected-output comparison inputs for one scenario target model."""
+
+    model_name: str
+    actual_target: CompiledRelationTarget
+    expected_sql: str
+
+
+@dataclass(frozen=True)
+class ScenarioAssertionCheckPlan:
+    """Zero-row assertion SQL for one scenario assertion CTE."""
+
+    name: str
+    sql: str
+
+
+@dataclass(frozen=True)
+class ScenarioExecutionPlan:
+    """Dry-run execution plan for a SQL scenario graph slice."""
+
+    key: CompiledObjectKey
+    name: str
+    graph_plan: ScenarioGraphPlan
+    relation_plan: ScenarioRelationPlan
+    fixture_plans: tuple[ScenarioFixturePlan, ...] = field(default_factory=tuple)
+    model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
+    expected_checks: tuple[ScenarioExpectedCheckPlan, ...] = field(default_factory=tuple)
+    assertion_checks: tuple[ScenarioAssertionCheckPlan, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class PlanOutput:
     """Complete execution plan produced by the planner."""
 

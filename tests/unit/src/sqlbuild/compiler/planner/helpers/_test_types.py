@@ -12,6 +12,7 @@ from sqlbuild.compiler.planner.models import (
     ParsedSelector,
     PathSelector,
     ScenarioArtifactIdentity,
+    ScenarioExecutionPlan,
     ScenarioGraphPlan,
     ScenarioRelationMap,
     SchemaAction,
@@ -311,6 +312,21 @@ class ScenarioRelationPlanErrorTestCase:
     description: str
     graph_plan: ScenarioGraphPlan
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ScenarioFixturePlanTestCase:
+    description: str
+    graph_plan: ScenarioGraphPlan
+    expected_fixture_sql: dict[str, str]
+    expected_fixture_targets: dict[str, str]
+
+
+@dataclass(frozen=True)
+class ScenarioExecutionPlanTestCase:
+    description: str
+    graph_plan: ScenarioGraphPlan
+    expected_plan: ScenarioExecutionPlan
 
 
 @dataclass(frozen=True)
