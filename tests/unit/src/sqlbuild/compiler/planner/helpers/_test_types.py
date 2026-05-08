@@ -11,7 +11,9 @@ from sqlbuild.compiler.planner.models import (
     MissingUpstream,
     ParsedSelector,
     PathSelector,
+    ScenarioArtifactIdentity,
     ScenarioGraphPlan,
+    ScenarioRelationMap,
     SchemaAction,
     SchemaFinding,
 )
@@ -242,6 +244,48 @@ class PlanScenarioGraphErrorTestCase:
     ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     expected_error_fragment: str = ""
+
+
+@dataclass(frozen=True)
+class ScenarioHashPrefixTestCase:
+    description: str
+    project_name: str
+    scenario_name: str
+    expected_hash_prefix: str
+
+
+@dataclass(frozen=True)
+class ScenarioHashCollisionTestCase:
+    description: str
+    scenario_names: tuple[str, ...]
+    prefix_length: int
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ScenarioArtifactNameTestCase:
+    description: str
+    hash_prefix: str
+    kind: str
+    logical_name: str
+    identifier_limit: int
+    expected_physical_name: str
+
+
+@dataclass(frozen=True)
+class ScenarioRelationMapTestCase:
+    description: str
+    artifacts: tuple[ScenarioArtifactIdentity, ...]
+    expected_relation_map: ScenarioRelationMap
+    normalize_case: bool = False
+
+
+@dataclass(frozen=True)
+class ScenarioRelationMapErrorTestCase:
+    description: str
+    artifacts: tuple[ScenarioArtifactIdentity, ...]
+    expected_error_fragment: str
+    normalize_case: bool = False
 
 
 @dataclass(frozen=True)
