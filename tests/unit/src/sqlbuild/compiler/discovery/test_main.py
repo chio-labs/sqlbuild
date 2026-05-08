@@ -43,6 +43,15 @@ seeds:
 """.strip()
                 + "\n",
                 "tests/unit/orders.sql": "TEST ();\nSELECT 1\n",
+                "tests/scenarios/revenue/revenue__customer_refund.sql": """
+SCENARIO (description: "Customer refund", tags: ["revenue"]);
+
+WITH
+__expected__daily_revenue AS (
+  SELECT 1 AS order_id
+)
+SELECT 1
+""",
                 "audits/generic/not_null.sql": "AUDIT ();\nSELECT 1\n",
                 "macros/name_helpers.py": "def slug() -> str:\n    return 'slug'\n",
                 "target/manifest.json": '{"metadata": {"dbt_schema_version": "v12"}}\n',
@@ -62,6 +71,14 @@ seeds:
             expected_test_block_indexes=(1,),
             expected_test_block_names=(None,),
             expected_test_block_sql_bodies=("SELECT 1",),
+            expected_scenario_paths=("tests/scenarios/revenue/revenue__customer_refund.sql",),
+            expected_scenario_names=("revenue__customer_refund",),
+            expected_scenario_header_values=(
+                {"description": "Customer refund", "tags": ["revenue"]},
+            ),
+            expected_scenario_sql_bodies=(
+                "WITH\n__expected__daily_revenue AS (\n  SELECT 1 AS order_id\n)\nSELECT 1",
+            ),
             expected_audit_paths=("audits/generic/not_null.sql",),
             expected_audit_block_indexes=(1,),
             expected_audit_block_names=(None,),
@@ -142,6 +159,24 @@ def test_given_project_repo_slice_when_discovering_inputs_then_it_returns_expect
     assert (
         tuple(block.sql_body for block in discovered_inputs.test_files[0].blocks)
         == test_case.expected_test_block_sql_bodies
+    )
+    assert (
+        tuple(
+            str(scenario_file.relative_path) for scenario_file in discovered_inputs.scenario_files
+        )
+        == test_case.expected_scenario_paths
+    )
+    assert (
+        tuple(scenario_file.name for scenario_file in discovered_inputs.scenario_files)
+        == test_case.expected_scenario_names
+    )
+    assert (
+        tuple(scenario_file.header_values for scenario_file in discovered_inputs.scenario_files)
+        == test_case.expected_scenario_header_values
+    )
+    assert (
+        tuple(scenario_file.sql_body for scenario_file in discovered_inputs.scenario_files)
+        == test_case.expected_scenario_sql_bodies
     )
     assert (
         tuple(str(audit_file.relative_path) for audit_file in discovered_inputs.audit_files)
@@ -243,6 +278,15 @@ seeds:
             "models/marts/orders.sql": "MODEL ();\n\nselect 1\n",
         },
         expected_error_fragment="Duplicate model file name found for 'orders'",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises on duplicate scenario file names across directories",
+        repo_files=base_repo_files()
+        | {
+            "tests/scenarios/revenue/customer_refund.sql": "SCENARIO ();\nSELECT 1\n",
+            "tests/scenarios/support/customer_refund.sql": "SCENARIO ();\nSELECT 1\n",
+        },
+        expected_error_fragment="Duplicate scenario file name found for 'customer_refund'",
     ),
     DiscoverProjectInputsErrorTestCase(
         description="raises when model and source names collide",
