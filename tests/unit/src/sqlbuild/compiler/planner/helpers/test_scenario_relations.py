@@ -3,21 +3,25 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.planner.helpers.scenario_relations import (
+    build_scenario_fixture_plans,
     build_scenario_relation_plan,
     resolve_scenario_check_sql,
 )
 from sqlbuild.compiler.planner.models import (
+    ScenarioFixturePlan,
     ScenarioGraphPlan,
     ScenarioRelationPlan,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     ScenarioCheckSqlResolutionTestCase,
+    ScenarioFixturePlanTestCase,
     ScenarioRelationPlanErrorTestCase,
     ScenarioRelationPlanTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     build_scenario_relation_test_map,
     build_scenario_relation_test_project,
+    build_scenario_relation_test_scenario,
 )
 
 HASH_PREFIX: str = "51b385aebe20"
@@ -71,6 +75,68 @@ def test_given_scenario_graph_when_building_relation_plan_then_returns_scenario_
     assert {
         name: source.expression for name, source in result.source_map.items()
     } == test_case.expected_source_expressions
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScenarioFixturePlanTestCase(
+            description="wraps fixture SQL with shared scenario helper CTEs",
+            graph_plan=ScenarioGraphPlan(
+                key=build_scenario_relation_test_project().models[0].key,
+                name=SCENARIO_NAME,
+                target_model_names=("daily_revenue",),
+                model_names=("daily_revenue",),
+                source_fixture_names=("raw__orders",),
+                ref_fixture_names=("stg_customers",),
+                seed_fixture_names=("country_codes",),
+            ),
+            expected_fixture_sql={
+                "source:raw__orders": (
+                    "WITH helper_orders AS (SELECT 1 AS order_id, 10 AS customer_id) "
+                    "SELECT * FROM helper_orders"
+                ),
+                "ref:stg_customers": (
+                    "WITH helper_orders AS (SELECT 1 AS order_id, 10 AS customer_id) "
+                    "SELECT 10 AS customer_id"
+                ),
+                "seed:country_codes": (
+                    "WITH helper_orders AS (SELECT 1 AS order_id, 10 AS customer_id) "
+                    "SELECT 'US' AS country_code"
+                ),
+            },
+            expected_fixture_targets={
+                "source:raw__orders": "scenario_schema.__sqb_51b385aebe20__source__raw__orders",
+                "ref:stg_customers": "scenario_schema.__sqb_51b385aebe20__ref__stg_customers",
+                "seed:country_codes": "scenario_schema.__sqb_51b385aebe20__seed__country_codes",
+            },
+        )
+    ],
+    ids=["wraps fixture SQL with shared scenario helper CTEs"],
+)
+def test_given_scenario_helpers_when_building_fixture_plans_then_fixtures_are_self_contained(
+    test_case: ScenarioFixturePlanTestCase,
+) -> None:
+    relation_plan: ScenarioRelationPlan = build_scenario_relation_plan(
+        project=build_scenario_relation_test_project(),
+        graph_plan=test_case.graph_plan,
+        relation_map=build_scenario_relation_test_map(),
+        schema="scenario_schema",
+    )
+
+    result: tuple[ScenarioFixturePlan, ...] = build_scenario_fixture_plans(
+        scenario=build_scenario_relation_test_scenario(),
+        graph_plan=test_case.graph_plan,
+        relation_plan=relation_plan,
+    )
+
+    assert {
+        f"{fixture.kind.value}:{fixture.logical_name}": fixture.sql for fixture in result
+    } == test_case.expected_fixture_sql
+    assert {
+        f"{fixture.kind.value}:{fixture.logical_name}": fixture.target.qualified_name
+        for fixture in result
+    } == test_case.expected_fixture_targets
 
 
 CHECK_SQL_TEST_CASES: list[ScenarioCheckSqlResolutionTestCase] = [

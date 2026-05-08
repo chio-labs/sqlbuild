@@ -323,6 +323,55 @@ def build_scenario_relation_test_project() -> CompiledProject:
     )
 
 
+def build_scenario_relation_test_scenario() -> CompiledSqlScenario:
+    """Build a scenario covering helper CTE and fixture planning tests."""
+
+    return CompiledSqlScenario(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.SQL_SCENARIO,
+            name="revenue__customer_refund",
+        ),
+        name="revenue__customer_refund",
+        scenario_file=DiscoveredSqlScenarioFile(
+            file_path=Path("tests/scenarios/revenue__customer_refund.sql"),
+            relative_path=Path("tests/scenarios/revenue__customer_refund.sql"),
+            contents="",
+            header_values={},
+            name="revenue__customer_refund",
+            sql_body="SELECT 1",
+        ),
+        sql_body="SELECT 1",
+        authored_ctes=(
+            CompileSqlScenarioCte(
+                name="helper_orders",
+                sql_body="SELECT 1 AS order_id, 10 AS customer_id",
+            ),
+            CompileSqlScenarioCte(
+                name="__source__raw__orders",
+                sql_body="SELECT * FROM helper_orders",
+            ),
+            CompileSqlScenarioCte(
+                name="__ref__stg_customers",
+                sql_body="SELECT 10 AS customer_id",
+            ),
+            CompileSqlScenarioCte(
+                name="__seed__country_codes",
+                sql_body="SELECT 'US' AS country_code",
+            ),
+        ),
+        expected_ctes=(
+            CompileSqlScenarioCte(
+                name="__expected__daily_revenue",
+                sql_body="SELECT 1 AS order_id",
+            ),
+        ),
+        source_fixture_names=("raw__orders",),
+        ref_fixture_names=("stg_customers",),
+        seed_fixture_names=("country_codes",),
+        expected_model_names=("daily_revenue",),
+    )
+
+
 def build_test_project_with_source_entry(source_entry: SourceEntry) -> CompiledProject:
     """Build a minimal CompiledProject containing one source entry."""
 
