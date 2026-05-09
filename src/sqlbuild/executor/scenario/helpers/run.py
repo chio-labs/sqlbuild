@@ -1,0 +1,207 @@
+"""Helpers for running a planned scenario."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.compiler.planner.models import ScenarioExecutionPlan, ScenarioRelationMap
+from sqlbuild.executor.build.models import SeedExecutionResult
+from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.scenario.helpers.checks import (
+    execute_scenario_assertion_checks,
+    execute_scenario_expected_checks,
+)
+from sqlbuild.executor.scenario.helpers.fixtures import (
+    execute_scenario_fixtures,
+    execute_scenario_seed_entries,
+)
+from sqlbuild.executor.scenario.helpers.model_execution import execute_scenario_models
+from sqlbuild.executor.scenario.main.cleanup import execute_scenario_cleanup
+from sqlbuild.executor.scenario.models import (
+    ScenarioAssertionCheckExecutionResult,
+    ScenarioCleanupExecutionResult,
+    ScenarioExpectedCheckExecutionResult,
+    ScenarioFixtureExecutionResult,
+    ScenarioRunResult,
+)
+from sqlbuild.executor.shared.types import ExecutionStatus
+
+
+def execute_scenario_run_steps(
+    *,
+    scenario_plan: ScenarioExecutionPlan,
+    adapter: BaseAdapter,
+    connection: Any,
+    run_id: str,
+    retain: bool,
+) -> ScenarioRunResult:
+    """Execute a planned scenario and apply cleanup policy."""
+
+    prepare_result: ScenarioCleanupExecutionResult = execute_scenario_cleanup(
+        scenario_plan=scenario_plan,
+        adapter=adapter,
+        connection=connection,
+    )
+    if prepare_result.status == ExecutionStatus.FAILED:
+        return _scenario_failure(
+            scenario_name=scenario_plan.name,
+            relation_map=scenario_plan.relation_plan.relation_map,
+            retained=retain,
+            cleanup_result=prepare_result,
+            error_message=prepare_result.error_message,
+        )
+
+    fixture_results: tuple[ScenarioFixtureExecutionResult, ...] = execute_scenario_fixtures(
+        scenario_name=scenario_plan.name,
+        fixture_plans=scenario_plan.fixture_plans,
+        adapter=adapter,
+        connection=connection,
+    )
+    if _has_failed(fixture_results):
+        return _finish_scenario(
+            scenario_plan=scenario_plan,
+            adapter=adapter,
+            connection=connection,
+            retain=retain,
+            fixture_results=fixture_results,
+            error_message=_first_error(fixture_results),
+        )
+
+    seed_results: tuple[SeedExecutionResult, ...] = execute_scenario_seed_entries(
+        seed_entries=scenario_plan.seed_entries,
+        adapter=adapter,
+        connection=connection,
+    )
+    if _has_failed(seed_results):
+        return _finish_scenario(
+            scenario_plan=scenario_plan,
+            adapter=adapter,
+            connection=connection,
+            retain=retain,
+            fixture_results=fixture_results,
+            seed_results=seed_results,
+            error_message=_first_error(seed_results),
+        )
+
+    model_results: tuple[ModelExecutionResult, ...] = execute_scenario_models(
+        scenario_plan=scenario_plan,
+        adapter=adapter,
+        connection=connection,
+        run_id=run_id,
+    )
+    if _has_failed(model_results):
+        return _finish_scenario(
+            scenario_plan=scenario_plan,
+            adapter=adapter,
+            connection=connection,
+            retain=retain,
+            fixture_results=fixture_results,
+            seed_results=seed_results,
+            model_results=model_results,
+            error_message=_first_error(model_results),
+        )
+
+    expected_results: tuple[ScenarioExpectedCheckExecutionResult, ...]
+    expected_results = execute_scenario_expected_checks(
+        scenario_plan=scenario_plan,
+        adapter=adapter,
+        connection=connection,
+    )
+    assertion_results: tuple[ScenarioAssertionCheckExecutionResult, ...]
+    assertion_results = execute_scenario_assertion_checks(
+        scenario_plan=scenario_plan,
+        adapter=adapter,
+        connection=connection,
+    )
+    failed_check_message: str | None = _first_error((*expected_results, *assertion_results))
+    return _finish_scenario(
+        scenario_plan=scenario_plan,
+        adapter=adapter,
+        connection=connection,
+        retain=retain,
+        fixture_results=fixture_results,
+        seed_results=seed_results,
+        model_results=model_results,
+        expected_results=expected_results,
+        assertion_results=assertion_results,
+        error_message=failed_check_message,
+    )
+
+
+def _finish_scenario(
+    *,
+    scenario_plan: ScenarioExecutionPlan,
+    adapter: BaseAdapter,
+    connection: Any,
+    retain: bool,
+    fixture_results: tuple[ScenarioFixtureExecutionResult, ...] = (),
+    seed_results: tuple[SeedExecutionResult, ...] = (),
+    model_results: tuple[ModelExecutionResult, ...] = (),
+    expected_results: tuple[ScenarioExpectedCheckExecutionResult, ...] = (),
+    assertion_results: tuple[ScenarioAssertionCheckExecutionResult, ...] = (),
+    error_message: str | None = None,
+) -> ScenarioRunResult:
+    status: ExecutionStatus = (
+        ExecutionStatus.FAILED if error_message is not None else ExecutionStatus.SUCCESS
+    )
+    cleanup_result: ScenarioCleanupExecutionResult | None = None
+    if not retain:
+        cleanup_result = execute_scenario_cleanup(
+            scenario_plan=scenario_plan,
+            adapter=adapter,
+            connection=connection,
+        )
+        if cleanup_result.status == ExecutionStatus.FAILED:
+            status = ExecutionStatus.FAILED
+            cleanup_error: str = cleanup_result.error_message or "scenario cleanup failed"
+            if error_message is None:
+                error_message = f"Cleanup failed: {cleanup_error}"
+            else:
+                error_message = f"{error_message}\nCleanup failed: {cleanup_error}"
+    return ScenarioRunResult(
+        scenario_name=scenario_plan.name,
+        status=status,
+        retained=retain,
+        relation_map=scenario_plan.relation_plan.relation_map,
+        fixture_results=fixture_results,
+        seed_results=seed_results,
+        model_results=model_results,
+        expected_results=expected_results,
+        assertion_results=assertion_results,
+        cleanup_result=cleanup_result,
+        error_message=error_message,
+    )
+
+
+def _scenario_failure(
+    *,
+    scenario_name: str,
+    relation_map: ScenarioRelationMap | None,
+    retained: bool,
+    cleanup_result: ScenarioCleanupExecutionResult | None = None,
+    error_message: str | None,
+) -> ScenarioRunResult:
+    return ScenarioRunResult(
+        scenario_name=scenario_name,
+        status=ExecutionStatus.FAILED,
+        retained=retained,
+        relation_map=relation_map,
+        cleanup_result=cleanup_result,
+        error_message=error_message,
+    )
+
+
+def _has_failed(results: tuple[object, ...]) -> bool:
+    return any(getattr(result, "status", None) == ExecutionStatus.FAILED for result in results)
+
+
+def _first_error(results: tuple[object, ...]) -> str | None:
+    result: object
+    for result in results:
+        if getattr(result, "status", None) == ExecutionStatus.FAILED:
+            error_message: object | None = getattr(result, "error_message", None)
+            if isinstance(error_message, str) and error_message:
+                return error_message
+            return "scenario step failed"
+    return None
