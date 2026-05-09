@@ -216,17 +216,15 @@ def discover_seed_files(*, project_dir: Path) -> tuple[DiscoveredSeedFile, ...]:
 
 
 def discover_test_files(*, project_dir: Path) -> tuple[DiscoveredSqlTestFile, ...]:
-    """Discover SQL-native test files under tests/."""
+    """Discover SQL-native unit test files under tests/unit/."""
 
-    tests_root: Path = project_dir / "tests"
+    tests_root: Path = project_dir / "tests" / "unit"
     if not tests_root.is_dir():
         return ()
 
     discovered_test_files: list[DiscoveredSqlTestFile] = []
     file_path: Path
     for file_path in sorted(tests_root.rglob("*.sql")):
-        if _is_relative_to(file_path, tests_root / "scenarios"):
-            continue
         contents: str = file_path.read_text(encoding="utf-8")
         discovered_test_files.append(
             DiscoveredSqlTestFile(

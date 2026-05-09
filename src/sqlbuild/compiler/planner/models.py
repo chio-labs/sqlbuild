@@ -318,7 +318,15 @@ class ChainStep:
 
     model_name: str
     resolved_sql: str
-    expected_cte_sql: str
+    expected_cte_sql: str | None = None
+
+
+@dataclass(frozen=True)
+class SqlTestAssertionStep:
+    """One zero-row assertion step in a SQL-native unit test."""
+
+    name: str
+    resolved_sql: str
 
 
 @dataclass(frozen=True)
@@ -337,6 +345,7 @@ class SqlTestPlanEntry:
     key: CompiledObjectKey
     name: str
     chain: tuple[ChainStep, ...] = field(default_factory=tuple)
+    assertions: tuple[SqlTestAssertionStep, ...] = field(default_factory=tuple)
     scope_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
     function_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
     sqlglot_enabled: bool = True

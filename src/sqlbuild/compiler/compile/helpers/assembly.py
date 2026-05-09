@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.helpers.deps import (
     audit_scope_deps,
@@ -30,6 +32,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSourceInput,
     CompileSqlFunctionInput,
     CompileSqlScenarioInput,
+    CompileSqlTestCte,
     CompileSqlTestInput,
     InferredColumn,
     MacroContext,
@@ -302,9 +305,16 @@ def _assemble_compiled_sql_test(
     inputs: CompileProjectInputs,
 ) -> CompiledSqlTest:
     test_name: str = _resolve_test_name(test_input)
+    assertion_target_model_names: tuple[str, ...] = _extract_sql_test_assertion_ref_targets(
+        assertion_ctes=test_input.assertion_ctes
+    )
     return CompiledSqlTest(
         key=CompiledObjectKey(resource_type=CompiledResourceType.SQL_TEST, name=test_name),
-        scope_deps=sql_test_scope_deps(expected_model_names=test_input.expected_model_names),
+        scope_deps=sql_test_scope_deps(
+            expected_model_names=tuple(
+                dict.fromkeys((*test_input.expected_model_names, *assertion_target_model_names))
+            )
+        ),
         name=test_name,
         test_file=test_input.test_file,
         test_block=test_input.test_block,
@@ -320,7 +330,21 @@ def _assemble_compiled_sql_test(
         mock_source_names=test_input.mock_source_names,
         mock_seed_names=test_input.mock_seed_names,
         expected_model_names=test_input.expected_model_names,
+        assertion_ctes=test_input.assertion_ctes,
+        assertion_names=test_input.assertion_names,
     )
+
+
+def _extract_sql_test_assertion_ref_targets(
+    *, assertion_ctes: tuple[CompileSqlTestCte, ...]
+) -> tuple[str, ...]:
+    targets: list[str] = []
+    cte: CompileSqlTestCte
+    for cte in assertion_ctes:
+        match: re.Match[str]
+        for match in re.finditer(r'__ref\("([^"]+)"\)', cte.sql_body):
+            targets.append(match.group(1))
+    return tuple(dict.fromkeys(targets))
 
 
 def _build_test_model_query_overrides(

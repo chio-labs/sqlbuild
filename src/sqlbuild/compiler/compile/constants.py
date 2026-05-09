@@ -27,11 +27,12 @@ GENERIC_AUDIT_RAW_PARAMETER_PATTERN: re.Pattern[str] = re.compile(
     r"(?<!@)@(?!')(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?!\s*\()"
 )
 EXPECTED_TEST_CTE_PREFIX: str = "__expected__"
+ASSERT_TEST_CTE_PREFIX: str = "__assert__"
 REF_TEST_CTE_PREFIX: str = "__ref__"
 SOURCE_TEST_CTE_PREFIX: str = "__source__"
 SEED_TEST_CTE_PREFIX: str = "__seed__"
 MACRO_TEST_CTE_PREFIX: str = "__macro__"
-ASSERT_SCENARIO_CTE_PREFIX: str = "__assert__"
+ASSERT_SCENARIO_CTE_PREFIX: str = ASSERT_TEST_CTE_PREFIX
 RESERVED_SQL_TEST_CTE_NAMES: frozenset[str] = frozenset(
     {
         "__actual",

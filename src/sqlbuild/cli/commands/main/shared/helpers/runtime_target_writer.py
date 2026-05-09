@@ -4,16 +4,26 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import LifeCycleEvent
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.planner.models import FunctionPlanEntry, ModelPlanEntry, PlanOutput
+from sqlbuild.compiler.planner.models import (
+    FunctionPlanEntry,
+    ModelPlanEntry,
+    PlanOutput,
+    SqlTestPlanEntry,
+)
 from sqlbuild.executor.build.models import BuildExecutionResult, FunctionExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
+from sqlbuild.executor.testing.models import SqlTestExecutionResult
 
 _RUN_DIR: str = "run"
 _MODELS_DIR: str = "models"
 _FUNCTIONS_DIR: str = "functions"
+_TESTS_DIR: str = "tests"
+_CHAIN_DIR: str = "_chain_"
 _SQL_FILE_SUFFIX: str = ".sql"
 
 
@@ -76,6 +86,32 @@ def write_runtime_target(
         )
 
 
+def write_test_runtime_target(
+    *,
+    target_dir: Path,
+    adapter: BaseAdapter,
+    plan_output: PlanOutput,
+    results: tuple[SqlTestExecutionResult, ...],
+) -> None:
+    """Write executed SQL unit-test statements under target/run/tests."""
+
+    run_dir: Path = target_dir / _RUN_DIR
+    result_names: frozenset[str] = frozenset(result.test_name for result in results)
+    entry: SqlTestPlanEntry
+    for entry in plan_output.test_entries:
+        if entry.name not in result_names:
+            continue
+        test_run_path: Path = run_dir / _TESTS_DIR / _test_folder(entry) / f"{entry.name}.sql"
+        _write_sql(
+            path=test_run_path,
+            sql=build_sql_test_comparison_sql(
+                entry,
+                set_difference_operator=adapter.render_set_difference_operator(),
+                sqlglot_dialect=adapter.sqlglot_dialect(),
+            ),
+        )
+
+
 def _write_sql(*, path: Path, sql: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(sql.rstrip() + "\n", encoding="utf-8")
@@ -94,6 +130,14 @@ def _function_output_path(*, relative_path: Path, language: FunctionLanguage) ->
     if len(parts) >= 2 and parts[0] == _FUNCTIONS_DIR and parts[1] == language_dir:
         return Path(*parts).with_suffix(_SQL_FILE_SUFFIX)
     return (Path(_FUNCTIONS_DIR) / language_dir / relative_path).with_suffix(_SQL_FILE_SUFFIX)
+
+
+def _test_folder(entry: SqlTestPlanEntry) -> Path:
+    model_names: list[str] = [step.model_name for step in entry.chain]
+    unique_names: list[str] = sorted(set(model_names))
+    if len(unique_names) <= 1:
+        return Path(unique_names[0] if unique_names else entry.name)
+    return Path(_CHAIN_DIR) / "__".join(unique_names)
 
 
 def _format_statement(statement: str) -> str:

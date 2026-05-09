@@ -118,6 +118,8 @@ class CompileSqlTestCtes:
     mock_source_names: tuple[str, ...] = field(default_factory=tuple)
     mock_seed_names: tuple[str, ...] = field(default_factory=tuple)
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
+    assertion_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
+    assertion_names: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -223,6 +225,8 @@ class CompileSqlTestInput:
     mock_source_names: tuple[str, ...] = field(default_factory=tuple)
     mock_seed_names: tuple[str, ...] = field(default_factory=tuple)
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
+    assertion_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
+    assertion_names: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -400,6 +404,8 @@ class CompiledSqlTest:
     mock_source_names: tuple[str, ...] = field(default_factory=tuple)
     mock_seed_names: tuple[str, ...] = field(default_factory=tuple)
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
+    assertion_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
+    assertion_names: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
