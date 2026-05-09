@@ -70,10 +70,12 @@ def executed_create_table_sql(adapter: ScenarioFixtureTestAdapter) -> tuple[str,
 
 
 def executed_drop_sql(adapter: ScenarioFixtureTestAdapter) -> tuple[str, ...]:
-    return tuple(sql for sql in adapter.executed_sql if sql.startswith("DROP TABLE"))
+    return tuple(sql for sql in adapter.executed_sql if sql.startswith("DROP "))
 
 
-def build_scenario_cleanup_test_plan() -> ScenarioExecutionPlan:
+def build_scenario_cleanup_test_plan(
+    *, model_materialization_type: MaterializationType = MaterializationType.TABLE
+) -> ScenarioExecutionPlan:
     source_fixture: ScenarioFixturePlan = build_scenario_fixture_plan()
     ref_fixture: ScenarioFixturePlan = build_scenario_fixture_plan(
         kind=ScenarioArtifactKind.REF,
@@ -122,6 +124,23 @@ def build_scenario_cleanup_test_plan() -> ScenarioExecutionPlan:
             seed_fixture_targets={"country_codes": seed_fixture.target},
         ),
         fixture_plans=(source_fixture, ref_fixture, seed_fixture),
+        model_entries=(
+            ModelPlanEntry(
+                key=CompiledObjectKey(
+                    resource_type=CompiledResourceType.MODEL,
+                    name="daily_revenue",
+                ),
+                name="daily_revenue",
+                relative_path=Path("models/daily_revenue.sql"),
+                materialization_type=model_materialization_type,
+                action=PlanAction.CREATE_TABLE,
+                reason=PlanReason.FIRST_RUN,
+                target=model_target,
+                fingerprint_query_sql="SELECT 1 AS revenue",
+                resolved_sql="SELECT 1 AS revenue",
+                logical_ddl="CREATE TABLE daily_revenue AS SELECT 1 AS revenue",
+            ),
+        ),
     )
 
 

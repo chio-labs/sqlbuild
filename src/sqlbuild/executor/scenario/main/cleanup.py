@@ -7,6 +7,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
+from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.scenario.helpers.cleanup import collect_scenario_cleanup_targets
 from sqlbuild.executor.scenario.models import (
     ScenarioCleanupExecutionResult,
@@ -40,12 +41,20 @@ def execute_scenario_cleanup(
                 sqlbuild_artifact_kind=cleanup_target.kind.value,
                 sqlbuild_artifact_name=cleanup_target.logical_name,
             ):
-                adapter.drop(
-                    connection,
-                    target=cleanup_target.target_relation,
-                    if_exists=True,
-                    statement_recorder=statement_recorder,
-                )
+                if cleanup_target.materialization_type == MaterializationType.VIEW:
+                    adapter.drop_view(
+                        connection,
+                        target=cleanup_target.target_relation,
+                        if_exists=True,
+                        statement_recorder=statement_recorder,
+                    )
+                else:
+                    adapter.drop(
+                        connection,
+                        target=cleanup_target.target_relation,
+                        if_exists=True,
+                        statement_recorder=statement_recorder,
+                    )
     except Exception as exc:
         statement_recorder.log(f"scenario cleanup {scenario_plan.name} failed error={exc}")
         return ScenarioCleanupExecutionResult(

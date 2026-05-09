@@ -42,5 +42,10 @@ __expected__fact_orders AS (
     'card' AS payment_method,
     'success' AS payment_status,
     2850 AS payment_amount_cents
+),
+__assert__line_totals_are_non_negative AS (
+  SELECT *
+  FROM __ref("fact_orders")
+  WHERE line_total_cents < 0
 )
 SELECT 1

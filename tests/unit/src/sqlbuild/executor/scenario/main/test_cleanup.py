@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.scenario.main.cleanup import execute_scenario_cleanup
 from sqlbuild.executor.scenario.models import ScenarioCleanupExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
@@ -56,6 +57,37 @@ def test_given_scenario_plan_when_cleaning_up_then_drops_only_planned_targets(
         assert f"DROP TABLE IF EXISTS {expected_target}" in drop_sql
     for unexpected_target in test_case.unexpected_drop_targets:
         assert all(unexpected_target not in statement for statement in drop_sql)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExecuteScenarioCleanupTestCase(
+            description="drops scenario view models as views",
+            expected_status=ExecutionStatus.SUCCESS,
+            expected_drop_targets=("scenario_schema.__sqb_51b385aebe20__model__daily_revenue",),
+        )
+    ],
+    ids=["drops scenario view models as views"],
+)
+def test_given_view_model_in_scenario_plan_when_cleaning_up_then_drops_view(
+    test_case: ExecuteScenarioCleanupTestCase,
+) -> None:
+    adapter: ScenarioFixtureTestAdapter = ScenarioFixtureTestAdapter()
+
+    result: ScenarioCleanupExecutionResult = execute_scenario_cleanup(
+        scenario_plan=build_scenario_cleanup_test_plan(
+            model_materialization_type=MaterializationType.VIEW
+        ),
+        adapter=adapter,
+        connection=object(),
+    )
+
+    assert result.status == test_case.expected_status
+    drop_sql: tuple[str, ...] = executed_drop_sql(adapter)
+    expected_target: str = test_case.expected_drop_targets[0]
+    assert f"DROP VIEW IF EXISTS {expected_target}" in drop_sql
+    assert f"DROP TABLE IF EXISTS {expected_target}" not in drop_sql
 
 
 @pytest.mark.parametrize(

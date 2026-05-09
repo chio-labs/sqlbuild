@@ -71,6 +71,8 @@ SQLGLOT_CHAIN_TEST_CASES: list[SqlglotChainSqlTestE2ETestCase] = [
                 "Execution  sqb test  (concurrency: 1)",
                 "Connecting to duckdb...",
                 "Connected to duckdb.",
+                "check   expected stg_orders",
+                "check   expected fact_orders",
             ),
             expected_ordered_stdout_fragments=(
                 "Execution  sqb test  (concurrency: 1)",
@@ -134,6 +136,8 @@ def test_given_chain_sql_test_when_running_test_then_generated_sql_is_valid(
 
     assert test_result.returncode == 0, test_result.stdout + test_result.stderr
     assert "PASS=1" in test_result.stdout
+    assert "check   expected stg_orders" in test_result.stdout
+    assert "check   expected fact_orders" in test_result.stdout
     runtime_artifact_sql: str = (
         project_dir
         / "target"
@@ -176,7 +180,7 @@ def test_given_chain_sql_test_when_running_test_then_generated_sql_is_valid(
             description="assertion-only SQL unit test passes when assertion returns zero rows",
             expected_exit_code=0,
             expected_stdout_fragment="PASS=1",
-            expected_stdout_fragments=("orders_assert",),
+            expected_stdout_fragments=("orders_assert", "check   assertion no_negative_orders"),
         )
     ],
     ids=["assertion-only SQL unit test passes when assertion returns zero rows"],
@@ -217,6 +221,8 @@ def test_given_assertion_only_sql_test_when_assertion_returns_zero_rows_then_it_
             expected_stdout_fragment="FAIL=1",
             expected_stdout_fragments=(
                 "orders_assert",
+                "check   assertion no_negative_orders",
+                "FAIL  1 row",
                 "test 'orders_assert' failed for models: assertion no_negative_orders",
             ),
         )
