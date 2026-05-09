@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from sqlbuild.adapter.shared.models import LifeCycleEvent
 from sqlbuild.compiler.planner.models import ScenarioRelationMap
@@ -33,6 +34,54 @@ class ScenarioCleanupTarget:
     logical_name: str
     target_relation: str
     materialization_type: MaterializationType = MaterializationType.TABLE
+
+
+@dataclass(frozen=True)
+class ScenarioSnapshotColumn:
+    """One column captured in a local scenario snapshot relation."""
+
+    name: str
+    warehouse_type: str
+    local_type: str
+
+
+@dataclass(frozen=True)
+class ScenarioSnapshotRelation:
+    """One captured relation recorded in a local scenario snapshot manifest."""
+
+    kind: ScenarioArtifactKind
+    logical_name: str
+    file_path: Path
+    row_count: int
+    byte_count: int
+    columns: tuple[ScenarioSnapshotColumn, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class ScenarioSnapshotManifest:
+    """Metadata for one local scenario snapshot."""
+
+    version: int
+    scenario_name: str
+    captured_at: str
+    capture_adapter: str
+    capture_dialect: str
+    sqlbuild_version: str
+    input_fingerprint: str
+    total_rows: int
+    total_bytes: int
+    relations: tuple[ScenarioSnapshotRelation, ...] = field(default_factory=tuple)
+    format: str = "jsonl"
+
+
+@dataclass(frozen=True)
+class ScenarioSnapshotInputSpec:
+    """Stable input requirement used to fingerprint local scenario snapshots."""
+
+    kind: ScenarioArtifactKind
+    logical_name: str
+    file_path: Path
+    capture_sql: str
 
 
 @dataclass(frozen=True)
