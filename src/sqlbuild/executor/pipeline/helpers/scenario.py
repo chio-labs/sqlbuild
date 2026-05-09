@@ -1,0 +1,82 @@
+"""Scenario test execution pipeline."""
+
+from __future__ import annotations
+
+import time
+from collections.abc import Callable
+from typing import Any
+
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.compiler.compile.models import CompiledSqlScenario
+from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.planner.main.scenario import build_scenario_plan
+from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
+from sqlbuild.executor.scenario.main.run import execute_scenario_run
+from sqlbuild.executor.scenario.models import ScenarioRunResult
+from sqlbuild.executor.shared.types import ExecutionStatus
+
+
+def run_scenario_test_pipeline(
+    *,
+    pipeline_result: CompilePipelineResult,
+    scenarios: tuple[CompiledSqlScenario, ...],
+    connection_config: dict[str, object],
+    adapter: BaseAdapter,
+    project_name: str,
+    retain: bool,
+    on_connection_start: Callable[[int], None] | None = None,
+    on_connection_complete: Callable[[int, float], None] | None = None,
+    on_connection_error: Callable[[int, float], None] | None = None,
+    on_scenario_start: Callable[[CompiledSqlScenario], None] | None = None,
+    on_scenario_complete: Callable[
+        [CompiledSqlScenario, ScenarioExecutionPlan | None, ScenarioRunResult], None
+    ]
+    | None = None,
+) -> tuple[ScenarioRunResult, ...]:
+    """Execute selected scenarios from a compiled project."""
+
+    if on_connection_start is not None:
+        on_connection_start(1)
+    start: float = time.monotonic()
+    try:
+        connection: Any = adapter.connect(connection_config)
+    except Exception:
+        if on_connection_error is not None:
+            on_connection_error(1, time.monotonic() - start)
+        raise
+    if on_connection_complete is not None:
+        on_connection_complete(1, time.monotonic() - start)
+    try:
+        results: list[ScenarioRunResult] = []
+        scenario: CompiledSqlScenario
+        for scenario in scenarios:
+            if on_scenario_start is not None:
+                on_scenario_start(scenario)
+            scenario_plan: ScenarioExecutionPlan | None = None
+            try:
+                scenario_plan = build_scenario_plan(
+                    scenario=scenario,
+                    pipeline_result=pipeline_result,
+                    adapter=adapter,
+                    project_name=project_name,
+                )
+                result: ScenarioRunResult = execute_scenario_run(
+                    scenario_plan=scenario_plan,
+                    adapter=adapter,
+                    connection=connection,
+                    run_id=pipeline_result.project.run_id,
+                    retain=retain,
+                )
+            except Exception as exc:
+                result = ScenarioRunResult(
+                    scenario_name=scenario.name,
+                    status=ExecutionStatus.FAILED,
+                    retained=retain,
+                    error_message=str(exc),
+                )
+            results.append(result)
+            if on_scenario_complete is not None:
+                on_scenario_complete(scenario, scenario_plan, result)
+        return tuple(results)
+    finally:
+        adapter.close(connection)

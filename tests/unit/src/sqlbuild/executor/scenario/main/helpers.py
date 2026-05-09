@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import ColumnInfo, QueryResult, StatementRecorder
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationTarget
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (
@@ -20,7 +22,7 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
     ScenarioArtifactKind,
 )
-from sqlbuild.spec.models.schema import default_seed_csv_settings
+from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
 
 
 class ScenarioFixtureTestAdapter(BaseAdapter):
@@ -43,6 +45,92 @@ class ScenarioFixtureTestAdapter(BaseAdapter):
 
     def close(self, connection: object) -> None:
         del connection
+
+
+class ScenarioSnapshotCaptureStepsTestAdapter(BaseAdapter):
+    """Adapter that records capture orchestration operations."""
+
+    def __init__(
+        self,
+        *,
+        fail_on_create_target: str | None = None,
+        fail_on_seed: bool = False,
+        fail_on_query_target: str | None = None,
+    ) -> None:
+        self.fail_on_create_target: str | None = fail_on_create_target
+        self.fail_on_seed: bool = fail_on_seed
+        self.fail_on_query_target: str | None = fail_on_query_target
+        self.events: list[str] = []
+
+    def connect(self, config: dict[str, object]) -> object:
+        del config
+        return object()
+
+    def execute(self, connection: object, sql: str) -> object:
+        del connection
+        self.events.append(sql)
+        return object()
+
+    def close(self, connection: object) -> None:
+        del connection
+
+    def create_table_as(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        sql: str,
+        config: dict[str, Any] | None = None,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        del connection, sql, config
+        self.events.append(f"create:{target}")
+        if self.fail_on_create_target is not None and self.fail_on_create_target in target:
+            raise RuntimeError("fixture create failed")
+        statement_recorder.record(f"CREATE TABLE {target}")
+
+    def drop(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        if_exists: bool = True,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        del connection, if_exists
+        self.events.append(f"drop:{target}")
+        statement_recorder.record(f"DROP TABLE {target}")
+
+    def load_seed(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        file_path: Path,
+        columns: tuple[ColumnInfo, ...],
+        csv_settings: SeedCsvSettings = default_seed_csv_settings,
+        replace: bool = True,
+        infer_types: bool = False,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        del connection, file_path, columns, csv_settings, replace, infer_types
+        self.events.append(f"seed:{target}")
+        if self.fail_on_seed:
+            raise RuntimeError("seed load failed")
+        statement_recorder.record(f"LOAD SEED {target}")
+
+    def query(self, connection: Any, sql: str, *, limit: int | None) -> QueryResult:
+        del connection, limit
+        self.events.append(f"query:{sql}")
+        if self.fail_on_query_target is not None and self.fail_on_query_target in sql:
+            raise RuntimeError("warehouse read failed")
+        if "__sqb_51b385aebe20__source__raw__orders" in sql:
+            return QueryResult(columns=("order_id",), rows=((1,),))
+        if "__sqb_51b385aebe20__ref__stg_customers" in sql:
+            return QueryResult(columns=("customer_id",), rows=((10,),))
+        if "__sqb_51b385aebe20__seed__country_codes" in sql:
+            return QueryResult(columns=("country_code",), rows=(("US",),))
+        raise RuntimeError(f"unexpected query: {sql}")
 
 
 def build_scenario_fixture_plan(

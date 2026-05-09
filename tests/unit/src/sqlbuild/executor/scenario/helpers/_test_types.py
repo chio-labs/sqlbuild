@@ -10,6 +10,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotManifest,
 )
 from sqlbuild.executor.scenario.types import ScenarioSnapshotState
+from sqlbuild.executor.shared.types import ExecutionStatus
 
 
 @dataclass(frozen=True)
@@ -103,3 +104,19 @@ class ScenarioSnapshotRelationPathErrorTestCase:
     kind: ScenarioArtifactKind
     logical_name: str
     expected_error_type: type[Exception]
+
+
+@dataclass(frozen=True)
+class ExecuteScenarioSnapshotCaptureStepsTestCase:
+    description: str
+    retain: bool
+    fail_on_create_target: str | None
+    fail_on_seed: bool
+    fail_on_query_target: str | None
+    expected_status: ExecutionStatus
+    expected_retained: bool
+    expected_fixture_result_count: int
+    expected_seed_result_count: int
+    expected_has_capture_result: bool
+    expected_has_cleanup_result: bool
+    expected_error_fragment: str | None = None

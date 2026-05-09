@@ -154,6 +154,21 @@ class ScenarioSnapshotCaptureResult:
 
 
 @dataclass(frozen=True)
+class ScenarioSnapshotCaptureRunResult:
+    """Outcome of materializing inputs and writing one local scenario snapshot."""
+
+    scenario_name: str
+    status: ExecutionStatus
+    retained: bool = False
+    fixture_results: tuple[ScenarioFixtureExecutionResult, ...] = field(default_factory=tuple)
+    seed_results: tuple[SeedExecutionResult, ...] = field(default_factory=tuple)
+    capture_result: ScenarioSnapshotCaptureResult | None = None
+    prepare_cleanup_result: ScenarioCleanupExecutionResult | None = None
+    cleanup_result: ScenarioCleanupExecutionResult | None = None
+    error_message: str | None = None
+
+
+@dataclass(frozen=True)
 class ScenarioCleanupExecutionResult:
     """Outcome of dropping planned scenario-owned relations."""
 

@@ -22,6 +22,7 @@ from sqlbuild.compiler.planner.types import (
     ScenarioArtifactKind,
 )
 from sqlbuild.executor.scenario.models import (
+    ScenarioSnapshotCaptureRunResult,
     ScenarioSnapshotColumn,
     ScenarioSnapshotManifest,
     ScenarioSnapshotRelation,
@@ -29,6 +30,7 @@ from sqlbuild.executor.scenario.models import (
 )
 from sqlbuild.spec.models.schema import default_seed_csv_settings
 from tests.unit.src.sqlbuild.executor.scenario.helpers._test_types import (
+    ExecuteScenarioSnapshotCaptureStepsTestCase,
     ScenarioSnapshotStateTestCase,
 )
 
@@ -185,6 +187,16 @@ def assert_snapshot_state_error(
     if test_case.expected_error_fragment is not None:
         assert state_result.error_message is not None
         assert test_case.expected_error_fragment in state_result.error_message
+
+
+def assert_capture_steps_error(
+    *,
+    result: ScenarioSnapshotCaptureRunResult,
+    test_case: ExecuteScenarioSnapshotCaptureStepsTestCase,
+) -> None:
+    if test_case.expected_error_fragment is not None:
+        assert result.error_message is not None
+        assert test_case.expected_error_fragment in result.error_message
 
 
 def _target(kind: str, logical_name: str) -> CompiledRelationTarget:

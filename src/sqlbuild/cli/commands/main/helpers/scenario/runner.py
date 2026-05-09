@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from time import monotonic
-from typing import Any, TextIO, cast
+from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.scenario.constants import FAILED_STATUS, SUCCESS_STATUS
@@ -24,10 +23,9 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.planner.main.scenario import build_scenario_plan
 from sqlbuild.compiler.planner.models import ScenarioArtifactName, ScenarioExecutionPlan
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
-from sqlbuild.executor.scenario.main.run import execute_scenario_run
+from sqlbuild.executor.pipeline.main.run import run_scenario_test_pipeline
 from sqlbuild.executor.scenario.models import (
     ScenarioAssertionCheckExecutionResult,
     ScenarioExpectedCheckExecutionResult,
@@ -117,41 +115,35 @@ def run_scenario(
         use_color=use_color,
     )
 
-    execution_connection_progress.on_connection_start(1)
-    connection_start: float = monotonic()
-    connection: Any
-    try:
-        connection = adapter.connect(connection_config)
-    except Exception:
-        execution_connection_progress.on_connection_error(1, monotonic() - connection_start)
-        raise
-    execution_connection_progress.on_connection_complete(1, monotonic() - connection_start)
-    results: list[ScenarioRunResult] = []
     status_is_tty: bool = hasattr(progress_stream, "isatty") and progress_stream.isatty()
     if not status_is_tty:
         progress_stream.write("Running scenarios...\n\n")
         progress_stream.flush()
-    try:
-        scenario: CompiledSqlScenario
-        for scenario in scenarios:
-            if status_is_tty:
-                scenario_status.start("Running scenarios...")
-            result: ScenarioRunResult = _run_one_scenario(
-                scenario=scenario,
-                pipeline_result=pipeline_result,
-                adapter=adapter,
-                connection=connection,
-                project_name=discovered_inputs.project_config.name,
-                target_dir=effective_project_dir / "target",
-                retain=retain,
-            )
-            if status_is_tty:
-                scenario_status.close()
-            results.append(result)
-            _write_scenario_result(result=result, stream=progress_stream, use_color=use_color)
-    finally:
-        scenario_status.close()
-        adapter.close(connection)
+    results: tuple[ScenarioRunResult, ...] = run_scenario_test_pipeline(
+        pipeline_result=pipeline_result,
+        scenarios=scenarios,
+        connection_config=connection_config,
+        adapter=adapter,
+        project_name=discovered_inputs.project_config.name,
+        retain=retain,
+        on_connection_start=execution_connection_progress.on_connection_start,
+        on_connection_complete=execution_connection_progress.on_connection_complete,
+        on_connection_error=execution_connection_progress.on_connection_error,
+        on_scenario_start=lambda _scenario: (
+            scenario_status.start("Running scenarios...") if status_is_tty else None
+        ),
+        on_scenario_complete=lambda _scenario, scenario_plan, result: _complete_scenario_run(
+            scenario_status=scenario_status,
+            status_is_tty=status_is_tty,
+            target_dir=effective_project_dir / "target",
+            adapter=adapter,
+            scenario_plan=scenario_plan,
+            result=result,
+            progress_stream=progress_stream,
+            use_color=use_color,
+        ),
+    )
+    scenario_status.close()
 
     pass_count: int = sum(1 for result in results if result.status == SUCCESS_STATUS)
     fail_count: int = len(results) - pass_count
@@ -193,44 +185,27 @@ def _select_scenarios(
     raise CliUserError(f"Unknown scenario selector '{selector}'", code="C453")
 
 
-def _run_one_scenario(
+def _complete_scenario_run(
     *,
-    scenario: CompiledSqlScenario,
-    pipeline_result: CompilePipelineResult,
-    adapter: BaseAdapter,
-    connection: Any,
-    project_name: str,
+    scenario_status: TransientStatusReporter,
+    status_is_tty: bool,
     target_dir: Path,
-    retain: bool,
-) -> ScenarioRunResult:
-    try:
-        scenario_plan: ScenarioExecutionPlan = build_scenario_plan(
-            scenario=scenario,
-            pipeline_result=pipeline_result,
-            adapter=adapter,
-            project_name=project_name,
-        )
-        result: ScenarioRunResult = execute_scenario_run(
-            scenario_plan=scenario_plan,
-            adapter=adapter,
-            connection=connection,
-            run_id=pipeline_result.project.run_id,
-            retain=retain,
-        )
+    adapter: BaseAdapter,
+    scenario_plan: ScenarioExecutionPlan | None,
+    result: ScenarioRunResult,
+    progress_stream: TextIO,
+    use_color: bool,
+) -> None:
+    if status_is_tty:
+        scenario_status.close()
+    if scenario_plan is not None:
         write_scenario_runtime_target(
             target_dir=target_dir,
             adapter=adapter,
             scenario_plan=scenario_plan,
             result=result,
         )
-        return result
-    except Exception as exc:
-        return ScenarioRunResult(
-            scenario_name=scenario.name,
-            status=cast(Any, FAILED_STATUS),
-            retained=retain,
-            error_message=str(exc),
-        )
+    _write_scenario_result(result=result, stream=progress_stream, use_color=use_color)
 
 
 def _write_scenario_result(*, result: ScenarioRunResult, stream: TextIO, use_color: bool) -> None:
