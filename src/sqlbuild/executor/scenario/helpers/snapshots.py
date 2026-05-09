@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from json import JSONDecodeError
 from pathlib import Path
+from typing import Any
 
 from sqlbuild.compiler.planner.models import (
     ScenarioExecutionPlan,
@@ -13,9 +15,13 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.scenario.models import (
+    ScenarioSnapshotColumn,
     ScenarioSnapshotInputSpec,
     ScenarioSnapshotManifest,
+    ScenarioSnapshotRelation,
+    ScenarioSnapshotStateResult,
 )
+from sqlbuild.executor.scenario.types import ScenarioSnapshotState
 
 _SNAPSHOT_ROOT_PARTS: tuple[str, ...] = ("tests", "_scenario_snapshots")
 _MANIFEST_FILE_NAME: str = "scenario.json"
@@ -108,6 +114,77 @@ def build_scenario_snapshot_input_fingerprint(
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+def write_scenario_snapshot_manifest(
+    *, manifest_path: Path, manifest: ScenarioSnapshotManifest
+) -> None:
+    """Write one local scenario snapshot manifest as stable JSON."""
+
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(
+        json.dumps(_manifest_to_json_data(manifest), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def read_scenario_snapshot_manifest(*, manifest_path: Path) -> ScenarioSnapshotManifest:
+    """Read one local scenario snapshot manifest from JSON."""
+
+    try:
+        raw_data: Any = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if not isinstance(raw_data, dict):
+            raise ValueError("manifest root must be a JSON object")
+        return _manifest_from_json_data(raw_data)
+    except JSONDecodeError as exc:
+        raise ValueError(f"Invalid scenario snapshot manifest JSON: {exc.msg}") from exc
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid scenario snapshot manifest: {exc}") from exc
+
+
+def classify_scenario_snapshot_state(
+    *, project_dir: Path, scenario_plan: ScenarioExecutionPlan
+) -> ScenarioSnapshotStateResult:
+    """Return whether a local scenario snapshot is fresh, missing, stale, or invalid."""
+
+    manifest_path: Path = scenario_snapshot_manifest_path(
+        project_dir=project_dir,
+        scenario_name=scenario_plan.name,
+    )
+    if not manifest_path.exists():
+        return ScenarioSnapshotStateResult(
+            state=ScenarioSnapshotState.MISSING,
+            manifest_path=manifest_path,
+        )
+
+    try:
+        manifest: ScenarioSnapshotManifest = read_scenario_snapshot_manifest(
+            manifest_path=manifest_path,
+        )
+    except ValueError as exc:
+        return ScenarioSnapshotStateResult(
+            state=ScenarioSnapshotState.INVALID,
+            manifest_path=manifest_path,
+            error_message=str(exc),
+        )
+
+    current_fingerprint: str = build_scenario_snapshot_input_fingerprint(
+        scenario_name=scenario_plan.name,
+        input_specs=build_scenario_snapshot_input_specs(scenario_plan=scenario_plan),
+    )
+    state: ScenarioSnapshotState = (
+        ScenarioSnapshotState.FRESH
+        if is_scenario_snapshot_fresh(
+            manifest=manifest,
+            current_input_fingerprint=current_fingerprint,
+        )
+        else ScenarioSnapshotState.STALE
+    )
+    return ScenarioSnapshotStateResult(
+        state=state,
+        manifest_path=manifest_path,
+        manifest=manifest,
+    )
+
+
 def is_scenario_snapshot_fresh(
     *, manifest: ScenarioSnapshotManifest, current_input_fingerprint: str
 ) -> bool:
@@ -122,3 +199,81 @@ def _input_spec_sort_key(spec: ScenarioSnapshotInputSpec) -> tuple[str, str, str
 
 def _normalize_sql(sql: str) -> str:
     return " ".join(sql.split())
+
+
+def _manifest_to_json_data(manifest: ScenarioSnapshotManifest) -> dict[str, object]:
+    return {
+        "version": manifest.version,
+        "scenario_name": manifest.scenario_name,
+        "captured_at": manifest.captured_at,
+        "capture_adapter": manifest.capture_adapter,
+        "capture_dialect": manifest.capture_dialect,
+        "sqlbuild_version": manifest.sqlbuild_version,
+        "input_fingerprint": manifest.input_fingerprint,
+        "format": manifest.format,
+        "total_rows": manifest.total_rows,
+        "total_bytes": manifest.total_bytes,
+        "relations": [
+            {
+                "kind": relation.kind.value,
+                "logical_name": relation.logical_name,
+                "file": relation.file_path.as_posix(),
+                "row_count": relation.row_count,
+                "bytes": relation.byte_count,
+                "columns": [
+                    {
+                        "name": column.name,
+                        "warehouse_type": column.warehouse_type,
+                        "local_type": column.local_type,
+                    }
+                    for column in relation.columns
+                ],
+            }
+            for relation in manifest.relations
+        ],
+    }
+
+
+def _manifest_from_json_data(data: dict[str, Any]) -> ScenarioSnapshotManifest:
+    relations_data: Any = data.get("relations", [])
+    if not isinstance(relations_data, list):
+        raise ValueError("relations must be a list")
+    return ScenarioSnapshotManifest(
+        version=int(data["version"]),
+        scenario_name=str(data["scenario_name"]),
+        captured_at=str(data["captured_at"]),
+        capture_adapter=str(data["capture_adapter"]),
+        capture_dialect=str(data["capture_dialect"]),
+        sqlbuild_version=str(data["sqlbuild_version"]),
+        input_fingerprint=str(data["input_fingerprint"]),
+        total_rows=int(data["total_rows"]),
+        total_bytes=int(data["total_bytes"]),
+        relations=tuple(_relation_from_json_data(relation) for relation in relations_data),
+        format=str(data.get("format", "jsonl")),
+    )
+
+
+def _relation_from_json_data(data: Any) -> ScenarioSnapshotRelation:
+    if not isinstance(data, dict):
+        raise ValueError("relation entries must be JSON objects")
+    columns_data: Any = data.get("columns", [])
+    if not isinstance(columns_data, list):
+        raise ValueError("relation columns must be a list")
+    return ScenarioSnapshotRelation(
+        kind=ScenarioArtifactKind(str(data["kind"])),
+        logical_name=str(data["logical_name"]),
+        file_path=Path(str(data["file"])),
+        row_count=int(data["row_count"]),
+        byte_count=int(data["bytes"]),
+        columns=tuple(_column_from_json_data(column) for column in columns_data),
+    )
+
+
+def _column_from_json_data(data: Any) -> ScenarioSnapshotColumn:
+    if not isinstance(data, dict):
+        raise ValueError("column entries must be JSON objects")
+    return ScenarioSnapshotColumn(
+        name=str(data["name"]),
+        warehouse_type=str(data["warehouse_type"]),
+        local_type=str(data["local_type"]),
+    )

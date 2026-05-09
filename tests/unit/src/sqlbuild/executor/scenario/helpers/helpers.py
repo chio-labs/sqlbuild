@@ -21,7 +21,16 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
     ScenarioArtifactKind,
 )
+from sqlbuild.executor.scenario.models import (
+    ScenarioSnapshotColumn,
+    ScenarioSnapshotManifest,
+    ScenarioSnapshotRelation,
+    ScenarioSnapshotStateResult,
+)
 from sqlbuild.spec.models.schema import default_seed_csv_settings
+from tests.unit.src.sqlbuild.executor.scenario.helpers._test_types import (
+    ScenarioSnapshotStateTestCase,
+)
 
 
 def build_snapshot_input_specs_test_plan(
@@ -118,6 +127,64 @@ def build_snapshot_input_specs_test_plan(
             ),
         ),
     )
+
+
+def build_snapshot_manifest(*, input_fingerprint: str = "fresh123") -> ScenarioSnapshotManifest:
+    return ScenarioSnapshotManifest(
+        version=1,
+        scenario_name="revenue__customer_refund",
+        captured_at="2026-05-09T00:00:00Z",
+        capture_adapter="snowflake",
+        capture_dialect="snowflake",
+        sqlbuild_version="0.1.0",
+        input_fingerprint=input_fingerprint,
+        total_rows=2,
+        total_bytes=100,
+        relations=(
+            ScenarioSnapshotRelation(
+                kind=ScenarioArtifactKind.SOURCE,
+                logical_name="raw__orders",
+                file_path=Path("sources/raw__orders.jsonl"),
+                row_count=2,
+                byte_count=100,
+                columns=(
+                    ScenarioSnapshotColumn(
+                        name="order_id",
+                        warehouse_type="NUMBER",
+                        local_type="BIGINT",
+                    ),
+                    ScenarioSnapshotColumn(
+                        name="amount",
+                        warehouse_type="NUMBER(10,2)",
+                        local_type="DECIMAL(10,2)",
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+def write_snapshot_state_test_manifest(
+    *, manifest_path: Path, test_case: ScenarioSnapshotStateTestCase
+) -> None:
+    if test_case.manifest is not None:
+        from sqlbuild.executor.scenario.helpers.snapshots import write_scenario_snapshot_manifest
+
+        write_scenario_snapshot_manifest(
+            manifest_path=manifest_path,
+            manifest=test_case.manifest,
+        )
+    if test_case.manifest_contents is not None:
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text(test_case.manifest_contents, encoding="utf-8")
+
+
+def assert_snapshot_state_error(
+    *, state_result: ScenarioSnapshotStateResult, test_case: ScenarioSnapshotStateTestCase
+) -> None:
+    if test_case.expected_error_fragment is not None:
+        assert state_result.error_message is not None
+        assert test_case.expected_error_fragment in state_result.error_message
 
 
 def _target(kind: str, logical_name: str) -> CompiledRelationTarget:

@@ -10,6 +10,7 @@ from sqlbuild.compiler.planner.models import ScenarioRelationMap
 from sqlbuild.compiler.planner.types import MaterializationType, ScenarioArtifactKind
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.scenario.types import ScenarioSnapshotState
 from sqlbuild.executor.shared.types import ExecutionStatus
 
 
@@ -82,6 +83,16 @@ class ScenarioSnapshotInputSpec:
     logical_name: str
     file_path: Path
     capture_sql: str
+
+
+@dataclass(frozen=True)
+class ScenarioSnapshotStateResult:
+    """Manifest freshness classification for one local scenario snapshot."""
+
+    state: ScenarioSnapshotState
+    manifest_path: Path
+    manifest: ScenarioSnapshotManifest | None = None
+    error_message: str | None = None
 
 
 @dataclass(frozen=True)

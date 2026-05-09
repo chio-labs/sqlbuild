@@ -3,7 +3,11 @@ from pathlib import Path
 
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
-from sqlbuild.executor.scenario.models import ScenarioSnapshotInputSpec
+from sqlbuild.executor.scenario.models import (
+    ScenarioSnapshotInputSpec,
+    ScenarioSnapshotManifest,
+)
+from sqlbuild.executor.scenario.types import ScenarioSnapshotState
 
 
 @dataclass(frozen=True)
@@ -46,6 +50,23 @@ class ScenarioSnapshotFreshnessTestCase:
     manifest_fingerprint: str
     current_fingerprint: str
     expected_is_fresh: bool
+
+
+@dataclass(frozen=True)
+class ScenarioSnapshotManifestIoTestCase:
+    description: str
+    manifest: ScenarioSnapshotManifest
+    expected_json_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ScenarioSnapshotStateTestCase:
+    description: str
+    manifest: ScenarioSnapshotManifest | None
+    manifest_contents: str | None
+    expected_state: ScenarioSnapshotState
+    expected_has_manifest: bool
+    expected_error_fragment: str | None = None
 
 
 @dataclass(frozen=True)

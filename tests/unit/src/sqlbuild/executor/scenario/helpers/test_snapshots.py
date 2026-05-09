@@ -4,28 +4,45 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.scenario.helpers.snapshots import (
     build_scenario_snapshot_input_fingerprint,
     build_scenario_snapshot_input_specs,
+    classify_scenario_snapshot_state,
     is_scenario_snapshot_fresh,
+    read_scenario_snapshot_manifest,
     scenario_snapshot_manifest_path,
     scenario_snapshot_relation_file_path,
     scenario_snapshot_root,
+    write_scenario_snapshot_manifest,
 )
 from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotInputSpec,
     ScenarioSnapshotManifest,
+    ScenarioSnapshotStateResult,
 )
+from sqlbuild.executor.scenario.types import ScenarioSnapshotState
 from tests.unit.src.sqlbuild.executor.scenario.helpers._test_types import (
     ScenarioSnapshotFingerprintTestCase,
     ScenarioSnapshotFreshnessTestCase,
     ScenarioSnapshotInputSpecsFromPlanTestCase,
+    ScenarioSnapshotManifestIoTestCase,
     ScenarioSnapshotPathTestCase,
     ScenarioSnapshotRelationPathErrorTestCase,
+    ScenarioSnapshotStateTestCase,
 )
 from tests.unit.src.sqlbuild.executor.scenario.helpers.helpers import (
+    assert_snapshot_state_error,
     build_snapshot_input_specs_test_plan,
+    build_snapshot_manifest,
+    write_snapshot_state_test_manifest,
+)
+
+SNAPSHOT_STATE_PLAN: ScenarioExecutionPlan = build_snapshot_input_specs_test_plan()
+SNAPSHOT_STATE_FINGERPRINT: str = build_scenario_snapshot_input_fingerprint(
+    scenario_name=SNAPSHOT_STATE_PLAN.name,
+    input_specs=build_scenario_snapshot_input_specs(scenario_plan=SNAPSHOT_STATE_PLAN),
 )
 
 PATH_TEST_CASES: list[ScenarioSnapshotPathTestCase] = [
@@ -76,6 +93,102 @@ FRESHNESS_TEST_CASES: list[ScenarioSnapshotFreshnessTestCase] = [
         expected_is_fresh=False,
     ),
 ]
+
+SNAPSHOT_STATE_TEST_CASES: list[ScenarioSnapshotStateTestCase] = [
+    ScenarioSnapshotStateTestCase(
+        description="missing manifest is classified as missing",
+        manifest=None,
+        manifest_contents=None,
+        expected_state=ScenarioSnapshotState.MISSING,
+        expected_has_manifest=False,
+    ),
+    ScenarioSnapshotStateTestCase(
+        description="matching fingerprint manifest is classified as fresh",
+        manifest=build_snapshot_manifest(input_fingerprint=SNAPSHOT_STATE_FINGERPRINT),
+        manifest_contents=None,
+        expected_state=ScenarioSnapshotState.FRESH,
+        expected_has_manifest=True,
+    ),
+    ScenarioSnapshotStateTestCase(
+        description="different fingerprint manifest is classified as stale",
+        manifest=build_snapshot_manifest(input_fingerprint="stale123"),
+        manifest_contents=None,
+        expected_state=ScenarioSnapshotState.STALE,
+        expected_has_manifest=True,
+    ),
+    ScenarioSnapshotStateTestCase(
+        description="malformed manifest is classified as invalid",
+        manifest=None,
+        manifest_contents="{not json",
+        expected_state=ScenarioSnapshotState.INVALID,
+        expected_has_manifest=False,
+        expected_error_fragment="Invalid scenario snapshot manifest JSON",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScenarioSnapshotManifestIoTestCase(
+            description="manifest round trips through scenario json shape",
+            manifest=build_snapshot_manifest(),
+            expected_json_fragments=(
+                '"file": "sources/raw__orders.jsonl"',
+                '"bytes": 100',
+                '"warehouse_type": "NUMBER(10,2)"',
+                '"local_type": "DECIMAL(10,2)"',
+            ),
+        )
+    ],
+    ids=["manifest round trips through scenario json shape"],
+)
+def test_given_snapshot_manifest_when_writing_and_reading_then_round_trips_json_shape(
+    tmp_path: Path,
+    test_case: ScenarioSnapshotManifestIoTestCase,
+) -> None:
+    manifest_path: Path = scenario_snapshot_manifest_path(
+        project_dir=tmp_path,
+        scenario_name=test_case.manifest.scenario_name,
+    )
+
+    write_scenario_snapshot_manifest(
+        manifest_path=manifest_path,
+        manifest=test_case.manifest,
+    )
+    manifest_contents: str = manifest_path.read_text(encoding="utf-8")
+    loaded_manifest: ScenarioSnapshotManifest = read_scenario_snapshot_manifest(
+        manifest_path=manifest_path,
+    )
+
+    assert loaded_manifest == test_case.manifest
+    for expected_fragment in test_case.expected_json_fragments:
+        assert expected_fragment in manifest_contents
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SNAPSHOT_STATE_TEST_CASES,
+    ids=[case.description for case in SNAPSHOT_STATE_TEST_CASES],
+)
+def test_given_snapshot_manifest_state_when_classifying_then_returns_expected_state(
+    tmp_path: Path,
+    test_case: ScenarioSnapshotStateTestCase,
+) -> None:
+    manifest_path: Path = scenario_snapshot_manifest_path(
+        project_dir=tmp_path,
+        scenario_name=SNAPSHOT_STATE_PLAN.name,
+    )
+    write_snapshot_state_test_manifest(manifest_path=manifest_path, test_case=test_case)
+
+    state_result: ScenarioSnapshotStateResult = classify_scenario_snapshot_state(
+        project_dir=tmp_path,
+        scenario_plan=SNAPSHOT_STATE_PLAN,
+    )
+
+    assert state_result.state == test_case.expected_state
+    assert (state_result.manifest is not None) is test_case.expected_has_manifest
+    assert_snapshot_state_error(state_result=state_result, test_case=test_case)
 
 
 @pytest.mark.parametrize(
