@@ -353,6 +353,7 @@ class ScenarioGraphPlan:
     model_names: tuple[str, ...] = field(default_factory=tuple)
     source_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    seed_names: tuple[str, ...] = field(default_factory=tuple)
     seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     function_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
 
@@ -435,6 +436,7 @@ class ScenarioExecutionPlan:
     graph_plan: ScenarioGraphPlan
     relation_plan: ScenarioRelationPlan
     fixture_plans: tuple[ScenarioFixturePlan, ...] = field(default_factory=tuple)
+    seed_entries: tuple[SeedPlanEntry, ...] = field(default_factory=tuple)
     model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
     expected_checks: tuple[ScenarioExpectedCheckPlan, ...] = field(default_factory=tuple)
     assertion_checks: tuple[ScenarioAssertionCheckPlan, ...] = field(default_factory=tuple)

@@ -357,8 +357,41 @@ def build_scenario_relation_test_project() -> CompiledProject:
     return replace(project, models=tuple(models))
 
 
-def build_scenario_relation_test_scenario() -> CompiledSqlScenario:
+def build_scenario_relation_test_project_with_unused_seed() -> CompiledProject:
+    """Build a scenario relation test project with a seed outside the scenario graph."""
+
+    project: CompiledProject = build_scenario_relation_test_project()
+    unused_seed_project: CompiledProject = build_test_project(seed_names=("unused_seed",))
+    return replace(project, seeds=(*project.seeds, unused_seed_project.seeds[0]))
+
+
+def build_scenario_relation_test_scenario(
+    *, include_seed_fixture: bool = True
+) -> CompiledSqlScenario:
     """Build a scenario covering helper CTE and fixture planning tests."""
+
+    authored_ctes: tuple[CompileSqlScenarioCte, ...] = (
+        CompileSqlScenarioCte(
+            name="helper_orders",
+            sql_body="SELECT 1 AS order_id, 10 AS customer_id",
+        ),
+        CompileSqlScenarioCte(
+            name="__source__raw__orders",
+            sql_body="SELECT * FROM helper_orders",
+        ),
+        CompileSqlScenarioCte(
+            name="__ref__stg_customers",
+            sql_body="SELECT 10 AS customer_id",
+        ),
+    )
+    if include_seed_fixture:
+        authored_ctes = (
+            *authored_ctes,
+            CompileSqlScenarioCte(
+                name="__seed__country_codes",
+                sql_body="SELECT 'US' AS country_code",
+            ),
+        )
 
     return CompiledSqlScenario(
         key=CompiledObjectKey(
@@ -375,24 +408,7 @@ def build_scenario_relation_test_scenario() -> CompiledSqlScenario:
             sql_body="SELECT 1",
         ),
         sql_body="SELECT 1",
-        authored_ctes=(
-            CompileSqlScenarioCte(
-                name="helper_orders",
-                sql_body="SELECT 1 AS order_id, 10 AS customer_id",
-            ),
-            CompileSqlScenarioCte(
-                name="__source__raw__orders",
-                sql_body="SELECT * FROM helper_orders",
-            ),
-            CompileSqlScenarioCte(
-                name="__ref__stg_customers",
-                sql_body="SELECT 10 AS customer_id",
-            ),
-            CompileSqlScenarioCte(
-                name="__seed__country_codes",
-                sql_body="SELECT 'US' AS country_code",
-            ),
-        ),
+        authored_ctes=authored_ctes,
         expected_ctes=(
             CompileSqlScenarioCte(
                 name="__expected__daily_revenue",
@@ -407,7 +423,7 @@ def build_scenario_relation_test_scenario() -> CompiledSqlScenario:
         ),
         source_fixture_names=("raw__orders",),
         ref_fixture_names=("stg_customers",),
-        seed_fixture_names=("country_codes",),
+        seed_fixture_names=("country_codes",) if include_seed_fixture else (),
         expected_model_names=("daily_revenue",),
         assertion_names=("no_negative_revenue",),
     )

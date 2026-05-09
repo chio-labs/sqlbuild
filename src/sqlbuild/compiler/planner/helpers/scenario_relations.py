@@ -18,12 +18,13 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationTarget,
+    CompiledSeed,
     CompiledSqlScenario,
     CompileSqlScenarioCte,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.helpers.graph import build_upstream_deps, topologically_order_keys
-from sqlbuild.compiler.planner.helpers.plan_entry import plan_model
+from sqlbuild.compiler.planner.helpers.plan_entry import extract_seed_columns, plan_model
 from sqlbuild.compiler.planner.helpers.resolve.refs import build_function_targets
 from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,
@@ -36,6 +37,7 @@ from sqlbuild.compiler.planner.models import (
     ScenarioGraphPlan,
     ScenarioRelationMap,
     ScenarioRelationPlan,
+    SeedPlanEntry,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
@@ -120,7 +122,7 @@ def build_scenario_relation_plan(
         )
 
     seed_name: str
-    for seed_name in graph_plan.seed_fixture_names:
+    for seed_name in graph_plan.seed_names:
         target = _target_for_artifact(
             artifacts=artifacts,
             kind=ScenarioArtifactKind.SEED,
@@ -128,8 +130,14 @@ def build_scenario_relation_plan(
             database=database,
             schema=schema,
         )
-        seed_fixture_targets[seed_name] = target
         seed_targets[seed_name] = target
+
+    for seed_name in graph_plan.seed_fixture_names:
+        seed_fixture_targets[seed_name] = _required_target(
+            seed_targets,
+            seed_name,
+            kind=ScenarioArtifactKind.SEED,
+        )
 
     return ScenarioRelationPlan(
         scenario_name=graph_plan.name,
@@ -216,6 +224,11 @@ def build_scenario_execution_plan(
         graph_plan=graph_plan,
         relation_plan=relation_plan,
     )
+    seed_entries: tuple[SeedPlanEntry, ...] = build_scenario_seed_entries(
+        project=project,
+        graph_plan=graph_plan,
+        relation_plan=relation_plan,
+    )
 
     model_entries: list[ModelPlanEntry] = []
     warnings: list[PlanWarning] = []
@@ -278,6 +291,7 @@ def build_scenario_execution_plan(
             graph_plan=graph_plan,
             relation_plan=relation_plan,
             fixture_plans=fixture_plans,
+            seed_entries=seed_entries,
             model_entries=tuple(model_entries),
             expected_checks=expected_checks,
             assertion_checks=assertion_checks,
@@ -364,6 +378,41 @@ def build_scenario_fixture_plans(
         )
 
     return tuple(plans)
+
+
+def build_scenario_seed_entries(
+    *,
+    project: CompiledProject,
+    graph_plan: ScenarioGraphPlan,
+    relation_plan: ScenarioRelationPlan,
+) -> tuple[SeedPlanEntry, ...]:
+    """Build project seed load entries for required seeds not overridden by fixtures."""
+
+    seeds_by_name: dict[str, CompiledSeed] = {seed.name: seed for seed in project.seeds}
+    seed_fixture_names: frozenset[str] = frozenset(graph_plan.seed_fixture_names)
+    seed_entries: list[SeedPlanEntry] = []
+    seed_name: str
+    for seed_name in graph_plan.seed_names:
+        if seed_name in seed_fixture_names:
+            continue
+        seed: CompiledSeed | None = seeds_by_name.get(seed_name)
+        if seed is None:
+            raise ValueError(f"Scenario requires unknown seed '{seed_name}'")
+        seed_entries.append(
+            SeedPlanEntry(
+                key=seed.key,
+                name=seed.name,
+                target=_required_target(
+                    relation_plan.seed_targets,
+                    seed_name,
+                    kind=ScenarioArtifactKind.SEED,
+                ),
+                file_path=seed.seed_file.file_path,
+                columns=extract_seed_columns(seed),
+                csv_settings=seed.schema_entry.csv_settings,
+            )
+        )
+    return tuple(seed_entries)
 
 
 def _resolve_scenario_check_sql_with_sqlglot(
