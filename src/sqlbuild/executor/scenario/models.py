@@ -5,7 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from sqlbuild.adapter.shared.models import LifeCycleEvent
+from sqlbuild.compiler.planner.models import ScenarioRelationMap
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
+from sqlbuild.executor.build.models import SeedExecutionResult
+from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 
 
@@ -64,4 +67,25 @@ class ScenarioAssertionCheckExecutionResult:
     status: ExecutionStatus
     failing_row_count: int = 0
     sample_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
+    error_message: str | None = None
+
+
+@dataclass(frozen=True)
+class ScenarioRunResult:
+    """Result for one scenario execution run."""
+
+    scenario_name: str
+    status: ExecutionStatus
+    retained: bool = False
+    relation_map: ScenarioRelationMap | None = None
+    fixture_results: tuple[ScenarioFixtureExecutionResult, ...] = field(default_factory=tuple)
+    seed_results: tuple[SeedExecutionResult, ...] = field(default_factory=tuple)
+    model_results: tuple[ModelExecutionResult, ...] = field(default_factory=tuple)
+    expected_results: tuple[ScenarioExpectedCheckExecutionResult, ...] = field(
+        default_factory=tuple
+    )
+    assertion_results: tuple[ScenarioAssertionCheckExecutionResult, ...] = field(
+        default_factory=tuple
+    )
+    cleanup_result: ScenarioCleanupExecutionResult | None = None
     error_message: str | None = None
