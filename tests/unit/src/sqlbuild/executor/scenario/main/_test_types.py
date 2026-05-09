@@ -1,5 +1,7 @@
 from dataclasses import dataclass
+from pathlib import Path
 
+from sqlbuild.executor.scenario.models import ScenarioSnapshotCaptureResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 
 
@@ -37,3 +39,11 @@ class ExecuteScenarioModelsTestCase:
     expected_model_names: tuple[str, ...]
     expected_sql_fragments: tuple[str, ...]
     expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
+class ExecuteScenarioSnapshotCaptureTestCase:
+    description: str
+    expected_result: ScenarioSnapshotCaptureResult
+    expected_jsonl_files: dict[Path, str]
+    expected_manifest_fragment: str

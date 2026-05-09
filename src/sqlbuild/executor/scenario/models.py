@@ -126,6 +126,34 @@ class ScenarioSnapshotCapturePlan:
 
 
 @dataclass(frozen=True)
+class ScenarioSnapshotCaptureRelationResult:
+    """Outcome of capturing one scenario input relation into JSONL."""
+
+    kind: ScenarioArtifactKind
+    logical_name: str
+    source_relation: str
+    file_path: Path
+    status: ExecutionStatus
+    row_count: int = 0
+    byte_count: int = 0
+    error_message: str | None = None
+
+
+@dataclass(frozen=True)
+class ScenarioSnapshotCaptureResult:
+    """Outcome of writing local snapshot files for one scenario capture plan."""
+
+    scenario_name: str
+    status: ExecutionStatus
+    manifest_path: Path
+    manifest: ScenarioSnapshotManifest | None = None
+    relation_results: tuple[ScenarioSnapshotCaptureRelationResult, ...] = field(
+        default_factory=tuple
+    )
+    error_message: str | None = None
+
+
+@dataclass(frozen=True)
 class ScenarioCleanupExecutionResult:
     """Outcome of dropping planned scenario-owned relations."""
 
