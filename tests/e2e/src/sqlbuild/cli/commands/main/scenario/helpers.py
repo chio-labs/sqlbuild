@@ -85,3 +85,25 @@ def list_scenario_relation_names(*, db_path: Path) -> tuple[str, ...]:
         ),
     )
     return tuple(str(row[0]) for row in rows)
+
+
+def scenario_relation_name_by_suffix(*, db_path: Path, suffix: str) -> str:
+    """Return one retained scenario relation name ending with the requested suffix."""
+
+    matches: tuple[str, ...] = tuple(
+        relation_name
+        for relation_name in list_scenario_relation_names(db_path=db_path)
+        if relation_name.endswith(suffix)
+    )
+    assert len(matches) == 1
+    return matches[0]
+
+
+def scenario_relation_row_count(*, db_path: Path, relation_name: str) -> int:
+    """Return row count for one retained scenario relation."""
+
+    rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=db_path,
+        sql=f'SELECT COUNT(*) FROM main."{relation_name}"',
+    )
+    return int(rows[0][0])

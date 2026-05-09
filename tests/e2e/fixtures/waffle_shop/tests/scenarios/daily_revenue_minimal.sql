@@ -46,7 +46,6 @@ __expected__daily_revenue AS (
     1 AS order_count,
     2 AS waffles_sold,
     1700 AS total_revenue_cents,
-    17.0 AS total_revenue_dollars,
     1700 AS avg_order_value_cents
 ),
 

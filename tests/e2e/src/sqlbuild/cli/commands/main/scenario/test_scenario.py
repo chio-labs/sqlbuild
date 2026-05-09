@@ -13,9 +13,12 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     build_scenario_project_files,
     list_scenario_relation_names,
+    scenario_relation_name_by_suffix,
+    scenario_relation_row_count,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     prepare_inline_project,
+    prepare_waffle_shop,
     run_sqb,
 )
 
@@ -203,3 +206,119 @@ def test_given_unknown_scenario_selector_when_running_scenario_test_then_fails_c
     expected_stderr_fragment: str
     for expected_stderr_fragment in test_case.expected_stderr_fragments:
         assert expected_stderr_fragment in result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScenarioCliE2ETestCase(
+            description="waffle shop fixture scenarios pass on duckdb",
+            command=("--no-color", "scenario", "test"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "Scenario (3 selected)",
+                "Connecting to duckdb...",
+                "Running scenarios...",
+                "daily_revenue_minimal",
+                "check     expected daily_revenue",
+                "check     assertion no_negative_revenue",
+                "daily_revenue_multi_order",
+                "check     assertion positive_average_order_value",
+                "fact_order_retained_artifacts",
+                "check     expected scenario_order_prices",
+                "check     assertion positive_line_total",
+                "PASS=3  FAIL=0  TOTAL=3",
+            ),
+            expected_retained_prefix_count=0,
+        )
+    ],
+    ids=["waffle shop fixture scenarios pass on duckdb"],
+)
+def test_given_waffle_shop_fixture_when_running_scenario_test_then_scenarios_pass_on_duckdb(
+    test_case: ScenarioCliE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_waffle_shop(tmp_path)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    expected_stdout_fragment: str
+    for expected_stdout_fragment in test_case.expected_stdout_fragments:
+        assert expected_stdout_fragment in result.stdout
+    retained_names: tuple[str, ...] = list_scenario_relation_names(
+        db_path=project_dir / "waffle_shop.duckdb"
+    )
+    assert len(retained_names) == test_case.expected_retained_prefix_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScenarioCliE2ETestCase(
+            description="waffle shop fixture retain keeps scenario artifacts on duckdb",
+            command=(
+                "--no-color",
+                "scenario",
+                "test",
+                "fact_order_retained_artifacts",
+                "--retain",
+            ),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "Scenario (1 selected)",
+                "fact_order_retained_artifacts",
+                "check     expected scenario_order_prices",
+                "check     assertion positive_line_total",
+                "Retained relations:",
+                "source raw_orders -> __sqb_",
+                "ref    stg_payments -> __sqb_",
+                "seed   waffle_types -> __sqb_",
+                "model  scenario_order_prices -> __sqb_",
+                "PASS=1  FAIL=0  TOTAL=1",
+            ),
+            expected_retained_prefix_count=4,
+        )
+    ],
+    ids=["waffle shop fixture retain keeps scenario artifacts on duckdb"],
+)
+def test_given_waffle_shop_fixture_when_running_with_retain_then_keeps_scenario_artifacts(
+    test_case: ScenarioCliE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_waffle_shop(tmp_path)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    expected_stdout_fragment: str
+    for expected_stdout_fragment in test_case.expected_stdout_fragments:
+        assert expected_stdout_fragment in result.stdout
+    retained_names: tuple[str, ...] = list_scenario_relation_names(
+        db_path=project_dir / "waffle_shop.duckdb"
+    )
+    assert len(retained_names) == test_case.expected_retained_prefix_count
+    expected_suffix: str
+    for expected_suffix in (
+        "__source__raw_orders",
+        "__ref__stg_payments",
+        "__seed__waffle_types",
+        "__model__scenario_order_prices",
+    ):
+        retained_relation_name: str = scenario_relation_name_by_suffix(
+            db_path=project_dir / "waffle_shop.duckdb",
+            suffix=expected_suffix,
+        )
+        assert (
+            scenario_relation_row_count(
+                db_path=project_dir / "waffle_shop.duckdb",
+                relation_name=retained_relation_name,
+            )
+            == 1
+        )
