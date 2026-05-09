@@ -45,6 +45,7 @@ class CompiledResourceType(StrEnum):
     DBT_REF = "dbt_ref"
     AUDIT = "audit"
     SQL_TEST = "sql_test"
+    SQL_SCENARIO = "sql_scenario"
 
 
 class FunctionLanguage(StrEnum):

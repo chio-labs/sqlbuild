@@ -9,6 +9,7 @@ from sqlbuild.compiler.compile.helpers.attachment import (
     build_effective_settings,
     build_effective_vars,
     build_model_inputs,
+    build_scenario_inputs,
     build_seed_inputs,
     build_source_inputs,
     build_sql_function_inputs,
@@ -26,6 +27,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSeedInput,
     CompileSourceInput,
     CompileSqlFunctionInput,
+    CompileSqlScenarioInput,
     CompileSqlTestInput,
     LoadedMacro,
     MacroContext,
@@ -122,6 +124,11 @@ def build_compile_inputs(
         effective_vars=effective_vars,
         macro_context=macro_context,
     )
+    scenario_inputs: tuple[CompileSqlScenarioInput, ...] = build_scenario_inputs(
+        discovered_inputs,
+        effective_vars=effective_vars,
+        macro_context=macro_context,
+    )
     project_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]] = (
         index_generic_audit_definitions(discovered_inputs.audit_files)
     )
@@ -160,6 +167,7 @@ def build_compile_inputs(
         source_inputs=source_inputs,
         sql_function_inputs=sql_function_inputs,
         test_inputs=test_inputs,
+        scenario_inputs=scenario_inputs,
         audit_inputs=audit_inputs,
         diagnostics=diagnostics,
     )

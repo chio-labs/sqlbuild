@@ -28,8 +28,8 @@ from tests.integration.src.sqlbuild.compiler.planner.helpers.sql_test_assembly._
 )
 
 _STUB_TEST_FILE: DiscoveredSqlTestFile = DiscoveredSqlTestFile(
-    file_path=Path("tests/test_chain.sql"),
-    relative_path=Path("tests/test_chain.sql"),
+    file_path=Path("tests/unit/test_chain.sql"),
+    relative_path=Path("tests/unit/test_chain.sql"),
     contents="",
     blocks=(),
 )

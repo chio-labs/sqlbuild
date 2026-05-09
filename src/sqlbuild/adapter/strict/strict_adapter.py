@@ -188,6 +188,23 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_drop_view(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+        """Render SQL statements that drop a view relation."""
+        ...
+
+    @abstractmethod
+    def drop_view(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        if_exists: bool = True,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        """Drop a view relation."""
+        ...
+
+    @abstractmethod
     def render_rename(self, *, source: str, target: str) -> tuple[str, ...]:
         """Render SQL statements that rename a relation."""
         ...

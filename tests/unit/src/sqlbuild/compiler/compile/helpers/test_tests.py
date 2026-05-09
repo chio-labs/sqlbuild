@@ -10,6 +10,39 @@ from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
 
 TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
     ExtractSqlTestCtesTestCase(
+        description="extracts zero-row assertion ctes",
+        sql="""
+        WITH
+        __source__raw_orders AS (SELECT 1 AS order_id, 10 AS amount),
+        __assert__no_negative_orders AS (
+          SELECT * FROM __ref("orders") WHERE amount < 0
+        )
+        SELECT 1
+        """.strip(),
+        expected_authored_cte_names=("__source__raw_orders",),
+        expected_mock_model_names=(),
+        expected_mock_source_names=("raw_orders",),
+        expected_expected_model_names=(),
+        expected_assertion_names=("no_negative_orders",),
+    ),
+    ExtractSqlTestCtesTestCase(
+        description="extracts mixed expected and assertion ctes",
+        sql="""
+        WITH
+        __source__raw_orders AS (SELECT 1 AS order_id, 10 AS amount),
+        __expected__orders AS (SELECT 1 AS order_id, 10 AS amount),
+        __assert__no_negative_orders AS (
+          SELECT * FROM __ref("orders") WHERE amount < 0
+        )
+        SELECT 1
+        """.strip(),
+        expected_authored_cte_names=("__source__raw_orders",),
+        expected_mock_model_names=(),
+        expected_mock_source_names=("raw_orders",),
+        expected_expected_model_names=("orders",),
+        expected_assertion_names=("no_negative_orders",),
+    ),
+    ExtractSqlTestCtesTestCase(
         description="extracts seed mocks from seed-prefixed ctes",
         sql="""
         WITH
@@ -235,6 +268,7 @@ def test_given_sql_test_cte_variants_when_extracting_then_it_returns_expected_ro
     assert extracted_ctes.mock_source_names == test_case.expected_mock_source_names
     assert extracted_ctes.mock_seed_names == test_case.expected_mock_seed_names
     assert extracted_ctes.expected_model_names == test_case.expected_expected_model_names
+    assert extracted_ctes.assertion_names == test_case.expected_assertion_names
     assert extracted_ctes.macro_mocks == test_case.expected_macro_mocks
 
 
@@ -287,6 +321,14 @@ ERROR_TEST_CASES: list[ExtractSqlTestCtesErrorTestCase] = [
         description="raises when test sql does not start with top level with",
         sql="SELECT 1",
         expected_error_fragment="must declare mock CTEs and one __expected__<model>",
+    ),
+    ExtractSqlTestCtesErrorTestCase(
+        description="raises when assertion cte omits assertion name",
+        sql="""
+        WITH __source__raw_orders AS (SELECT 1), __assert__ AS (SELECT 1)
+        SELECT 1
+        """.strip(),
+        expected_error_fragment="must use __assert__<assertion>",
     ),
     ExtractSqlTestCtesErrorTestCase(
         description="raises when cte body is unclosed",

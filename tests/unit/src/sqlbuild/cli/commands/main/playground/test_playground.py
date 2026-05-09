@@ -27,7 +27,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
                 Path("models/marts/fact_orders.sql"),
                 Path("seeds/waffle_types.csv"),
                 Path("sources/raw.yml"),
-                Path("tests/test_daily_revenue_chain.sql"),
+                Path("tests/unit/test_daily_revenue_chain.sql"),
                 Path("audits/generic/expression_is_true.sql"),
                 Path("functions/sql/is_completed_order.sql"),
                 Path("macros/currency.py"),

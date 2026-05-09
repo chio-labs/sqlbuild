@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import fields, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -28,6 +29,7 @@ from sqlbuild.compiler.compile.helpers.model_config_validation import (
     validate_placeholder_config,
 )
 from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
+from sqlbuild.compiler.compile.helpers.scenarios import extract_sql_scenario_ctes
 from sqlbuild.compiler.compile.helpers.sql_vars import (
     expand_authored_sql,
     substitute_sql_vars,
@@ -51,6 +53,9 @@ from sqlbuild.compiler.compile.models import (
     CompileSourceInput,
     CompileSqlFunctionInput,
     CompileSqlReference,
+    CompileSqlScenarioCtes,
+    CompileSqlScenarioInput,
+    CompileSqlTestCte,
     CompileSqlTestCtes,
     CompileSqlTestInput,
     FunctionArgument,
@@ -74,6 +79,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSourceFile,
     DiscoveredSqlFunctionFile,
     DiscoveredSqlModelFile,
+    DiscoveredSqlScenarioFile,
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
@@ -1070,9 +1076,52 @@ def build_test_inputs(
                     mock_source_names=test_ctes.mock_source_names,
                     mock_seed_names=test_ctes.mock_seed_names,
                     expected_model_names=test_ctes.expected_model_names,
+                    assertion_ctes=test_ctes.assertion_ctes,
+                    assertion_names=test_ctes.assertion_names,
                 )
             )
     return tuple(test_inputs)
+
+
+def build_scenario_inputs(
+    discovered_inputs: DiscoveredProjectInputs,
+    *,
+    effective_vars: dict[str, str] | None = None,
+    macro_context: MacroContext,
+) -> tuple[CompileSqlScenarioInput, ...]:
+    """Build compile-time scenario inputs from discovered SQL-native scenario files."""
+
+    loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
+    vars_for_substitution: dict[str, str] = effective_vars or {}
+    scenario_inputs: list[CompileSqlScenarioInput] = []
+    scenario_file: DiscoveredSqlScenarioFile
+    for scenario_file in discovered_inputs.scenario_files:
+        expanded_sql_body: str = expand_authored_sql(
+            sql=scenario_file.sql_body,
+            file_path=scenario_file.file_path,
+            effective_vars=vars_for_substitution,
+            loaded_macros=loaded_macros,
+            macro_context=macro_context,
+        )
+        scenario_ctes: CompileSqlScenarioCtes = extract_sql_scenario_ctes(
+            sql=expanded_sql_body,
+            file_label=str(scenario_file.relative_path),
+        )
+        scenario_inputs.append(
+            CompileSqlScenarioInput(
+                scenario_file=scenario_file,
+                sql_body=expanded_sql_body,
+                authored_ctes=scenario_ctes.authored_ctes,
+                expected_ctes=scenario_ctes.expected_ctes,
+                assertion_ctes=scenario_ctes.assertion_ctes,
+                source_fixture_names=scenario_ctes.source_fixture_names,
+                ref_fixture_names=scenario_ctes.ref_fixture_names,
+                seed_fixture_names=scenario_ctes.seed_fixture_names,
+                expected_model_names=scenario_ctes.expected_model_names,
+                assertion_names=scenario_ctes.assertion_names,
+            )
+        )
+    return tuple(scenario_inputs)
 
 
 def validate_test_ctes(
@@ -1117,6 +1166,28 @@ def validate_test_ctes(
                 f"SQL test file {test_file.relative_path} expects unknown model "
                 f"'{expected_model_name}'"
             )
+
+    assertion_target_name: str
+    for assertion_target_name in _extract_sql_test_assertion_ref_targets(
+        assertion_ctes=test_ctes.assertion_ctes
+    ):
+        if assertion_target_name not in known_model_names:
+            raise CompileInputError(
+                f"SQL test file {test_file.relative_path} assertion references unknown model "
+                f"'{assertion_target_name}'"
+            )
+
+
+def _extract_sql_test_assertion_ref_targets(
+    *, assertion_ctes: tuple[CompileSqlTestCte, ...]
+) -> tuple[str, ...]:
+    targets: list[str] = []
+    cte: CompileSqlTestCte
+    for cte in assertion_ctes:
+        match: re.Match[str]
+        for match in re.finditer(r'__ref\("([^"]+)"\)', cte.sql_body):
+            targets.append(match.group(1))
+    return tuple(dict.fromkeys(targets))
 
 
 def build_audit_inputs(

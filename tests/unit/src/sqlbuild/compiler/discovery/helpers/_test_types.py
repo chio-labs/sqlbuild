@@ -104,6 +104,22 @@ class ParseSqlTestFileErrorTestCase:
 
 
 @dataclass(frozen=True)
+class ParseSqlScenarioFileTestCase:
+    description: str
+    contents: str
+    expected_name: str
+    expected_header_values: dict[str, object]
+    expected_sql_body: str
+
+
+@dataclass(frozen=True)
+class ParseSqlScenarioFileErrorTestCase:
+    description: str
+    contents: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class ParseSqlAuditFileTestCase:
     description: str
     contents: str

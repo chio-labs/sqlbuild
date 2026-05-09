@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
@@ -15,9 +17,11 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationTarget,
     CompiledSeed,
     CompiledSource,
+    CompiledSqlScenario,
     CompiledSqlTest,
     CompileModelConfig,
     CompileSqlReference,
+    CompileSqlScenarioCte,
     FunctionArgument,
 )
 from sqlbuild.compiler.compile.types import (
@@ -31,14 +35,18 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
+    DiscoveredSqlScenarioFile,
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.planner.helpers.scenario_artifacts import build_scenario_relation_map
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeResult,
     ChangeDetectionResult,
+    ScenarioArtifactIdentity,
+    ScenarioRelationMap,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction
@@ -49,8 +57,25 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     BuildModelWarningsTestCase,
     IncrementalStrategyErrorTestCase,
     PlanAuditTestCase,
+    PlanScenarioGraphErrorTestCase,
+    PlanScenarioGraphTestCase,
     ResolveModelPlanActionTestCase,
 )
+
+
+class PlannerTestAdapter(BaseAdapter):
+    """Minimal adapter for planner helper tests."""
+
+    def connect(self, config: dict[str, object]) -> object:
+        del config
+        return object()
+
+    def execute(self, connection: object, sql: str) -> object:
+        del connection, sql
+        return object()
+
+    def close(self, connection: object) -> None:
+        del connection
 
 
 def model_key(name: str) -> CompiledObjectKey:
@@ -223,6 +248,185 @@ def build_snapshot_from_relation_names(relation_names: tuple[str, ...]) -> Wareh
         for name in relation_names
     }
     return WarehouseSnapshot(existing_relations=existing_relations)
+
+
+def build_scenario_from_test_case(
+    test_case: PlanScenarioGraphTestCase | PlanScenarioGraphErrorTestCase,
+) -> CompiledSqlScenario:
+    """Build a minimal compiled SQL scenario from a graph test case."""
+
+    scenario_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.SQL_SCENARIO,
+        name="revenue__customer_refund",
+    )
+    assertion_ctes: tuple[CompileSqlScenarioCte, ...] = tuple(
+        CompileSqlScenarioCte(name=f"__assert__assertion_{index}", sql_body=sql_body)
+        for index, sql_body in enumerate(test_case.assertion_sql_bodies)
+    )
+    expected_ctes: tuple[CompileSqlScenarioCte, ...] = tuple(
+        CompileSqlScenarioCte(name=f"__expected__{model_name}", sql_body="SELECT 1")
+        for model_name in test_case.expected_model_names
+    )
+    return CompiledSqlScenario(
+        key=scenario_key,
+        name="revenue__customer_refund",
+        scenario_file=DiscoveredSqlScenarioFile(
+            file_path=Path("tests/scenarios/revenue__customer_refund.sql"),
+            relative_path=Path("tests/scenarios/revenue__customer_refund.sql"),
+            contents="",
+            header_values={},
+            name="revenue__customer_refund",
+            sql_body="SELECT 1",
+        ),
+        sql_body="SELECT 1",
+        expected_ctes=expected_ctes,
+        assertion_ctes=assertion_ctes,
+        source_fixture_names=test_case.source_fixture_names,
+        ref_fixture_names=test_case.ref_fixture_names,
+        seed_fixture_names=test_case.seed_fixture_names,
+        expected_model_names=test_case.expected_model_names,
+        assertion_names=tuple(cte.name.removeprefix("__assert__") for cte in assertion_ctes),
+    )
+
+
+def build_compiled_scenario_with_name(name: str) -> CompiledSqlScenario:
+    """Build a minimal compiled SQL scenario with a specific name."""
+
+    return CompiledSqlScenario(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.SQL_SCENARIO,
+            name=name,
+        ),
+        name=name,
+        scenario_file=DiscoveredSqlScenarioFile(
+            file_path=Path(f"tests/scenarios/{name}.sql"),
+            relative_path=Path(f"tests/scenarios/{name}.sql"),
+            contents="",
+            header_values={},
+            name=name,
+            sql_body="SELECT 1",
+        ),
+        sql_body="SELECT 1",
+    )
+
+
+def build_scenario_relation_test_map() -> ScenarioRelationMap:
+    """Build a relation map covering scenario relation planning tests."""
+
+    return build_scenario_relation_map(
+        scenario_name="revenue__customer_refund",
+        hash_prefix="51b385aebe20",
+        artifacts=(
+            ScenarioArtifactIdentity(kind="source", logical_name="raw__orders"),
+            ScenarioArtifactIdentity(kind="ref", logical_name="stg_customers"),
+            ScenarioArtifactIdentity(kind="seed", logical_name="country_codes"),
+            ScenarioArtifactIdentity(kind="model", logical_name="daily_revenue"),
+            ScenarioArtifactIdentity(kind="model", logical_name="customer_revenue"),
+        ),
+    )
+
+
+def build_scenario_relation_test_project() -> CompiledProject:
+    """Build a project covering scenario relation planning tests."""
+
+    project: CompiledProject = build_test_project(
+        model_deps={
+            "daily_revenue": ("raw__orders", "stg_customers", "country_codes"),
+            "customer_revenue": ("raw__orders",),
+            "stg_customers": ("raw__orders",),
+        },
+        source_names=("raw__orders",),
+        seed_names=("country_codes",),
+    )
+    models: list[CompiledModel] = []
+    model: CompiledModel
+    for model in project.models:
+        if model.name == "daily_revenue":
+            models.append(
+                replace(
+                    model,
+                    query_sql=(
+                        'SELECT * FROM __source("raw__orders") '
+                        'JOIN __ref("stg_customers") USING (customer_id) '
+                        'JOIN __seed("country_codes") USING (country_code)'
+                    ),
+                )
+            )
+            continue
+        models.append(model)
+    return replace(project, models=tuple(models))
+
+
+def build_scenario_relation_test_project_with_unused_seed() -> CompiledProject:
+    """Build a scenario relation test project with a seed outside the scenario graph."""
+
+    project: CompiledProject = build_scenario_relation_test_project()
+    unused_seed_project: CompiledProject = build_test_project(seed_names=("unused_seed",))
+    return replace(project, seeds=(*project.seeds, unused_seed_project.seeds[0]))
+
+
+def build_scenario_relation_test_scenario(
+    *, include_seed_fixture: bool = True
+) -> CompiledSqlScenario:
+    """Build a scenario covering helper CTE and fixture planning tests."""
+
+    authored_ctes: tuple[CompileSqlScenarioCte, ...] = (
+        CompileSqlScenarioCte(
+            name="helper_orders",
+            sql_body="SELECT 1 AS order_id, 10 AS customer_id",
+        ),
+        CompileSqlScenarioCte(
+            name="__source__raw__orders",
+            sql_body="SELECT * FROM helper_orders",
+        ),
+        CompileSqlScenarioCte(
+            name="__ref__stg_customers",
+            sql_body="SELECT 10 AS customer_id",
+        ),
+    )
+    if include_seed_fixture:
+        authored_ctes = (
+            *authored_ctes,
+            CompileSqlScenarioCte(
+                name="__seed__country_codes",
+                sql_body="SELECT 'US' AS country_code",
+            ),
+        )
+
+    return CompiledSqlScenario(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.SQL_SCENARIO,
+            name="revenue__customer_refund",
+        ),
+        name="revenue__customer_refund",
+        scenario_file=DiscoveredSqlScenarioFile(
+            file_path=Path("tests/scenarios/revenue__customer_refund.sql"),
+            relative_path=Path("tests/scenarios/revenue__customer_refund.sql"),
+            contents="",
+            header_values={},
+            name="revenue__customer_refund",
+            sql_body="SELECT 1",
+        ),
+        sql_body="SELECT 1",
+        authored_ctes=authored_ctes,
+        expected_ctes=(
+            CompileSqlScenarioCte(
+                name="__expected__daily_revenue",
+                sql_body='SELECT * FROM __ref("daily_revenue")',
+            ),
+        ),
+        assertion_ctes=(
+            CompileSqlScenarioCte(
+                name="__assert__no_negative_revenue",
+                sql_body='SELECT * FROM __ref("daily_revenue") WHERE revenue < 0',
+            ),
+        ),
+        source_fixture_names=("raw__orders",),
+        ref_fixture_names=("stg_customers",),
+        seed_fixture_names=("country_codes",) if include_seed_fixture else (),
+        expected_model_names=("daily_revenue",),
+        assertion_names=("no_negative_revenue",),
+    )
 
 
 def build_test_project_with_source_entry(source_entry: SourceEntry) -> CompiledProject:

@@ -20,7 +20,7 @@ def build_sql_test_comparison_sql(
 ) -> str:
     """Build the single SQL statement used to execute a SQL unit test."""
 
-    if not test_entry.chain:
+    if not test_entry.chain and not test_entry.assertions:
         return ""
 
     lifted_ctes: OrderedDict[str, str] = OrderedDict()
@@ -42,6 +42,8 @@ def build_sql_test_comparison_sql(
             sqlglot_enabled=test_entry.sqlglot_enabled,
         )
         comparison_ctes.append(f"{actual_cte} AS ({actual_sql})")
+        if step.expected_cte_sql is None:
+            continue
         comparison_ctes.append(f"{expected_cte} AS ({step.expected_cte_sql})")
         select_parts.append(
             "SELECT "
@@ -53,8 +55,31 @@ def build_sql_test_comparison_sql(
             f"SELECT * FROM {actual_cte} {set_difference_operator} SELECT * FROM {expected_cte}"
             f")) AS mismatched_count"
         )
+    assertion_index: int
+    for assertion_index, assertion in enumerate(test_entry.assertions, start=len(test_entry.chain)):
+        assertion_suffix: str = unique_cte_suffix(
+            model_name=assertion.name,
+            cte_name_counts=cte_name_counts,
+        )
+        assertion_cte: str = f"__assert__{assertion_suffix}"
+        assertion_sql: str = lift_step_ctes(
+            assertion.resolved_sql,
+            lifted_ctes,
+            sqlglot_enabled=test_entry.sqlglot_enabled,
+        )
+        comparison_ctes.append(f"{assertion_cte} AS ({assertion_sql})")
+        select_parts.append(
+            "SELECT "
+            f"{assertion_index} AS step_index, "
+            f"'assertion {_escape_sql_string(assertion.name)}' AS model_name, "
+            f"(SELECT COUNT(*) FROM {assertion_cte}) AS actual_count, "
+            "0 AS expected_count, "
+            f"(SELECT COUNT(*) FROM {assertion_cte}) AS mismatched_count"
+        )
     cte_parts: list[str] = [f"{name} AS ({sql})" for name, sql in lifted_ctes.items()]
     cte_parts.extend(comparison_ctes)
+    if not select_parts:
+        return ""
     comparison_sql: str = f"WITH {', '.join(cte_parts)} " + " UNION ALL ".join(select_parts)
     return format_sql(
         comparison_sql,

@@ -23,6 +23,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSourceFile,
     DiscoveredSqlFunctionFile,
     DiscoveredSqlModelFile,
+    DiscoveredSqlScenarioFile,
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
@@ -117,6 +118,30 @@ class CompileSqlTestCtes:
     mock_source_names: tuple[str, ...] = field(default_factory=tuple)
     mock_seed_names: tuple[str, ...] = field(default_factory=tuple)
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
+    assertion_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
+    assertion_names: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class CompileSqlScenarioCte:
+    """One top-level SQL-native scenario CTE extracted after macro expansion."""
+
+    name: str
+    sql_body: str
+
+
+@dataclass(frozen=True)
+class CompileSqlScenarioCtes:
+    """Extracted top-level SQL-native scenario CTE semantics."""
+
+    authored_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
+    expected_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
+    assertion_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
+    source_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    expected_model_names: tuple[str, ...] = field(default_factory=tuple)
+    assertion_names: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -200,6 +225,24 @@ class CompileSqlTestInput:
     mock_source_names: tuple[str, ...] = field(default_factory=tuple)
     mock_seed_names: tuple[str, ...] = field(default_factory=tuple)
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
+    assertion_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
+    assertion_names: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class CompileSqlScenarioInput:
+    """One discovered SQL-native scenario with compile-time SQL expansion applied."""
+
+    scenario_file: DiscoveredSqlScenarioFile
+    sql_body: str
+    authored_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
+    expected_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
+    assertion_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
+    source_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    expected_model_names: tuple[str, ...] = field(default_factory=tuple)
+    assertion_names: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -244,6 +287,7 @@ class CompileProjectInputs:
     source_inputs: tuple[CompileSourceInput, ...] = field(default_factory=tuple)
     sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = field(default_factory=tuple)
     test_inputs: tuple[CompileSqlTestInput, ...] = field(default_factory=tuple)
+    scenario_inputs: tuple[CompileSqlScenarioInput, ...] = field(default_factory=tuple)
     audit_inputs: tuple[CompileAuditInput, ...] = field(default_factory=tuple)
     diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
 
@@ -360,6 +404,26 @@ class CompiledSqlTest:
     mock_source_names: tuple[str, ...] = field(default_factory=tuple)
     mock_seed_names: tuple[str, ...] = field(default_factory=tuple)
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
+    assertion_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
+    assertion_names: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class CompiledSqlScenario:
+    """Compiled SQL-native scenario metadata selected by inferred graph targets."""
+
+    key: CompiledObjectKey
+    name: str
+    scenario_file: DiscoveredSqlScenarioFile
+    sql_body: str
+    authored_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
+    expected_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
+    assertion_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
+    source_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    expected_model_names: tuple[str, ...] = field(default_factory=tuple)
+    assertion_names: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -377,4 +441,5 @@ class CompiledProject:
     functions: tuple[CompiledFunction, ...] = field(default_factory=tuple)
     audits: tuple[CompiledAudit, ...] = field(default_factory=tuple)
     sql_tests: tuple[CompiledSqlTest, ...] = field(default_factory=tuple)
+    sql_scenarios: tuple[CompiledSqlScenario, ...] = field(default_factory=tuple)
     diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)

@@ -42,9 +42,11 @@ def execute_seed(
         return SeedExecutionResult(
             seed_name=seed_entry.name,
             status=ExecutionStatus.FAILED,
+            lifecycle_events=statement_recorder.snapshot(),
             error_message=str(exc),
         )
     return SeedExecutionResult(
         seed_name=seed_entry.name,
         status=ExecutionStatus.SUCCESS,
+        lifecycle_events=statement_recorder.snapshot(),
     )

@@ -354,6 +354,7 @@ TEST_CASES: list[BuildOutputTestCase] = [
                         StepResult(
                             model_name="orders",
                             outcome=SqlTestOutcome.FAIL,
+                            mismatched_row_count=1,
                         ),
                     ),
                     error_message="test 'test_orders' failed for models: orders",
@@ -364,11 +365,48 @@ TEST_CASES: list[BuildOutputTestCase] = [
         ),
         expected_output_fragments=(
             "SKIP",
+            "check expected orders",
+            "FAIL  1 mismatched",
             "Completed with errors.",
             "FAIL=1",
             "SKIP=1",
             "Failures:",
             "test_orders  (test)",
+        ),
+    ),
+    BuildOutputTestCase(
+        description="unit test assertion check rows show assertion names",
+        result=BuildExecutionResult(
+            status=BuildStatus.SUCCESS,
+            model_results=(
+                ModelExecutionResult(
+                    model_name="fact_orders",
+                    status=ExecutionStatus.SUCCESS,
+                    duration_ms=100,
+                ),
+            ),
+            test_results=(
+                SqlTestExecutionResult(
+                    test_name="test_fact_orders",
+                    outcome=SqlTestOutcome.PASS,
+                    step_results=(
+                        StepResult(
+                            model_name="fact_orders",
+                            outcome=SqlTestOutcome.PASS,
+                        ),
+                        StepResult(
+                            model_name="assertion line_totals_are_non_negative",
+                            outcome=SqlTestOutcome.PASS,
+                        ),
+                    ),
+                ),
+            ),
+            success_count=2,
+        ),
+        expected_output_fragments=(
+            "test   test_fact_orders",
+            "check expected fact_orders",
+            "check assertion line_totals_are_non_negative PASS",
         ),
     ),
     BuildOutputTestCase(

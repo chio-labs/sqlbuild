@@ -15,6 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.janitor._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.janitor.helpers import (
     create_janitor_demo_relations,
+    create_janitor_scenario_relations,
     prepare_janitor_project,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb, table_exists
@@ -108,6 +109,77 @@ def test_given_stale_relations_when_running_janitor_then_it_deletes_only_tracked
         build_result.stdout + build_result.stderr
     )
     create_janitor_demo_relations(db_path=db_path)
+
+    janitor_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.janitor_command,
+        project_dir=project_dir,
+    )
+
+    assert janitor_result.returncode == test_case.expected_exit_code, (
+        janitor_result.stdout + janitor_result.stderr
+    )
+    fragment: str
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in janitor_result.stdout
+    table_name: str
+    for table_name in test_case.expected_existing_tables:
+        assert table_exists(db_path=db_path, table_name=table_name)
+    for table_name in test_case.expected_missing_tables:
+        assert not table_exists(db_path=db_path, table_name=table_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorCleanupE2ETestCase(
+            description="tracked-only janitor deletes strict scenario artifacts",
+            build_command=("--no-color", "build", "--full-refresh"),
+            janitor_command=("janitor", "--auto-approve"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "Objects eligible for deletion: 2",
+                "Objects skipped: 2",
+                "- main.__sqb_a13f09c2e7b8__model__daily_revenue",
+                "- main.__sqb_a13f09c2e7b8__source__raw_orders",
+                "main.__sqb_a13f09c2e7b__model__daily_revenue: relation is not tracked by SQLBuild",
+                "Deleted 2 objects.",
+            ),
+            expected_existing_tables=(
+                "orders",
+                "__sqb_a13f09c2e7b__model__daily_revenue",
+            ),
+            expected_missing_tables=(
+                "__sqb_a13f09c2e7b8__source__raw_orders",
+                "__sqb_a13f09c2e7b8__model__daily_revenue",
+            ),
+        )
+    ],
+    ids=["tracked-only janitor deletes strict scenario artifacts"],
+)
+def test_given_scenario_artifacts_when_running_tracked_only_janitor_then_it_deletes_them(
+    test_case: JanitorCleanupE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_janitor_project(
+        tmp_path=tmp_path,
+        project_name="janitor_scenario_cleanup_project",
+        janitor_config=dedent(
+            """
+              enabled = true
+              retention_days = 0
+            """
+        ),
+    )
+    db_path: Path = project_dir / "janitor.duckdb"
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.build_command,
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == test_case.expected_exit_code, (
+        build_result.stdout + build_result.stderr
+    )
+    create_janitor_scenario_relations(db_path=db_path)
 
     janitor_result: subprocess.CompletedProcess[str] = run_sqb(
         command=test_case.janitor_command,

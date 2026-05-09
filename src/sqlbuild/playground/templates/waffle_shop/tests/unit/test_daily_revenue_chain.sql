@@ -77,5 +77,10 @@ __expected__daily_revenue AS (
     2850 AS total_revenue_cents,
     28.5 AS total_revenue_dollars,
     2850 AS avg_order_value_cents
+),
+__assert__daily_revenue_is_non_negative AS (
+  SELECT *
+  FROM __ref("daily_revenue")
+  WHERE total_revenue_cents < 0
 )
 SELECT 1

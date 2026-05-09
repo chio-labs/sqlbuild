@@ -9,6 +9,7 @@ from tests.unit.src.sqlbuild.executor.testing.main._test_types import (
     BuildComparisonSqlTestCase,
 )
 from tests.unit.src.sqlbuild.executor.testing.main.helpers import (
+    build_assertion_test_entry,
     build_comparison_test_adapter,
     build_comparison_test_entry,
 )
@@ -93,6 +94,38 @@ def test_given_sqlglot_disabled_when_building_comparison_sql_then_it_does_not_im
 
     comparison_sql: str = build_sql_test_comparison_sql(
         build_comparison_test_entry(sqlglot_enabled=test_case.sqlglot_enabled),
+        set_difference_operator=adapter.render_set_difference_operator(),
+        sqlglot_dialect=adapter.sqlglot_dialect(),
+    )
+
+    expected_fragment: str
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in comparison_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildComparisonSqlTestCase(
+            description="assertion test SQL counts zero-row assertion failures",
+            adapter_name="duckdb",
+            expected_fragments=(
+                "__actual__orders AS",
+                "__assert__no_negative_orders AS",
+                "'assertion no_negative_orders' AS model_name",
+                "0 AS expected_count",
+            ),
+        )
+    ],
+    ids=["assertion test SQL counts zero-row assertion failures"],
+)
+def test_given_assertion_step_when_building_comparison_sql_then_it_counts_failing_rows(
+    test_case: BuildComparisonSqlTestCase,
+) -> None:
+    adapter: BaseAdapter = build_comparison_test_adapter(test_case.adapter_name)
+
+    comparison_sql: str = build_sql_test_comparison_sql(
+        build_assertion_test_entry(),
         set_difference_operator=adapter.render_set_difference_operator(),
         sqlglot_dialect=adapter.sqlglot_dialect(),
     )

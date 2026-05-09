@@ -28,6 +28,7 @@ from sqlbuild.compiler.planner.types import (
     OnSchemaChange,
     PlanAction,
     PlanReason,
+    ScenarioArtifactKind,
     SchemaActionKind,
     SchemaChangeKind,
     SchemaColumnSource,
@@ -317,7 +318,15 @@ class ChainStep:
 
     model_name: str
     resolved_sql: str
-    expected_cte_sql: str
+    expected_cte_sql: str | None = None
+
+
+@dataclass(frozen=True)
+class SqlTestAssertionStep:
+    """One zero-row assertion step in a SQL-native unit test."""
+
+    name: str
+    resolved_sql: str
 
 
 @dataclass(frozen=True)
@@ -336,9 +345,110 @@ class SqlTestPlanEntry:
     key: CompiledObjectKey
     name: str
     chain: tuple[ChainStep, ...] = field(default_factory=tuple)
+    assertions: tuple[SqlTestAssertionStep, ...] = field(default_factory=tuple)
     scope_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
     function_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
     sqlglot_enabled: bool = True
+
+
+@dataclass(frozen=True)
+class ScenarioGraphPlan:
+    """Inferred graph slice and fixture boundaries for one SQL scenario."""
+
+    key: CompiledObjectKey
+    name: str
+    target_model_names: tuple[str, ...] = field(default_factory=tuple)
+    assertion_target_model_names: tuple[str, ...] = field(default_factory=tuple)
+    model_names: tuple[str, ...] = field(default_factory=tuple)
+    source_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    seed_names: tuple[str, ...] = field(default_factory=tuple)
+    seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    function_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class ScenarioArtifactIdentity:
+    """Logical identity for one scenario-owned physical artifact."""
+
+    kind: ScenarioArtifactKind | str
+    logical_name: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "kind", ScenarioArtifactKind(self.kind))
+
+
+@dataclass(frozen=True)
+class ScenarioArtifactName:
+    """Resolved physical relation name for one scenario artifact."""
+
+    identity: ScenarioArtifactIdentity
+    physical_name: str
+
+
+@dataclass(frozen=True)
+class ScenarioRelationMap:
+    """Resolved scenario hash prefix and scenario-owned relation names."""
+
+    scenario_name: str
+    hash_prefix: str
+    artifacts: tuple[ScenarioArtifactName, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class ScenarioRelationPlan:
+    """Resolved scenario relation targets for model/source/seed ref resolution."""
+
+    scenario_name: str
+    relation_map: ScenarioRelationMap
+    model_targets: dict[str, CompiledRelationTarget] = field(default_factory=dict)
+    seed_targets: dict[str, CompiledRelationTarget] = field(default_factory=dict)
+    source_map: dict[str, SourceEntry] = field(default_factory=dict)
+    source_fixture_targets: dict[str, CompiledRelationTarget] = field(default_factory=dict)
+    ref_fixture_targets: dict[str, CompiledRelationTarget] = field(default_factory=dict)
+    seed_fixture_targets: dict[str, CompiledRelationTarget] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ScenarioFixturePlan:
+    """Self-contained fixture SQL planned for scenario materialization."""
+
+    kind: ScenarioArtifactKind
+    logical_name: str
+    target: CompiledRelationTarget
+    sql: str
+
+
+@dataclass(frozen=True)
+class ScenarioExpectedCheckPlan:
+    """Expected-output comparison inputs for one scenario target model."""
+
+    model_name: str
+    actual_target: CompiledRelationTarget
+    expected_sql: str
+
+
+@dataclass(frozen=True)
+class ScenarioAssertionCheckPlan:
+    """Zero-row assertion SQL for one scenario assertion CTE."""
+
+    name: str
+    sql: str
+
+
+@dataclass(frozen=True)
+class ScenarioExecutionPlan:
+    """Dry-run execution plan for a SQL scenario graph slice."""
+
+    key: CompiledObjectKey
+    name: str
+    graph_plan: ScenarioGraphPlan
+    relation_plan: ScenarioRelationPlan
+    fixture_plans: tuple[ScenarioFixturePlan, ...] = field(default_factory=tuple)
+    seed_entries: tuple[SeedPlanEntry, ...] = field(default_factory=tuple)
+    model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
+    expected_checks: tuple[ScenarioExpectedCheckPlan, ...] = field(default_factory=tuple)
+    assertion_checks: tuple[ScenarioAssertionCheckPlan, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

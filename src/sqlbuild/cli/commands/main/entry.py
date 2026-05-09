@@ -161,6 +161,13 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
         default="sqlbuild-playground",
         metavar="path",
     )
+    scenario_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.SCENARIO)
+    scenario_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
+    scenario_subparsers = scenario_parser.add_subparsers(dest="scenario_command")
+    scenario_test_parser: argparse.ArgumentParser = scenario_subparsers.add_parser("test")
+    scenario_test_parser.add_argument("scenario_selector", nargs="?", metavar="scenario")
+    scenario_test_parser.add_argument("--retain", dest="scenario_retain", action="store_true")
+    scenario_test_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     return parser
 
 
@@ -179,6 +186,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.playground import run_playground
     from sqlbuild.cli.commands.main.query import run_query
     from sqlbuild.cli.commands.main.run import run_run
+    from sqlbuild.cli.commands.main.scenario import run_scenario
     from sqlbuild.cli.commands.main.seed import run_seed
     from sqlbuild.cli.commands.main.test import run_test
 
@@ -197,6 +205,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_lineage=run_lineage,
         run_janitor=run_janitor,
         run_playground=run_playground,
+        run_scenario=run_scenario,
     )
     return _main_with_dependencies(argv=argv, handlers=handlers)
 
@@ -392,6 +401,16 @@ def _main_with_dependencies(
             )
         if args.command == CliCommand.PLAYGROUND:
             return handlers.run_playground(project_dir, args.playground_path)
+        if args.command == CliCommand.SCENARIO:
+            if args.scenario_command != "test":
+                raise CliUserError("scenario requires a subcommand such as 'test'", code="C450")
+            return handlers.run_scenario(
+                project_dir,
+                args.no_sql_validation,
+                args.no_color,
+                args.scenario_selector,
+                args.scenario_retain,
+            )
         return 0
     except CliUserError as error:
         logging.getLogger("sqlbuild.cli").exception("cli user error")

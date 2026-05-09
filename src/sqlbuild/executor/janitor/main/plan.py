@@ -28,6 +28,7 @@ from sqlbuild.executor.janitor.models import (
     JanitorSkippedRelation,
     JanitorSkippedSchema,
 )
+from sqlbuild.shared.helpers.scenario_artifact_names import is_scenario_artifact_physical_name
 
 
 def build_janitor_plan(
@@ -97,6 +98,7 @@ def build_janitor_plan(
         relation: RelationInfo
         for relation in schema_relations:
             relation_key: JanitorRelationKey = build_relation_key(relation)
+            scenario_artifact: bool = is_scenario_artifact_physical_name(relation_key.name)
             if relation_key in desired_keys:
                 continue
             exclude_pattern: str | None = _matching_exclude_pattern(
@@ -112,7 +114,11 @@ def build_janitor_plan(
                     )
                 )
                 continue
-            if delete_tracked_only and relation_key not in tracked_relation_keys:
+            if (
+                delete_tracked_only
+                and relation_key not in tracked_relation_keys
+                and not scenario_artifact
+            ):
                 skipped_relations.append(
                     JanitorSkippedRelation(
                         key=relation_key,

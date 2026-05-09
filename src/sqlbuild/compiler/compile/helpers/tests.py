@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.constants import (
+    ASSERT_TEST_CTE_PREFIX,
     EXPECTED_TEST_CTE_PREFIX,
     MACRO_TEST_CTE_PREFIX,
     REF_TEST_CTE_PREFIX,
@@ -80,6 +81,8 @@ def _classify_sql_test_ctes(
     mock_source_names: list[str] = []
     mock_seed_names: list[str] = []
     expected_model_names: list[str] = []
+    assertion_ctes: list[CompileSqlTestCte] = []
+    assertion_names: list[str] = []
 
     cte: CompileSqlTestCte
     for cte in ctes:
@@ -136,6 +139,17 @@ def _classify_sql_test_ctes(
             )
             _validate_expected_cte_query(cte=cte, file_label=file_label)
             continue
+        if cte.name.startswith(ASSERT_TEST_CTE_PREFIX):
+            assertion_names.append(
+                _require_prefixed_name(
+                    cte_name=cte.name,
+                    prefix=ASSERT_TEST_CTE_PREFIX,
+                    label="__assert__<assertion>",
+                    file_label=file_label,
+                )
+            )
+            assertion_ctes.append(cte)
+            continue
         if cte.name in RESERVED_SQL_TEST_CTE_NAMES:
             raise CompileInputError(
                 f"SQL test '{file_label}' uses reserved helper CTE name '{cte.name}'"
@@ -147,9 +161,10 @@ def _classify_sql_test_ctes(
             f"SQL test '{file_label}' must define at least one __ref__*, __source__*, "
             "or __seed__* mock CTE"
         )
-    if not expected_model_names:
+    if not expected_model_names and not assertion_names:
         raise CompileInputError(
-            f"SQL test '{file_label}' must define at least one __expected__<model> CTE"
+            f"SQL test '{file_label}' must define at least one __expected__<model> or "
+            "__assert__<assertion> CTE"
         )
     return CompileSqlTestCtes(
         authored_ctes=tuple(authored_ctes),
@@ -158,6 +173,8 @@ def _classify_sql_test_ctes(
         mock_source_names=tuple(mock_source_names),
         mock_seed_names=tuple(mock_seed_names),
         expected_model_names=tuple(expected_model_names),
+        assertion_ctes=tuple(assertion_ctes),
+        assertion_names=tuple(assertion_names),
     )
 
 

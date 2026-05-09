@@ -9,6 +9,10 @@ from dataclasses import dataclass
 
 from sqlbuild.adapter.shared.models import LifeCycleEvent
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
+from sqlbuild.cli.commands.main.helpers.sql_test_progress import (
+    format_check_detail,
+    format_check_name,
+)
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.planner.types import MaterializationType
@@ -21,7 +25,7 @@ from sqlbuild.executor.build.models import (
 )
 from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.testing.models import SqlTestExecutionResult
+from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.shared.helpers.colors import (
     blue_dim,
@@ -121,9 +125,23 @@ class BuildProgressCallbacks:
             max_name_len = max(
                 max_name_len, len(getattr(function_entry, "name", str(function_entry)))
             )
-        self._name_width: int = max(
-            min(max_name_len + _NAME_PADDING, _MAX_NAME_WIDTH), _MIN_NAME_WIDTH
-        )
+        test_entry: object
+        for test_entry in plan.test_entries:
+            max_name_len = max(max_name_len, len(getattr(test_entry, "name", str(test_entry))))
+            chain_step: object
+            for chain_step in getattr(test_entry, "chain", ()):
+                if getattr(chain_step, "expected_cte_sql", None):
+                    max_name_len = max(
+                        max_name_len,
+                        len(format_check_name(str(getattr(chain_step, "model_name", "")))),
+                    )
+            assertion: object
+            for assertion in getattr(test_entry, "assertions", ()):
+                max_name_len = max(
+                    max_name_len,
+                    len(format_check_name(f"assertion {getattr(assertion, 'name', '')}")),
+                )
+        self._name_width: int = max(max_name_len + _NAME_PADDING, _MIN_NAME_WIDTH)
 
     @property
     def elapsed(self) -> float:
@@ -332,10 +350,24 @@ class BuildProgressCallbacks:
                 _test_outcome_display(test_result.outcome),
                 use_color=self._use_color,
             )
-            test_name: str = _truncate_name(test_result.test_name, sub_nw)
+            test_name: str = test_result.test_name
             self._stream.write(
                 f"{sub_pad}{'test':<{_TYPE_WIDTH}}{test_name:<{sub_nw}} {test_status}\n"
             )
+            check_pad: str = f"{sub_pad}  "
+            check_type_width: int = _TYPE_WIDTH - 2
+            step_result: StepResult
+            for step_result in test_result.step_results:
+                check_status: str = colorize_status(
+                    _test_outcome_display(step_result.outcome),
+                    use_color=self._use_color,
+                )
+                check_name: str = format_check_name(step_result.model_name)
+                check_detail: str = format_check_detail(step_result)
+                self._stream.write(
+                    f"{check_pad}{'check':<{check_type_width}}{check_name:<{sub_nw}} "
+                    f"{check_status}{check_detail}\n"
+                )
 
         display_audits: list[_AuditDisplayEntry] = _aggregate_audit_results(
             model_result.audit_results

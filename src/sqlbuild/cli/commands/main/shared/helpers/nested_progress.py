@@ -5,6 +5,7 @@ from __future__ import annotations
 import threading
 from typing import TextIO
 
+from sqlbuild.cli.commands.main.shared.models import NestedProgressChildRow
 from sqlbuild.shared.helpers.colors import bold, colorize_status
 
 _LABEL_WIDTH: int = 10
@@ -34,11 +35,13 @@ class NestedCommandProgressCallbacks:
         label: str,
         stream: TextIO,
         use_color: bool,
+        name_width: int = _NAME_WIDTH,
     ) -> None:
         self._total: int = total
         self._label: str = label
         self._stream: TextIO = stream
         self._use_color: bool = use_color
+        self._name_width: int = max(_NAME_WIDTH, name_width)
         self._is_tty: bool = hasattr(stream, "isatty") and stream.isatty()
         self._counter: int = 0
         self._current_group: str = ""
@@ -74,6 +77,7 @@ class NestedCommandProgressCallbacks:
         status_text: str,
         detail: str = "",
         error_message: str | None = None,
+        child_rows: tuple[NestedProgressChildRow, ...] = (),
     ) -> None:
         self._stop_spinner_loop()
         if self._is_tty:
@@ -86,8 +90,16 @@ class NestedCommandProgressCallbacks:
 
         status: str = colorize_status(status_text, use_color=self._use_color)
         self._stream.write(
-            f"    {self._label:<{_LABEL_WIDTH}}{item_name:<{_NAME_WIDTH}} {status}{detail}\n"
+            f"    {self._label:<{_LABEL_WIDTH}}{item_name:<{self._name_width}} {status}{detail}\n"
         )
+        child_row: NestedProgressChildRow
+        for child_row in child_rows:
+            child_status: str = colorize_status(child_row.status_text, use_color=self._use_color)
+            self._stream.write(
+                f"      {child_row.label:<{_LABEL_WIDTH - 2}}"
+                f"{child_row.name:<{self._name_width}} "
+                f"{child_status}{child_row.detail}\n"
+            )
         if error_message is not None:
             self._stream.write(f"{'':>14}{error_message}\n")
         self._stream.flush()
@@ -101,7 +113,7 @@ class NestedCommandProgressCallbacks:
         name: str = self._active_name
         with self._write_lock:
             self._stream.write(
-                f"\r\033[K    {self._label:<{_LABEL_WIDTH}}{name:<{_NAME_WIDTH}} {spinner}"
+                f"\r\033[K    {self._label:<{_LABEL_WIDTH}}{name:<{self._name_width}} {spinner}"
             )
             self._stream.flush()
 
