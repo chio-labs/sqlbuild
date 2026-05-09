@@ -168,6 +168,10 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     scenario_test_parser.add_argument("scenario_selector", nargs="*", metavar="scenario")
     scenario_test_parser.add_argument("--retain", dest="scenario_retain", action="store_true")
     scenario_test_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    scenario_capture_parser: argparse.ArgumentParser = scenario_subparsers.add_parser("capture")
+    scenario_capture_parser.add_argument("scenario_selector", nargs="*", metavar="scenario")
+    scenario_capture_parser.add_argument("--retain", dest="scenario_retain", action="store_true")
+    scenario_capture_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     return parser
 
 
@@ -180,6 +184,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.compile import run_compile
     from sqlbuild.cli.commands.main.debug import run_debug
     from sqlbuild.cli.commands.main.diff import run_diff
+    from sqlbuild.cli.commands.main.helpers.scenario.capture import run_scenario_capture
     from sqlbuild.cli.commands.main.janitor import run_janitor
     from sqlbuild.cli.commands.main.lineage import run_lineage
     from sqlbuild.cli.commands.main.plan import run_plan
@@ -206,6 +211,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_janitor=run_janitor,
         run_playground=run_playground,
         run_scenario=run_scenario,
+        run_scenario_capture=run_scenario_capture,
     )
     return _main_with_dependencies(argv=argv, handlers=handlers)
 
@@ -402,15 +408,23 @@ def _main_with_dependencies(
         if args.command == CliCommand.PLAYGROUND:
             return handlers.run_playground(project_dir, args.playground_path)
         if args.command == CliCommand.SCENARIO:
-            if args.scenario_command != "test":
-                raise CliUserError("scenario requires a subcommand such as 'test'", code="C450")
-            return handlers.run_scenario(
-                project_dir,
-                args.no_sql_validation,
-                args.no_color,
-                tuple(args.scenario_selector),
-                args.scenario_retain,
-            )
+            if args.scenario_command == "test":
+                return handlers.run_scenario(
+                    project_dir,
+                    args.no_sql_validation,
+                    args.no_color,
+                    tuple(args.scenario_selector),
+                    args.scenario_retain,
+                )
+            if args.scenario_command == "capture":
+                return handlers.run_scenario_capture(
+                    project_dir,
+                    args.no_sql_validation,
+                    args.no_color,
+                    tuple(args.scenario_selector),
+                    args.scenario_retain,
+                )
+            raise CliUserError("scenario requires a subcommand such as 'test'", code="C450")
         return 0
     except CliUserError as error:
         logging.getLogger("sqlbuild.cli").exception("cli user error")

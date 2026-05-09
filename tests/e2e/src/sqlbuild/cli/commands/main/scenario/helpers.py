@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import query_duckdb
@@ -120,3 +121,26 @@ def assert_runtime_artifact_contains(
     expected_fragment: str
     for expected_fragment in expected_fragments:
         assert expected_fragment in content
+
+
+def assert_scenario_snapshot(
+    *, project_dir: Path, scenario_name: str, expected_row_count: int
+) -> None:
+    """Assert a scenario snapshot manifest and source JSONL file were written."""
+
+    snapshot_root: Path = project_dir / "tests" / "_scenario_snapshots" / scenario_name
+    manifest_path: Path = snapshot_root / "scenario.json"
+    jsonl_path: Path = snapshot_root / "sources" / "raw_orders.jsonl"
+    assert manifest_path.exists()
+    assert jsonl_path.exists()
+
+    manifest_data: object = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert isinstance(manifest_data, dict)
+    assert manifest_data["scenario_name"] == scenario_name
+    assert manifest_data["format"] == "jsonl"
+    assert manifest_data["total_rows"] == expected_row_count
+    assert manifest_data["relations"][0]["file"] == "sources/raw_orders.jsonl"
+    assert manifest_data["relations"][0]["row_count"] == expected_row_count
+
+    rows: list[str] = jsonl_path.read_text(encoding="utf-8").splitlines()
+    assert len(rows) == expected_row_count

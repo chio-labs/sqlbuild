@@ -17,6 +17,9 @@ from sqlbuild.executor.pipeline.helpers.auditing import (
     run_audit_pipeline as run_audit_pipeline,
 )
 from sqlbuild.executor.pipeline.helpers.scenario import (
+    run_scenario_capture_pipeline as run_scenario_capture_pipeline,
+)
+from sqlbuild.executor.pipeline.helpers.scenario import (
     run_scenario_test_pipeline as run_scenario_test_pipeline,
 )
 from sqlbuild.executor.pipeline.helpers.seeding import (
