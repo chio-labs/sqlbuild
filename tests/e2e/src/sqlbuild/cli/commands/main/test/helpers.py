@@ -47,7 +47,7 @@ def build_chain_test_project_files(*, sqlglot_enabled: bool) -> dict[str, str]:
             "    return \"'active'\"\n"
         ),
         "sources/raw.yml": "sources:\n  - name: raw\n    schema: main\n    table: raw\n",
-        "tests/test_chain.sql": (
+        "tests/unit/test_chain.sql": (
             "TEST();\n\n"
             "WITH\n"
             "__macro__mocked_amount AS (SELECT '100'),\n"
@@ -61,6 +61,41 @@ def build_chain_test_project_files(*, sqlglot_enabled: bool) -> dict[str, str]:
             "__expected__fact_orders AS (\n"
             "  SELECT 1 AS id, 101 AS adjusted, 'US' AS country, ' + x + ' AS "
             "literal_text, 'active' AS status\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+def build_assertion_test_project_files(*, failing: bool) -> dict[str, str]:
+    """Build an inline project with a SQL unit-test zero-row assertion."""
+
+    amount: int = -10 if failing else 10
+    return {
+        "sqlbuild_project.toml": (
+            'name = "assertion_demo"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "assertion_demo.duckdb"\n\n'
+            "[defaults]\n"
+            'materialized = "table"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+        ),
+        "models/orders.sql": (
+            "MODEL (materialized table);\n\n"
+            "SELECT\n"
+            "  id AS order_id,\n"
+            "  amount\n"
+            'FROM __source("raw_orders")\n'
+        ),
+        "tests/unit/orders_assert.sql": (
+            "TEST();\n\n"
+            "WITH\n"
+            f"__source__raw_orders AS (SELECT 1 AS id, {amount} AS amount),\n"
+            "__assert__no_negative_orders AS (\n"
+            '  SELECT * FROM __ref("orders") WHERE amount < 0\n'
             ")\n"
             "SELECT 1\n"
         ),

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.helpers.deps import (
     audit_scope_deps,
@@ -22,12 +24,15 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationTarget,
     CompiledSeed,
     CompiledSource,
+    CompiledSqlScenario,
     CompiledSqlTest,
     CompileModelInput,
     CompileProjectInputs,
     CompileSeedInput,
     CompileSourceInput,
     CompileSqlFunctionInput,
+    CompileSqlScenarioInput,
+    CompileSqlTestCte,
     CompileSqlTestInput,
     InferredColumn,
     MacroContext,
@@ -93,6 +98,10 @@ def assemble_compiled_project(
         sql_tests=tuple(
             _assemble_compiled_sql_test(test_input, model_inputs=inputs.model_inputs, inputs=inputs)
             for test_input in inputs.test_inputs
+        ),
+        sql_scenarios=tuple(
+            _assemble_compiled_sql_scenario(scenario_input)
+            for scenario_input in inputs.scenario_inputs
         ),
         diagnostics=inputs.diagnostics,
     )
@@ -296,9 +305,16 @@ def _assemble_compiled_sql_test(
     inputs: CompileProjectInputs,
 ) -> CompiledSqlTest:
     test_name: str = _resolve_test_name(test_input)
+    assertion_target_model_names: tuple[str, ...] = _extract_sql_test_assertion_ref_targets(
+        assertion_ctes=test_input.assertion_ctes
+    )
     return CompiledSqlTest(
         key=CompiledObjectKey(resource_type=CompiledResourceType.SQL_TEST, name=test_name),
-        scope_deps=sql_test_scope_deps(expected_model_names=test_input.expected_model_names),
+        scope_deps=sql_test_scope_deps(
+            expected_model_names=tuple(
+                dict.fromkeys((*test_input.expected_model_names, *assertion_target_model_names))
+            )
+        ),
         name=test_name,
         test_file=test_input.test_file,
         test_block=test_input.test_block,
@@ -314,7 +330,21 @@ def _assemble_compiled_sql_test(
         mock_source_names=test_input.mock_source_names,
         mock_seed_names=test_input.mock_seed_names,
         expected_model_names=test_input.expected_model_names,
+        assertion_ctes=test_input.assertion_ctes,
+        assertion_names=test_input.assertion_names,
     )
+
+
+def _extract_sql_test_assertion_ref_targets(
+    *, assertion_ctes: tuple[CompileSqlTestCte, ...]
+) -> tuple[str, ...]:
+    targets: list[str] = []
+    cte: CompileSqlTestCte
+    for cte in assertion_ctes:
+        match: re.Match[str]
+        for match in re.finditer(r'__ref\("([^"]+)"\)', cte.sql_body):
+            targets.append(match.group(1))
+    return tuple(dict.fromkeys(targets))
 
 
 def _build_test_model_query_overrides(
@@ -349,6 +379,29 @@ def _build_test_model_query_overrides(
             macro_context=macro_context,
         )
     return overrides
+
+
+def _assemble_compiled_sql_scenario(
+    scenario_input: CompileSqlScenarioInput,
+) -> CompiledSqlScenario:
+    scenario_name: str = scenario_input.scenario_file.name
+    return CompiledSqlScenario(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.SQL_SCENARIO,
+            name=scenario_name,
+        ),
+        name=scenario_name,
+        scenario_file=scenario_input.scenario_file,
+        sql_body=scenario_input.sql_body,
+        authored_ctes=scenario_input.authored_ctes,
+        expected_ctes=scenario_input.expected_ctes,
+        assertion_ctes=scenario_input.assertion_ctes,
+        source_fixture_names=scenario_input.source_fixture_names,
+        ref_fixture_names=scenario_input.ref_fixture_names,
+        seed_fixture_names=scenario_input.seed_fixture_names,
+        expected_model_names=scenario_input.expected_model_names,
+        assertion_names=scenario_input.assertion_names,
+    )
 
 
 def _resolve_audit_name(audit_input: CompileAuditInput) -> str:

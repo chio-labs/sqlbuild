@@ -11,6 +11,9 @@ from sqlbuild.compiler.planner.models import (
     MissingUpstream,
     ParsedSelector,
     PathSelector,
+    ScenarioArtifactIdentity,
+    ScenarioGraphPlan,
+    ScenarioRelationMap,
     SchemaAction,
     SchemaFinding,
 )
@@ -213,6 +216,141 @@ class BuildPathIndexTestCase:
     description: str
     model_paths: dict[str, str]
     expected_folders: dict[str, str]
+
+
+@dataclass(frozen=True)
+class PlanScenarioGraphTestCase:
+    description: str
+    model_deps: dict[str, tuple[str, ...]]
+    source_names: tuple[str, ...]
+    seed_names: tuple[str, ...]
+    expected_model_names: tuple[str, ...] = field(default_factory=tuple)
+    assertion_sql_bodies: tuple[str, ...] = field(default_factory=tuple)
+    source_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    expected_plan: ScenarioGraphPlan | None = None
+
+
+@dataclass(frozen=True)
+class PlanScenarioGraphErrorTestCase:
+    description: str
+    model_deps: dict[str, tuple[str, ...]]
+    source_names: tuple[str, ...]
+    seed_names: tuple[str, ...]
+    expected_model_names: tuple[str, ...] = field(default_factory=tuple)
+    assertion_sql_bodies: tuple[str, ...] = field(default_factory=tuple)
+    source_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    expected_error_fragment: str = ""
+
+
+@dataclass(frozen=True)
+class ScenarioHashPrefixTestCase:
+    description: str
+    project_name: str
+    scenario_name: str
+    expected_hash_prefix: str
+
+
+@dataclass(frozen=True)
+class ScenarioHashCollisionTestCase:
+    description: str
+    scenario_names: tuple[str, ...]
+    prefix_length: int
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ScenarioArtifactNameTestCase:
+    description: str
+    hash_prefix: str
+    kind: str
+    logical_name: str
+    identifier_limit: int
+    expected_physical_name: str
+
+
+@dataclass(frozen=True)
+class ScenarioArtifactNameRecognitionTestCase:
+    description: str
+    physical_name: str
+    expected_is_scenario_artifact: bool
+    expected_hash_prefix: str | None = None
+    expected_kind: str | None = None
+    expected_logical_name: str | None = None
+
+
+@dataclass(frozen=True)
+class ScenarioRelationMapTestCase:
+    description: str
+    artifacts: tuple[ScenarioArtifactIdentity, ...]
+    expected_relation_map: ScenarioRelationMap
+    normalize_case: bool = False
+
+
+@dataclass(frozen=True)
+class ScenarioRelationMapErrorTestCase:
+    description: str
+    artifacts: tuple[ScenarioArtifactIdentity, ...]
+    expected_error_fragment: str
+    normalize_case: bool = False
+
+
+@dataclass(frozen=True)
+class ScenarioRelationPlanTestCase:
+    description: str
+    graph_plan: ScenarioGraphPlan
+    expected_model_target_names: dict[str, str]
+    expected_seed_target_names: dict[str, str]
+    expected_source_expressions: dict[str, str]
+
+
+@dataclass(frozen=True)
+class ScenarioCheckSqlResolutionTestCase:
+    description: str
+    sql: str
+    expected_sql: str
+    sqlglot_enabled: bool = True
+    sqlglot_dialect: str | None = None
+
+
+@dataclass(frozen=True)
+class ScenarioRelationPlanErrorTestCase:
+    description: str
+    graph_plan: ScenarioGraphPlan
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ScenarioFixturePlanTestCase:
+    description: str
+    graph_plan: ScenarioGraphPlan
+    expected_fixture_sql: dict[str, str]
+    expected_fixture_targets: dict[str, str]
+
+
+@dataclass(frozen=True)
+class ScenarioExecutionPlanTestCase:
+    description: str
+    graph_plan: ScenarioGraphPlan
+    expected_model_entry_targets: dict[str, str]
+    expected_model_entry_sql_fragments: dict[str, tuple[str, ...]]
+    expected_fixture_targets: dict[str, str]
+    expected_seed_entry_targets: dict[str, str]
+    expected_expected_actual_targets: dict[str, str]
+    expected_expected_sql: dict[str, str]
+    expected_assertion_sql: dict[str, str]
+
+
+@dataclass(frozen=True)
+class ScenarioUnmockedSeedExecutionPlanTestCase:
+    description: str
+    graph_plan: ScenarioGraphPlan
+    include_unrelated_project_seed: bool
+    expected_seed_fixture_names: frozenset[str]
+    expected_seed_entry_targets: dict[str, str]
 
 
 @dataclass(frozen=True)

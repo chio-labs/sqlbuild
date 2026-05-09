@@ -1,6 +1,6 @@
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
+from sqlbuild.compiler.planner.models import ChainStep, SqlTestAssertionStep, SqlTestPlanEntry
 from sqlbuild.integrations.bigquery.client import BigQueryAdapter
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from sqlbuild.integrations.snowflake.client import SnowflakeAdapter
@@ -18,6 +18,29 @@ def build_comparison_test_entry(*, sqlglot_enabled: bool = True) -> SqlTestPlanE
                 model_name="orders",
                 resolved_sql="SELECT 1 AS order_id",
                 expected_cte_sql="SELECT 2 AS order_id",
+            ),
+        ),
+        sqlglot_enabled=sqlglot_enabled,
+    )
+
+
+def build_assertion_test_entry(*, sqlglot_enabled: bool = True) -> SqlTestPlanEntry:
+    return SqlTestPlanEntry(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.SQL_TEST,
+            name="orders_assertions",
+        ),
+        name="orders_assertions",
+        chain=(
+            ChainStep(
+                model_name="orders",
+                resolved_sql="SELECT 1 AS order_id, 10 AS amount",
+            ),
+        ),
+        assertions=(
+            SqlTestAssertionStep(
+                name="no_negative_orders",
+                resolved_sql="SELECT * FROM __actual__orders WHERE amount < 0",
             ),
         ),
         sqlglot_enabled=sqlglot_enabled,

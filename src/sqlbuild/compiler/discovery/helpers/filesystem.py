@@ -13,6 +13,7 @@ from sqlbuild.compiler.discovery.helpers.sql_models import (
     model_output_column_locations,
     parse_model_sql,
 )
+from sqlbuild.compiler.discovery.helpers.sql_scenarios import parse_sql_scenario_file
 from sqlbuild.compiler.discovery.helpers.sql_tests import parse_sql_test_file
 from sqlbuild.compiler.discovery.helpers.yml_schema import parse_schema_yml
 from sqlbuild.compiler.discovery.helpers.yml_sources import parse_sources_yml
@@ -28,6 +29,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSourceFile,
     DiscoveredSqlFunctionFile,
     DiscoveredSqlModelFile,
+    DiscoveredSqlScenarioFile,
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.shared.constants import (
@@ -214,9 +216,9 @@ def discover_seed_files(*, project_dir: Path) -> tuple[DiscoveredSeedFile, ...]:
 
 
 def discover_test_files(*, project_dir: Path) -> tuple[DiscoveredSqlTestFile, ...]:
-    """Discover SQL-native test files under tests/."""
+    """Discover SQL-native unit test files under tests/unit/."""
 
-    tests_root: Path = project_dir / "tests"
+    tests_root: Path = project_dir / "tests" / "unit"
     if not tests_root.is_dir():
         return ()
 
@@ -233,6 +235,27 @@ def discover_test_files(*, project_dir: Path) -> tuple[DiscoveredSqlTestFile, ..
             )
         )
     return tuple(discovered_test_files)
+
+
+def discover_scenario_files(*, project_dir: Path) -> tuple[DiscoveredSqlScenarioFile, ...]:
+    """Discover SQL-native scenario files under tests/scenarios/."""
+
+    scenarios_root: Path = project_dir / "tests" / "scenarios"
+    if not scenarios_root.is_dir():
+        return ()
+
+    discovered_scenario_files: list[DiscoveredSqlScenarioFile] = []
+    file_path: Path
+    for file_path in sorted(scenarios_root.rglob("*.sql")):
+        contents: str = file_path.read_text(encoding="utf-8")
+        discovered_scenario_files.append(
+            parse_sql_scenario_file(
+                contents=contents,
+                file_path=file_path,
+                relative_path=file_path.relative_to(project_dir),
+            )
+        )
+    return tuple(discovered_scenario_files)
 
 
 def discover_audit_files(*, project_dir: Path) -> tuple[DiscoveredAuditFile, ...]:
@@ -322,3 +345,11 @@ def discover_adapter_file(*, project_dir: Path) -> DiscoveredAdapterFile | None:
         file_path=file_path,
         relative_path=file_path.relative_to(project_dir),
     )
+
+
+def _is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True

@@ -99,6 +99,23 @@ PLAN_TEST_CASES: list[JanitorPlanTestCase] = [
         tracked_relations=((None, "analytics", "old_orders"),),
         expected_candidate_names=("old_orders",),
     ),
+    JanitorPlanTestCase(
+        description="scenario artifact is eligible when tracked-only is enabled",
+        relation_infos=(
+            relation_info("__sqb_a13f09c2e7b8__model__daily_revenue", created_at=OLD_TIME),
+        ),
+        delete_tracked_only=True,
+        expected_candidate_names=("__sqb_a13f09c2e7b8__model__daily_revenue",),
+    ),
+    JanitorPlanTestCase(
+        description="scenario-like relation is not eligible when tracked-only is enabled",
+        relation_infos=(
+            relation_info("__sqb_a13f09c2e7b__model__daily_revenue", created_at=OLD_TIME),
+        ),
+        delete_tracked_only=True,
+        expected_candidate_names=(),
+        expected_skipped_relation_reasons=("relation is not tracked by SQLBuild",),
+    ),
 ]
 
 

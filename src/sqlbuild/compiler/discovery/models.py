@@ -96,6 +96,18 @@ class DiscoveredSqlTestBlock:
 
 
 @dataclass(frozen=True)
+class DiscoveredSqlScenarioFile:
+    """A discovered SQL-native scenario file and its raw contents."""
+
+    file_path: Path
+    relative_path: Path
+    contents: str
+    header_values: dict[str, object]
+    sql_body: str
+    name: str
+
+
+@dataclass(frozen=True)
 class DiscoveredAuditFile:
     """A discovered audit SQL file and its raw contents."""
 
@@ -163,6 +175,7 @@ class DiscoveredProjectInputs:
     source_files: tuple[DiscoveredSourceFile, ...] = field(default_factory=tuple)
     seed_files: tuple[DiscoveredSeedFile, ...] = field(default_factory=tuple)
     test_files: tuple[DiscoveredSqlTestFile, ...] = field(default_factory=tuple)
+    scenario_files: tuple[DiscoveredSqlScenarioFile, ...] = field(default_factory=tuple)
     audit_files: tuple[DiscoveredAuditFile, ...] = field(default_factory=tuple)
     macro_files: tuple[DiscoveredMacroFile, ...] = field(default_factory=tuple)
     materialization_files: tuple[DiscoveredMaterializationFile, ...] = field(default_factory=tuple)

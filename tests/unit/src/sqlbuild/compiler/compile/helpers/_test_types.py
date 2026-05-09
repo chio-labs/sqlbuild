@@ -36,6 +36,7 @@ class ExtractSqlTestCtesTestCase:
     expected_mock_source_names: tuple[str, ...]
     expected_expected_model_names: tuple[str, ...]
     expected_mock_seed_names: tuple[str, ...] = ()
+    expected_assertion_names: tuple[str, ...] = ()
     expected_macro_mocks: dict[str, str] = field(default_factory=dict)
 
 
@@ -44,6 +45,38 @@ class ExtractSqlTestCtesErrorTestCase:
     description: str
     sql: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ExtractSqlScenarioCtesTestCase:
+    description: str
+    sql: str
+    expected_authored_cte_names: tuple[str, ...]
+    expected_source_fixture_names: tuple[str, ...]
+    expected_ref_fixture_names: tuple[str, ...]
+    expected_expected_model_names: tuple[str, ...]
+    expected_assertion_names: tuple[str, ...]
+    expected_seed_fixture_names: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ExtractSqlScenarioCtesErrorTestCase:
+    description: str
+    sql: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class BuildScenarioInputsTestCase:
+    description: str
+    sql_body: str
+    effective_vars: dict[str, str]
+    expected_source_fixture_names: tuple[str, ...]
+    expected_ref_fixture_names: tuple[str, ...]
+    expected_seed_fixture_names: tuple[str, ...]
+    expected_expected_model_names: tuple[str, ...]
+    expected_assertion_names: tuple[str, ...]
+    expected_sql_fragment: str
 
 
 @dataclass(frozen=True)

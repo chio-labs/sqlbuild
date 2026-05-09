@@ -27,6 +27,7 @@ class SeedExecutionResult:
     seed_name: str
     status: ExecutionStatus
     duration_ms: int | None = None
+    lifecycle_events: tuple[LifeCycleEvent, ...] = field(default_factory=tuple)
     error_message: str | None = None
 
 

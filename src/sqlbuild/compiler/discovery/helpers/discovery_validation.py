@@ -12,6 +12,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSeedFile,
     DiscoveredSourceFile,
     DiscoveredSqlModelFile,
+    DiscoveredSqlScenarioFile,
 )
 from sqlbuild.compiler.shared.constants import RESERVED_MODEL_NAMES
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
@@ -22,6 +23,7 @@ def validate_discovered_inputs(discovered_inputs: DiscoveredProjectInputs) -> No
     """Validate cross-file conflicts across discovered project inputs."""
 
     _validate_unique_model_file_names(discovered_inputs.model_files)
+    _validate_unique_scenario_file_names(discovered_inputs.scenario_files)
     _validate_unique_source_names(discovered_inputs.source_files)
     _validate_unique_schema_model_names(discovered_inputs.schema_files)
     _validate_unique_schema_seed_names(discovered_inputs.schema_files)
@@ -57,6 +59,21 @@ def _validate_unique_model_file_names(model_files: tuple[DiscoveredSqlModelFile,
                 f"{existing_path} and {model_file.relative_path}"
             )
         seen_names[model_name] = str(model_file.relative_path)
+
+
+def _validate_unique_scenario_file_names(
+    scenario_files: tuple[DiscoveredSqlScenarioFile, ...],
+) -> None:
+    seen_names: dict[str, str] = {}
+    scenario_file: DiscoveredSqlScenarioFile
+    for scenario_file in scenario_files:
+        existing_path: str | None = seen_names.get(scenario_file.name)
+        if existing_path is not None:
+            raise DiscoveryConflictError(
+                f"Duplicate scenario file name found for '{scenario_file.name}' in "
+                f"{existing_path} and {scenario_file.relative_path}"
+            )
+        seen_names[scenario_file.name] = str(scenario_file.relative_path)
 
 
 def _validate_unique_source_names(source_files: tuple[DiscoveredSourceFile, ...]) -> None:

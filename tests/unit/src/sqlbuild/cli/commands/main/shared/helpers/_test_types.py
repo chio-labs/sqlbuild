@@ -71,6 +71,22 @@ class BuildProgressSpinnerLifecycleTestCase:
 
 
 @dataclass(frozen=True)
+class NestedProgressChildRowsTestCase:
+    description: str
+    item_name: str
+    name_width: int
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class BuildProgressSqlTestRowsTestCase:
+    description: str
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class ConnectionProgressTestCase:
     description: str
     connection_count: int
