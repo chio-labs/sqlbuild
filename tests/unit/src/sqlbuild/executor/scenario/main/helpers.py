@@ -1,8 +1,15 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledRelationTarget
-from sqlbuild.compiler.planner.models import ScenarioFixturePlan
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationTarget
+from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner.models import (
+    ScenarioExecutionPlan,
+    ScenarioFixturePlan,
+    ScenarioGraphPlan,
+    ScenarioRelationMap,
+    ScenarioRelationPlan,
+)
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 
 
@@ -50,3 +57,59 @@ def build_scenario_fixture_plan(
 
 def executed_create_table_sql(adapter: ScenarioFixtureTestAdapter) -> tuple[str, ...]:
     return tuple(sql for sql in adapter.executed_sql if "CREATE OR REPLACE TABLE" in sql)
+
+
+def executed_drop_sql(adapter: ScenarioFixtureTestAdapter) -> tuple[str, ...]:
+    return tuple(sql for sql in adapter.executed_sql if sql.startswith("DROP TABLE"))
+
+
+def build_scenario_cleanup_test_plan() -> ScenarioExecutionPlan:
+    source_fixture: ScenarioFixturePlan = build_scenario_fixture_plan()
+    ref_fixture: ScenarioFixturePlan = build_scenario_fixture_plan(
+        kind=ScenarioArtifactKind.REF,
+        logical_name="stg_customers",
+        target_name="__sqb_51b385aebe20__ref__stg_customers",
+        sql="SELECT 10 AS customer_id",
+    )
+    seed_fixture: ScenarioFixturePlan = build_scenario_fixture_plan(
+        kind=ScenarioArtifactKind.SEED,
+        logical_name="country_codes",
+        target_name="__sqb_51b385aebe20__seed__country_codes",
+        sql="SELECT 'US' AS country_code",
+    )
+    model_target: CompiledRelationTarget = CompiledRelationTarget(
+        database=None,
+        schema="scenario_schema",
+        name="__sqb_51b385aebe20__model__daily_revenue",
+        qualified_name="scenario_schema.__sqb_51b385aebe20__model__daily_revenue",
+    )
+    return ScenarioExecutionPlan(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.SQL_SCENARIO,
+            name="revenue__customer_refund",
+        ),
+        name="revenue__customer_refund",
+        graph_plan=ScenarioGraphPlan(
+            key=CompiledObjectKey(
+                resource_type=CompiledResourceType.SQL_SCENARIO,
+                name="revenue__customer_refund",
+            ),
+            name="revenue__customer_refund",
+            model_names=("daily_revenue",),
+        ),
+        relation_plan=ScenarioRelationPlan(
+            scenario_name="revenue__customer_refund",
+            relation_map=ScenarioRelationMap(
+                scenario_name="revenue__customer_refund",
+                hash_prefix="51b385aebe20",
+            ),
+            model_targets={
+                "daily_revenue": model_target,
+                "stg_customers": ref_fixture.target,
+            },
+            source_fixture_targets={"raw__orders": source_fixture.target},
+            ref_fixture_targets={"stg_customers": ref_fixture.target},
+            seed_fixture_targets={"country_codes": seed_fixture.target},
+        ),
+        fixture_plans=(source_fixture, ref_fixture, seed_fixture),
+    )
