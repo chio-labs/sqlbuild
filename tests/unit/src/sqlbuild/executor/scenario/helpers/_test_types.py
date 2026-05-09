@@ -4,6 +4,7 @@ from pathlib import Path
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.scenario.models import (
+    ScenarioSnapshotCapturePlan,
     ScenarioSnapshotFileStats,
     ScenarioSnapshotInputSpec,
     ScenarioSnapshotManifest,
@@ -85,6 +86,15 @@ class ScenarioSnapshotJsonlErrorTestCase:
     description: str
     file_contents: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ScenarioSnapshotCapturePlanTestCase:
+    description: str
+    project_dir: Path
+    scenario_plan: ScenarioExecutionPlan
+    expected_capture_plan: ScenarioSnapshotCapturePlan
+    expected_manifest: ScenarioSnapshotManifest
 
 
 @dataclass(frozen=True)

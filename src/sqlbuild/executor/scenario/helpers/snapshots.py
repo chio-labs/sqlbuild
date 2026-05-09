@@ -15,6 +15,8 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.scenario.models import (
+    ScenarioSnapshotCapturePlan,
+    ScenarioSnapshotCaptureRelationPlan,
     ScenarioSnapshotColumn,
     ScenarioSnapshotFileStats,
     ScenarioSnapshotInputSpec,
@@ -186,6 +188,98 @@ def classify_scenario_snapshot_state(
     )
 
 
+def build_scenario_snapshot_capture_plan(
+    *, project_dir: Path, scenario_plan: ScenarioExecutionPlan
+) -> ScenarioSnapshotCapturePlan:
+    """Build executor-side local snapshot capture work from one scenario execution plan."""
+
+    input_specs: tuple[ScenarioSnapshotInputSpec, ...] = build_scenario_snapshot_input_specs(
+        scenario_plan=scenario_plan,
+    )
+    relation_plans: list[ScenarioSnapshotCaptureRelationPlan] = []
+    spec_by_identity: dict[tuple[ScenarioArtifactKind, str], ScenarioSnapshotInputSpec] = {
+        (spec.kind, spec.logical_name): spec for spec in input_specs
+    }
+
+    fixture_plan: ScenarioFixturePlan
+    for fixture_plan in scenario_plan.fixture_plans:
+        spec: ScenarioSnapshotInputSpec = spec_by_identity[
+            (fixture_plan.kind, fixture_plan.logical_name)
+        ]
+        relation_plans.append(
+            ScenarioSnapshotCaptureRelationPlan(
+                kind=fixture_plan.kind,
+                logical_name=fixture_plan.logical_name,
+                source_target=fixture_plan.target,
+                file_path=spec.file_path,
+                capture_sql=spec.capture_sql,
+            )
+        )
+
+    seed_entry: SeedPlanEntry
+    for seed_entry in scenario_plan.seed_entries:
+        spec = spec_by_identity[(ScenarioArtifactKind.SEED, seed_entry.name)]
+        relation_plans.append(
+            ScenarioSnapshotCaptureRelationPlan(
+                kind=ScenarioArtifactKind.SEED,
+                logical_name=seed_entry.name,
+                source_target=seed_entry.target,
+                file_path=spec.file_path,
+                capture_sql=spec.capture_sql,
+            )
+        )
+
+    return ScenarioSnapshotCapturePlan(
+        scenario_name=scenario_plan.name,
+        snapshot_root=scenario_snapshot_root(
+            project_dir=project_dir,
+            scenario_name=scenario_plan.name,
+        ),
+        manifest_path=scenario_snapshot_manifest_path(
+            project_dir=project_dir,
+            scenario_name=scenario_plan.name,
+        ),
+        input_fingerprint=build_scenario_snapshot_input_fingerprint(
+            scenario_name=scenario_plan.name,
+            input_specs=input_specs,
+        ),
+        relations=tuple(sorted(relation_plans, key=_capture_relation_sort_key)),
+    )
+
+
+def build_scenario_snapshot_manifest_shell(
+    *,
+    capture_plan: ScenarioSnapshotCapturePlan,
+    captured_at: str,
+    capture_adapter: str,
+    capture_dialect: str,
+    sqlbuild_version: str,
+) -> ScenarioSnapshotManifest:
+    """Build a zero-row manifest shell for a capture plan before rows are downloaded."""
+
+    return ScenarioSnapshotManifest(
+        version=1,
+        scenario_name=capture_plan.scenario_name,
+        captured_at=captured_at,
+        capture_adapter=capture_adapter,
+        capture_dialect=capture_dialect,
+        sqlbuild_version=sqlbuild_version,
+        input_fingerprint=capture_plan.input_fingerprint,
+        total_rows=0,
+        total_bytes=0,
+        relations=tuple(
+            ScenarioSnapshotRelation(
+                kind=relation.kind,
+                logical_name=relation.logical_name,
+                file_path=relation.file_path,
+                row_count=0,
+                byte_count=0,
+            )
+            for relation in capture_plan.relations
+        ),
+    )
+
+
 def write_scenario_snapshot_jsonl(
     *, file_path: Path, rows: tuple[dict[str, object], ...]
 ) -> ScenarioSnapshotFileStats:
@@ -241,6 +335,12 @@ def is_scenario_snapshot_fresh(
 
 def _input_spec_sort_key(spec: ScenarioSnapshotInputSpec) -> tuple[str, str, str]:
     return (spec.kind.value, spec.logical_name, spec.file_path.as_posix())
+
+
+def _capture_relation_sort_key(
+    relation: ScenarioSnapshotCaptureRelationPlan,
+) -> tuple[str, str, str]:
+    return (relation.kind.value, relation.logical_name, relation.file_path.as_posix())
 
 
 def _normalize_sql(sql: str) -> str:
