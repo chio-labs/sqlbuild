@@ -16,6 +16,7 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotColumn,
+    ScenarioSnapshotFileStats,
     ScenarioSnapshotInputSpec,
     ScenarioSnapshotManifest,
     ScenarioSnapshotRelation,
@@ -183,6 +184,51 @@ def classify_scenario_snapshot_state(
         manifest_path=manifest_path,
         manifest=manifest,
     )
+
+
+def write_scenario_snapshot_jsonl(
+    *, file_path: Path, rows: tuple[dict[str, object], ...]
+) -> ScenarioSnapshotFileStats:
+    """Write JSON object rows as newline-delimited JSON and return file statistics."""
+
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    row_count: int = 0
+    byte_count: int = 0
+    with file_path.open("w", encoding="utf-8") as snapshot_file:
+        row: dict[str, object]
+        for row in rows:
+            encoded_row: str = json.dumps(row, sort_keys=True, separators=(",", ":"))
+            snapshot_file.write(encoded_row)
+            snapshot_file.write("\n")
+            row_count += 1
+            byte_count += len(encoded_row.encode("utf-8")) + 1
+    return ScenarioSnapshotFileStats(row_count=row_count, byte_count=byte_count)
+
+
+def read_scenario_snapshot_jsonl(*, file_path: Path) -> tuple[dict[str, object], ...]:
+    """Read newline-delimited JSON object rows from one local scenario snapshot file."""
+
+    rows: list[dict[str, object]] = []
+    with file_path.open("r", encoding="utf-8") as snapshot_file:
+        line_number: int
+        line: str
+        for line_number, line in enumerate(snapshot_file, start=1):
+            stripped_line: str = line.strip()
+            if stripped_line == "":
+                continue
+            try:
+                row: Any = json.loads(stripped_line)
+            except JSONDecodeError as exc:
+                raise ValueError(
+                    f"Invalid scenario snapshot JSONL at line {line_number}: {exc.msg}"
+                ) from exc
+            if not isinstance(row, dict):
+                raise ValueError(
+                    f"Invalid scenario snapshot JSONL at line {line_number}: "
+                    "row must be a JSON object"
+                )
+            rows.append(row)
+    return tuple(rows)
 
 
 def is_scenario_snapshot_fresh(

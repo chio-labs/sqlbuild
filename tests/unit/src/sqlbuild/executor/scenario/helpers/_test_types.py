@@ -4,6 +4,7 @@ from pathlib import Path
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.scenario.models import (
+    ScenarioSnapshotFileStats,
     ScenarioSnapshotInputSpec,
     ScenarioSnapshotManifest,
 )
@@ -67,6 +68,23 @@ class ScenarioSnapshotStateTestCase:
     expected_state: ScenarioSnapshotState
     expected_has_manifest: bool
     expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
+class ScenarioSnapshotJsonlRoundTripTestCase:
+    description: str
+    relative_file_path: Path
+    rows: tuple[dict[str, object], ...]
+    expected_stats: ScenarioSnapshotFileStats
+    expected_file_contents: str
+    expected_rows: tuple[dict[str, object], ...]
+
+
+@dataclass(frozen=True)
+class ScenarioSnapshotJsonlErrorTestCase:
+    description: str
+    file_contents: str
+    expected_error_fragment: str
 
 
 @dataclass(frozen=True)
