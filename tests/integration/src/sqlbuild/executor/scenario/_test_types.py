@@ -31,3 +31,10 @@ class ScenarioProjectSeedLoadIntegrationTestCase:
     description: str
     expected_statuses: tuple[ExecutionStatus, ...]
     expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ScenarioModelBuildIntegrationTestCase:
+    description: str
+    expected_statuses: tuple[ExecutionStatus, ...]
+    expected_rows: tuple[tuple[object, ...], ...]

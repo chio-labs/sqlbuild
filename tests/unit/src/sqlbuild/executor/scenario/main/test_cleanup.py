@@ -11,6 +11,7 @@ from tests.unit.src.sqlbuild.executor.scenario.main._test_types import (
 from tests.unit.src.sqlbuild.executor.scenario.main.helpers import (
     ScenarioFixtureTestAdapter,
     build_scenario_cleanup_test_plan,
+    build_scenario_cleanup_test_plan_with_project_seed,
     executed_drop_sql,
 )
 
@@ -95,3 +96,37 @@ def test_given_adapter_failure_when_cleaning_up_then_returns_failed_result(
     assert result.error_message == test_case.expected_error_fragment
     assert test_case.expected_error_fragment is not None
     assert test_case.expected_error_fragment in result.lifecycle_events[-1].content
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExecuteScenarioCleanupTestCase(
+            description="drops unmocked project seed target",
+            expected_status=ExecutionStatus.SUCCESS,
+            expected_drop_targets=(
+                "scenario_schema.__sqb_51b385aebe20__source__raw__orders",
+                "scenario_schema.__sqb_51b385aebe20__ref__stg_customers",
+                "scenario_schema.__sqb_51b385aebe20__seed__country_codes",
+                "scenario_schema.__sqb_51b385aebe20__model__daily_revenue",
+            ),
+        )
+    ],
+    ids=["drops unmocked project seed target"],
+)
+def test_given_unmocked_project_seed_when_cleaning_up_then_drops_seed_target(
+    test_case: ExecuteScenarioCleanupTestCase,
+) -> None:
+    adapter: ScenarioFixtureTestAdapter = ScenarioFixtureTestAdapter()
+
+    result: ScenarioCleanupExecutionResult = execute_scenario_cleanup(
+        scenario_plan=build_scenario_cleanup_test_plan_with_project_seed(),
+        adapter=adapter,
+        connection=object(),
+    )
+
+    assert result.status == test_case.expected_status
+    assert (
+        tuple(target.target_relation for target in result.targets)
+        == test_case.expected_drop_targets
+    )

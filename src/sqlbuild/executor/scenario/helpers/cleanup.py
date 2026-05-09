@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledRelationTarget
-from sqlbuild.compiler.planner.models import ScenarioExecutionPlan, ScenarioFixturePlan
+from sqlbuild.compiler.planner.models import (
+    ScenarioExecutionPlan,
+    ScenarioFixturePlan,
+    SeedPlanEntry,
+)
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.scenario.models import ScenarioCleanupTarget
 from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
@@ -28,6 +32,17 @@ def collect_scenario_cleanup_targets(
             kind=fixture_plan.kind,
             logical_name=fixture_plan.logical_name,
             target=fixture_plan.target,
+            adapter=adapter,
+        )
+
+    seed_entry: SeedPlanEntry
+    for seed_entry in scenario_plan.seed_entries:
+        _append_target(
+            targets=targets,
+            seen=seen,
+            kind=ScenarioArtifactKind.SEED,
+            logical_name=seed_entry.name,
+            target=seed_entry.target,
             adapter=adapter,
         )
 
