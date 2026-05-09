@@ -22,6 +22,7 @@ class MainTestCase:
     expected_manifest: bool = False
     expected_compile_lineage_mode: CompileLineageMode = CompileLineageMode.FAST
     expected_column_lineage_mode: ColumnLineageMode = ColumnLineageMode.RICH
+    expected_scenario_selectors: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

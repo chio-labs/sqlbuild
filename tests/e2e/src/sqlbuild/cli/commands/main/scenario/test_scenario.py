@@ -68,6 +68,50 @@ SCENARIO_CLI_TEST_CASES: list[ScenarioCliE2ETestCase] = [
         expected_retained_prefix_count=0,
     ),
     ScenarioCliE2ETestCase(
+        description="runs multiple selected scenarios by name and path",
+        command=(
+            "--no-color",
+            "scenario",
+            "test",
+            "order_totals_pass",
+            "tests/scenarios/nested/orders_assert_pass.sql",
+        ),
+        expected_exit_code=0,
+        expected_stdout_fragments=(
+            "Scenario (2 selected)",
+            "order_totals_pass",
+            "orders_assert_pass",
+            "check     expected order_totals",
+            "check     assertion no_negative_orders",
+            "PASS=2  FAIL=0  TOTAL=2",
+        ),
+        expected_retained_prefix_count=0,
+    ),
+    ScenarioCliE2ETestCase(
+        description="runs scenarios under project relative folder selector",
+        command=("--no-color", "scenario", "test", "tests/scenarios/nested"),
+        expected_exit_code=0,
+        expected_stdout_fragments=(
+            "Scenario (1 selected)",
+            "orders_assert_pass",
+            "check     assertion no_negative_orders",
+            "PASS=1  FAIL=0  TOTAL=1",
+        ),
+        expected_retained_prefix_count=0,
+    ),
+    ScenarioCliE2ETestCase(
+        description="deduplicates selected scenarios from name and folder selectors",
+        command=("--no-color", "scenario", "test", "orders_assert_pass", "nested"),
+        expected_exit_code=0,
+        expected_stdout_fragments=(
+            "Scenario (1 selected)",
+            "orders_assert_pass",
+            "check     assertion no_negative_orders",
+            "PASS=1  FAIL=0  TOTAL=1",
+        ),
+        expected_retained_prefix_count=0,
+    ),
+    ScenarioCliE2ETestCase(
         description="retains artifacts and prints relation map",
         command=("--no-color", "scenario", "test", "order_totals_pass", "--retain"),
         expected_exit_code=0,
@@ -224,6 +268,94 @@ def test_given_multiple_scenarios_when_running_without_selector_then_runs_all_sc
         db_path=project_dir / "scenario_demo.duckdb"
     )
     assert len(retained_names) == test_case.expected_retained_prefix_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScenarioCliE2ETestCase(
+            description="multiple selected scenarios retain materialized artifacts",
+            command=(
+                "--no-color",
+                "scenario",
+                "test",
+                "order_totals_pass",
+                "tests/scenarios/nested/orders_assert_pass.sql",
+                "--retain",
+            ),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "Scenario (2 selected)",
+                "order_totals_pass",
+                "orders_assert_pass",
+                "Retained relations:",
+                "source raw_orders -> __sqb_",
+                "model  orders -> __sqb_",
+                "model  order_totals -> __sqb_",
+                "PASS=2  FAIL=0  TOTAL=2",
+            ),
+            expected_retained_prefix_count=5,
+        )
+    ],
+    ids=["multiple selected scenarios retain materialized artifacts"],
+)
+def test_given_multiple_selected_scenarios_when_running_with_retain_then_materializes_each_scenario(
+    test_case: ScenarioCliE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="scenario_project",
+        repo_files=build_scenario_project_files(),
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    expected_stdout_fragment: str
+    for expected_stdout_fragment in test_case.expected_stdout_fragments:
+        assert expected_stdout_fragment in result.stdout
+    retained_names: tuple[str, ...] = list_scenario_relation_names(
+        db_path=project_dir / "scenario_demo.duckdb"
+    )
+    assert len(retained_names) == test_case.expected_retained_prefix_count
+    retained_source_names: tuple[str, ...] = tuple(
+        name for name in retained_names if name.endswith("__source__raw_orders")
+    )
+    retained_orders_model_names: tuple[str, ...] = tuple(
+        name for name in retained_names if name.endswith("__model__orders")
+    )
+    retained_order_totals_names: tuple[str, ...] = tuple(
+        name for name in retained_names if name.endswith("__model__order_totals")
+    )
+
+    assert len(retained_source_names) == 2
+    assert len(retained_orders_model_names) == 2
+    assert len(retained_order_totals_names) == 1
+    assert sorted(
+        scenario_relation_row_count(
+            db_path=project_dir / "scenario_demo.duckdb",
+            relation_name=relation_name,
+        )
+        for relation_name in retained_source_names
+    ) == [1, 2]
+    assert sorted(
+        scenario_relation_row_count(
+            db_path=project_dir / "scenario_demo.duckdb",
+            relation_name=relation_name,
+        )
+        for relation_name in retained_orders_model_names
+    ) == [1, 2]
+    assert (
+        scenario_relation_row_count(
+            db_path=project_dir / "scenario_demo.duckdb",
+            relation_name=retained_order_totals_names[0],
+        )
+        == 1
+    )
 
 
 @pytest.mark.parametrize(

@@ -165,7 +165,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     scenario_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
     scenario_subparsers = scenario_parser.add_subparsers(dest="scenario_command")
     scenario_test_parser: argparse.ArgumentParser = scenario_subparsers.add_parser("test")
-    scenario_test_parser.add_argument("scenario_selector", nargs="?", metavar="scenario")
+    scenario_test_parser.add_argument("scenario_selector", nargs="*", metavar="scenario")
     scenario_test_parser.add_argument("--retain", dest="scenario_retain", action="store_true")
     scenario_test_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     return parser
@@ -408,7 +408,7 @@ def _main_with_dependencies(
                 project_dir,
                 args.no_sql_validation,
                 args.no_color,
-                args.scenario_selector,
+                tuple(args.scenario_selector),
                 args.scenario_retain,
             )
         return 0
