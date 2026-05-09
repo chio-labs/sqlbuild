@@ -86,6 +86,14 @@ class ScenarioSnapshotInputSpec:
 
 
 @dataclass(frozen=True)
+class ScenarioSnapshotFileStats:
+    """Write statistics for one durable local scenario snapshot file."""
+
+    row_count: int
+    byte_count: int
+
+
+@dataclass(frozen=True)
 class ScenarioSnapshotStateResult:
     """Manifest freshness classification for one local scenario snapshot."""
 

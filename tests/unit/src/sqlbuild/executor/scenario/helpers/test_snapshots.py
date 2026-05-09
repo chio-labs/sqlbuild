@@ -11,13 +11,16 @@ from sqlbuild.executor.scenario.helpers.snapshots import (
     build_scenario_snapshot_input_specs,
     classify_scenario_snapshot_state,
     is_scenario_snapshot_fresh,
+    read_scenario_snapshot_jsonl,
     read_scenario_snapshot_manifest,
     scenario_snapshot_manifest_path,
     scenario_snapshot_relation_file_path,
     scenario_snapshot_root,
+    write_scenario_snapshot_jsonl,
     write_scenario_snapshot_manifest,
 )
 from sqlbuild.executor.scenario.models import (
+    ScenarioSnapshotFileStats,
     ScenarioSnapshotInputSpec,
     ScenarioSnapshotManifest,
     ScenarioSnapshotStateResult,
@@ -27,6 +30,8 @@ from tests.unit.src.sqlbuild.executor.scenario.helpers._test_types import (
     ScenarioSnapshotFingerprintTestCase,
     ScenarioSnapshotFreshnessTestCase,
     ScenarioSnapshotInputSpecsFromPlanTestCase,
+    ScenarioSnapshotJsonlErrorTestCase,
+    ScenarioSnapshotJsonlRoundTripTestCase,
     ScenarioSnapshotManifestIoTestCase,
     ScenarioSnapshotPathTestCase,
     ScenarioSnapshotRelationPathErrorTestCase,
@@ -125,6 +130,79 @@ SNAPSHOT_STATE_TEST_CASES: list[ScenarioSnapshotStateTestCase] = [
         expected_error_fragment="Invalid scenario snapshot manifest JSON",
     ),
 ]
+
+JSONL_ERROR_TEST_CASES: list[ScenarioSnapshotJsonlErrorTestCase] = [
+    ScenarioSnapshotJsonlErrorTestCase(
+        description="malformed json line fails clearly",
+        file_contents='{"order_id":1}\n{not json}\n',
+        expected_error_fragment="line 2",
+    ),
+    ScenarioSnapshotJsonlErrorTestCase(
+        description="non object json line fails clearly",
+        file_contents='{"order_id":1}\n[1, 2, 3]\n',
+        expected_error_fragment="row must be a JSON object",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScenarioSnapshotJsonlRoundTripTestCase(
+            description="jsonl rows round trip with file stats",
+            relative_file_path=Path("sources/raw__orders.jsonl"),
+            rows=(
+                {"order_id": 1, "amount": 10.5, "is_paid": True, "note": None},
+                {"order_id": 2, "amount": 20, "is_paid": False, "note": "refund"},
+            ),
+            expected_stats=ScenarioSnapshotFileStats(row_count=2, byte_count=115),
+            expected_file_contents=(
+                '{"amount":10.5,"is_paid":true,"note":null,"order_id":1}\n'
+                '{"amount":20,"is_paid":false,"note":"refund","order_id":2}\n'
+            ),
+            expected_rows=(
+                {"amount": 10.5, "is_paid": True, "note": None, "order_id": 1},
+                {"amount": 20, "is_paid": False, "note": "refund", "order_id": 2},
+            ),
+        )
+    ],
+    ids=["jsonl rows round trip with file stats"],
+)
+def test_given_snapshot_rows_when_writing_and_reading_jsonl_then_round_trips_with_stats(
+    tmp_path: Path,
+    test_case: ScenarioSnapshotJsonlRoundTripTestCase,
+) -> None:
+    file_path: Path = tmp_path / test_case.relative_file_path
+
+    stats: ScenarioSnapshotFileStats = write_scenario_snapshot_jsonl(
+        file_path=file_path,
+        rows=test_case.rows,
+    )
+    file_contents: str = file_path.read_text(encoding="utf-8")
+    rows: tuple[dict[str, object], ...] = read_scenario_snapshot_jsonl(file_path=file_path)
+
+    assert stats == test_case.expected_stats
+    assert file_contents == test_case.expected_file_contents
+    assert rows == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    JSONL_ERROR_TEST_CASES,
+    ids=[case.description for case in JSONL_ERROR_TEST_CASES],
+)
+def test_given_invalid_snapshot_jsonl_when_reading_then_raises_clear_error(
+    tmp_path: Path,
+    test_case: ScenarioSnapshotJsonlErrorTestCase,
+) -> None:
+    file_path: Path = tmp_path / "sources" / "raw__orders.jsonl"
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path.write_text(test_case.file_contents, encoding="utf-8")
+
+    with pytest.raises(ValueError) as exc_info:
+        read_scenario_snapshot_jsonl(file_path=file_path)
+
+    assert test_case.expected_error_fragment in str(exc_info.value)
 
 
 @pytest.mark.parametrize(
