@@ -38,3 +38,22 @@ class ScenarioModelBuildIntegrationTestCase:
     description: str
     expected_statuses: tuple[ExecutionStatus, ...]
     expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ScenarioExpectedCheckIntegrationTestCase:
+    description: str
+    expected_sql: str
+    expected_status: ExecutionStatus
+    expected_actual_row_count: int
+    expected_expected_row_count: int
+    expected_mismatched_row_count: int
+
+
+@dataclass(frozen=True)
+class ScenarioAssertionCheckIntegrationTestCase:
+    description: str
+    assertion_sql: str
+    expected_status: ExecutionStatus
+    expected_failing_row_count: int
+    expected_sample_rows: tuple[tuple[object, ...], ...]

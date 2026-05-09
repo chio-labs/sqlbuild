@@ -7,7 +7,9 @@ from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,
+    ScenarioAssertionCheckPlan,
     ScenarioExecutionPlan,
+    ScenarioExpectedCheckPlan,
     ScenarioFixturePlan,
     ScenarioGraphPlan,
     ScenarioRelationMap,
@@ -167,6 +169,73 @@ def build_duckdb_model_execution_plan() -> ScenarioExecutionPlan:
         ),
         fixture_plans=build_duckdb_fixture_plans()[:2],
         model_entries=(stg_orders, daily_revenue),
+    )
+
+
+def build_duckdb_expected_check_plan(*, expected_sql: str) -> ScenarioExecutionPlan:
+    model_target: CompiledRelationTarget = _target(
+        physical_name="__sqb_51b385aebe20__model__daily_revenue"
+    )
+    return ScenarioExecutionPlan(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.SQL_SCENARIO,
+            name=SCENARIO_NAME,
+        ),
+        name=SCENARIO_NAME,
+        graph_plan=ScenarioGraphPlan(
+            key=CompiledObjectKey(
+                resource_type=CompiledResourceType.SQL_SCENARIO,
+                name=SCENARIO_NAME,
+            ),
+            name=SCENARIO_NAME,
+            model_names=("daily_revenue",),
+        ),
+        relation_plan=ScenarioRelationPlan(
+            scenario_name=SCENARIO_NAME,
+            relation_map=ScenarioRelationMap(
+                scenario_name=SCENARIO_NAME,
+                hash_prefix=HASH_PREFIX,
+            ),
+            model_targets={"daily_revenue": model_target},
+        ),
+        expected_checks=(
+            ScenarioExpectedCheckPlan(
+                model_name="daily_revenue",
+                actual_target=model_target,
+                expected_sql=expected_sql,
+            ),
+        ),
+    )
+
+
+def build_duckdb_assertion_check_plan(*, assertion_sql: str) -> ScenarioExecutionPlan:
+    return ScenarioExecutionPlan(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.SQL_SCENARIO,
+            name=SCENARIO_NAME,
+        ),
+        name=SCENARIO_NAME,
+        graph_plan=ScenarioGraphPlan(
+            key=CompiledObjectKey(
+                resource_type=CompiledResourceType.SQL_SCENARIO,
+                name=SCENARIO_NAME,
+            ),
+            name=SCENARIO_NAME,
+            model_names=("daily_revenue",),
+        ),
+        relation_plan=ScenarioRelationPlan(
+            scenario_name=SCENARIO_NAME,
+            relation_map=ScenarioRelationMap(
+                scenario_name=SCENARIO_NAME,
+                hash_prefix=HASH_PREFIX,
+            ),
+        ),
+        assertion_checks=(
+            ScenarioAssertionCheckPlan(
+                name="no_unknown_customers",
+                sql=assertion_sql,
+            ),
+        ),
     )
 
 

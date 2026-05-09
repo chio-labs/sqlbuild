@@ -40,3 +40,28 @@ class ScenarioCleanupExecutionResult:
     targets: tuple[ScenarioCleanupTarget, ...] = field(default_factory=tuple)
     lifecycle_events: tuple[LifeCycleEvent, ...] = field(default_factory=tuple)
     error_message: str | None = None
+
+
+@dataclass(frozen=True)
+class ScenarioExpectedCheckExecutionResult:
+    """Outcome of comparing one scenario model relation to expected SQL."""
+
+    scenario_name: str
+    model_name: str
+    status: ExecutionStatus
+    actual_row_count: int = 0
+    expected_row_count: int = 0
+    mismatched_row_count: int = 0
+    error_message: str | None = None
+
+
+@dataclass(frozen=True)
+class ScenarioAssertionCheckExecutionResult:
+    """Outcome of executing one zero-row scenario assertion."""
+
+    scenario_name: str
+    name: str
+    status: ExecutionStatus
+    failing_row_count: int = 0
+    sample_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
+    error_message: str | None = None
