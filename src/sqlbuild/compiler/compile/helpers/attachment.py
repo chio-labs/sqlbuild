@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import fields, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -54,6 +55,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlReference,
     CompileSqlScenarioCtes,
     CompileSqlScenarioInput,
+    CompileSqlTestCte,
     CompileSqlTestCtes,
     CompileSqlTestInput,
     FunctionArgument,
@@ -1074,6 +1076,8 @@ def build_test_inputs(
                     mock_source_names=test_ctes.mock_source_names,
                     mock_seed_names=test_ctes.mock_seed_names,
                     expected_model_names=test_ctes.expected_model_names,
+                    assertion_ctes=test_ctes.assertion_ctes,
+                    assertion_names=test_ctes.assertion_names,
                 )
             )
     return tuple(test_inputs)
@@ -1162,6 +1166,28 @@ def validate_test_ctes(
                 f"SQL test file {test_file.relative_path} expects unknown model "
                 f"'{expected_model_name}'"
             )
+
+    assertion_target_name: str
+    for assertion_target_name in _extract_sql_test_assertion_ref_targets(
+        assertion_ctes=test_ctes.assertion_ctes
+    ):
+        if assertion_target_name not in known_model_names:
+            raise CompileInputError(
+                f"SQL test file {test_file.relative_path} assertion references unknown model "
+                f"'{assertion_target_name}'"
+            )
+
+
+def _extract_sql_test_assertion_ref_targets(
+    *, assertion_ctes: tuple[CompileSqlTestCte, ...]
+) -> tuple[str, ...]:
+    targets: list[str] = []
+    cte: CompileSqlTestCte
+    for cte in assertion_ctes:
+        match: re.Match[str]
+        for match in re.finditer(r'__ref\("([^"]+)"\)', cte.sql_body):
+            targets.append(match.group(1))
+    return tuple(dict.fromkeys(targets))
 
 
 def build_audit_inputs(

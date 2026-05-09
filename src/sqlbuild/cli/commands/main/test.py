@@ -14,6 +14,9 @@ from sqlbuild.cli.commands.main.shared.helpers.connection_progress import Connec
 from sqlbuild.cli.commands.main.shared.helpers.nested_progress import NestedCommandProgressCallbacks
 from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
 from sqlbuild.cli.commands.main.shared.helpers.progress import format_build_header
+from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import (
+    write_test_runtime_target,
+)
 from sqlbuild.cli.commands.main.shared.helpers.status import TransientStatusReporter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -137,6 +140,12 @@ def run_test(
             item_name=entry.name,
         ),
         on_test_complete=on_complete,
+    )
+    write_test_runtime_target(
+        target_dir=effective_project_dir / "target",
+        adapter=adapter,
+        plan_output=pipeline_result.plan_output,
+        results=results,
     )
 
     pass_count: int = sum(1 for r in results if r.outcome == SqlTestOutcome.PASS)

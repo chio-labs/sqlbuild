@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 from sqlbuild.compiler.compile.constants import (
+    ASSERT_TEST_CTE_PREFIX,
     EXPECTED_TEST_CTE_PREFIX,
     REF_TEST_CTE_PREFIX,
     SEED_TEST_CTE_PREFIX,
@@ -27,6 +28,7 @@ from sqlbuild.compiler.planner.models import (
     ChainStep,
     PlanWarning,
     SqlglotResolvedTestSql,
+    SqlTestAssertionStep,
     SqlTestPlanEntry,
 )
 from sqlbuild.compiler.planner.types import WarningSeverity
@@ -53,8 +55,14 @@ def plan_test(
     mock_seeds: dict[str, str] = _extract_mock_seeds(test)
     helper_ctes: tuple[CompileSqlTestCte, ...] = _extract_helper_ctes(test)
     expected_map: dict[str, str] = _extract_expected_ctes(test)
+    assertion_map: dict[str, str] = _extract_assertion_ctes(test)
+    assertion_target_names: tuple[str, ...] = _extract_assertion_ref_targets(
+        assertion_map=assertion_map
+    )
 
-    expected_names: tuple[str, ...] = test.expected_model_names
+    expected_names: tuple[str, ...] = tuple(
+        dict.fromkeys((*test.expected_model_names, *assertion_target_names))
+    )
     ordered_names: tuple[str, ...] = _topo_sort_expected(
         expected_names=expected_names,
         model_map=model_map,
@@ -132,7 +140,26 @@ def plan_test(
             ChainStep(
                 model_name=model_name,
                 resolved_sql=step_sql,
-                expected_cte_sql=expected_cte_sql,
+                expected_cte_sql=expected_cte_sql or None,
+            )
+        )
+
+    assertion_steps: list[SqlTestAssertionStep] = []
+    assertion_name: str
+    assertion_sql: str
+    for assertion_name, assertion_sql in assertion_map.items():
+        assertion_steps.append(
+            SqlTestAssertionStep(
+                name=assertion_name,
+                resolved_sql=_resolve_assertion_sql(
+                    sql=assertion_sql,
+                    resolved_chain=resolved,
+                    mock_refs=mock_refs,
+                    mock_sources=mock_sources,
+                    mock_seeds=mock_seeds,
+                    helper_ctes=helper_ctes,
+                    function_targets=function_targets,
+                ),
             )
         )
 
@@ -174,11 +201,55 @@ def plan_test(
         key=test.key,
         name=test.name,
         chain=tuple(chain_steps),
+        assertions=tuple(assertion_steps),
         scope_deps=test.scope_deps,
         function_deps=_dedupe_function_deps(function_deps),
         sqlglot_enabled=sqlglot_enabled,
     )
     return entry, tuple(warnings)
+
+
+def _extract_assertion_ref_targets(*, assertion_map: dict[str, str]) -> tuple[str, ...]:
+    targets: list[str] = []
+    sql: str
+    for sql in assertion_map.values():
+        match: re.Match[str]
+        for match in _REF_PATTERN.finditer(sql):
+            targets.append(match.group(1))
+    return tuple(dict.fromkeys(targets))
+
+
+def _resolve_assertion_sql(
+    *,
+    sql: str,
+    resolved_chain: dict[str, str],
+    mock_refs: dict[str, str],
+    mock_sources: dict[str, str],
+    mock_seeds: dict[str, str],
+    helper_ctes: tuple[CompileSqlTestCte, ...],
+    function_targets: dict[str, CompiledRelationTarget],
+) -> str:
+    reachable_mocks: set[str] = set()
+    assertion_resolved_chain: dict[str, str] = {
+        name: _wrap_resolved_chain_sql(sql) for name, sql in resolved_chain.items()
+    }
+    return _resolve_test_model_sql(
+        query_sql=sql,
+        mock_refs=mock_refs,
+        mock_sources=mock_sources,
+        mock_seeds=mock_seeds,
+        helper_ctes=helper_ctes,
+        resolved_chain=assertion_resolved_chain,
+        reachable_mocks=reachable_mocks,
+        function_targets=function_targets,
+    )
+
+
+def _wrap_resolved_chain_sql(sql: str) -> str:
+    stripped: str = sql.strip()
+    if stripped.startswith("(") and stripped.endswith(")"):
+        return stripped
+    return f"({stripped})"
 
 
 def _dedupe_function_deps(deps: list[CompiledObjectKey]) -> tuple[CompiledObjectKey, ...]:
@@ -431,6 +502,8 @@ def _extract_helper_ctes(
             continue
         if cte.name.startswith(SEED_TEST_CTE_PREFIX):
             continue
+        if cte.name.startswith(ASSERT_TEST_CTE_PREFIX):
+            continue
         helpers.append(cte)
     return tuple(helpers)
 
@@ -455,4 +528,15 @@ def _extract_expected_ctes(
         model_name: str = cte_name.removeprefix(EXPECTED_TEST_CTE_PREFIX)
         cte_body: str = match.group(2).strip()
         result[model_name] = cte_body
+    return result
+
+
+def _extract_assertion_ctes(
+    test: CompiledSqlTest,
+) -> dict[str, str]:
+    result: dict[str, str] = {}
+    cte: CompileSqlTestCte
+    for cte in test.assertion_ctes:
+        assertion_name: str = cte.name.removeprefix(ASSERT_TEST_CTE_PREFIX)
+        result[assertion_name] = cte.sql_body
     return result

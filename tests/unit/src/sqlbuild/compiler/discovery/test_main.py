@@ -43,6 +43,7 @@ seeds:
 """.strip()
                 + "\n",
                 "tests/unit/orders.sql": "TEST ();\nSELECT 1\n",
+                "tests/legacy_orders.sql": "TEST ();\nSELECT 2\n",
                 "tests/scenarios/revenue/revenue__customer_refund.sql": """
 SCENARIO (description: "Customer refund", tags: ["revenue"]);
 

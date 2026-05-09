@@ -385,7 +385,7 @@ def test_given_project_with_defer_to_when_compiling_then_resolves_refs_to_deferr
                     "CROSS JOIN local_helper"
                 ),
                 "sources/raw.yml": "sources:\n  - name: raw\n    schema: main\n    table: raw\n",
-                "tests/test_chain.sql": (
+                "tests/unit/test_chain.sql": (
                     "TEST();\n\n"
                     "WITH\n"
                     "__source__raw AS (SELECT 1 AS id, 100 AS amount),\n"

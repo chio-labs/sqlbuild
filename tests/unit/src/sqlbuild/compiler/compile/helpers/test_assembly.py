@@ -71,7 +71,7 @@ seeds:
             "seeds/country_codes.csv": "code\nUS\n",
             "audits/generic/not_null.sql": "AUDIT ();\n\n"
             "SELECT @column FROM __ref('@model') WHERE @column IS NULL\n",
-            "tests/orders_test.sql": """
+            "tests/unit/orders_test.sql": """
 TEST ();
 
 WITH

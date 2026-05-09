@@ -36,6 +36,7 @@ class ExtractSqlTestCtesTestCase:
     expected_mock_source_names: tuple[str, ...]
     expected_expected_model_names: tuple[str, ...]
     expected_mock_seed_names: tuple[str, ...] = ()
+    expected_assertion_names: tuple[str, ...] = ()
     expected_macro_mocks: dict[str, str] = field(default_factory=dict)
 
 
