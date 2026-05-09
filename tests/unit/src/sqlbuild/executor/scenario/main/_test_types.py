@@ -19,3 +19,12 @@ class ExecuteScenarioFixturesTestCase:
     expected_result_count: int
     expected_statuses: tuple[ExecutionStatus, ...]
     expected_executed_target_count: int
+
+
+@dataclass(frozen=True)
+class ExecuteScenarioCleanupTestCase:
+    description: str
+    expected_status: ExecutionStatus
+    expected_drop_targets: tuple[str, ...]
+    unexpected_drop_targets: tuple[str, ...] = ()
+    expected_error_fragment: str | None = None
