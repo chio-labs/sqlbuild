@@ -87,5 +87,6 @@ class ScenarioRunResult:
     assertion_results: tuple[ScenarioAssertionCheckExecutionResult, ...] = field(
         default_factory=tuple
     )
+    prepare_cleanup_result: ScenarioCleanupExecutionResult | None = None
     cleanup_result: ScenarioCleanupExecutionResult | None = None
     error_message: str | None = None

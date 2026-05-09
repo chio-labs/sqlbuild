@@ -15,6 +15,9 @@ from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
 from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
 from sqlbuild.cli.commands.main.shared.helpers.progress import format_build_header
+from sqlbuild.cli.commands.main.shared.helpers.scenario_runtime_target_writer import (
+    write_scenario_runtime_target,
+)
 from sqlbuild.cli.commands.main.shared.helpers.status import TransientStatusReporter
 from sqlbuild.compiler.compile.models import CompiledProject, CompiledSqlScenario
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -139,6 +142,7 @@ def run_scenario(
                 adapter=adapter,
                 connection=connection,
                 project_name=discovered_inputs.project_config.name,
+                target_dir=effective_project_dir / "target",
                 retain=retain,
             )
             if status_is_tty:
@@ -196,6 +200,7 @@ def _run_one_scenario(
     adapter: BaseAdapter,
     connection: Any,
     project_name: str,
+    target_dir: Path,
     retain: bool,
 ) -> ScenarioRunResult:
     try:
@@ -205,13 +210,20 @@ def _run_one_scenario(
             adapter=adapter,
             project_name=project_name,
         )
-        return execute_scenario_run(
+        result: ScenarioRunResult = execute_scenario_run(
             scenario_plan=scenario_plan,
             adapter=adapter,
             connection=connection,
             run_id=pipeline_result.project.run_id,
             retain=retain,
         )
+        write_scenario_runtime_target(
+            target_dir=target_dir,
+            adapter=adapter,
+            scenario_plan=scenario_plan,
+            result=result,
+        )
+        return result
     except Exception as exc:
         return ScenarioRunResult(
             scenario_name=scenario.name,
