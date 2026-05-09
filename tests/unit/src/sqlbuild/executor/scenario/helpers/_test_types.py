@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.scenario.models import ScenarioSnapshotInputSpec
 
@@ -26,6 +27,17 @@ class ScenarioSnapshotFingerprintTestCase:
     changed_input_specs: tuple[ScenarioSnapshotInputSpec, ...]
     expected_matches_equivalent: bool
     expected_differs_from_changed: bool
+
+
+@dataclass(frozen=True)
+class ScenarioSnapshotInputSpecsFromPlanTestCase:
+    description: str
+    scenario_plan: ScenarioExecutionPlan
+    expected_input_specs: tuple[ScenarioSnapshotInputSpec, ...]
+    changed_check_plan: ScenarioExecutionPlan
+    changed_fixture_plan: ScenarioExecutionPlan
+    expected_check_fingerprint_matches: bool
+    expected_fixture_fingerprint_differs: bool
 
 
 @dataclass(frozen=True)
