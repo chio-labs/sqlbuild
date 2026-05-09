@@ -88,3 +88,19 @@ def create_janitor_demo_relations(*, db_path: Path) -> None:
         )
     finally:
         connection.close()
+
+
+def create_janitor_scenario_relations(*, db_path: Path) -> None:
+    """Create strict scenario artifacts and a similarly named non-artifact relation."""
+
+    import duckdb
+
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(str(db_path))
+    try:
+        connection.execute("CREATE TABLE __sqb_a13f09c2e7b8__source__raw_orders AS SELECT 1 AS id")
+        connection.execute(
+            "CREATE TABLE __sqb_a13f09c2e7b8__model__daily_revenue AS SELECT 1 AS id"
+        )
+        connection.execute("CREATE TABLE __sqb_a13f09c2e7b__model__daily_revenue AS SELECT 1 AS id")
+    finally:
+        connection.close()

@@ -13,7 +13,13 @@ from sqlbuild.compiler.planner.models import (
     ScenarioArtifactName,
     ScenarioRelationMap,
 )
+from sqlbuild.shared.helpers.scenario_artifact_names import (
+    is_scenario_artifact_physical_name,
+    parse_scenario_artifact_physical_name,
+)
+from sqlbuild.shared.models import ParsedScenarioArtifactName
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
+    ScenarioArtifactNameRecognitionTestCase,
     ScenarioArtifactNameTestCase,
     ScenarioHashCollisionTestCase,
     ScenarioHashPrefixTestCase,
@@ -118,6 +124,87 @@ def test_given_scenario_artifact_when_building_name_then_returns_expected_physic
 
     assert result == test_case.expected_physical_name
     assert len(result) <= test_case.identifier_limit
+
+
+VALID_ARTIFACT_NAME_RECOGNITION_TEST_CASES: list[ScenarioArtifactNameRecognitionTestCase] = [
+    ScenarioArtifactNameRecognitionTestCase(
+        description="recognizes generated source artifact name",
+        physical_name=build_scenario_artifact_name(
+            hash_prefix="51b385aebe20",
+            kind="source",
+            logical_name="raw__orders",
+        ),
+        expected_is_scenario_artifact=True,
+        expected_hash_prefix="51b385aebe20",
+        expected_kind="source",
+        expected_logical_name="raw__orders",
+    ),
+    ScenarioArtifactNameRecognitionTestCase(
+        description="recognizes generated shortened model artifact name",
+        physical_name=build_scenario_artifact_name(
+            hash_prefix="51b385aebe20",
+            kind="model",
+            logical_name="very_long_customer_revenue_reconciliation_by_region_and_day",
+            identifier_limit=63,
+        ),
+        expected_is_scenario_artifact=True,
+        expected_hash_prefix="51b385aebe20",
+        expected_kind="model",
+        expected_logical_name="very_long_customer_revenue__f3f1eed0",
+    ),
+]
+
+INVALID_ARTIFACT_NAME_RECOGNITION_TEST_CASES: list[ScenarioArtifactNameRecognitionTestCase] = [
+    ScenarioArtifactNameRecognitionTestCase(
+        description="rejects non-12-character hash prefix",
+        physical_name="__sqb_51b385aebe2__model__daily_revenue",
+        expected_is_scenario_artifact=False,
+    ),
+    ScenarioArtifactNameRecognitionTestCase(
+        description="rejects unknown artifact kind",
+        physical_name="__sqb_51b385aebe20__cmp__daily_revenue",
+        expected_is_scenario_artifact=False,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    VALID_ARTIFACT_NAME_RECOGNITION_TEST_CASES,
+    ids=[case.description for case in VALID_ARTIFACT_NAME_RECOGNITION_TEST_CASES],
+)
+def test_given_generated_physical_name_when_parsing_scenario_artifact_then_returns_expected_parts(
+    test_case: ScenarioArtifactNameRecognitionTestCase,
+) -> None:
+    parsed: ParsedScenarioArtifactName | None = parse_scenario_artifact_physical_name(
+        test_case.physical_name
+    )
+
+    assert is_scenario_artifact_physical_name(test_case.physical_name) is (
+        test_case.expected_is_scenario_artifact
+    )
+    assert parsed is not None
+    assert parsed.hash_prefix == test_case.expected_hash_prefix
+    assert parsed.kind == test_case.expected_kind
+    assert parsed.logical_name == test_case.expected_logical_name
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    INVALID_ARTIFACT_NAME_RECOGNITION_TEST_CASES,
+    ids=[case.description for case in INVALID_ARTIFACT_NAME_RECOGNITION_TEST_CASES],
+)
+def test_given_non_scenario_physical_name_when_parsing_scenario_artifact_then_returns_none(
+    test_case: ScenarioArtifactNameRecognitionTestCase,
+) -> None:
+    parsed: ParsedScenarioArtifactName | None = parse_scenario_artifact_physical_name(
+        test_case.physical_name
+    )
+
+    assert is_scenario_artifact_physical_name(test_case.physical_name) is (
+        test_case.expected_is_scenario_artifact
+    )
+    assert parsed is None
 
 
 @pytest.mark.parametrize(

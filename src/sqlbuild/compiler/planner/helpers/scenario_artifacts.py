@@ -9,7 +9,6 @@ from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.planner.constants import (
     SCENARIO_DEFAULT_IDENTIFIER_LIMIT,
     SCENARIO_HASH_PREFIX_LENGTH,
-    SCENARIO_SHORTENED_LOGICAL_HASH_LENGTH,
 )
 from sqlbuild.compiler.planner.models import (
     ScenarioArtifactIdentity,
@@ -17,6 +16,9 @@ from sqlbuild.compiler.planner.models import (
     ScenarioRelationMap,
 )
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
+from sqlbuild.shared.helpers.scenario_artifact_names import (
+    build_scenario_artifact_physical_name,
+)
 
 
 def compute_scenario_hash_prefix(
@@ -73,13 +75,12 @@ def build_scenario_artifact_name(
     """Build one deterministic scenario physical relation name."""
 
     normalized_kind: ScenarioArtifactKind = ScenarioArtifactKind(kind)
-    fixed_prefix: str = f"__sqb_{hash_prefix}__{normalized_kind.value}__"
-    logical_part: str = _fit_logical_name(
+    return build_scenario_artifact_physical_name(
+        hash_prefix=hash_prefix,
+        kind=normalized_kind.value,
         logical_name=logical_name,
-        fixed_prefix=fixed_prefix,
         identifier_limit=identifier_limit,
     )
-    return f"{fixed_prefix}{logical_part}"
 
 
 def build_scenario_relation_map(
@@ -124,26 +125,3 @@ def build_scenario_relation_map(
         hash_prefix=hash_prefix,
         artifacts=tuple(resolved_artifacts),
     )
-
-
-def _fit_logical_name(*, logical_name: str, fixed_prefix: str, identifier_limit: int) -> str:
-    max_logical_length: int = identifier_limit - len(fixed_prefix)
-    if max_logical_length < 1:
-        raise ValueError(
-            f"Scenario artifact prefix '{fixed_prefix}' does not fit within identifier "
-            f"limit {identifier_limit}"
-        )
-    if len(logical_name) <= max_logical_length:
-        return logical_name
-
-    suffix_length: int = SCENARIO_SHORTENED_LOGICAL_HASH_LENGTH + 1
-    if max_logical_length <= suffix_length:
-        raise ValueError(
-            f"Scenario artifact name for '{logical_name}' cannot fit within identifier "
-            f"limit {identifier_limit}"
-        )
-    logical_hash: str = hashlib.sha256(logical_name.encode("utf-8")).hexdigest()[
-        :SCENARIO_SHORTENED_LOGICAL_HASH_LENGTH
-    ]
-    prefix_length: int = max_logical_length - suffix_length
-    return f"{logical_name[:prefix_length]}_{logical_hash}"

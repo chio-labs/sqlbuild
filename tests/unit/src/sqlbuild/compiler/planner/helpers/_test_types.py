@@ -273,6 +273,16 @@ class ScenarioArtifactNameTestCase:
 
 
 @dataclass(frozen=True)
+class ScenarioArtifactNameRecognitionTestCase:
+    description: str
+    physical_name: str
+    expected_is_scenario_artifact: bool
+    expected_hash_prefix: str | None = None
+    expected_kind: str | None = None
+    expected_logical_name: str | None = None
+
+
+@dataclass(frozen=True)
 class ScenarioRelationMapTestCase:
     description: str
     artifacts: tuple[ScenarioArtifactIdentity, ...]

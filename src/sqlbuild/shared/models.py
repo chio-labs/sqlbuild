@@ -13,3 +13,12 @@ class DiscoveredAdapter:
     adapter_name: str
     adapter_class: type[StrictAdapter]
     file_path: Path
+
+
+@dataclass(frozen=True)
+class ParsedScenarioArtifactName:
+    """Parsed physical name for one scenario-owned artifact."""
+
+    hash_prefix: str
+    kind: str
+    logical_name: str
