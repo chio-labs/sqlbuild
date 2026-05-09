@@ -8,6 +8,10 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.cli.commands.main.helpers.sql_test_progress import (
+    build_test_check_rows,
+    resolve_test_name_width,
+)
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
@@ -97,6 +101,7 @@ def run_test(
         label="test",
         stream=progress_stream,
         use_color=use_color,
+        name_width=resolve_test_name_width(pipeline_result.plan_output.test_entries),
     )
     sys.stdout.write(f"\n{styled_header}\n\n")
     sys.stdout.flush()
@@ -169,6 +174,7 @@ def _build_on_complete(
             group_name=group_name,
             item_name=result.test_name,
             status_text=status_text,
+            child_rows=build_test_check_rows(result),
             error_message=result.error_message,
         )
 

@@ -355,6 +355,10 @@ class BaseAdapter(StrictAdapter):
         exists_clause: str = " IF EXISTS" if if_exists else ""
         return (f"DROP TABLE{exists_clause} {target}",)
 
+    def render_drop_view(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+        exists_clause: str = " IF EXISTS" if if_exists else ""
+        return (f"DROP VIEW{exists_clause} {target}",)
+
     def render_rename(self, *, source: str, target: str) -> tuple[str, ...]:
         return (f"ALTER TABLE {source} RENAME TO {target}",)
 
@@ -487,6 +491,20 @@ class BaseAdapter(StrictAdapter):
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_drop(target=target, if_exists=if_exists)
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def drop_view(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        if_exists: bool = True,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_drop_view(target=target, if_exists=if_exists)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:

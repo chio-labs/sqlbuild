@@ -328,10 +328,11 @@ def test_given_waffle_shop_fixture_when_running_scenario_test_then_scenarios_pas
                 "source raw_orders -> __sqb_",
                 "ref    stg_payments -> __sqb_",
                 "seed   waffle_types -> __sqb_",
+                "model  stg_orders -> __sqb_",
                 "model  scenario_order_prices -> __sqb_",
                 "PASS=1  FAIL=0  TOTAL=1",
             ),
-            expected_retained_prefix_count=4,
+            expected_retained_prefix_count=5,
         )
     ],
     ids=["waffle shop fixture retain keeps scenario artifacts on duckdb"],
@@ -360,6 +361,7 @@ def test_given_waffle_shop_fixture_when_running_with_retain_then_keeps_scenario_
         "__source__raw_orders",
         "__ref__stg_payments",
         "__seed__waffle_types",
+        "__model__stg_orders",
         "__model__scenario_order_prices",
     ):
         retained_relation_name: str = scenario_relation_name_by_suffix(

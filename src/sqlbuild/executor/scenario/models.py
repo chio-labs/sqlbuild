@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from sqlbuild.adapter.shared.models import LifeCycleEvent
 from sqlbuild.compiler.planner.models import ScenarioRelationMap
-from sqlbuild.compiler.planner.types import ScenarioArtifactKind
+from sqlbuild.compiler.planner.types import MaterializationType, ScenarioArtifactKind
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
@@ -32,6 +32,7 @@ class ScenarioCleanupTarget:
     kind: ScenarioArtifactKind
     logical_name: str
     target_relation: str
+    materialization_type: MaterializationType = MaterializationType.TABLE
 
 
 @dataclass(frozen=True)

@@ -24,7 +24,7 @@ from sqlbuild.executor.build.models import (
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.executor.testing.models import SqlTestExecutionResult
+from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
 
@@ -123,6 +123,15 @@ def format_build_output(
                     name_width=sub_name_width,
                 )
             )
+            step_result: StepResult
+            for step_result in test_result.step_results:
+                lines.append(
+                    _format_test_check_sub_line(
+                        step_result,
+                        use_color=use_color,
+                        name_width=sub_name_width,
+                    )
+                )
 
         audit_entries: list[_AuditDisplayEntry] = _aggregate_audit_results(
             model_result.audit_results
@@ -293,6 +302,34 @@ def _format_audit_sub_line(entry: _AuditDisplayEntry, *, use_color: bool, name_w
     )
 
 
+def _format_test_check_sub_line(
+    step_result: StepResult, *, use_color: bool, name_width: int
+) -> str:
+    status: str = _test_outcome_to_status(step_result.outcome)
+    detail: str = ""
+    if step_result.outcome != SqlTestOutcome.PASS:
+        if step_result.model_name.startswith("assertion "):
+            row_label: str = "row" if step_result.actual_row_count == 1 else "rows"
+            detail = f"  {step_result.actual_row_count} {row_label}"
+        else:
+            detail = f"  {step_result.mismatched_row_count} mismatched"
+    colored_status: str = colorize_status(f"{status}{detail}", use_color=use_color)
+    name: str = _format_test_check_name(step_result.model_name)
+    return format_aligned_name_value(
+        plain_name=name,
+        styled_name=name,
+        value=colored_status,
+        name_column_width=name_width,
+        prefix=f"{'':>14}{'check':<4} ",
+    )
+
+
+def _format_test_check_name(model_name: str) -> str:
+    if model_name.startswith("assertion "):
+        return model_name
+    return f"expected {model_name}"
+
+
 def _format_completion_message(status: BuildStatus, warning_count: int, *, use_color: bool) -> str:
     if status == BuildStatus.FAILED:
         return colorize_completion("Completed with errors.", use_color=use_color)
@@ -321,6 +358,9 @@ def _sub_name_width(result: BuildExecutionResult) -> int:
     test_result: SqlTestExecutionResult
     for test_result in result.test_results:
         names.append(test_result.test_name)
+        step_result: StepResult
+        for step_result in test_result.step_results:
+            names.append(_format_test_check_name(step_result.model_name))
     model_result: ModelExecutionResult
     for model_result in result.model_results:
         audit_entry: _AuditDisplayEntry

@@ -7,6 +7,7 @@ from io import StringIO
 
 import pytest
 
+from sqlbuild.cli.commands.main.shared.helpers.nested_progress import NestedCommandProgressCallbacks
 from sqlbuild.cli.commands.main.shared.helpers.progress import (
     BuildProgressCallbacks,
     _aggregate_audit_results,
@@ -14,6 +15,7 @@ from sqlbuild.cli.commands.main.shared.helpers.progress import (
     _truncate_name,
     format_build_footer,
 )
+from sqlbuild.cli.commands.main.shared.models import NestedProgressChildRow
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.planner.types import MaterializationType
@@ -25,12 +27,16 @@ from sqlbuild.executor.build.models import (
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
+from sqlbuild.executor.testing.types import SqlTestOutcome
 from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import (
     AuditAggregationTestCase,
     BuildFooterTestCase,
     BuildProgressActiveSpinnerTestCase,
     BuildProgressFailureOutputTestCase,
     BuildProgressSpinnerLifecycleTestCase,
+    BuildProgressSqlTestRowsTestCase,
+    NestedProgressChildRowsTestCase,
     TruncateNameTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers.helpers import (
@@ -390,6 +396,64 @@ BUILD_PROGRESS_ACTIVE_SPINNER_TEST_CASES: list[BuildProgressActiveSpinnerTestCas
 
 @pytest.mark.parametrize(
     "test_case",
+    [
+        NestedProgressChildRowsTestCase(
+            description="completed item renders aligned child check rows without truncation",
+            item_name="test_fact_orders",
+            name_width=len("assertion line_totals_are_non_negative"),
+            expected_fragments=(
+                "test      test_fact_orders",
+                "check   expected fact_orders",
+                "check   assertion line_totals_are_non_negative",
+                "expected fact_orders                               PASS",
+            ),
+            unexpected_fragments=("...",),
+        )
+    ],
+    ids=["completed item renders aligned child check rows without truncation"],
+)
+def test_given_child_rows_when_completing_nested_progress_then_renders_aligned_checks(
+    test_case: NestedProgressChildRowsTestCase,
+) -> None:
+    stream: StringIO = StringIO()
+    callbacks: NestedCommandProgressCallbacks = NestedCommandProgressCallbacks(
+        total=1,
+        label="test",
+        stream=stream,
+        use_color=False,
+        name_width=test_case.name_width,
+    )
+
+    callbacks.on_item_start(group_name="fact_orders", item_name=test_case.item_name)
+    callbacks.on_item_complete(
+        group_name="fact_orders",
+        item_name=test_case.item_name,
+        status_text="PASS",
+        child_rows=(
+            NestedProgressChildRow(
+                label="check",
+                name="expected fact_orders",
+                status_text="PASS",
+            ),
+            NestedProgressChildRow(
+                label="check",
+                name="assertion line_totals_are_non_negative",
+                status_text="PASS",
+            ),
+        ),
+    )
+    output: str = stream.getvalue()
+
+    expected_fragment: str
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in output
+    unexpected_fragment: str
+    for unexpected_fragment in test_case.unexpected_fragments:
+        assert unexpected_fragment not in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
     AUDIT_AGGREGATION_TEST_CASES,
     ids=[case.description for case in AUDIT_AGGREGATION_TEST_CASES],
 )
@@ -455,6 +519,62 @@ def test_given_failed_top_level_node_when_reporting_progress_then_writes_error_d
     )
 
     callbacks.on_node_complete(test_case.node_result)
+    output: str = stream.getvalue()
+
+    expected_fragment: str
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in output
+    unexpected_fragment: str
+    for unexpected_fragment in test_case.unexpected_fragments:
+        assert unexpected_fragment not in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildProgressSqlTestRowsTestCase(
+            description="completed model renders sql unit test check rows",
+            expected_fragments=(
+                "test      test_fact_orders",
+                "check   expected fact_orders",
+                "check   assertion line_totals_are_non_negative PASS",
+            ),
+            unexpected_fragments=("...",),
+        )
+    ],
+    ids=["completed model renders sql unit test check rows"],
+)
+def test_given_sql_unit_test_result_when_reporting_model_progress_then_writes_check_rows(
+    test_case: BuildProgressSqlTestRowsTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stream: StringIO = StringIO()
+    monkeypatch.setattr("sys.stdout", stream)
+    callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
+        plan=PlanOutput(),
+        use_color=False,
+    )
+
+    callbacks.on_node_complete(
+        SqlTestExecutionResult(
+            test_name="test_fact_orders",
+            outcome=SqlTestOutcome.PASS,
+            step_results=(
+                StepResult(model_name="fact_orders", outcome=SqlTestOutcome.PASS),
+                StepResult(
+                    model_name="assertion line_totals_are_non_negative",
+                    outcome=SqlTestOutcome.PASS,
+                ),
+            ),
+        )
+    )
+    callbacks.on_node_complete(
+        ModelExecutionResult(
+            model_name="fact_orders",
+            status=ExecutionStatus.SUCCESS,
+            duration_ms=100,
+        )
+    )
     output: str = stream.getvalue()
 
     expected_fragment: str

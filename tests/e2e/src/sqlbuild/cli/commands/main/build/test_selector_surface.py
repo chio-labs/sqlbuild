@@ -20,7 +20,7 @@ TEST_CASES: list[SelectorSurfaceBuildE2ETestCase] = [
         description="slash path selector works on build",
         command=("--no-color", "build", "--select", "/marts"),
         expected_exit_code=0,
-        expected_fragments=("Plan ready (9 selected)", "hourly_activity_with_daily_context"),
+        expected_fragments=("Plan ready (10 selected)", "hourly_activity_with_daily_context"),
         expected_stream="stdout",
         pre_commands=(("--no-color", "build"),),
     ),

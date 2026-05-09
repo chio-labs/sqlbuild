@@ -18,5 +18,10 @@ __expected__stg_orders AS (
     3 AS quantity,
     CAST('2026-04-01 10:00:00' AS TIMESTAMP) AS ordered_at,
     'completed' AS status
+),
+__assert__order_ids_are_not_null AS (
+  SELECT *
+  FROM __ref("stg_orders")
+  WHERE order_id IS NULL
 )
 SELECT 1
