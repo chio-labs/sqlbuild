@@ -287,6 +287,48 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
     "test_case",
     [
         MainTestCase(
+            description="dispatches scenario test with multiple selectors",
+            argv=[
+                "scenario",
+                "test",
+                "order_totals_pass",
+                "tests/scenarios/nested",
+                "--retain",
+            ],
+            expected_exit_code=5,
+            expected_scenario_selectors=("order_totals_pass", "tests/scenarios/nested"),
+        )
+    ],
+    ids=["dispatches scenario test with multiple selectors"],
+)
+def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispatches_selectors(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[tuple[Path | None, bool, bool, tuple[str, ...], bool]] = []
+
+    def run_scenario(
+        project_dir: Path | None,
+        no_sql_validation: bool,
+        no_color: bool,
+        selectors: tuple[str, ...],
+        retain: bool,
+    ) -> int:
+        received_args.append((project_dir, no_sql_validation, no_color, selectors, retain))
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_scenario=run_scenario),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [(None, False, False, test_case.expected_scenario_selectors, True)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
             description="dispatches query command through injected handler",
             argv=[
                 "query",

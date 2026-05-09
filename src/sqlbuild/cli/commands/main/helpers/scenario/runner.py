@@ -49,7 +49,7 @@ def run_scenario(
     project_dir: Path | None,
     no_sql_validation: bool = False,
     no_color: bool = False,
-    selector: str | None = None,
+    selectors: tuple[str, ...] = (),
     retain: bool = False,
 ) -> int:
     """Execute the scenario test command."""
@@ -69,8 +69,9 @@ def run_scenario(
     )
     use_color: bool = not no_color and supports_color()
     progress_stream: TextIO = sys.stdout
+    target_label: str | None = " ".join(selectors) if selectors else None
     execution_header: str = format_build_header(
-        command="sqb scenario test", target=selector, concurrency=1
+        command="sqb scenario test", target=target_label, concurrency=1
     )
     execution_label: str = blue_bold("Execution") if use_color else "Execution"
     header_detail: str = dim(execution_header) if use_color else execution_header
@@ -98,7 +99,7 @@ def run_scenario(
     )
     scenarios: tuple[CompiledSqlScenario, ...] = _select_scenarios(
         project=pipeline_result.project,
-        selector=selector,
+        selectors=selectors,
         project_dir=effective_project_dir,
     )
     header: str = f"Scenario ({len(scenarios)} selected)"
@@ -153,15 +154,36 @@ def run_scenario(
 
 
 def _select_scenarios(
-    *, project: CompiledProject, selector: str | None, project_dir: Path
+    *, project: CompiledProject, selectors: tuple[str, ...], project_dir: Path
 ) -> tuple[CompiledSqlScenario, ...]:
-    if selector is None:
+    if not selectors:
         if not project.sql_scenarios:
             raise CliUserError(
                 "No SQL scenarios were discovered under tests/scenarios", code="C451"
             )
         return project.sql_scenarios
 
+    selected: list[CompiledSqlScenario] = []
+    selected_names: set[str] = set()
+    selector: str
+    for selector in selectors:
+        matches: tuple[CompiledSqlScenario, ...] = _select_scenarios_for_selector(
+            project=project,
+            selector=selector,
+            project_dir=project_dir,
+        )
+        scenario: CompiledSqlScenario
+        for scenario in matches:
+            if scenario.name in selected_names:
+                continue
+            selected.append(scenario)
+            selected_names.add(scenario.name)
+    return tuple(selected)
+
+
+def _select_scenarios_for_selector(
+    *, project: CompiledProject, selector: str, project_dir: Path
+) -> tuple[CompiledSqlScenario, ...]:
     selector_path: Path = Path(selector)
     matches: list[CompiledSqlScenario] = []
     scenario: CompiledSqlScenario
@@ -170,19 +192,75 @@ def _select_scenarios(
             matches.append(scenario)
             continue
         scenario_path: Path = scenario.scenario_file.file_path
-        if selector_path.suffix == ".sql" and (
-            scenario_path == selector_path
-            or scenario_path == project_dir / selector_path
-            or scenario.scenario_file.relative_path == selector_path
+        scenario_relative_path: Path = scenario.scenario_file.relative_path
+        scenario_root_relative_path: Path = _scenario_root_relative_path(scenario_relative_path)
+        if selector_path.suffix == ".sql" and _scenario_file_matches_selector(
+            selector_path=selector_path,
+            project_dir=project_dir,
+            scenario_path=scenario_path,
+            scenario_relative_path=scenario_relative_path,
+            scenario_root_relative_path=scenario_root_relative_path,
         ):
             matches.append(scenario)
-    if len(matches) == 1:
-        return (matches[0],)
-    if len(matches) > 1:
-        raise CliUserError(
-            f"Scenario selector '{selector}' matched multiple scenarios", code="C452"
-        )
+            continue
+        if selector_path.suffix != ".sql" and _scenario_path_is_under_selector(
+            selector_path=selector_path,
+            project_dir=project_dir,
+            scenario_path=scenario_path,
+            scenario_relative_path=scenario_relative_path,
+            scenario_root_relative_path=scenario_root_relative_path,
+        ):
+            matches.append(scenario)
+    if matches:
+        return tuple(matches)
     raise CliUserError(f"Unknown scenario selector '{selector}'", code="C453")
+
+
+def _scenario_file_matches_selector(
+    *,
+    selector_path: Path,
+    project_dir: Path,
+    scenario_path: Path,
+    scenario_relative_path: Path,
+    scenario_root_relative_path: Path,
+) -> bool:
+    return selector_path in (
+        scenario_path,
+        project_dir / selector_path,
+        scenario_relative_path,
+        scenario_root_relative_path,
+    )
+
+
+def _scenario_path_is_under_selector(
+    *,
+    selector_path: Path,
+    project_dir: Path,
+    scenario_path: Path,
+    scenario_relative_path: Path,
+    scenario_root_relative_path: Path,
+) -> bool:
+    selector_candidates: tuple[Path, ...] = (selector_path, project_dir / selector_path)
+    candidate: Path
+    for candidate in selector_candidates:
+        if _path_is_under(path=scenario_path, prefix=candidate):
+            return True
+    return _path_is_under(path=scenario_relative_path, prefix=selector_path) or _path_is_under(
+        path=scenario_root_relative_path,
+        prefix=selector_path,
+    )
+
+
+def _path_is_under(*, path: Path, prefix: Path) -> bool:
+    return path == prefix or prefix in path.parents
+
+
+def _scenario_root_relative_path(relative_path: Path) -> Path:
+    scenario_root: Path = Path("tests") / "scenarios"
+    try:
+        return relative_path.relative_to(scenario_root)
+    except ValueError:
+        return relative_path
 
 
 def _complete_scenario_run(

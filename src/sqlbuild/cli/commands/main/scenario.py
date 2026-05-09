@@ -11,7 +11,7 @@ def run_scenario(
     project_dir: Path | None,
     no_sql_validation: bool = False,
     no_color: bool = False,
-    selector: str | None = None,
+    selectors: tuple[str, ...] = (),
     retain: bool = False,
 ) -> int:
     """Run the scenario command."""
@@ -20,6 +20,6 @@ def run_scenario(
         project_dir=project_dir,
         no_sql_validation=no_sql_validation,
         no_color=no_color,
-        selector=selector,
+        selectors=selectors,
         retain=retain,
     )
