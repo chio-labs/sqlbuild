@@ -7,6 +7,7 @@ import pytest
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.scenario.helpers.snapshots import (
     build_scenario_snapshot_input_fingerprint,
+    build_scenario_snapshot_input_specs,
     is_scenario_snapshot_fresh,
     scenario_snapshot_manifest_path,
     scenario_snapshot_relation_file_path,
@@ -19,8 +20,12 @@ from sqlbuild.executor.scenario.models import (
 from tests.unit.src.sqlbuild.executor.scenario.helpers._test_types import (
     ScenarioSnapshotFingerprintTestCase,
     ScenarioSnapshotFreshnessTestCase,
+    ScenarioSnapshotInputSpecsFromPlanTestCase,
     ScenarioSnapshotPathTestCase,
     ScenarioSnapshotRelationPathErrorTestCase,
+)
+from tests.unit.src.sqlbuild.executor.scenario.helpers.helpers import (
+    build_snapshot_input_specs_test_plan,
 )
 
 PATH_TEST_CASES: list[ScenarioSnapshotPathTestCase] = [
@@ -71,6 +76,82 @@ FRESHNESS_TEST_CASES: list[ScenarioSnapshotFreshnessTestCase] = [
         expected_is_fresh=False,
     ),
 ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScenarioSnapshotInputSpecsFromPlanTestCase(
+            description="scenario plan inputs become durable snapshot input specs",
+            scenario_plan=build_snapshot_input_specs_test_plan(),
+            expected_input_specs=(
+                ScenarioSnapshotInputSpec(
+                    kind=ScenarioArtifactKind.REF,
+                    logical_name="stg_customers",
+                    file_path=Path("refs/stg_customers.jsonl"),
+                    capture_sql="SELECT 10 AS customer_id",
+                ),
+                ScenarioSnapshotInputSpec(
+                    kind=ScenarioArtifactKind.SEED,
+                    logical_name="country_codes",
+                    file_path=Path("seeds/country_codes.jsonl"),
+                    capture_sql="SELECT 'US' AS country_code",
+                ),
+                ScenarioSnapshotInputSpec(
+                    kind=ScenarioArtifactKind.SEED,
+                    logical_name="currency_codes",
+                    file_path=Path("seeds/currency_codes.jsonl"),
+                    capture_sql="seed_file:seeds/currency_codes.csv",
+                ),
+                ScenarioSnapshotInputSpec(
+                    kind=ScenarioArtifactKind.SOURCE,
+                    logical_name="raw__orders",
+                    file_path=Path("sources/raw__orders.jsonl"),
+                    capture_sql="SELECT 1 AS order_id",
+                ),
+            ),
+            changed_check_plan=build_snapshot_input_specs_test_plan(
+                expected_sql_suffix=" ORDER BY revenue"
+            ),
+            changed_fixture_plan=build_snapshot_input_specs_test_plan(
+                fixture_sql_suffix=" WHERE order_id = 1"
+            ),
+            expected_check_fingerprint_matches=True,
+            expected_fixture_fingerprint_differs=True,
+        )
+    ],
+    ids=["scenario plan inputs become durable snapshot input specs"],
+)
+def test_given_scenario_execution_plan_when_building_snapshot_specs_then_returns_input_specs(
+    test_case: ScenarioSnapshotInputSpecsFromPlanTestCase,
+) -> None:
+    input_specs: tuple[ScenarioSnapshotInputSpec, ...] = build_scenario_snapshot_input_specs(
+        scenario_plan=test_case.scenario_plan,
+    )
+    fingerprint: str = build_scenario_snapshot_input_fingerprint(
+        scenario_name=test_case.scenario_plan.name,
+        input_specs=input_specs,
+    )
+    changed_check_fingerprint: str = build_scenario_snapshot_input_fingerprint(
+        scenario_name=test_case.changed_check_plan.name,
+        input_specs=build_scenario_snapshot_input_specs(
+            scenario_plan=test_case.changed_check_plan,
+        ),
+    )
+    changed_fixture_fingerprint: str = build_scenario_snapshot_input_fingerprint(
+        scenario_name=test_case.changed_fixture_plan.name,
+        input_specs=build_scenario_snapshot_input_specs(
+            scenario_plan=test_case.changed_fixture_plan,
+        ),
+    )
+
+    assert input_specs == test_case.expected_input_specs
+    assert (fingerprint == changed_check_fingerprint) is (
+        test_case.expected_check_fingerprint_matches
+    )
+    assert (fingerprint != changed_fixture_fingerprint) is (
+        test_case.expected_fixture_fingerprint_differs
+    )
 
 
 @pytest.mark.parametrize(

@@ -6,6 +6,11 @@ import hashlib
 import json
 from pathlib import Path
 
+from sqlbuild.compiler.planner.models import (
+    ScenarioExecutionPlan,
+    ScenarioFixturePlan,
+    SeedPlanEntry,
+)
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotInputSpec,
@@ -43,6 +48,43 @@ def scenario_snapshot_relation_file_path(*, kind: ScenarioArtifactKind, logical_
     if relation_dir is None:
         raise ValueError(f"Local scenario snapshots do not capture '{kind.value}' artifacts")
     return Path(relation_dir) / f"{logical_name}.jsonl"
+
+
+def build_scenario_snapshot_input_specs(
+    *, scenario_plan: ScenarioExecutionPlan
+) -> tuple[ScenarioSnapshotInputSpec, ...]:
+    """Return durable local snapshot input requirements for one scenario plan."""
+
+    specs: list[ScenarioSnapshotInputSpec] = []
+    fixture_plan: ScenarioFixturePlan
+    for fixture_plan in scenario_plan.fixture_plans:
+        specs.append(
+            ScenarioSnapshotInputSpec(
+                kind=fixture_plan.kind,
+                logical_name=fixture_plan.logical_name,
+                file_path=scenario_snapshot_relation_file_path(
+                    kind=fixture_plan.kind,
+                    logical_name=fixture_plan.logical_name,
+                ),
+                capture_sql=fixture_plan.sql,
+            )
+        )
+
+    seed_entry: SeedPlanEntry
+    for seed_entry in scenario_plan.seed_entries:
+        specs.append(
+            ScenarioSnapshotInputSpec(
+                kind=ScenarioArtifactKind.SEED,
+                logical_name=seed_entry.name,
+                file_path=scenario_snapshot_relation_file_path(
+                    kind=ScenarioArtifactKind.SEED,
+                    logical_name=seed_entry.name,
+                ),
+                capture_sql=f"seed_file:{seed_entry.file_path.as_posix()}",
+            )
+        )
+
+    return tuple(sorted(specs, key=_input_spec_sort_key))
 
 
 def build_scenario_snapshot_input_fingerprint(
