@@ -24,3 +24,10 @@ class ScenarioFixtureFailureIntegrationTestCase:
     expected_status: ExecutionStatus
     expected_error_fragment: str
     expected_log_fragment: str
+
+
+@dataclass(frozen=True)
+class ScenarioProjectSeedLoadIntegrationTestCase:
+    description: str
+    expected_statuses: tuple[ExecutionStatus, ...]
+    expected_rows: tuple[tuple[object, ...], ...]

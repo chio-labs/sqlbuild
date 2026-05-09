@@ -328,9 +328,19 @@ class ScenarioExecutionPlanTestCase:
     expected_model_entry_targets: dict[str, str]
     expected_model_entry_sql_fragments: dict[str, tuple[str, ...]]
     expected_fixture_targets: dict[str, str]
+    expected_seed_entry_targets: dict[str, str]
     expected_expected_actual_targets: dict[str, str]
     expected_expected_sql: dict[str, str]
     expected_assertion_sql: dict[str, str]
+
+
+@dataclass(frozen=True)
+class ScenarioUnmockedSeedExecutionPlanTestCase:
+    description: str
+    graph_plan: ScenarioGraphPlan
+    include_unrelated_project_seed: bool
+    expected_seed_fixture_names: frozenset[str]
+    expected_seed_entry_targets: dict[str, str]
 
 
 @dataclass(frozen=True)

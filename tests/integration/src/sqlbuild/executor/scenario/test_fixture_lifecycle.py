@@ -1,11 +1,23 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
 
-from sqlbuild.compiler.planner.models import ScenarioExecutionPlan, ScenarioFixturePlan
-from sqlbuild.executor.scenario.helpers.fixtures import execute_scenario_fixtures
+from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationTarget
+from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner.models import (
+    ScenarioExecutionPlan,
+    ScenarioFixturePlan,
+    SeedPlanEntry,
+)
+from sqlbuild.executor.build.models import SeedExecutionResult
+from sqlbuild.executor.scenario.helpers.fixtures import (
+    execute_scenario_fixtures,
+    execute_scenario_seed_entries,
+)
 from sqlbuild.executor.scenario.main.cleanup import execute_scenario_cleanup
 from sqlbuild.executor.scenario.main.fixtures import execute_scenario_fixture
 from sqlbuild.executor.scenario.models import (
@@ -14,10 +26,12 @@ from sqlbuild.executor.scenario.models import (
 )
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
+from sqlbuild.spec.models.schema import default_seed_csv_settings
 from tests.integration.src.sqlbuild.executor.scenario._test_types import (
     ScenarioCleanupIntegrationTestCase,
     ScenarioFixtureFailureIntegrationTestCase,
     ScenarioFixtureMaterializationIntegrationTestCase,
+    ScenarioProjectSeedLoadIntegrationTestCase,
 )
 from tests.integration.src.sqlbuild.executor.scenario.helpers import (
     SCENARIO_NAME,
@@ -140,3 +154,52 @@ def test_given_fixture_materialization_failure_when_executing_then_returns_faile
     assert result.error_message is not None
     assert test_case.expected_error_fragment in result.error_message
     assert test_case.expected_log_fragment in result.lifecycle_events[-1].content
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScenarioProjectSeedLoadIntegrationTestCase(
+            description="loads required unmocked project seed into scenario target",
+            expected_statuses=(ExecutionStatus.SUCCESS,),
+            expected_rows=(("US", "United States"),),
+        )
+    ],
+    ids=["loads required unmocked project seed into scenario target"],
+)
+def test_given_required_unmocked_seed_when_executing_then_loads_project_seed_to_scenario_target(
+    test_case: ScenarioProjectSeedLoadIntegrationTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+    tmp_path: Path,
+) -> None:
+    seed_file: Path = tmp_path / "country_codes.csv"
+    seed_file.write_text("country_code,country_name\nUS,United States\n", encoding="utf-8")
+    seed_entry: SeedPlanEntry = SeedPlanEntry(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.SEED, name="country_codes"),
+        name="country_codes",
+        target=CompiledRelationTarget(
+            database=None,
+            schema="scenario_schema",
+            name="__sqb_51b385aebe20__seed__country_codes",
+            qualified_name="scenario_schema.__sqb_51b385aebe20__seed__country_codes",
+        ),
+        file_path=seed_file,
+        columns=(
+            ColumnInfo(name="country_code", type="VARCHAR"),
+            ColumnInfo(name="country_name", type="VARCHAR"),
+        ),
+        csv_settings=default_seed_csv_settings,
+    )
+
+    results: tuple[SeedExecutionResult, ...] = execute_scenario_seed_entries(
+        seed_entries=(seed_entry,),
+        adapter=adapter,
+        connection=connection,
+    )
+
+    assert tuple(result.status for result in results) == test_case.expected_statuses
+    assert (
+        relation_rows(connection, "__sqb_51b385aebe20__seed__country_codes")
+        == test_case.expected_rows
+    )

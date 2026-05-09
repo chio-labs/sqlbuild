@@ -21,11 +21,13 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     ScenarioFixturePlanTestCase,
     ScenarioRelationPlanErrorTestCase,
     ScenarioRelationPlanTestCase,
+    ScenarioUnmockedSeedExecutionPlanTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     PlannerTestAdapter,
     build_scenario_relation_test_map,
     build_scenario_relation_test_project,
+    build_scenario_relation_test_project_with_unused_seed,
     build_scenario_relation_test_scenario,
 )
 
@@ -45,6 +47,7 @@ SCENARIO_NAME: str = "revenue__customer_refund"
                 model_names=("daily_revenue",),
                 source_fixture_names=("raw__orders",),
                 ref_fixture_names=("stg_customers",),
+                seed_names=("country_codes",),
                 seed_fixture_names=("country_codes",),
             ),
             expected_model_target_names={
@@ -94,6 +97,7 @@ def test_given_scenario_graph_when_building_relation_plan_then_returns_scenario_
                 model_names=("daily_revenue",),
                 source_fixture_names=("raw__orders",),
                 ref_fixture_names=("stg_customers",),
+                seed_names=("country_codes",),
                 seed_fixture_names=("country_codes",),
             ),
             expected_fixture_sql={
@@ -157,6 +161,7 @@ def test_given_scenario_helpers_when_building_fixture_plans_then_fixtures_are_se
                 model_names=("daily_revenue",),
                 source_fixture_names=("raw__orders",),
                 ref_fixture_names=("stg_customers",),
+                seed_names=("country_codes",),
                 seed_fixture_names=("country_codes",),
             ),
             expected_model_entry_targets={
@@ -174,6 +179,7 @@ def test_given_scenario_helpers_when_building_fixture_plans_then_fixtures_are_se
                 "ref:stg_customers": "scenario_schema.__sqb_51b385aebe20__ref__stg_customers",
                 "seed:country_codes": "scenario_schema.__sqb_51b385aebe20__seed__country_codes",
             },
+            expected_seed_entry_targets={},
             expected_expected_actual_targets={
                 "daily_revenue": "scenario_schema.__sqb_51b385aebe20__model__daily_revenue",
             },
@@ -225,6 +231,9 @@ def test_given_scenario_graph_when_building_execution_plan_then_returns_scenario
         for fixture in result.fixture_plans
     } == test_case.expected_fixture_targets
     assert {
+        entry.name: entry.target.qualified_name for entry in result.seed_entries
+    } == test_case.expected_seed_entry_targets
+    assert {
         check.model_name: check.actual_target.qualified_name for check in result.expected_checks
     } == test_case.expected_expected_actual_targets
     assert {
@@ -233,6 +242,83 @@ def test_given_scenario_graph_when_building_execution_plan_then_returns_scenario
     assert {
         check.name: check.sql for check in result.assertion_checks
     } == test_case.expected_assertion_sql
+
+
+UNMOCKED_SEED_EXECUTION_PLAN_TEST_CASES: list[ScenarioUnmockedSeedExecutionPlanTestCase] = [
+    ScenarioUnmockedSeedExecutionPlanTestCase(
+        description="loads required unmocked seed from project seed file",
+        graph_plan=ScenarioGraphPlan(
+            key=build_scenario_relation_test_project().models[0].key,
+            name=SCENARIO_NAME,
+            target_model_names=("daily_revenue",),
+            assertion_target_model_names=("daily_revenue",),
+            model_names=("daily_revenue",),
+            source_fixture_names=("raw__orders",),
+            ref_fixture_names=("stg_customers",),
+            seed_names=("country_codes",),
+        ),
+        include_unrelated_project_seed=False,
+        expected_seed_fixture_names=frozenset(),
+        expected_seed_entry_targets={
+            "country_codes": "scenario_schema.__sqb_51b385aebe20__seed__country_codes"
+        },
+    ),
+    ScenarioUnmockedSeedExecutionPlanTestCase(
+        description="ignores project seeds outside the scenario graph",
+        graph_plan=ScenarioGraphPlan(
+            key=build_scenario_relation_test_project().models[0].key,
+            name=SCENARIO_NAME,
+            target_model_names=("daily_revenue",),
+            assertion_target_model_names=("daily_revenue",),
+            model_names=("daily_revenue",),
+            source_fixture_names=("raw__orders",),
+            ref_fixture_names=("stg_customers",),
+            seed_names=("country_codes",),
+        ),
+        include_unrelated_project_seed=True,
+        expected_seed_fixture_names=frozenset(),
+        expected_seed_entry_targets={
+            "country_codes": "scenario_schema.__sqb_51b385aebe20__seed__country_codes"
+        },
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    UNMOCKED_SEED_EXECUTION_PLAN_TEST_CASES,
+    ids=[case.description for case in UNMOCKED_SEED_EXECUTION_PLAN_TEST_CASES],
+)
+def test_given_required_unmocked_seed_when_building_execution_plan_then_loads_project_seed(
+    test_case: ScenarioUnmockedSeedExecutionPlanTestCase,
+) -> None:
+    project: CompiledProject = (
+        build_scenario_relation_test_project_with_unused_seed()
+        if test_case.include_unrelated_project_seed
+        else build_scenario_relation_test_project()
+    )
+    relation_plan: ScenarioRelationPlan = build_scenario_relation_plan(
+        project=project,
+        graph_plan=test_case.graph_plan,
+        relation_map=build_scenario_relation_test_map(),
+        schema="scenario_schema",
+    )
+
+    result, warnings = build_scenario_execution_plan(
+        scenario=build_scenario_relation_test_scenario(include_seed_fixture=False),
+        project=project,
+        adapter=PlannerTestAdapter(),
+        graph_plan=test_case.graph_plan,
+        relation_plan=relation_plan,
+    )
+
+    assert warnings == ()
+    assert {
+        fixture.logical_name for fixture in result.fixture_plans if fixture.kind.value == "seed"
+    } == test_case.expected_seed_fixture_names
+    assert {
+        entry.name: entry.target.qualified_name for entry in result.seed_entries
+    } == test_case.expected_seed_entry_targets
 
 
 CHECK_SQL_TEST_CASES: list[ScenarioCheckSqlResolutionTestCase] = [
@@ -305,6 +391,7 @@ def test_given_scenario_check_sql_when_resolving_then_uses_scenario_relations(
             model_names=("daily_revenue",),
             source_fixture_names=("raw__orders",),
             ref_fixture_names=("stg_customers",),
+            seed_names=("country_codes",),
             seed_fixture_names=("country_codes",),
         ),
         relation_map=build_scenario_relation_test_map(),

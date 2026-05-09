@@ -99,21 +99,6 @@ def plan_scenario_graph(
             )
         )
 
-    missing_seed_names: tuple[str, ...] = tuple(sorted(required_seed_names - seed_fixture_names))
-    seed_name: str
-    for seed_name in missing_seed_names:
-        warnings.append(
-            PlanWarning(
-                model_name=None,
-                severity=WarningSeverity.ERROR,
-                message=(
-                    f"Scenario '{scenario.name}' requires seed '{seed_name}', "
-                    "but no fixture was provided. Add a CTE named "
-                    f"__seed__{_fixture_name_for(seed_name)} AS (...)."
-                ),
-            )
-        )
-
     plan: ScenarioGraphPlan = ScenarioGraphPlan(
         key=scenario.key,
         name=scenario.name,
@@ -122,7 +107,8 @@ def plan_scenario_graph(
         model_names=tuple(sorted(model_names)),
         source_fixture_names=tuple(sorted(required_source_names)),
         ref_fixture_names=tuple(sorted(required_ref_fixture_names)),
-        seed_fixture_names=tuple(sorted(required_seed_names)),
+        seed_names=tuple(sorted(required_seed_names)),
+        seed_fixture_names=tuple(sorted(required_seed_names & seed_fixture_names)),
         function_deps=tuple(function_deps),
     )
     return plan, tuple(warnings)
