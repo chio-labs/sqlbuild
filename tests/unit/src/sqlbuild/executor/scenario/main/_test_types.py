@@ -28,3 +28,12 @@ class ExecuteScenarioCleanupTestCase:
     expected_drop_targets: tuple[str, ...]
     unexpected_drop_targets: tuple[str, ...] = ()
     expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
+class ExecuteScenarioModelsTestCase:
+    description: str
+    expected_statuses: tuple[ExecutionStatus, ...]
+    expected_model_names: tuple[str, ...]
+    expected_sql_fragments: tuple[str, ...]
+    expected_error_fragment: str | None = None

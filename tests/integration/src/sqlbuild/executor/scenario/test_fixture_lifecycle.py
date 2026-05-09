@@ -14,10 +14,12 @@ from sqlbuild.compiler.planner.models import (
     SeedPlanEntry,
 )
 from sqlbuild.executor.build.models import SeedExecutionResult
+from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario.helpers.fixtures import (
     execute_scenario_fixtures,
     execute_scenario_seed_entries,
 )
+from sqlbuild.executor.scenario.helpers.model_execution import execute_scenario_models
 from sqlbuild.executor.scenario.main.cleanup import execute_scenario_cleanup
 from sqlbuild.executor.scenario.main.fixtures import execute_scenario_fixture
 from sqlbuild.executor.scenario.models import (
@@ -31,6 +33,7 @@ from tests.integration.src.sqlbuild.executor.scenario._test_types import (
     ScenarioCleanupIntegrationTestCase,
     ScenarioFixtureFailureIntegrationTestCase,
     ScenarioFixtureMaterializationIntegrationTestCase,
+    ScenarioModelBuildIntegrationTestCase,
     ScenarioProjectSeedLoadIntegrationTestCase,
 )
 from tests.integration.src.sqlbuild.executor.scenario.helpers import (
@@ -38,6 +41,7 @@ from tests.integration.src.sqlbuild.executor.scenario.helpers import (
     build_duckdb_cleanup_plan,
     build_duckdb_fixture_plans,
     build_duckdb_invalid_fixture_plan,
+    build_duckdb_model_execution_plan,
     create_table,
     relation_exists,
     relation_rows,
@@ -201,5 +205,50 @@ def test_given_required_unmocked_seed_when_executing_then_loads_project_seed_to_
     assert tuple(result.status for result in results) == test_case.expected_statuses
     assert (
         relation_rows(connection, "__sqb_51b385aebe20__seed__country_codes")
+        == test_case.expected_rows
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScenarioModelBuildIntegrationTestCase(
+            description="builds scenario model graph from fixture and seed relations",
+            expected_statuses=(ExecutionStatus.SUCCESS, ExecutionStatus.SUCCESS),
+            expected_rows=((1, "Ada", "United States"),),
+        )
+    ],
+    ids=["builds scenario model graph from fixture and seed relations"],
+)
+def test_given_scenario_plan_when_executing_models_then_builds_model_relations(
+    test_case: ScenarioModelBuildIntegrationTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    scenario_plan: ScenarioExecutionPlan = build_duckdb_model_execution_plan()
+    fixture_results: tuple[ScenarioFixtureExecutionResult, ...] = execute_scenario_fixtures(
+        scenario_name=SCENARIO_NAME,
+        fixture_plans=scenario_plan.fixture_plans,
+        adapter=adapter,
+        connection=connection,
+    )
+
+    assert all(result.status == ExecutionStatus.SUCCESS for result in fixture_results)
+
+    connection.execute(
+        "CREATE TABLE scenario_schema.__sqb_51b385aebe20__seed__country_codes "
+        "AS SELECT 'US' AS country_code, 'United States' AS country_name"
+    )
+
+    results: tuple[ModelExecutionResult, ...] = execute_scenario_models(
+        scenario_plan=scenario_plan,
+        adapter=adapter,
+        connection=connection,
+        run_id="run-1",
+    )
+
+    assert tuple(result.status for result in results) == test_case.expected_statuses
+    assert (
+        relation_rows(connection, "__sqb_51b385aebe20__model__daily_revenue")
         == test_case.expected_rows
     )

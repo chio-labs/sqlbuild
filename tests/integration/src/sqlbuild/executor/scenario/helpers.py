@@ -1,17 +1,24 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationTarget
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (
+    ModelPlanEntry,
     ScenarioExecutionPlan,
     ScenarioFixturePlan,
     ScenarioGraphPlan,
     ScenarioRelationMap,
     ScenarioRelationPlan,
 )
-from sqlbuild.compiler.planner.types import ScenarioArtifactKind
+from sqlbuild.compiler.planner.types import (
+    MaterializationType,
+    PlanAction,
+    PlanReason,
+    ScenarioArtifactKind,
+)
 
 SCENARIO_NAME: str = "revenue__customer_refund"
 SCHEMA_NAME: str = "scenario_schema"
@@ -90,6 +97,79 @@ def build_duckdb_cleanup_plan() -> ScenarioExecutionPlan:
     )
 
 
+def build_duckdb_model_execution_plan() -> ScenarioExecutionPlan:
+    source_target: CompiledRelationTarget = _target(
+        physical_name="__sqb_51b385aebe20__source__raw__orders"
+    )
+    ref_target: CompiledRelationTarget = _target(
+        physical_name="__sqb_51b385aebe20__ref__stg_customers"
+    )
+    seed_target: CompiledRelationTarget = _target(
+        physical_name="__sqb_51b385aebe20__seed__country_codes"
+    )
+    stg_orders_target: CompiledRelationTarget = _target(
+        physical_name="__sqb_51b385aebe20__model__stg_orders"
+    )
+    daily_revenue_target: CompiledRelationTarget = _target(
+        physical_name="__sqb_51b385aebe20__model__daily_revenue"
+    )
+    stg_orders: ModelPlanEntry = _model_entry(
+        name="stg_orders",
+        target=stg_orders_target,
+        sql=(
+            "SELECT o.order_id, o.customer_id, c.country_name "
+            "FROM scenario_schema.__sqb_51b385aebe20__source__raw__orders o "
+            "JOIN scenario_schema.__sqb_51b385aebe20__seed__country_codes c "
+            "ON o.country_code = c.country_code"
+        ),
+    )
+    daily_revenue: ModelPlanEntry = _model_entry(
+        name="daily_revenue",
+        target=daily_revenue_target,
+        sql=(
+            "SELECT o.order_id, c.customer_name, o.country_name "
+            "FROM scenario_schema.__sqb_51b385aebe20__model__stg_orders o "
+            "JOIN scenario_schema.__sqb_51b385aebe20__ref__stg_customers c "
+            "ON o.customer_id = c.customer_id"
+        ),
+    )
+    return ScenarioExecutionPlan(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.SQL_SCENARIO,
+            name=SCENARIO_NAME,
+        ),
+        name=SCENARIO_NAME,
+        graph_plan=ScenarioGraphPlan(
+            key=CompiledObjectKey(
+                resource_type=CompiledResourceType.SQL_SCENARIO,
+                name=SCENARIO_NAME,
+            ),
+            name=SCENARIO_NAME,
+            model_names=("stg_orders", "daily_revenue"),
+            source_fixture_names=("raw__orders",),
+            ref_fixture_names=("stg_customers",),
+            seed_names=("country_codes",),
+        ),
+        relation_plan=ScenarioRelationPlan(
+            scenario_name=SCENARIO_NAME,
+            relation_map=ScenarioRelationMap(
+                scenario_name=SCENARIO_NAME,
+                hash_prefix=HASH_PREFIX,
+            ),
+            model_targets={
+                "stg_orders": stg_orders_target,
+                "daily_revenue": daily_revenue_target,
+                "stg_customers": ref_target,
+            },
+            seed_targets={"country_codes": seed_target},
+            source_fixture_targets={"raw__orders": source_target},
+            ref_fixture_targets={"stg_customers": ref_target},
+        ),
+        fixture_plans=build_duckdb_fixture_plans()[:2],
+        model_entries=(stg_orders, daily_revenue),
+    )
+
+
 def relation_rows(connection: Any, relation_name: str) -> tuple[tuple[object, ...], ...]:
     rows: list[Any] = connection.execute(f"SELECT * FROM {SCHEMA_NAME}.{relation_name}").fetchall()
     return tuple(tuple(row) for row in rows)
@@ -129,4 +209,19 @@ def _target(*, physical_name: str) -> CompiledRelationTarget:
         schema=SCHEMA_NAME,
         name=physical_name,
         qualified_name=f"{SCHEMA_NAME}.{physical_name}",
+    )
+
+
+def _model_entry(*, name: str, target: CompiledRelationTarget, sql: str) -> ModelPlanEntry:
+    return ModelPlanEntry(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name),
+        name=name,
+        relative_path=Path(f"models/{name}.sql"),
+        materialization_type=MaterializationType.TABLE,
+        action=PlanAction.CREATE_TABLE,
+        reason=PlanReason.FIRST_RUN,
+        target=target,
+        fingerprint_query_sql=sql,
+        resolved_sql=sql,
+        logical_ddl="",
     )
