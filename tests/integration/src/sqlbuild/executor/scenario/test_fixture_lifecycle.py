@@ -15,6 +15,10 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.scenario.helpers.checks import (
+    execute_scenario_assertion_checks,
+    execute_scenario_expected_checks,
+)
 from sqlbuild.executor.scenario.helpers.fixtures import (
     execute_scenario_fixtures,
     execute_scenario_seed_entries,
@@ -23,14 +27,18 @@ from sqlbuild.executor.scenario.helpers.model_execution import execute_scenario_
 from sqlbuild.executor.scenario.main.cleanup import execute_scenario_cleanup
 from sqlbuild.executor.scenario.main.fixtures import execute_scenario_fixture
 from sqlbuild.executor.scenario.models import (
+    ScenarioAssertionCheckExecutionResult,
     ScenarioCleanupExecutionResult,
+    ScenarioExpectedCheckExecutionResult,
     ScenarioFixtureExecutionResult,
 )
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from sqlbuild.spec.models.schema import default_seed_csv_settings
 from tests.integration.src.sqlbuild.executor.scenario._test_types import (
+    ScenarioAssertionCheckIntegrationTestCase,
     ScenarioCleanupIntegrationTestCase,
+    ScenarioExpectedCheckIntegrationTestCase,
     ScenarioFixtureFailureIntegrationTestCase,
     ScenarioFixtureMaterializationIntegrationTestCase,
     ScenarioModelBuildIntegrationTestCase,
@@ -38,7 +46,9 @@ from tests.integration.src.sqlbuild.executor.scenario._test_types import (
 )
 from tests.integration.src.sqlbuild.executor.scenario.helpers import (
     SCENARIO_NAME,
+    build_duckdb_assertion_check_plan,
     build_duckdb_cleanup_plan,
+    build_duckdb_expected_check_plan,
     build_duckdb_fixture_plans,
     build_duckdb_invalid_fixture_plan,
     build_duckdb_model_execution_plan,
@@ -252,3 +262,115 @@ def test_given_scenario_plan_when_executing_models_then_builds_model_relations(
         relation_rows(connection, "__sqb_51b385aebe20__model__daily_revenue")
         == test_case.expected_rows
     )
+
+
+EXPECTED_CHECK_TEST_CASES: list[ScenarioExpectedCheckIntegrationTestCase] = [
+    ScenarioExpectedCheckIntegrationTestCase(
+        description="expected output matches scenario model relation",
+        expected_sql=(
+            "SELECT 1 AS order_id, 'Ada' AS customer_name, 'United States' AS country_name"
+        ),
+        expected_status=ExecutionStatus.SUCCESS,
+        expected_actual_row_count=1,
+        expected_expected_row_count=1,
+        expected_mismatched_row_count=0,
+    ),
+    ScenarioExpectedCheckIntegrationTestCase(
+        description="expected output mismatch fails scenario check",
+        expected_sql=(
+            "SELECT 1 AS order_id, 'Grace' AS customer_name, 'United States' AS country_name"
+        ),
+        expected_status=ExecutionStatus.FAILED,
+        expected_actual_row_count=1,
+        expected_expected_row_count=1,
+        expected_mismatched_row_count=1,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    EXPECTED_CHECK_TEST_CASES,
+    ids=[case.description for case in EXPECTED_CHECK_TEST_CASES],
+)
+def test_given_expected_check_when_executing_then_returns_comparison_result(
+    test_case: ScenarioExpectedCheckIntegrationTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    create_table(
+        connection,
+        "__sqb_51b385aebe20__model__daily_revenue",
+        sql="SELECT 1 AS order_id, 'Ada' AS customer_name, 'United States' AS country_name",
+    )
+    scenario_plan: ScenarioExecutionPlan = build_duckdb_expected_check_plan(
+        expected_sql=test_case.expected_sql
+    )
+
+    results: tuple[ScenarioExpectedCheckExecutionResult, ...] = execute_scenario_expected_checks(
+        scenario_plan=scenario_plan,
+        adapter=adapter,
+        connection=connection,
+    )
+
+    assert len(results) == 1
+    assert results[0].status == test_case.expected_status
+    assert results[0].actual_row_count == test_case.expected_actual_row_count
+    assert results[0].expected_row_count == test_case.expected_expected_row_count
+    assert results[0].mismatched_row_count == test_case.expected_mismatched_row_count
+
+
+ASSERTION_CHECK_TEST_CASES: list[ScenarioAssertionCheckIntegrationTestCase] = [
+    ScenarioAssertionCheckIntegrationTestCase(
+        description="zero-row assertion passes",
+        assertion_sql=(
+            "SELECT * FROM scenario_schema.__sqb_51b385aebe20__model__daily_revenue "
+            "WHERE customer_name = 'Grace'"
+        ),
+        expected_status=ExecutionStatus.SUCCESS,
+        expected_failing_row_count=0,
+        expected_sample_rows=(),
+    ),
+    ScenarioAssertionCheckIntegrationTestCase(
+        description="assertion returning rows fails with sample rows",
+        assertion_sql=(
+            "SELECT order_id, customer_name "
+            "FROM scenario_schema.__sqb_51b385aebe20__model__daily_revenue "
+            "WHERE customer_name = 'Ada'"
+        ),
+        expected_status=ExecutionStatus.FAILED,
+        expected_failing_row_count=1,
+        expected_sample_rows=((1, "Ada"),),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    ASSERTION_CHECK_TEST_CASES,
+    ids=[case.description for case in ASSERTION_CHECK_TEST_CASES],
+)
+def test_given_assertion_check_when_executing_then_returns_zero_row_result(
+    test_case: ScenarioAssertionCheckIntegrationTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    create_table(
+        connection,
+        "__sqb_51b385aebe20__model__daily_revenue",
+        sql="SELECT 1 AS order_id, 'Ada' AS customer_name, 'United States' AS country_name",
+    )
+    scenario_plan: ScenarioExecutionPlan = build_duckdb_assertion_check_plan(
+        assertion_sql=test_case.assertion_sql
+    )
+
+    results: tuple[ScenarioAssertionCheckExecutionResult, ...] = execute_scenario_assertion_checks(
+        scenario_plan=scenario_plan,
+        adapter=adapter,
+        connection=connection,
+    )
+
+    assert len(results) == 1
+    assert results[0].status == test_case.expected_status
+    assert results[0].failing_row_count == test_case.expected_failing_row_count
+    assert results[0].sample_rows == test_case.expected_sample_rows
