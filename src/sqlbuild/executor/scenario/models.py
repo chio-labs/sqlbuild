@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild.adapter.shared.models import LifeCycleEvent
-from sqlbuild.compiler.planner.models import ScenarioRelationMap
+from sqlbuild.compiler.planner.models import CompiledRelationTarget, ScenarioRelationMap
 from sqlbuild.compiler.planner.types import MaterializationType, ScenarioArtifactKind
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
@@ -101,6 +101,28 @@ class ScenarioSnapshotStateResult:
     manifest_path: Path
     manifest: ScenarioSnapshotManifest | None = None
     error_message: str | None = None
+
+
+@dataclass(frozen=True)
+class ScenarioSnapshotCaptureRelationPlan:
+    """One scenario input relation planned for durable local snapshot capture."""
+
+    kind: ScenarioArtifactKind
+    logical_name: str
+    source_target: CompiledRelationTarget
+    file_path: Path
+    capture_sql: str
+
+
+@dataclass(frozen=True)
+class ScenarioSnapshotCapturePlan:
+    """Executor-side plan for capturing scenario inputs into local snapshot files."""
+
+    scenario_name: str
+    snapshot_root: Path
+    manifest_path: Path
+    input_fingerprint: str
+    relations: tuple[ScenarioSnapshotCaptureRelationPlan, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

@@ -7,8 +7,10 @@ import pytest
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.scenario.helpers.snapshots import (
+    build_scenario_snapshot_capture_plan,
     build_scenario_snapshot_input_fingerprint,
     build_scenario_snapshot_input_specs,
+    build_scenario_snapshot_manifest_shell,
     classify_scenario_snapshot_state,
     is_scenario_snapshot_fresh,
     read_scenario_snapshot_jsonl,
@@ -20,13 +22,17 @@ from sqlbuild.executor.scenario.helpers.snapshots import (
     write_scenario_snapshot_manifest,
 )
 from sqlbuild.executor.scenario.models import (
+    ScenarioSnapshotCapturePlan,
+    ScenarioSnapshotCaptureRelationPlan,
     ScenarioSnapshotFileStats,
     ScenarioSnapshotInputSpec,
     ScenarioSnapshotManifest,
+    ScenarioSnapshotRelation,
     ScenarioSnapshotStateResult,
 )
 from sqlbuild.executor.scenario.types import ScenarioSnapshotState
 from tests.unit.src.sqlbuild.executor.scenario.helpers._test_types import (
+    ScenarioSnapshotCapturePlanTestCase,
     ScenarioSnapshotFingerprintTestCase,
     ScenarioSnapshotFreshnessTestCase,
     ScenarioSnapshotInputSpecsFromPlanTestCase,
@@ -48,6 +54,11 @@ SNAPSHOT_STATE_PLAN: ScenarioExecutionPlan = build_snapshot_input_specs_test_pla
 SNAPSHOT_STATE_FINGERPRINT: str = build_scenario_snapshot_input_fingerprint(
     scenario_name=SNAPSHOT_STATE_PLAN.name,
     input_specs=build_scenario_snapshot_input_specs(scenario_plan=SNAPSHOT_STATE_PLAN),
+)
+SNAPSHOT_CAPTURE_PLAN: ScenarioExecutionPlan = build_snapshot_input_specs_test_plan()
+SNAPSHOT_CAPTURE_FINGERPRINT: str = build_scenario_snapshot_input_fingerprint(
+    scenario_name=SNAPSHOT_CAPTURE_PLAN.name,
+    input_specs=build_scenario_snapshot_input_specs(scenario_plan=SNAPSHOT_CAPTURE_PLAN),
 )
 
 PATH_TEST_CASES: list[ScenarioSnapshotPathTestCase] = [
@@ -143,6 +154,115 @@ JSONL_ERROR_TEST_CASES: list[ScenarioSnapshotJsonlErrorTestCase] = [
         expected_error_fragment="row must be a JSON object",
     ),
 ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScenarioSnapshotCapturePlanTestCase(
+            description="scenario execution plan becomes snapshot capture plan",
+            project_dir=Path("/repo"),
+            scenario_plan=SNAPSHOT_CAPTURE_PLAN,
+            expected_capture_plan=ScenarioSnapshotCapturePlan(
+                scenario_name="revenue__customer_refund",
+                snapshot_root=Path("/repo/tests/_scenario_snapshots/revenue__customer_refund"),
+                manifest_path=Path(
+                    "/repo/tests/_scenario_snapshots/revenue__customer_refund/scenario.json"
+                ),
+                input_fingerprint=SNAPSHOT_CAPTURE_FINGERPRINT,
+                relations=(
+                    ScenarioSnapshotCaptureRelationPlan(
+                        kind=ScenarioArtifactKind.REF,
+                        logical_name="stg_customers",
+                        source_target=SNAPSHOT_CAPTURE_PLAN.fixture_plans[1].target,
+                        file_path=Path("refs/stg_customers.jsonl"),
+                        capture_sql="SELECT 10 AS customer_id",
+                    ),
+                    ScenarioSnapshotCaptureRelationPlan(
+                        kind=ScenarioArtifactKind.SEED,
+                        logical_name="country_codes",
+                        source_target=SNAPSHOT_CAPTURE_PLAN.fixture_plans[2].target,
+                        file_path=Path("seeds/country_codes.jsonl"),
+                        capture_sql="SELECT 'US' AS country_code",
+                    ),
+                    ScenarioSnapshotCaptureRelationPlan(
+                        kind=ScenarioArtifactKind.SEED,
+                        logical_name="currency_codes",
+                        source_target=SNAPSHOT_CAPTURE_PLAN.seed_entries[0].target,
+                        file_path=Path("seeds/currency_codes.jsonl"),
+                        capture_sql="seed_file:seeds/currency_codes.csv",
+                    ),
+                    ScenarioSnapshotCaptureRelationPlan(
+                        kind=ScenarioArtifactKind.SOURCE,
+                        logical_name="raw__orders",
+                        source_target=SNAPSHOT_CAPTURE_PLAN.fixture_plans[0].target,
+                        file_path=Path("sources/raw__orders.jsonl"),
+                        capture_sql="SELECT 1 AS order_id",
+                    ),
+                ),
+            ),
+            expected_manifest=ScenarioSnapshotManifest(
+                version=1,
+                scenario_name="revenue__customer_refund",
+                captured_at="2026-05-09T00:00:00Z",
+                capture_adapter="snowflake",
+                capture_dialect="snowflake",
+                sqlbuild_version="0.1.0",
+                input_fingerprint=SNAPSHOT_CAPTURE_FINGERPRINT,
+                total_rows=0,
+                total_bytes=0,
+                relations=(
+                    ScenarioSnapshotRelation(
+                        kind=ScenarioArtifactKind.REF,
+                        logical_name="stg_customers",
+                        file_path=Path("refs/stg_customers.jsonl"),
+                        row_count=0,
+                        byte_count=0,
+                    ),
+                    ScenarioSnapshotRelation(
+                        kind=ScenarioArtifactKind.SEED,
+                        logical_name="country_codes",
+                        file_path=Path("seeds/country_codes.jsonl"),
+                        row_count=0,
+                        byte_count=0,
+                    ),
+                    ScenarioSnapshotRelation(
+                        kind=ScenarioArtifactKind.SEED,
+                        logical_name="currency_codes",
+                        file_path=Path("seeds/currency_codes.jsonl"),
+                        row_count=0,
+                        byte_count=0,
+                    ),
+                    ScenarioSnapshotRelation(
+                        kind=ScenarioArtifactKind.SOURCE,
+                        logical_name="raw__orders",
+                        file_path=Path("sources/raw__orders.jsonl"),
+                        row_count=0,
+                        byte_count=0,
+                    ),
+                ),
+            ),
+        )
+    ],
+    ids=["scenario execution plan becomes snapshot capture plan"],
+)
+def test_given_scenario_execution_plan_when_building_capture_plan_then_returns_snapshot_work(
+    test_case: ScenarioSnapshotCapturePlanTestCase,
+) -> None:
+    capture_plan: ScenarioSnapshotCapturePlan = build_scenario_snapshot_capture_plan(
+        project_dir=test_case.project_dir,
+        scenario_plan=test_case.scenario_plan,
+    )
+    manifest: ScenarioSnapshotManifest = build_scenario_snapshot_manifest_shell(
+        capture_plan=capture_plan,
+        captured_at="2026-05-09T00:00:00Z",
+        capture_adapter="snowflake",
+        capture_dialect="snowflake",
+        sqlbuild_version="0.1.0",
+    )
+
+    assert capture_plan == test_case.expected_capture_plan
+    assert manifest == test_case.expected_manifest
 
 
 @pytest.mark.parametrize(
