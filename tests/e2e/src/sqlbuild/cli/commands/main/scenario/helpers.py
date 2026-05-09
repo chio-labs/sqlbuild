@@ -107,3 +107,16 @@ def scenario_relation_row_count(*, db_path: Path, relation_name: str) -> int:
         sql=f'SELECT COUNT(*) FROM main."{relation_name}"',
     )
     return int(rows[0][0])
+
+
+def assert_runtime_artifact_contains(
+    *, project_dir: Path, relative_path: Path, expected_fragments: tuple[str, ...]
+) -> None:
+    """Assert a scenario runtime artifact exists and contains expected fragments."""
+
+    artifact_path: Path = project_dir / relative_path
+    assert artifact_path.exists(), f"missing runtime artifact: {artifact_path}"
+    content: str = artifact_path.read_text(encoding="utf-8")
+    expected_fragment: str
+    for expected_fragment in expected_fragments:
+        assert expected_fragment in content

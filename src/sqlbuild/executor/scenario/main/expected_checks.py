@@ -9,6 +9,9 @@ from sqlbuild.compiler.planner.models import ScenarioExpectedCheckPlan
 from sqlbuild.executor.scenario.models import ScenarioExpectedCheckExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
+from sqlbuild.shared.helpers.scenario_expected_check_sql import (
+    build_scenario_expected_comparison_sql,
+)
 
 
 def execute_scenario_expected_check(
@@ -23,7 +26,7 @@ def execute_scenario_expected_check(
     actual_relation: str = resolve_target_qualified_name(
         adapter=adapter, target=check.actual_target
     )
-    comparison_sql: str = _build_expected_comparison_sql(
+    comparison_sql: str = build_scenario_expected_comparison_sql(
         actual_sql=f"SELECT * FROM {actual_relation}",
         expected_sql=check.expected_sql,
         set_difference_operator=adapter.render_set_difference_operator(),
@@ -75,23 +78,4 @@ def execute_scenario_expected_check(
         expected_row_count=expected_count,
         mismatched_row_count=mismatched_count,
         error_message=error_message,
-    )
-
-
-def _build_expected_comparison_sql(
-    *,
-    actual_sql: str,
-    expected_sql: str,
-    set_difference_operator: str,
-) -> str:
-    return (
-        "WITH "
-        f"__actual AS ({actual_sql}), "
-        f"__expected AS ({expected_sql}) "
-        "SELECT "
-        "(SELECT COUNT(*) FROM __actual) AS actual_count, "
-        "(SELECT COUNT(*) FROM __expected) AS expected_count, "
-        "(SELECT COUNT(*) FROM ("
-        f"SELECT * FROM __actual {set_difference_operator} SELECT * FROM __expected"
-        ")) AS mismatched_count"
     )

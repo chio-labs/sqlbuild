@@ -48,7 +48,7 @@ def execute_scenario_run_steps(
             scenario_name=scenario_plan.name,
             relation_map=scenario_plan.relation_plan.relation_map,
             retained=retain,
-            cleanup_result=prepare_result,
+            prepare_cleanup_result=prepare_result,
             error_message=prepare_result.error_message,
         )
 
@@ -64,6 +64,7 @@ def execute_scenario_run_steps(
             adapter=adapter,
             connection=connection,
             retain=retain,
+            prepare_cleanup_result=prepare_result,
             fixture_results=fixture_results,
             error_message=_first_error(fixture_results),
         )
@@ -79,6 +80,7 @@ def execute_scenario_run_steps(
             adapter=adapter,
             connection=connection,
             retain=retain,
+            prepare_cleanup_result=prepare_result,
             fixture_results=fixture_results,
             seed_results=seed_results,
             error_message=_first_error(seed_results),
@@ -96,6 +98,7 @@ def execute_scenario_run_steps(
             adapter=adapter,
             connection=connection,
             retain=retain,
+            prepare_cleanup_result=prepare_result,
             fixture_results=fixture_results,
             seed_results=seed_results,
             model_results=model_results,
@@ -120,6 +123,7 @@ def execute_scenario_run_steps(
         adapter=adapter,
         connection=connection,
         retain=retain,
+        prepare_cleanup_result=prepare_result,
         fixture_results=fixture_results,
         seed_results=seed_results,
         model_results=model_results,
@@ -135,6 +139,7 @@ def _finish_scenario(
     adapter: BaseAdapter,
     connection: Any,
     retain: bool,
+    prepare_cleanup_result: ScenarioCleanupExecutionResult,
     fixture_results: tuple[ScenarioFixtureExecutionResult, ...] = (),
     seed_results: tuple[SeedExecutionResult, ...] = (),
     model_results: tuple[ModelExecutionResult, ...] = (),
@@ -169,6 +174,7 @@ def _finish_scenario(
         model_results=model_results,
         expected_results=expected_results,
         assertion_results=assertion_results,
+        prepare_cleanup_result=prepare_cleanup_result,
         cleanup_result=cleanup_result,
         error_message=error_message,
     )
@@ -179,7 +185,7 @@ def _scenario_failure(
     scenario_name: str,
     relation_map: ScenarioRelationMap | None,
     retained: bool,
-    cleanup_result: ScenarioCleanupExecutionResult | None = None,
+    prepare_cleanup_result: ScenarioCleanupExecutionResult | None = None,
     error_message: str | None,
 ) -> ScenarioRunResult:
     return ScenarioRunResult(
@@ -187,7 +193,7 @@ def _scenario_failure(
         status=ExecutionStatus.FAILED,
         retained=retained,
         relation_map=relation_map,
-        cleanup_result=cleanup_result,
+        prepare_cleanup_result=prepare_cleanup_result,
         error_message=error_message,
     )
 
