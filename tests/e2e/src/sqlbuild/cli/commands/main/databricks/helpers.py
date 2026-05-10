@@ -30,6 +30,27 @@ def build_databricks_local_config(*, environment: str = "dev", schema_name: str)
     )
 
 
+def build_databricks_project_toml(*, project_name: str, schema_name: str) -> str:
+    """Build project TOML for an inline Databricks e2e project."""
+
+    catalog_name: str = str(build_databricks_connection_config(schema=schema_name)["catalog"])
+    return (
+        f'name = "{project_name}"\n'
+        'adapter = "databricks"\n'
+        'default_environment = "dev"\n\n'
+        "[connection]\n"
+        'server_hostname = "${ENV:SQB_TEST_DATABRICKS_SERVER_HOSTNAME}"\n'
+        'http_path = "${ENV:SQB_TEST_DATABRICKS_HTTP_PATH}"\n'
+        'token = "${ENV:SQB_TEST_DATABRICKS_TOKEN}"\n'
+        'catalog = "${ENV:SQB_TEST_DATABRICKS_CATALOG}"\n\n'
+        "[environments.dev]\n"
+        f'database = "{catalog_name}"\n'
+        f'schema = "{schema_name}"\n\n'
+        "[defaults]\n"
+        'materialized = "table"\n'
+    )
+
+
 def prepare_databricks_waffle_shop(*, tmp_path: Path) -> tuple[Path, str]:
     """Prepare a Waffle Shop project wired to a unique Databricks schema."""
 

@@ -104,6 +104,8 @@ def execute_scenario_snapshot_capture_steps(
     capture_plan: ScenarioSnapshotCapturePlan = build_scenario_snapshot_capture_plan(
         project_dir=project_dir,
         scenario_plan=scenario_plan,
+        capture_adapter=capture_adapter,
+        capture_dialect=capture_dialect,
     )
     manifest: ScenarioSnapshotManifest = build_scenario_snapshot_manifest_shell(
         capture_plan=capture_plan,

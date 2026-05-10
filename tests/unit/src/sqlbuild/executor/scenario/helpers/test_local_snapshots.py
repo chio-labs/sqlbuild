@@ -31,26 +31,42 @@ from tests.unit.src.sqlbuild.executor.scenario.helpers.helpers import (
 SCENARIO_NAME: str = "revenue__customer_refund"
 INPUT_FINGERPRINT: str = "fresh123"
 
+LOCAL_SNAPSHOT_LOAD_TEST_CASES: list[ScenarioLocalSnapshotLoadTestCase] = [
+    ScenarioLocalSnapshotLoadTestCase(
+        description="loads typed jsonl rows into duckdb tables",
+        columns=(
+            ("order_id", "NUMBER", "BIGINT"),
+            ("amount", "NUMBER(10,2)", "DECIMAL(10,2)"),
+            ("order_date", "DATE", "DATE"),
+        ),
+        rows=(
+            {"order_id": 1, "amount": "10.50", "order_date": "2026-01-02"},
+            {"order_id": 2, "amount": "20.25", "order_date": "2026-01-03"},
+        ),
+        expected_table_name="__sqb_local__source__raw__orders",
+        expected_summary_row=(2, 2, "30.75"),
+    ),
+    ScenarioLocalSnapshotLoadTestCase(
+        description="loads warehouse-folded jsonl keys case-insensitively",
+        columns=(
+            ("order_id", "NUMBER", "BIGINT"),
+            ("amount", "NUMBER(10,2)", "DECIMAL(10,2)"),
+            ("order_date", "DATE", "DATE"),
+        ),
+        rows=(
+            {"ORDER_ID": 1, "AMOUNT": "10.50", "ORDER_DATE": "2026-01-02"},
+            {"ORDER_ID": 2, "AMOUNT": "20.25", "ORDER_DATE": "2026-01-03"},
+        ),
+        expected_table_name="__sqb_local__source__raw__orders",
+        expected_summary_row=(2, 2, "30.75"),
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        ScenarioLocalSnapshotLoadTestCase(
-            description="loads typed jsonl rows into duckdb tables",
-            columns=(
-                ("order_id", "NUMBER", "BIGINT"),
-                ("amount", "NUMBER(10,2)", "DECIMAL(10,2)"),
-                ("order_date", "DATE", "DATE"),
-            ),
-            rows=(
-                {"order_id": 1, "amount": "10.50", "order_date": "2026-01-02"},
-                {"order_id": 2, "amount": "20.25", "order_date": "2026-01-03"},
-            ),
-            expected_table_name="__sqb_local__source__raw__orders",
-            expected_summary_row=(2, 2, "30.75"),
-        )
-    ],
-    ids=["loads typed jsonl rows into duckdb tables"],
+    LOCAL_SNAPSHOT_LOAD_TEST_CASES,
+    ids=[case.description for case in LOCAL_SNAPSHOT_LOAD_TEST_CASES],
 )
 def test_given_fresh_snapshot_when_loading_into_duckdb_then_creates_typed_tables(
     tmp_path: Path,

@@ -40,6 +40,7 @@ from sqlbuild.shared.constants import (
 )
 from tests.unit.src.sqlbuild.executor.scenario.helpers._test_types import (
     ScenarioSnapshotCapturePlanTestCase,
+    ScenarioSnapshotDialectFingerprintTestCase,
     ScenarioSnapshotFingerprintTestCase,
     ScenarioSnapshotFreshnessTestCase,
     ScenarioSnapshotInputSpecsFromPlanTestCase,
@@ -602,6 +603,68 @@ def test_given_snapshot_input_specs_when_fingerprinting_then_is_stable_and_input
     )
 
     assert (fingerprint == equivalent_fingerprint) is test_case.expected_matches_equivalent
+    assert (fingerprint != changed_fingerprint) is test_case.expected_differs_from_changed
+
+
+SNAPSHOT_DIALECT_FINGERPRINT_TEST_CASES: list[ScenarioSnapshotDialectFingerprintTestCase] = [
+    ScenarioSnapshotDialectFingerprintTestCase(
+        description="fingerprint changes when capture dialect changes",
+        scenario_name="order_refund",
+        input_specs=(
+            ScenarioSnapshotInputSpec(
+                kind=ScenarioArtifactKind.SOURCE,
+                logical_name="raw__orders",
+                file_path=Path("sources/raw__orders.jsonl"),
+                capture_sql="SELECT * FROM raw.orders",
+            ),
+        ),
+        capture_adapter="snowflake",
+        capture_dialect="snowflake",
+        changed_capture_adapter="snowflake",
+        changed_capture_dialect="bigquery",
+        expected_differs_from_changed=True,
+    ),
+    ScenarioSnapshotDialectFingerprintTestCase(
+        description="fingerprint changes when capture adapter changes",
+        scenario_name="order_refund",
+        input_specs=(
+            ScenarioSnapshotInputSpec(
+                kind=ScenarioArtifactKind.SOURCE,
+                logical_name="raw__orders",
+                file_path=Path("sources/raw__orders.jsonl"),
+                capture_sql="SELECT * FROM raw.orders",
+            ),
+        ),
+        capture_adapter="snowflake",
+        capture_dialect="snowflake",
+        changed_capture_adapter="custom_snowflake",
+        changed_capture_dialect="snowflake",
+        expected_differs_from_changed=True,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SNAPSHOT_DIALECT_FINGERPRINT_TEST_CASES,
+    ids=[case.description for case in SNAPSHOT_DIALECT_FINGERPRINT_TEST_CASES],
+)
+def test_given_capture_dialect_when_fingerprinting_then_dialect_changes_are_stale(
+    test_case: ScenarioSnapshotDialectFingerprintTestCase,
+) -> None:
+    fingerprint: str = build_scenario_snapshot_input_fingerprint(
+        scenario_name=test_case.scenario_name,
+        input_specs=test_case.input_specs,
+        capture_adapter=test_case.capture_adapter,
+        capture_dialect=test_case.capture_dialect,
+    )
+    changed_fingerprint: str = build_scenario_snapshot_input_fingerprint(
+        scenario_name=test_case.scenario_name,
+        input_specs=test_case.input_specs,
+        capture_adapter=test_case.changed_capture_adapter,
+        capture_dialect=test_case.changed_capture_dialect,
+    )
+
     assert (fingerprint != changed_fingerprint) is test_case.expected_differs_from_changed
 
 

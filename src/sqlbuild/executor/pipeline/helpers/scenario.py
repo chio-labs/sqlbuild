@@ -106,6 +106,8 @@ def run_scenario_local_test_pipeline(
     adapter: BaseAdapter,
     project_name: str,
     strict: bool,
+    capture_adapter: str | None = None,
+    capture_dialect: str | None = None,
     on_scenario_start: Callable[[CompiledSqlScenario], None] | None = None,
     on_scenario_complete: Callable[
         [CompiledSqlScenario, ScenarioExecutionPlan | None, ScenarioRunResult], None
@@ -132,6 +134,8 @@ def run_scenario_local_test_pipeline(
                 scenario_plan=scenario_plan,
                 adapter=adapter,
                 strict=strict,
+                capture_adapter=capture_adapter,
+                capture_dialect=capture_dialect,
             )
         except Exception as exc:
             result = ScenarioRunResult(

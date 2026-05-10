@@ -74,6 +74,25 @@ def build_scenario_project_files() -> dict[str, str]:
     }
 
 
+def build_real_warehouse_local_replay_project_files(
+    *,
+    project_toml: str,
+    model_sql: str,
+    scenario_sql: str,
+    scenario_name: str = "transpilable_event_rollup",
+) -> dict[str, str]:
+    """Build an inline scenario project for remote capture followed by local replay."""
+
+    return {
+        "sqlbuild_project.toml": project_toml,
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_events\n    schema: raw\n    table: raw_events\n"
+        ),
+        "models/event_rollup.sql": model_sql,
+        f"tests/scenarios/{scenario_name}.sql": scenario_sql,
+    }
+
+
 def list_scenario_relation_names(*, db_path: Path) -> tuple[str, ...]:
     """Return DuckDB relation names owned by scenario artifact prefixes."""
 
@@ -207,3 +226,21 @@ def assert_local_duckdb_state(
     if rows_sql is not None:
         value_rows: list[tuple[object, ...]] = query_duckdb(db_path=db_path, sql=rows_sql)
         assert tuple(value_rows) == expected_rows
+
+
+def assert_optional_local_replay_rows(
+    *,
+    project_dir: Path,
+    scenario_name: str,
+    local_rows_sql: str,
+    expected_local_rows: tuple[tuple[object, ...], ...],
+) -> None:
+    """Assert local replay rows when a test case expects inspectable local output."""
+
+    if not local_rows_sql:
+        return
+    rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "target" / "run" / "scenarios" / scenario_name / "local.duckdb",
+        sql=local_rows_sql,
+    )
+    assert tuple(rows) == expected_local_rows

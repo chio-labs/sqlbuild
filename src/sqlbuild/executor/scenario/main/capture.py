@@ -27,6 +27,7 @@ from sqlbuild.shared.constants import (
     SCENARIO_EXEC_CAPTURE_INTERNAL,
 )
 from sqlbuild.shared.helpers.coded_errors import error_code
+from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
 
 
 def execute_scenario_snapshot_capture(
@@ -53,7 +54,7 @@ def execute_scenario_snapshot_capture(
             columns: tuple[ScenarioSnapshotColumn, ...] = build_scenario_snapshot_columns(
                 adapter=adapter,
                 connection=connection,
-                relation_name=_source_relation_name(relation_plan),
+                relation_name=_source_relation_name(adapter=adapter, relation_plan=relation_plan),
                 local_type_overrides=local_type_overrides,
             )
             stats: ScenarioSnapshotFileStats = write_scenario_snapshot_jsonl(
@@ -63,7 +64,7 @@ def execute_scenario_snapshot_capture(
             result = ScenarioSnapshotCaptureRelationResult(
                 kind=relation_plan.kind,
                 logical_name=relation_plan.logical_name,
-                source_relation=_source_relation_name(relation_plan),
+                source_relation=_source_relation_name(adapter=adapter, relation_plan=relation_plan),
                 file_path=relation_plan.file_path,
                 status=ExecutionStatus.SUCCESS,
                 row_count=stats.row_count,
@@ -87,7 +88,7 @@ def execute_scenario_snapshot_capture(
             result = ScenarioSnapshotCaptureRelationResult(
                 kind=relation_plan.kind,
                 logical_name=relation_plan.logical_name,
-                source_relation=_source_relation_name(relation_plan),
+                source_relation=_source_relation_name(adapter=adapter, relation_plan=relation_plan),
                 file_path=relation_plan.file_path,
                 status=ExecutionStatus.FAILED,
                 error_code=captured_error_code,
@@ -144,7 +145,7 @@ def _query_relation_rows(
 ) -> tuple[dict[str, object], ...]:
     query_result: QueryResult = adapter.query(
         connection,
-        f"SELECT * FROM {_source_relation_name(relation_plan)}",
+        f"SELECT * FROM {_source_relation_name(adapter=adapter, relation_plan=relation_plan)}",
         limit=None,
     )
     rows: list[dict[str, object]] = []
@@ -161,12 +162,12 @@ def _query_relation_rows(
     return tuple(rows)
 
 
-def _source_relation_name(relation_plan: ScenarioSnapshotCaptureRelationPlan) -> str:
-    qualified_name: str | None = relation_plan.source_target.qualified_name
-    if qualified_name is None:
-        error: ValueError = ValueError(
-            f"Scenario snapshot relation '{relation_plan.logical_name}' has no qualified target"
-        )
-        object.__setattr__(error, "code", SCENARIO_EXEC_CAPTURE_INTERNAL)
-        raise error
-    return qualified_name
+def _source_relation_name(
+    *, adapter: BaseAdapter, relation_plan: ScenarioSnapshotCaptureRelationPlan
+) -> str:
+    return resolve_qualified_name_parts(
+        adapter=adapter,
+        database=relation_plan.source_target.database,
+        schema=relation_plan.source_target.schema,
+        name=relation_plan.source_target.name,
+    )

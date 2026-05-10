@@ -188,8 +188,13 @@ def test_given_selected_scenarios_when_running_local_scenario_pipeline_then_load
     adapter: ScenarioLocalPipelineTestAdapter = ScenarioLocalPipelineTestAdapter()
 
     def classify_snapshot(
-        *, project_dir: Path, scenario_plan: ScenarioExecutionPlan
+        *,
+        project_dir: Path,
+        scenario_plan: ScenarioExecutionPlan,
+        capture_adapter: str | None = None,
+        capture_dialect: str | None = None,
     ) -> ScenarioSnapshotStateResult:
+        del capture_adapter, capture_dialect
         return ScenarioSnapshotStateResult(
             state=ScenarioSnapshotState(test_case.snapshot_state),
             manifest_path=project_dir

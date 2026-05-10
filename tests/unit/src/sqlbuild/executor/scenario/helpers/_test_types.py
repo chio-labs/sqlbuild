@@ -37,6 +37,18 @@ class ScenarioSnapshotFingerprintTestCase:
 
 
 @dataclass(frozen=True)
+class ScenarioSnapshotDialectFingerprintTestCase:
+    description: str
+    scenario_name: str
+    input_specs: tuple[ScenarioSnapshotInputSpec, ...]
+    capture_adapter: str
+    capture_dialect: str
+    changed_capture_adapter: str
+    changed_capture_dialect: str
+    expected_differs_from_changed: bool
+
+
+@dataclass(frozen=True)
 class ScenarioSnapshotInputSpecsFromPlanTestCase:
     description: str
     scenario_plan: ScenarioExecutionPlan
