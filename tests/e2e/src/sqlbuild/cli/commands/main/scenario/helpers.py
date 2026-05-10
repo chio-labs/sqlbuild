@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import query_duckdb
+from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import query_duckdb, run_sqb
 
 
 def build_scenario_project_files() -> dict[str, str]:
@@ -202,6 +203,50 @@ def maybe_corrupt_scenario_snapshot_jsonl(
         / "raw_orders.jsonl"
     )
     jsonl_path.write_text('{"id": 1, "amount": 10}\nnot-json\n', encoding="utf-8")
+
+
+def maybe_capture_scenario_snapshot(
+    *, project_dir: Path, scenario_name: str, enabled: bool
+) -> None:
+    """Optionally capture a scenario snapshot for an e2e project."""
+
+    if not enabled:
+        return
+    capture_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "scenario", "capture", scenario_name),
+        project_dir=project_dir,
+    )
+    assert capture_result.returncode == 0, capture_result.stdout + capture_result.stderr
+
+
+def write_stale_order_totals_scenario(*, project_dir: Path) -> None:
+    """Change the order totals scenario so a prior snapshot becomes stale."""
+
+    scenario_path: Path = project_dir / "tests" / "scenarios" / "order_totals_pass.sql"
+    scenario_path.write_text(
+        'SCENARIO (description: "Order totals scenario", tags: ["scenario"]);\n\n'
+        "WITH\n"
+        "__source__raw_orders AS (\n"
+        "  SELECT 1 AS id, 10 AS amount\n"
+        "  UNION ALL\n"
+        "  SELECT 2 AS id, 5 AS amount\n"
+        "  UNION ALL\n"
+        "  SELECT 3 AS id, 3 AS amount\n"
+        "),\n"
+        "__expected__order_totals AS (\n"
+        "  SELECT 18 AS total_amount\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def maybe_write_stale_order_totals_scenario(*, project_dir: Path, enabled: bool) -> None:
+    """Optionally change a scenario so a prior snapshot becomes stale."""
+
+    if not enabled:
+        return
+    write_stale_order_totals_scenario(project_dir=project_dir)
 
 
 def assert_local_duckdb_state(

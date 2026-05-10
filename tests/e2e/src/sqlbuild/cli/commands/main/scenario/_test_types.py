@@ -71,3 +71,20 @@ class ScenarioLocalRetainE2ETestCase:
     expected_duckdb_exists: bool = True
     corrupt_jsonl: bool = False
     additional_project_files: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class ScenarioLocalSnapshotSyncE2ETestCase:
+    """Test case for local snapshot sync and refresh verification."""
+
+    description: str
+    scenario_name: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+    initial_capture: bool = False
+    corrupt_jsonl: bool = False
+    update_scenario_after_capture: bool = False
+    expected_duckdb_exists: bool = True
+    query_when_exists: bool = True
+    expected_count: int = 2

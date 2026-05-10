@@ -32,6 +32,7 @@ from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
 from sqlbuild.shared.constants import (
     SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
+    SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
     SCENARIO_CLI_MISSING_SUBCOMMAND,
 )
 from sqlbuild.shared.helpers.colors import supports_color
@@ -173,6 +174,13 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     scenario_test_parser.add_argument("--retain", dest="scenario_retain", action="store_true")
     scenario_test_parser.add_argument("--local", dest="scenario_local", action="store_true")
     scenario_test_parser.add_argument("--strict", dest="scenario_strict", action="store_true")
+    scenario_snapshot_group: argparse._MutuallyExclusiveGroup = (
+        scenario_test_parser.add_mutually_exclusive_group()
+    )
+    scenario_snapshot_group.add_argument(
+        "--sync-snapshots", dest="scenario_sync_snapshots", action="store_true"
+    )
+    scenario_snapshot_group.add_argument("--refresh", dest="scenario_refresh", action="store_true")
     scenario_test_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     scenario_capture_parser: argparse.ArgumentParser = scenario_subparsers.add_parser("capture")
     scenario_capture_parser.add_argument("scenario_selector", nargs="*", metavar="scenario")
@@ -424,6 +432,17 @@ def _main_with_dependencies(
                             "target/run/scenarios/."
                         ),
                     )
+                if not args.scenario_local and (
+                    args.scenario_sync_snapshots or args.scenario_refresh
+                ):
+                    raise CliUserError(
+                        "scenario snapshot sync flags require --local",
+                        code=SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
+                        help=(
+                            "Use sqb scenario test --local --sync-snapshots or "
+                            "sqb scenario test --local --refresh."
+                        ),
+                    )
                 return handlers.run_scenario(
                     project_dir,
                     args.no_sql_validation,
@@ -432,6 +451,8 @@ def _main_with_dependencies(
                     args.scenario_retain,
                     args.scenario_local,
                     args.scenario_strict,
+                    args.scenario_sync_snapshots,
+                    args.scenario_refresh,
                 )
             if args.scenario_command == "capture":
                 return handlers.run_scenario_capture(

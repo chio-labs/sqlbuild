@@ -12,6 +12,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario._test_types import (
     ScenarioLocalCliE2ETestCase,
     ScenarioLocalRetainE2ETestCase,
     ScenarioLocalRuntimeArtifactTestCase,
+    ScenarioLocalSnapshotSyncE2ETestCase,
     ScenarioRuntimeArtifactTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
@@ -19,7 +20,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     assert_runtime_artifact_contains,
     build_scenario_project_files,
     list_scenario_relation_names,
+    maybe_capture_scenario_snapshot,
     maybe_corrupt_scenario_snapshot_jsonl,
+    maybe_write_stale_order_totals_scenario,
     scenario_relation_name_by_suffix,
     scenario_relation_row_count,
 )
@@ -637,6 +640,94 @@ SCENARIO_LOCAL_DUCKDB_TEST_CASES: tuple[ScenarioLocalRetainE2ETestCase, ...] = (
     ),
 )
 
+SCENARIO_LOCAL_SNAPSHOT_SYNC_TEST_CASES: tuple[ScenarioLocalSnapshotSyncE2ETestCase, ...] = (
+    ScenarioLocalSnapshotSyncE2ETestCase(
+        description="sync captures missing snapshot before local replay",
+        scenario_name="order_totals_pass",
+        command=(
+            "--no-color",
+            "scenario",
+            "test",
+            "order_totals_pass",
+            "--local",
+            "--sync-snapshots",
+        ),
+        expected_exit_code=0,
+        expected_stdout_fragments=(
+            "Snapshot Sync (1 selected)",
+            "SNAPSHOT_PASS=1  SNAPSHOT_FAIL=0",
+            "order_totals_pass",
+            "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+        ),
+    ),
+    ScenarioLocalSnapshotSyncE2ETestCase(
+        description="sync reuses fresh snapshot",
+        scenario_name="order_totals_pass",
+        command=(
+            "--no-color",
+            "scenario",
+            "test",
+            "order_totals_pass",
+            "--local",
+            "--sync-snapshots",
+        ),
+        expected_exit_code=1,
+        expected_stdout_fragments=(
+            "Snapshots are fresh.",
+            "order_totals_pass",
+            "ERROR",
+            "error[X604]:",
+            "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+        ),
+        initial_capture=True,
+        corrupt_jsonl=True,
+        query_when_exists=False,
+    ),
+    ScenarioLocalSnapshotSyncE2ETestCase(
+        description="refresh recaptures fresh snapshot before local replay",
+        scenario_name="order_totals_pass",
+        command=(
+            "--no-color",
+            "scenario",
+            "test",
+            "order_totals_pass",
+            "--local",
+            "--refresh",
+        ),
+        expected_exit_code=0,
+        expected_stdout_fragments=(
+            "Snapshot Sync (1 selected)",
+            "SNAPSHOT_PASS=1  SNAPSHOT_FAIL=0",
+            "order_totals_pass",
+            "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+        ),
+        initial_capture=True,
+        corrupt_jsonl=True,
+    ),
+    ScenarioLocalSnapshotSyncE2ETestCase(
+        description="sync recaptures stale snapshot before local replay",
+        scenario_name="order_totals_pass",
+        command=(
+            "--no-color",
+            "scenario",
+            "test",
+            "order_totals_pass",
+            "--local",
+            "--sync-snapshots",
+        ),
+        expected_exit_code=0,
+        expected_stdout_fragments=(
+            "Snapshot Sync (1 selected)",
+            "SNAPSHOT_PASS=1  SNAPSHOT_FAIL=0",
+            "order_totals_pass",
+            "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+        ),
+        initial_capture=True,
+        update_scenario_after_capture=True,
+        expected_count=3,
+    ),
+)
+
 SCENARIO_RUNTIME_ARTIFACT_TEST_CASES: list[ScenarioRuntimeArtifactTestCase] = [
     ScenarioRuntimeArtifactTestCase(
         description="writes fixture runtime SQL under target run scenarios",
@@ -853,6 +944,57 @@ def test_given_captured_snapshot_when_running_local_scenario_then_manages_local_
         expected_count=test_case.expected_count,
         rows_sql=test_case.retained_rows_sql,
         expected_rows=test_case.expected_rows,
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SCENARIO_LOCAL_SNAPSHOT_SYNC_TEST_CASES,
+    ids=[case.description for case in SCENARIO_LOCAL_SNAPSHOT_SYNC_TEST_CASES],
+)
+def test_given_local_snapshot_sync_when_running_local_scenario_then_captures_expected_snapshots(
+    test_case: ScenarioLocalSnapshotSyncE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="scenario_project",
+        repo_files=build_scenario_project_files(),
+    )
+    maybe_capture_scenario_snapshot(
+        project_dir=project_dir,
+        scenario_name=test_case.scenario_name,
+        enabled=test_case.initial_capture,
+    )
+    maybe_corrupt_scenario_snapshot_jsonl(
+        project_dir=project_dir,
+        scenario_name=test_case.scenario_name,
+        enabled=test_case.corrupt_jsonl,
+    )
+    maybe_write_stale_order_totals_scenario(
+        project_dir=project_dir,
+        enabled=test_case.update_scenario_after_capture,
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    local_duckdb_path: Path = (
+        project_dir / "target" / "run" / "scenarios" / test_case.scenario_name / "local.duckdb"
+    )
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    expected_fragment: str
+    for expected_fragment in test_case.expected_stdout_fragments:
+        assert expected_fragment in result.stdout
+    assert_local_duckdb_state(
+        db_path=local_duckdb_path,
+        stdout=result.stdout,
+        expected_exists=test_case.expected_duckdb_exists,
+        query_when_exists=test_case.query_when_exists,
+        count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+        expected_count=test_case.expected_count,
     )
 
 

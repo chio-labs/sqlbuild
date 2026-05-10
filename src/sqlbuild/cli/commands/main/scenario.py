@@ -15,6 +15,8 @@ def run_scenario(
     retain: bool = False,
     local: bool = False,
     strict: bool = False,
+    sync_snapshots: bool = False,
+    refresh: bool = False,
 ) -> int:
     """Run the scenario command."""
 
@@ -26,4 +28,6 @@ def run_scenario(
         retain=retain,
         local=local,
         strict=strict,
+        sync_snapshots=sync_snapshots,
+        refresh=refresh,
     )
