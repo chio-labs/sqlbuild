@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.exceptions import AdapterUserError
@@ -95,6 +95,8 @@ class _BigQueryConnection:
 
 class BigQueryAdapter(BaseAdapter):
     """BigQuery adapter backed by google-cloud-bigquery."""
+
+    sqlglot_dialect_name: ClassVar[str | None] = "bigquery"
 
     def __init__(self) -> None:
         self._location: str | None = None
@@ -230,9 +232,6 @@ class BigQueryAdapter(BaseAdapter):
         """Render the BigQuery set-difference operator explicitly."""
 
         return "EXCEPT DISTINCT"
-
-    def sqlglot_dialect(self) -> str | None:
-        return "bigquery"
 
     def expression_inference_profile(self) -> ExpressionInferenceProfile:
         return ExpressionInferenceProfile(

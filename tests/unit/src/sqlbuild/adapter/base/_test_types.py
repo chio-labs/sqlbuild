@@ -12,3 +12,9 @@ class BaseAdapterExpressionInferenceProfileTestCase:
     description: str
     expected_sqlglot_dialect: str | None
     expected_function_rules_count: int
+
+
+@dataclass(frozen=True)
+class BaseAdapterSqlglotDialectTestCase:
+    description: str
+    expected_sqlglot_dialect: str | None

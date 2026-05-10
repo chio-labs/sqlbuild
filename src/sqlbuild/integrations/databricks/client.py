@@ -8,7 +8,7 @@ import json
 import logging
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.exceptions import AdapterUserError
@@ -63,6 +63,8 @@ class _DatabricksConnection:
 
 class DatabricksAdapter(BaseAdapter):
     """Databricks adapter backed by databricks-sql-connector."""
+
+    sqlglot_dialect_name: ClassVar[str | None] = "databricks"
 
     def supports_zero_copy_clone(self) -> bool:
         return True
@@ -352,9 +354,6 @@ class DatabricksAdapter(BaseAdapter):
 
     def render_set_difference_operator(self) -> str:
         return "EXCEPT"
-
-    def sqlglot_dialect(self) -> str | None:
-        return "databricks"
 
     def expression_inference_profile(self) -> ExpressionInferenceProfile:
         return ExpressionInferenceProfile(
