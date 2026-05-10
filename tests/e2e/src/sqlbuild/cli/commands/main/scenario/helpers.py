@@ -230,6 +230,61 @@ def maybe_capture_scenario_snapshot(
     assert capture_result.returncode == 0, capture_result.stdout + capture_result.stderr
 
 
+def write_committed_order_totals_pass_snapshot(*, project_dir: Path) -> None:
+    """Write a small snapshot fixture without running scenario capture."""
+
+    snapshot_root: Path = project_dir / "tests" / "_scenario_snapshots" / "order_totals_pass"
+    sources_root: Path = snapshot_root / "sources"
+    sources_root.mkdir(parents=True)
+    (snapshot_root / "scenario.json").write_text(
+        json.dumps(
+            {
+                "capture_adapter": "duckdb",
+                "capture_dialect": "duckdb",
+                "captured_at": "2026-05-10T13:16:38Z",
+                "format": "jsonl",
+                "input_fingerprint": (
+                    "b768a0f159b65141c9eb9f460b80f350679e1362477a8fc527b24911fb211112"
+                ),
+                "relations": [
+                    {
+                        "bytes": 41,
+                        "columns": [
+                            {
+                                "local_type": "INT",
+                                "name": "id",
+                                "warehouse_type": "INTEGER",
+                            },
+                            {
+                                "local_type": "INT",
+                                "name": "amount",
+                                "warehouse_type": "INTEGER",
+                            },
+                        ],
+                        "file": "sources/raw_orders.jsonl",
+                        "kind": "source",
+                        "logical_name": "raw_orders",
+                        "row_count": 2,
+                    }
+                ],
+                "scenario_name": "order_totals_pass",
+                "sqlbuild_version": "0.2.1",
+                "total_bytes": 41,
+                "total_rows": 2,
+                "version": 1,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (sources_root / "raw_orders.jsonl").write_text(
+        '{"amount":10,"id":1}\n{"amount":5,"id":2}\n',
+        encoding="utf-8",
+    )
+
+
 def write_stale_order_totals_scenario(*, project_dir: Path) -> None:
     """Change the order totals scenario so a prior snapshot becomes stale."""
 

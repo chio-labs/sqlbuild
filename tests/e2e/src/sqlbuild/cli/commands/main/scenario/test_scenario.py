@@ -10,6 +10,7 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.scenario._test_types import (
     ScenarioCliE2ETestCase,
     ScenarioLocalCliE2ETestCase,
+    ScenarioLocalCommittedSnapshotE2ETestCase,
     ScenarioLocalRetainE2ETestCase,
     ScenarioLocalRuntimeArtifactTestCase,
     ScenarioLocalSnapshotSyncE2ETestCase,
@@ -25,6 +26,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     maybe_write_stale_order_totals_scenario,
     scenario_relation_name_by_suffix,
     scenario_relation_row_count,
+    write_committed_order_totals_pass_snapshot,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     prepare_inline_project,
@@ -940,6 +942,68 @@ def test_given_captured_snapshot_when_running_local_scenario_then_manages_local_
         stdout=result.stdout,
         expected_exists=test_case.expected_duckdb_exists,
         query_when_exists=test_case.expected_duckdb_exists and not test_case.corrupt_jsonl,
+        count_sql=test_case.retained_count_sql,
+        expected_count=test_case.expected_count,
+        rows_sql=test_case.retained_rows_sql,
+        expected_rows=test_case.expected_rows,
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScenarioLocalCommittedSnapshotE2ETestCase(
+            description="replays committed local snapshot without capture",
+            scenario_name="order_totals_pass",
+            command=("--no-color", "scenario", "test", "order_totals_pass", "--local"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "order_totals_pass",
+                "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+            ),
+            unexpected_stdout_fragments=("Snapshot Capture",),
+            retained_duckdb_relative_path=Path(
+                "target/run/scenarios/order_totals_pass/local.duckdb"
+            ),
+            retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+            expected_count=2,
+            retained_rows_sql=(
+                'SELECT id, amount FROM "__sqb_local__source__raw_orders" ORDER BY id'
+            ),
+            expected_rows=((1, 10), (2, 5)),
+        ),
+    ],
+    ids=["replays committed local snapshot without capture"],
+)
+def test_given_committed_snapshot_when_running_local_scenario_then_replays_without_capture(
+    test_case: ScenarioLocalCommittedSnapshotE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="scenario_project",
+        repo_files=build_scenario_project_files(),
+    )
+    write_committed_order_totals_pass_snapshot(project_dir=project_dir)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    local_duckdb_path: Path = project_dir / test_case.retained_duckdb_relative_path
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    expected_fragment: str
+    for expected_fragment in test_case.expected_stdout_fragments:
+        assert expected_fragment in result.stdout
+    unexpected_fragment: str
+    for unexpected_fragment in test_case.unexpected_stdout_fragments:
+        assert unexpected_fragment not in result.stdout
+    assert_local_duckdb_state(
+        db_path=local_duckdb_path,
+        stdout=result.stdout,
+        expected_exists=True,
+        query_when_exists=True,
         count_sql=test_case.retained_count_sql,
         expected_count=test_case.expected_count,
         rows_sql=test_case.retained_rows_sql,
