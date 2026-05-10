@@ -50,6 +50,8 @@ from sqlbuild.spec.models.project import (
 )
 
 _SCENARIO_NAME_WIDTH: int = 64
+_CAPTURE_RELATION_KIND_WIDTH: int = 8
+_CAPTURE_RELATION_NAME_WIDTH: int = _SCENARIO_NAME_WIDTH - 4 - _CAPTURE_RELATION_KIND_WIDTH - 1
 
 
 def run_scenario_capture(
@@ -125,6 +127,7 @@ def run_scenario_capture(
     )
     execution_connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
         adapter_name=adapter_name,
+        blank_line_after_complete=True,
         stream=progress_stream,
         use_color=use_color,
     )
@@ -167,6 +170,7 @@ def run_scenario_capture(
         on_scenario_complete=lambda _scenario, scenario_plan, result: _complete_capture_run(
             scenario_status=scenario_status,
             status_is_tty=status_is_tty,
+            project_dir=effective_project_dir,
             scenario_plan=scenario_plan,
             result=result,
             progress_stream=progress_stream,
@@ -186,6 +190,7 @@ def _complete_capture_run(
     *,
     scenario_status: TransientStatusReporter,
     status_is_tty: bool,
+    project_dir: Path,
     scenario_plan: ScenarioExecutionPlan | None,
     result: ScenarioSnapshotCaptureRunResult,
     progress_stream: TextIO,
@@ -196,6 +201,7 @@ def _complete_capture_run(
     _write_capture_result(
         result=result,
         scenario_plan=scenario_plan,
+        project_dir=project_dir,
         stream=progress_stream,
         use_color=use_color,
     )
@@ -205,6 +211,7 @@ def _write_capture_result(
     *,
     result: ScenarioSnapshotCaptureRunResult,
     scenario_plan: ScenarioExecutionPlan | None,
+    project_dir: Path,
     stream: TextIO,
     use_color: bool,
 ) -> None:
@@ -224,7 +231,12 @@ def _write_capture_result(
         if not result.retained:
             stream.write("    Rerun with --retain to inspect scenario-owned artifacts.\n")
     if result.capture_result is not None and result.capture_result.manifest_path is not None:
-        stream.write(f"    snapshot {result.capture_result.manifest_path}\n")
+        _write_capture_relation_rows(result=result, stream=stream, use_color=use_color)
+        snapshot_path: str = _display_snapshot_path(
+            manifest_path=result.capture_result.manifest_path,
+            project_dir=project_dir,
+        )
+        stream.write(f"    {'snapshot':<{_CAPTURE_RELATION_KIND_WIDTH}} {snapshot_path}\n")
     if result.retained and scenario_plan is not None:
         stream.write("    Retained relations:\n")
         fixture_result: ScenarioFixtureExecutionResult
@@ -237,6 +249,45 @@ def _write_capture_result(
         for seed_result in result.seed_results:
             stream.write(f"      seed   {seed_result.seed_name}\n")
     stream.flush()
+
+
+def _write_capture_relation_rows(
+    *, result: ScenarioSnapshotCaptureRunResult, stream: TextIO, use_color: bool
+) -> None:
+    capture_result: ScenarioSnapshotCaptureResult | None = result.capture_result
+    if capture_result is None:
+        return
+    relation_result: ScenarioSnapshotCaptureRelationResult
+    for relation_result in capture_result.relation_results:
+        status_text: str = "PASS" if relation_result.status == SUCCESS_STATUS else "FAIL"
+        status: str = colorize_status(status_text, use_color=use_color)
+        row_label: str = "row" if relation_result.row_count == 1 else "rows"
+        detail: str = (
+            f"  {relation_result.row_count} {row_label}, "
+            f"{_format_snapshot_size(relation_result.byte_count)}"
+        )
+        stream.write(
+            f"    {relation_result.kind.value:<{_CAPTURE_RELATION_KIND_WIDTH}} "
+            f"{relation_result.logical_name:<{_CAPTURE_RELATION_NAME_WIDTH}} "
+            f"{status}{detail}\n"
+        )
+
+
+def _format_snapshot_size(byte_count: int) -> str:
+    if byte_count < 1024:
+        return f"{byte_count} B"
+    kibibytes: float = byte_count / 1024
+    if kibibytes < 1024:
+        return f"{kibibytes:.1f} KB"
+    mebibytes: float = kibibytes / 1024
+    return f"{mebibytes:.1f} MB"
+
+
+def _display_snapshot_path(*, manifest_path: Path, project_dir: Path) -> str:
+    try:
+        return manifest_path.relative_to(project_dir).as_posix()
+    except ValueError:
+        return manifest_path.as_posix()
 
 
 def _capture_detail(result: ScenarioSnapshotCaptureRunResult) -> str:

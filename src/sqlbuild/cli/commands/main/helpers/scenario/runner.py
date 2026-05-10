@@ -227,6 +227,7 @@ def run_scenario(
     else:
         execution_connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
             adapter_name=adapter_name,
+            blank_line_after_complete=True,
             stream=progress_stream,
             use_color=use_color,
         )
@@ -333,6 +334,7 @@ def _sync_local_snapshots(
     )
     execution_connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
         adapter_name=project_adapter_name,
+        blank_line_after_complete=True,
         stream=progress_stream,
         use_color=use_color,
     )
