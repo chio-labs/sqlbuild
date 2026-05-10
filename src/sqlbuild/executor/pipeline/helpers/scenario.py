@@ -16,6 +16,8 @@ from sqlbuild.executor.scenario.main.capture_steps import execute_scenario_snaps
 from sqlbuild.executor.scenario.main.run import execute_scenario_run
 from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotCaptureRunResult
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.shared.constants import SCENARIO_EXEC_INTERNAL
+from sqlbuild.shared.helpers.coded_errors import error_code, error_help, error_message
 from sqlbuild.spec.models.project import scenario_local_type_overrides_for_dialect
 
 
@@ -75,7 +77,13 @@ def run_scenario_test_pipeline(
                     scenario_name=scenario.name,
                     status=ExecutionStatus.FAILED,
                     retained=retain,
-                    error_message=str(exc),
+                    error_code=error_code(exc, fallback_code=SCENARIO_EXEC_INTERNAL),
+                    error_help=error_help(exc)
+                    or (
+                        "This is likely a SQLBuild bug. Please file an issue with the "
+                        "scenario name."
+                    ),
+                    error_message=error_message(exc),
                 )
             results.append(result)
             if on_scenario_complete is not None:
@@ -154,7 +162,13 @@ def run_scenario_capture_pipeline(
                     scenario_name=scenario.name,
                     status=ExecutionStatus.FAILED,
                     retained=retain,
-                    error_message=str(exc),
+                    error_code=error_code(exc, fallback_code=SCENARIO_EXEC_INTERNAL),
+                    error_help=error_help(exc)
+                    or (
+                        "This is likely a SQLBuild bug. Please file an issue with the "
+                        "scenario name."
+                    ),
+                    error_message=error_message(exc),
                 )
             results.append(result)
             if on_scenario_complete is not None:

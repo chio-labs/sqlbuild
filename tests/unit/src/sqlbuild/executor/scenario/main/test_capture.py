@@ -23,6 +23,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotRelation,
 )
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.shared.constants import SCENARIO_EXEC_CAPTURE_FAILED
 from tests.unit.src.sqlbuild.executor.scenario.main._test_types import (
     ExecuteScenarioSnapshotCaptureTestCase,
 )
@@ -266,10 +267,20 @@ def test_given_capture_plan_when_executing_snapshot_capture_then_writes_jsonl_an
                         source_relation=str(SCENARIO_PLAN.fixture_plans[1].target.qualified_name),
                         file_path=Path("refs/stg_customers.jsonl"),
                         status=ExecutionStatus.FAILED,
+                        error_code=SCENARIO_EXEC_CAPTURE_FAILED,
+                        error_help=(
+                            "Check the materialized scenario input relation and rerun capture "
+                            "with --retain to inspect warehouse artifacts."
+                        ),
                         error_message=(
                             "Failed to capture ref 'stg_customers': warehouse read failed"
                         ),
                     ),
+                ),
+                error_code=SCENARIO_EXEC_CAPTURE_FAILED,
+                error_help=(
+                    "Check the materialized scenario input relation and rerun capture "
+                    "with --retain to inspect warehouse artifacts."
                 ),
                 error_message="Failed to capture ref 'stg_customers': warehouse read failed",
             ),

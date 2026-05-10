@@ -31,6 +31,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCaptureResult,
     ScenarioSnapshotCaptureRunResult,
 )
+from sqlbuild.shared.helpers.coded_errors import format_coded_error
 from sqlbuild.shared.helpers.colors import (
     blue_bold,
     colorize_status,
@@ -186,8 +187,13 @@ def _write_capture_result(
     detail: str = _capture_detail(result)
     stream.write(f"{result.scenario_name:<{_SCENARIO_NAME_WIDTH}} {status}{detail}\n")
     if result.error_message:
+        rendered_error_message: str = _render_result_error(
+            error_code=result.error_code,
+            error_message=result.error_message,
+            error_help=result.error_help,
+        )
         error_line: str
-        for error_line in result.error_message.splitlines():
+        for error_line in rendered_error_message.splitlines():
             stream.write(f"    {error_line}\n")
         if not result.retained:
             stream.write("    Rerun with --retain to inspect scenario-owned artifacts.\n")
@@ -221,6 +227,14 @@ def _capture_detail(result: ScenarioSnapshotCaptureRunResult) -> str:
     relation_label: str = "relation" if relation_count == 1 else "relations"
     row_label: str = "row" if row_count == 1 else "rows"
     return f"  {relation_count} {relation_label}, {row_count} {row_label}"
+
+
+def _render_result_error(
+    *, error_code: str | None, error_message: str, error_help: str | None = None
+) -> str:
+    if error_code is None:
+        return error_message
+    return format_coded_error(code=error_code, message=error_message, help=error_help)
 
 
 def _captured_at() -> str:

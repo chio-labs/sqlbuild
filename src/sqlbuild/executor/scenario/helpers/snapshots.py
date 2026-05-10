@@ -28,6 +28,15 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotStateResult,
 )
 from sqlbuild.executor.scenario.types import ScenarioSnapshotState
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.shared.constants import (
+    SCENARIO_EXEC_INTERNAL,
+    SCENARIO_LOCAL_JSONL_INVALID,
+    SCENARIO_LOCAL_MANIFEST_INVALID,
+    SCENARIO_LOCAL_SNAPSHOT_MISSING,
+    SCENARIO_LOCAL_SNAPSHOT_STALE,
+)
+from sqlbuild.shared.helpers.coded_errors import error_code, error_message
 
 _SNAPSHOT_ROOT_PARTS: tuple[str, ...] = ("tests", "_scenario_snapshots")
 _MANIFEST_FILE_NAME: str = "scenario.json"
@@ -58,7 +67,11 @@ def scenario_snapshot_relation_file_path(*, kind: ScenarioArtifactKind, logical_
 
     relation_dir: str | None = _RELATION_DIRS.get(kind)
     if relation_dir is None:
-        raise ValueError(f"Local scenario snapshots do not capture '{kind.value}' artifacts")
+        raise ExecutorInputError(
+            f"Local scenario snapshots do not capture '{kind.value}' artifacts",
+            code=SCENARIO_EXEC_INTERNAL,
+            help="This is likely a SQLBuild bug. Please file an issue with the scenario name.",
+        )
     return Path(relation_dir) / f"{logical_name}.jsonl"
 
 
@@ -138,12 +151,21 @@ def read_scenario_snapshot_manifest(*, manifest_path: Path) -> ScenarioSnapshotM
     try:
         raw_data: Any = json.loads(manifest_path.read_text(encoding="utf-8"))
         if not isinstance(raw_data, dict):
-            raise ValueError("manifest root must be a JSON object")
+            raise ExecutorInputError(
+                "manifest root must be a JSON object",
+                code=SCENARIO_LOCAL_MANIFEST_INVALID,
+            )
         return _manifest_from_json_data(raw_data)
     except JSONDecodeError as exc:
-        raise ValueError(f"Invalid scenario snapshot manifest JSON: {exc.msg}") from exc
+        raise ExecutorInputError(
+            f"Invalid scenario snapshot manifest JSON: {exc.msg}",
+            code=SCENARIO_LOCAL_MANIFEST_INVALID,
+        ) from exc
     except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError(f"Invalid scenario snapshot manifest: {exc}") from exc
+        raise ExecutorInputError(
+            f"Invalid scenario snapshot manifest: {error_message(exc)}",
+            code=error_code(exc, fallback_code=SCENARIO_LOCAL_MANIFEST_INVALID),
+        ) from exc
 
 
 def classify_scenario_snapshot_state(
@@ -159,6 +181,7 @@ def classify_scenario_snapshot_state(
         return ScenarioSnapshotStateResult(
             state=ScenarioSnapshotState.MISSING,
             manifest_path=manifest_path,
+            error_code=SCENARIO_LOCAL_SNAPSHOT_MISSING,
         )
 
     try:
@@ -169,6 +192,7 @@ def classify_scenario_snapshot_state(
         return ScenarioSnapshotStateResult(
             state=ScenarioSnapshotState.INVALID,
             manifest_path=manifest_path,
+            error_code=error_code(exc, fallback_code=SCENARIO_LOCAL_MANIFEST_INVALID),
             error_message=str(exc),
         )
 
@@ -188,6 +212,7 @@ def classify_scenario_snapshot_state(
         state=state,
         manifest_path=manifest_path,
         manifest=manifest,
+        error_code=SCENARIO_LOCAL_SNAPSHOT_STALE if state == ScenarioSnapshotState.STALE else None,
     )
 
 
@@ -339,13 +364,15 @@ def read_scenario_snapshot_jsonl(*, file_path: Path) -> tuple[dict[str, object],
             try:
                 row: Any = json.loads(stripped_line)
             except JSONDecodeError as exc:
-                raise ValueError(
-                    f"Invalid scenario snapshot JSONL at line {line_number}: {exc.msg}"
+                raise ExecutorInputError(
+                    f"Invalid scenario snapshot JSONL at line {line_number}: {exc.msg}",
+                    code=SCENARIO_LOCAL_JSONL_INVALID,
                 ) from exc
             if not isinstance(row, dict):
-                raise ValueError(
+                raise ExecutorInputError(
                     f"Invalid scenario snapshot JSONL at line {line_number}: "
-                    "row must be a JSON object"
+                    "row must be a JSON object",
+                    code=SCENARIO_LOCAL_JSONL_INVALID,
                 )
             rows.append(row)
     return tuple(rows)
@@ -409,7 +436,7 @@ def _manifest_to_json_data(manifest: ScenarioSnapshotManifest) -> dict[str, obje
 def _manifest_from_json_data(data: dict[str, Any]) -> ScenarioSnapshotManifest:
     relations_data: Any = data.get("relations", [])
     if not isinstance(relations_data, list):
-        raise ValueError("relations must be a list")
+        raise ExecutorInputError("relations must be a list", code=SCENARIO_LOCAL_MANIFEST_INVALID)
     return ScenarioSnapshotManifest(
         version=int(data["version"]),
         scenario_name=str(data["scenario_name"]),
@@ -427,10 +454,14 @@ def _manifest_from_json_data(data: dict[str, Any]) -> ScenarioSnapshotManifest:
 
 def _relation_from_json_data(data: Any) -> ScenarioSnapshotRelation:
     if not isinstance(data, dict):
-        raise ValueError("relation entries must be JSON objects")
+        raise ExecutorInputError(
+            "relation entries must be JSON objects", code=SCENARIO_LOCAL_MANIFEST_INVALID
+        )
     columns_data: Any = data.get("columns", [])
     if not isinstance(columns_data, list):
-        raise ValueError("relation columns must be a list")
+        raise ExecutorInputError(
+            "relation columns must be a list", code=SCENARIO_LOCAL_MANIFEST_INVALID
+        )
     return ScenarioSnapshotRelation(
         kind=ScenarioArtifactKind(str(data["kind"])),
         logical_name=str(data["logical_name"]),
@@ -443,7 +474,9 @@ def _relation_from_json_data(data: Any) -> ScenarioSnapshotRelation:
 
 def _column_from_json_data(data: Any) -> ScenarioSnapshotColumn:
     if not isinstance(data, dict):
-        raise ValueError("column entries must be JSON objects")
+        raise ExecutorInputError(
+            "column entries must be JSON objects", code=SCENARIO_LOCAL_MANIFEST_INVALID
+        )
     return ScenarioSnapshotColumn(
         name=str(data["name"]),
         warehouse_type=str(data["warehouse_type"]),

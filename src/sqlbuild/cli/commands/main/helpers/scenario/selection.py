@@ -6,6 +6,10 @@ from pathlib import Path
 
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.compiler.compile.models import CompiledProject, CompiledSqlScenario
+from sqlbuild.shared.constants import (
+    SCENARIO_CLI_NONE_DISCOVERED,
+    SCENARIO_CLI_UNKNOWN_SELECTOR,
+)
 
 
 def select_scenarios(
@@ -16,7 +20,8 @@ def select_scenarios(
     if not selectors:
         if not project.sql_scenarios:
             raise CliUserError(
-                "No SQL scenarios were discovered under tests/scenarios", code="C451"
+                "No SQL scenarios were discovered under tests/scenarios",
+                code=SCENARIO_CLI_NONE_DISCOVERED,
             )
         return project.sql_scenarios
 
@@ -70,7 +75,10 @@ def _select_scenarios_for_selector(
             matches.append(scenario)
     if matches:
         return tuple(matches)
-    raise CliUserError(f"Unknown scenario selector '{selector}'", code="C453")
+    raise CliUserError(
+        f"Unknown scenario selector '{selector}'",
+        code=SCENARIO_CLI_UNKNOWN_SELECTOR,
+    )
 
 
 def _scenario_file_matches_selector(

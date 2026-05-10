@@ -8,6 +8,10 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ScenarioAssertionCheckPlan
 from sqlbuild.executor.scenario.models import ScenarioAssertionCheckExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.shared.constants import (
+    SCENARIO_EXEC_ASSERTION_ERRORED,
+    SCENARIO_EXEC_ASSERTION_FAILED,
+)
 
 
 def execute_scenario_assertion_check(
@@ -44,6 +48,8 @@ def execute_scenario_assertion_check(
             scenario_name=scenario_name,
             name=check.name,
             status=ExecutionStatus.FAILED,
+            error_code=SCENARIO_EXEC_ASSERTION_ERRORED,
+            error_help="Check the assertion CTE SQL and rerun with --retain to inspect relations.",
             error_message=error_message,
         )
 
@@ -52,9 +58,10 @@ def execute_scenario_assertion_check(
     )
     error_message = None
     if status == ExecutionStatus.FAILED:
+        sample_message: str = f"; sample={sample_rows[0]}" if sample_rows else ""
         error_message = (
             f"scenario '{scenario_name}' assertion '{check.name}' returned "
-            f"{failing_count} failing rows"
+            f"{failing_count} failing rows{sample_message}"
         )
     return ScenarioAssertionCheckExecutionResult(
         scenario_name=scenario_name,
@@ -62,5 +69,12 @@ def execute_scenario_assertion_check(
         status=status,
         failing_row_count=failing_count,
         sample_rows=sample_rows,
+        error_code=SCENARIO_EXEC_ASSERTION_FAILED if status == ExecutionStatus.FAILED else None,
+        error_help=(
+            "Update the scenario data or model logic so the assertion query returns zero rows. "
+            "Rerun with --retain to inspect scenario-owned artifacts."
+            if status == ExecutionStatus.FAILED
+            else None
+        ),
         error_message=error_message,
     )

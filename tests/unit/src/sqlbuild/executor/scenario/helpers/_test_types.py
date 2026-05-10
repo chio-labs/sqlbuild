@@ -69,6 +69,7 @@ class ScenarioSnapshotStateTestCase:
     manifest_contents: str | None
     expected_state: ScenarioSnapshotState
     expected_has_manifest: bool
+    expected_error_code: str | None = None
     expected_error_fragment: str | None = None
 
 

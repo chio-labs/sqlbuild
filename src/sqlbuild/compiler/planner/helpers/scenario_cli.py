@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.scenario_artifacts import (
     build_scenario_hash_index,
     build_scenario_relation_map,
@@ -23,6 +24,7 @@ from sqlbuild.compiler.planner.models import (
     ScenarioRelationPlan,
 )
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind, WarningSeverity
+from sqlbuild.shared.constants import SCENARIO_PLAN_GRAPH_VALIDATION
 
 
 def build_cli_scenario_plan(
@@ -111,8 +113,11 @@ def _scenario_namespace(
 
 
 def _raise_for_error_warnings(warnings: tuple[PlanWarning, ...]) -> None:
-    errors: tuple[str, ...] = tuple(
-        warning.message for warning in warnings if warning.severity == WarningSeverity.ERROR
+    error_warnings: tuple[PlanWarning, ...] = tuple(
+        warning for warning in warnings if warning.severity == WarningSeverity.ERROR
     )
-    if errors:
-        raise ValueError("\n".join(errors))
+    if error_warnings:
+        raise PlannerInputError(
+            "\n".join(warning.message for warning in error_warnings),
+            code=error_warnings[0].code or SCENARIO_PLAN_GRAPH_VALIDATION,
+        )

@@ -184,6 +184,8 @@ def write_snapshot_state_test_manifest(
 def assert_snapshot_state_error(
     *, state_result: ScenarioSnapshotStateResult, test_case: ScenarioSnapshotStateTestCase
 ) -> None:
+    if test_case.expected_error_code is not None:
+        assert state_result.error_code == test_case.expected_error_code
     if test_case.expected_error_fragment is not None:
         assert state_result.error_message is not None
         assert test_case.expected_error_fragment in state_result.error_message
