@@ -88,3 +88,20 @@ class ScenarioLocalSnapshotSyncE2ETestCase:
     expected_duckdb_exists: bool = True
     query_when_exists: bool = True
     expected_count: int = 2
+
+
+@dataclass(frozen=True)
+class ScenarioLocalCommittedSnapshotE2ETestCase:
+    """Test case for local replay from a pre-written snapshot fixture."""
+
+    description: str
+    scenario_name: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+    unexpected_stdout_fragments: tuple[str, ...]
+    retained_duckdb_relative_path: Path
+    retained_count_sql: str
+    expected_count: int
+    retained_rows_sql: str
+    expected_rows: tuple[tuple[object, ...], ...]
