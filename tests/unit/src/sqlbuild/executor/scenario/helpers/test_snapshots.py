@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -60,6 +62,56 @@ SNAPSHOT_CAPTURE_FINGERPRINT: str = build_scenario_snapshot_input_fingerprint(
     scenario_name=SNAPSHOT_CAPTURE_PLAN.name,
     input_specs=build_scenario_snapshot_input_specs(scenario_plan=SNAPSHOT_CAPTURE_PLAN),
 )
+
+JSONL_ROUND_TRIP_TEST_CASES: list[ScenarioSnapshotJsonlRoundTripTestCase] = [
+    ScenarioSnapshotJsonlRoundTripTestCase(
+        description="jsonl rows round trip with file stats",
+        relative_file_path=Path("sources/raw__orders.jsonl"),
+        rows=(
+            {"order_id": 1, "amount": 10.5, "is_paid": True, "note": None},
+            {"order_id": 2, "amount": 20, "is_paid": False, "note": "refund"},
+        ),
+        expected_stats=ScenarioSnapshotFileStats(row_count=2, byte_count=115),
+        expected_file_contents=(
+            '{"amount":10.5,"is_paid":true,"note":null,"order_id":1}\n'
+            '{"amount":20,"is_paid":false,"note":"refund","order_id":2}\n'
+        ),
+        expected_rows=(
+            {"amount": 10.5, "is_paid": True, "note": None, "order_id": 1},
+            {"amount": 20, "is_paid": False, "note": "refund", "order_id": 2},
+        ),
+    ),
+    ScenarioSnapshotJsonlRoundTripTestCase(
+        description="jsonl rows serialize captured warehouse scalar objects",
+        relative_file_path=Path("sources/raw__orders.jsonl"),
+        rows=(
+            {
+                "amount": Decimal("10.50"),
+                "order_date": date(2026, 1, 2),
+                "loaded_at": datetime(2026, 1, 2, 3, 4, 5),
+                "loaded_time": time(3, 4, 5),
+                "interval": timedelta(days=2),
+                "payload": b"abc",
+            },
+        ),
+        expected_stats=ScenarioSnapshotFileStats(row_count=1, byte_count=151),
+        expected_file_contents=(
+            '{"amount":"10.50","interval":"172800 seconds",'
+            '"loaded_at":"2026-01-02T03:04:05","loaded_time":"03:04:05",'
+            '"order_date":"2026-01-02","payload":"616263"}\n'
+        ),
+        expected_rows=(
+            {
+                "amount": "10.50",
+                "interval": "172800 seconds",
+                "loaded_at": "2026-01-02T03:04:05",
+                "loaded_time": "03:04:05",
+                "order_date": "2026-01-02",
+                "payload": "616263",
+            },
+        ),
+    ),
+]
 
 PATH_TEST_CASES: list[ScenarioSnapshotPathTestCase] = [
     ScenarioSnapshotPathTestCase(
@@ -267,26 +319,8 @@ def test_given_scenario_execution_plan_when_building_capture_plan_then_returns_s
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        ScenarioSnapshotJsonlRoundTripTestCase(
-            description="jsonl rows round trip with file stats",
-            relative_file_path=Path("sources/raw__orders.jsonl"),
-            rows=(
-                {"order_id": 1, "amount": 10.5, "is_paid": True, "note": None},
-                {"order_id": 2, "amount": 20, "is_paid": False, "note": "refund"},
-            ),
-            expected_stats=ScenarioSnapshotFileStats(row_count=2, byte_count=115),
-            expected_file_contents=(
-                '{"amount":10.5,"is_paid":true,"note":null,"order_id":1}\n'
-                '{"amount":20,"is_paid":false,"note":"refund","order_id":2}\n'
-            ),
-            expected_rows=(
-                {"amount": 10.5, "is_paid": True, "note": None, "order_id": 1},
-                {"amount": 20, "is_paid": False, "note": "refund", "order_id": 2},
-            ),
-        )
-    ],
-    ids=["jsonl rows round trip with file stats"],
+    JSONL_ROUND_TRIP_TEST_CASES,
+    ids=[case.description for case in JSONL_ROUND_TRIP_TEST_CASES],
 )
 def test_given_snapshot_rows_when_writing_and_reading_jsonl_then_round_trips_with_stats(
     tmp_path: Path,

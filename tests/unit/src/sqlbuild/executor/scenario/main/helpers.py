@@ -132,6 +132,16 @@ class ScenarioSnapshotCaptureStepsTestAdapter(BaseAdapter):
             return QueryResult(columns=("country_code",), rows=(("US",),))
         raise RuntimeError(f"unexpected query: {sql}")
 
+    def describe_relation(self, connection: Any, relation: str) -> tuple[ColumnInfo, ...]:
+        del connection
+        if "__sqb_51b385aebe20__source__raw__orders" in relation:
+            return (ColumnInfo(name="order_id", type="INTEGER"),)
+        if "__sqb_51b385aebe20__ref__stg_customers" in relation:
+            return (ColumnInfo(name="customer_id", type="INTEGER"),)
+        if "__sqb_51b385aebe20__seed__country_codes" in relation:
+            return (ColumnInfo(name="country_code", type="VARCHAR"),)
+        raise RuntimeError(f"unexpected describe: {relation}")
+
 
 def build_scenario_fixture_plan(
     *,

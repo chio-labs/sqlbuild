@@ -16,6 +16,7 @@ from sqlbuild.executor.scenario.main.capture_steps import execute_scenario_snaps
 from sqlbuild.executor.scenario.main.run import execute_scenario_run
 from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotCaptureRunResult
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.spec.models.project import scenario_local_type_overrides_for_dialect
 
 
 def run_scenario_test_pipeline(
@@ -143,6 +144,10 @@ def run_scenario_capture_pipeline(
                     capture_dialect=capture_dialect,
                     sqlbuild_version=sqlbuild_version,
                     retain=retain,
+                    local_type_overrides=scenario_local_type_overrides_for_dialect(
+                        scenario_config=pipeline_result.project.scenario,
+                        sqlglot_dialect=adapter.sqlglot_dialect(),
+                    ),
                 )
             except Exception as exc:
                 result = ScenarioSnapshotCaptureRunResult(

@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import QueryResult
+from sqlbuild.adapter.shared.models import ColumnInfo, QueryResult
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.scenario.helpers.snapshots import (
@@ -18,7 +18,9 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCapturePlan,
     ScenarioSnapshotCaptureRelationResult,
     ScenarioSnapshotCaptureResult,
+    ScenarioSnapshotColumn,
     ScenarioSnapshotManifest,
+    ScenarioSnapshotRelation,
 )
 from sqlbuild.executor.shared.types import ExecutionStatus
 from tests.unit.src.sqlbuild.executor.scenario.main._test_types import (
@@ -63,6 +65,19 @@ class ScenarioSnapshotCaptureTestAdapter(BaseAdapter):
             return QueryResult(columns=("country_code",), rows=(("US",),))
         raise RuntimeError(f"unexpected query: {sql}")
 
+    def describe_relation(self, connection: Any, relation: str) -> tuple[ColumnInfo, ...]:
+        del connection
+        if "__sqb_51b385aebe20__source__raw__orders" in relation:
+            return (
+                ColumnInfo(name="order_id", type="INTEGER"),
+                ColumnInfo(name="amount", type="DECIMAL(10,2)"),
+            )
+        if "__sqb_51b385aebe20__ref__stg_customers" in relation:
+            return (ColumnInfo(name="customer_id", type="NUMBER"),)
+        if "__sqb_51b385aebe20__seed__country_codes" in relation:
+            return (ColumnInfo(name="country_code", type="VARCHAR"),)
+        raise RuntimeError(f"unexpected describe: {relation}")
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -85,6 +100,55 @@ class ScenarioSnapshotCaptureTestAdapter(BaseAdapter):
                     input_fingerprint="placeholder",
                     total_rows=4,
                     total_bytes=97,
+                    relations=(
+                        ScenarioSnapshotRelation(
+                            kind=SCENARIO_PLAN.fixture_plans[1].kind,
+                            logical_name="stg_customers",
+                            file_path=Path("refs/stg_customers.jsonl"),
+                            row_count=1,
+                            byte_count=19,
+                            columns=(
+                                ScenarioSnapshotColumn(
+                                    name="customer_id",
+                                    warehouse_type="NUMBER",
+                                    local_type="DECIMAL",
+                                ),
+                            ),
+                        ),
+                        ScenarioSnapshotRelation(
+                            kind=ScenarioArtifactKind.SEED,
+                            logical_name="country_codes",
+                            file_path=Path("seeds/country_codes.jsonl"),
+                            row_count=1,
+                            byte_count=22,
+                            columns=(
+                                ScenarioSnapshotColumn(
+                                    name="country_code",
+                                    warehouse_type="VARCHAR",
+                                    local_type="TEXT",
+                                ),
+                            ),
+                        ),
+                        ScenarioSnapshotRelation(
+                            kind=SCENARIO_PLAN.fixture_plans[0].kind,
+                            logical_name="raw__orders",
+                            file_path=Path("sources/raw__orders.jsonl"),
+                            row_count=2,
+                            byte_count=56,
+                            columns=(
+                                ScenarioSnapshotColumn(
+                                    name="order_id",
+                                    warehouse_type="INTEGER",
+                                    local_type="INT",
+                                ),
+                                ScenarioSnapshotColumn(
+                                    name="amount",
+                                    warehouse_type="DECIMAL(10,2)",
+                                    local_type="DECIMAL(10, 2)",
+                                ),
+                            ),
+                        ),
+                    ),
                 ),
                 relation_results=(
                     ScenarioSnapshotCaptureRelationResult(
@@ -159,6 +223,7 @@ def test_given_capture_plan_when_executing_snapshot_capture_then_writes_jsonl_an
     assert expected_manifest is not None
     assert result.manifest.total_rows == expected_manifest.total_rows
     assert result.manifest.total_bytes == expected_manifest.total_bytes
+    assert result.manifest.relations == expected_manifest.relations
     assert (
         tuple(
             ScenarioSnapshotCaptureRelationResult(

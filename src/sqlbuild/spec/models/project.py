@@ -87,6 +87,13 @@ class JanitorConfig:
 
 
 @dataclass(frozen=True)
+class ScenarioConfig:
+    """Scenario command configuration."""
+
+    local_type_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class ProjectConfig:
     """Shared project configuration loaded from sqlbuild_project.toml."""
 
@@ -100,6 +107,7 @@ class ProjectConfig:
     vars: dict[str, str] = field(default_factory=dict)
     environments: dict[str, EnvironmentConfig] = field(default_factory=dict)
     janitor: JanitorConfig = field(default_factory=JanitorConfig)
+    scenario: ScenarioConfig = field(default_factory=ScenarioConfig)
 
 
 @dataclass(frozen=True)
@@ -113,6 +121,7 @@ class LocalConfig:
     settings: SettingsConfig = field(default_factory=SettingsConfig)
     setting_overrides: frozenset[str] = field(default_factory=frozenset)
     vars: dict[str, str] = field(default_factory=dict)
+    scenario: ScenarioConfig = field(default_factory=ScenarioConfig)
 
 
 def resolve_effective_adapter_name(
@@ -123,3 +132,30 @@ def resolve_effective_adapter_name(
     if local_config.adapter is not None:
         return local_config.adapter
     return project_config.adapter
+
+
+def resolve_effective_scenario_config(
+    *, project_config: ProjectConfig, local_config: LocalConfig
+) -> ScenarioConfig:
+    """Resolve scenario config, allowing local overrides to replace project rules."""
+
+    local_type_overrides: dict[str, dict[str, str]] = {
+        dialect: dict(rules)
+        for dialect, rules in project_config.scenario.local_type_overrides.items()
+    }
+    dialect: str
+    rules: dict[str, str]
+    for dialect, rules in local_config.scenario.local_type_overrides.items():
+        local_type_overrides.setdefault(dialect, {}).update(rules)
+    return ScenarioConfig(local_type_overrides=local_type_overrides)
+
+
+def scenario_local_type_overrides_for_dialect(
+    *, scenario_config: ScenarioConfig, sqlglot_dialect: str | None
+) -> dict[str, str]:
+    """Return global and dialect-specific scenario local type override rules."""
+
+    overrides: dict[str, str] = dict(scenario_config.local_type_overrides.get("*", {}))
+    if sqlglot_dialect is not None:
+        overrides.update(scenario_config.local_type_overrides.get(sqlglot_dialect, {}))
+    return overrides

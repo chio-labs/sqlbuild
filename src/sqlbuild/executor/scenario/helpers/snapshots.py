@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
 from json import JSONDecodeError
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 from sqlbuild.compiler.planner.models import (
     ScenarioExecutionPlan,
@@ -291,12 +294,35 @@ def write_scenario_snapshot_jsonl(
     with file_path.open("w", encoding="utf-8") as snapshot_file:
         row: dict[str, object]
         for row in rows:
-            encoded_row: str = json.dumps(row, sort_keys=True, separators=(",", ":"))
+            encoded_row: str = json.dumps(
+                row,
+                default=_snapshot_json_default,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
             snapshot_file.write(encoded_row)
             snapshot_file.write("\n")
             row_count += 1
             byte_count += len(encoded_row.encode("utf-8")) + 1
     return ScenarioSnapshotFileStats(row_count=row_count, byte_count=byte_count)
+
+
+def _snapshot_json_default(value: object) -> object:
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, datetime | date | time):
+        return value.isoformat()
+    if isinstance(value, timedelta):
+        total_seconds: float = value.total_seconds()
+        seconds_text: str = (
+            str(int(total_seconds)) if total_seconds.is_integer() else str(total_seconds)
+        )
+        return f"{seconds_text} seconds"
+    if isinstance(value, UUID):
+        return str(value)
+    if isinstance(value, bytes):
+        return value.hex()
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
 def read_scenario_snapshot_jsonl(*, file_path: Path) -> tuple[dict[str, object], ...]:

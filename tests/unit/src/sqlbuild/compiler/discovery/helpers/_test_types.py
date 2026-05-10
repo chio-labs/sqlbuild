@@ -25,6 +25,7 @@ class LoadProjectConfigTestCase:
     expected_retention_days: int
     expected_janitor_delete_tracked_only: bool
     expected_janitor_exclude_patterns: tuple[str, ...]
+    expected_scenario_local_type_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,7 @@ class LoadLocalConfigTestCase:
     expected_vars: dict[str, str]
     expected_environments: dict[str, dict[str, object]] = field(default_factory=dict)
     expected_missing_attributes: tuple[str, ...] = ()
+    expected_scenario_local_type_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

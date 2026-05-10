@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import QueryResult
+from sqlbuild.executor.scenario.helpers.capture_columns import build_scenario_snapshot_columns
 from sqlbuild.executor.scenario.helpers.snapshots import (
     write_scenario_snapshot_jsonl,
     write_scenario_snapshot_manifest,
@@ -15,6 +16,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCaptureRelationPlan,
     ScenarioSnapshotCaptureRelationResult,
     ScenarioSnapshotCaptureResult,
+    ScenarioSnapshotColumn,
     ScenarioSnapshotFileStats,
     ScenarioSnapshotManifest,
     ScenarioSnapshotRelation,
@@ -28,6 +30,7 @@ def execute_scenario_snapshot_capture(
     manifest: ScenarioSnapshotManifest,
     adapter: BaseAdapter,
     connection: Any,
+    local_type_overrides: dict[str, str] | None = None,
 ) -> ScenarioSnapshotCaptureResult:
     """Write JSONL relation snapshots and a final manifest from materialized inputs."""
 
@@ -41,6 +44,12 @@ def execute_scenario_snapshot_capture(
                 adapter=adapter,
                 connection=connection,
                 relation_plan=relation_plan,
+            )
+            columns: tuple[ScenarioSnapshotColumn, ...] = build_scenario_snapshot_columns(
+                adapter=adapter,
+                connection=connection,
+                relation_name=_source_relation_name(relation_plan),
+                local_type_overrides=local_type_overrides,
             )
             stats: ScenarioSnapshotFileStats = write_scenario_snapshot_jsonl(
                 file_path=capture_plan.snapshot_root / relation_plan.file_path,
@@ -62,6 +71,7 @@ def execute_scenario_snapshot_capture(
                     file_path=relation_plan.file_path,
                     row_count=stats.row_count,
                     byte_count=stats.byte_count,
+                    columns=columns,
                 )
             )
         except Exception as exc:
