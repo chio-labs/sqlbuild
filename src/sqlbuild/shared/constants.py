@@ -11,6 +11,7 @@ SCENARIO_ARTIFACT_KINDS: tuple[str, ...] = ("source", "ref", "seed", "model")
 # Scenario CLI codes use the existing C45x range.
 SCENARIO_CLI_MISSING_SUBCOMMAND: str = "C450"
 SCENARIO_CLI_NONE_DISCOVERED: str = "C451"
+SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED: str = "C452"
 SCENARIO_CLI_UNKNOWN_SELECTOR: str = "C453"
 
 # Scenario planning codes use the S5xx range.

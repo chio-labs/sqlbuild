@@ -36,7 +36,6 @@ class ScenarioLocalPipelineTestCase:
     description: str
     snapshot_state: str
     strict: bool
-    retain: bool
     load_error_message: str | None
     expected_local_status: str
     expected_status: str

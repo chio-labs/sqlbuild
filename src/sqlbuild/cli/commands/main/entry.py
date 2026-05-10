@@ -30,7 +30,10 @@ from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
-from sqlbuild.shared.constants import SCENARIO_CLI_MISSING_SUBCOMMAND
+from sqlbuild.shared.constants import (
+    SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
+    SCENARIO_CLI_MISSING_SUBCOMMAND,
+)
 from sqlbuild.shared.helpers.colors import supports_color
 
 
@@ -412,6 +415,15 @@ def _main_with_dependencies(
             return handlers.run_playground(project_dir, args.playground_path)
         if args.command == CliCommand.SCENARIO:
             if args.scenario_command == "test":
+                if args.scenario_local and args.scenario_retain:
+                    raise CliUserError(
+                        "scenario test --local does not support --retain",
+                        code=SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
+                        help=(
+                            "Local scenario DuckDB files are always kept under "
+                            "target/run/scenarios/."
+                        ),
+                    )
                 return handlers.run_scenario(
                     project_dir,
                     args.no_sql_validation,

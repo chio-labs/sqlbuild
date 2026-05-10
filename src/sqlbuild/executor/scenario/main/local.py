@@ -17,7 +17,6 @@ def execute_local_scenario_load_only_run(
     project_dir: Path,
     scenario_plan: ScenarioExecutionPlan,
     adapter: BaseAdapter,
-    retain: bool,
     strict: bool,
 ) -> ScenarioRunResult:
     """Run one scenario locally against a run-scoped DuckDB database."""
@@ -26,6 +25,5 @@ def execute_local_scenario_load_only_run(
         project_dir=project_dir,
         scenario_plan=scenario_plan,
         adapter=adapter,
-        retain=retain,
         strict=strict,
     )
