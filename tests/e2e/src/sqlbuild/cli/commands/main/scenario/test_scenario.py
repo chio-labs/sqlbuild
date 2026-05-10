@@ -185,6 +185,7 @@ SCENARIO_LOCAL_MISSING_SNAPSHOT_TEST_CASES: tuple[ScenarioLocalCliE2ETestCase, .
 SCENARIO_LOCAL_DUCKDB_TEST_CASES: tuple[ScenarioLocalRetainE2ETestCase, ...] = (
     ScenarioLocalRetainE2ETestCase(
         description="captured snapshot loads into retained local DuckDB",
+        scenario_name="order_totals_pass",
         capture_command=("--no-color", "scenario", "capture", "order_totals_pass"),
         command=(
             "--no-color",
@@ -207,6 +208,7 @@ SCENARIO_LOCAL_DUCKDB_TEST_CASES: tuple[ScenarioLocalRetainE2ETestCase, ...] = (
     ),
     ScenarioLocalRetainE2ETestCase(
         description="captured snapshot pass deletes local DuckDB by default",
+        scenario_name="order_totals_pass",
         capture_command=("--no-color", "scenario", "capture", "order_totals_pass"),
         command=("--no-color", "scenario", "test", "order_totals_pass", "--local"),
         expected_exit_code=0,
@@ -221,6 +223,7 @@ SCENARIO_LOCAL_DUCKDB_TEST_CASES: tuple[ScenarioLocalRetainE2ETestCase, ...] = (
     ),
     ScenarioLocalRetainE2ETestCase(
         description="malformed local JSONL errors and retains local DuckDB",
+        scenario_name="order_totals_pass",
         capture_command=("--no-color", "scenario", "capture", "order_totals_pass"),
         command=("--no-color", "scenario", "test", "order_totals_pass", "--local"),
         expected_exit_code=1,
@@ -235,6 +238,62 @@ SCENARIO_LOCAL_DUCKDB_TEST_CASES: tuple[ScenarioLocalRetainE2ETestCase, ...] = (
         retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
         expected_count=0,
         corrupt_jsonl=True,
+    ),
+    ScenarioLocalRetainE2ETestCase(
+        description="expected mismatch is local FAIL",
+        scenario_name="order_totals_fail",
+        capture_command=("--no-color", "scenario", "capture", "order_totals_fail"),
+        command=("--no-color", "scenario", "test", "order_totals_fail", "--local"),
+        expected_exit_code=1,
+        expected_stdout_fragments=(
+            "order_totals_fail",
+            "FAIL",
+            "error[X506]:",
+            "check     expected order_totals",
+            "PASS=0  FAIL=1  ERROR=0  SKIP=0  TOTAL=1",
+        ),
+        retained_duckdb_relative_path=Path("target/run/scenarios/order_totals_fail/local.duckdb"),
+        retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+        expected_count=1,
+        retained_rows_sql=('SELECT id, amount FROM "__sqb_local__source__raw_orders" ORDER BY id'),
+        expected_rows=((1, 10),),
+    ),
+    ScenarioLocalRetainE2ETestCase(
+        description="local model execution error is ERROR",
+        scenario_name="local_model_error",
+        capture_command=("--no-color", "scenario", "capture", "local_model_error"),
+        command=("--no-color", "scenario", "test", "local_model_error", "--local"),
+        expected_exit_code=1,
+        expected_stdout_fragments=(
+            "local_model_error",
+            "ERROR",
+            "error[X608]:",
+            "missing_function",
+            "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+        ),
+        retained_duckdb_relative_path=Path("target/run/scenarios/local_model_error/local.duckdb"),
+        retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+        expected_count=1,
+        additional_project_files=(
+            (
+                "models/local_model_error.sql",
+                "MODEL (materialized table);\n\n"
+                "SELECT missing_function(amount) AS bad_value\n"
+                'FROM __source("raw_orders")\n',
+            ),
+            (
+                "tests/scenarios/local_model_error.sql",
+                "SCENARIO ();\n\n"
+                "WITH\n"
+                "__source__raw_orders AS (\n"
+                "  SELECT 1 AS id, 10 AS amount\n"
+                "),\n"
+                "__expected__local_model_error AS (\n"
+                "  SELECT 10 AS bad_value\n"
+                ")\n"
+                "SELECT 1\n",
+            ),
+        ),
     ),
 )
 
@@ -354,10 +413,12 @@ def test_given_captured_snapshot_when_running_local_scenario_then_manages_local_
     test_case: ScenarioLocalRetainE2ETestCase,
     tmp_path: Path,
 ) -> None:
+    project_files: dict[str, str] = build_scenario_project_files()
+    project_files.update(dict(test_case.additional_project_files))
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
         project_name="scenario_project",
-        repo_files=build_scenario_project_files(),
+        repo_files=project_files,
     )
     capture_result: subprocess.CompletedProcess[str] = run_sqb(
         command=test_case.capture_command,
@@ -366,7 +427,7 @@ def test_given_captured_snapshot_when_running_local_scenario_then_manages_local_
     assert capture_result.returncode == 0, capture_result.stdout + capture_result.stderr
     maybe_corrupt_scenario_snapshot_jsonl(
         project_dir=project_dir,
-        scenario_name="order_totals_pass",
+        scenario_name=test_case.scenario_name,
         enabled=test_case.corrupt_jsonl,
     )
 

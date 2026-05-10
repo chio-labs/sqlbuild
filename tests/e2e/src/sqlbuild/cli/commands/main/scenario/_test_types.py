@@ -44,6 +44,7 @@ class ScenarioLocalRetainE2ETestCase:
     """Test case for retained local scenario DuckDB verification."""
 
     description: str
+    scenario_name: str
     capture_command: tuple[str, ...]
     command: tuple[str, ...]
     expected_exit_code: int
@@ -55,3 +56,4 @@ class ScenarioLocalRetainE2ETestCase:
     expected_rows: tuple[tuple[object, ...], ...] = ()
     expected_duckdb_exists: bool = True
     corrupt_jsonl: bool = False
+    additional_project_files: tuple[tuple[str, str], ...] = ()
