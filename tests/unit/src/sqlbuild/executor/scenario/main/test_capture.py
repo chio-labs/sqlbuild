@@ -79,6 +79,19 @@ class ScenarioSnapshotCaptureTestAdapter(BaseAdapter):
             return (ColumnInfo(name="country_code", type="VARCHAR"),)
         raise RuntimeError(f"unexpected describe: {relation}")
 
+    def render_qualified_name(
+        self,
+        *,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> str | None:
+        if database is not None and schema is not None:
+            return f"`{database}.{schema}.{name}`"
+        if schema is not None:
+            return f"`{schema}.{name}`"
+        return super().render_qualified_name(database=database, schema=schema, name=name)
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -155,7 +168,9 @@ class ScenarioSnapshotCaptureTestAdapter(BaseAdapter):
                     ScenarioSnapshotCaptureRelationResult(
                         kind=SCENARIO_PLAN.fixture_plans[1].kind,
                         logical_name="stg_customers",
-                        source_relation=str(SCENARIO_PLAN.fixture_plans[1].target.qualified_name),
+                        source_relation=(
+                            "`scenario_schema.__sqb_51b385aebe20__ref__stg_customers`"
+                        ),
                         file_path=Path("refs/stg_customers.jsonl"),
                         status=ExecutionStatus.SUCCESS,
                         row_count=1,
@@ -164,7 +179,9 @@ class ScenarioSnapshotCaptureTestAdapter(BaseAdapter):
                     ScenarioSnapshotCaptureRelationResult(
                         kind=ScenarioArtifactKind.SEED,
                         logical_name="country_codes",
-                        source_relation=str(SCENARIO_PLAN.seed_entries[0].target.qualified_name),
+                        source_relation=(
+                            "`scenario_schema.__sqb_51b385aebe20__seed__country_codes`"
+                        ),
                         file_path=Path("seeds/country_codes.jsonl"),
                         status=ExecutionStatus.SUCCESS,
                         row_count=1,
@@ -173,7 +190,9 @@ class ScenarioSnapshotCaptureTestAdapter(BaseAdapter):
                     ScenarioSnapshotCaptureRelationResult(
                         kind=SCENARIO_PLAN.fixture_plans[0].kind,
                         logical_name="raw__orders",
-                        source_relation=str(SCENARIO_PLAN.fixture_plans[0].target.qualified_name),
+                        source_relation=(
+                            "`scenario_schema.__sqb_51b385aebe20__source__raw__orders`"
+                        ),
                         file_path=Path("sources/raw__orders.jsonl"),
                         status=ExecutionStatus.SUCCESS,
                         row_count=2,
@@ -189,6 +208,9 @@ class ScenarioSnapshotCaptureTestAdapter(BaseAdapter):
                 ),
             },
             expected_manifest_fragment='"total_rows": 4',
+            expected_query_fragments=(
+                "SELECT * FROM `scenario_schema.__sqb_51b385aebe20__source__raw__orders`",
+            ),
         )
     ],
     ids=["captures materialized scenario inputs into JSONL and manifest"],
@@ -247,6 +269,9 @@ def test_given_capture_plan_when_executing_snapshot_capture_then_writes_jsonl_an
     assert test_case.expected_manifest_fragment in capture_plan.manifest_path.read_text(
         encoding="utf-8"
     )
+    expected_query_fragment: str
+    for expected_query_fragment in test_case.expected_query_fragments:
+        assert any(expected_query_fragment in query for query in adapter.queries)
 
 
 @pytest.mark.parametrize(
@@ -264,7 +289,9 @@ def test_given_capture_plan_when_executing_snapshot_capture_then_writes_jsonl_an
                     ScenarioSnapshotCaptureRelationResult(
                         kind=SCENARIO_PLAN.fixture_plans[1].kind,
                         logical_name="stg_customers",
-                        source_relation=str(SCENARIO_PLAN.fixture_plans[1].target.qualified_name),
+                        source_relation=(
+                            "`scenario_schema.__sqb_51b385aebe20__ref__stg_customers`"
+                        ),
                         file_path=Path("refs/stg_customers.jsonl"),
                         status=ExecutionStatus.FAILED,
                         error_code=SCENARIO_EXEC_CAPTURE_FAILED,

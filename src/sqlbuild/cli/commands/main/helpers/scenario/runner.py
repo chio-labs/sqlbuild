@@ -75,15 +75,16 @@ def run_scenario(
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
-    adapter_name: str = (
-        "duckdb"
-        if local
-        else resolve_effective_adapter_name(
-            project_config=discovered_inputs.project_config,
-            local_config=discovered_inputs.local_config,
-        )
+    project_adapter_name: str = resolve_effective_adapter_name(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
     )
+    adapter_name: str = "duckdb" if local else project_adapter_name
     adapter: BaseAdapter = resolve_adapter(adapter_name, project_dir=effective_project_dir)
+    project_adapter: BaseAdapter = resolve_adapter(
+        project_adapter_name,
+        project_dir=effective_project_dir,
+    )
     connection_config: dict[str, object] = (
         {"database": ":memory:"}
         if local
@@ -149,6 +150,8 @@ def run_scenario(
             adapter=adapter,
             project_name=discovered_inputs.project_config.name,
             strict=strict,
+            capture_adapter=project_adapter_name,
+            capture_dialect=project_adapter.sqlglot_dialect(),
             on_scenario_start=lambda _scenario: (
                 scenario_status.start("Running scenarios...") if status_is_tty else None
             ),

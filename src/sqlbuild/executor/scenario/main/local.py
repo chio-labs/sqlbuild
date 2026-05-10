@@ -18,6 +18,8 @@ def execute_local_scenario_load_only_run(
     scenario_plan: ScenarioExecutionPlan,
     adapter: BaseAdapter,
     strict: bool,
+    capture_adapter: str | None = None,
+    capture_dialect: str | None = None,
 ) -> ScenarioRunResult:
     """Run one scenario locally against a run-scoped DuckDB database."""
 
@@ -26,4 +28,6 @@ def execute_local_scenario_load_only_run(
         scenario_plan=scenario_plan,
         adapter=adapter,
         strict=strict,
+        capture_adapter=capture_adapter,
+        capture_dialect=capture_dialect,
     )

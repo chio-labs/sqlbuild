@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild.executor.scenario.models import ScenarioSnapshotCaptureResult
@@ -47,3 +47,4 @@ class ExecuteScenarioSnapshotCaptureTestCase:
     expected_result: ScenarioSnapshotCaptureResult
     expected_jsonl_files: dict[Path, str]
     expected_manifest_fragment: str
+    expected_query_fragments: tuple[str, ...] = field(default_factory=tuple)

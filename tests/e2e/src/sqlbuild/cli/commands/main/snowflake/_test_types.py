@@ -29,3 +29,15 @@ class SnowflakeDiffE2ETestCase:
     command: tuple[str, ...]
     expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
     expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class SnowflakeScenarioLocalReplayE2ETestCase:
+    description: str
+    model_sql: str
+    scenario_sql: str
+    expected_stdout_fragments: tuple[str, ...]
+    expected_return_code: int = 0
+    scenario_name: str = "transpilable_event_rollup"
+    expected_local_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
+    local_rows_sql: str = ""

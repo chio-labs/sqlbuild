@@ -283,7 +283,8 @@ def _insert_rows(
     column_names: tuple[str, ...] = tuple(column.name for column in relation.columns)
     insert_sql: str = _build_insert_sql(table_name=table_name, column_names=column_names)
     row_values: list[tuple[object, ...]] = [
-        tuple(row.get(column_name) for column_name in column_names) for row in rows
+        tuple(_row_value(row=row, column_name=column_name) for column_name in column_names)
+        for row in rows
     ]
     try:
         connection.executemany(insert_sql, row_values)
@@ -300,6 +301,17 @@ def _insert_rows(
             code=SCENARIO_LOCAL_LOAD_FAILED,
             help="Check scenario.json local_type values and the JSONL values for this relation.",
         ) from exc
+
+
+def _row_value(*, row: dict[str, object], column_name: str) -> object:
+    if column_name in row:
+        return row[column_name]
+    normalized_column_name: str = column_name.lower()
+    row_key: str
+    for row_key in row:
+        if row_key.lower() == normalized_column_name:
+            return row[row_key]
+    return None
 
 
 def _load_failure_column_context(

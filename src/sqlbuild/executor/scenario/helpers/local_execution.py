@@ -72,12 +72,16 @@ def execute_local_scenario_load_only_run(
     scenario_plan: ScenarioExecutionPlan,
     adapter: BaseAdapter,
     strict: bool,
+    capture_adapter: str | None = None,
+    capture_dialect: str | None = None,
 ) -> ScenarioRunResult:
     """Run one scenario locally against a run-scoped DuckDB database."""
 
     snapshot_state: ScenarioSnapshotStateResult = classify_scenario_snapshot_state(
         project_dir=project_dir,
         scenario_plan=scenario_plan,
+        capture_adapter=capture_adapter,
+        capture_dialect=capture_dialect,
     )
     if snapshot_state.state == ScenarioSnapshotState.MISSING:
         return _local_snapshot_unavailable_result(
@@ -123,6 +127,8 @@ def execute_local_scenario_load_only_run(
         input_fingerprint: str = build_scenario_snapshot_input_fingerprint(
             scenario_name=scenario_plan.name,
             input_specs=build_scenario_snapshot_input_specs(scenario_plan=scenario_plan),
+            capture_adapter=capture_adapter,
+            capture_dialect=capture_dialect,
         )
         load_result: ScenarioLocalSnapshotLoadResult = load_scenario_snapshot_into_duckdb(
             project_dir=project_dir,
@@ -133,7 +139,7 @@ def execute_local_scenario_load_only_run(
         local_plan: ScenarioExecutionPlan = _build_local_execution_plan(
             scenario_plan=scenario_plan,
             load_result=load_result,
-            source_dialect=adapter.sqlglot_dialect(),
+            source_dialect=load_result.manifest.capture_dialect,
         )
         result: ScenarioRunResult = _execute_local_plan(
             scenario_plan=local_plan,

@@ -113,12 +113,18 @@ def build_scenario_snapshot_input_specs(
 
 
 def build_scenario_snapshot_input_fingerprint(
-    *, scenario_name: str, input_specs: tuple[ScenarioSnapshotInputSpec, ...]
+    *,
+    scenario_name: str,
+    input_specs: tuple[ScenarioSnapshotInputSpec, ...],
+    capture_adapter: str | None = None,
+    capture_dialect: str | None = None,
 ) -> str:
     """Build a stable fingerprint for local snapshot input compatibility."""
 
     payload: dict[str, object] = {
         "scenario_name": scenario_name,
+        "capture_adapter": capture_adapter,
+        "capture_dialect": capture_dialect,
         "inputs": [
             {
                 "kind": spec.kind.value,
@@ -169,7 +175,11 @@ def read_scenario_snapshot_manifest(*, manifest_path: Path) -> ScenarioSnapshotM
 
 
 def classify_scenario_snapshot_state(
-    *, project_dir: Path, scenario_plan: ScenarioExecutionPlan
+    *,
+    project_dir: Path,
+    scenario_plan: ScenarioExecutionPlan,
+    capture_adapter: str | None = None,
+    capture_dialect: str | None = None,
 ) -> ScenarioSnapshotStateResult:
     """Return whether a local scenario snapshot is fresh, missing, stale, or invalid."""
 
@@ -199,6 +209,8 @@ def classify_scenario_snapshot_state(
     current_fingerprint: str = build_scenario_snapshot_input_fingerprint(
         scenario_name=scenario_plan.name,
         input_specs=build_scenario_snapshot_input_specs(scenario_plan=scenario_plan),
+        capture_adapter=capture_adapter,
+        capture_dialect=capture_dialect,
     )
     state: ScenarioSnapshotState = (
         ScenarioSnapshotState.FRESH
@@ -217,7 +229,11 @@ def classify_scenario_snapshot_state(
 
 
 def build_scenario_snapshot_capture_plan(
-    *, project_dir: Path, scenario_plan: ScenarioExecutionPlan
+    *,
+    project_dir: Path,
+    scenario_plan: ScenarioExecutionPlan,
+    capture_adapter: str | None = None,
+    capture_dialect: str | None = None,
 ) -> ScenarioSnapshotCapturePlan:
     """Build executor-side local snapshot capture work from one scenario execution plan."""
 
@@ -270,6 +286,8 @@ def build_scenario_snapshot_capture_plan(
         input_fingerprint=build_scenario_snapshot_input_fingerprint(
             scenario_name=scenario_plan.name,
             input_specs=input_specs,
+            capture_adapter=capture_adapter,
+            capture_dialect=capture_dialect,
         ),
         relations=tuple(sorted(relation_plans, key=_capture_relation_sort_key)),
     )
