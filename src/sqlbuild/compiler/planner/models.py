@@ -447,6 +447,7 @@ class ScenarioExecutionPlan:
     relation_plan: ScenarioRelationPlan
     fixture_plans: tuple[ScenarioFixturePlan, ...] = field(default_factory=tuple)
     seed_entries: tuple[SeedPlanEntry, ...] = field(default_factory=tuple)
+    function_entries: tuple[FunctionPlanEntry, ...] = field(default_factory=tuple)
     model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
     expected_checks: tuple[ScenarioExpectedCheckPlan, ...] = field(default_factory=tuple)
     assertion_checks: tuple[ScenarioAssertionCheckPlan, ...] = field(default_factory=tuple)

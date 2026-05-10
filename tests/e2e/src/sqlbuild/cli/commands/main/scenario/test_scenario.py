@@ -274,6 +274,366 @@ SCENARIO_LOCAL_DUCKDB_TEST_CASES: tuple[ScenarioLocalRetainE2ETestCase, ...] = (
             ),
         ),
     ),
+    ScenarioLocalRetainE2ETestCase(
+        description="local SQL function scenario passes",
+        scenario_name="local_sql_function_pass",
+        capture_command=("--no-color", "scenario", "capture", "local_sql_function_pass"),
+        command=("--no-color", "scenario", "test", "local_sql_function_pass", "--local"),
+        expected_exit_code=0,
+        expected_stdout_fragments=(
+            "local_sql_function_pass",
+            "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+        ),
+        retained_duckdb_relative_path=Path(
+            "target/run/scenarios/local_sql_function_pass/local.duckdb"
+        ),
+        retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+        expected_count=2,
+        additional_project_files=(
+            (
+                "functions/sql/is_large_order.sql",
+                "FUNCTION (arguments (amount INTEGER), returns BOOLEAN);\n\namount > 9\n",
+            ),
+            (
+                "models/local_sql_function_pass.sql",
+                "MODEL (materialized table);\n\n"
+                'SELECT id, __udf("is_large_order")(amount) AS is_large_order\n'
+                'FROM __source("raw_orders")\n',
+            ),
+            (
+                "tests/scenarios/local_sql_function_pass.sql",
+                "SCENARIO ();\n\n"
+                "WITH\n"
+                "__source__raw_orders AS (\n"
+                "  SELECT 1 AS id, 10 AS amount\n"
+                "  UNION ALL\n"
+                "  SELECT 2 AS id, 5 AS amount\n"
+                "),\n"
+                "__expected__local_sql_function_pass AS (\n"
+                "  SELECT 1 AS id, TRUE AS is_large_order\n"
+                "  UNION ALL\n"
+                "  SELECT 2 AS id, FALSE AS is_large_order\n"
+                ")\n"
+                "SELECT 1\n",
+            ),
+        ),
+    ),
+    ScenarioLocalRetainE2ETestCase(
+        description="local SQL function setup error is ERROR",
+        scenario_name="local_sql_function_setup_error",
+        capture_command=("--no-color", "scenario", "capture", "local_sql_function_setup_error"),
+        command=("--no-color", "scenario", "test", "local_sql_function_setup_error", "--local"),
+        expected_exit_code=1,
+        expected_stdout_fragments=(
+            "local_sql_function_setup_error",
+            "ERROR",
+            "error[X609]:",
+            "local function 'bad_sql_function' failed",
+            "missing_col",
+            "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+        ),
+        retained_duckdb_relative_path=Path(
+            "target/run/scenarios/local_sql_function_setup_error/local.duckdb"
+        ),
+        retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+        expected_count=1,
+        additional_project_files=(
+            (
+                "functions/sql/bad_sql_function.sql",
+                "FUNCTION (arguments (amount INTEGER), returns BOOLEAN);\n\nmissing_col > 9\n",
+            ),
+            (
+                "models/local_sql_function_setup_error.sql",
+                "MODEL (materialized table);\n\n"
+                'SELECT id, __udf("bad_sql_function")(amount) AS is_large_order\n'
+                'FROM __source("raw_orders")\n',
+            ),
+            (
+                "tests/scenarios/local_sql_function_setup_error.sql",
+                "SCENARIO ();\n\n"
+                "WITH\n"
+                "__source__raw_orders AS (\n"
+                "  SELECT 1 AS id, 10 AS amount\n"
+                "),\n"
+                "__expected__local_sql_function_setup_error AS (\n"
+                "  SELECT 1 AS id, TRUE AS is_large_order\n"
+                ")\n"
+                "SELECT 1\n",
+            ),
+        ),
+    ),
+    ScenarioLocalRetainE2ETestCase(
+        description="local SQL function transpile error is ERROR",
+        scenario_name="local_sql_function_transpile_error",
+        capture_command=(
+            "--no-color",
+            "scenario",
+            "capture",
+            "local_sql_function_transpile_error",
+        ),
+        command=(
+            "--no-color",
+            "scenario",
+            "test",
+            "local_sql_function_transpile_error",
+            "--local",
+        ),
+        expected_exit_code=1,
+        expected_stdout_fragments=(
+            "local_sql_function_transpile_error",
+            "ERROR",
+            "error[X607]:",
+            "bad_transpile_function",
+            "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+        ),
+        retained_duckdb_relative_path=Path(
+            "target/run/scenarios/local_sql_function_transpile_error/local.duckdb"
+        ),
+        retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+        expected_count=1,
+        additional_project_files=(
+            (
+                "sqlbuild_project.toml",
+                'name = "scenario_demo"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "scenario_demo.duckdb"\n\n'
+                "[defaults]\n"
+                'materialized = "table"\n\n'
+                "[settings]\n"
+                "sql_validation = false\n",
+            ),
+            (
+                "functions/sql/bad_transpile_function.sql",
+                "FUNCTION (arguments (amount INTEGER), returns BOOLEAN);\n\namount >\n",
+            ),
+            (
+                "models/local_sql_function_transpile_error.sql",
+                "MODEL (materialized table);\n\n"
+                'SELECT id, __udf("bad_transpile_function")(amount) AS is_large_order\n'
+                'FROM __source("raw_orders")\n',
+            ),
+            (
+                "tests/scenarios/local_sql_function_transpile_error.sql",
+                "SCENARIO ();\n\n"
+                "WITH\n"
+                "__source__raw_orders AS (\n"
+                "  SELECT 1 AS id, 10 AS amount\n"
+                "),\n"
+                "__expected__local_sql_function_transpile_error AS (\n"
+                "  SELECT 1 AS id, TRUE AS is_large_order\n"
+                ")\n"
+                "SELECT 1\n",
+            ),
+        ),
+    ),
+    ScenarioLocalRetainE2ETestCase(
+        description="local SQL function runtime error is ERROR",
+        scenario_name="local_sql_function_runtime_error",
+        capture_command=("--no-color", "scenario", "capture", "local_sql_function_runtime_error"),
+        command=("--no-color", "scenario", "test", "local_sql_function_runtime_error", "--local"),
+        expected_exit_code=1,
+        expected_stdout_fragments=(
+            "local_sql_function_runtime_error",
+            "ERROR",
+            "error[X608]:",
+            "Could not convert string",
+            "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+        ),
+        retained_duckdb_relative_path=Path(
+            "target/run/scenarios/local_sql_function_runtime_error/local.duckdb"
+        ),
+        retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+        expected_count=1,
+        additional_project_files=(
+            (
+                "functions/sql/sql_runtime_error.sql",
+                "FUNCTION (arguments (amount INTEGER), returns INTEGER);\n\n"
+                "CAST('bad' AS INTEGER)\n",
+            ),
+            (
+                "models/local_sql_function_runtime_error.sql",
+                "MODEL (materialized table);\n\n"
+                'SELECT id, __udf("sql_runtime_error")(amount) AS bad_value\n'
+                'FROM __source("raw_orders")\n',
+            ),
+            (
+                "tests/scenarios/local_sql_function_runtime_error.sql",
+                "SCENARIO ();\n\n"
+                "WITH\n"
+                "__source__raw_orders AS (\n"
+                "  SELECT 1 AS id, 10 AS amount\n"
+                "),\n"
+                "__expected__local_sql_function_runtime_error AS (\n"
+                "  SELECT 1 AS id, 10 AS bad_value\n"
+                ")\n"
+                "SELECT 1\n",
+            ),
+        ),
+    ),
+    ScenarioLocalRetainE2ETestCase(
+        description="local Python function scenario passes",
+        scenario_name="local_python_function_pass",
+        capture_command=("--no-color", "scenario", "capture", "local_python_function_pass"),
+        command=("--no-color", "scenario", "test", "local_python_function_pass", "--local"),
+        expected_exit_code=0,
+        expected_stdout_fragments=(
+            "local_python_function_pass",
+            "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+        ),
+        retained_duckdb_relative_path=Path(
+            "target/run/scenarios/local_python_function_pass/local.duckdb"
+        ),
+        retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+        expected_count=2,
+        additional_project_files=(
+            (
+                "functions/python/is_large_order_py.py",
+                "from sqlbuild.functions import udf\n\n\n"
+                "@udf(\n"
+                '    arguments={"amount": "INTEGER"},\n'
+                '    returns="BOOLEAN",\n'
+                '    runtime_version="3.11",\n'
+                ")\n"
+                "def main(amount: int | None) -> bool:\n"
+                "    return amount is not None and amount > 9\n",
+            ),
+            (
+                "models/local_python_function_pass.sql",
+                "MODEL (materialized table);\n\n"
+                'SELECT id, __udf("is_large_order_py")(amount) AS is_large_order\n'
+                'FROM __source("raw_orders")\n',
+            ),
+            (
+                "tests/scenarios/local_python_function_pass.sql",
+                "SCENARIO ();\n\n"
+                "WITH\n"
+                "__source__raw_orders AS (\n"
+                "  SELECT 1 AS id, 10 AS amount\n"
+                "  UNION ALL\n"
+                "  SELECT 2 AS id, 5 AS amount\n"
+                "),\n"
+                "__expected__local_python_function_pass AS (\n"
+                "  SELECT 1 AS id, TRUE AS is_large_order\n"
+                "  UNION ALL\n"
+                "  SELECT 2 AS id, FALSE AS is_large_order\n"
+                ")\n"
+                "SELECT 1\n",
+            ),
+        ),
+    ),
+    ScenarioLocalRetainE2ETestCase(
+        description="local Python function setup error is ERROR",
+        scenario_name="local_python_function_error",
+        capture_command=("--no-color", "scenario", "capture", "local_python_function_error"),
+        command=("--no-color", "scenario", "test", "local_python_function_error", "--local"),
+        expected_exit_code=1,
+        expected_stdout_fragments=(
+            "local_python_function_error",
+            "ERROR",
+            "error[X609]:",
+            "cannot set database or schema",
+            "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+        ),
+        retained_duckdb_relative_path=Path(
+            "target/run/scenarios/local_python_function_error/local.duckdb"
+        ),
+        retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+        expected_count=1,
+        additional_project_files=(
+            (
+                "functions/python/is_large_order_py.py",
+                "from sqlbuild.functions import udf\n\n\n"
+                "@udf(\n"
+                '    arguments={"amount": "INTEGER"},\n'
+                '    returns="BOOLEAN",\n'
+                '    runtime_version="3.11",\n'
+                '    schema="analytics",\n'
+                ")\n"
+                "def main(amount: int | None) -> bool:\n"
+                "    return amount is not None and amount > 9\n",
+            ),
+            (
+                "models/local_python_function_error.sql",
+                "MODEL (materialized table);\n\n"
+                'SELECT id, __udf("is_large_order_py")(amount) AS is_large_order\n'
+                'FROM __source("raw_orders")\n',
+            ),
+            (
+                "tests/scenarios/local_python_function_error.sql",
+                "SCENARIO ();\n\n"
+                "WITH\n"
+                "__source__raw_orders AS (\n"
+                "  SELECT 1 AS id, 10 AS amount\n"
+                "),\n"
+                "__expected__local_python_function_error AS (\n"
+                "  SELECT 1 AS id, TRUE AS is_large_order\n"
+                ")\n"
+                "SELECT 1\n",
+            ),
+        ),
+    ),
+    ScenarioLocalRetainE2ETestCase(
+        description="local Python function runtime error is ERROR",
+        scenario_name="local_python_function_runtime_error",
+        capture_command=(
+            "--no-color",
+            "scenario",
+            "capture",
+            "local_python_function_runtime_error",
+        ),
+        command=(
+            "--no-color",
+            "scenario",
+            "test",
+            "local_python_function_runtime_error",
+            "--local",
+        ),
+        expected_exit_code=1,
+        expected_stdout_fragments=(
+            "local_python_function_runtime_error",
+            "ERROR",
+            "error[X608]:",
+            "python udf exploded",
+            "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+        ),
+        retained_duckdb_relative_path=Path(
+            "target/run/scenarios/local_python_function_runtime_error/local.duckdb"
+        ),
+        retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+        expected_count=1,
+        additional_project_files=(
+            (
+                "functions/python/python_runtime_error.py",
+                "from sqlbuild.functions import udf\n\n\n"
+                "@udf(\n"
+                '    arguments={"amount": "INTEGER"},\n'
+                '    returns="INTEGER",\n'
+                '    runtime_version="3.11",\n'
+                ")\n"
+                "def main(amount: int | None) -> int:\n"
+                '    raise ValueError("python udf exploded")\n',
+            ),
+            (
+                "models/local_python_function_runtime_error.sql",
+                "MODEL (materialized table);\n\n"
+                'SELECT id, __udf("python_runtime_error")(amount) AS bad_value\n'
+                'FROM __source("raw_orders")\n',
+            ),
+            (
+                "tests/scenarios/local_python_function_runtime_error.sql",
+                "SCENARIO ();\n\n"
+                "WITH\n"
+                "__source__raw_orders AS (\n"
+                "  SELECT 1 AS id, 10 AS amount\n"
+                "),\n"
+                "__expected__local_python_function_runtime_error AS (\n"
+                "  SELECT 1 AS id, 10 AS bad_value\n"
+                ")\n"
+                "SELECT 1\n",
+            ),
+        ),
+    ),
 )
 
 SCENARIO_RUNTIME_ARTIFACT_TEST_CASES: list[ScenarioRuntimeArtifactTestCase] = [

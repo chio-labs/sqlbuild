@@ -7,8 +7,11 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.compile.models import CompiledRelationTarget
+from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.models import (
+    FunctionPlanEntry,
     ModelPlanEntry,
     ScenarioAssertionCheckPlan,
     ScenarioExecutionPlan,
@@ -16,6 +19,8 @@ from sqlbuild.compiler.planner.models import (
     ScenarioRelationPlan,
 )
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
+from sqlbuild.executor.build.models import FunctionExecutionResult
+from sqlbuild.executor.functions.main.execute import execute_function
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario.helpers.checks import (
     execute_scenario_assertion_checks,
@@ -49,6 +54,7 @@ from sqlbuild.shared.constants import (
     SCENARIO_EXEC_ASSERTION_FAILED,
     SCENARIO_EXEC_EXPECTED_ERRORED,
     SCENARIO_EXEC_EXPECTED_FAILED,
+    SCENARIO_LOCAL_FUNCTION_FAILED,
     SCENARIO_LOCAL_INTERNAL,
     SCENARIO_LOCAL_MANIFEST_INVALID,
     SCENARIO_LOCAL_MODEL_FAILED,
@@ -167,6 +173,23 @@ def _build_local_execution_plan(
         load_result=load_result,
     )
 
+    function_entries: list[FunctionPlanEntry] = []
+    function_entry: FunctionPlanEntry
+    for function_entry in scenario_plan.function_entries:
+        function_sql: str = replace_local_relations(
+            sql=function_entry.body_sql,
+            relation_replacements=relation_replacements,
+        )
+        if function_entry.language == FunctionLanguage.SQL:
+            function_sql = transpile_sql_for_local_duckdb(
+                sql=function_sql,
+                source_dialect=source_dialect,
+                scenario_name=scenario_plan.name,
+                resource_kind="function",
+                resource_name=function_entry.name,
+            )
+        function_entries.append(replace(function_entry, body_sql=function_sql))
+
     model_entries: list[ModelPlanEntry] = []
     entry: ModelPlanEntry
     for entry in scenario_plan.model_entries:
@@ -235,6 +258,7 @@ def _build_local_execution_plan(
         relation_plan=relation_plan,
         fixture_plans=(),
         seed_entries=(),
+        function_entries=tuple(function_entries),
         model_entries=tuple(model_entries),
         expected_checks=tuple(expected_checks),
         assertion_checks=tuple(assertion_checks),
@@ -249,6 +273,23 @@ def _execute_local_plan(
     run_id: str,
     duckdb_path: Path,
 ) -> ScenarioRunResult:
+    function_results: tuple[FunctionExecutionResult, ...] = _execute_local_functions(
+        scenario_plan=scenario_plan,
+        adapter=adapter,
+        connection=connection,
+        run_id=run_id,
+    )
+    if _has_failed(function_results):
+        return _local_result(
+            scenario_plan=scenario_plan,
+            local_status=ScenarioLocalRunStatus.ERROR,
+            retained=True,
+            duckdb_path=duckdb_path,
+            error_code=_first_error_code(function_results) or SCENARIO_LOCAL_FUNCTION_FAILED,
+            error_help=_first_error_help(function_results),
+            error_message=_first_error(function_results),
+        )
+
     model_results: tuple[ModelExecutionResult, ...] = execute_scenario_models(
         scenario_plan=scenario_plan,
         adapter=adapter,
@@ -322,6 +363,41 @@ def _execute_local_plan(
         expected_results=expected_results,
         assertion_results=assertion_results,
     )
+
+
+def _execute_local_functions(
+    *,
+    scenario_plan: ScenarioExecutionPlan,
+    adapter: BaseAdapter,
+    connection: Any,
+    run_id: str,
+) -> tuple[FunctionExecutionResult, ...]:
+    results: list[FunctionExecutionResult] = []
+    function_entry: FunctionPlanEntry
+    for function_entry in scenario_plan.function_entries:
+        result: FunctionExecutionResult = execute_function(
+            function_entry=function_entry,
+            adapter=adapter,
+            connection=connection,
+            statement_recorder=StatementRecorder(),
+            run_id=run_id,
+            query_change_tracking=False,
+        )
+        if result.status == ExecutionStatus.FAILED:
+            result = replace(
+                result,
+                error_code=SCENARIO_LOCAL_FUNCTION_FAILED,
+                error_help="Inspect the retained local DuckDB database and function definition.",
+                error_message=(
+                    f"local function '{result.function_name}' failed: {result.error_message}"
+                    if result.error_message is not None
+                    else f"local function '{result.function_name}' failed"
+                ),
+            )
+        results.append(result)
+        if result.status == ExecutionStatus.FAILED:
+            break
+    return tuple(results)
 
 
 def _build_local_relation_plan(

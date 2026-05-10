@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from sqlbuild.compiler.compile.models import CompiledProject
@@ -25,6 +27,7 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     PlannerTestAdapter,
+    build_compiled_function,
     build_scenario_relation_test_map,
     build_scenario_relation_test_project,
     build_scenario_relation_test_project_with_unused_seed,
@@ -163,6 +166,7 @@ def test_given_scenario_helpers_when_building_fixture_plans_then_fixtures_are_se
                 ref_fixture_names=("stg_customers",),
                 seed_names=("country_codes",),
                 seed_fixture_names=("country_codes",),
+                function_deps=(build_compiled_function(body_sql="").key,),
             ),
             expected_model_entry_targets={
                 "daily_revenue": "scenario_schema.__sqb_51b385aebe20__model__daily_revenue",
@@ -180,6 +184,15 @@ def test_given_scenario_helpers_when_building_fixture_plans_then_fixtures_are_se
                 "seed:country_codes": "scenario_schema.__sqb_51b385aebe20__seed__country_codes",
             },
             expected_seed_entry_targets={},
+            expected_function_entry_targets={
+                "is_completed_order": "main.is_completed_order",
+            },
+            expected_function_entry_sql_fragments={
+                "is_completed_order": (
+                    "scenario_schema.__sqb_51b385aebe20__source__raw__orders",
+                    "scenario_schema.__sqb_51b385aebe20__model__daily_revenue",
+                ),
+            },
             expected_expected_actual_targets={
                 "daily_revenue": "scenario_schema.__sqb_51b385aebe20__model__daily_revenue",
             },
@@ -202,7 +215,18 @@ def test_given_scenario_helpers_when_building_fixture_plans_then_fixtures_are_se
 def test_given_scenario_graph_when_building_execution_plan_then_returns_scenario_plan(
     test_case: ScenarioExecutionPlanTestCase,
 ) -> None:
-    project: CompiledProject = build_scenario_relation_test_project()
+    base_project: CompiledProject = build_scenario_relation_test_project()
+    project: CompiledProject = replace(
+        base_project,
+        functions=(
+            build_compiled_function(
+                body_sql=(
+                    'EXISTS (SELECT 1 FROM __source("raw__orders")) '
+                    'AND EXISTS (SELECT 1 FROM __ref("daily_revenue"))'
+                )
+            ),
+        ),
+    )
     relation_plan: ScenarioRelationPlan = build_scenario_relation_plan(
         project=project,
         graph_plan=test_case.graph_plan,
@@ -233,6 +257,12 @@ def test_given_scenario_graph_when_building_execution_plan_then_returns_scenario
     assert {
         entry.name: entry.target.qualified_name for entry in result.seed_entries
     } == test_case.expected_seed_entry_targets
+    assert {
+        entry.name: entry.target.qualified_name for entry in result.function_entries
+    } == test_case.expected_function_entry_targets
+    for entry in result.function_entries:
+        for expected_fragment in test_case.expected_function_entry_sql_fragments[entry.name]:
+            assert expected_fragment in entry.body_sql
     assert {
         check.model_name: check.actual_target.qualified_name for check in result.expected_checks
     } == test_case.expected_expected_actual_targets
