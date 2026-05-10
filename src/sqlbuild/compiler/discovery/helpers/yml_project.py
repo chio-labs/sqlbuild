@@ -27,6 +27,7 @@ from sqlbuild.spec.models.project import (
     LocalConfig,
     LocalEnvironmentConfig,
     ProjectConfig,
+    ScenarioConfig,
     SettingsConfig,
 )
 
@@ -55,6 +56,7 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         file_path=file_path,
     )
     janitor: JanitorConfig = _load_janitor(payload=payload.get("janitor"), file_path=file_path)
+    scenario: ScenarioConfig = _load_scenario(payload=payload.get("scenario"), file_path=file_path)
     if janitor.enabled and janitor.delete_tracked_only and not settings.query_change_tracking:
         raise ProjectConfigError(
             f"{file_path} janitor.delete_tracked_only requires "
@@ -72,6 +74,7 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         vars=vars_map,
         environments=environments,
         janitor=janitor,
+        scenario=scenario,
     )
 
 
@@ -98,6 +101,7 @@ def load_local_config(*, project_dir: Path) -> LocalConfig:
     vars_map: dict[str, str] = _load_string_mapping(
         payload=payload.get("vars"), file_path=file_path
     )
+    scenario: ScenarioConfig = _load_scenario(payload=payload.get("scenario"), file_path=file_path)
     return LocalConfig(
         environment=environment,
         adapter=adapter,
@@ -106,6 +110,7 @@ def load_local_config(*, project_dir: Path) -> LocalConfig:
         settings=settings,
         setting_overrides=setting_overrides,
         vars=vars_map,
+        scenario=scenario,
     )
 
 
@@ -485,6 +490,36 @@ def _load_janitor(*, payload: object, file_path: Path) -> JanitorConfig:
         delete_tracked_only=delete_tracked_only,
         exclude_patterns=exclude_patterns,
     )
+
+
+def _load_scenario(*, payload: object, file_path: Path) -> ScenarioConfig:
+    mapping: dict[str, object] = _coerce_mapping(
+        payload=payload, label="scenario", file_path=file_path
+    )
+    _validate_allowed_keys(
+        mapping=mapping,
+        allowed_keys=frozenset({"local_type_overrides"}),
+        label="scenario",
+        file_path=file_path,
+    )
+    overrides_payload: dict[str, object] = _coerce_mapping(
+        payload=mapping.get("local_type_overrides"),
+        label="scenario.local_type_overrides",
+        file_path=file_path,
+    )
+    local_type_overrides: dict[str, dict[str, str]] = {}
+    dialect: str
+    rules_payload: object
+    for dialect, rules_payload in overrides_payload.items():
+        if not isinstance(dialect, str) or not dialect.strip():
+            raise ProjectConfigError(
+                f"{file_path} scenario.local_type_overrides contains an empty dialect key"
+            )
+        local_type_overrides[dialect.strip()] = _load_string_mapping(
+            payload=rules_payload,
+            file_path=file_path,
+        )
+    return ScenarioConfig(local_type_overrides=local_type_overrides)
 
 
 def _load_string_mapping(*, payload: object, file_path: Path) -> dict[str, str]:

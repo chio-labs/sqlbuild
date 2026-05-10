@@ -107,6 +107,15 @@ class ScenarioSnapshotRelationPathErrorTestCase:
 
 
 @dataclass(frozen=True)
+class ScenarioSnapshotLocalTypeMappingTestCase:
+    description: str
+    sqlglot_dialect: str | None
+    warehouse_type: str
+    expected_local_type: str
+    local_type_overrides: dict[str, str] | None = None
+
+
+@dataclass(frozen=True)
 class ExecuteScenarioSnapshotCaptureStepsTestCase:
     description: str
     retain: bool

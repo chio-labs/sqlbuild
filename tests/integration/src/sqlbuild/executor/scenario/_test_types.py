@@ -57,3 +57,10 @@ class ScenarioAssertionCheckIntegrationTestCase:
     expected_status: ExecutionStatus
     expected_failing_row_count: int
     expected_sample_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ScenarioSnapshotCaptureTypesIntegrationTestCase:
+    description: str
+    expected_local_types: dict[str, str]
+    expected_replay_summary_rows: tuple[tuple[object, ...], ...]

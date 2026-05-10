@@ -32,6 +32,7 @@ from sqlbuild.spec.models.project import (
     EnvironmentConfig,
     LocalConfig,
     ProjectConfig,
+    ScenarioConfig,
     SettingsConfig,
 )
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry, SourceLocation
@@ -435,6 +436,7 @@ class CompiledProject:
     effective_connection: dict[str, object]
     effective_vars: dict[str, str]
     settings: SettingsConfig = field(default_factory=SettingsConfig)
+    scenario: ScenarioConfig = field(default_factory=ScenarioConfig)
     models: tuple[CompiledModel, ...] = field(default_factory=tuple)
     sources: tuple[CompiledSource, ...] = field(default_factory=tuple)
     seeds: tuple[CompiledSeed, ...] = field(default_factory=tuple)

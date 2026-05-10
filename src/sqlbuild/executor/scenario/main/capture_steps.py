@@ -22,6 +22,7 @@ def execute_scenario_snapshot_capture_run(
     capture_dialect: str,
     sqlbuild_version: str,
     retain: bool,
+    local_type_overrides: dict[str, str] | None = None,
 ) -> ScenarioSnapshotCaptureRunResult:
     """Materialize scenario inputs and capture them for an external entrypoint."""
 
@@ -35,4 +36,5 @@ def execute_scenario_snapshot_capture_run(
         capture_dialect=capture_dialect,
         sqlbuild_version=sqlbuild_version,
         retain=retain,
+        local_type_overrides=local_type_overrides,
     )

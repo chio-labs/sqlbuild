@@ -45,6 +45,10 @@ concurrency = 4
 
 [vars]
 user = "kevin"
+
+[scenario.local_type_overrides.snowflake]
+"NUMBER(*,0)" = "BIGINT"
+OBJECT = "JSON"
 """.strip()
         },
         expected_environment="dev",
@@ -55,6 +59,12 @@ user = "kevin"
         expected_max_concurrency=4,
         expected_setting_overrides=frozenset({"sqlglot", "sql_validation", "concurrency"}),
         expected_vars={"user": "kevin"},
+        expected_scenario_local_type_overrides={
+            "snowflake": {
+                "NUMBER(*,0)": "BIGINT",
+                "OBJECT": "JSON",
+            }
+        },
     ),
     LoadLocalConfigTestCase(
         description="loads legacy local max concurrency as canonical concurrency override",
@@ -476,6 +486,13 @@ enabled = true
 retention_days = 14
 delete_tracked_only = false
 exclude_patterns = ["partition_*"]
+
+[scenario.local_type_overrides.snowflake]
+"NUMBER(*,0)" = "BIGINT"
+OBJECT = "JSON"
+
+[scenario.local_type_overrides.bigquery]
+"BIGNUMERIC(*,*)" = "DECIMAL({1}, {2})"
 """.strip(),
             expected_name="demo",
             expected_adapter="duckdb",
@@ -503,6 +520,13 @@ exclude_patterns = ["partition_*"]
             expected_retention_days=14,
             expected_janitor_delete_tracked_only=False,
             expected_janitor_exclude_patterns=("partition_*",),
+            expected_scenario_local_type_overrides={
+                "snowflake": {
+                    "NUMBER(*,0)": "BIGINT",
+                    "OBJECT": "JSON",
+                },
+                "bigquery": {"BIGNUMERIC(*,*)": "DECIMAL({1}, {2})"},
+            },
         )
     ],
     ids=["loads expected fields from project config"],
@@ -535,6 +559,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.janitor.retention_days == test_case.expected_retention_days
     assert config.janitor.delete_tracked_only is test_case.expected_janitor_delete_tracked_only
     assert config.janitor.exclude_patterns == test_case.expected_janitor_exclude_patterns
+    assert config.scenario.local_type_overrides == test_case.expected_scenario_local_type_overrides
 
 
 @pytest.mark.parametrize(
@@ -563,6 +588,7 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
     assert config.settings.concurrency == test_case.expected_max_concurrency
     assert config.setting_overrides == test_case.expected_setting_overrides
     assert config.vars == test_case.expected_vars
+    assert config.scenario.local_type_overrides == test_case.expected_scenario_local_type_overrides
     assert {
         environment_name: {
             "connection": environment_config.connection,

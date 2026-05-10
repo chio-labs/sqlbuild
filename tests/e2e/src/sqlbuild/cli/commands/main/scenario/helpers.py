@@ -124,7 +124,11 @@ def assert_runtime_artifact_contains(
 
 
 def assert_scenario_snapshot(
-    *, project_dir: Path, scenario_name: str, expected_row_count: int
+    *,
+    project_dir: Path,
+    scenario_name: str,
+    expected_row_count: int,
+    expected_local_types: dict[str, str] | None = None,
 ) -> None:
     """Assert a scenario snapshot manifest and source JSONL file were written."""
 
@@ -141,6 +145,23 @@ def assert_scenario_snapshot(
     assert manifest_data["total_rows"] == expected_row_count
     assert manifest_data["relations"][0]["file"] == "sources/raw_orders.jsonl"
     assert manifest_data["relations"][0]["row_count"] == expected_row_count
+    columns: object = manifest_data["relations"][0]["columns"]
+    assert isinstance(columns, list)
+    assert columns
+    column_names: set[str] = {str(column["name"]) for column in columns}
+    assert {"id", "amount"}.issubset(column_names)
+    local_types_by_name: dict[str, str] = {
+        str(column["name"]): str(column["local_type"])
+        for column in columns
+        if isinstance(column, dict)
+    }
+    if expected_local_types is not None:
+        assert local_types_by_name | expected_local_types == local_types_by_name
+    column: object
+    for column in columns:
+        assert isinstance(column, dict)
+        assert column["warehouse_type"]
+        assert column["local_type"]
 
     rows: list[str] = jsonl_path.read_text(encoding="utf-8").splitlines()
     assert len(rows) == expected_row_count

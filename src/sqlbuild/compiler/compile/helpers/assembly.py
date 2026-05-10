@@ -43,6 +43,7 @@ from sqlbuild.spec.models.project import (
     DefaultsConfig,
     EnvironmentConfig,
     resolve_effective_adapter_name,
+    resolve_effective_scenario_config,
 )
 from sqlbuild.spec.models.schema import SchemaAuditInstance, SchemaColumn, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceColumnEntry
@@ -68,6 +69,10 @@ def assemble_compiled_project(
         effective_connection=inputs.effective_connection,
         effective_vars=inputs.effective_vars,
         settings=inputs.effective_settings,
+        scenario=resolve_effective_scenario_config(
+            project_config=inputs.project_config,
+            local_config=inputs.local_config,
+        ),
         models=tuple(
             _assemble_compiled_model(
                 model_input,

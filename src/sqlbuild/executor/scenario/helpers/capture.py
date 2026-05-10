@@ -40,6 +40,7 @@ def execute_scenario_snapshot_capture_steps(
     capture_dialect: str,
     sqlbuild_version: str,
     retain: bool,
+    local_type_overrides: dict[str, str] | None = None,
 ) -> ScenarioSnapshotCaptureRunResult:
     """Materialize scenario inputs, capture JSONL snapshots, and apply cleanup policy."""
 
@@ -109,6 +110,7 @@ def execute_scenario_snapshot_capture_steps(
         manifest=manifest,
         adapter=adapter,
         connection=connection,
+        local_type_overrides=local_type_overrides,
     )
 
     return _finish_capture_run(
