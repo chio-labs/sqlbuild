@@ -17,6 +17,10 @@ from sqlbuild.compiler.planner.models import (
     ScenarioRelationMap,
     ScenarioRelationPlan,
 )
+from sqlbuild.executor.scenario.models import (
+    ScenarioLocalSnapshotLoadResult,
+    ScenarioSnapshotManifest,
+)
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.shared.constants import SCENARIO_LOCAL_JSONL_INVALID
 from tests.unit.src.sqlbuild.executor.pipeline.helpers._test_types import (
@@ -134,15 +138,28 @@ def build_scenario_pipeline_plan(*, scenario: CompiledSqlScenario) -> ScenarioEx
 
 def local_snapshot_loader_for_test_case(
     test_case: ScenarioLocalPipelineTestCase,
-) -> Callable[..., object]:
+) -> Callable[..., ScenarioLocalSnapshotLoadResult]:
     """Build a local snapshot loader stub for one pipeline test case."""
 
-    def load_snapshot(**_kwargs: object) -> object:
+    def load_snapshot(**_kwargs: object) -> ScenarioLocalSnapshotLoadResult:
         if test_case.load_error_message is not None:
             raise ExecutorInputError(
                 test_case.load_error_message,
                 code=SCENARIO_LOCAL_JSONL_INVALID,
             )
-        return object()
+        return ScenarioLocalSnapshotLoadResult(
+            scenario_name="local_scenario",
+            manifest=ScenarioSnapshotManifest(
+                version=1,
+                scenario_name="local_scenario",
+                captured_at="2026-05-10T00:00:00Z",
+                capture_adapter="duckdb",
+                capture_dialect="duckdb",
+                sqlbuild_version="0.0.0",
+                input_fingerprint="fingerprint",
+                total_rows=0,
+                total_bytes=0,
+            ),
+        )
 
     return load_snapshot

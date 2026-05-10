@@ -11,7 +11,7 @@ from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.executor.pipeline.helpers import scenario as scenario_pipeline
-from sqlbuild.executor.scenario.main import local as local_scenario
+from sqlbuild.executor.scenario.helpers import local_execution as local_scenario
 from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotStateResult
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
 from sqlbuild.executor.shared.types import ExecutionStatus

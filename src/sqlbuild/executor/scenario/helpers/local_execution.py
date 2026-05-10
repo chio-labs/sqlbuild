@@ -1,0 +1,616 @@
+"""Local scenario replay entrypoint."""
+
+from __future__ import annotations
+
+from dataclasses import replace
+from pathlib import Path
+from typing import Any
+
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.compiler.compile.models import CompiledRelationTarget
+from sqlbuild.compiler.planner.models import (
+    ModelPlanEntry,
+    ScenarioAssertionCheckPlan,
+    ScenarioExecutionPlan,
+    ScenarioExpectedCheckPlan,
+    ScenarioRelationPlan,
+)
+from sqlbuild.compiler.planner.types import ScenarioArtifactKind
+from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.scenario.helpers.checks import (
+    execute_scenario_assertion_checks,
+    execute_scenario_expected_checks,
+)
+from sqlbuild.executor.scenario.helpers.local_snapshots import (
+    load_scenario_snapshot_into_duckdb,
+    local_snapshot_table_name,
+)
+from sqlbuild.executor.scenario.helpers.local_sql import (
+    replace_local_relations,
+    transpile_sql_for_local_duckdb,
+)
+from sqlbuild.executor.scenario.helpers.model_execution import execute_scenario_models
+from sqlbuild.executor.scenario.helpers.snapshots import (
+    build_scenario_snapshot_input_fingerprint,
+    build_scenario_snapshot_input_specs,
+    classify_scenario_snapshot_state,
+)
+from sqlbuild.executor.scenario.models import (
+    ScenarioAssertionCheckExecutionResult,
+    ScenarioExpectedCheckExecutionResult,
+    ScenarioLocalSnapshotLoadResult,
+    ScenarioRunResult,
+    ScenarioSnapshotStateResult,
+)
+from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
+from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.shared.constants import (
+    SCENARIO_EXEC_ASSERTION_ERRORED,
+    SCENARIO_EXEC_ASSERTION_FAILED,
+    SCENARIO_EXEC_EXPECTED_ERRORED,
+    SCENARIO_EXEC_EXPECTED_FAILED,
+    SCENARIO_LOCAL_INTERNAL,
+    SCENARIO_LOCAL_MANIFEST_INVALID,
+    SCENARIO_LOCAL_MODEL_FAILED,
+    SCENARIO_LOCAL_SNAPSHOT_MISSING,
+    SCENARIO_LOCAL_SNAPSHOT_STALE,
+)
+from sqlbuild.shared.helpers.coded_errors import error_code, error_help, error_message
+from sqlbuild.spec.models.source import SourceEntry
+
+
+def execute_local_scenario_load_only_run(
+    *,
+    project_dir: Path,
+    scenario_plan: ScenarioExecutionPlan,
+    adapter: BaseAdapter,
+    retain: bool,
+    strict: bool,
+) -> ScenarioRunResult:
+    """Run one scenario locally against a run-scoped DuckDB database."""
+
+    snapshot_state: ScenarioSnapshotStateResult = classify_scenario_snapshot_state(
+        project_dir=project_dir,
+        scenario_plan=scenario_plan,
+    )
+    if snapshot_state.state == ScenarioSnapshotState.MISSING:
+        return _local_snapshot_unavailable_result(
+            scenario_name=scenario_plan.name,
+            status=ScenarioLocalRunStatus.ERROR if strict else ScenarioLocalRunStatus.SKIP,
+            code=SCENARIO_LOCAL_SNAPSHOT_MISSING,
+            message=(
+                f"Scenario '{scenario_plan.name}' is missing local snapshot manifest "
+                f"'{snapshot_state.manifest_path.as_posix()}'."
+            ),
+            help=f"Run `sqb scenario capture {scenario_plan.name}` to create the snapshot.",
+        )
+    if snapshot_state.state == ScenarioSnapshotState.STALE:
+        return _local_snapshot_unavailable_result(
+            scenario_name=scenario_plan.name,
+            status=ScenarioLocalRunStatus.ERROR if strict else ScenarioLocalRunStatus.SKIP,
+            code=SCENARIO_LOCAL_SNAPSHOT_STALE,
+            message=(
+                f"Scenario '{scenario_plan.name}' local snapshot "
+                f"'{snapshot_state.manifest_path.as_posix()}' is stale."
+            ),
+            help=f"Run `sqb scenario capture {scenario_plan.name}` to refresh the snapshot.",
+        )
+    if snapshot_state.state == ScenarioSnapshotState.INVALID:
+        return _local_snapshot_unavailable_result(
+            scenario_name=scenario_plan.name,
+            status=ScenarioLocalRunStatus.ERROR,
+            code=snapshot_state.error_code or SCENARIO_LOCAL_MANIFEST_INVALID,
+            message=snapshot_state.error_message
+            or (
+                f"Scenario '{scenario_plan.name}' has invalid local snapshot manifest "
+                f"'{snapshot_state.manifest_path.as_posix()}'."
+            ),
+            help="Fix scenario.json or regenerate it with `sqb scenario capture`.",
+        )
+
+    run_dir: Path = project_dir / "target" / "run" / "scenarios" / scenario_plan.name
+    run_dir.mkdir(parents=True, exist_ok=True)
+    duckdb_path: Path = run_dir / "local.duckdb"
+    _remove_local_duckdb_files(duckdb_path)
+    connection: Any = adapter.connect({"database": str(duckdb_path)})
+    try:
+        input_fingerprint: str = build_scenario_snapshot_input_fingerprint(
+            scenario_name=scenario_plan.name,
+            input_specs=build_scenario_snapshot_input_specs(scenario_plan=scenario_plan),
+        )
+        load_result: ScenarioLocalSnapshotLoadResult = load_scenario_snapshot_into_duckdb(
+            project_dir=project_dir,
+            scenario_name=scenario_plan.name,
+            current_input_fingerprint=input_fingerprint,
+            connection=connection,
+        )
+        local_plan: ScenarioExecutionPlan = _build_local_execution_plan(
+            scenario_plan=scenario_plan,
+            load_result=load_result,
+            source_dialect=adapter.sqlglot_dialect(),
+        )
+        result: ScenarioRunResult = _execute_local_plan(
+            scenario_plan=local_plan,
+            adapter=adapter,
+            connection=connection,
+            run_id=f"local-{scenario_plan.name}",
+            requested_retain=retain,
+            duckdb_path=duckdb_path,
+        )
+    except Exception as exc:
+        return ScenarioRunResult(
+            scenario_name=scenario_plan.name,
+            status=ExecutionStatus.FAILED,
+            local_status=ScenarioLocalRunStatus.ERROR,
+            retained=True,
+            local_duckdb_path=duckdb_path,
+            error_code=error_code(exc, fallback_code=SCENARIO_LOCAL_INTERNAL),
+            error_help=error_help(exc),
+            error_message=error_message(exc),
+        )
+    finally:
+        adapter.close(connection)
+
+    if result.local_status == ScenarioLocalRunStatus.PASS and not retain:
+        _remove_local_duckdb_files(duckdb_path)
+    return result
+
+
+def _build_local_execution_plan(
+    *,
+    scenario_plan: ScenarioExecutionPlan,
+    load_result: ScenarioLocalSnapshotLoadResult,
+    source_dialect: str | None,
+) -> ScenarioExecutionPlan:
+    relation_replacements: dict[str, str] = _build_relation_replacements(
+        scenario_plan=scenario_plan,
+        load_result=load_result,
+    )
+    relation_plan: ScenarioRelationPlan = _build_local_relation_plan(
+        scenario_plan=scenario_plan,
+        load_result=load_result,
+    )
+
+    model_entries: list[ModelPlanEntry] = []
+    entry: ModelPlanEntry
+    for entry in scenario_plan.model_entries:
+        local_sql: str = replace_local_relations(
+            sql=entry.resolved_sql,
+            relation_replacements=relation_replacements,
+        )
+        local_sql = transpile_sql_for_local_duckdb(
+            sql=local_sql,
+            source_dialect=source_dialect,
+            scenario_name=scenario_plan.name,
+            resource_kind="model",
+            resource_name=entry.name,
+        )
+        model_entries.append(
+            replace(
+                entry,
+                target=relation_plan.model_targets[entry.name],
+                resolved_sql=local_sql,
+                pre_hook=None,
+                post_hook=None,
+                type_enforcement=False,
+            )
+        )
+
+    expected_checks: list[ScenarioExpectedCheckPlan] = []
+    expected_check: ScenarioExpectedCheckPlan
+    for expected_check in scenario_plan.expected_checks:
+        expected_sql: str = replace_local_relations(
+            sql=expected_check.expected_sql,
+            relation_replacements=relation_replacements,
+        )
+        expected_sql = transpile_sql_for_local_duckdb(
+            sql=expected_sql,
+            source_dialect=source_dialect,
+            scenario_name=scenario_plan.name,
+            resource_kind="expected check",
+            resource_name=expected_check.model_name,
+        )
+        expected_checks.append(
+            replace(
+                expected_check,
+                actual_target=relation_plan.model_targets[expected_check.model_name],
+                expected_sql=expected_sql,
+            )
+        )
+
+    assertion_checks: list[ScenarioAssertionCheckPlan] = []
+    assertion_check: ScenarioAssertionCheckPlan
+    for assertion_check in scenario_plan.assertion_checks:
+        assertion_sql: str = replace_local_relations(
+            sql=assertion_check.sql,
+            relation_replacements=relation_replacements,
+        )
+        assertion_sql = transpile_sql_for_local_duckdb(
+            sql=assertion_sql,
+            source_dialect=source_dialect,
+            scenario_name=scenario_plan.name,
+            resource_kind="assertion",
+            resource_name=assertion_check.name,
+        )
+        assertion_checks.append(replace(assertion_check, sql=assertion_sql))
+
+    return replace(
+        scenario_plan,
+        relation_plan=relation_plan,
+        fixture_plans=(),
+        seed_entries=(),
+        model_entries=tuple(model_entries),
+        expected_checks=tuple(expected_checks),
+        assertion_checks=tuple(assertion_checks),
+    )
+
+
+def _execute_local_plan(
+    *,
+    scenario_plan: ScenarioExecutionPlan,
+    adapter: BaseAdapter,
+    connection: Any,
+    run_id: str,
+    requested_retain: bool,
+    duckdb_path: Path,
+) -> ScenarioRunResult:
+    model_results: tuple[ModelExecutionResult, ...] = execute_scenario_models(
+        scenario_plan=scenario_plan,
+        adapter=adapter,
+        connection=connection,
+        run_id=run_id,
+    )
+    if _has_failed(model_results):
+        local_model_results: tuple[ModelExecutionResult, ...] = _with_local_model_error_codes(
+            model_results
+        )
+        return _local_result(
+            scenario_plan=scenario_plan,
+            local_status=ScenarioLocalRunStatus.ERROR,
+            retained=True,
+            duckdb_path=duckdb_path,
+            model_results=local_model_results,
+            error_code=_first_error_code(local_model_results) or SCENARIO_LOCAL_MODEL_FAILED,
+            error_help=_first_error_help(local_model_results),
+            error_message=_first_error(local_model_results),
+        )
+
+    expected_results: tuple[ScenarioExpectedCheckExecutionResult, ...]
+    expected_results = _with_local_expected_check_error_codes(
+        execute_scenario_expected_checks(
+            scenario_plan=scenario_plan,
+            adapter=adapter,
+            connection=connection,
+        )
+    )
+    assertion_results: tuple[ScenarioAssertionCheckExecutionResult, ...]
+    assertion_results = _with_local_assertion_check_error_codes(
+        execute_scenario_assertion_checks(
+            scenario_plan=scenario_plan,
+            adapter=adapter,
+            connection=connection,
+        )
+    )
+    check_results: tuple[object, ...] = (*expected_results, *assertion_results)
+    if _has_local_check_error(check_results):
+        return _local_result(
+            scenario_plan=scenario_plan,
+            local_status=ScenarioLocalRunStatus.ERROR,
+            retained=True,
+            duckdb_path=duckdb_path,
+            model_results=model_results,
+            expected_results=expected_results,
+            assertion_results=assertion_results,
+            error_code=_first_error_code(check_results) or SCENARIO_LOCAL_MODEL_FAILED,
+            error_help=_first_error_help(check_results),
+            error_message=_first_error(check_results),
+        )
+    if _has_failed(check_results):
+        return _local_result(
+            scenario_plan=scenario_plan,
+            local_status=ScenarioLocalRunStatus.FAIL,
+            retained=True,
+            duckdb_path=duckdb_path,
+            model_results=model_results,
+            expected_results=expected_results,
+            assertion_results=assertion_results,
+            error_code=_first_error_code(check_results),
+            error_help=_first_error_help(check_results),
+            error_message=_first_error(check_results),
+        )
+    return _local_result(
+        scenario_plan=scenario_plan,
+        local_status=ScenarioLocalRunStatus.PASS,
+        retained=requested_retain,
+        duckdb_path=duckdb_path if requested_retain else None,
+        model_results=model_results,
+        expected_results=expected_results,
+        assertion_results=assertion_results,
+    )
+
+
+def _build_local_relation_plan(
+    *, scenario_plan: ScenarioExecutionPlan, load_result: ScenarioLocalSnapshotLoadResult
+) -> ScenarioRelationPlan:
+    source_map: dict[str, SourceEntry] = dict(scenario_plan.relation_plan.source_map)
+    source_fixture_targets: dict[str, CompiledRelationTarget] = {}
+    ref_fixture_targets: dict[str, CompiledRelationTarget] = {}
+    seed_fixture_targets: dict[str, CompiledRelationTarget] = {}
+    seed_targets: dict[str, CompiledRelationTarget] = {}
+    model_targets: dict[str, CompiledRelationTarget] = {}
+
+    loaded_targets: dict[tuple[ScenarioArtifactKind, str], CompiledRelationTarget] = {
+        (relation.kind, relation.logical_name): _local_target(relation.table_name)
+        for relation in load_result.relations
+    }
+    source_name: str
+    for source_name in scenario_plan.graph_plan.source_fixture_names:
+        target: CompiledRelationTarget = loaded_targets[(ScenarioArtifactKind.SOURCE, source_name)]
+        source_fixture_targets[source_name] = target
+        source_entry: SourceEntry = source_map[source_name]
+        source_map[source_name] = replace(
+            source_entry,
+            database=None,
+            schema=None,
+            table=None,
+            expression=target.name,
+            type_enforcement=False,
+        )
+    ref_name: str
+    for ref_name in scenario_plan.graph_plan.ref_fixture_names:
+        target = loaded_targets[(ScenarioArtifactKind.REF, ref_name)]
+        ref_fixture_targets[ref_name] = target
+        model_targets[ref_name] = target
+    seed_name: str
+    for seed_name in scenario_plan.graph_plan.seed_names:
+        target = loaded_targets[(ScenarioArtifactKind.SEED, seed_name)]
+        seed_targets[seed_name] = target
+        if seed_name in scenario_plan.graph_plan.seed_fixture_names:
+            seed_fixture_targets[seed_name] = target
+    model_name: str
+    for model_name in scenario_plan.graph_plan.model_names:
+        model_targets[model_name] = _local_target(
+            local_snapshot_table_name(kind=ScenarioArtifactKind.MODEL, logical_name=model_name)
+        )
+
+    return replace(
+        scenario_plan.relation_plan,
+        model_targets=model_targets,
+        seed_targets=seed_targets,
+        source_map=source_map,
+        source_fixture_targets=source_fixture_targets,
+        ref_fixture_targets=ref_fixture_targets,
+        seed_fixture_targets=seed_fixture_targets,
+    )
+
+
+def _build_relation_replacements(
+    *, scenario_plan: ScenarioExecutionPlan, load_result: ScenarioLocalSnapshotLoadResult
+) -> dict[str, str]:
+    replacements: dict[str, str] = {}
+    loaded_names: dict[tuple[ScenarioArtifactKind, str], str] = {
+        (relation.kind, relation.logical_name): relation.table_name
+        for relation in load_result.relations
+    }
+    source_name: str
+    for source_name, target in scenario_plan.relation_plan.source_fixture_targets.items():
+        _add_target_replacements(
+            replacements,
+            target=target,
+            local_name=loaded_names[(ScenarioArtifactKind.SOURCE, source_name)],
+        )
+    ref_name: str
+    for ref_name, target in scenario_plan.relation_plan.ref_fixture_targets.items():
+        _add_target_replacements(
+            replacements,
+            target=target,
+            local_name=loaded_names[(ScenarioArtifactKind.REF, ref_name)],
+        )
+    seed_name: str
+    for seed_name, target in scenario_plan.relation_plan.seed_targets.items():
+        _add_target_replacements(
+            replacements,
+            target=target,
+            local_name=loaded_names[(ScenarioArtifactKind.SEED, seed_name)],
+        )
+    model_name: str
+    for model_name, target in scenario_plan.relation_plan.model_targets.items():
+        if model_name in scenario_plan.graph_plan.ref_fixture_names:
+            continue
+        _add_target_replacements(
+            replacements,
+            target=target,
+            local_name=local_snapshot_table_name(
+                kind=ScenarioArtifactKind.MODEL,
+                logical_name=model_name,
+            ),
+        )
+    return replacements
+
+
+def _local_snapshot_unavailable_result(
+    *,
+    scenario_name: str,
+    status: ScenarioLocalRunStatus,
+    code: str,
+    message: str,
+    help: str,
+) -> ScenarioRunResult:
+    return ScenarioRunResult(
+        scenario_name=scenario_name,
+        status=ExecutionStatus.SKIPPED
+        if status == ScenarioLocalRunStatus.SKIP
+        else ExecutionStatus.FAILED,
+        local_status=status,
+        retained=False,
+        error_code=code,
+        error_help=help,
+        error_message=message,
+    )
+
+
+def _local_result(
+    *,
+    scenario_plan: ScenarioExecutionPlan,
+    local_status: ScenarioLocalRunStatus,
+    retained: bool,
+    duckdb_path: Path | None,
+    model_results: tuple[ModelExecutionResult, ...] = (),
+    expected_results: tuple[ScenarioExpectedCheckExecutionResult, ...] = (),
+    assertion_results: tuple[ScenarioAssertionCheckExecutionResult, ...] = (),
+    error_code: str | None = None,
+    error_help: str | None = None,
+    error_message: str | None = None,
+) -> ScenarioRunResult:
+    return ScenarioRunResult(
+        scenario_name=scenario_plan.name,
+        status=ExecutionStatus.SUCCESS
+        if local_status == ScenarioLocalRunStatus.PASS
+        else ExecutionStatus.FAILED,
+        local_status=local_status,
+        retained=retained,
+        local_duckdb_path=duckdb_path,
+        relation_map=None,
+        model_results=model_results,
+        expected_results=expected_results,
+        assertion_results=assertion_results,
+        error_code=error_code,
+        error_help=error_help,
+        error_message=error_message,
+    )
+
+
+def _local_target(table_name: str) -> CompiledRelationTarget:
+    return CompiledRelationTarget(
+        database=None,
+        schema=None,
+        name=table_name,
+        qualified_name=None,
+    )
+
+
+def _add_target_replacements(
+    replacements: dict[str, str], *, target: CompiledRelationTarget, local_name: str
+) -> None:
+    original: str
+    for original in _target_name_variants(target):
+        replacements[original] = local_name
+
+
+def _target_name_variants(target: CompiledRelationTarget) -> tuple[str, ...]:
+    values: list[str] = [target.name, f'"{target.name}"']
+    if target.qualified_name is not None:
+        values.append(target.qualified_name)
+        values.append(f'"{target.qualified_name}"')
+    if target.schema is not None:
+        values.append(f"{target.schema}.{target.name}")
+        values.append(f'"{target.schema}"."{target.name}"')
+    if target.database is not None and target.schema is not None:
+        values.append(f"{target.database}.{target.schema}.{target.name}")
+        values.append(f'"{target.database}"."{target.schema}"."{target.name}"')
+    return tuple(dict.fromkeys(values))
+
+
+def _with_local_model_error_codes(
+    results: tuple[ModelExecutionResult, ...],
+) -> tuple[ModelExecutionResult, ...]:
+    return tuple(
+        replace(
+            result,
+            error_code=SCENARIO_LOCAL_MODEL_FAILED,
+            error_help=result.error_help or "Inspect the retained local DuckDB database.",
+            error_message=(
+                f"local model '{result.model_name}' failed: {result.error_message}"
+                if result.error_message is not None
+                else f"local model '{result.model_name}' failed"
+            ),
+        )
+        if result.status == ExecutionStatus.FAILED
+        else result
+        for result in results
+    )
+
+
+def _with_local_expected_check_error_codes(
+    results: tuple[ScenarioExpectedCheckExecutionResult, ...],
+) -> tuple[ScenarioExpectedCheckExecutionResult, ...]:
+    remapped_results: list[ScenarioExpectedCheckExecutionResult] = []
+    result: ScenarioExpectedCheckExecutionResult
+    for result in results:
+        if result.error_code == SCENARIO_EXEC_EXPECTED_ERRORED:
+            remapped_results.append(
+                replace(
+                    result,
+                    error_code=SCENARIO_LOCAL_MODEL_FAILED,
+                    error_help="Inspect the retained local DuckDB database and local SQL.",
+                )
+            )
+            continue
+        remapped_results.append(result)
+    return tuple(remapped_results)
+
+
+def _with_local_assertion_check_error_codes(
+    results: tuple[ScenarioAssertionCheckExecutionResult, ...],
+) -> tuple[ScenarioAssertionCheckExecutionResult, ...]:
+    remapped_results: list[ScenarioAssertionCheckExecutionResult] = []
+    result: ScenarioAssertionCheckExecutionResult
+    for result in results:
+        if result.error_code == SCENARIO_EXEC_ASSERTION_ERRORED:
+            remapped_results.append(
+                replace(
+                    result,
+                    error_code=SCENARIO_LOCAL_MODEL_FAILED,
+                    error_help="Inspect the retained local DuckDB database and local SQL.",
+                )
+            )
+            continue
+        remapped_results.append(result)
+    return tuple(remapped_results)
+
+
+def _has_failed(results: tuple[object, ...]) -> bool:
+    return any(getattr(result, "status", None) == ExecutionStatus.FAILED for result in results)
+
+
+def _has_local_check_error(results: tuple[object, ...]) -> bool:
+    return any(
+        getattr(result, "error_code", None)
+        not in (None, SCENARIO_EXEC_EXPECTED_FAILED, SCENARIO_EXEC_ASSERTION_FAILED)
+        for result in results
+        if getattr(result, "status", None) == ExecutionStatus.FAILED
+    )
+
+
+def _first_error(results: tuple[object, ...]) -> str | None:
+    result: object
+    for result in results:
+        if getattr(result, "status", None) == ExecutionStatus.FAILED:
+            message: object | None = getattr(result, "error_message", None)
+            return message if isinstance(message, str) and message else "local scenario step failed"
+    return None
+
+
+def _first_error_code(results: tuple[object, ...]) -> str | None:
+    result: object
+    for result in results:
+        if getattr(result, "status", None) == ExecutionStatus.FAILED:
+            code: object | None = getattr(result, "error_code", None)
+            if isinstance(code, str) and code:
+                return code
+    return None
+
+
+def _first_error_help(results: tuple[object, ...]) -> str | None:
+    result: object
+    for result in results:
+        if getattr(result, "status", None) == ExecutionStatus.FAILED:
+            help_text: object | None = getattr(result, "error_help", None)
+            if isinstance(help_text, str) and help_text:
+                return help_text
+    return None
+
+
+def _remove_local_duckdb_files(duckdb_path: Path) -> None:
+    duckdb_path.unlink(missing_ok=True)
+    duckdb_path.with_name(f"{duckdb_path.name}.wal").unlink(missing_ok=True)
