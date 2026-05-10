@@ -44,6 +44,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioExpectedCheckExecutionResult,
     ScenarioRunResult,
     ScenarioSnapshotCaptureLimits,
+    ScenarioSnapshotCaptureRelationResult,
     ScenarioSnapshotCaptureRunResult,
 )
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus
@@ -67,6 +68,8 @@ from sqlbuild.spec.models.project import (
 _SCENARIO_NAME_WIDTH: int = 64
 _CHECK_LABEL_WIDTH: int = 10
 _CHECK_NAME_WIDTH: int = 50
+_CAPTURE_RELATION_KIND_WIDTH: int = 8
+_CAPTURE_RELATION_NAME_WIDTH: int = _SCENARIO_NAME_WIDTH - 4 - _CAPTURE_RELATION_KIND_WIDTH - 1
 
 
 def run_scenario(
@@ -323,7 +326,8 @@ def _sync_local_snapshots(
         selectors=capture_names,
         project_dir=project_dir,
     )
-    header: str = f"Snapshot Sync ({len(capture_scenarios)} selected)"
+    phase_name: str = "Refresh" if refresh else "Sync"
+    header: str = f"Snapshot {phase_name} ({len(capture_scenarios)} selected)"
     styled_header: str = green_bold(header) if use_color else header
     progress_stream.write(f"\n{styled_header}\n\n")
     progress_stream.write(f"{scenario_snapshot_capture_warning(force=force)}\n\n")
@@ -375,6 +379,8 @@ def _sync_local_snapshots(
         on_scenario_complete=lambda _scenario, _scenario_plan, result: _complete_snapshot_sync(
             scenario_status=scenario_status,
             status_is_tty=status_is_tty,
+            project_dir=project_dir,
+            refresh=refresh,
             result=result,
             progress_stream=progress_stream,
             use_color=use_color,
@@ -383,7 +389,10 @@ def _sync_local_snapshots(
     scenario_status.close()
     pass_count: int = sum(1 for result in results if result.status == SUCCESS_STATUS)
     fail_count: int = len(results) - pass_count
-    progress_stream.write(f"\nSNAPSHOT_PASS={pass_count}  SNAPSHOT_FAIL={fail_count}\n")
+    summary_prefix: str = "REFRESH" if refresh else "SYNC"
+    progress_stream.write(
+        f"\n{summary_prefix}_PASS={pass_count}  {summary_prefix}_FAIL={fail_count}\n"
+    )
     progress_stream.flush()
     return 0 if fail_count == 0 else 1
 
@@ -392,15 +401,19 @@ def _complete_snapshot_sync(
     *,
     scenario_status: TransientStatusReporter,
     status_is_tty: bool,
+    project_dir: Path,
+    refresh: bool,
     result: ScenarioSnapshotCaptureRunResult,
     progress_stream: TextIO,
     use_color: bool,
 ) -> None:
     if status_is_tty:
         scenario_status.close()
-    status_text: str = "PASS" if result.status == SUCCESS_STATUS else "FAIL"
+    success_status_text: str = "REFRESHED" if refresh else "CAPTURED"
+    status_text: str = success_status_text if result.status == SUCCESS_STATUS else "FAIL"
     status: str = colorize_status(status_text, use_color=use_color)
-    progress_stream.write(f"{result.scenario_name:<{_SCENARIO_NAME_WIDTH}} {status}\n")
+    detail: str = _snapshot_capture_detail(result)
+    progress_stream.write(f"{result.scenario_name:<{_SCENARIO_NAME_WIDTH}} {status}{detail}\n")
     if result.error_message:
         rendered_error_message: str = _render_result_error(
             error_code=result.error_code,
@@ -410,7 +423,69 @@ def _complete_snapshot_sync(
         error_line: str
         for error_line in rendered_error_message.splitlines():
             progress_stream.write(f"    {error_line}\n")
+    _write_snapshot_capture_relation_rows(
+        result=result, stream=progress_stream, use_color=use_color
+    )
+    if result.capture_result is not None and result.capture_result.manifest_path is not None:
+        snapshot_path: str = _display_snapshot_path(
+            manifest_path=result.capture_result.manifest_path,
+            project_dir=project_dir,
+        )
+        progress_stream.write(f"    {'snapshot':<{_CAPTURE_RELATION_KIND_WIDTH}} {snapshot_path}\n")
     progress_stream.flush()
+
+
+def _write_snapshot_capture_relation_rows(
+    *, result: ScenarioSnapshotCaptureRunResult, stream: TextIO, use_color: bool
+) -> None:
+    if result.capture_result is None:
+        return
+    relation_result: ScenarioSnapshotCaptureRelationResult
+    for relation_result in result.capture_result.relation_results:
+        status_text: str = "PASS" if relation_result.status == SUCCESS_STATUS else "FAIL"
+        status: str = colorize_status(status_text, use_color=use_color)
+        row_label: str = "row" if relation_result.row_count == 1 else "rows"
+        detail: str = (
+            f"  {relation_result.row_count} {row_label}, "
+            f"{_format_snapshot_size(relation_result.byte_count)}"
+        )
+        stream.write(
+            f"    {relation_result.kind.value:<{_CAPTURE_RELATION_KIND_WIDTH}} "
+            f"{relation_result.logical_name:<{_CAPTURE_RELATION_NAME_WIDTH}} "
+            f"{status}{detail}\n"
+        )
+
+
+def _snapshot_capture_detail(result: ScenarioSnapshotCaptureRunResult) -> str:
+    if result.capture_result is None:
+        return ""
+    relation_results: tuple[ScenarioSnapshotCaptureRelationResult, ...] = (
+        result.capture_result.relation_results
+    )
+    relation_count: int = sum(
+        1 for relation in relation_results if relation.status == SUCCESS_STATUS
+    )
+    row_count: int = sum(relation.row_count for relation in relation_results)
+    relation_label: str = "relation" if relation_count == 1 else "relations"
+    row_label: str = "row" if row_count == 1 else "rows"
+    return f"  {relation_count} {relation_label}, {row_count} {row_label}"
+
+
+def _format_snapshot_size(byte_count: int) -> str:
+    if byte_count < 1024:
+        return f"{byte_count} B"
+    kibibytes: float = byte_count / 1024
+    if kibibytes < 1024:
+        return f"{kibibytes:.1f} KB"
+    mebibytes: float = kibibytes / 1024
+    return f"{mebibytes:.1f} MB"
+
+
+def _display_snapshot_path(*, manifest_path: Path, project_dir: Path) -> str:
+    try:
+        return manifest_path.relative_to(project_dir).as_posix()
+    except ValueError:
+        return manifest_path.as_posix()
 
 
 def _write_remote_summary(*, results: tuple[ScenarioRunResult, ...], stream: TextIO) -> int:
