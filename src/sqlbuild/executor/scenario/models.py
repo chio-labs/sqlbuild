@@ -108,6 +108,39 @@ class ScenarioSnapshotStateResult:
 
 
 @dataclass(frozen=True)
+class ScenarioLocalSnapshotLoadedRelation:
+    """One local DuckDB table loaded from a durable scenario snapshot relation."""
+
+    kind: ScenarioArtifactKind
+    logical_name: str
+    file_path: Path
+    table_name: str
+    row_count: int
+
+
+@dataclass(frozen=True)
+class ScenarioLocalSnapshotLoadResult:
+    """Outcome of loading one local scenario snapshot into DuckDB."""
+
+    scenario_name: str
+    manifest: ScenarioSnapshotManifest
+    relations: tuple[ScenarioLocalSnapshotLoadedRelation, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class ScenarioLocalSnapshotTypeValidationIssue:
+    """One DuckDB-rejected local type in a scenario snapshot manifest."""
+
+    scenario_name: str
+    manifest_path: Path
+    kind: ScenarioArtifactKind
+    logical_name: str
+    column_name: str
+    local_type: str
+    error_message: str
+
+
+@dataclass(frozen=True)
 class ScenarioSnapshotCaptureRelationPlan:
     """One scenario input relation planned for durable local snapshot capture."""
 

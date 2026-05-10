@@ -91,6 +91,24 @@ class ScenarioSnapshotJsonlErrorTestCase:
 
 
 @dataclass(frozen=True)
+class ScenarioLocalSnapshotLoadTestCase:
+    description: str
+    columns: tuple[tuple[str, str, str], ...]
+    rows: tuple[dict[str, object], ...]
+    expected_table_name: str
+    expected_summary_row: tuple[object, ...]
+
+
+@dataclass(frozen=True)
+class ScenarioLocalSnapshotLoadErrorTestCase:
+    description: str
+    columns: tuple[tuple[str, str, str], ...]
+    file_contents: str
+    expected_error_code: str
+    expected_error_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ScenarioSnapshotCapturePlanTestCase:
     description: str
     project_dir: Path
