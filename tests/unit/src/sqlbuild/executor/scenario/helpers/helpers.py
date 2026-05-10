@@ -166,6 +166,88 @@ def build_snapshot_manifest(*, input_fingerprint: str = "fresh123") -> ScenarioS
     )
 
 
+def build_local_snapshot_load_manifest(
+    *,
+    input_fingerprint: str,
+    columns: tuple[tuple[str, str, str], ...],
+) -> ScenarioSnapshotManifest:
+    return ScenarioSnapshotManifest(
+        version=1,
+        scenario_name="revenue__customer_refund",
+        captured_at="2026-05-09T00:00:00Z",
+        capture_adapter="snowflake",
+        capture_dialect="snowflake",
+        sqlbuild_version="0.1.0",
+        input_fingerprint=input_fingerprint,
+        total_rows=1,
+        total_bytes=1,
+        relations=(
+            ScenarioSnapshotRelation(
+                kind=ScenarioArtifactKind.SOURCE,
+                logical_name="raw__orders",
+                file_path=Path("sources/raw__orders.jsonl"),
+                row_count=1,
+                byte_count=1,
+                columns=tuple(
+                    ScenarioSnapshotColumn(
+                        name=name,
+                        warehouse_type=warehouse_type,
+                        local_type=local_type,
+                    )
+                    for name, warehouse_type, local_type in columns
+                ),
+            ),
+        ),
+    )
+
+
+def write_local_snapshot_load_test_files(
+    *,
+    project_dir: Path,
+    manifest: ScenarioSnapshotManifest,
+    rows: tuple[dict[str, object], ...],
+) -> None:
+    from sqlbuild.executor.scenario.helpers.snapshots import (
+        scenario_snapshot_root,
+        write_scenario_snapshot_jsonl,
+        write_scenario_snapshot_manifest,
+    )
+
+    snapshot_root: Path = scenario_snapshot_root(
+        project_dir=project_dir,
+        scenario_name=manifest.scenario_name,
+    )
+    write_scenario_snapshot_manifest(
+        manifest_path=snapshot_root / "scenario.json",
+        manifest=manifest,
+    )
+    write_scenario_snapshot_jsonl(
+        file_path=snapshot_root / "sources" / "raw__orders.jsonl",
+        rows=rows,
+    )
+
+
+def write_local_snapshot_load_test_file_contents(
+    *, project_dir: Path, manifest: ScenarioSnapshotManifest, file_contents: str
+) -> None:
+    from sqlbuild.executor.scenario.helpers.snapshots import (
+        scenario_snapshot_root,
+        write_scenario_snapshot_manifest,
+    )
+
+    snapshot_root: Path = scenario_snapshot_root(
+        project_dir=project_dir,
+        scenario_name=manifest.scenario_name,
+    )
+    write_scenario_snapshot_manifest(
+        manifest_path=snapshot_root / "scenario.json",
+        manifest=manifest,
+    )
+    file_path: Path = snapshot_root / "sources" / "raw__orders.jsonl"
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path.write_text(file_contents, encoding="utf-8")
+
+
 def write_snapshot_state_test_manifest(
     *, manifest_path: Path, test_case: ScenarioSnapshotStateTestCase
 ) -> None:
