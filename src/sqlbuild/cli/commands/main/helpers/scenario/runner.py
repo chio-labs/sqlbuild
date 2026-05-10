@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import sys
+from datetime import UTC, datetime
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import TextIO
 
@@ -28,16 +30,22 @@ from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import ScenarioArtifactName, ScenarioExecutionPlan
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.pipeline.main.run import (
+    run_scenario_capture_pipeline,
     run_scenario_local_test_pipeline,
     run_scenario_test_pipeline,
+    select_scenario_snapshot_capture_candidates,
 )
 from sqlbuild.executor.scenario.models import (
     ScenarioAssertionCheckExecutionResult,
     ScenarioExpectedCheckExecutionResult,
     ScenarioRunResult,
+    ScenarioSnapshotCaptureRunResult,
 )
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus
-from sqlbuild.shared.constants import SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED
+from sqlbuild.shared.constants import (
+    SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
+    SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
+)
 from sqlbuild.shared.helpers.coded_errors import format_coded_error
 from sqlbuild.shared.helpers.colors import (
     blue_bold,
@@ -61,6 +69,8 @@ def run_scenario(
     retain: bool = False,
     local: bool = False,
     strict: bool = False,
+    sync_snapshots: bool = False,
+    refresh: bool = False,
 ) -> int:
     """Execute the scenario test command."""
 
@@ -69,6 +79,15 @@ def run_scenario(
             "scenario test --local does not support --retain",
             code=SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
             help=("Local scenario DuckDB files are always kept under target/run/scenarios/."),
+        )
+    if not local and (sync_snapshots or refresh):
+        raise CliUserError(
+            "scenario snapshot sync flags require --local",
+            code=SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
+            help=(
+                "Use sqb scenario test --local --sync-snapshots or "
+                "sqb scenario test --local --refresh."
+            ),
         )
 
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
@@ -130,6 +149,27 @@ def run_scenario(
         selectors=selectors,
         project_dir=effective_project_dir,
     )
+    if local and (sync_snapshots or refresh):
+        capture_exit_code: int = _sync_local_snapshots(
+            project_dir=effective_project_dir,
+            discovered_inputs=discovered_inputs,
+            local_pipeline_result=pipeline_result,
+            local_scenarios=scenarios,
+            local_adapter=adapter,
+            project_adapter=project_adapter,
+            project_adapter_name=project_adapter_name,
+            project_connection_config=resolve_project_connection_config(
+                discovered_inputs=discovered_inputs,
+                project_dir=effective_project_dir,
+            ),
+            project_name=discovered_inputs.project_config.name,
+            no_sql_validation=no_sql_validation,
+            refresh=refresh,
+            progress_stream=progress_stream,
+            use_color=use_color,
+        )
+        if capture_exit_code != 0:
+            return capture_exit_code
     header: str = f"Scenario ({len(scenarios)} selected)"
     styled_header: str = green_bold(header) if use_color else header
     progress_stream.write(f"\n{styled_header}\n\n")
@@ -201,6 +241,138 @@ def run_scenario(
     if local:
         return _write_local_summary(results=results, stream=progress_stream)
     return _write_remote_summary(results=results, stream=progress_stream)
+
+
+def _sync_local_snapshots(
+    *,
+    project_dir: Path,
+    discovered_inputs: DiscoveredProjectInputs,
+    local_pipeline_result: CompilePipelineResult,
+    local_scenarios: tuple[CompiledSqlScenario, ...],
+    local_adapter: BaseAdapter,
+    project_adapter: BaseAdapter,
+    project_adapter_name: str,
+    project_connection_config: dict[str, object],
+    project_name: str,
+    no_sql_validation: bool,
+    refresh: bool,
+    progress_stream: TextIO,
+    use_color: bool,
+) -> int:
+    capture_dialect: str = project_adapter.sqlglot_dialect() or project_adapter_name
+    capture_names: tuple[str, ...] = select_scenario_snapshot_capture_candidates(
+        project_dir=project_dir,
+        pipeline_result=local_pipeline_result,
+        scenarios=local_scenarios,
+        adapter=local_adapter,
+        project_name=project_name,
+        capture_adapter=project_adapter_name,
+        capture_dialect=capture_dialect,
+        refresh=refresh,
+    )
+    if not capture_names:
+        progress_stream.write("\nSnapshots are fresh.\n")
+        progress_stream.flush()
+        return 0
+
+    connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
+        adapter_name=project_adapter_name,
+        stream=progress_stream,
+        use_color=use_color,
+    )
+    planning_progress: PlanningProgressReporter = PlanningProgressReporter(
+        stream=progress_stream,
+        use_color=use_color,
+    )
+    project_pipeline_result: CompilePipelineResult = run_compile_pipeline(
+        discovered_inputs=discovered_inputs,
+        adapter=project_adapter,
+        no_sql_validation=no_sql_validation,
+        connection_config=project_connection_config,
+        on_connection_start=connection_progress.on_connection_start,
+        on_connection_complete=connection_progress.on_connection_complete,
+        on_connection_error=connection_progress.on_connection_error,
+        on_progress=planning_progress.on_progress,
+    )
+    capture_scenarios: tuple[CompiledSqlScenario, ...] = select_scenarios(
+        project=project_pipeline_result.project,
+        selectors=capture_names,
+        project_dir=project_dir,
+    )
+    header: str = f"Snapshot Sync ({len(capture_scenarios)} selected)"
+    styled_header: str = green_bold(header) if use_color else header
+    progress_stream.write(f"\n{styled_header}\n\n")
+    progress_stream.flush()
+    scenario_status: TransientStatusReporter = TransientStatusReporter(
+        stream=progress_stream,
+        use_color=use_color,
+    )
+    execution_connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
+        adapter_name=project_adapter_name,
+        stream=progress_stream,
+        use_color=use_color,
+    )
+    status_is_tty: bool = hasattr(progress_stream, "isatty") and progress_stream.isatty()
+    if not status_is_tty:
+        progress_stream.write("Capturing snapshots...\n\n")
+        progress_stream.flush()
+    results: tuple[ScenarioSnapshotCaptureRunResult, ...] = run_scenario_capture_pipeline(
+        project_dir=project_dir,
+        pipeline_result=project_pipeline_result,
+        scenarios=capture_scenarios,
+        connection_config=project_connection_config,
+        adapter=project_adapter,
+        project_name=project_name,
+        captured_at=_captured_at(),
+        capture_adapter=project_adapter_name,
+        capture_dialect=capture_dialect,
+        sqlbuild_version=_sqlbuild_version(),
+        retain=False,
+        on_connection_start=execution_connection_progress.on_connection_start,
+        on_connection_complete=execution_connection_progress.on_connection_complete,
+        on_connection_error=execution_connection_progress.on_connection_error,
+        on_scenario_start=lambda _scenario: (
+            scenario_status.start("Capturing snapshots...") if status_is_tty else None
+        ),
+        on_scenario_complete=lambda _scenario, _scenario_plan, result: _complete_snapshot_sync(
+            scenario_status=scenario_status,
+            status_is_tty=status_is_tty,
+            result=result,
+            progress_stream=progress_stream,
+            use_color=use_color,
+        ),
+    )
+    scenario_status.close()
+    pass_count: int = sum(1 for result in results if result.status == SUCCESS_STATUS)
+    fail_count: int = len(results) - pass_count
+    progress_stream.write(f"\nSNAPSHOT_PASS={pass_count}  SNAPSHOT_FAIL={fail_count}\n")
+    progress_stream.flush()
+    return 0 if fail_count == 0 else 1
+
+
+def _complete_snapshot_sync(
+    *,
+    scenario_status: TransientStatusReporter,
+    status_is_tty: bool,
+    result: ScenarioSnapshotCaptureRunResult,
+    progress_stream: TextIO,
+    use_color: bool,
+) -> None:
+    if status_is_tty:
+        scenario_status.close()
+    status_text: str = "PASS" if result.status == SUCCESS_STATUS else "FAIL"
+    status: str = colorize_status(status_text, use_color=use_color)
+    progress_stream.write(f"{result.scenario_name:<{_SCENARIO_NAME_WIDTH}} {status}\n")
+    if result.error_message:
+        rendered_error_message: str = _render_result_error(
+            error_code=result.error_code,
+            error_message=result.error_message,
+            error_help=result.error_help,
+        )
+        error_line: str
+        for error_line in rendered_error_message.splitlines():
+            progress_stream.write(f"    {error_line}\n")
+    progress_stream.flush()
 
 
 def _write_remote_summary(*, results: tuple[ScenarioRunResult, ...], stream: TextIO) -> int:
@@ -366,3 +538,14 @@ def _write_check_failures(*, result: ScenarioRunResult, stream: TextIO) -> None:
         )
         if assertion.sample_rows:
             stream.write(f"    sample: {assertion.sample_rows[0]}\n")
+
+
+def _captured_at() -> str:
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _sqlbuild_version() -> str:
+    try:
+        return version("sqlbuild")
+    except PackageNotFoundError:
+        return "unknown"

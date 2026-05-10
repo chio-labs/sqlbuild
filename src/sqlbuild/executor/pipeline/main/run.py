@@ -25,6 +25,9 @@ from sqlbuild.executor.pipeline.helpers.scenario import (
 from sqlbuild.executor.pipeline.helpers.scenario import (
     run_scenario_test_pipeline as run_scenario_test_pipeline,
 )
+from sqlbuild.executor.pipeline.helpers.scenario import (
+    select_scenario_snapshot_capture_candidates as select_scenario_snapshot_capture_candidates,
+)
 from sqlbuild.executor.pipeline.helpers.seeding import (
     run_seed_pipeline as run_seed_pipeline,
 )

@@ -15,8 +15,13 @@ from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.executor.scenario.main.capture_steps import execute_scenario_snapshot_capture_run
 from sqlbuild.executor.scenario.main.local import execute_local_scenario_load_only_run
 from sqlbuild.executor.scenario.main.run import execute_scenario_run
-from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotCaptureRunResult
-from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus
+from sqlbuild.executor.scenario.main.snapshots import classify_scenario_snapshot_state
+from sqlbuild.executor.scenario.models import (
+    ScenarioRunResult,
+    ScenarioSnapshotCaptureRunResult,
+    ScenarioSnapshotStateResult,
+)
+from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.shared.constants import (
     SCENARIO_EXEC_INTERNAL,
@@ -237,3 +242,42 @@ def run_scenario_capture_pipeline(
         return tuple(results)
     finally:
         adapter.close(connection)
+
+
+def select_scenario_snapshot_capture_candidates(
+    *,
+    project_dir: Path,
+    pipeline_result: CompilePipelineResult,
+    scenarios: tuple[CompiledSqlScenario, ...],
+    adapter: BaseAdapter,
+    project_name: str,
+    capture_adapter: str,
+    capture_dialect: str,
+    refresh: bool,
+) -> tuple[str, ...]:
+    """Return selected scenario names that need snapshot capture before local replay."""
+
+    names: list[str] = []
+    scenario: CompiledSqlScenario
+    for scenario in scenarios:
+        if refresh:
+            names.append(scenario.name)
+            continue
+        try:
+            scenario_plan: ScenarioExecutionPlan = build_scenario_plan(
+                scenario=scenario,
+                pipeline_result=pipeline_result,
+                adapter=adapter,
+                project_name=project_name,
+            )
+            snapshot_state: ScenarioSnapshotStateResult = classify_scenario_snapshot_state(
+                project_dir=project_dir,
+                scenario_plan=scenario_plan,
+                capture_adapter=capture_adapter,
+                capture_dialect=capture_dialect,
+            )
+        except Exception:
+            continue
+        if snapshot_state.state in (ScenarioSnapshotState.MISSING, ScenarioSnapshotState.STALE):
+            names.append(scenario.name)
+    return tuple(names)

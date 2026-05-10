@@ -287,7 +287,7 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
     "test_case",
     [
         MainTestCase(
-            description="dispatches scenario test with multiple selectors",
+            description="dispatches scenario test with multiple selectors and local snapshot sync",
             argv=[
                 "scenario",
                 "test",
@@ -295,6 +295,7 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
                 "tests/scenarios/nested",
                 "--local",
                 "--strict",
+                "--sync-snapshots",
             ],
             expected_exit_code=5,
             expected_scenario_selectors=("order_totals_pass", "tests/scenarios/nested"),
@@ -305,7 +306,9 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
 def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispatches_selectors(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[Path | None, bool, bool, tuple[str, ...], bool, bool, bool]] = []
+    received_args: list[
+        tuple[Path | None, bool, bool, tuple[str, ...], bool, bool, bool, bool, bool]
+    ] = []
 
     def run_scenario(
         project_dir: Path | None,
@@ -315,9 +318,21 @@ def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispa
         retain: bool,
         local: bool,
         strict: bool,
+        sync_snapshots: bool,
+        refresh: bool,
     ) -> int:
         received_args.append(
-            (project_dir, no_sql_validation, no_color, selectors, retain, local, strict)
+            (
+                project_dir,
+                no_sql_validation,
+                no_color,
+                selectors,
+                retain,
+                local,
+                strict,
+                sync_snapshots,
+                refresh,
+            )
         )
         return test_case.expected_exit_code
 
@@ -328,7 +343,7 @@ def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispa
 
     assert exit_code == test_case.expected_exit_code
     assert received_args == [
-        (None, False, False, test_case.expected_scenario_selectors, False, True, True)
+        (None, False, False, test_case.expected_scenario_selectors, False, True, True, True, False)
     ]
 
 
