@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -15,6 +16,11 @@ from sqlbuild.compiler.planner.models import (
     ScenarioGraphPlan,
     ScenarioRelationMap,
     ScenarioRelationPlan,
+)
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.shared.constants import SCENARIO_LOCAL_JSONL_INVALID
+from tests.unit.src.sqlbuild.executor.pipeline.helpers._test_types import (
+    ScenarioLocalPipelineTestCase,
 )
 
 
@@ -36,6 +42,17 @@ class ScenarioPipelineTestAdapter(BaseAdapter):
     def close(self, connection: object) -> None:
         del connection
         self.events.append("close")
+
+
+class ScenarioLocalPipelineTestAdapter(ScenarioPipelineTestAdapter):
+    """Adapter that creates a local DuckDB placeholder file for pipeline tests."""
+
+    def connect(self, config: dict[str, object]) -> object:
+        database: object = config.get("database", "")
+        self.events.append(f"connect:{database}")
+        if database:
+            Path(str(database)).touch()
+        return object()
 
 
 class ScenarioPipelinePlanBuilder:
@@ -113,3 +130,19 @@ def build_scenario_pipeline_plan(*, scenario: CompiledSqlScenario) -> ScenarioEx
             ),
         ),
     )
+
+
+def local_snapshot_loader_for_test_case(
+    test_case: ScenarioLocalPipelineTestCase,
+) -> Callable[..., object]:
+    """Build a local snapshot loader stub for one pipeline test case."""
+
+    def load_snapshot(**_kwargs: object) -> object:
+        if test_case.load_error_message is not None:
+            raise ExecutorInputError(
+                test_case.load_error_message,
+                code=SCENARIO_LOCAL_JSONL_INVALID,
+            )
+        return object()
+
+    return load_snapshot

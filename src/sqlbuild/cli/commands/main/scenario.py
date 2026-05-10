@@ -13,6 +13,8 @@ def run_scenario(
     no_color: bool = False,
     selectors: tuple[str, ...] = (),
     retain: bool = False,
+    local: bool = False,
+    strict: bool = False,
 ) -> int:
     """Run the scenario command."""
 
@@ -22,4 +24,6 @@ def run_scenario(
         no_color=no_color,
         selectors=selectors,
         retain=retain,
+        local=local,
+        strict=strict,
     )

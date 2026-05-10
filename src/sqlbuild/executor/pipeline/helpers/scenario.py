@@ -13,10 +13,15 @@ from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.main.scenario import build_scenario_plan
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.executor.scenario.main.capture_steps import execute_scenario_snapshot_capture_run
+from sqlbuild.executor.scenario.main.local import execute_local_scenario_load_only_run
 from sqlbuild.executor.scenario.main.run import execute_scenario_run
 from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotCaptureRunResult
+from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus
 from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.shared.constants import SCENARIO_EXEC_INTERNAL
+from sqlbuild.shared.constants import (
+    SCENARIO_EXEC_INTERNAL,
+    SCENARIO_LOCAL_INTERNAL,
+)
 from sqlbuild.shared.helpers.coded_errors import error_code, error_help, error_message
 from sqlbuild.spec.models.project import scenario_local_type_overrides_for_dialect
 
@@ -91,6 +96,60 @@ def run_scenario_test_pipeline(
         return tuple(results)
     finally:
         adapter.close(connection)
+
+
+def run_scenario_local_test_pipeline(
+    *,
+    project_dir: Path,
+    pipeline_result: CompilePipelineResult,
+    scenarios: tuple[CompiledSqlScenario, ...],
+    adapter: BaseAdapter,
+    project_name: str,
+    retain: bool,
+    strict: bool,
+    on_scenario_start: Callable[[CompiledSqlScenario], None] | None = None,
+    on_scenario_complete: Callable[
+        [CompiledSqlScenario, ScenarioExecutionPlan | None, ScenarioRunResult], None
+    ]
+    | None = None,
+) -> tuple[ScenarioRunResult, ...]:
+    """Load selected local scenario snapshots into run-scoped DuckDB databases."""
+
+    results: list[ScenarioRunResult] = []
+    scenario: CompiledSqlScenario
+    for scenario in scenarios:
+        if on_scenario_start is not None:
+            on_scenario_start(scenario)
+        scenario_plan: ScenarioExecutionPlan | None = None
+        try:
+            scenario_plan = build_scenario_plan(
+                scenario=scenario,
+                pipeline_result=pipeline_result,
+                adapter=adapter,
+                project_name=project_name,
+            )
+            result: ScenarioRunResult = execute_local_scenario_load_only_run(
+                project_dir=project_dir,
+                scenario_plan=scenario_plan,
+                adapter=adapter,
+                retain=retain,
+                strict=strict,
+            )
+        except Exception as exc:
+            result = ScenarioRunResult(
+                scenario_name=scenario.name,
+                status=ExecutionStatus.FAILED,
+                local_status=ScenarioLocalRunStatus.ERROR,
+                retained=False,
+                error_code=error_code(exc, fallback_code=SCENARIO_LOCAL_INTERNAL),
+                error_help=error_help(exc)
+                or ("This is likely a SQLBuild bug. Please file an issue with the scenario name."),
+                error_message=error_message(exc),
+            )
+        results.append(result)
+        if on_scenario_complete is not None:
+            on_scenario_complete(scenario, scenario_plan, result)
+    return tuple(results)
 
 
 def run_scenario_capture_pipeline(

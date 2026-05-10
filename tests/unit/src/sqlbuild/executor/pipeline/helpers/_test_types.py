@@ -27,3 +27,19 @@ class ScenarioTestPipelineTestCase:
     expected_completed_plan_names: tuple[str | None, ...]
     expected_connection_events: tuple[str, ...]
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ScenarioLocalPipelineTestCase:
+    """One local scenario load-only pipeline case."""
+
+    description: str
+    snapshot_state: str
+    strict: bool
+    retain: bool
+    load_error_message: str | None
+    expected_local_status: str
+    expected_status: str
+    expected_retained: bool
+    expected_duckdb_exists: bool
+    expected_error_code: str | None

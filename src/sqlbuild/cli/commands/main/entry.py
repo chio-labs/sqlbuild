@@ -168,6 +168,8 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     scenario_test_parser: argparse.ArgumentParser = scenario_subparsers.add_parser("test")
     scenario_test_parser.add_argument("scenario_selector", nargs="*", metavar="scenario")
     scenario_test_parser.add_argument("--retain", dest="scenario_retain", action="store_true")
+    scenario_test_parser.add_argument("--local", dest="scenario_local", action="store_true")
+    scenario_test_parser.add_argument("--strict", dest="scenario_strict", action="store_true")
     scenario_test_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     scenario_capture_parser: argparse.ArgumentParser = scenario_subparsers.add_parser("capture")
     scenario_capture_parser.add_argument("scenario_selector", nargs="*", metavar="scenario")
@@ -416,6 +418,8 @@ def _main_with_dependencies(
                     args.no_color,
                     tuple(args.scenario_selector),
                     args.scenario_retain,
+                    args.scenario_local,
+                    args.scenario_strict,
                 )
             if args.scenario_command == "capture":
                 return handlers.run_scenario_capture(
