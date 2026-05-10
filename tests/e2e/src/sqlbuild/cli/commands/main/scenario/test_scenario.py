@@ -642,6 +642,42 @@ SCENARIO_LOCAL_DUCKDB_TEST_CASES: tuple[ScenarioLocalRetainE2ETestCase, ...] = (
     ),
 )
 
+SCENARIO_LOCAL_SQL_VALIDATION_REQUIRED_TEST_CASES: tuple[ScenarioCliE2ETestCase, ...] = (
+    ScenarioCliE2ETestCase(
+        description="local replay rejects disabled sqlglot",
+        command=(
+            "--no-color",
+            "scenario",
+            "test",
+            "order_totals_pass",
+            "--local",
+        ),
+        expected_exit_code=1,
+        expected_stderr_fragments=(
+            "error[C455]: scenario test --local requires SQLGlot and SQL validation",
+            "= help: Enable settings.sqlglot and settings.sql_validation when running local "
+            "scenario replay, snapshot sync, or snapshot refresh.",
+        ),
+    ),
+    ScenarioCliE2ETestCase(
+        description="local snapshot sync rejects disabled SQL validation",
+        command=(
+            "--no-color",
+            "scenario",
+            "test",
+            "order_totals_pass",
+            "--local",
+            "--sync-snapshots",
+        ),
+        expected_exit_code=1,
+        expected_stderr_fragments=(
+            "error[C455]: scenario test --local requires SQLGlot and SQL validation",
+            "= help: Enable settings.sqlglot and settings.sql_validation when running local "
+            "scenario replay, snapshot sync, or snapshot refresh.",
+        ),
+    ),
+)
+
 SCENARIO_LOCAL_SNAPSHOT_SYNC_TEST_CASES: tuple[ScenarioLocalSnapshotSyncE2ETestCase, ...] = (
     ScenarioLocalSnapshotSyncE2ETestCase(
         description="sync captures missing snapshot before local replay",
@@ -1230,6 +1266,35 @@ def test_given_unknown_scenario_selector_when_running_scenario_test_then_fails_c
         tmp_path=tmp_path,
         project_name="scenario_project",
         repo_files=build_scenario_project_files(),
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    expected_stderr_fragment: str
+    for expected_stderr_fragment in test_case.expected_stderr_fragments:
+        assert expected_stderr_fragment in result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SCENARIO_LOCAL_SQL_VALIDATION_REQUIRED_TEST_CASES,
+    ids=[case.description for case in SCENARIO_LOCAL_SQL_VALIDATION_REQUIRED_TEST_CASES],
+)
+def test_given_local_scenario_command_when_sql_validation_disabled_then_fails_clearly(
+    test_case: ScenarioCliE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    repo_files: dict[str, str] = build_scenario_project_files()
+    disabled_setting: str = "sqlglot" if "sqlglot" in test_case.description else "sql_validation"
+    repo_files["sqlbuild_project.toml"] += f"\n[settings]\n{disabled_setting} = false\n"
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="scenario_project",
+        repo_files=repo_files,
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(

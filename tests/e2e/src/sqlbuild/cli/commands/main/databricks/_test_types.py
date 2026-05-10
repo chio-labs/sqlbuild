@@ -32,6 +32,16 @@ class DatabricksDiffE2ETestCase:
 
 
 @dataclass(frozen=True)
+class DatabricksCloneE2ETestCase:
+    description: str
+    default_command: tuple[str, ...]
+    hard_copy_command: tuple[str, ...]
+    expected_default_stdout_fragments: tuple[str, ...]
+    expected_hard_copy_stdout_fragments: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class DatabricksErrorE2ETestCase:
     description: str
     command: tuple[str, ...]

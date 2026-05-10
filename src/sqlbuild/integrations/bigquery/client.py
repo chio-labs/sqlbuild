@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.exceptions import AdapterUserError
@@ -96,6 +96,8 @@ class _BigQueryConnection:
 class BigQueryAdapter(BaseAdapter):
     """BigQuery adapter backed by google-cloud-bigquery."""
 
+    sqlglot_dialect_name: ClassVar[str | None] = "bigquery"
+
     def __init__(self) -> None:
         self._location: str | None = None
 
@@ -184,6 +186,9 @@ class BigQueryAdapter(BaseAdapter):
     def supports_transactions(self) -> bool:
         return False
 
+    def supports_zero_copy_clone(self) -> bool:
+        return True
+
     def star_exclude_keyword(self) -> str:
         """BigQuery uses EXCEPT for SELECT * EXCEPT."""
 
@@ -227,9 +232,6 @@ class BigQueryAdapter(BaseAdapter):
         """Render the BigQuery set-difference operator explicitly."""
 
         return "EXCEPT DISTINCT"
-
-    def sqlglot_dialect(self) -> str | None:
-        return "bigquery"
 
     def expression_inference_profile(self) -> ExpressionInferenceProfile:
         return ExpressionInferenceProfile(
@@ -399,7 +401,11 @@ class BigQueryAdapter(BaseAdapter):
         target: str,
         hard_copy: bool = False,
     ) -> tuple[str, ...]:
-        del hard_copy
+        if not hard_copy:
+            return (
+                f"CREATE TABLE {self._quote_identifier_path(target)} "
+                f"CLONE {self._quote_identifier_path(source)}",
+            )
         return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
 
     def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:

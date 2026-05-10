@@ -25,6 +25,7 @@ from tests.unit.src.sqlbuild.integrations.bigquery._test_types import (
     BigQueryCountRowsTestCase,
     BigQueryExpressionInferenceProfileTestCase,
     BigQueryQueryTestCase,
+    BigQueryRenderCloneTestCase,
     BigQueryRenderCursorBoundLiteralTestCase,
     BigQueryRenderDeleteInsertTestCase,
     BigQueryRenderPythonFunctionTestCase,
@@ -137,6 +138,31 @@ BIGQUERY_RENDER_QUALIFIED_NAME_TEST_CASES: list[BigQueryRenderQualifiedNameTestC
         schema="dev",
         name="stg_customers",
         expected_qualified_name="`dev.stg_customers`",
+    ),
+]
+
+BIGQUERY_RENDER_CLONE_TEST_CASES: list[BigQueryRenderCloneTestCase] = [
+    BigQueryRenderCloneTestCase(
+        description="renders zero copy table clone by default",
+        source="example-project.prod.fact_orders",
+        target="example-project.dev.fact_orders",
+        hard_copy=False,
+        expected_statements=(
+            "CREATE TABLE `example-project.dev.fact_orders` "
+            "CLONE `example-project.prod.fact_orders`",
+        ),
+        expected_supports_zero_copy=True,
+    ),
+    BigQueryRenderCloneTestCase(
+        description="renders CTAS when hard copy is requested",
+        source="`example-project.prod.fact_orders`",
+        target="`example-project.dev.fact_orders`",
+        hard_copy=True,
+        expected_statements=(
+            "CREATE OR REPLACE TABLE `example-project.dev.fact_orders` AS "
+            "SELECT * FROM `example-project.prod.fact_orders`",
+        ),
+        expected_supports_zero_copy=True,
     ),
 ]
 
@@ -398,6 +424,26 @@ def test_given_cursor_bounds_when_rendering_then_bigquery_returns_expected_liter
     result: str = adapter.render_cursor_bound_literal(test_case.value, test_case.cursor_type)
 
     assert result == test_case.expected_literal
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    BIGQUERY_RENDER_CLONE_TEST_CASES,
+    ids=[case.description for case in BIGQUERY_RENDER_CLONE_TEST_CASES],
+)
+def test_given_clone_request_when_rendering_then_bigquery_uses_expected_clone_sql(
+    test_case: BigQueryRenderCloneTestCase,
+) -> None:
+    adapter: BigQueryAdapter = BigQueryAdapter()
+
+    statements: tuple[str, ...] = adapter.render_clone(
+        source=test_case.source,
+        target=test_case.target,
+        hard_copy=test_case.hard_copy,
+    )
+
+    assert adapter.supports_zero_copy_clone() is test_case.expected_supports_zero_copy
+    assert statements == test_case.expected_statements
 
 
 @pytest.mark.parametrize(
