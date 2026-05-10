@@ -25,6 +25,15 @@ class LoadProjectConfigTestCase:
     expected_retention_days: int
     expected_janitor_delete_tracked_only: bool
     expected_janitor_exclude_patterns: tuple[str, ...]
+    expected_scenario_local_type_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
+    expected_snapshot_limits: dict[str, int | None] = field(
+        default_factory=lambda: {
+            "max_rows_per_relation": None,
+            "max_total_rows": None,
+            "max_bytes_per_relation": None,
+            "max_total_bytes": None,
+        }
+    )
 
 
 @dataclass(frozen=True)
@@ -41,6 +50,15 @@ class LoadLocalConfigTestCase:
     expected_vars: dict[str, str]
     expected_environments: dict[str, dict[str, object]] = field(default_factory=dict)
     expected_missing_attributes: tuple[str, ...] = ()
+    expected_scenario_local_type_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
+    expected_snapshot_limits: dict[str, int | None] = field(
+        default_factory=lambda: {
+            "max_rows_per_relation": None,
+            "max_total_rows": None,
+            "max_bytes_per_relation": None,
+            "max_total_bytes": None,
+        }
+    )
 
 
 @dataclass(frozen=True)

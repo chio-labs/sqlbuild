@@ -11,6 +11,7 @@ SQLBuild is a framework for building batch SQL transformation pipelines where co
 ## Key features
 
 - **SQL unit tests that chain across models** - Mock your sources, assert on the model you care about, and SQLBuild resolves every intermediate model automatically. One test file can be a full integration test across your pipeline.
+- **End-to-end scenarios with local replay** - Define coherent fixture worlds, run the real project graph in an isolated warehouse slice, capture JSONL snapshots, and replay them locally through DuckDB for fast CI feedback.
 - **Audits that block bad data** - Audits run before data reaches the target table. For full table builds, SQLBuild materializes into a staging table and only promotes if audits pass. For incremental models, delta-phase audits validate each batch before DML.
 - **Python macros, not Jinja** - Macros are real Python functions. Testable, debuggable, and composable with standard tooling.
 - **Change-aware incremental rebuilds** - Fingerprint-based query change detection, schema diff tracking, and configurable backfill policies with automatic cascade through the DAG.
@@ -109,6 +110,58 @@ __expected__fact_orders AS (
 )
 SELECT 1
 ```
+
+An end-to-end scenario:
+
+```sql
+SCENARIO (
+  description "Customer refund updates daily revenue correctly",
+  tags [revenue, refund],
+);
+
+WITH
+__source__raw_orders AS (
+  SELECT 1 AS order_id, DATE '2026-01-01' AS order_date, 100.00 AS amount
+),
+__source__raw_refunds AS (
+  SELECT 1 AS refund_id, 1 AS order_id, DATE '2026-01-01' AS refund_date, 25.00 AS amount
+),
+__expected__daily_revenue AS (
+  SELECT DATE '2026-01-01' AS order_date, 75.00 AS revenue
+),
+__assert__no_negative_revenue AS (
+  SELECT * FROM __ref("daily_revenue") WHERE revenue < 0
+)
+SELECT 1
+```
+
+Scenario files live under `tests/scenarios/**/*.sql`. Run them in the target warehouse with:
+
+```bash
+sqb scenario test
+sqb scenario test revenue__customer_refund --retain
+```
+
+Capture local replay snapshots as JSONL under `tests/_scenario_snapshots/<scenario_name>/`:
+
+```bash
+sqb scenario capture revenue__customer_refund
+sqb scenario test revenue__customer_refund --local
+sqb scenario test --local --sync-snapshots
+sqb scenario test --local --refresh
+```
+
+Snapshots are committable test data, so review them for sensitive warehouse values before committing. Capture safety limits can be set in config and overridden on the CLI:
+
+```toml
+[scenario.snapshot_limits]
+max_rows_per_relation = 10000
+max_total_rows = 50000
+max_bytes_per_relation = 5000000
+max_total_bytes = 25000000
+```
+
+Use `--force` to bypass snapshot size limits when you intentionally want a larger capture.
 
 ## Documentation
 

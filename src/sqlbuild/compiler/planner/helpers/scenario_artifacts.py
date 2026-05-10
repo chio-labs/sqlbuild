@@ -10,12 +10,18 @@ from sqlbuild.compiler.planner.constants import (
     SCENARIO_DEFAULT_IDENTIFIER_LIMIT,
     SCENARIO_HASH_PREFIX_LENGTH,
 )
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     ScenarioArtifactIdentity,
     ScenarioArtifactName,
     ScenarioRelationMap,
 )
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
+from sqlbuild.shared.constants import (
+    SCENARIO_PLAN_HASH_COLLISION,
+    SCENARIO_PLAN_INVALID_HASH_PREFIX,
+    SCENARIO_PLAN_RELATION_COLLISION,
+)
 from sqlbuild.shared.helpers.scenario_artifact_names import (
     build_scenario_artifact_physical_name,
 )
@@ -30,7 +36,10 @@ def compute_scenario_hash_prefix(
     """Return a stable scenario artifact hash prefix."""
 
     if prefix_length < 1:
-        raise ValueError("Scenario hash prefix length must be at least 1")
+        raise PlannerInputError(
+            "Scenario hash prefix length must be at least 1",
+            code=SCENARIO_PLAN_INVALID_HASH_PREFIX,
+        )
     hash_input: str = f"{project_name}:{scenario_name}"
     return hashlib.sha256(hash_input.encode("utf-8")).hexdigest()[:prefix_length]
 
@@ -54,11 +63,15 @@ def build_scenario_hash_index(
         )
         existing: CompiledSqlScenario | None = by_prefix.get(prefix)
         if existing is not None:
-            raise ValueError(
+            raise PlannerInputError(
                 "Scenario artifact hash collision: scenarios "
                 f"'{existing.name}' and '{scenario.name}' both map to hash prefix "
                 f"'{prefix}'. Rename one scenario file so SQLBuild can generate "
-                "distinct warehouse artifact prefixes."
+                "distinct warehouse artifact prefixes.",
+                code=SCENARIO_PLAN_HASH_COLLISION,
+                help=(
+                    "Rename one scenario file so SQLBuild can generate distinct artifact prefixes."
+                ),
             )
         by_prefix[prefix] = scenario
         result[scenario.name] = prefix
@@ -107,13 +120,15 @@ def build_scenario_relation_map(
         normalized_physical_name: str = normalizer(physical_name)
         existing: ScenarioArtifactIdentity | None = seen.get(normalized_physical_name)
         if existing is not None:
-            raise ValueError(
+            raise PlannerInputError(
                 f"Scenario relation name collision in scenario '{scenario_name}'. "
                 f"Both scenario artifacts map to '{physical_name}': "
                 f"{ScenarioArtifactKind(existing.kind).value} {existing.logical_name} and "
                 f"{ScenarioArtifactKind(artifact.kind).value} {artifact.logical_name}. "
                 "Rename one artifact "
-                "or shorten one model/source name."
+                "or shorten one model/source name.",
+                code=SCENARIO_PLAN_RELATION_COLLISION,
+                help="Rename or shorten one of the colliding scenario artifacts.",
             )
         seen[normalized_physical_name] = artifact
         resolved_artifacts.append(

@@ -26,6 +26,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioRunResult,
 )
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.shared.constants import SCENARIO_EXEC_CLEANUP_FAILED
 
 
 def execute_scenario_run_steps(
@@ -49,6 +50,8 @@ def execute_scenario_run_steps(
             relation_map=scenario_plan.relation_plan.relation_map,
             retained=retain,
             prepare_cleanup_result=prepare_result,
+            error_code=prepare_result.error_code,
+            error_help=prepare_result.error_help,
             error_message=prepare_result.error_message,
         )
 
@@ -66,6 +69,8 @@ def execute_scenario_run_steps(
             retain=retain,
             prepare_cleanup_result=prepare_result,
             fixture_results=fixture_results,
+            error_code=_first_error_code(fixture_results),
+            error_help=_first_error_help(fixture_results),
             error_message=_first_error(fixture_results),
         )
 
@@ -83,6 +88,8 @@ def execute_scenario_run_steps(
             prepare_cleanup_result=prepare_result,
             fixture_results=fixture_results,
             seed_results=seed_results,
+            error_code=_first_error_code(seed_results),
+            error_help=_first_error_help(seed_results),
             error_message=_first_error(seed_results),
         )
 
@@ -102,6 +109,8 @@ def execute_scenario_run_steps(
             fixture_results=fixture_results,
             seed_results=seed_results,
             model_results=model_results,
+            error_code=_first_error_code(model_results),
+            error_help=_first_error_help(model_results),
             error_message=_first_error(model_results),
         )
 
@@ -118,6 +127,8 @@ def execute_scenario_run_steps(
         connection=connection,
     )
     failed_check_message: str | None = _first_error((*expected_results, *assertion_results))
+    failed_check_code: str | None = _first_error_code((*expected_results, *assertion_results))
+    failed_check_help: str | None = _first_error_help((*expected_results, *assertion_results))
     return _finish_scenario(
         scenario_plan=scenario_plan,
         adapter=adapter,
@@ -129,6 +140,8 @@ def execute_scenario_run_steps(
         model_results=model_results,
         expected_results=expected_results,
         assertion_results=assertion_results,
+        error_code=failed_check_code,
+        error_help=failed_check_help,
         error_message=failed_check_message,
     )
 
@@ -145,6 +158,8 @@ def _finish_scenario(
     model_results: tuple[ModelExecutionResult, ...] = (),
     expected_results: tuple[ScenarioExpectedCheckExecutionResult, ...] = (),
     assertion_results: tuple[ScenarioAssertionCheckExecutionResult, ...] = (),
+    error_code: str | None = None,
+    error_help: str | None = None,
     error_message: str | None = None,
 ) -> ScenarioRunResult:
     status: ExecutionStatus = (
@@ -159,6 +174,9 @@ def _finish_scenario(
         )
         if cleanup_result.status == ExecutionStatus.FAILED:
             status = ExecutionStatus.FAILED
+            if error_code is None:
+                error_code = cleanup_result.error_code or SCENARIO_EXEC_CLEANUP_FAILED
+                error_help = cleanup_result.error_help
             cleanup_error: str = cleanup_result.error_message or "scenario cleanup failed"
             if error_message is None:
                 error_message = f"Cleanup failed: {cleanup_error}"
@@ -176,6 +194,8 @@ def _finish_scenario(
         assertion_results=assertion_results,
         prepare_cleanup_result=prepare_cleanup_result,
         cleanup_result=cleanup_result,
+        error_code=error_code,
+        error_help=error_help,
         error_message=error_message,
     )
 
@@ -185,8 +205,10 @@ def _scenario_failure(
     scenario_name: str,
     relation_map: ScenarioRelationMap | None,
     retained: bool,
-    prepare_cleanup_result: ScenarioCleanupExecutionResult | None = None,
     error_message: str | None,
+    prepare_cleanup_result: ScenarioCleanupExecutionResult | None = None,
+    error_code: str | None = None,
+    error_help: str | None = None,
 ) -> ScenarioRunResult:
     return ScenarioRunResult(
         scenario_name=scenario_name,
@@ -194,6 +216,8 @@ def _scenario_failure(
         retained=retained,
         relation_map=relation_map,
         prepare_cleanup_result=prepare_cleanup_result,
+        error_code=error_code,
+        error_help=error_help,
         error_message=error_message,
     )
 
@@ -210,4 +234,24 @@ def _first_error(results: tuple[object, ...]) -> str | None:
             if isinstance(error_message, str) and error_message:
                 return error_message
             return "scenario step failed"
+    return None
+
+
+def _first_error_code(results: tuple[object, ...]) -> str | None:
+    result: object
+    for result in results:
+        if getattr(result, "status", None) == ExecutionStatus.FAILED:
+            error_code: object | None = getattr(result, "error_code", None)
+            if isinstance(error_code, str) and error_code:
+                return error_code
+    return None
+
+
+def _first_error_help(results: tuple[object, ...]) -> str | None:
+    result: object
+    for result in results:
+        if getattr(result, "status", None) == ExecutionStatus.FAILED:
+            error_help: object | None = getattr(result, "error_help", None)
+            if isinstance(error_help, str) and error_help:
+                return error_help
     return None

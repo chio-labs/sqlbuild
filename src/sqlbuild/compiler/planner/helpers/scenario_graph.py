@@ -15,6 +15,11 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import PlanWarning, ScenarioGraphPlan
 from sqlbuild.compiler.planner.types import WarningSeverity
+from sqlbuild.shared.constants import (
+    SCENARIO_PLAN_GRAPH_VALIDATION,
+    SCENARIO_PLAN_SQLGLOT_PARSE,
+    SCENARIO_PLAN_SQLGLOT_UNAVAILABLE,
+)
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot, import_sqlglot_expressions
 
 _REF_PATTERN: re.Pattern[str] = re.compile(
@@ -137,7 +142,8 @@ def _extract_assertion_target_names(
                 warnings.append(
                     _error(
                         f"Scenario '{scenario_name}' assertion CTE '{cte.name}' could not be "
-                        f"parsed with SQLGlot: {error}"
+                        f"parsed with SQLGlot: {error}",
+                        code=str(getattr(error, "code", SCENARIO_PLAN_SQLGLOT_PARSE)),
                     )
                 )
             continue
@@ -153,7 +159,9 @@ def _extract_assertion_target_names_with_sqlglot(
     sqlglot_module: Any | None = import_sqlglot()
     expressions_module: Any | None = import_sqlglot_expressions()
     if sqlglot_module is None or expressions_module is None:
-        raise ValueError("SQLGlot is enabled but unavailable")
+        error: ValueError = ValueError("SQLGlot is enabled but unavailable")
+        object.__setattr__(error, "code", SCENARIO_PLAN_SQLGLOT_UNAVAILABLE)
+        raise error
     try:
         parsed: Any = (
             sqlglot_module.parse_one(sql, read=sqlglot_dialect)
@@ -161,7 +169,9 @@ def _extract_assertion_target_names_with_sqlglot(
             else sqlglot_module.parse_one(sql)
         )
     except Exception as error:
-        raise ValueError(str(error)) from None
+        value_error: ValueError = ValueError(str(error))
+        object.__setattr__(value_error, "code", SCENARIO_PLAN_SQLGLOT_PARSE)
+        raise value_error from None
 
     table_type: type[Any] = expressions_module.Table
     anonymous_type: type[Any] = expressions_module.Anonymous
@@ -332,9 +342,10 @@ def _fixture_name_for(name: str) -> str:
     return name.replace(".", "__")
 
 
-def _error(message: str) -> PlanWarning:
+def _error(message: str, *, code: str = SCENARIO_PLAN_GRAPH_VALIDATION) -> PlanWarning:
     return PlanWarning(
         model_name=None,
         severity=WarningSeverity.ERROR,
         message=message,
+        code=code,
     )

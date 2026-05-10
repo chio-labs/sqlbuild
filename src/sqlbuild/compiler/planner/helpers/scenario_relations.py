@@ -14,6 +14,7 @@ from sqlbuild.compiler.compile.constants import (
     SOURCE_TEST_CTE_PREFIX,
 )
 from sqlbuild.compiler.compile.models import (
+    CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
@@ -23,10 +24,16 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlScenarioCte,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.helpers.function_fingerprints import (
+    build_compiled_function_fingerprint_sql,
+)
 from sqlbuild.compiler.planner.helpers.graph import build_upstream_deps, topologically_order_keys
 from sqlbuild.compiler.planner.helpers.plan_entry import extract_seed_columns, plan_model
 from sqlbuild.compiler.planner.helpers.resolve.refs import build_function_targets
+from sqlbuild.compiler.planner.helpers.resolve.resolve import resolve_function_sql
 from sqlbuild.compiler.planner.models import (
+    FunctionPlanEntry,
     ModelPlanEntry,
     PlanWarning,
     ScenarioArtifactIdentity,
@@ -41,6 +48,14 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
+from sqlbuild.shared.constants import (
+    SCENARIO_PLAN_INTERNAL,
+    SCENARIO_PLAN_MISSING_FIXTURE_SQL,
+    SCENARIO_PLAN_MISSING_RELATION_TARGET,
+    SCENARIO_PLAN_SQLGLOT_PARSE,
+    SCENARIO_PLAN_SQLGLOT_UNAVAILABLE,
+    SCENARIO_PLAN_UNKNOWN_SEED,
+)
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot, import_sqlglot_expressions
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -209,6 +224,9 @@ def build_scenario_execution_plan(
         source_warehouse_columns or {}
     )
     models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    functions_by_key: dict[CompiledObjectKey, CompiledFunction] = {
+        function.key: function for function in project.functions
+    }
     function_targets: dict[str, CompiledRelationTarget] = build_function_targets(project.functions)
     scenario_model_names: frozenset[str] = frozenset(graph_plan.model_names)
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_upstream_deps(
@@ -228,6 +246,17 @@ def build_scenario_execution_plan(
         project=project,
         graph_plan=graph_plan,
         relation_plan=relation_plan,
+    )
+    function_entries: tuple[FunctionPlanEntry, ...] = tuple(
+        _build_scenario_function_entry(
+            function=functions_by_key[key],
+            adapter=adapter,
+            relation_plan=relation_plan,
+            function_targets=function_targets,
+            source_warehouse_columns=effective_source_warehouse_columns,
+        )
+        for key in topologically_order_keys(upstream_deps)
+        if key in graph_plan.function_deps and key in functions_by_key
     )
 
     model_entries: list[ModelPlanEntry] = []
@@ -292,11 +321,48 @@ def build_scenario_execution_plan(
             relation_plan=relation_plan,
             fixture_plans=fixture_plans,
             seed_entries=seed_entries,
+            function_entries=function_entries,
             model_entries=tuple(model_entries),
             expected_checks=expected_checks,
             assertion_checks=assertion_checks,
         ),
         tuple(warnings),
+    )
+
+
+def _build_scenario_function_entry(
+    *,
+    function: CompiledFunction,
+    adapter: BaseAdapter,
+    relation_plan: ScenarioRelationPlan,
+    function_targets: dict[str, CompiledRelationTarget],
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
+) -> FunctionPlanEntry:
+    return FunctionPlanEntry(
+        key=function.key,
+        name=function.name,
+        relative_path=function.relative_path,
+        target=function.target,
+        arguments=function.arguments,
+        returns=function.returns,
+        body_sql=resolve_function_sql(
+            adapter=adapter,
+            function=function,
+            model_targets=relation_plan.model_targets,
+            seed_targets=relation_plan.seed_targets,
+            function_targets=function_targets,
+            source_map=relation_plan.source_map,
+            source_warehouse_columns=source_warehouse_columns,
+            star_exclude_keyword=adapter.star_exclude_keyword(),
+        ),
+        fingerprint_query_sql=build_compiled_function_fingerprint_sql(function),
+        fingerprint_target=function.fingerprint_target,
+        return_columns=function.return_columns,
+        language=function.language,
+        source_file_path=function.source_file_path,
+        runtime_version=function.runtime_version,
+        entry_point=function.entry_point,
+        packages=function.packages,
     )
 
 
@@ -397,7 +463,10 @@ def build_scenario_seed_entries(
             continue
         seed: CompiledSeed | None = seeds_by_name.get(seed_name)
         if seed is None:
-            raise ValueError(f"Scenario requires unknown seed '{seed_name}'")
+            raise PlannerInputError(
+                f"Scenario '{graph_plan.name}' requires unknown seed '{seed_name}'",
+                code=SCENARIO_PLAN_UNKNOWN_SEED,
+            )
         seed_entries.append(
             SeedPlanEntry(
                 key=seed.key,
@@ -421,7 +490,11 @@ def _resolve_scenario_check_sql_with_sqlglot(
     sqlglot_module: Any | None = import_sqlglot()
     expressions_module: Any | None = import_sqlglot_expressions()
     if sqlglot_module is None or expressions_module is None:
-        raise ValueError("SQLGlot is enabled but unavailable")
+        raise PlannerInputError(
+            "Scenario SQLGlot resolution is enabled but SQLGlot is unavailable",
+            code=SCENARIO_PLAN_SQLGLOT_UNAVAILABLE,
+            help="Install SQLBuild with the sqlglot extra or run with SQL validation disabled.",
+        )
     try:
         parsed: Any = (
             sqlglot_module.parse_one(sql, read=sqlglot_dialect)
@@ -429,7 +502,10 @@ def _resolve_scenario_check_sql_with_sqlglot(
             else sqlglot_module.parse_one(sql)
         )
     except Exception as error:
-        raise ValueError(f"Scenario SQL could not be parsed with SQLGlot: {error}") from None
+        raise PlannerInputError(
+            f"Scenario SQL could not be parsed with SQLGlot: {error}",
+            code=SCENARIO_PLAN_SQLGLOT_PARSE,
+        ) from None
 
     table_type: type[Any] = expressions_module.Table
     anonymous_type: type[Any] = expressions_module.Anonymous
@@ -525,7 +601,10 @@ def _wrap_sql_with_helpers(*, sql: str, helper_ctes: tuple[CompileSqlScenarioCte
 def _required_fixture_sql(fixture_sql: dict[str, str], logical_name: str, *, kind: str) -> str:
     sql: str | None = fixture_sql.get(logical_name)
     if sql is None:
-        raise ValueError(f"Scenario is missing {kind} fixture SQL '{logical_name}'")
+        raise PlannerInputError(
+            f"Scenario is missing {kind} fixture SQL '{logical_name}'",
+            code=SCENARIO_PLAN_MISSING_FIXTURE_SQL,
+        )
     return sql
 
 
@@ -537,7 +616,11 @@ def _required_target(
 ) -> CompiledRelationTarget:
     target: CompiledRelationTarget | None = targets.get(name)
     if target is None:
-        raise ValueError(f"Scenario relation plan is missing {kind.value} target '{name}'")
+        raise PlannerInputError(
+            f"Scenario relation plan is missing {kind.value} target '{name}'",
+            code=SCENARIO_PLAN_MISSING_RELATION_TARGET,
+            help="This is likely a SQLBuild bug. Please file an issue with the scenario name.",
+        )
     return target
 
 
@@ -570,7 +653,11 @@ def _target_for_artifact(
     )
     physical_name: str | None = artifacts.get(identity)
     if physical_name is None:
-        raise ValueError(f"Scenario relation map is missing {kind.value} artifact '{logical_name}'")
+        raise PlannerInputError(
+            f"Scenario relation map is missing {kind.value} artifact '{logical_name}'",
+            code=SCENARIO_PLAN_INTERNAL,
+            help="This is likely a SQLBuild bug. Please file an issue with the scenario name.",
+        )
     qualified_name: str | None = _qualified_name(
         database=database,
         schema=schema,

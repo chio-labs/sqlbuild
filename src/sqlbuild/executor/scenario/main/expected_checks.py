@@ -8,6 +8,11 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ScenarioExpectedCheckPlan
 from sqlbuild.executor.scenario.models import ScenarioExpectedCheckExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.shared.constants import (
+    SCENARIO_EXEC_EXPECTED_ERRORED,
+    SCENARIO_EXEC_EXPECTED_FAILED,
+    SCENARIO_EXEC_EXPECTED_INTERNAL,
+)
 from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
 from sqlbuild.shared.helpers.scenario_expected_check_sql import (
     build_scenario_expected_comparison_sql,
@@ -43,6 +48,8 @@ def execute_scenario_expected_check(
             scenario_name=scenario_name,
             model_name=check.model_name,
             status=ExecutionStatus.FAILED,
+            error_code=SCENARIO_EXEC_EXPECTED_ERRORED,
+            error_help="Check the expected CTE SQL and rerun with --retain to inspect relations.",
             error_message=error_message,
         )
 
@@ -51,6 +58,10 @@ def execute_scenario_expected_check(
             scenario_name=scenario_name,
             model_name=check.model_name,
             status=ExecutionStatus.FAILED,
+            error_code=SCENARIO_EXEC_EXPECTED_INTERNAL,
+            error_help=(
+                "This is likely a SQLBuild bug. Please file an issue with the scenario name."
+            ),
             error_message=(
                 f"scenario '{scenario_name}' expected check for model "
                 f"'{check.model_name}' returned no comparison row"
@@ -68,7 +79,8 @@ def execute_scenario_expected_check(
     error_message = None
     if status == ExecutionStatus.FAILED:
         error_message = (
-            f"scenario '{scenario_name}' expected check for model '{check.model_name}' failed"
+            f"scenario '{scenario_name}' expected check for model '{check.model_name}' failed: "
+            f"actual={actual_count} expected={expected_count} mismatched={mismatched_count}"
         )
     return ScenarioExpectedCheckExecutionResult(
         scenario_name=scenario_name,
@@ -77,5 +89,12 @@ def execute_scenario_expected_check(
         actual_row_count=actual_count,
         expected_row_count=expected_count,
         mismatched_row_count=mismatched_count,
+        error_code=SCENARIO_EXEC_EXPECTED_FAILED if status == ExecutionStatus.FAILED else None,
+        error_help=(
+            "Compare the expected CTE with the retained scenario model relation. "
+            "Rerun with --retain to inspect scenario-owned artifacts."
+            if status == ExecutionStatus.FAILED
+            else None
+        ),
         error_message=error_message,
     )

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.scenario_artifacts import (
     build_scenario_artifact_name,
     build_scenario_hash_index,
@@ -12,6 +13,10 @@ from sqlbuild.compiler.planner.models import (
     ScenarioArtifactIdentity,
     ScenarioArtifactName,
     ScenarioRelationMap,
+)
+from sqlbuild.shared.constants import (
+    SCENARIO_PLAN_HASH_COLLISION,
+    SCENARIO_PLAN_RELATION_COLLISION,
 )
 from sqlbuild.shared.helpers.scenario_artifact_names import (
     is_scenario_artifact_physical_name,
@@ -77,7 +82,7 @@ def test_given_project_and_scenario_when_hashing_then_returns_expected_prefix(
 def test_given_colliding_scenario_hashes_when_building_index_then_raises_clear_error(
     test_case: ScenarioHashCollisionTestCase,
 ) -> None:
-    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+    with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment) as exc_info:
         build_scenario_hash_index(
             project_name="waffle_shop",
             scenarios=tuple(
@@ -85,6 +90,7 @@ def test_given_colliding_scenario_hashes_when_building_index_then_raises_clear_e
             ),
             prefix_length=test_case.prefix_length,
         )
+    assert exc_info.value.code == SCENARIO_PLAN_HASH_COLLISION
 
 
 ARTIFACT_NAME_TEST_CASES: list[ScenarioArtifactNameTestCase] = [
@@ -285,10 +291,11 @@ RELATION_MAP_ERROR_TEST_CASES: list[ScenarioRelationMapErrorTestCase] = [
 def test_given_colliding_scenario_artifacts_when_building_relation_map_then_raises(
     test_case: ScenarioRelationMapErrorTestCase,
 ) -> None:
-    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+    with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment) as exc_info:
         build_scenario_relation_map(
             scenario_name="revenue__customer_refund",
             hash_prefix="51b385aebe20",
             artifacts=test_case.artifacts,
             normalize_identifier=str.lower if test_case.normalize_case else None,
         )
+    assert exc_info.value.code == SCENARIO_PLAN_RELATION_COLLISION

@@ -30,6 +30,26 @@ def build_bigquery_local_config(*, environment: str = "dev", location: str) -> s
     )
 
 
+def build_bigquery_project_toml(*, project_name: str, dataset_name: str) -> str:
+    """Build project TOML for an inline BigQuery e2e project."""
+
+    project_id: str = str(build_bigquery_connection_config(schema=dataset_name)["project"])
+    location: str = str(build_bigquery_connection_config(schema=dataset_name)["location"])
+    return (
+        f'name = "{project_name}"\n'
+        'adapter = "bigquery"\n'
+        'default_environment = "dev"\n\n'
+        "[connection]\n"
+        'project = "${ENV:SQB_TEST_BIGQUERY_PROJECT}"\n'
+        f'location = "{location}"\n\n'
+        "[environments.dev]\n"
+        f'database = "{project_id}"\n'
+        f'schema = "{dataset_name}"\n\n'
+        "[defaults]\n"
+        'materialized = "table"\n'
+    )
+
+
 def prepare_bigquery_waffle_shop(*, tmp_path: Path) -> tuple[Path, str]:
     """Prepare the example waffle shop project wired to a unique BigQuery dataset."""
 

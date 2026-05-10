@@ -5,13 +5,22 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
+    assert_optional_local_replay_rows,
+    build_real_warehouse_local_replay_project_files,
+)
+from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    prepare_inline_project,
+    run_sqb,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.snowflake._test_types import (
     SnowflakeBuildE2ETestCase,
     SnowflakeCliTestCase,
     SnowflakeDiffE2ETestCase,
+    SnowflakeScenarioLocalReplayE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.snowflake.helpers import (
+    build_snowflake_project_toml,
     cleanup_snowflake_schema,
     ensure_query_schema_ready,
     execute_snowflake_sql,
@@ -21,6 +30,104 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake.helpers import (
     relation_name,
     write_local_environment_override,
 )
+from tests.integration.src.sqlbuild.integrations.snowflake.helpers import build_unique_schema_name
+
+SNOWFLAKE_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES: list[SnowflakeScenarioLocalReplayE2ETestCase] = [
+    SnowflakeScenarioLocalReplayE2ETestCase(
+        description="captures snowflake fixtures and replays transpilable SQL locally",
+        model_sql=(
+            "MODEL (materialized table);\n\n"
+            "SELECT\n"
+            "  customer_id,\n"
+            "  DATE_TRUNC('DAY', event_ts) AS event_day,\n"
+            "  SUM(IFF(amount_cents >= 1000, amount_cents, 0)) AS large_amount_cents,\n"
+            "  COUNT(*) AS event_count\n"
+            'FROM __source("raw_events")\n'
+            "GROUP BY customer_id, DATE_TRUNC('DAY', event_ts)\n"
+        ),
+        scenario_sql=(
+            "SCENARIO ();\n\n"
+            "WITH\n"
+            "__source__raw_events AS (\n"
+            "  SELECT 10 AS customer_id, TO_TIMESTAMP_NTZ('2026-01-01 08:15:00') "
+            "AS event_ts, 1500 AS amount_cents\n"
+            "  UNION ALL\n"
+            "  SELECT 10 AS customer_id, TO_TIMESTAMP_NTZ('2026-01-01 10:30:00') "
+            "AS event_ts, 500 AS amount_cents\n"
+            "),\n"
+            "__expected__event_rollup AS (\n"
+            "  SELECT 10 AS customer_id, "
+            "DATE_TRUNC('DAY', TO_TIMESTAMP_NTZ('2026-01-01 00:00:00')) AS event_day, "
+            "1500 AS large_amount_cents, 2 AS event_count\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+        expected_stdout_fragments=(
+            "transpilable_event_rollup",
+            "PASS",
+            "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+        ),
+        expected_local_rows=((10, 1500, 2),),
+        local_rows_sql=(
+            "SELECT customer_id, large_amount_cents, event_count "
+            "FROM __sqb_local__model__event_rollup ORDER BY customer_id"
+        ),
+    ),
+    SnowflakeScenarioLocalReplayE2ETestCase(
+        description="reports snowflake local transpilation failures as X607",
+        scenario_name="local_transpile_error",
+        model_sql=(
+            'MODEL (materialized table);\n\nSELECT *\nFROM __source("raw_events")\nQUALIFY\n'
+        ),
+        scenario_sql=(
+            "SCENARIO ();\n\n"
+            "WITH\n"
+            "__source__raw_events AS (\n"
+            "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
+            "),\n"
+            "__expected__event_rollup AS (\n"
+            "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+        expected_stdout_fragments=(
+            "local_transpile_error",
+            "ERROR",
+            "error[X607]",
+            "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+        ),
+        expected_return_code=1,
+    ),
+    SnowflakeScenarioLocalReplayE2ETestCase(
+        description="reports snowflake local DuckDB execution failures as X608",
+        scenario_name="local_execution_error",
+        model_sql=(
+            "MODEL (materialized table);\n\n"
+            "SELECT\n"
+            "  customer_id,\n"
+            "  __sqb_missing_local_function(amount_cents) AS amount_cents\n"
+            'FROM __source("raw_events")\n'
+        ),
+        scenario_sql=(
+            "SCENARIO ();\n\n"
+            "WITH\n"
+            "__source__raw_events AS (\n"
+            "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
+            "),\n"
+            "__expected__event_rollup AS (\n"
+            "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+        expected_stdout_fragments=(
+            "local_execution_error",
+            "ERROR",
+            "error[X608]",
+            "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+        ),
+        expected_return_code=1,
+    ),
+]
 
 SNOWFLAKE_QUERY_E2E_TEST_CASES: list[SnowflakeCliTestCase] = [
     SnowflakeCliTestCase(
@@ -74,6 +181,65 @@ def test_given_snowflake_local_config_when_running_query_then_outputs_expected_r
         for fragment in test_case.expected_stdout_fragments:
             assert fragment in result.stdout
         assert test_case.expected_schema_fragment in result.stdout
+    finally:
+        cleanup_snowflake_schema(schema_name=schema_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SNOWFLAKE_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES,
+    ids=[case.description for case in SNOWFLAKE_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES],
+)
+def test_given_snowflake_scenario_capture_when_replaying_locally_then_transpilable_sql_passes(
+    tmp_path: Path,
+    test_case: SnowflakeScenarioLocalReplayE2ETestCase,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_scenario_local")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="snowflake_scenario_local_replay",
+        repo_files=build_real_warehouse_local_replay_project_files(
+            project_toml=build_snowflake_project_toml(
+                project_name="snowflake_scenario_local_replay",
+                schema_name=schema_name,
+            ),
+            model_sql=test_case.model_sql,
+            scenario_sql=test_case.scenario_sql,
+            scenario_name=test_case.scenario_name,
+        ),
+    )
+    ensure_query_schema_ready(schema_name=schema_name)
+
+    try:
+        capture_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "scenario",
+                "capture",
+                "--no-sql-validation",
+                test_case.scenario_name,
+            ),
+            project_dir=project_dir,
+        )
+        assert capture_result.returncode == 0, capture_result.stdout + capture_result.stderr
+
+        replay_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "scenario", "test", test_case.scenario_name, "--local"),
+            project_dir=project_dir,
+        )
+
+        assert replay_result.returncode == test_case.expected_return_code, (
+            replay_result.stdout + replay_result.stderr
+        )
+        fragment: str
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in replay_result.stdout
+        assert_optional_local_replay_rows(
+            project_dir=project_dir,
+            scenario_name=test_case.scenario_name,
+            local_rows_sql=test_case.local_rows_sql,
+            expected_local_rows=test_case.expected_local_rows,
+        )
     finally:
         cleanup_snowflake_schema(schema_name=schema_name)
 
