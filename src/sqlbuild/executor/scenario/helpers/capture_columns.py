@@ -8,6 +8,8 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.executor.scenario.models import ScenarioSnapshotColumn
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.shared.constants import SCENARIO_LOCAL_TYPE_INVALID
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot_expressions
 
 
@@ -129,8 +131,14 @@ def _local_type_from_overrides(
         local_type for specificity, local_type in matches if specificity == best_specificity
     }
     if len(best_local_types) > 1:
-        raise ValueError(
-            f"Multiple local type override patterns match '{warehouse_type}' with equal specificity"
+        raise ExecutorInputError(
+            "Multiple local type override patterns match "
+            f"'{warehouse_type}' with equal specificity",
+            code=SCENARIO_LOCAL_TYPE_INVALID,
+            help=(
+                "Make one scenario local type override pattern more specific or remove the "
+                "duplicate."
+            ),
         )
     return best_local_types.pop()
 

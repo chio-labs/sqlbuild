@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -12,6 +13,7 @@ from sqlbuild.executor.scenario.main.fixtures import execute_scenario_fixture
 from sqlbuild.executor.scenario.models import ScenarioFixtureExecutionResult
 from sqlbuild.executor.seed.main.execute import execute_seed
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.shared.constants import SCENARIO_EXEC_SEED_FAILED
 
 
 def execute_scenario_fixtures(
@@ -55,6 +57,21 @@ def execute_scenario_seed_entries(
             connection=connection,
             statement_recorder=StatementRecorder(),
         )
+        if result.status == ExecutionStatus.FAILED:
+            error_message: str = result.error_message or "seed load failed"
+            result = replace(
+                result,
+                error_code=result.error_code or SCENARIO_EXEC_SEED_FAILED,
+                error_help=(
+                    result.error_help
+                    or "Check the seed file, schema metadata, and scenario relation target."
+                ),
+                error_message=(
+                    f"scenario seed '{seed_entry.name}' failed to load into "
+                    f"'{seed_entry.target.qualified_name or seed_entry.target.name}': "
+                    f"{error_message}"
+                ),
+            )
         results.append(result)
         if result.status == ExecutionStatus.FAILED:
             break

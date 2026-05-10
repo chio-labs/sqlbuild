@@ -134,6 +134,9 @@ SCENARIO_CLI_TEST_CASES: list[ScenarioCliE2ETestCase] = [
         expected_stdout_fragments=(
             "Scenario (1 selected)",
             "order_totals_fail",
+            "error[X506]: scenario 'order_totals_fail' expected check for model "
+            "'order_totals' failed: actual=1 expected=1 mismatched=1",
+            "= help: Compare the expected CTE with the retained scenario model relation.",
             "check     expected order_totals",
             "expected order_totals:",
             "Rerun with --retain to inspect scenario-owned artifacts.",
@@ -365,7 +368,9 @@ def test_given_multiple_selected_scenarios_when_running_with_retain_then_materia
             description="unknown selector fails clearly",
             command=("--no-color", "scenario", "test", "missing_scenario"),
             expected_exit_code=1,
-            expected_stderr_fragments=("Unknown scenario selector 'missing_scenario'",),
+            expected_stderr_fragments=(
+                "error[C453]: Unknown scenario selector 'missing_scenario'",
+            ),
         )
     ],
     ids=["unknown selector fails clearly"],

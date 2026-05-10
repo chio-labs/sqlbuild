@@ -24,6 +24,8 @@ class ScenarioFixtureExecutionResult:
     target_relation: str
     status: ExecutionStatus
     lifecycle_events: tuple[LifeCycleEvent, ...] = field(default_factory=tuple)
+    error_code: str | None = None
+    error_help: str | None = None
     error_message: str | None = None
 
 
@@ -100,6 +102,8 @@ class ScenarioSnapshotStateResult:
     state: ScenarioSnapshotState
     manifest_path: Path
     manifest: ScenarioSnapshotManifest | None = None
+    error_code: str | None = None
+    error_help: str | None = None
     error_message: str | None = None
 
 
@@ -136,6 +140,8 @@ class ScenarioSnapshotCaptureRelationResult:
     status: ExecutionStatus
     row_count: int = 0
     byte_count: int = 0
+    error_code: str | None = None
+    error_help: str | None = None
     error_message: str | None = None
 
 
@@ -150,6 +156,8 @@ class ScenarioSnapshotCaptureResult:
     relation_results: tuple[ScenarioSnapshotCaptureRelationResult, ...] = field(
         default_factory=tuple
     )
+    error_code: str | None = None
+    error_help: str | None = None
     error_message: str | None = None
 
 
@@ -165,6 +173,8 @@ class ScenarioSnapshotCaptureRunResult:
     capture_result: ScenarioSnapshotCaptureResult | None = None
     prepare_cleanup_result: ScenarioCleanupExecutionResult | None = None
     cleanup_result: ScenarioCleanupExecutionResult | None = None
+    error_code: str | None = None
+    error_help: str | None = None
     error_message: str | None = None
 
 
@@ -176,6 +186,8 @@ class ScenarioCleanupExecutionResult:
     status: ExecutionStatus
     targets: tuple[ScenarioCleanupTarget, ...] = field(default_factory=tuple)
     lifecycle_events: tuple[LifeCycleEvent, ...] = field(default_factory=tuple)
+    error_code: str | None = None
+    error_help: str | None = None
     error_message: str | None = None
 
 
@@ -189,6 +201,8 @@ class ScenarioExpectedCheckExecutionResult:
     actual_row_count: int = 0
     expected_row_count: int = 0
     mismatched_row_count: int = 0
+    error_code: str | None = None
+    error_help: str | None = None
     error_message: str | None = None
 
 
@@ -201,6 +215,8 @@ class ScenarioAssertionCheckExecutionResult:
     status: ExecutionStatus
     failing_row_count: int = 0
     sample_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
+    error_code: str | None = None
+    error_help: str | None = None
     error_message: str | None = None
 
 
@@ -223,4 +239,6 @@ class ScenarioRunResult:
     )
     prepare_cleanup_result: ScenarioCleanupExecutionResult | None = None
     cleanup_result: ScenarioCleanupExecutionResult | None = None
+    error_code: str | None = None
+    error_help: str | None = None
     error_message: str | None = None

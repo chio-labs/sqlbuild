@@ -22,6 +22,11 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotRelation,
 )
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.shared.constants import (
+    SCENARIO_EXEC_CAPTURE_FAILED,
+    SCENARIO_EXEC_CAPTURE_INTERNAL,
+)
+from sqlbuild.shared.helpers.coded_errors import error_code
 
 
 def execute_scenario_snapshot_capture(
@@ -75,12 +80,21 @@ def execute_scenario_snapshot_capture(
                 )
             )
         except Exception as exc:
+            captured_error_code: str = error_code(
+                exc,
+                fallback_code=SCENARIO_EXEC_CAPTURE_FAILED,
+            )
             result = ScenarioSnapshotCaptureRelationResult(
                 kind=relation_plan.kind,
                 logical_name=relation_plan.logical_name,
                 source_relation=_source_relation_name(relation_plan),
                 file_path=relation_plan.file_path,
                 status=ExecutionStatus.FAILED,
+                error_code=captured_error_code,
+                error_help=(
+                    "Check the materialized scenario input relation and rerun capture with "
+                    "--retain to inspect warehouse artifacts."
+                ),
                 error_message=f"Failed to capture {relation_plan.kind.value} "
                 f"'{relation_plan.logical_name}': {exc}",
             )
@@ -90,6 +104,8 @@ def execute_scenario_snapshot_capture(
                 status=ExecutionStatus.FAILED,
                 manifest_path=capture_plan.manifest_path,
                 relation_results=tuple(relation_results),
+                error_code=captured_error_code,
+                error_help=result.error_help,
                 error_message=result.error_message,
             )
         relation_results.append(result)
@@ -135,10 +151,12 @@ def _query_relation_rows(
     row: tuple[object, ...]
     for row in query_result.rows:
         if len(row) != len(query_result.columns):
-            raise ValueError(
+            error: ValueError = ValueError(
                 "row value count does not match column count for relation "
                 f"'{relation_plan.logical_name}'"
             )
+            object.__setattr__(error, "code", SCENARIO_EXEC_CAPTURE_INTERNAL)
+            raise error
         rows.append(dict(zip(query_result.columns, row, strict=True)))
     return tuple(rows)
 
@@ -146,7 +164,9 @@ def _query_relation_rows(
 def _source_relation_name(relation_plan: ScenarioSnapshotCaptureRelationPlan) -> str:
     qualified_name: str | None = relation_plan.source_target.qualified_name
     if qualified_name is None:
-        raise ValueError(
+        error: ValueError = ValueError(
             f"Scenario snapshot relation '{relation_plan.logical_name}' has no qualified target"
         )
+        object.__setattr__(error, "code", SCENARIO_EXEC_CAPTURE_INTERNAL)
+        raise error
     return qualified_name

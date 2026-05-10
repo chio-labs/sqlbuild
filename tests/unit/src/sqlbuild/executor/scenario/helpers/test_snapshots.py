@@ -33,6 +33,11 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotStateResult,
 )
 from sqlbuild.executor.scenario.types import ScenarioSnapshotState
+from sqlbuild.shared.constants import (
+    SCENARIO_LOCAL_MANIFEST_INVALID,
+    SCENARIO_LOCAL_SNAPSHOT_MISSING,
+    SCENARIO_LOCAL_SNAPSHOT_STALE,
+)
 from tests.unit.src.sqlbuild.executor.scenario.helpers._test_types import (
     ScenarioSnapshotCapturePlanTestCase,
     ScenarioSnapshotFingerprintTestCase,
@@ -169,6 +174,7 @@ SNAPSHOT_STATE_TEST_CASES: list[ScenarioSnapshotStateTestCase] = [
         manifest_contents=None,
         expected_state=ScenarioSnapshotState.MISSING,
         expected_has_manifest=False,
+        expected_error_code=SCENARIO_LOCAL_SNAPSHOT_MISSING,
     ),
     ScenarioSnapshotStateTestCase(
         description="matching fingerprint manifest is classified as fresh",
@@ -183,6 +189,7 @@ SNAPSHOT_STATE_TEST_CASES: list[ScenarioSnapshotStateTestCase] = [
         manifest_contents=None,
         expected_state=ScenarioSnapshotState.STALE,
         expected_has_manifest=True,
+        expected_error_code=SCENARIO_LOCAL_SNAPSHOT_STALE,
     ),
     ScenarioSnapshotStateTestCase(
         description="malformed manifest is classified as invalid",
@@ -190,6 +197,7 @@ SNAPSHOT_STATE_TEST_CASES: list[ScenarioSnapshotStateTestCase] = [
         manifest_contents="{not json",
         expected_state=ScenarioSnapshotState.INVALID,
         expected_has_manifest=False,
+        expected_error_code=SCENARIO_LOCAL_MANIFEST_INVALID,
         expected_error_fragment="Invalid scenario snapshot manifest JSON",
     ),
 ]

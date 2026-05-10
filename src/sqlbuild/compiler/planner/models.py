@@ -212,6 +212,7 @@ class PlanWarning:
     model_name: str | None
     severity: WarningSeverity
     message: str
+    code: str | None = None
 
 
 @dataclass(frozen=True)

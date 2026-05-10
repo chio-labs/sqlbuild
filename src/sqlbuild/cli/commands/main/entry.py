@@ -30,6 +30,7 @@ from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
+from sqlbuild.shared.constants import SCENARIO_CLI_MISSING_SUBCOMMAND
 from sqlbuild.shared.helpers.colors import supports_color
 
 
@@ -424,7 +425,10 @@ def _main_with_dependencies(
                     tuple(args.scenario_selector),
                     args.scenario_retain,
                 )
-            raise CliUserError("scenario requires a subcommand such as 'test'", code="C450")
+            raise CliUserError(
+                "scenario requires a subcommand such as 'test'",
+                code=SCENARIO_CLI_MISSING_SUBCOMMAND,
+            )
         return 0
     except CliUserError as error:
         logging.getLogger("sqlbuild.cli").exception("cli user error")

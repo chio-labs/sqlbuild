@@ -27,6 +27,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotManifest,
 )
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.shared.constants import SCENARIO_EXEC_CLEANUP_FAILED
 
 
 def execute_scenario_snapshot_capture_steps(
@@ -55,6 +56,8 @@ def execute_scenario_snapshot_capture_steps(
             status=ExecutionStatus.FAILED,
             retained=retain,
             prepare_cleanup_result=prepare_result,
+            error_code=prepare_result.error_code,
+            error_help=prepare_result.error_help,
             error_message=prepare_result.error_message,
         )
 
@@ -73,6 +76,8 @@ def execute_scenario_snapshot_capture_steps(
             retain=retain,
             prepare_cleanup_result=prepare_result,
             fixture_results=fixture_results,
+            error_code=_first_error_code(fixture_results),
+            error_help=_first_error_help(fixture_results),
             error_message=fixture_error,
         )
 
@@ -91,6 +96,8 @@ def execute_scenario_snapshot_capture_steps(
             prepare_cleanup_result=prepare_result,
             fixture_results=fixture_results,
             seed_results=seed_results,
+            error_code=_first_error_code(seed_results),
+            error_help=_first_error_help(seed_results),
             error_message=seed_error,
         )
 
@@ -122,6 +129,8 @@ def execute_scenario_snapshot_capture_steps(
         fixture_results=fixture_results,
         seed_results=seed_results,
         capture_result=capture_result,
+        error_code=capture_result.error_code,
+        error_help=capture_result.error_help,
         error_message=capture_result.error_message,
     )
 
@@ -136,6 +145,8 @@ def _finish_capture_run(
     fixture_results: tuple[ScenarioFixtureExecutionResult, ...] = (),
     seed_results: tuple[SeedExecutionResult, ...] = (),
     capture_result: ScenarioSnapshotCaptureResult | None = None,
+    error_code: str | None = None,
+    error_help: str | None = None,
     error_message: str | None = None,
 ) -> ScenarioSnapshotCaptureRunResult:
     status: ExecutionStatus = (
@@ -150,6 +161,9 @@ def _finish_capture_run(
         )
         if cleanup_result.status == ExecutionStatus.FAILED:
             status = ExecutionStatus.FAILED
+            if error_code is None:
+                error_code = cleanup_result.error_code or SCENARIO_EXEC_CLEANUP_FAILED
+                error_help = cleanup_result.error_help
             cleanup_error: str = cleanup_result.error_message or "scenario cleanup failed"
             if error_message is None:
                 error_message = f"Cleanup failed: {cleanup_error}"
@@ -165,6 +179,8 @@ def _finish_capture_run(
         capture_result=capture_result,
         prepare_cleanup_result=prepare_cleanup_result,
         cleanup_result=cleanup_result,
+        error_code=error_code,
+        error_help=error_help,
         error_message=error_message,
     )
 
@@ -174,4 +190,24 @@ def _first_error(results: tuple[object, ...]) -> str | None:
     for result in results:
         if getattr(result, "status", None) == ExecutionStatus.FAILED:
             return str(getattr(result, "error_message", "scenario snapshot capture failed"))
+    return None
+
+
+def _first_error_code(results: tuple[object, ...]) -> str | None:
+    result: object
+    for result in results:
+        if getattr(result, "status", None) == ExecutionStatus.FAILED:
+            error_code: object | None = getattr(result, "error_code", None)
+            if isinstance(error_code, str) and error_code:
+                return error_code
+    return None
+
+
+def _first_error_help(results: tuple[object, ...]) -> str | None:
+    result: object
+    for result in results:
+        if getattr(result, "status", None) == ExecutionStatus.FAILED:
+            error_help: object | None = getattr(result, "error_help", None)
+            if isinstance(error_help, str) and error_help:
+                return error_help
     return None

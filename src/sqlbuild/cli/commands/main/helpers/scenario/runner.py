@@ -31,6 +31,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioExpectedCheckExecutionResult,
     ScenarioRunResult,
 )
+from sqlbuild.shared.helpers.coded_errors import format_coded_error
 from sqlbuild.shared.helpers.colors import (
     blue_bold,
     colorize_status,
@@ -181,8 +182,13 @@ def _write_scenario_result(*, result: ScenarioRunResult, stream: TextIO, use_col
     status: str = colorize_status(status_text, use_color=use_color)
     stream.write(f"{result.scenario_name:<{_SCENARIO_NAME_WIDTH}} {status}\n")
     if result.error_message:
+        rendered_error_message: str = _render_result_error(
+            error_code=result.error_code,
+            error_message=result.error_message,
+            error_help=result.error_help,
+        )
         error_line: str
-        for error_line in result.error_message.splitlines():
+        for error_line in rendered_error_message.splitlines():
             stream.write(f"    {error_line}\n")
         if not result.retained:
             stream.write("    Rerun with --retain to inspect scenario-owned artifacts.\n")
@@ -213,7 +219,12 @@ def _write_checks(*, result: ScenarioRunResult, stream: TextIO, use_color: bool)
             f"{status}{detail}\n"
         )
         if expected.error_message is not None:
-            stream.write(f"{'':>14}{expected.error_message}\n")
+            rendered_error: str = _render_result_error(
+                error_code=expected.error_code,
+                error_message=expected.error_message,
+                error_help=expected.error_help,
+            )
+            stream.write(f"{'':>14}{rendered_error}\n")
     assertion: ScenarioAssertionCheckExecutionResult
     for assertion in result.assertion_results:
         status_text = "FAIL" if assertion.status == FAILED_STATUS else "PASS"
@@ -228,7 +239,20 @@ def _write_checks(*, result: ScenarioRunResult, stream: TextIO, use_color: bool)
             f"{status}{detail}\n"
         )
         if assertion.error_message is not None:
-            stream.write(f"{'':>14}{assertion.error_message}\n")
+            rendered_error = _render_result_error(
+                error_code=assertion.error_code,
+                error_message=assertion.error_message,
+                error_help=assertion.error_help,
+            )
+            stream.write(f"{'':>14}{rendered_error}\n")
+
+
+def _render_result_error(
+    *, error_code: str | None, error_message: str, error_help: str | None = None
+) -> str:
+    if error_code is None:
+        return error_message
+    return format_coded_error(code=error_code, message=error_message, help=error_help)
 
 
 def _write_check_failures(*, result: ScenarioRunResult, stream: TextIO) -> None:
