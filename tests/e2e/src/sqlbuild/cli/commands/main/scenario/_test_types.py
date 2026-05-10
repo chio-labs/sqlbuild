@@ -30,6 +30,20 @@ class ScenarioRuntimeArtifactTestCase:
 
 
 @dataclass(frozen=True)
+class ScenarioLocalRuntimeArtifactTestCase:
+    """Test case for local scenario target/run artifact verification."""
+
+    description: str
+    scenario_name: str
+    capture_command: tuple[str, ...]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    artifact_relative_path: Path
+    expected_artifact_fragments: tuple[str, ...]
+    additional_project_files: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
 class ScenarioLocalCliE2ETestCase:
     """Test case for sqb scenario test --local verification."""
 

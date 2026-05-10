@@ -11,6 +11,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario._test_types import (
     ScenarioCliE2ETestCase,
     ScenarioLocalCliE2ETestCase,
     ScenarioLocalRetainE2ETestCase,
+    ScenarioLocalRuntimeArtifactTestCase,
     ScenarioRuntimeArtifactTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
@@ -685,6 +686,69 @@ SCENARIO_RUNTIME_ARTIFACT_TEST_CASES: list[ScenarioRuntimeArtifactTestCase] = [
     ),
 ]
 
+SCENARIO_LOCAL_RUNTIME_ARTIFACT_TEST_CASES: list[ScenarioLocalRuntimeArtifactTestCase] = [
+    ScenarioLocalRuntimeArtifactTestCase(
+        description="writes local fixture artifact",
+        scenario_name="order_totals_pass",
+        capture_command=("--no-color", "scenario", "capture", "order_totals_pass"),
+        command=("--no-color", "scenario", "test", "order_totals_pass", "--local"),
+        expected_exit_code=0,
+        artifact_relative_path=Path(
+            "target/run/scenarios/order_totals_pass/local/fixtures/source__raw_orders.sql"
+        ),
+        expected_artifact_fragments=(
+            "loaded from",
+            "sources/raw_orders.jsonl",
+            'CREATE TABLE "__sqb_local__source__raw_orders"',
+        ),
+    ),
+    ScenarioLocalRuntimeArtifactTestCase(
+        description="writes local model artifact",
+        scenario_name="order_totals_pass",
+        capture_command=("--no-color", "scenario", "capture", "order_totals_pass"),
+        command=("--no-color", "scenario", "test", "order_totals_pass", "--local"),
+        expected_exit_code=0,
+        artifact_relative_path=Path(
+            "target/run/scenarios/order_totals_pass/local/models/order_totals.sql"
+        ),
+        expected_artifact_fragments=(
+            "SUM(amount) AS total_amount",
+            "__sqb_local__model__orders",
+        ),
+    ),
+    ScenarioLocalRuntimeArtifactTestCase(
+        description="writes local expected check artifact",
+        scenario_name="order_totals_pass",
+        capture_command=("--no-color", "scenario", "capture", "order_totals_pass"),
+        command=("--no-color", "scenario", "test", "order_totals_pass", "--local"),
+        expected_exit_code=0,
+        artifact_relative_path=Path(
+            "target/run/scenarios/order_totals_pass/local/checks/expected__order_totals.sql"
+        ),
+        expected_artifact_fragments=(
+            "WITH __actual AS",
+            "__sqb_local__model__order_totals",
+            "mismatched_count",
+        ),
+    ),
+    ScenarioLocalRuntimeArtifactTestCase(
+        description="writes local SQL function artifact",
+        scenario_name="local_sql_function_pass",
+        capture_command=("--no-color", "scenario", "capture", "local_sql_function_pass"),
+        command=("--no-color", "scenario", "test", "local_sql_function_pass", "--local"),
+        expected_exit_code=0,
+        artifact_relative_path=Path(
+            "target/run/scenarios/local_sql_function_pass/local/functions/sql/is_large_order.sql"
+        ),
+        expected_artifact_fragments=(
+            "CREATE OR REPLACE MACRO",
+            "is_large_order",
+            "amount > 9",
+        ),
+        additional_project_files=SCENARIO_LOCAL_DUCKDB_TEST_CASES[4].additional_project_files,
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -1093,6 +1157,41 @@ def test_given_scenario_project_when_running_scenario_test_then_writes_runtime_a
         project_name="scenario_project",
         repo_files=build_scenario_project_files(),
     )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    assert_runtime_artifact_contains(
+        project_dir=project_dir,
+        relative_path=test_case.artifact_relative_path,
+        expected_fragments=test_case.expected_artifact_fragments,
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SCENARIO_LOCAL_RUNTIME_ARTIFACT_TEST_CASES,
+    ids=[case.description for case in SCENARIO_LOCAL_RUNTIME_ARTIFACT_TEST_CASES],
+)
+def test_given_local_scenario_when_running_then_writes_local_runtime_artifacts(
+    test_case: ScenarioLocalRuntimeArtifactTestCase,
+    tmp_path: Path,
+) -> None:
+    project_files: dict[str, str] = build_scenario_project_files()
+    project_files.update(dict(test_case.additional_project_files))
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="scenario_project",
+        repo_files=project_files,
+    )
+    capture_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.capture_command,
+        project_dir=project_dir,
+    )
+    assert capture_result.returncode == 0, capture_result.stdout + capture_result.stderr
 
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=test_case.command,

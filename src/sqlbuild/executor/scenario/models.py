@@ -6,9 +6,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild.adapter.shared.models import LifeCycleEvent
-from sqlbuild.compiler.planner.models import CompiledRelationTarget, ScenarioRelationMap
+from sqlbuild.compiler.planner.models import (
+    CompiledRelationTarget,
+    ScenarioExecutionPlan,
+    ScenarioRelationMap,
+)
 from sqlbuild.compiler.planner.types import MaterializationType, ScenarioArtifactKind
-from sqlbuild.executor.build.models import SeedExecutionResult
+from sqlbuild.executor.build.models import FunctionExecutionResult, SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
 from sqlbuild.executor.shared.types import ExecutionStatus
@@ -262,9 +266,14 @@ class ScenarioRunResult:
     retained: bool = False
     local_status: ScenarioLocalRunStatus | None = None
     local_duckdb_path: Path | None = None
+    local_execution_plan: ScenarioExecutionPlan | None = None
+    local_snapshot_relations: tuple[ScenarioLocalSnapshotLoadedRelation, ...] = field(
+        default_factory=tuple
+    )
     relation_map: ScenarioRelationMap | None = None
     fixture_results: tuple[ScenarioFixtureExecutionResult, ...] = field(default_factory=tuple)
     seed_results: tuple[SeedExecutionResult, ...] = field(default_factory=tuple)
+    function_results: tuple[FunctionExecutionResult, ...] = field(default_factory=tuple)
     model_results: tuple[ModelExecutionResult, ...] = field(default_factory=tuple)
     expected_results: tuple[ScenarioExpectedCheckExecutionResult, ...] = field(
         default_factory=tuple
