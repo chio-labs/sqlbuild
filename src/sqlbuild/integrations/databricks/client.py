@@ -65,7 +65,7 @@ class DatabricksAdapter(BaseAdapter):
     """Databricks adapter backed by databricks-sql-connector."""
 
     def supports_zero_copy_clone(self) -> bool:
-        return False
+        return True
 
     def supports_relation_age_metadata(self) -> bool:
         return False
@@ -573,7 +573,8 @@ class DatabricksAdapter(BaseAdapter):
         target: str,
         hard_copy: bool = False,
     ) -> tuple[str, ...]:
-        del hard_copy
+        if not hard_copy:
+            return (f"CREATE TABLE {target} SHALLOW CLONE {source}",)
         return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
 
     def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:

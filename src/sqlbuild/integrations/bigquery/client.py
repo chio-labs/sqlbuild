@@ -184,6 +184,9 @@ class BigQueryAdapter(BaseAdapter):
     def supports_transactions(self) -> bool:
         return False
 
+    def supports_zero_copy_clone(self) -> bool:
+        return True
+
     def star_exclude_keyword(self) -> str:
         """BigQuery uses EXCEPT for SELECT * EXCEPT."""
 
@@ -399,7 +402,11 @@ class BigQueryAdapter(BaseAdapter):
         target: str,
         hard_copy: bool = False,
     ) -> tuple[str, ...]:
-        del hard_copy
+        if not hard_copy:
+            return (
+                f"CREATE TABLE {self._quote_identifier_path(target)} "
+                f"CLONE {self._quote_identifier_path(source)}",
+            )
         return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
 
     def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:

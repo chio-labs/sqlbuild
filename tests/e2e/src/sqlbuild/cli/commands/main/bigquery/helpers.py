@@ -171,9 +171,15 @@ def prepare_bigquery_diff_project(*, tmp_path: Path) -> tuple[Path, str, str]:
         "[environments.dev]\n"
         f'database = "{project_name}"\n'
         f'schema = "{dev_dataset}"\n\n'
+        "[environments.dev.clone]\n"
+        "allow_as_source = true\n"
+        "allow_as_target = true\n\n"
         "[environments.prod]\n"
         f'database = "{project_name}"\n'
         f'schema = "{prod_dataset}"\n\n'
+        "[environments.prod.clone]\n"
+        "allow_as_source = true\n"
+        "allow_as_target = false\n\n"
         "[defaults]\n"
         'materialized = "table"\n'
     )

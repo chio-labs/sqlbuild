@@ -11,6 +11,7 @@ from sqlbuild.integrations.databricks.client import DatabricksAdapter
 from tests.unit.src.sqlbuild.integrations.databricks._test_types import (
     DatabricksExpressionInferenceProfileTestCase,
     DatabricksPythonFunctionSupportTestCase,
+    DatabricksRenderCloneTestCase,
     DatabricksRenderDeleteInsertCursorTestCase,
     DatabricksRenderPythonFunctionTestCase,
     DatabricksRenderTableFunctionTestCase,
@@ -88,6 +89,31 @@ TEST_CASES: list[DatabricksRenderDeleteInsertCursorTestCase] = [
     ),
 ]
 
+DATABRICKS_RENDER_CLONE_TEST_CASES: list[DatabricksRenderCloneTestCase] = [
+    DatabricksRenderCloneTestCase(
+        description="renders shallow table clone by default",
+        source="`workspace`.`prod`.`fact_orders`",
+        target="`workspace`.`dev`.`fact_orders`",
+        hard_copy=False,
+        expected_statements=(
+            "CREATE TABLE `workspace`.`dev`.`fact_orders` "
+            "SHALLOW CLONE `workspace`.`prod`.`fact_orders`",
+        ),
+        expected_supports_zero_copy=True,
+    ),
+    DatabricksRenderCloneTestCase(
+        description="renders CTAS when hard copy is requested",
+        source="`workspace`.`prod`.`fact_orders`",
+        target="`workspace`.`dev`.`fact_orders`",
+        hard_copy=True,
+        expected_statements=(
+            "CREATE OR REPLACE TABLE `workspace`.`dev`.`fact_orders` AS "
+            "SELECT * FROM `workspace`.`prod`.`fact_orders`",
+        ),
+        expected_supports_zero_copy=True,
+    ),
+]
+
 
 @pytest.mark.parametrize("test_case", TEST_CASES, ids=[case.description for case in TEST_CASES])
 def test_given_cursor_delete_insert_when_rendering_then_databricks_uses_replace_where(
@@ -104,6 +130,26 @@ def test_given_cursor_delete_insert_when_rendering_then_databricks_uses_replace_
         columns=test_case.columns,
     )
 
+    assert statements == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    DATABRICKS_RENDER_CLONE_TEST_CASES,
+    ids=[case.description for case in DATABRICKS_RENDER_CLONE_TEST_CASES],
+)
+def test_given_clone_request_when_rendering_then_databricks_uses_expected_clone_sql(
+    test_case: DatabricksRenderCloneTestCase,
+) -> None:
+    adapter: DatabricksAdapter = DatabricksAdapter()
+
+    statements: tuple[str, ...] = adapter.render_clone(
+        source=test_case.source,
+        target=test_case.target,
+        hard_copy=test_case.hard_copy,
+    )
+
+    assert adapter.supports_zero_copy_clone() is test_case.expected_supports_zero_copy
     assert statements == test_case.expected_statements
 
 
