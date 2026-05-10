@@ -8,3 +8,12 @@ class ScenarioSnapshotState(StrEnum):
     MISSING = "missing"
     STALE = "stale"
     INVALID = "invalid"
+
+
+class ScenarioLocalRunStatus(StrEnum):
+    """User-facing outcome for one local scenario replay."""
+
+    PASS = "PASS"
+    FAIL = "FAIL"
+    ERROR = "ERROR"
+    SKIP = "SKIP"

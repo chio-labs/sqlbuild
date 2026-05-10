@@ -294,6 +294,8 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
                 "order_totals_pass",
                 "tests/scenarios/nested",
                 "--retain",
+                "--local",
+                "--strict",
             ],
             expected_exit_code=5,
             expected_scenario_selectors=("order_totals_pass", "tests/scenarios/nested"),
@@ -304,7 +306,7 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
 def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispatches_selectors(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[Path | None, bool, bool, tuple[str, ...], bool]] = []
+    received_args: list[tuple[Path | None, bool, bool, tuple[str, ...], bool, bool, bool]] = []
 
     def run_scenario(
         project_dir: Path | None,
@@ -312,8 +314,12 @@ def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispa
         no_color: bool,
         selectors: tuple[str, ...],
         retain: bool,
+        local: bool,
+        strict: bool,
     ) -> int:
-        received_args.append((project_dir, no_sql_validation, no_color, selectors, retain))
+        received_args.append(
+            (project_dir, no_sql_validation, no_color, selectors, retain, local, strict)
+        )
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -322,7 +328,9 @@ def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispa
     )
 
     assert exit_code == test_case.expected_exit_code
-    assert received_args == [(None, False, False, test_case.expected_scenario_selectors, True)]
+    assert received_args == [
+        (None, False, False, test_case.expected_scenario_selectors, True, True, True)
+    ]
 
 
 @pytest.mark.parametrize(

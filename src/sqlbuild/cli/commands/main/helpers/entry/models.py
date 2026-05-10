@@ -57,6 +57,8 @@ class CliNamespace:
     scenario_command: str | None = None
     scenario_selector: list[str] = field(default_factory=list)
     scenario_retain: bool = False
+    scenario_local: bool = False
+    scenario_strict: bool = False
     select: list[str] = field(default_factory=list)
     exclude: list[str] = field(default_factory=list)
 
@@ -161,5 +163,5 @@ class CliEntrypointHandlers:
     ]
     run_janitor: Callable[[Path | None, bool, bool, int | None], int]
     run_playground: Callable[[Path | None, str], int]
-    run_scenario: Callable[[Path | None, bool, bool, tuple[str, ...], bool], int]
+    run_scenario: Callable[[Path | None, bool, bool, tuple[str, ...], bool, bool, bool], int]
     run_scenario_capture: Callable[[Path | None, bool, bool, tuple[str, ...], bool], int]

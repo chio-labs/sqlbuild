@@ -165,3 +165,45 @@ def assert_scenario_snapshot(
 
     rows: list[str] = jsonl_path.read_text(encoding="utf-8").splitlines()
     assert len(rows) == expected_row_count
+
+
+def maybe_corrupt_scenario_snapshot_jsonl(
+    *, project_dir: Path, scenario_name: str, enabled: bool
+) -> None:
+    """Optionally replace one captured source JSONL file with malformed content."""
+
+    if not enabled:
+        return
+    jsonl_path: Path = (
+        project_dir
+        / "tests"
+        / "_scenario_snapshots"
+        / scenario_name
+        / "sources"
+        / "raw_orders.jsonl"
+    )
+    jsonl_path.write_text('{"id": 1, "amount": 10}\nnot-json\n', encoding="utf-8")
+
+
+def assert_local_duckdb_state(
+    *,
+    db_path: Path,
+    stdout: str,
+    expected_exists: bool,
+    query_when_exists: bool,
+    count_sql: str,
+    expected_count: int,
+    rows_sql: str | None = None,
+    expected_rows: tuple[tuple[object, ...], ...] = (),
+) -> None:
+    """Assert retained local DuckDB state for a local scenario run."""
+
+    assert db_path.exists() is expected_exists
+    if not query_when_exists:
+        return
+    assert f"Retained local DuckDB: {db_path.as_posix()}" in stdout
+    rows: list[tuple[object, ...]] = query_duckdb(db_path=db_path, sql=count_sql)
+    assert rows == [(expected_count,)]
+    if rows_sql is not None:
+        value_rows: list[tuple[object, ...]] = query_duckdb(db_path=db_path, sql=rows_sql)
+        assert tuple(value_rows) == expected_rows

@@ -27,3 +27,31 @@ class ScenarioRuntimeArtifactTestCase:
     expected_exit_code: int
     artifact_relative_path: Path
     expected_artifact_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ScenarioLocalCliE2ETestCase:
+    """Test case for sqb scenario test --local verification."""
+
+    description: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ScenarioLocalRetainE2ETestCase:
+    """Test case for retained local scenario DuckDB verification."""
+
+    description: str
+    capture_command: tuple[str, ...]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+    retained_duckdb_relative_path: Path
+    retained_count_sql: str
+    expected_count: int
+    retained_rows_sql: str | None = None
+    expected_rows: tuple[tuple[object, ...], ...] = ()
+    expected_duckdb_exists: bool = True
+    corrupt_jsonl: bool = False

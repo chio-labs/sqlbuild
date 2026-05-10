@@ -10,7 +10,7 @@ from sqlbuild.compiler.planner.models import CompiledRelationTarget, ScenarioRel
 from sqlbuild.compiler.planner.types import MaterializationType, ScenarioArtifactKind
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.scenario.types import ScenarioSnapshotState
+from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
 from sqlbuild.executor.shared.types import ExecutionStatus
 
 
@@ -260,6 +260,8 @@ class ScenarioRunResult:
     scenario_name: str
     status: ExecutionStatus
     retained: bool = False
+    local_status: ScenarioLocalRunStatus | None = None
+    local_duckdb_path: Path | None = None
     relation_map: ScenarioRelationMap | None = None
     fixture_results: tuple[ScenarioFixtureExecutionResult, ...] = field(default_factory=tuple)
     seed_results: tuple[SeedExecutionResult, ...] = field(default_factory=tuple)

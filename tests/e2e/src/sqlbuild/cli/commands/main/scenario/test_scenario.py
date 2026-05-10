@@ -9,12 +9,16 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.scenario._test_types import (
     ScenarioCliE2ETestCase,
+    ScenarioLocalCliE2ETestCase,
+    ScenarioLocalRetainE2ETestCase,
     ScenarioRuntimeArtifactTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
+    assert_local_duckdb_state,
     assert_runtime_artifact_contains,
     build_scenario_project_files,
     list_scenario_relation_names,
+    maybe_corrupt_scenario_snapshot_jsonl,
     scenario_relation_name_by_suffix,
     scenario_relation_row_count,
 )
@@ -146,6 +150,94 @@ SCENARIO_CLI_TEST_CASES: list[ScenarioCliE2ETestCase] = [
     ),
 ]
 
+SCENARIO_LOCAL_MISSING_SNAPSHOT_TEST_CASES: tuple[ScenarioLocalCliE2ETestCase, ...] = (
+    ScenarioLocalCliE2ETestCase(
+        description="missing snapshot skips by default",
+        command=("--no-color", "scenario", "test", "order_totals_pass", "--local"),
+        expected_exit_code=0,
+        expected_stdout_fragments=(
+            "order_totals_pass",
+            "SKIP",
+            "error[X601]:",
+            "PASS=0  FAIL=0  ERROR=0  SKIP=1  TOTAL=1",
+        ),
+    ),
+    ScenarioLocalCliE2ETestCase(
+        description="missing snapshot errors with strict",
+        command=(
+            "--no-color",
+            "scenario",
+            "test",
+            "order_totals_pass",
+            "--local",
+            "--strict",
+        ),
+        expected_exit_code=1,
+        expected_stdout_fragments=(
+            "order_totals_pass",
+            "ERROR",
+            "error[X601]:",
+            "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+        ),
+    ),
+)
+
+SCENARIO_LOCAL_DUCKDB_TEST_CASES: tuple[ScenarioLocalRetainE2ETestCase, ...] = (
+    ScenarioLocalRetainE2ETestCase(
+        description="captured snapshot loads into retained local DuckDB",
+        capture_command=("--no-color", "scenario", "capture", "order_totals_pass"),
+        command=(
+            "--no-color",
+            "scenario",
+            "test",
+            "order_totals_pass",
+            "--local",
+            "--retain",
+        ),
+        expected_exit_code=0,
+        expected_stdout_fragments=(
+            "order_totals_pass",
+            "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+        ),
+        retained_duckdb_relative_path=Path("target/run/scenarios/order_totals_pass/local.duckdb"),
+        retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+        expected_count=2,
+        retained_rows_sql=('SELECT id, amount FROM "__sqb_local__source__raw_orders" ORDER BY id'),
+        expected_rows=((1, 10), (2, 5)),
+    ),
+    ScenarioLocalRetainE2ETestCase(
+        description="captured snapshot pass deletes local DuckDB by default",
+        capture_command=("--no-color", "scenario", "capture", "order_totals_pass"),
+        command=("--no-color", "scenario", "test", "order_totals_pass", "--local"),
+        expected_exit_code=0,
+        expected_stdout_fragments=(
+            "order_totals_pass",
+            "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+        ),
+        retained_duckdb_relative_path=Path("target/run/scenarios/order_totals_pass/local.duckdb"),
+        retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+        expected_count=0,
+        expected_duckdb_exists=False,
+    ),
+    ScenarioLocalRetainE2ETestCase(
+        description="malformed local JSONL errors and retains local DuckDB",
+        capture_command=("--no-color", "scenario", "capture", "order_totals_pass"),
+        command=("--no-color", "scenario", "test", "order_totals_pass", "--local"),
+        expected_exit_code=1,
+        expected_stdout_fragments=(
+            "order_totals_pass",
+            "ERROR",
+            "error[X604]:",
+            "Retained local DuckDB:",
+            "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+        ),
+        retained_duckdb_relative_path=Path("target/run/scenarios/order_totals_pass/local.duckdb"),
+        retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+        expected_count=0,
+        corrupt_jsonl=True,
+    ),
+)
+
 SCENARIO_RUNTIME_ARTIFACT_TEST_CASES: list[ScenarioRuntimeArtifactTestCase] = [
     ScenarioRuntimeArtifactTestCase(
         description="writes fixture runtime SQL under target run scenarios",
@@ -225,6 +317,79 @@ def test_given_scenario_project_when_running_scenario_test_then_cli_behaves_as_e
         db_path=project_dir / "scenario_demo.duckdb"
     )
     assert len(retained_names) == test_case.expected_retained_prefix_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SCENARIO_LOCAL_MISSING_SNAPSHOT_TEST_CASES,
+    ids=[case.description for case in SCENARIO_LOCAL_MISSING_SNAPSHOT_TEST_CASES],
+)
+def test_given_missing_snapshot_when_running_local_scenario_then_reports_expected_status(
+    test_case: ScenarioLocalCliE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="scenario_project",
+        repo_files=build_scenario_project_files(),
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    expected_fragment: str
+    for expected_fragment in test_case.expected_stdout_fragments:
+        assert expected_fragment in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SCENARIO_LOCAL_DUCKDB_TEST_CASES,
+    ids=[case.description for case in SCENARIO_LOCAL_DUCKDB_TEST_CASES],
+)
+def test_given_captured_snapshot_when_running_local_scenario_then_manages_local_duckdb(
+    test_case: ScenarioLocalRetainE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="scenario_project",
+        repo_files=build_scenario_project_files(),
+    )
+    capture_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.capture_command,
+        project_dir=project_dir,
+    )
+    assert capture_result.returncode == 0, capture_result.stdout + capture_result.stderr
+    maybe_corrupt_scenario_snapshot_jsonl(
+        project_dir=project_dir,
+        scenario_name="order_totals_pass",
+        enabled=test_case.corrupt_jsonl,
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    local_duckdb_path: Path = project_dir / test_case.retained_duckdb_relative_path
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    expected_fragment: str
+    for expected_fragment in test_case.expected_stdout_fragments:
+        assert expected_fragment in result.stdout
+    assert_local_duckdb_state(
+        db_path=local_duckdb_path,
+        stdout=result.stdout,
+        expected_exists=test_case.expected_duckdb_exists,
+        query_when_exists=test_case.expected_duckdb_exists and not test_case.corrupt_jsonl,
+        count_sql=test_case.retained_count_sql,
+        expected_count=test_case.expected_count,
+        rows_sql=test_case.retained_rows_sql,
+        expected_rows=test_case.expected_rows,
+    )
 
 
 @pytest.mark.parametrize(
