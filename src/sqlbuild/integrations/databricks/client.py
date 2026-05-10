@@ -8,7 +8,7 @@ import json
 import logging
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.exceptions import AdapterUserError
@@ -64,8 +64,10 @@ class _DatabricksConnection:
 class DatabricksAdapter(BaseAdapter):
     """Databricks adapter backed by databricks-sql-connector."""
 
+    sqlglot_dialect_name: ClassVar[str | None] = "databricks"
+
     def supports_zero_copy_clone(self) -> bool:
-        return False
+        return True
 
     def supports_relation_age_metadata(self) -> bool:
         return False
@@ -353,9 +355,6 @@ class DatabricksAdapter(BaseAdapter):
     def render_set_difference_operator(self) -> str:
         return "EXCEPT"
 
-    def sqlglot_dialect(self) -> str | None:
-        return "databricks"
-
     def expression_inference_profile(self) -> ExpressionInferenceProfile:
         return ExpressionInferenceProfile(
             sqlglot_dialect=self.sqlglot_dialect(),
@@ -573,7 +572,8 @@ class DatabricksAdapter(BaseAdapter):
         target: str,
         hard_copy: bool = False,
     ) -> tuple[str, ...]:
-        del hard_copy
+        if not hard_copy:
+            return (f"CREATE TABLE {target} SHALLOW CLONE {source}",)
         return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
 
     def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:

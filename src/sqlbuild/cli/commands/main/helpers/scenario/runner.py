@@ -51,6 +51,7 @@ from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus
 from sqlbuild.shared.constants import (
     SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
     SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
+    SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
 )
 from sqlbuild.shared.helpers.coded_errors import format_coded_error
 from sqlbuild.shared.helpers.colors import (
@@ -105,11 +106,15 @@ def run_scenario(
                 "sqb scenario test --local --refresh."
             ),
         )
-
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
+    if local:
+        _validate_local_scenario_sqlglot_enabled(
+            discovered_inputs=discovered_inputs,
+            no_sql_validation=no_sql_validation,
+        )
     project_adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
@@ -263,6 +268,39 @@ def run_scenario(
     if local:
         return _write_local_summary(results=results, stream=progress_stream)
     return _write_remote_summary(results=results, stream=progress_stream)
+
+
+def _validate_local_scenario_sqlglot_enabled(
+    *, discovered_inputs: DiscoveredProjectInputs, no_sql_validation: bool
+) -> None:
+    if no_sql_validation or not _effective_sqlglot_and_validation_enabled(
+        discovered_inputs=discovered_inputs
+    ):
+        raise CliUserError(
+            "scenario test --local requires SQLGlot and SQL validation",
+            code=SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
+            help=(
+                "Enable settings.sqlglot and settings.sql_validation when running local "
+                "scenario replay, snapshot sync, or snapshot refresh."
+            ),
+        )
+
+
+def _effective_sqlglot_and_validation_enabled(
+    *, discovered_inputs: DiscoveredProjectInputs
+) -> bool:
+    setting_overrides: frozenset[str] = discovered_inputs.local_config.setting_overrides
+    sqlglot_enabled: bool = (
+        discovered_inputs.local_config.settings.sqlglot
+        if "sqlglot" in setting_overrides
+        else discovered_inputs.project_config.settings.sqlglot
+    )
+    sql_validation_enabled: bool = (
+        discovered_inputs.local_config.settings.sql_validation
+        if "sql_validation" in setting_overrides
+        else discovered_inputs.project_config.settings.sql_validation
+    )
+    return sqlglot_enabled and sql_validation_enabled
 
 
 def _sync_local_snapshots(

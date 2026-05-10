@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
 import pytest
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -9,6 +11,7 @@ from sqlbuild.compiler.compile.types import FunctionLanguage
 from tests.unit.src.sqlbuild.adapter.base._test_types import (
     BaseAdapterExpressionInferenceProfileTestCase,
     BaseAdapterPythonFunctionSupportTestCase,
+    BaseAdapterSqlglotDialectTestCase,
 )
 
 
@@ -22,6 +25,22 @@ class ConcreteBaseAdapter(BaseAdapter):
 
     def close(self, connection: object) -> None:
         del connection
+
+
+class PostgresLikeBaseAdapter(ConcreteBaseAdapter):
+    sqlglot_dialect_name: ClassVar[str | None] = "postgres"
+
+
+BASE_ADAPTER_SQLGLOT_DIALECT_TEST_CASES: list[BaseAdapterSqlglotDialectTestCase] = [
+    BaseAdapterSqlglotDialectTestCase(
+        description="returns none by default",
+        expected_sqlglot_dialect=None,
+    ),
+    BaseAdapterSqlglotDialectTestCase(
+        description="returns class configured dialect",
+        expected_sqlglot_dialect="postgres",
+    ),
+]
 
 
 @pytest.mark.parametrize(
@@ -73,3 +92,23 @@ def test_given_base_adapter_when_getting_inference_profile_then_returns_portable
 
     assert profile.sqlglot_dialect == test_case.expected_sqlglot_dialect
     assert len(profile.function_nullability_rules) == test_case.expected_function_rules_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    BASE_ADAPTER_SQLGLOT_DIALECT_TEST_CASES,
+    ids=[case.description for case in BASE_ADAPTER_SQLGLOT_DIALECT_TEST_CASES],
+)
+def test_given_base_adapter_subclass_when_getting_sqlglot_dialect_then_uses_class_setting(
+    test_case: BaseAdapterSqlglotDialectTestCase,
+) -> None:
+    adapter: BaseAdapter = (
+        PostgresLikeBaseAdapter()
+        if test_case.expected_sqlglot_dialect is not None
+        else ConcreteBaseAdapter()
+    )
+
+    assert adapter.sqlglot_dialect() == test_case.expected_sqlglot_dialect
+    assert adapter.expression_inference_profile().sqlglot_dialect == (
+        test_case.expected_sqlglot_dialect
+    )

@@ -33,6 +33,16 @@ class BigQueryDiffE2ETestCase:
 
 
 @dataclass(frozen=True)
+class BigQueryCloneE2ETestCase:
+    description: str
+    default_command: tuple[str, ...]
+    hard_copy_command: tuple[str, ...]
+    expected_default_stdout_fragments: tuple[str, ...]
+    expected_hard_copy_stdout_fragments: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class BigQueryModelBuildE2ETestCase:
     description: str
     model_name: str

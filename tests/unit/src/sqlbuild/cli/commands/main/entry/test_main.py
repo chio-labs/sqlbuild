@@ -82,6 +82,19 @@ COMMAND_LOCAL_GLOBAL_FLAG_ERROR_TEST_CASES: list[MainTestCase] = [
     ),
 ]
 
+SCENARIO_NO_SQL_VALIDATION_FLAG_ERROR_TEST_CASES: list[MainTestCase] = [
+    MainTestCase(
+        description="rejects no sql validation flag on scenario test",
+        argv=["scenario", "test", "order_totals_pass", "--no-sql-validation"],
+        expected_exit_code=2,
+    ),
+    MainTestCase(
+        description="rejects no sql validation flag on scenario capture",
+        argv=["scenario", "capture", "order_totals_pass", "--no-sql-validation"],
+        expected_exit_code=2,
+    ),
+]
+
 COMPILE_DISPATCH_TEST_CASES: list[MainTestCase] = [
     MainTestCase(
         description="passes no sql validation flag to compile handler",
@@ -417,6 +430,25 @@ def test_given_local_scenario_test_with_retain_when_running_then_returns_cli_err
         "Local scenario DuckDB files are always kept under target/run/scenarios/."
         in rendered_stderr
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SCENARIO_NO_SQL_VALIDATION_FLAG_ERROR_TEST_CASES,
+    ids=[case.description for case in SCENARIO_NO_SQL_VALIDATION_FLAG_ERROR_TEST_CASES],
+)
+def test_given_scenario_command_when_no_sql_validation_flag_passed_then_parser_rejects_it(
+    test_case: MainTestCase,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(),
+    )
+    rendered_stderr: str = capsys.readouterr().err
+
+    assert exit_code == test_case.expected_exit_code
+    assert "unrecognized arguments: --no-sql-validation" in rendered_stderr
 
 
 @pytest.mark.parametrize(

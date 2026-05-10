@@ -1,12 +1,12 @@
 <p align="center">
-  <img src=".github/sqlbuild-logo-clean.png" alt="SQLBuild" width="100%">
+  <img src="https://github.com/chio-labs/sqlbuild/blob/main/.github/sqlbuild-logo-clean.png" alt="SQLBuild" width="100%">
 </p>
 
 <p align="center">
-  Typed, test-first SQL pipelines with change-aware incremental rebuilds.
+  Typed, test-first SQL pipelines with local E2E testing.
 </p>
 
-SQLBuild is a framework for building batch SQL transformation pipelines where correctness and extensibility are first-class concerns.
+SQLBuild is a SQL pipeline framework that validates SQL at compile time, blocks bad data before promotion, and runs full E2E tests with no warehouse required.
 
 ## Key features
 
@@ -30,24 +30,25 @@ pip install sqlbuild
 uv add sqlbuild
 ```
 
-Clone the repo and run the waffle shop example:
+Create and run the playground project:
 
 ```bash
-git clone https://github.com/chio-labs/sqlbuild.git
-cd sqlbuild
-uv sync
-sqb --project-dir examples/waffle_shop plan
-sqb --project-dir examples/waffle_shop build
+sqb playground waffle-shop
+cd waffle-shop
+sqb plan
+sqb build
+sqb test
+sqb scenario test
 ```
 
 
 ## How it works
 
 1. **Define** your models as SQL files with `MODEL()` headers that declare configuration, schema, and audits inline
-2. **Compile** to resolve references, validate SQL (with SQLGlot), and expand Python macros
+2. **Compile** to resolve references, validate SQL, infer column types, check contracts, and compute column lineage - all offline
 3. **Plan** what needs to change based on fingerprints, schema diffs, and backfill policies
 4. **Build** by executing the plan: materializing models, validating data before promotion, and ensuring bad data never reaches production
-5. **Iterate** with first-class support for chained unit tests, zero-copy cloning, and deferred builds - fast feedback without rebuilding the world
+5. **Test** with chained unit tests, E2E scenario tests, and local replay through DuckDB - no warehouse required
 
 ## Example
 
@@ -107,6 +108,9 @@ __source__raw_payments AS (
 __expected__fact_orders AS (
   SELECT 1 AS order_id, 100 AS customer_id, 1500 AS total_cents,
          'credit_card' AS payment_method
+),
+__assert__no_negative_totals AS (
+  SELECT * FROM __ref("fact_orders") WHERE total_cents < 0
 )
 SELECT 1
 ```

@@ -6,7 +6,7 @@ import csv
 import logging
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.exceptions import AdapterUserError
@@ -54,6 +54,8 @@ class _SnowflakeConnection:
 
 class SnowflakeAdapter(BaseAdapter):
     """Snowflake adapter backed by snowflake-connector-python."""
+
+    sqlglot_dialect_name: ClassVar[str | None] = "snowflake"
 
     def supports_python_functions(self) -> bool:
         return True
@@ -380,9 +382,6 @@ class SnowflakeAdapter(BaseAdapter):
 
     def render_table_function_call(self, *, target: str, arguments_sql: str) -> str:
         return f"TABLE({target}({arguments_sql}))"
-
-    def sqlglot_dialect(self) -> str | None:
-        return "snowflake"
 
     def expression_inference_profile(self) -> ExpressionInferenceProfile:
         return ExpressionInferenceProfile(

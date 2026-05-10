@@ -19,6 +19,7 @@ from tests.unit.src.sqlbuild.integrations.snowflake._test_types import (
     SnowflakeExpressionInferenceProfileTestCase,
     SnowflakeLoadSeedTestCase,
     SnowflakeQueryColumnNamesTestCase,
+    SnowflakeRenderCloneTestCase,
     SnowflakeRenderCursorBoundLiteralTestCase,
     SnowflakeRenderPythonFunctionTestCase,
     SnowflakeRenderTableFunctionTestCase,
@@ -84,6 +85,27 @@ TEST_CASES: list[SnowflakeRenderCursorBoundLiteralTestCase] = [
     ),
 ]
 
+SNOWFLAKE_RENDER_CLONE_TEST_CASES: list[SnowflakeRenderCloneTestCase] = [
+    SnowflakeRenderCloneTestCase(
+        description="renders zero copy table clone by default",
+        source="prod.fact_orders",
+        target="dev.fact_orders",
+        hard_copy=False,
+        expected_statements=("CREATE OR REPLACE TABLE dev.fact_orders CLONE prod.fact_orders",),
+        expected_supports_zero_copy=True,
+    ),
+    SnowflakeRenderCloneTestCase(
+        description="renders CTAS when hard copy is requested",
+        source="prod.fact_orders",
+        target="dev.fact_orders",
+        hard_copy=True,
+        expected_statements=(
+            "CREATE OR REPLACE TABLE dev.fact_orders AS SELECT * FROM prod.fact_orders",
+        ),
+        expected_supports_zero_copy=True,
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -98,6 +120,26 @@ def test_given_cursor_bounds_when_rendering_then_snowflake_returns_expected_lite
     result: str = adapter.render_cursor_bound_literal(test_case.value, test_case.cursor_type)
 
     assert result == test_case.expected_literal
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SNOWFLAKE_RENDER_CLONE_TEST_CASES,
+    ids=[case.description for case in SNOWFLAKE_RENDER_CLONE_TEST_CASES],
+)
+def test_given_clone_request_when_rendering_then_snowflake_uses_expected_clone_sql(
+    test_case: SnowflakeRenderCloneTestCase,
+) -> None:
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+
+    statements: tuple[str, ...] = adapter.render_clone(
+        source=test_case.source,
+        target=test_case.target,
+        hard_copy=test_case.hard_copy,
+    )
+
+    assert adapter.supports_zero_copy_clone() is test_case.expected_supports_zero_copy
+    assert statements == test_case.expected_statements
 
 
 @pytest.mark.parametrize(

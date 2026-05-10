@@ -45,6 +45,16 @@ class BigQueryRenderQualifiedNameTestCase:
 
 
 @dataclass(frozen=True)
+class BigQueryRenderCloneTestCase:
+    description: str
+    source: str
+    target: str
+    hard_copy: bool
+    expected_statements: tuple[str, ...]
+    expected_supports_zero_copy: bool
+
+
+@dataclass(frozen=True)
 class BigQueryRenderPythonFunctionTestCase:
     description: str
     expected_sql: str

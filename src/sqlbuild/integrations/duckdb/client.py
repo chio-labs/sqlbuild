@@ -8,7 +8,7 @@ from decimal import Decimal
 from importlib.machinery import ModuleSpec
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.inference_rules import first_arg_nullability
@@ -37,6 +37,8 @@ from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settin
 
 class DuckDbAdapter(BaseAdapter):
     """First-class DuckDB adapter with full method coverage."""
+
+    sqlglot_dialect_name: ClassVar[str | None] = "duckdb"
 
     def recommended_max_sql_length(self) -> int | None:
         """DuckDB uses the framework default recommendation for lightweight unit-test SQL."""
@@ -75,9 +77,6 @@ class DuckDbAdapter(BaseAdapter):
         """Render DuckDB set-difference operator explicitly."""
 
         return "EXCEPT"
-
-    def sqlglot_dialect(self) -> str | None:
-        return "duckdb"
 
     def expression_inference_profile(self) -> ExpressionInferenceProfile:
         return ExpressionInferenceProfile(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
@@ -37,6 +37,8 @@ class BaseAdapter(StrictAdapter):
     Built-in adapters and most user adapters should subclass this.
     Override only the methods your engine requires.
     """
+
+    sqlglot_dialect_name: ClassVar[str | None] = None
 
     def supports_zero_copy_clone(self) -> bool:
         return False
@@ -873,14 +875,14 @@ class BaseAdapter(StrictAdapter):
             return "decimal"
         if "INT" in normalized:
             return "integer"
-        return None
+        return self.sqlglot_dialect_name
 
     def format_row_diff_decimal_sql(self, value: Decimal) -> str:
         return format(value, "f")
 
     def default_schema(self) -> str | None:
         """Return None — most adapters require explicit schema configuration."""
-        return None
+        return self.sqlglot_dialect_name
 
     def default_database(self) -> str | None:
         """Return None — most adapters require explicit database configuration."""
@@ -920,9 +922,9 @@ class BaseAdapter(StrictAdapter):
         return "EXCEPT"
 
     def sqlglot_dialect(self) -> str | None:
-        """Return no adapter-specific SQLGlot dialect by default."""
+        """Return the configured SQLGlot dialect name, if any."""
 
-        return None
+        return self.sqlglot_dialect_name
 
     def expression_inference_profile(self) -> ExpressionInferenceProfile:
         """Return portable static expression inference behavior by default."""
