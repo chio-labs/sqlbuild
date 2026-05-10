@@ -14,6 +14,7 @@ from sqlbuild.compiler.compile.constants import (
     SOURCE_TEST_CTE_PREFIX,
 )
 from sqlbuild.compiler.compile.models import (
+    CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
@@ -24,10 +25,15 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.helpers.function_fingerprints import (
+    build_compiled_function_fingerprint_sql,
+)
 from sqlbuild.compiler.planner.helpers.graph import build_upstream_deps, topologically_order_keys
 from sqlbuild.compiler.planner.helpers.plan_entry import extract_seed_columns, plan_model
 from sqlbuild.compiler.planner.helpers.resolve.refs import build_function_targets
+from sqlbuild.compiler.planner.helpers.resolve.resolve import resolve_function_sql
 from sqlbuild.compiler.planner.models import (
+    FunctionPlanEntry,
     ModelPlanEntry,
     PlanWarning,
     ScenarioArtifactIdentity,
@@ -218,6 +224,9 @@ def build_scenario_execution_plan(
         source_warehouse_columns or {}
     )
     models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    functions_by_key: dict[CompiledObjectKey, CompiledFunction] = {
+        function.key: function for function in project.functions
+    }
     function_targets: dict[str, CompiledRelationTarget] = build_function_targets(project.functions)
     scenario_model_names: frozenset[str] = frozenset(graph_plan.model_names)
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_upstream_deps(
@@ -237,6 +246,17 @@ def build_scenario_execution_plan(
         project=project,
         graph_plan=graph_plan,
         relation_plan=relation_plan,
+    )
+    function_entries: tuple[FunctionPlanEntry, ...] = tuple(
+        _build_scenario_function_entry(
+            function=functions_by_key[key],
+            adapter=adapter,
+            relation_plan=relation_plan,
+            function_targets=function_targets,
+            source_warehouse_columns=effective_source_warehouse_columns,
+        )
+        for key in topologically_order_keys(upstream_deps)
+        if key in graph_plan.function_deps and key in functions_by_key
     )
 
     model_entries: list[ModelPlanEntry] = []
@@ -301,11 +321,48 @@ def build_scenario_execution_plan(
             relation_plan=relation_plan,
             fixture_plans=fixture_plans,
             seed_entries=seed_entries,
+            function_entries=function_entries,
             model_entries=tuple(model_entries),
             expected_checks=expected_checks,
             assertion_checks=assertion_checks,
         ),
         tuple(warnings),
+    )
+
+
+def _build_scenario_function_entry(
+    *,
+    function: CompiledFunction,
+    adapter: BaseAdapter,
+    relation_plan: ScenarioRelationPlan,
+    function_targets: dict[str, CompiledRelationTarget],
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
+) -> FunctionPlanEntry:
+    return FunctionPlanEntry(
+        key=function.key,
+        name=function.name,
+        relative_path=function.relative_path,
+        target=function.target,
+        arguments=function.arguments,
+        returns=function.returns,
+        body_sql=resolve_function_sql(
+            adapter=adapter,
+            function=function,
+            model_targets=relation_plan.model_targets,
+            seed_targets=relation_plan.seed_targets,
+            function_targets=function_targets,
+            source_map=relation_plan.source_map,
+            source_warehouse_columns=source_warehouse_columns,
+            star_exclude_keyword=adapter.star_exclude_keyword(),
+        ),
+        fingerprint_query_sql=build_compiled_function_fingerprint_sql(function),
+        fingerprint_target=function.fingerprint_target,
+        return_columns=function.return_columns,
+        language=function.language,
+        source_file_path=function.source_file_path,
+        runtime_version=function.runtime_version,
+        entry_point=function.entry_point,
+        packages=function.packages,
     )
 
 
