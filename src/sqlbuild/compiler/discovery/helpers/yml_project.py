@@ -28,6 +28,7 @@ from sqlbuild.spec.models.project import (
     LocalEnvironmentConfig,
     ProjectConfig,
     ScenarioConfig,
+    ScenarioSnapshotLimitsConfig,
     SettingsConfig,
 )
 
@@ -498,7 +499,7 @@ def _load_scenario(*, payload: object, file_path: Path) -> ScenarioConfig:
     )
     _validate_allowed_keys(
         mapping=mapping,
-        allowed_keys=frozenset({"local_type_overrides"}),
+        allowed_keys=frozenset({"local_type_overrides", "snapshot_limits"}),
         label="scenario",
         file_path=file_path,
     )
@@ -519,7 +520,58 @@ def _load_scenario(*, payload: object, file_path: Path) -> ScenarioConfig:
             payload=rules_payload,
             file_path=file_path,
         )
-    return ScenarioConfig(local_type_overrides=local_type_overrides)
+    return ScenarioConfig(
+        local_type_overrides=local_type_overrides,
+        snapshot_limits=_load_scenario_snapshot_limits(
+            payload=mapping.get("snapshot_limits"),
+            file_path=file_path,
+        ),
+    )
+
+
+def _load_scenario_snapshot_limits(
+    *, payload: object, file_path: Path
+) -> ScenarioSnapshotLimitsConfig:
+    mapping: dict[str, object] = _coerce_mapping(
+        payload=payload,
+        label="scenario.snapshot_limits",
+        file_path=file_path,
+    )
+    _validate_allowed_keys(
+        mapping=mapping,
+        allowed_keys=frozenset(
+            {
+                "max_rows_per_relation",
+                "max_total_rows",
+                "max_bytes_per_relation",
+                "max_total_bytes",
+            }
+        ),
+        label="scenario.snapshot_limits",
+        file_path=file_path,
+    )
+    limits: ScenarioSnapshotLimitsConfig = ScenarioSnapshotLimitsConfig(
+        max_rows_per_relation=_optional_nullable_int(
+            mapping=mapping,
+            key="max_rows_per_relation",
+        ),
+        max_total_rows=_optional_nullable_int(mapping=mapping, key="max_total_rows"),
+        max_bytes_per_relation=_optional_nullable_int(
+            mapping=mapping,
+            key="max_bytes_per_relation",
+        ),
+        max_total_bytes=_optional_nullable_int(mapping=mapping, key="max_total_bytes"),
+    )
+    value: int | None
+    for value in (
+        limits.max_rows_per_relation,
+        limits.max_total_rows,
+        limits.max_bytes_per_relation,
+        limits.max_total_bytes,
+    ):
+        if value is not None and value < 0:
+            raise ProjectConfigError(f"{file_path} scenario.snapshot_limits values must be >= 0")
+    return limits
 
 
 def _load_string_mapping(*, payload: object, file_path: Path) -> dict[str, str]:
@@ -589,6 +641,15 @@ def _optional_int(*, mapping: dict[str, object], key: str, default: int) -> int:
     value: object | None = mapping.get(key)
     if value is None:
         return default
+    if not isinstance(value, int):
+        raise ProjectConfigError(f"Expected '{key}' to be an integer when provided")
+    return value
+
+
+def _optional_nullable_int(*, mapping: dict[str, object], key: str) -> int | None:
+    value: object | None = mapping.get(key)
+    if value is None:
+        return None
     if not isinstance(value, int):
         raise ProjectConfigError(f"Expected '{key}' to be an integer when provided")
     return value

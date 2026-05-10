@@ -18,6 +18,7 @@ from sqlbuild.executor.scenario.main.run import execute_scenario_run
 from sqlbuild.executor.scenario.main.snapshots import classify_scenario_snapshot_state
 from sqlbuild.executor.scenario.models import (
     ScenarioRunResult,
+    ScenarioSnapshotCaptureLimits,
     ScenarioSnapshotCaptureRunResult,
     ScenarioSnapshotStateResult,
 )
@@ -172,6 +173,7 @@ def run_scenario_capture_pipeline(
     capture_dialect: str,
     sqlbuild_version: str,
     retain: bool,
+    capture_limits: ScenarioSnapshotCaptureLimits | None = None,
     on_connection_start: Callable[[int], None] | None = None,
     on_connection_complete: Callable[[int, float], None] | None = None,
     on_connection_error: Callable[[int, float], None] | None = None,
@@ -222,6 +224,7 @@ def run_scenario_capture_pipeline(
                         scenario_config=pipeline_result.project.scenario,
                         sqlglot_dialect=adapter.sqlglot_dialect(),
                     ),
+                    limits=capture_limits,
                 )
             except Exception as exc:
                 result = ScenarioSnapshotCaptureRunResult(

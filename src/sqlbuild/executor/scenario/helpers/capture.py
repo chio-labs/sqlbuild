@@ -21,6 +21,7 @@ from sqlbuild.executor.scenario.main.cleanup import execute_scenario_cleanup
 from sqlbuild.executor.scenario.models import (
     ScenarioCleanupExecutionResult,
     ScenarioFixtureExecutionResult,
+    ScenarioSnapshotCaptureLimits,
     ScenarioSnapshotCapturePlan,
     ScenarioSnapshotCaptureResult,
     ScenarioSnapshotCaptureRunResult,
@@ -42,6 +43,7 @@ def execute_scenario_snapshot_capture_steps(
     sqlbuild_version: str,
     retain: bool,
     local_type_overrides: dict[str, str] | None = None,
+    limits: ScenarioSnapshotCaptureLimits | None = None,
 ) -> ScenarioSnapshotCaptureRunResult:
     """Materialize scenario inputs, capture JSONL snapshots, and apply cleanup policy."""
 
@@ -120,6 +122,7 @@ def execute_scenario_snapshot_capture_steps(
         adapter=adapter,
         connection=connection,
         local_type_overrides=local_type_overrides,
+        limits=limits,
     )
 
     return _finish_capture_run(

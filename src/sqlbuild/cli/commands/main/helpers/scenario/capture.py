@@ -11,6 +11,10 @@ from typing import TextIO
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.scenario.constants import SUCCESS_STATUS
 from sqlbuild.cli.commands.main.helpers.scenario.selection import select_scenarios
+from sqlbuild.cli.commands.main.helpers.scenario.snapshot_limits import (
+    build_scenario_snapshot_capture_limits,
+    scenario_snapshot_capture_warning,
+)
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
@@ -27,6 +31,7 @@ from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.pipeline.main.run import run_scenario_capture_pipeline
 from sqlbuild.executor.scenario.models import (
     ScenarioFixtureExecutionResult,
+    ScenarioSnapshotCaptureLimits,
     ScenarioSnapshotCaptureRelationResult,
     ScenarioSnapshotCaptureResult,
     ScenarioSnapshotCaptureRunResult,
@@ -39,7 +44,10 @@ from sqlbuild.shared.helpers.colors import (
     green_bold,
     supports_color,
 )
-from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.models.project import (
+    resolve_effective_adapter_name,
+    resolve_effective_scenario_config,
+)
 
 _SCENARIO_NAME_WIDTH: int = 64
 
@@ -50,6 +58,11 @@ def run_scenario_capture(
     no_color: bool = False,
     selectors: tuple[str, ...] = (),
     retain: bool = False,
+    force: bool = False,
+    max_snapshot_rows: int | None = None,
+    max_snapshot_total_rows: int | None = None,
+    max_snapshot_bytes: int | None = None,
+    max_snapshot_total_bytes: int | None = None,
 ) -> int:
     """Execute the scenario capture command."""
 
@@ -84,6 +97,7 @@ def run_scenario_capture(
         use_color=use_color,
     )
     progress_stream.write(f"\n{execution_label}  {header_detail}\n\n")
+    progress_stream.write(f"{scenario_snapshot_capture_warning(force=force)}\n\n")
     progress_stream.flush()
 
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
@@ -120,6 +134,17 @@ def run_scenario_capture(
         progress_stream.write("Capturing scenarios...\n\n")
         progress_stream.flush()
     results: tuple[ScenarioSnapshotCaptureRunResult, ...]
+    capture_limits: ScenarioSnapshotCaptureLimits = build_scenario_snapshot_capture_limits(
+        scenario_config=resolve_effective_scenario_config(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+        ),
+        max_rows_per_relation=max_snapshot_rows,
+        max_total_rows=max_snapshot_total_rows,
+        max_bytes_per_relation=max_snapshot_bytes,
+        max_total_bytes=max_snapshot_total_bytes,
+        force=force,
+    )
     results = run_scenario_capture_pipeline(
         project_dir=effective_project_dir,
         pipeline_result=pipeline_result,
@@ -132,6 +157,7 @@ def run_scenario_capture(
         capture_dialect=adapter_name,
         sqlbuild_version=_sqlbuild_version(),
         retain=retain,
+        capture_limits=capture_limits,
         on_connection_start=execution_connection_progress.on_connection_start,
         on_connection_complete=execution_connection_progress.on_connection_complete,
         on_connection_error=execution_connection_progress.on_connection_error,

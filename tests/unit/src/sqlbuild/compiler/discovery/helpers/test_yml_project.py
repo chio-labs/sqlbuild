@@ -49,6 +49,12 @@ user = "kevin"
 [scenario.local_type_overrides.snowflake]
 "NUMBER(*,0)" = "BIGINT"
 OBJECT = "JSON"
+
+[scenario.snapshot_limits]
+max_rows_per_relation = 12
+max_total_rows = 34
+max_bytes_per_relation = 56
+max_total_bytes = 78
 """.strip()
         },
         expected_environment="dev",
@@ -64,6 +70,12 @@ OBJECT = "JSON"
                 "NUMBER(*,0)": "BIGINT",
                 "OBJECT": "JSON",
             }
+        },
+        expected_snapshot_limits={
+            "max_rows_per_relation": 12,
+            "max_total_rows": 34,
+            "max_bytes_per_relation": 56,
+            "max_total_bytes": 78,
         },
     ),
     LoadLocalConfigTestCase(
@@ -385,6 +397,28 @@ threads = 4
 """.strip(),
         expected_error_fragment=r"settings contains unknown key\(s\): threads",
     ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when scenario snapshot limit is not an integer",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[scenario.snapshot_limits]
+max_rows_per_relation = "many"
+""".strip(),
+        expected_error_fragment="Expected 'max_rows_per_relation' to be an integer when provided",
+    ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when scenario snapshot limit is negative",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[scenario.snapshot_limits]
+max_total_bytes = -1
+""".strip(),
+        expected_error_fragment="scenario.snapshot_limits values must be >= 0",
+    ),
 ]
 
 LOCAL_CONFIG_ERROR_TEST_CASES: list[LoadLocalConfigErrorTestCase] = [
@@ -493,6 +527,12 @@ OBJECT = "JSON"
 
 [scenario.local_type_overrides.bigquery]
 "BIGNUMERIC(*,*)" = "DECIMAL({1}, {2})"
+
+[scenario.snapshot_limits]
+max_rows_per_relation = 100
+max_total_rows = 200
+max_bytes_per_relation = 300
+max_total_bytes = 400
 """.strip(),
             expected_name="demo",
             expected_adapter="duckdb",
@@ -527,6 +567,12 @@ OBJECT = "JSON"
                 },
                 "bigquery": {"BIGNUMERIC(*,*)": "DECIMAL({1}, {2})"},
             },
+            expected_snapshot_limits={
+                "max_rows_per_relation": 100,
+                "max_total_rows": 200,
+                "max_bytes_per_relation": 300,
+                "max_total_bytes": 400,
+            },
         )
     ],
     ids=["loads expected fields from project config"],
@@ -560,6 +606,12 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.janitor.delete_tracked_only is test_case.expected_janitor_delete_tracked_only
     assert config.janitor.exclude_patterns == test_case.expected_janitor_exclude_patterns
     assert config.scenario.local_type_overrides == test_case.expected_scenario_local_type_overrides
+    assert {
+        "max_rows_per_relation": config.scenario.snapshot_limits.max_rows_per_relation,
+        "max_total_rows": config.scenario.snapshot_limits.max_total_rows,
+        "max_bytes_per_relation": config.scenario.snapshot_limits.max_bytes_per_relation,
+        "max_total_bytes": config.scenario.snapshot_limits.max_total_bytes,
+    } == test_case.expected_snapshot_limits
 
 
 @pytest.mark.parametrize(
@@ -589,6 +641,12 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
     assert config.setting_overrides == test_case.expected_setting_overrides
     assert config.vars == test_case.expected_vars
     assert config.scenario.local_type_overrides == test_case.expected_scenario_local_type_overrides
+    assert {
+        "max_rows_per_relation": config.scenario.snapshot_limits.max_rows_per_relation,
+        "max_total_rows": config.scenario.snapshot_limits.max_total_rows,
+        "max_bytes_per_relation": config.scenario.snapshot_limits.max_bytes_per_relation,
+        "max_total_bytes": config.scenario.snapshot_limits.max_total_bytes,
+    } == test_case.expected_snapshot_limits
     assert {
         environment_name: {
             "connection": environment_config.connection,

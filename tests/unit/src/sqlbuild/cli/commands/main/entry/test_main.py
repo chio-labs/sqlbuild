@@ -296,6 +296,9 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
                 "--local",
                 "--strict",
                 "--sync-snapshots",
+                "--force",
+                "--max-snapshot-rows",
+                "7",
             ],
             expected_exit_code=5,
             expected_scenario_selectors=("order_totals_pass", "tests/scenarios/nested"),
@@ -307,7 +310,22 @@ def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispa
     test_case: MainTestCase,
 ) -> None:
     received_args: list[
-        tuple[Path | None, bool, bool, tuple[str, ...], bool, bool, bool, bool, bool]
+        tuple[
+            Path | None,
+            bool,
+            bool,
+            tuple[str, ...],
+            bool,
+            bool,
+            bool,
+            bool,
+            bool,
+            bool,
+            int | None,
+            int | None,
+            int | None,
+            int | None,
+        ]
     ] = []
 
     def run_scenario(
@@ -320,6 +338,11 @@ def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispa
         strict: bool,
         sync_snapshots: bool,
         refresh: bool,
+        force: bool,
+        max_snapshot_rows: int | None,
+        max_snapshot_total_rows: int | None,
+        max_snapshot_bytes: int | None,
+        max_snapshot_total_bytes: int | None,
     ) -> int:
         received_args.append(
             (
@@ -332,6 +355,11 @@ def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispa
                 strict,
                 sync_snapshots,
                 refresh,
+                force,
+                max_snapshot_rows,
+                max_snapshot_total_rows,
+                max_snapshot_bytes,
+                max_snapshot_total_bytes,
             )
         )
         return test_case.expected_exit_code
@@ -343,7 +371,22 @@ def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispa
 
     assert exit_code == test_case.expected_exit_code
     assert received_args == [
-        (None, False, False, test_case.expected_scenario_selectors, False, True, True, True, False)
+        (
+            None,
+            False,
+            False,
+            test_case.expected_scenario_selectors,
+            False,
+            True,
+            True,
+            True,
+            False,
+            True,
+            7,
+            None,
+            None,
+            None,
+        )
     ]
 
 
@@ -387,6 +430,8 @@ def test_given_local_scenario_test_with_retain_when_running_then_returns_cli_err
                 "order_totals_pass",
                 "tests/scenarios/nested",
                 "--retain",
+                "--max-snapshot-total-rows",
+                "9",
             ],
             expected_exit_code=6,
             expected_scenario_selectors=("order_totals_pass", "tests/scenarios/nested"),
@@ -397,7 +442,20 @@ def test_given_local_scenario_test_with_retain_when_running_then_returns_cli_err
 def test_given_scenario_capture_arguments_when_running_with_dependencies_then_dispatches_selectors(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[Path | None, bool, bool, tuple[str, ...], bool]] = []
+    received_args: list[
+        tuple[
+            Path | None,
+            bool,
+            bool,
+            tuple[str, ...],
+            bool,
+            bool,
+            int | None,
+            int | None,
+            int | None,
+            int | None,
+        ]
+    ] = []
 
     def run_scenario_capture(
         project_dir: Path | None,
@@ -405,8 +463,26 @@ def test_given_scenario_capture_arguments_when_running_with_dependencies_then_di
         no_color: bool,
         selectors: tuple[str, ...],
         retain: bool,
+        force: bool,
+        max_snapshot_rows: int | None,
+        max_snapshot_total_rows: int | None,
+        max_snapshot_bytes: int | None,
+        max_snapshot_total_bytes: int | None,
     ) -> int:
-        received_args.append((project_dir, no_sql_validation, no_color, selectors, retain))
+        received_args.append(
+            (
+                project_dir,
+                no_sql_validation,
+                no_color,
+                selectors,
+                retain,
+                force,
+                max_snapshot_rows,
+                max_snapshot_total_rows,
+                max_snapshot_bytes,
+                max_snapshot_total_bytes,
+            )
+        )
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -415,7 +491,20 @@ def test_given_scenario_capture_arguments_when_running_with_dependencies_then_di
     )
 
     assert exit_code == test_case.expected_exit_code
-    assert received_args == [(None, False, False, test_case.expected_scenario_selectors, True)]
+    assert received_args == [
+        (
+            None,
+            False,
+            False,
+            test_case.expected_scenario_selectors,
+            True,
+            False,
+            None,
+            9,
+            None,
+            None,
+        )
+    ]
 
 
 @pytest.mark.parametrize(

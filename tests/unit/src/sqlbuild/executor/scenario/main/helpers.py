@@ -124,6 +124,12 @@ class ScenarioSnapshotCaptureStepsTestAdapter(BaseAdapter):
         self.events.append(f"query:{sql}")
         if self.fail_on_query_target is not None and self.fail_on_query_target in sql:
             raise RuntimeError("warehouse read failed")
+        if "COUNT(*)" in sql and "__sqb_51b385aebe20__source__raw__orders" in sql:
+            return QueryResult(columns=("count",), rows=((1,),))
+        if "COUNT(*)" in sql and "__sqb_51b385aebe20__ref__stg_customers" in sql:
+            return QueryResult(columns=("count",), rows=((1,),))
+        if "COUNT(*)" in sql and "__sqb_51b385aebe20__seed__country_codes" in sql:
+            return QueryResult(columns=("count",), rows=((1,),))
         if "__sqb_51b385aebe20__source__raw__orders" in sql:
             return QueryResult(columns=("order_id",), rows=((1,),))
         if "__sqb_51b385aebe20__ref__stg_customers" in sql:

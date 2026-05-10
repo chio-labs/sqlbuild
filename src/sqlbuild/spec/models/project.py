@@ -87,10 +87,23 @@ class JanitorConfig:
 
 
 @dataclass(frozen=True)
+class ScenarioSnapshotLimitsConfig:
+    """Scenario snapshot capture safety limits."""
+
+    max_rows_per_relation: int | None = None
+    max_total_rows: int | None = None
+    max_bytes_per_relation: int | None = None
+    max_total_bytes: int | None = None
+
+
+@dataclass(frozen=True)
 class ScenarioConfig:
     """Scenario command configuration."""
 
     local_type_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
+    snapshot_limits: ScenarioSnapshotLimitsConfig = field(
+        default_factory=ScenarioSnapshotLimitsConfig
+    )
 
 
 @dataclass(frozen=True)
@@ -147,7 +160,35 @@ def resolve_effective_scenario_config(
     rules: dict[str, str]
     for dialect, rules in local_config.scenario.local_type_overrides.items():
         local_type_overrides.setdefault(dialect, {}).update(rules)
-    return ScenarioConfig(local_type_overrides=local_type_overrides)
+    project_limits: ScenarioSnapshotLimitsConfig = project_config.scenario.snapshot_limits
+    local_limits: ScenarioSnapshotLimitsConfig = local_config.scenario.snapshot_limits
+    return ScenarioConfig(
+        local_type_overrides=local_type_overrides,
+        snapshot_limits=ScenarioSnapshotLimitsConfig(
+            max_rows_per_relation=_resolve_optional_int_override(
+                project_limits.max_rows_per_relation,
+                local_limits.max_rows_per_relation,
+            ),
+            max_total_rows=_resolve_optional_int_override(
+                project_limits.max_total_rows,
+                local_limits.max_total_rows,
+            ),
+            max_bytes_per_relation=_resolve_optional_int_override(
+                project_limits.max_bytes_per_relation,
+                local_limits.max_bytes_per_relation,
+            ),
+            max_total_bytes=_resolve_optional_int_override(
+                project_limits.max_total_bytes,
+                local_limits.max_total_bytes,
+            ),
+        ),
+    )
+
+
+def _resolve_optional_int_override(
+    project_value: int | None, local_value: int | None
+) -> int | None:
+    return local_value if local_value is not None else project_value
 
 
 def scenario_local_type_overrides_for_dialect(

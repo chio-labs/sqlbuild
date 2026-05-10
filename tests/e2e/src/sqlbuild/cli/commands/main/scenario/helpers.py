@@ -75,6 +75,17 @@ def build_scenario_project_files() -> dict[str, str]:
     }
 
 
+def build_capture_safety_project_files(*, use_project_row_limit: bool) -> dict[str, str]:
+    """Build scenario e2e files with optional project snapshot limit config."""
+
+    repo_files: dict[str, str] = build_scenario_project_files()
+    if use_project_row_limit:
+        repo_files["sqlbuild_project.toml"] += (
+            "\n[scenario.snapshot_limits]\nmax_rows_per_relation = 1\n"
+        )
+    return repo_files
+
+
 def build_real_warehouse_local_replay_project_files(
     *,
     project_toml: str,

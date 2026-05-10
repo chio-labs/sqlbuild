@@ -8,7 +8,10 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.executor.scenario.helpers.capture import execute_scenario_snapshot_capture_steps
-from sqlbuild.executor.scenario.models import ScenarioSnapshotCaptureRunResult
+from sqlbuild.executor.scenario.models import (
+    ScenarioSnapshotCaptureLimits,
+    ScenarioSnapshotCaptureRunResult,
+)
 
 
 def execute_scenario_snapshot_capture_run(
@@ -23,6 +26,7 @@ def execute_scenario_snapshot_capture_run(
     sqlbuild_version: str,
     retain: bool,
     local_type_overrides: dict[str, str] | None = None,
+    limits: ScenarioSnapshotCaptureLimits | None = None,
 ) -> ScenarioSnapshotCaptureRunResult:
     """Materialize scenario inputs and capture them for an external entrypoint."""
 
@@ -37,4 +41,5 @@ def execute_scenario_snapshot_capture_run(
         sqlbuild_version=sqlbuild_version,
         retain=retain,
         local_type_overrides=local_type_overrides,
+        limits=limits,
     )
