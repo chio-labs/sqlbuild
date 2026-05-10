@@ -1,7 +1,10 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild.executor.scenario.models import ScenarioSnapshotCaptureResult
+from sqlbuild.executor.scenario.models import (
+    ScenarioSnapshotCaptureLimits,
+    ScenarioSnapshotCaptureResult,
+)
 from sqlbuild.executor.shared.types import ExecutionStatus
 
 
@@ -48,3 +51,13 @@ class ExecuteScenarioSnapshotCaptureTestCase:
     expected_jsonl_files: dict[Path, str]
     expected_manifest_fragment: str
     expected_query_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class ExecuteScenarioSnapshotCaptureLimitTestCase:
+    description: str
+    limits: ScenarioSnapshotCaptureLimits
+    expected_error_fragment: str
+    expected_missing_relative_path: Path
+    expected_query_fragment: str
+    unexpected_query_fragment: str

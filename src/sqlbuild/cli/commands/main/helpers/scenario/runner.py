@@ -11,6 +11,10 @@ from typing import TextIO
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.scenario.constants import FAILED_STATUS, SUCCESS_STATUS
 from sqlbuild.cli.commands.main.helpers.scenario.selection import select_scenarios
+from sqlbuild.cli.commands.main.helpers.scenario.snapshot_limits import (
+    build_scenario_snapshot_capture_limits,
+    scenario_snapshot_capture_warning,
+)
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
@@ -39,6 +43,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioAssertionCheckExecutionResult,
     ScenarioExpectedCheckExecutionResult,
     ScenarioRunResult,
+    ScenarioSnapshotCaptureLimits,
     ScenarioSnapshotCaptureRunResult,
 )
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus
@@ -54,7 +59,10 @@ from sqlbuild.shared.helpers.colors import (
     green_bold,
     supports_color,
 )
-from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.models.project import (
+    resolve_effective_adapter_name,
+    resolve_effective_scenario_config,
+)
 
 _SCENARIO_NAME_WIDTH: int = 64
 _CHECK_LABEL_WIDTH: int = 10
@@ -71,6 +79,11 @@ def run_scenario(
     strict: bool = False,
     sync_snapshots: bool = False,
     refresh: bool = False,
+    force: bool = False,
+    max_snapshot_rows: int | None = None,
+    max_snapshot_total_rows: int | None = None,
+    max_snapshot_bytes: int | None = None,
+    max_snapshot_total_bytes: int | None = None,
 ) -> int:
     """Execute the scenario test command."""
 
@@ -165,6 +178,11 @@ def run_scenario(
             project_name=discovered_inputs.project_config.name,
             no_sql_validation=no_sql_validation,
             refresh=refresh,
+            force=force,
+            max_snapshot_rows=max_snapshot_rows,
+            max_snapshot_total_rows=max_snapshot_total_rows,
+            max_snapshot_bytes=max_snapshot_bytes,
+            max_snapshot_total_bytes=max_snapshot_total_bytes,
             progress_stream=progress_stream,
             use_color=use_color,
         )
@@ -256,6 +274,11 @@ def _sync_local_snapshots(
     project_name: str,
     no_sql_validation: bool,
     refresh: bool,
+    force: bool,
+    max_snapshot_rows: int | None,
+    max_snapshot_total_rows: int | None,
+    max_snapshot_bytes: int | None,
+    max_snapshot_total_bytes: int | None,
     progress_stream: TextIO,
     use_color: bool,
 ) -> int:
@@ -302,6 +325,7 @@ def _sync_local_snapshots(
     header: str = f"Snapshot Sync ({len(capture_scenarios)} selected)"
     styled_header: str = green_bold(header) if use_color else header
     progress_stream.write(f"\n{styled_header}\n\n")
+    progress_stream.write(f"{scenario_snapshot_capture_warning(force=force)}\n\n")
     progress_stream.flush()
     scenario_status: TransientStatusReporter = TransientStatusReporter(
         stream=progress_stream,
@@ -316,6 +340,17 @@ def _sync_local_snapshots(
     if not status_is_tty:
         progress_stream.write("Capturing snapshots...\n\n")
         progress_stream.flush()
+    capture_limits: ScenarioSnapshotCaptureLimits = build_scenario_snapshot_capture_limits(
+        scenario_config=resolve_effective_scenario_config(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+        ),
+        max_rows_per_relation=max_snapshot_rows,
+        max_total_rows=max_snapshot_total_rows,
+        max_bytes_per_relation=max_snapshot_bytes,
+        max_total_bytes=max_snapshot_total_bytes,
+        force=force,
+    )
     results: tuple[ScenarioSnapshotCaptureRunResult, ...] = run_scenario_capture_pipeline(
         project_dir=project_dir,
         pipeline_result=project_pipeline_result,
@@ -328,6 +363,7 @@ def _sync_local_snapshots(
         capture_dialect=capture_dialect,
         sqlbuild_version=_sqlbuild_version(),
         retain=False,
+        capture_limits=capture_limits,
         on_connection_start=execution_connection_progress.on_connection_start,
         on_connection_complete=execution_connection_progress.on_connection_complete,
         on_connection_error=execution_connection_progress.on_connection_error,

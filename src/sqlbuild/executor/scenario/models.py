@@ -100,6 +100,17 @@ class ScenarioSnapshotFileStats:
 
 
 @dataclass(frozen=True)
+class ScenarioSnapshotCaptureLimits:
+    """Safety limits for writing durable local scenario snapshots."""
+
+    max_rows_per_relation: int | None = None
+    max_total_rows: int | None = None
+    max_bytes_per_relation: int | None = None
+    max_total_bytes: int | None = None
+    force: bool = False
+
+
+@dataclass(frozen=True)
 class ScenarioSnapshotStateResult:
     """Manifest freshness classification for one local scenario snapshot."""
 

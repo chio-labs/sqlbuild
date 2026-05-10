@@ -12,10 +12,79 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     assert_scenario_snapshot,
+    build_capture_safety_project_files,
     build_scenario_project_files,
     list_scenario_relation_names,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_inline_project, run_sqb
+
+SCENARIO_CAPTURE_SAFETY_TEST_CASES: tuple[ScenarioCliE2ETestCase, ...] = (
+    ScenarioCliE2ETestCase(
+        description="capture fails before writing snapshot when row limit is exceeded",
+        command=(
+            "--no-color",
+            "scenario",
+            "capture",
+            "order_totals_pass",
+            "--max-snapshot-rows",
+            "1",
+        ),
+        expected_exit_code=1,
+        expected_stdout_fragments=(
+            "Review captured scenario snapshots before committing",
+            "error[X512]:",
+            "exceeding the per-relation capture limit of 1 rows",
+            "PASS=0  FAIL=1  TOTAL=1",
+        ),
+    ),
+    ScenarioCliE2ETestCase(
+        description="capture force bypasses row limit",
+        command=(
+            "--no-color",
+            "scenario",
+            "capture",
+            "order_totals_pass",
+            "--max-snapshot-rows",
+            "1",
+            "--force",
+        ),
+        expected_exit_code=0,
+        expected_stdout_fragments=(
+            "Review captured scenario snapshots before committing",
+            "Size limits are bypassed.",
+            "order_totals_pass",
+            "1 relation, 2 rows",
+            "PASS=1  FAIL=0  TOTAL=1",
+        ),
+    ),
+    ScenarioCliE2ETestCase(
+        description="capture uses project snapshot row limit",
+        command=("--no-color", "scenario", "capture", "order_totals_pass"),
+        expected_exit_code=1,
+        expected_stdout_fragments=(
+            "error[X512]:",
+            "exceeding the per-relation capture limit of 1 rows",
+            "PASS=0  FAIL=1  TOTAL=1",
+        ),
+    ),
+    ScenarioCliE2ETestCase(
+        description="capture CLI row limit overrides project snapshot row limit",
+        command=(
+            "--no-color",
+            "scenario",
+            "capture",
+            "order_totals_pass",
+            "--max-snapshot-rows",
+            "2",
+        ),
+        expected_exit_code=0,
+        expected_stdout_fragments=(
+            "order_totals_pass",
+            "1 relation, 2 rows",
+            "PASS=1  FAIL=0  TOTAL=1",
+        ),
+    ),
+)
 
 
 @pytest.mark.parametrize(
@@ -53,7 +122,9 @@ def test_given_selected_scenarios_when_running_capture_then_writes_snapshots(
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
         project_name="scenario_project",
-        repo_files=build_scenario_project_files(),
+        repo_files=build_capture_safety_project_files(
+            use_project_row_limit="project snapshot row limit" in test_case.description,
+        ),
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
@@ -201,3 +272,40 @@ def test_given_local_type_override_when_running_capture_then_manifest_uses_overr
         expected_row_count=2,
         expected_local_types={"id": "BIGINT", "amount": "BIGINT", "tax": "DECIMAL(8, 2)"},
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SCENARIO_CAPTURE_SAFETY_TEST_CASES,
+    ids=[case.description for case in SCENARIO_CAPTURE_SAFETY_TEST_CASES],
+)
+def test_given_capture_safety_options_when_running_capture_then_enforces_limits(
+    test_case: ScenarioCliE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="scenario_project",
+        repo_files=build_capture_safety_project_files(
+            use_project_row_limit="project snapshot row limit" in test_case.description,
+        ),
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    expected_stdout_fragment: str
+    for expected_stdout_fragment in test_case.expected_stdout_fragments:
+        assert expected_stdout_fragment in result.stdout
+    snapshot_path: Path = (
+        project_dir
+        / "tests"
+        / "_scenario_snapshots"
+        / "order_totals_pass"
+        / "sources"
+        / "raw_orders.jsonl"
+    )
+    assert snapshot_path.exists() is (test_case.expected_exit_code == 0)

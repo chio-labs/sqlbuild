@@ -30,6 +30,7 @@ from sqlbuild.executor.scenario.models import (
 from sqlbuild.executor.scenario.types import ScenarioSnapshotState
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.shared.constants import (
+    SCENARIO_EXEC_CAPTURE_LIMIT_EXCEEDED,
     SCENARIO_EXEC_INTERNAL,
     SCENARIO_LOCAL_JSONL_INVALID,
     SCENARIO_LOCAL_MANIFEST_INVALID,
@@ -327,26 +328,37 @@ def build_scenario_snapshot_manifest_shell(
 
 
 def write_scenario_snapshot_jsonl(
-    *, file_path: Path, rows: tuple[dict[str, object], ...]
+    *, file_path: Path, rows: tuple[dict[str, object], ...], max_bytes: int | None = None
 ) -> ScenarioSnapshotFileStats:
     """Write JSON object rows as newline-delimited JSON and return file statistics."""
 
     file_path.parent.mkdir(parents=True, exist_ok=True)
     row_count: int = 0
     byte_count: int = 0
-    with file_path.open("w", encoding="utf-8") as snapshot_file:
-        row: dict[str, object]
-        for row in rows:
-            encoded_row: str = json.dumps(
-                row,
-                default=_snapshot_json_default,
-                sort_keys=True,
-                separators=(",", ":"),
-            )
-            snapshot_file.write(encoded_row)
-            snapshot_file.write("\n")
-            row_count += 1
-            byte_count += len(encoded_row.encode("utf-8")) + 1
+    try:
+        with file_path.open("w", encoding="utf-8") as snapshot_file:
+            row: dict[str, object]
+            for row in rows:
+                encoded_row: str = json.dumps(
+                    row,
+                    default=_snapshot_json_default,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                next_byte_count: int = byte_count + len(encoded_row.encode("utf-8")) + 1
+                if max_bytes is not None and next_byte_count > max_bytes:
+                    raise ExecutorInputError(
+                        f"Scenario snapshot JSONL file '{file_path}' would exceed "
+                        f"the {max_bytes} byte limit",
+                        code=SCENARIO_EXEC_CAPTURE_LIMIT_EXCEEDED,
+                    )
+                snapshot_file.write(encoded_row)
+                snapshot_file.write("\n")
+                row_count += 1
+                byte_count = next_byte_count
+    except Exception:
+        file_path.unlink(missing_ok=True)
+        raise
     return ScenarioSnapshotFileStats(row_count=row_count, byte_count=byte_count)
 
 

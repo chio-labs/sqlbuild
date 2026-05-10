@@ -15,6 +15,7 @@ from sqlbuild.executor.scenario.helpers.snapshots import (
 )
 from sqlbuild.executor.scenario.main.capture import execute_scenario_snapshot_capture
 from sqlbuild.executor.scenario.models import (
+    ScenarioSnapshotCaptureLimits,
     ScenarioSnapshotCapturePlan,
     ScenarioSnapshotCaptureRelationResult,
     ScenarioSnapshotCaptureResult,
@@ -23,8 +24,12 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotRelation,
 )
 from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.shared.constants import SCENARIO_EXEC_CAPTURE_FAILED
+from sqlbuild.shared.constants import (
+    SCENARIO_EXEC_CAPTURE_FAILED,
+    SCENARIO_EXEC_CAPTURE_LIMIT_EXCEEDED,
+)
 from tests.unit.src.sqlbuild.executor.scenario.main._test_types import (
+    ExecuteScenarioSnapshotCaptureLimitTestCase,
     ExecuteScenarioSnapshotCaptureTestCase,
 )
 from tests.unit.src.sqlbuild.executor.scenario.main.helpers import (
@@ -32,6 +37,28 @@ from tests.unit.src.sqlbuild.executor.scenario.main.helpers import (
 )
 
 SCENARIO_PLAN: ScenarioExecutionPlan = build_scenario_cleanup_test_plan_with_project_seed()
+SCENARIO_SNAPSHOT_CAPTURE_LIMIT_TEST_CASES: tuple[
+    ExecuteScenarioSnapshotCaptureLimitTestCase, ...
+] = (
+    ExecuteScenarioSnapshotCaptureLimitTestCase(
+        description="row limit fails before downloading oversized relation",
+        limits=ScenarioSnapshotCaptureLimits(max_rows_per_relation=1),
+        expected_error_fragment="exceeding the per-relation capture limit",
+        expected_missing_relative_path=Path("sources/raw__orders.jsonl"),
+        expected_query_fragment="SELECT COUNT(*)",
+        unexpected_query_fragment=(
+            "SELECT * FROM `scenario_schema.__sqb_51b385aebe20__source__raw__orders`"
+        ),
+    ),
+    ExecuteScenarioSnapshotCaptureLimitTestCase(
+        description="byte limit removes partial jsonl",
+        limits=ScenarioSnapshotCaptureLimits(max_bytes_per_relation=1),
+        expected_error_fragment="would exceed the 1 byte limit",
+        expected_missing_relative_path=Path("refs/stg_customers.jsonl"),
+        expected_query_fragment="SELECT *",
+        unexpected_query_fragment="not-a-query-fragment",
+    ),
+)
 
 
 class ScenarioSnapshotCaptureTestAdapter(BaseAdapter):
@@ -55,6 +82,12 @@ class ScenarioSnapshotCaptureTestAdapter(BaseAdapter):
         self.queries.append(sql)
         if self.fail_on_relation is not None and self.fail_on_relation in sql:
             raise RuntimeError("warehouse read failed")
+        if "COUNT(*)" in sql and "__sqb_51b385aebe20__source__raw__orders" in sql:
+            return QueryResult(columns=("count",), rows=((2,),))
+        if "COUNT(*)" in sql and "__sqb_51b385aebe20__ref__stg_customers" in sql:
+            return QueryResult(columns=("count",), rows=((1,),))
+        if "COUNT(*)" in sql and "__sqb_51b385aebe20__seed__country_codes" in sql:
+            return QueryResult(columns=("count",), rows=((1,),))
         if "__sqb_51b385aebe20__source__raw__orders" in sql:
             return QueryResult(
                 columns=("order_id", "amount"),
@@ -272,6 +305,45 @@ def test_given_capture_plan_when_executing_snapshot_capture_then_writes_jsonl_an
     expected_query_fragment: str
     for expected_query_fragment in test_case.expected_query_fragments:
         assert any(expected_query_fragment in query for query in adapter.queries)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SCENARIO_SNAPSHOT_CAPTURE_LIMIT_TEST_CASES,
+    ids=[case.description for case in SCENARIO_SNAPSHOT_CAPTURE_LIMIT_TEST_CASES],
+)
+def test_given_capture_limit_when_executing_snapshot_capture_then_fails_safely(
+    test_case: ExecuteScenarioSnapshotCaptureLimitTestCase,
+    tmp_path: Path,
+) -> None:
+    capture_plan: ScenarioSnapshotCapturePlan = build_scenario_snapshot_capture_plan(
+        project_dir=tmp_path,
+        scenario_plan=SCENARIO_PLAN,
+    )
+    manifest: ScenarioSnapshotManifest = build_scenario_snapshot_manifest_shell(
+        capture_plan=capture_plan,
+        captured_at="2026-05-09T00:00:00Z",
+        capture_adapter="duckdb",
+        capture_dialect="duckdb",
+        sqlbuild_version="0.1.0",
+    )
+    adapter: ScenarioSnapshotCaptureTestAdapter = ScenarioSnapshotCaptureTestAdapter()
+
+    result: ScenarioSnapshotCaptureResult = execute_scenario_snapshot_capture(
+        capture_plan=capture_plan,
+        manifest=manifest,
+        adapter=adapter,
+        connection=object(),
+        limits=test_case.limits,
+    )
+
+    assert result.status == ExecutionStatus.FAILED
+    assert result.error_code == SCENARIO_EXEC_CAPTURE_LIMIT_EXCEEDED
+    assert result.error_message is not None
+    assert test_case.expected_error_fragment in result.error_message
+    assert not (capture_plan.snapshot_root / test_case.expected_missing_relative_path).exists()
+    assert any(test_case.expected_query_fragment in query for query in adapter.queries)
+    assert not any(test_case.unexpected_query_fragment in query for query in adapter.queries)
 
 
 @pytest.mark.parametrize(

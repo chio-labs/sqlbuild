@@ -17,6 +17,11 @@ def run_scenario(
     strict: bool = False,
     sync_snapshots: bool = False,
     refresh: bool = False,
+    force: bool = False,
+    max_snapshot_rows: int | None = None,
+    max_snapshot_total_rows: int | None = None,
+    max_snapshot_bytes: int | None = None,
+    max_snapshot_total_bytes: int | None = None,
 ) -> int:
     """Run the scenario command."""
 
@@ -30,4 +35,9 @@ def run_scenario(
         strict=strict,
         sync_snapshots=sync_snapshots,
         refresh=refresh,
+        force=force,
+        max_snapshot_rows=max_snapshot_rows,
+        max_snapshot_total_rows=max_snapshot_total_rows,
+        max_snapshot_bytes=max_snapshot_bytes,
+        max_snapshot_total_bytes=max_snapshot_total_bytes,
     )

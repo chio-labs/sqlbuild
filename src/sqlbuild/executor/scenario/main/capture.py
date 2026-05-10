@@ -7,11 +7,18 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import QueryResult
 from sqlbuild.executor.scenario.helpers.capture_columns import build_scenario_snapshot_columns
+from sqlbuild.executor.scenario.helpers.capture_safety import (
+    capture_error_help,
+    max_relation_write_bytes,
+    query_capture_relation_row_count,
+    validate_capture_row_limits,
+)
 from sqlbuild.executor.scenario.helpers.snapshots import (
     write_scenario_snapshot_jsonl,
     write_scenario_snapshot_manifest,
 )
 from sqlbuild.executor.scenario.models import (
+    ScenarioSnapshotCaptureLimits,
     ScenarioSnapshotCapturePlan,
     ScenarioSnapshotCaptureRelationPlan,
     ScenarioSnapshotCaptureRelationResult,
@@ -37,15 +44,37 @@ def execute_scenario_snapshot_capture(
     adapter: BaseAdapter,
     connection: Any,
     local_type_overrides: dict[str, str] | None = None,
+    limits: ScenarioSnapshotCaptureLimits | None = None,
 ) -> ScenarioSnapshotCaptureResult:
     """Write JSONL relation snapshots and a final manifest from materialized inputs."""
 
     relation_results: list[ScenarioSnapshotCaptureRelationResult] = []
     manifest_relations: list[ScenarioSnapshotRelation] = []
+    effective_limits: ScenarioSnapshotCaptureLimits = limits or ScenarioSnapshotCaptureLimits()
+    total_row_count: int = 0
+    total_byte_count: int = 0
     relation_plan: ScenarioSnapshotCaptureRelationPlan
     for relation_plan in capture_plan.relations:
         result: ScenarioSnapshotCaptureRelationResult
         try:
+            source_relation_name: str = _source_relation_name(
+                adapter=adapter,
+                relation_plan=relation_plan,
+            )
+            preflight_row_count: int = query_capture_relation_row_count(
+                adapter=adapter,
+                connection=connection,
+                relation_plan=relation_plan,
+                source_relation_name=source_relation_name,
+            )
+            if not effective_limits.force:
+                validate_capture_row_limits(
+                    scenario_name=capture_plan.scenario_name,
+                    relation_plan=relation_plan,
+                    relation_row_count=preflight_row_count,
+                    total_row_count=total_row_count,
+                    limits=effective_limits,
+                )
             rows: tuple[dict[str, object], ...] = _query_relation_rows(
                 adapter=adapter,
                 connection=connection,
@@ -60,7 +89,13 @@ def execute_scenario_snapshot_capture(
             stats: ScenarioSnapshotFileStats = write_scenario_snapshot_jsonl(
                 file_path=capture_plan.snapshot_root / relation_plan.file_path,
                 rows=rows,
+                max_bytes=max_relation_write_bytes(
+                    total_byte_count=total_byte_count,
+                    limits=effective_limits,
+                ),
             )
+            total_row_count += preflight_row_count
+            total_byte_count += stats.byte_count
             result = ScenarioSnapshotCaptureRelationResult(
                 kind=relation_plan.kind,
                 logical_name=relation_plan.logical_name,
@@ -92,10 +127,7 @@ def execute_scenario_snapshot_capture(
                 file_path=relation_plan.file_path,
                 status=ExecutionStatus.FAILED,
                 error_code=captured_error_code,
-                error_help=(
-                    "Check the materialized scenario input relation and rerun capture with "
-                    "--retain to inspect warehouse artifacts."
-                ),
+                error_help=capture_error_help(captured_error_code),
                 error_message=f"Failed to capture {relation_plan.kind.value} "
                 f"'{relation_plan.logical_name}': {exc}",
             )
