@@ -287,6 +287,230 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
     "test_case",
     [
         MainTestCase(
+            description="dispatches scenario test with multiple selectors and local snapshot sync",
+            argv=[
+                "scenario",
+                "test",
+                "order_totals_pass",
+                "tests/scenarios/nested",
+                "--local",
+                "--strict",
+                "--sync-snapshots",
+                "--force",
+                "--max-snapshot-rows",
+                "7",
+            ],
+            expected_exit_code=5,
+            expected_scenario_selectors=("order_totals_pass", "tests/scenarios/nested"),
+        )
+    ],
+    ids=["dispatches scenario test with multiple selectors"],
+)
+def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispatches_selectors(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[
+        tuple[
+            Path | None,
+            bool,
+            bool,
+            tuple[str, ...],
+            bool,
+            bool,
+            bool,
+            bool,
+            bool,
+            bool,
+            int | None,
+            int | None,
+            int | None,
+            int | None,
+        ]
+    ] = []
+
+    def run_scenario(
+        project_dir: Path | None,
+        no_sql_validation: bool,
+        no_color: bool,
+        selectors: tuple[str, ...],
+        retain: bool,
+        local: bool,
+        strict: bool,
+        sync_snapshots: bool,
+        refresh: bool,
+        force: bool,
+        max_snapshot_rows: int | None,
+        max_snapshot_total_rows: int | None,
+        max_snapshot_bytes: int | None,
+        max_snapshot_total_bytes: int | None,
+    ) -> int:
+        received_args.append(
+            (
+                project_dir,
+                no_sql_validation,
+                no_color,
+                selectors,
+                retain,
+                local,
+                strict,
+                sync_snapshots,
+                refresh,
+                force,
+                max_snapshot_rows,
+                max_snapshot_total_rows,
+                max_snapshot_bytes,
+                max_snapshot_total_bytes,
+            )
+        )
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_scenario=run_scenario),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [
+        (
+            None,
+            False,
+            False,
+            test_case.expected_scenario_selectors,
+            False,
+            True,
+            True,
+            True,
+            False,
+            True,
+            7,
+            None,
+            None,
+            None,
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="rejects local scenario retain flag",
+            argv=["scenario", "test", "order_totals_pass", "--local", "--retain"],
+            expected_exit_code=1,
+        )
+    ],
+    ids=["rejects local scenario retain flag"],
+)
+def test_given_local_scenario_test_with_retain_when_running_then_returns_cli_error(
+    test_case: MainTestCase,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(),
+    )
+    rendered_stderr: str = capsys.readouterr().err
+
+    assert exit_code == test_case.expected_exit_code
+    assert "error[C452]: scenario test --local does not support --retain" in rendered_stderr
+    assert (
+        "Local scenario DuckDB files are always kept under target/run/scenarios/."
+        in rendered_stderr
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="dispatches scenario capture with multiple selectors",
+            argv=[
+                "scenario",
+                "capture",
+                "order_totals_pass",
+                "tests/scenarios/nested",
+                "--retain",
+                "--max-snapshot-total-rows",
+                "9",
+            ],
+            expected_exit_code=6,
+            expected_scenario_selectors=("order_totals_pass", "tests/scenarios/nested"),
+        )
+    ],
+    ids=["dispatches scenario capture with multiple selectors"],
+)
+def test_given_scenario_capture_arguments_when_running_with_dependencies_then_dispatches_selectors(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[
+        tuple[
+            Path | None,
+            bool,
+            bool,
+            tuple[str, ...],
+            bool,
+            bool,
+            int | None,
+            int | None,
+            int | None,
+            int | None,
+        ]
+    ] = []
+
+    def run_scenario_capture(
+        project_dir: Path | None,
+        no_sql_validation: bool,
+        no_color: bool,
+        selectors: tuple[str, ...],
+        retain: bool,
+        force: bool,
+        max_snapshot_rows: int | None,
+        max_snapshot_total_rows: int | None,
+        max_snapshot_bytes: int | None,
+        max_snapshot_total_bytes: int | None,
+    ) -> int:
+        received_args.append(
+            (
+                project_dir,
+                no_sql_validation,
+                no_color,
+                selectors,
+                retain,
+                force,
+                max_snapshot_rows,
+                max_snapshot_total_rows,
+                max_snapshot_bytes,
+                max_snapshot_total_bytes,
+            )
+        )
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_scenario_capture=run_scenario_capture),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [
+        (
+            None,
+            False,
+            False,
+            test_case.expected_scenario_selectors,
+            True,
+            False,
+            None,
+            9,
+            None,
+            None,
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
             description="dispatches query command through injected handler",
             argv=[
                 "query",

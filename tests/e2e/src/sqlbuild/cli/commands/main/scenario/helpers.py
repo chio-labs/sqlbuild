@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import subprocess
 from pathlib import Path
 
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import query_duckdb
+from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import query_duckdb, run_sqb
 
 
 def build_scenario_project_files() -> dict[str, str]:
@@ -73,6 +75,36 @@ def build_scenario_project_files() -> dict[str, str]:
     }
 
 
+def build_capture_safety_project_files(*, use_project_row_limit: bool) -> dict[str, str]:
+    """Build scenario e2e files with optional project snapshot limit config."""
+
+    repo_files: dict[str, str] = build_scenario_project_files()
+    if use_project_row_limit:
+        repo_files["sqlbuild_project.toml"] += (
+            "\n[scenario.snapshot_limits]\nmax_rows_per_relation = 1\n"
+        )
+    return repo_files
+
+
+def build_real_warehouse_local_replay_project_files(
+    *,
+    project_toml: str,
+    model_sql: str,
+    scenario_sql: str,
+    scenario_name: str = "transpilable_event_rollup",
+) -> dict[str, str]:
+    """Build an inline scenario project for remote capture followed by local replay."""
+
+    return {
+        "sqlbuild_project.toml": project_toml,
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_events\n    schema: raw\n    table: raw_events\n"
+        ),
+        "models/event_rollup.sql": model_sql,
+        f"tests/scenarios/{scenario_name}.sql": scenario_sql,
+    }
+
+
 def list_scenario_relation_names(*, db_path: Path) -> tuple[str, ...]:
     """Return DuckDB relation names owned by scenario artifact prefixes."""
 
@@ -120,3 +152,206 @@ def assert_runtime_artifact_contains(
     expected_fragment: str
     for expected_fragment in expected_fragments:
         assert expected_fragment in content
+
+
+def assert_scenario_snapshot(
+    *,
+    project_dir: Path,
+    scenario_name: str,
+    expected_row_count: int,
+    expected_local_types: dict[str, str] | None = None,
+) -> None:
+    """Assert a scenario snapshot manifest and source JSONL file were written."""
+
+    snapshot_root: Path = project_dir / "tests" / "_scenario_snapshots" / scenario_name
+    manifest_path: Path = snapshot_root / "scenario.json"
+    jsonl_path: Path = snapshot_root / "sources" / "raw_orders.jsonl"
+    assert manifest_path.exists()
+    assert jsonl_path.exists()
+
+    manifest_data: object = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert isinstance(manifest_data, dict)
+    assert manifest_data["scenario_name"] == scenario_name
+    assert manifest_data["format"] == "jsonl"
+    assert manifest_data["total_rows"] == expected_row_count
+    assert manifest_data["relations"][0]["file"] == "sources/raw_orders.jsonl"
+    assert manifest_data["relations"][0]["row_count"] == expected_row_count
+    columns: object = manifest_data["relations"][0]["columns"]
+    assert isinstance(columns, list)
+    assert columns
+    column_names: set[str] = {str(column["name"]) for column in columns}
+    assert {"id", "amount"}.issubset(column_names)
+    local_types_by_name: dict[str, str] = {
+        str(column["name"]): str(column["local_type"])
+        for column in columns
+        if isinstance(column, dict)
+    }
+    if expected_local_types is not None:
+        assert local_types_by_name | expected_local_types == local_types_by_name
+    column: object
+    for column in columns:
+        assert isinstance(column, dict)
+        assert column["warehouse_type"]
+        assert column["local_type"]
+
+    rows: list[str] = jsonl_path.read_text(encoding="utf-8").splitlines()
+    assert len(rows) == expected_row_count
+
+
+def maybe_corrupt_scenario_snapshot_jsonl(
+    *, project_dir: Path, scenario_name: str, enabled: bool
+) -> None:
+    """Optionally replace one captured source JSONL file with malformed content."""
+
+    if not enabled:
+        return
+    jsonl_path: Path = (
+        project_dir
+        / "tests"
+        / "_scenario_snapshots"
+        / scenario_name
+        / "sources"
+        / "raw_orders.jsonl"
+    )
+    jsonl_path.write_text('{"id": 1, "amount": 10}\nnot-json\n', encoding="utf-8")
+
+
+def maybe_capture_scenario_snapshot(
+    *, project_dir: Path, scenario_name: str, enabled: bool
+) -> None:
+    """Optionally capture a scenario snapshot for an e2e project."""
+
+    if not enabled:
+        return
+    capture_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "scenario", "capture", scenario_name),
+        project_dir=project_dir,
+    )
+    assert capture_result.returncode == 0, capture_result.stdout + capture_result.stderr
+
+
+def write_committed_order_totals_pass_snapshot(*, project_dir: Path) -> None:
+    """Write a small snapshot fixture without running scenario capture."""
+
+    snapshot_root: Path = project_dir / "tests" / "_scenario_snapshots" / "order_totals_pass"
+    sources_root: Path = snapshot_root / "sources"
+    sources_root.mkdir(parents=True)
+    (snapshot_root / "scenario.json").write_text(
+        json.dumps(
+            {
+                "capture_adapter": "duckdb",
+                "capture_dialect": "duckdb",
+                "captured_at": "2026-05-10T13:16:38Z",
+                "format": "jsonl",
+                "input_fingerprint": (
+                    "b768a0f159b65141c9eb9f460b80f350679e1362477a8fc527b24911fb211112"
+                ),
+                "relations": [
+                    {
+                        "bytes": 41,
+                        "columns": [
+                            {
+                                "local_type": "INT",
+                                "name": "id",
+                                "warehouse_type": "INTEGER",
+                            },
+                            {
+                                "local_type": "INT",
+                                "name": "amount",
+                                "warehouse_type": "INTEGER",
+                            },
+                        ],
+                        "file": "sources/raw_orders.jsonl",
+                        "kind": "source",
+                        "logical_name": "raw_orders",
+                        "row_count": 2,
+                    }
+                ],
+                "scenario_name": "order_totals_pass",
+                "sqlbuild_version": "0.2.1",
+                "total_bytes": 41,
+                "total_rows": 2,
+                "version": 1,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (sources_root / "raw_orders.jsonl").write_text(
+        '{"amount":10,"id":1}\n{"amount":5,"id":2}\n',
+        encoding="utf-8",
+    )
+
+
+def write_stale_order_totals_scenario(*, project_dir: Path) -> None:
+    """Change the order totals scenario so a prior snapshot becomes stale."""
+
+    scenario_path: Path = project_dir / "tests" / "scenarios" / "order_totals_pass.sql"
+    scenario_path.write_text(
+        'SCENARIO (description: "Order totals scenario", tags: ["scenario"]);\n\n'
+        "WITH\n"
+        "__source__raw_orders AS (\n"
+        "  SELECT 1 AS id, 10 AS amount\n"
+        "  UNION ALL\n"
+        "  SELECT 2 AS id, 5 AS amount\n"
+        "  UNION ALL\n"
+        "  SELECT 3 AS id, 3 AS amount\n"
+        "),\n"
+        "__expected__order_totals AS (\n"
+        "  SELECT 18 AS total_amount\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def maybe_write_stale_order_totals_scenario(*, project_dir: Path, enabled: bool) -> None:
+    """Optionally change a scenario so a prior snapshot becomes stale."""
+
+    if not enabled:
+        return
+    write_stale_order_totals_scenario(project_dir=project_dir)
+
+
+def assert_local_duckdb_state(
+    *,
+    db_path: Path,
+    stdout: str,
+    expected_exists: bool,
+    query_when_exists: bool,
+    count_sql: str,
+    expected_count: int,
+    rows_sql: str | None = None,
+    expected_rows: tuple[tuple[object, ...], ...] = (),
+) -> None:
+    """Assert retained local DuckDB state for a local scenario run."""
+
+    assert db_path.exists() is expected_exists
+    if not query_when_exists:
+        return
+    assert f"Retained local DuckDB: {db_path.as_posix()}" in stdout
+    rows: list[tuple[object, ...]] = query_duckdb(db_path=db_path, sql=count_sql)
+    assert rows == [(expected_count,)]
+    if rows_sql is not None:
+        value_rows: list[tuple[object, ...]] = query_duckdb(db_path=db_path, sql=rows_sql)
+        assert tuple(value_rows) == expected_rows
+
+
+def assert_optional_local_replay_rows(
+    *,
+    project_dir: Path,
+    scenario_name: str,
+    local_rows_sql: str,
+    expected_local_rows: tuple[tuple[object, ...], ...],
+) -> None:
+    """Assert local replay rows when a test case expects inspectable local output."""
+
+    if not local_rows_sql:
+        return
+    rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "target" / "run" / "scenarios" / scenario_name / "local.duckdb",
+        sql=local_rows_sql,
+    )
+    assert tuple(rows) == expected_local_rows

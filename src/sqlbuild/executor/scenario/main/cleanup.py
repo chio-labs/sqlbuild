@@ -14,6 +14,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioCleanupTarget,
 )
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.shared.constants import SCENARIO_EXEC_CLEANUP_FAILED
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
 
 
@@ -62,6 +63,8 @@ def execute_scenario_cleanup(
             status=ExecutionStatus.FAILED,
             targets=cleanup_targets,
             lifecycle_events=statement_recorder.snapshot(),
+            error_code=SCENARIO_EXEC_CLEANUP_FAILED,
+            error_help="Drop retained scenario artifacts manually or rerun `sqb janitor`.",
             error_message=str(exc),
         )
 

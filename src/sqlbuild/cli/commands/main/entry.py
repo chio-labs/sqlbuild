@@ -23,6 +23,7 @@ from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.parsers import (
     add_cursor_override_args,
     add_execution_args,
+    add_scenario_snapshot_safety_args,
     add_select_args,
 )
 from sqlbuild.cli.commands.main.shared.types import CliCommand
@@ -30,6 +31,11 @@ from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
+from sqlbuild.shared.constants import (
+    SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
+    SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
+    SCENARIO_CLI_MISSING_SUBCOMMAND,
+)
 from sqlbuild.shared.helpers.colors import supports_color
 
 
@@ -165,9 +171,24 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     scenario_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
     scenario_subparsers = scenario_parser.add_subparsers(dest="scenario_command")
     scenario_test_parser: argparse.ArgumentParser = scenario_subparsers.add_parser("test")
-    scenario_test_parser.add_argument("scenario_selector", nargs="?", metavar="scenario")
+    scenario_test_parser.add_argument("scenario_selector", nargs="*", metavar="scenario")
     scenario_test_parser.add_argument("--retain", dest="scenario_retain", action="store_true")
+    scenario_test_parser.add_argument("--local", dest="scenario_local", action="store_true")
+    scenario_test_parser.add_argument("--strict", dest="scenario_strict", action="store_true")
+    scenario_snapshot_group: argparse._MutuallyExclusiveGroup = (
+        scenario_test_parser.add_mutually_exclusive_group()
+    )
+    scenario_snapshot_group.add_argument(
+        "--sync-snapshots", dest="scenario_sync_snapshots", action="store_true"
+    )
+    scenario_snapshot_group.add_argument("--refresh", dest="scenario_refresh", action="store_true")
+    add_scenario_snapshot_safety_args(scenario_test_parser)
     scenario_test_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    scenario_capture_parser: argparse.ArgumentParser = scenario_subparsers.add_parser("capture")
+    scenario_capture_parser.add_argument("scenario_selector", nargs="*", metavar="scenario")
+    scenario_capture_parser.add_argument("--retain", dest="scenario_retain", action="store_true")
+    add_scenario_snapshot_safety_args(scenario_capture_parser)
+    scenario_capture_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     return parser
 
 
@@ -180,6 +201,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.compile import run_compile
     from sqlbuild.cli.commands.main.debug import run_debug
     from sqlbuild.cli.commands.main.diff import run_diff
+    from sqlbuild.cli.commands.main.helpers.scenario.capture import run_scenario_capture
     from sqlbuild.cli.commands.main.janitor import run_janitor
     from sqlbuild.cli.commands.main.lineage import run_lineage
     from sqlbuild.cli.commands.main.plan import run_plan
@@ -206,6 +228,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_janitor=run_janitor,
         run_playground=run_playground,
         run_scenario=run_scenario,
+        run_scenario_capture=run_scenario_capture,
     )
     return _main_with_dependencies(argv=argv, handlers=handlers)
 
@@ -402,14 +425,59 @@ def _main_with_dependencies(
         if args.command == CliCommand.PLAYGROUND:
             return handlers.run_playground(project_dir, args.playground_path)
         if args.command == CliCommand.SCENARIO:
-            if args.scenario_command != "test":
-                raise CliUserError("scenario requires a subcommand such as 'test'", code="C450")
-            return handlers.run_scenario(
-                project_dir,
-                args.no_sql_validation,
-                args.no_color,
-                args.scenario_selector,
-                args.scenario_retain,
+            if args.scenario_command == "test":
+                if args.scenario_local and args.scenario_retain:
+                    raise CliUserError(
+                        "scenario test --local does not support --retain",
+                        code=SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
+                        help=(
+                            "Local scenario DuckDB files are always kept under "
+                            "target/run/scenarios/."
+                        ),
+                    )
+                if not args.scenario_local and (
+                    args.scenario_sync_snapshots or args.scenario_refresh
+                ):
+                    raise CliUserError(
+                        "scenario snapshot sync flags require --local",
+                        code=SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
+                        help=(
+                            "Use sqb scenario test --local --sync-snapshots or "
+                            "sqb scenario test --local --refresh."
+                        ),
+                    )
+                return handlers.run_scenario(
+                    project_dir,
+                    args.no_sql_validation,
+                    args.no_color,
+                    tuple(args.scenario_selector),
+                    args.scenario_retain,
+                    args.scenario_local,
+                    args.scenario_strict,
+                    args.scenario_sync_snapshots,
+                    args.scenario_refresh,
+                    args.scenario_force,
+                    args.scenario_max_snapshot_rows,
+                    args.scenario_max_snapshot_total_rows,
+                    args.scenario_max_snapshot_bytes,
+                    args.scenario_max_snapshot_total_bytes,
+                )
+            if args.scenario_command == "capture":
+                return handlers.run_scenario_capture(
+                    project_dir,
+                    args.no_sql_validation,
+                    args.no_color,
+                    tuple(args.scenario_selector),
+                    args.scenario_retain,
+                    args.scenario_force,
+                    args.scenario_max_snapshot_rows,
+                    args.scenario_max_snapshot_total_rows,
+                    args.scenario_max_snapshot_bytes,
+                    args.scenario_max_snapshot_total_bytes,
+                )
+            raise CliUserError(
+                "scenario requires a subcommand such as 'test'",
+                code=SCENARIO_CLI_MISSING_SUBCOMMAND,
             )
         return 0
     except CliUserError as error:

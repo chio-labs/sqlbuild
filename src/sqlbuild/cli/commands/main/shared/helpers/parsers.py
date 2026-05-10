@@ -28,3 +28,33 @@ def add_select_args(parser: argparse.ArgumentParser) -> None:
 
     parser.add_argument("--select", "-s", nargs="+", action="extend", default=[])
     parser.add_argument("--exclude", nargs="+", action="extend", default=[])
+
+
+def add_scenario_snapshot_safety_args(parser: argparse.ArgumentParser) -> None:
+    """Add scenario snapshot capture safety flags to a subparser."""
+
+    parser.add_argument("--force", dest="scenario_force", action="store_true", default=False)
+    parser.add_argument(
+        "--max-snapshot-rows",
+        dest="scenario_max_snapshot_rows",
+        type=int,
+        default=None,
+    )
+    parser.add_argument(
+        "--max-snapshot-total-rows",
+        dest="scenario_max_snapshot_total_rows",
+        type=int,
+        default=None,
+    )
+    parser.add_argument(
+        "--max-snapshot-bytes",
+        dest="scenario_max_snapshot_bytes",
+        type=int,
+        default=None,
+    )
+    parser.add_argument(
+        "--max-snapshot-total-bytes",
+        dest="scenario_max_snapshot_total_bytes",
+        type=int,
+        default=None,
+    )

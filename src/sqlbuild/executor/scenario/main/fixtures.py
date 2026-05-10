@@ -9,6 +9,7 @@ from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.planner.models import ScenarioFixturePlan
 from sqlbuild.executor.scenario.models import ScenarioFixtureExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.shared.constants import SCENARIO_EXEC_FIXTURE_FAILED
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
 from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
 
@@ -62,6 +63,10 @@ def execute_scenario_fixture(
             target_relation=target_relation,
             status=ExecutionStatus.FAILED,
             lifecycle_events=statement_recorder.snapshot(),
+            error_code=SCENARIO_EXEC_FIXTURE_FAILED,
+            error_help=(
+                "Check the fixture CTE SQL and rerun with --retain to inspect generated SQL."
+            ),
             error_message=str(exc),
         )
 
