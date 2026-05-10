@@ -16,6 +16,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
 from tests.e2e.src.sqlbuild.cli.commands.main.snowflake._test_types import (
     SnowflakeBuildE2ETestCase,
     SnowflakeCliTestCase,
+    SnowflakeCloneE2ETestCase,
     SnowflakeDiffE2ETestCase,
     SnowflakeScenarioLocalReplayE2ETestCase,
 )
@@ -437,6 +438,108 @@ def test_given_snowflake_project_when_running_diff_then_outputs_expected_summary
         fragment: str
         for fragment in test_case.expected_stdout_fragments:
             assert fragment in result.stdout
+    finally:
+        cleanup_snowflake_schema(schema_name=prod_schema)
+        cleanup_snowflake_schema(schema_name=dev_schema)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeCloneE2ETestCase(
+            description="clone defaults to zero copy and hard copy uses CTAS",
+            default_command=(
+                "--no-color",
+                "clone",
+                "--from",
+                "prod",
+                "--to",
+                "dev",
+                "--select",
+                "stg_orders",
+            ),
+            hard_copy_command=(
+                "--no-color",
+                "clone",
+                "--from",
+                "prod",
+                "--to",
+                "dev",
+                "--hard-copy",
+                "--select",
+                "stg_orders",
+            ),
+            expected_default_stdout_fragments=(
+                "stg_orders",
+                "cloned",
+                "CLONED=1  COPIED=0",
+                "PASS=1  WARN=0  FAIL=0  TOTAL=1",
+            ),
+            expected_hard_copy_stdout_fragments=(
+                "stg_orders",
+                "copied",
+                "CLONED=0  COPIED=1",
+                "PASS=1  WARN=0  FAIL=0  TOTAL=1",
+            ),
+            expected_rows=((1, 1, 100), (2, 2, 200)),
+        )
+    ],
+    ids=["clone defaults to zero copy and hard copy uses CTAS"],
+)
+def test_given_snowflake_project_when_cloning_then_default_uses_zero_copy_and_hard_copy_ctas(
+    tmp_path: Path,
+    test_case: SnowflakeCloneE2ETestCase,
+) -> None:
+    project_dir: Path
+    prod_schema: str
+    dev_schema: str
+    project_dir, prod_schema, dev_schema = prepare_snowflake_diff_project(tmp_path=tmp_path)
+
+    try:
+        write_local_environment_override(project_dir=project_dir, environment="prod")
+        prod_build: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "build"),
+            project_dir=project_dir,
+        )
+        assert prod_build.returncode == 0, prod_build.stdout + prod_build.stderr
+        ensure_query_schema_ready(schema_name=dev_schema)
+
+        default_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=test_case.default_command,
+            project_dir=project_dir,
+        )
+        assert default_result.returncode == 0, default_result.stdout + default_result.stderr
+        fragment: str
+        for fragment in test_case.expected_default_stdout_fragments:
+            assert fragment in default_result.stdout
+        cloned_rows: tuple[tuple[object, ...], ...] = fetch_snowflake_rows(
+            schema_name=dev_schema,
+            sql=(
+                "SELECT order_id, customer_id, amount_cents FROM "
+                f"{relation_name(schema_name=dev_schema, name='stg_orders')} ORDER BY order_id"
+            ),
+        )
+        assert cloned_rows == test_case.expected_rows
+
+        execute_snowflake_sql(
+            schema_name=dev_schema,
+            sql=f"DROP TABLE {relation_name(schema_name=dev_schema, name='stg_orders')}",
+        )
+        hard_copy_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=test_case.hard_copy_command,
+            project_dir=project_dir,
+        )
+        assert hard_copy_result.returncode == 0, hard_copy_result.stdout + hard_copy_result.stderr
+        for fragment in test_case.expected_hard_copy_stdout_fragments:
+            assert fragment in hard_copy_result.stdout
+        copied_rows: tuple[tuple[object, ...], ...] = fetch_snowflake_rows(
+            schema_name=dev_schema,
+            sql=(
+                "SELECT order_id, customer_id, amount_cents FROM "
+                f"{relation_name(schema_name=dev_schema, name='stg_orders')} ORDER BY order_id"
+            ),
+        )
+        assert copied_rows == test_case.expected_rows
     finally:
         cleanup_snowflake_schema(schema_name=prod_schema)
         cleanup_snowflake_schema(schema_name=dev_schema)

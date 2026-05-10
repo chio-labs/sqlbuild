@@ -154,9 +154,15 @@ def prepare_snowflake_diff_project(*, tmp_path: Path) -> tuple[Path, str, str]:
         "[environments.dev]\n"
         f'database = "{database_name}"\n'
         f'schema = "{dev_schema}"\n\n'
+        "[environments.dev.clone]\n"
+        "allow_as_source = true\n"
+        "allow_as_target = true\n\n"
         "[environments.prod]\n"
         f'database = "{database_name}"\n'
         f'schema = "{prod_schema}"\n\n'
+        "[environments.prod.clone]\n"
+        "allow_as_source = true\n"
+        "allow_as_target = false\n\n"
         "[defaults]\n"
         'materialized = "table"\n\n'
         "models/staging/stg_orders.sql: invalid\n"
