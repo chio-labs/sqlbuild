@@ -16,6 +16,7 @@ from sqlbuild.cli.commands.main.shared.helpers.connection_progress import Connec
 from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
 from sqlbuild.cli.commands.main.shared.helpers.progress import format_build_header
 from sqlbuild.cli.commands.main.shared.helpers.scenario_runtime_target_writer import (
+    write_local_scenario_runtime_target,
     write_scenario_runtime_target,
 )
 from sqlbuild.cli.commands.main.shared.helpers.status import TransientStatusReporter
@@ -243,6 +244,13 @@ def _complete_scenario_run(
         scenario_status.close()
     if scenario_plan is not None and result.local_status is None:
         write_scenario_runtime_target(
+            target_dir=target_dir,
+            adapter=adapter,
+            scenario_plan=scenario_plan,
+            result=result,
+        )
+    if scenario_plan is not None and result.local_status is not None:
+        write_local_scenario_runtime_target(
             target_dir=target_dir,
             adapter=adapter,
             scenario_plan=scenario_plan,
