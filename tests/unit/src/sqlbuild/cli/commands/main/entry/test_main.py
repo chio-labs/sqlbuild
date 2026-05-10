@@ -293,7 +293,6 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
                 "test",
                 "order_totals_pass",
                 "tests/scenarios/nested",
-                "--retain",
                 "--local",
                 "--strict",
             ],
@@ -329,8 +328,37 @@ def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispa
 
     assert exit_code == test_case.expected_exit_code
     assert received_args == [
-        (None, False, False, test_case.expected_scenario_selectors, True, True, True)
+        (None, False, False, test_case.expected_scenario_selectors, False, True, True)
     ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="rejects local scenario retain flag",
+            argv=["scenario", "test", "order_totals_pass", "--local", "--retain"],
+            expected_exit_code=1,
+        )
+    ],
+    ids=["rejects local scenario retain flag"],
+)
+def test_given_local_scenario_test_with_retain_when_running_then_returns_cli_error(
+    test_case: MainTestCase,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(),
+    )
+    rendered_stderr: str = capsys.readouterr().err
+
+    assert exit_code == test_case.expected_exit_code
+    assert "error[C452]: scenario test --local does not support --retain" in rendered_stderr
+    assert (
+        "Local scenario DuckDB files are always kept under target/run/scenarios/."
+        in rendered_stderr
+    )
 
 
 @pytest.mark.parametrize(

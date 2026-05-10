@@ -9,6 +9,7 @@ from typing import TextIO
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.scenario.constants import FAILED_STATUS, SUCCESS_STATUS
 from sqlbuild.cli.commands.main.helpers.scenario.selection import select_scenarios
+from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
@@ -35,6 +36,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioRunResult,
 )
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus
+from sqlbuild.shared.constants import SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED
 from sqlbuild.shared.helpers.coded_errors import format_coded_error
 from sqlbuild.shared.helpers.colors import (
     blue_bold,
@@ -60,6 +62,13 @@ def run_scenario(
     strict: bool = False,
 ) -> int:
     """Execute the scenario test command."""
+
+    if local and retain:
+        raise CliUserError(
+            "scenario test --local does not support --retain",
+            code=SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
+            help=("Local scenario DuckDB files are always kept under target/run/scenarios/."),
+        )
 
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
@@ -138,7 +147,6 @@ def run_scenario(
             scenarios=scenarios,
             adapter=adapter,
             project_name=discovered_inputs.project_config.name,
-            retain=retain,
             strict=strict,
             on_scenario_start=lambda _scenario: (
                 scenario_status.start("Running scenarios...") if status_is_tty else None

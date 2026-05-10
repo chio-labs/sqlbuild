@@ -184,20 +184,14 @@ SCENARIO_LOCAL_MISSING_SNAPSHOT_TEST_CASES: tuple[ScenarioLocalCliE2ETestCase, .
 
 SCENARIO_LOCAL_DUCKDB_TEST_CASES: tuple[ScenarioLocalRetainE2ETestCase, ...] = (
     ScenarioLocalRetainE2ETestCase(
-        description="captured snapshot loads into retained local DuckDB",
+        description="captured snapshot keeps local DuckDB by default",
         scenario_name="order_totals_pass",
         capture_command=("--no-color", "scenario", "capture", "order_totals_pass"),
-        command=(
-            "--no-color",
-            "scenario",
-            "test",
-            "order_totals_pass",
-            "--local",
-            "--retain",
-        ),
+        command=("--no-color", "scenario", "test", "order_totals_pass", "--local"),
         expected_exit_code=0,
         expected_stdout_fragments=(
             "order_totals_pass",
+            "Retained local DuckDB:",
             "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
         ),
         retained_duckdb_relative_path=Path("target/run/scenarios/order_totals_pass/local.duckdb"),
@@ -205,21 +199,6 @@ SCENARIO_LOCAL_DUCKDB_TEST_CASES: tuple[ScenarioLocalRetainE2ETestCase, ...] = (
         expected_count=2,
         retained_rows_sql=('SELECT id, amount FROM "__sqb_local__source__raw_orders" ORDER BY id'),
         expected_rows=((1, 10), (2, 5)),
-    ),
-    ScenarioLocalRetainE2ETestCase(
-        description="captured snapshot pass deletes local DuckDB by default",
-        scenario_name="order_totals_pass",
-        capture_command=("--no-color", "scenario", "capture", "order_totals_pass"),
-        command=("--no-color", "scenario", "test", "order_totals_pass", "--local"),
-        expected_exit_code=0,
-        expected_stdout_fragments=(
-            "order_totals_pass",
-            "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
-        ),
-        retained_duckdb_relative_path=Path("target/run/scenarios/order_totals_pass/local.duckdb"),
-        retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
-        expected_count=0,
-        expected_duckdb_exists=False,
     ),
     ScenarioLocalRetainE2ETestCase(
         description="malformed local JSONL errors and retains local DuckDB",

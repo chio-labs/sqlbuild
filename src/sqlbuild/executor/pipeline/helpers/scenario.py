@@ -105,7 +105,6 @@ def run_scenario_local_test_pipeline(
     scenarios: tuple[CompiledSqlScenario, ...],
     adapter: BaseAdapter,
     project_name: str,
-    retain: bool,
     strict: bool,
     on_scenario_start: Callable[[CompiledSqlScenario], None] | None = None,
     on_scenario_complete: Callable[
@@ -132,7 +131,6 @@ def run_scenario_local_test_pipeline(
                 project_dir=project_dir,
                 scenario_plan=scenario_plan,
                 adapter=adapter,
-                retain=retain,
                 strict=strict,
             )
         except Exception as exc:

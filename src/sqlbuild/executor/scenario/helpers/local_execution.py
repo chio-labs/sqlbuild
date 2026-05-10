@@ -64,7 +64,6 @@ def execute_local_scenario_load_only_run(
     project_dir: Path,
     scenario_plan: ScenarioExecutionPlan,
     adapter: BaseAdapter,
-    retain: bool,
     strict: bool,
 ) -> ScenarioRunResult:
     """Run one scenario locally against a run-scoped DuckDB database."""
@@ -134,7 +133,6 @@ def execute_local_scenario_load_only_run(
             adapter=adapter,
             connection=connection,
             run_id=f"local-{scenario_plan.name}",
-            requested_retain=retain,
             duckdb_path=duckdb_path,
         )
     except Exception as exc:
@@ -151,8 +149,6 @@ def execute_local_scenario_load_only_run(
     finally:
         adapter.close(connection)
 
-    if result.local_status == ScenarioLocalRunStatus.PASS and not retain:
-        _remove_local_duckdb_files(duckdb_path)
     return result
 
 
@@ -251,7 +247,6 @@ def _execute_local_plan(
     adapter: BaseAdapter,
     connection: Any,
     run_id: str,
-    requested_retain: bool,
     duckdb_path: Path,
 ) -> ScenarioRunResult:
     model_results: tuple[ModelExecutionResult, ...] = execute_scenario_models(
@@ -321,8 +316,8 @@ def _execute_local_plan(
     return _local_result(
         scenario_plan=scenario_plan,
         local_status=ScenarioLocalRunStatus.PASS,
-        retained=requested_retain,
-        duckdb_path=duckdb_path if requested_retain else None,
+        retained=True,
+        duckdb_path=duckdb_path,
         model_results=model_results,
         expected_results=expected_results,
         assertion_results=assertion_results,
