@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.8.0](https://github.com/chio-labs/sqlbuild/compare/v0.7.0...v0.8.0) (2026-05-09)
+
+
+### Features
+
+* add scenario test CLI ([8ff989a](https://github.com/chio-labs/sqlbuild/commit/8ff989a4bc98fbf095b39106bf6b73f88aec071e))
+* add SQL unit test assertions ([640fbcb](https://github.com/chio-labs/sqlbuild/commit/640fbcb2fdcb090bba221524af32d665427a557e))
+* add waffle shop playground ([a91f805](https://github.com/chio-labs/sqlbuild/commit/a91f805ac8a0eeaf5bf830a2dfdfe0d22c85f2e0))
+* clean scenario artifacts ([2293a8a](https://github.com/chio-labs/sqlbuild/commit/2293a8a97098c3fa5a90ae7314dc06f1a89875bd))
+* clean scenario artifacts with janitor ([19df620](https://github.com/chio-labs/sqlbuild/commit/19df620850dee53bf09724f91a3f3469d2468e13))
+* discover SQL scenarios ([d280dff](https://github.com/chio-labs/sqlbuild/commit/d280dff043714a7f48dc1b5de0c63291b06bdd68))
+* execute scenario checks ([a32ad16](https://github.com/chio-labs/sqlbuild/commit/a32ad16e2607fa02c6678c4582167c8ce0118cc0))
+* execute scenario model graph ([8cba144](https://github.com/chio-labs/sqlbuild/commit/8cba1444d1fa3fd0dadcdae989a69fc810206960))
+* extract scenario CTE roles ([0ecbabf](https://github.com/chio-labs/sqlbuild/commit/0ecbabfba117c7eca1d3e4635e5117ac508f47b5))
+* infer scenario graph requirements ([555d545](https://github.com/chio-labs/sqlbuild/commit/555d54514cb6e0e4f664040c573901dcc0ed15b6))
+* load scenario project seeds ([0b52756](https://github.com/chio-labs/sqlbuild/commit/0b52756863816e7aa1d15af273619b607ea73293))
+* materialize scenario fixtures ([b49179a](https://github.com/chio-labs/sqlbuild/commit/b49179a2990aeb9b6cb7fe2c48bdd2c83b7a3784))
+* name scenario artifacts ([93e0cb6](https://github.com/chio-labs/sqlbuild/commit/93e0cb6de5eddafbc6b7969fce90069ddba1d63f))
+* plan scenario fixture SQL ([8fd0a69](https://github.com/chio-labs/sqlbuild/commit/8fd0a69e732d03620d4fa6cc2b50e83b77a8ceb0))
+* plan scenario relation overrides ([1dfb94b](https://github.com/chio-labs/sqlbuild/commit/1dfb94bc8797cf0250f517eedc91015e7040306b))
+* show nested SQL unit test checks ([b096564](https://github.com/chio-labs/sqlbuild/commit/b0965646820fc96e27e4576b37e9e25bf00f7eb8))
+* write scenario runtime artifacts ([8add531](https://github.com/chio-labs/sqlbuild/commit/8add531783f03dc348368f6547e61da941f0ec16))
+
+
+### Bug Fixes
+
+* keep playground install minimal ([e67a144](https://github.com/chio-labs/sqlbuild/commit/e67a14464c90653373eddd4bdfef46855802a6fc))
+
 ## [0.7.0](https://github.com/chio-labs/sqlbuild/compare/v0.6.0...v0.7.0) (2026-05-07)
 
 
