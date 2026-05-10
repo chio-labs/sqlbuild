@@ -15,6 +15,7 @@ from sqlbuild.cli.commands.main.helpers.scenario.snapshot_limits import (
     build_scenario_snapshot_capture_limits,
     scenario_snapshot_capture_warning,
 )
+from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
@@ -36,6 +37,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCaptureResult,
     ScenarioSnapshotCaptureRunResult,
 )
+from sqlbuild.shared.constants import SCENARIO_CLI_SQL_VALIDATION_REQUIRED
 from sqlbuild.shared.helpers.coded_errors import format_coded_error
 from sqlbuild.shared.helpers.colors import (
     blue_bold,
@@ -68,10 +70,21 @@ def run_scenario_capture(
 ) -> int:
     """Execute the scenario capture command."""
 
+    if no_sql_validation:
+        raise CliUserError(
+            "scenario capture requires SQLGlot and SQL validation",
+            code=SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
+            help=(
+                "Enable settings.sqlglot and settings.sql_validation when capturing snapshots "
+                "for local scenario replay."
+            ),
+        )
+
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
+    _validate_capture_sqlglot_enabled(discovered_inputs=discovered_inputs)
     adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
@@ -184,6 +197,35 @@ def run_scenario_capture(
     progress_stream.write(f"\nPASS={pass_count}  FAIL={fail_count}  TOTAL={len(results)}\n")
     progress_stream.flush()
     return 0 if fail_count == 0 else 1
+
+
+def _validate_capture_sqlglot_enabled(*, discovered_inputs: DiscoveredProjectInputs) -> None:
+    if not _effective_sqlglot_and_validation_enabled(discovered_inputs=discovered_inputs):
+        raise CliUserError(
+            "scenario capture requires SQLGlot and SQL validation",
+            code=SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
+            help=(
+                "Enable settings.sqlglot and settings.sql_validation when capturing snapshots "
+                "for local scenario replay."
+            ),
+        )
+
+
+def _effective_sqlglot_and_validation_enabled(
+    *, discovered_inputs: DiscoveredProjectInputs
+) -> bool:
+    setting_overrides: frozenset[str] = discovered_inputs.local_config.setting_overrides
+    sqlglot_enabled: bool = (
+        discovered_inputs.local_config.settings.sqlglot
+        if "sqlglot" in setting_overrides
+        else discovered_inputs.project_config.settings.sqlglot
+    )
+    sql_validation_enabled: bool = (
+        discovered_inputs.local_config.settings.sql_validation
+        if "sql_validation" in setting_overrides
+        else discovered_inputs.project_config.settings.sql_validation
+    )
+    return sqlglot_enabled and sql_validation_enabled
 
 
 def _complete_capture_run(

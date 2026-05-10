@@ -217,7 +217,6 @@ def test_given_snowflake_scenario_capture_when_replaying_locally_then_transpilab
                 "--no-color",
                 "scenario",
                 "capture",
-                "--no-sql-validation",
                 test_case.scenario_name,
             ),
             project_dir=project_dir,
