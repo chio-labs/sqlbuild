@@ -48,6 +48,7 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
+from sqlbuild.compiler.shared.helpers.sources import render_source_relation
 from sqlbuild.shared.constants import (
     SCENARIO_PLAN_INTERNAL,
     SCENARIO_PLAN_MISSING_FIXTURE_SQL,
@@ -129,10 +130,10 @@ def build_scenario_relation_plan(
         source_entry: SourceEntry = source_entries[source_name]
         source_map[source_name] = replace(
             source_entry,
-            database=None,
-            schema=None,
-            table=None,
-            expression=target.qualified_name or target.name,
+            database=target.database,
+            schema=target.schema,
+            table=target.name,
+            expression=None,
             type_enforcement=False,
         )
 
@@ -196,9 +197,9 @@ def resolve_scenario_check_sql(
 
     def _replace_source(match: re.Match[str]) -> str:
         source: SourceEntry | None = relation_plan.source_map.get(match.group("name"))
-        if source is None or source.expression is None:
+        if source is None:
             return match.group(0)
-        return source.expression
+        return render_source_relation(source)
 
     result: str = _REF_PATTERN.sub(_replace_ref, sql)
     result = _SEED_PATTERN.sub(_replace_seed, result)
@@ -635,7 +636,7 @@ def _scenario_target_name_for_marker(
         return None if target is None else target.qualified_name
     if function_name == "__source":
         source: SourceEntry | None = relation_plan.source_map.get(referenced_name)
-        return None if source is None else source.expression
+        return None if source is None else render_source_relation(source)
     return None
 
 

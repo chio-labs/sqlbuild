@@ -56,6 +56,7 @@ class SnowflakeAdapter(BaseAdapter):
     """Snowflake adapter backed by snowflake-connector-python."""
 
     sqlglot_dialect_name: ClassVar[str | None] = "snowflake"
+    max_identifier_length: ClassVar[int] = 255
 
     def supports_python_functions(self) -> bool:
         return True

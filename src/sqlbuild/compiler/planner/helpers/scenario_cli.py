@@ -51,6 +51,7 @@ def build_cli_scenario_plan(
         scenario_name=scenario.name,
         hash_prefix=hash_index[scenario.name],
         artifacts=_scenario_artifacts(graph_plan),
+        identifier_limit=adapter.maximum_identifier_length(),
     )
     database: str | None
     schema: str | None

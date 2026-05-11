@@ -39,6 +39,7 @@ class BaseAdapter(StrictAdapter):
     """
 
     sqlglot_dialect_name: ClassVar[str | None] = None
+    max_identifier_length: ClassVar[int] = 63
 
     def supports_zero_copy_clone(self) -> bool:
         return False
@@ -65,6 +66,11 @@ class BaseAdapter(StrictAdapter):
         """Return the recommended maximum SQL length for lightweight unit-test queries."""
 
         return 256_000
+
+    def maximum_identifier_length(self) -> int:
+        """Return the maximum unqualified identifier length supported by the adapter."""
+
+        return self.max_identifier_length
 
     def describe_relation(self, connection: Any, relation: str) -> tuple[ColumnInfo, ...]:
         """Return relation column metadata using a generic DESCRIBE statement."""

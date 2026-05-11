@@ -32,11 +32,13 @@ def resolve_target_qualified_name(
 ) -> str:
     """Resolve one compiled target to its final adapter-qualified relation name."""
 
+    if target.database is not None or target.schema is not None:
+        return resolve_qualified_name_parts(
+            adapter=adapter,
+            database=target.database,
+            schema=target.schema,
+            name=target.name,
+        )
     if target.qualified_name is not None:
         return target.qualified_name
-    return resolve_qualified_name_parts(
-        adapter=adapter,
-        database=target.database,
-        schema=target.schema,
-        name=target.name,
-    )
+    return target.name

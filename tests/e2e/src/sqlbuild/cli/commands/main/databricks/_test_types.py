@@ -59,3 +59,11 @@ class DatabricksScenarioLocalReplayE2ETestCase:
     scenario_name: str = "transpilable_event_rollup"
     expected_local_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
     local_rows_sql: str = ""
+
+
+@dataclass(frozen=True)
+class DatabricksScenarioRemoteE2ETestCase:
+    description: str
+    expected_stdout_fragments: tuple[str, ...]
+    expected_retained_suffix_counts: dict[str, int]
+    expected_row_counts_by_suffix: dict[str, int]

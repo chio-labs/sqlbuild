@@ -37,6 +37,7 @@ from tests.unit.src.sqlbuild.integrations.snowflake.helpers import (
         SnowflakeExpressionInferenceProfileTestCase(
             description="returns Snowflake inference rules",
             expected_sqlglot_dialect="snowflake",
+            expected_identifier_limit=255,
             expected_rule_results={
                 "IFF": InferredNullability.NON_NULL,
                 "UPPER": InferredNullability.NON_NULL,
@@ -53,6 +54,7 @@ def test_given_snowflake_adapter_when_getting_inference_profile_then_returns_exp
     profile: ExpressionInferenceProfile = adapter.expression_inference_profile()
 
     assert profile.sqlglot_dialect == test_case.expected_sqlglot_dialect
+    assert adapter.maximum_identifier_length() == test_case.expected_identifier_limit
     iff_rule: FunctionNullabilityRule | None = profile.function_nullability_rule("IFF")
     upper_rule: FunctionNullabilityRule | None = profile.function_nullability_rule("UPPER")
     assert iff_rule is not None
