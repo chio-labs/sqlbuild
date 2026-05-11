@@ -13,13 +13,16 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery._test_types import (
     BigQueryErrorE2ETestCase,
     BigQueryModelBuildE2ETestCase,
     BigQueryScenarioLocalReplayE2ETestCase,
+    BigQueryScenarioRemoteE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.bigquery.helpers import (
+    bigquery_relation_row_count,
     build_bigquery_project_toml,
     cleanup_bigquery_dataset,
     ensure_bigquery_dataset_ready,
     execute_bigquery_sql,
     fetch_bigquery_rows,
+    list_bigquery_scenario_relation_names,
     prepare_bigquery_diff_project,
     prepare_bigquery_query_source,
     prepare_bigquery_waffle_shop,
@@ -29,6 +32,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery.helpers import (
 from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     assert_optional_local_replay_rows,
     build_real_warehouse_local_replay_project_files,
+    build_real_warehouse_remote_scenario_project_files,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     prepare_inline_project,
@@ -274,6 +278,88 @@ def test_given_bigquery_scenario_capture_when_replaying_locally_then_transpilabl
             local_rows_sql=test_case.local_rows_sql,
             expected_local_rows=test_case.expected_local_rows,
         )
+    finally:
+        cleanup_bigquery_dataset(dataset_name=dataset_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryScenarioRemoteE2ETestCase(
+            description="runs bigquery scenario remotely and retains inspectable artifacts",
+            expected_stdout_fragments=(
+                "remote_event_rollup",
+                "Retained relations:",
+                "source raw_events -> __sqb_",
+                "model  stg_events -> __sqb_",
+                "model  event_rollup -> __sqb_",
+                "PASS=1  FAIL=0  TOTAL=1",
+            ),
+            expected_retained_suffix_counts={
+                "__source__raw_events": 1,
+                "__model__stg_events": 1,
+                "__model__event_rollup": 1,
+            },
+            expected_row_counts_by_suffix={
+                "__source__raw_events": 2,
+                "__model__stg_events": 1,
+                "__model__event_rollup": 1,
+            },
+        )
+    ],
+    ids=["runs bigquery scenario remotely and retains inspectable artifacts"],
+)
+def test_given_bigquery_scenario_when_running_remotely_then_cleans_up_and_retains_artifacts(
+    tmp_path: Path,
+    test_case: BigQueryScenarioRemoteE2ETestCase,
+) -> None:
+    dataset_name: str = build_unique_dataset_name(prefix="sqlbuild_scenario_remote")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="bigquery_scenario_remote",
+        repo_files=build_real_warehouse_remote_scenario_project_files(
+            project_toml=build_bigquery_project_toml(
+                project_name="bigquery_scenario_remote",
+                dataset_name=dataset_name,
+            ),
+        ),
+    )
+    ensure_bigquery_dataset_ready(dataset_name=dataset_name)
+
+    try:
+        cleanup_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "scenario", "test", "remote_event_rollup"),
+            project_dir=project_dir,
+        )
+        assert cleanup_result.returncode == 0, cleanup_result.stdout + cleanup_result.stderr
+        assert list_bigquery_scenario_relation_names(dataset_name=dataset_name) == ()
+
+        retain_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "scenario", "test", "remote_event_rollup", "--retain"),
+            project_dir=project_dir,
+        )
+
+        assert retain_result.returncode == 0, retain_result.stdout + retain_result.stderr
+        expected_fragment: str
+        for expected_fragment in test_case.expected_stdout_fragments:
+            assert expected_fragment in retain_result.stdout
+        retained_names: tuple[str, ...] = list_bigquery_scenario_relation_names(
+            dataset_name=dataset_name
+        )
+        assert len(retained_names) == sum(test_case.expected_retained_suffix_counts.values())
+        suffix: str
+        for suffix, expected_count in test_case.expected_retained_suffix_counts.items():
+            matches: tuple[str, ...] = tuple(
+                relation for relation in retained_names if relation.endswith(suffix)
+            )
+            assert len(matches) == expected_count
+        for suffix, expected_count in test_case.expected_row_counts_by_suffix.items():
+            matches = tuple(relation for relation in retained_names if relation.endswith(suffix))
+            assert len(matches) == 1
+            assert (
+                bigquery_relation_row_count(dataset_name=dataset_name, relation=matches[0])
+                == expected_count
+            )
     finally:
         cleanup_bigquery_dataset(dataset_name=dataset_name)
 

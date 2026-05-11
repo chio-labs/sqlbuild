@@ -13,6 +13,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledSeed,
 )
 from sqlbuild.compiler.planner.models import CursorBounds
+from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
 
 _REF_PATTERN: re.Pattern[str] = re.compile(r'__ref\("([^"]+)"\)')
 _SEED_PATTERN: re.Pattern[str] = re.compile(r'__seed\("([^"]+)"\)')
@@ -39,9 +40,9 @@ def resolve_ref_references(
     def _replace_ref(match: re.Match[str]) -> str:
         ref_name: str = match.group(1)
         target: CompiledRelationTarget | None = model_targets.get(ref_name)
-        if target is None or target.qualified_name is None:
+        if target is None:
             return match.group(0)
-        qualified_name: str = target.qualified_name
+        qualified_name: str = resolve_target_qualified_name(adapter=adapter, target=target)
         if cursor_bounds is None:
             return qualified_name
         cursor_column: str | None = cursor_inputs.get(ref_name)
@@ -59,9 +60,9 @@ def resolve_ref_references(
     def _replace_seed(match: re.Match[str]) -> str:
         seed_name: str = match.group(1)
         target: CompiledRelationTarget | None = seed_targets.get(seed_name)
-        if target is None or target.qualified_name is None:
+        if target is None:
             return match.group(0)
-        return target.qualified_name
+        return resolve_target_qualified_name(adapter=adapter, target=target)
 
     return _SEED_PATTERN.sub(_replace_seed, _REF_PATTERN.sub(_replace_ref, query_sql))
 
