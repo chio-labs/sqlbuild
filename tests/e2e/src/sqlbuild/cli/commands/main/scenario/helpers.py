@@ -105,6 +105,45 @@ def build_real_warehouse_local_replay_project_files(
     }
 
 
+def build_real_warehouse_remote_scenario_project_files(*, project_toml: str) -> dict[str, str]:
+    """Build an inline scenario project for live remote scenario execution."""
+
+    return {
+        "sqlbuild_project.toml": project_toml,
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_events\n    schema: raw\n    table: raw_events\n"
+        ),
+        "models/stg_events.sql": (
+            "MODEL (materialized view);\n\n"
+            "SELECT customer_id, amount_cents\n"
+            'FROM __source("raw_events")\n'
+            "WHERE amount_cents >= 1000\n"
+        ),
+        "models/event_rollup.sql": (
+            "MODEL (materialized table);\n\n"
+            "SELECT\n"
+            "  customer_id,\n"
+            "  SUM(amount_cents) AS large_amount_cents,\n"
+            "  COUNT(*) AS event_count\n"
+            'FROM __ref("stg_events")\n'
+            "GROUP BY customer_id\n"
+        ),
+        "tests/scenarios/remote_event_rollup.sql": (
+            "SCENARIO ();\n\n"
+            "WITH\n"
+            "__source__raw_events AS (\n"
+            "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
+            "  UNION ALL\n"
+            "  SELECT 10 AS customer_id, 500 AS amount_cents\n"
+            "),\n"
+            "__expected__event_rollup AS (\n"
+            "  SELECT 10 AS customer_id, 1500 AS large_amount_cents, 1 AS event_count\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
 def list_scenario_relation_names(*, db_path: Path) -> tuple[str, ...]:
     """Return DuckDB relation names owned by scenario artifact prefixes."""
 

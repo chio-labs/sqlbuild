@@ -97,6 +97,7 @@ class BigQueryAdapter(BaseAdapter):
     """BigQuery adapter backed by google-cloud-bigquery."""
 
     sqlglot_dialect_name: ClassVar[str | None] = "bigquery"
+    max_identifier_length: ClassVar[int] = 1024
 
     def __init__(self) -> None:
         self._location: str | None = None
@@ -386,6 +387,10 @@ class BigQueryAdapter(BaseAdapter):
             f"DROP TABLE{exists_clause} {self._quote_identifier_path(target)}",
             f"DROP VIEW{exists_clause} {self._quote_identifier_path(target)}",
         )
+
+    def render_drop_view(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+        exists_clause: str = " IF EXISTS" if if_exists else ""
+        return (f"DROP VIEW{exists_clause} {self._quote_identifier_path(target)}",)
 
     def render_rename(self, *, source: str, target: str) -> tuple[str, ...]:
         target_name: str = self._strip_identifier_quotes(target).split(".")[-1]

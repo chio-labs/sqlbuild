@@ -132,6 +132,30 @@ def fetch_bigquery_rows(*, dataset_name: str, sql: str) -> tuple[tuple[object, .
         adapter.close(connection)
 
 
+def list_bigquery_scenario_relation_names(*, dataset_name: str) -> tuple[str, ...]:
+    """Return scenario artifact relation names in a BigQuery dataset."""
+
+    project_name: str = str(build_bigquery_connection_config(schema=dataset_name)["project"])
+    rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
+        dataset_name=dataset_name,
+        sql=(
+            f"SELECT table_name FROM `{project_name}.{dataset_name}.INFORMATION_SCHEMA.TABLES` "
+            "WHERE table_name LIKE '__sqb_%' ORDER BY table_name"
+        ),
+    )
+    return tuple(str(row[0]) for row in rows)
+
+
+def bigquery_relation_row_count(*, dataset_name: str, relation: str) -> int:
+    """Return row count for one BigQuery relation."""
+
+    rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
+        dataset_name=dataset_name,
+        sql=f"SELECT COUNT(*) FROM {relation_name(dataset_name=dataset_name, name=relation)}",
+    )
+    return int(str(rows[0][0]))
+
+
 def relation_name(*, dataset_name: str, name: str) -> str:
     """Return a fully qualified relation name for a BigQuery e2e dataset."""
 

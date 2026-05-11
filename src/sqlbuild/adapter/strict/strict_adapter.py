@@ -76,6 +76,11 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def maximum_identifier_length(self) -> int:
+        """Return the maximum unqualified identifier length supported by the adapter."""
+        ...
+
+    @abstractmethod
     def describe_relation(self, connection: Any, relation: str) -> tuple[ColumnInfo, ...]:
         """Return relation column metadata."""
         ...

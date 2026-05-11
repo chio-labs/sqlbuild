@@ -129,6 +129,31 @@ def fetch_databricks_rows(*, schema_name: str, sql: str) -> tuple[tuple[object, 
         adapter.close(connection)
 
 
+def list_databricks_scenario_relation_names(*, schema_name: str) -> tuple[str, ...]:
+    """Return scenario artifact relation names in a Databricks schema."""
+
+    catalog_name: str = str(build_databricks_connection_config(schema=schema_name)["catalog"])
+    rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+        schema_name=schema_name,
+        sql=(
+            f"SELECT table_name FROM `{catalog_name}`.information_schema.tables "
+            f"WHERE table_schema = '{schema_name}' "
+            "AND table_name LIKE '__sqb_%' ORDER BY table_name"
+        ),
+    )
+    return tuple(str(row[0]) for row in rows)
+
+
+def databricks_relation_row_count(*, schema_name: str, relation: str) -> int:
+    """Return row count for one Databricks relation."""
+
+    rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+        schema_name=schema_name,
+        sql=f"SELECT COUNT(*) FROM {relation_name(schema_name=schema_name, name=relation)}",
+    )
+    return int(str(rows[0][0]))
+
+
 def relation_name(*, schema_name: str, name: str) -> str:
     """Return a fully qualified relation name for a Databricks e2e schema."""
 

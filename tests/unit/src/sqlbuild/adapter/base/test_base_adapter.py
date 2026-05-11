@@ -10,6 +10,7 @@ from sqlbuild.compiler.compile.models import FunctionArgument
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from tests.unit.src.sqlbuild.adapter.base._test_types import (
     BaseAdapterExpressionInferenceProfileTestCase,
+    BaseAdapterIdentifierLimitTestCase,
     BaseAdapterPythonFunctionSupportTestCase,
     BaseAdapterSqlglotDialectTestCase,
 )
@@ -112,3 +113,21 @@ def test_given_base_adapter_subclass_when_getting_sqlglot_dialect_then_uses_clas
     assert adapter.expression_inference_profile().sqlglot_dialect == (
         test_case.expected_sqlglot_dialect
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BaseAdapterIdentifierLimitTestCase(
+            description="returns postgres-compatible identifier limit by default",
+            expected_identifier_limit=63,
+        )
+    ],
+    ids=["returns postgres-compatible identifier limit by default"],
+)
+def test_given_base_adapter_when_getting_identifier_limit_then_returns_portable_default(
+    test_case: BaseAdapterIdentifierLimitTestCase,
+) -> None:
+    adapter: BaseAdapter = ConcreteBaseAdapter()
+
+    assert adapter.maximum_identifier_length() == test_case.expected_identifier_limit

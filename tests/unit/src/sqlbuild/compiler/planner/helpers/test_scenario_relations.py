@@ -61,7 +61,7 @@ SCENARIO_NAME: str = "revenue__customer_refund"
                 "country_codes": "scenario_schema.__sqb_51b385aebe20__seed__country_codes",
             },
             expected_source_expressions={
-                "raw__orders": "scenario_schema.__sqb_51b385aebe20__source__raw__orders",
+                "raw__orders": None,
             },
         )
     ],

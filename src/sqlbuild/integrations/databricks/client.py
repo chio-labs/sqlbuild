@@ -65,6 +65,7 @@ class DatabricksAdapter(BaseAdapter):
     """Databricks adapter backed by databricks-sql-connector."""
 
     sqlglot_dialect_name: ClassVar[str | None] = "databricks"
+    max_identifier_length: ClassVar[int] = 255
 
     def supports_zero_copy_clone(self) -> bool:
         return True

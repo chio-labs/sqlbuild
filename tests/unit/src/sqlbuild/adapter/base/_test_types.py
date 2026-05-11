@@ -18,3 +18,9 @@ class BaseAdapterExpressionInferenceProfileTestCase:
 class BaseAdapterSqlglotDialectTestCase:
     description: str
     expected_sqlglot_dialect: str | None
+
+
+@dataclass(frozen=True)
+class BaseAdapterIdentifierLimitTestCase:
+    description: str
+    expected_identifier_limit: int

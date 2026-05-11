@@ -28,6 +28,7 @@ from tests.unit.src.sqlbuild.integrations.bigquery._test_types import (
     BigQueryRenderCloneTestCase,
     BigQueryRenderCursorBoundLiteralTestCase,
     BigQueryRenderDeleteInsertTestCase,
+    BigQueryRenderDropViewTestCase,
     BigQueryRenderPythonFunctionTestCase,
     BigQueryRenderQualifiedNameTestCase,
     BigQueryRenderSchemaTestCase,
@@ -53,6 +54,7 @@ from tests.unit.src.sqlbuild.integrations.bigquery.helpers import (
         BigQueryExpressionInferenceProfileTestCase(
             description="returns BigQuery inference rules",
             expected_sqlglot_dialect="bigquery",
+            expected_identifier_limit=1024,
             expected_rule_results={
                 "IF": InferredNullability.NON_NULL,
                 "LOWER": InferredNullability.NON_NULL,
@@ -69,6 +71,7 @@ def test_given_bigquery_adapter_when_getting_inference_profile_then_returns_expe
     profile: ExpressionInferenceProfile = adapter.expression_inference_profile()
 
     assert profile.sqlglot_dialect == test_case.expected_sqlglot_dialect
+    assert adapter.maximum_identifier_length() == test_case.expected_identifier_limit
     if_rule: FunctionNullabilityRule | None = profile.function_nullability_rule("IF")
     lower_rule: FunctionNullabilityRule | None = profile.function_nullability_rule("LOWER")
     assert if_rule is not None
@@ -444,6 +447,29 @@ def test_given_clone_request_when_rendering_then_bigquery_uses_expected_clone_sq
 
     assert adapter.supports_zero_copy_clone() is test_case.expected_supports_zero_copy
     assert statements == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryRenderDropViewTestCase(
+            description="quotes hyphenated project id when dropping view",
+            target="test-project.dataset.__sqb_123456789abc__model__stg_events",
+            expected_statements=(
+                "DROP VIEW IF EXISTS `test-project.dataset.__sqb_123456789abc__model__stg_events`",
+            ),
+        )
+    ],
+    ids=["quotes hyphenated project id when dropping view"],
+)
+def test_given_bigquery_adapter_when_rendering_drop_view_then_quotes_target(
+    test_case: BigQueryRenderDropViewTestCase,
+) -> None:
+    adapter: BigQueryAdapter = BigQueryAdapter()
+
+    result: tuple[str, ...] = adapter.render_drop_view(target=test_case.target)
+
+    assert result == test_case.expected_statements
 
 
 @pytest.mark.parametrize(
