@@ -20,6 +20,7 @@ from sqlbuild.compiler.discovery.constants import (
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.spec.models.project import (
     ClonePolicy,
+    DbtConfig,
     DefaultsConfig,
     EnvironmentConfig,
     JanitorConfig,
@@ -58,6 +59,7 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
     )
     janitor: JanitorConfig = _load_janitor(payload=payload.get("janitor"), file_path=file_path)
     scenario: ScenarioConfig = _load_scenario(payload=payload.get("scenario"), file_path=file_path)
+    dbt: DbtConfig = _load_dbt(payload=payload.get("dbt"), file_path=file_path)
     if janitor.enabled and janitor.delete_tracked_only and not settings.query_change_tracking:
         raise ProjectConfigError(
             f"{file_path} janitor.delete_tracked_only requires "
@@ -76,6 +78,7 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         environments=environments,
         janitor=janitor,
         scenario=scenario,
+        dbt=dbt,
     )
 
 
@@ -526,6 +529,24 @@ def _load_scenario(*, payload: object, file_path: Path) -> ScenarioConfig:
             payload=mapping.get("snapshot_limits"),
             file_path=file_path,
         ),
+    )
+
+
+def _load_dbt(*, payload: object, file_path: Path) -> DbtConfig:
+    """Load optional dbt interop configuration."""
+
+    mapping: dict[str, object] = _coerce_mapping(payload=payload, label="dbt", file_path=file_path)
+    _validate_allowed_keys(
+        mapping=mapping,
+        allowed_keys=frozenset({"project_dir", "profiles_dir", "target", "target_path"}),
+        label="dbt",
+        file_path=file_path,
+    )
+    return DbtConfig(
+        project_dir=_optional_str(payload=mapping, key="project_dir"),
+        profiles_dir=_optional_str(payload=mapping, key="profiles_dir"),
+        target=_optional_str(payload=mapping, key="target"),
+        target_path=_optional_str(payload=mapping, key="target_path"),
     )
 
 

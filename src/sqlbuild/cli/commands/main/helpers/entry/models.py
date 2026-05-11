@@ -17,6 +17,10 @@ class CliNamespace:
 
     command: str | None = None
     project_dir: str | None = None
+    dbt_project_dir: str | None = None
+    dbt_profiles_dir: str | None = None
+    dbt_target: str | None = None
+    dbt_target_path: str | None = None
     no_sql_validation: bool = False
     defer_to: str | None = None
     environment_range: str | None = None
