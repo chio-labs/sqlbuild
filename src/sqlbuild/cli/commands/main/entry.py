@@ -22,6 +22,7 @@ from sqlbuild.cli.commands.main.helpers.lineage.constants import COLUMN_LINEAGE_
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.parsers import (
     add_cursor_override_args,
+    add_dbt_config_args,
     add_execution_args,
     add_scenario_snapshot_safety_args,
     add_select_args,
@@ -64,6 +65,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
         default=CompileLineageMode.FAST.value,
         help="Column lineage mode: fast (default), rich (slower), or none",
     )
+    add_dbt_config_args(compile_parser)
 
     plan_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PLAN)
     plan_parser.add_argument("--no-sql-validation", action="store_true", default=False)
@@ -72,6 +74,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     plan_parser.add_argument("--full-refresh", action="store_true", default=False)
     add_cursor_override_args(plan_parser)
     add_select_args(plan_parser)
+    add_dbt_config_args(plan_parser)
 
     build_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.BUILD)
     build_parser.add_argument("--no-sql-validation", action="store_true", default=False)
@@ -79,6 +82,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     add_cursor_override_args(build_parser)
     add_execution_args(build_parser)
     add_select_args(build_parser)
+    add_dbt_config_args(build_parser)
 
     run_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.RUN)
     run_parser.add_argument("--no-sql-validation", action="store_true", default=False)
@@ -86,15 +90,18 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     add_cursor_override_args(run_parser)
     add_execution_args(run_parser)
     add_select_args(run_parser)
+    add_dbt_config_args(run_parser)
 
     test_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.TEST)
     test_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     add_select_args(test_parser)
+    add_dbt_config_args(test_parser)
 
     audit_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.AUDIT)
     audit_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     audit_parser.add_argument("--defer-to", default=None)
     add_select_args(audit_parser)
+    add_dbt_config_args(audit_parser)
 
     seed_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.SEED)
     add_select_args(seed_parser)
@@ -105,6 +112,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     clone_parser.add_argument("--to", dest="to_environment", required=True)
     clone_parser.add_argument("--hard-copy", action="store_true", default=False)
     add_select_args(clone_parser)
+    add_dbt_config_args(clone_parser)
 
     diff_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DIFF)
     diff_parser.add_argument("environment_range", metavar="FROM:TO")
