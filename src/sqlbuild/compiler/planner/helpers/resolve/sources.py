@@ -33,7 +33,7 @@ def resolve_source_references(
         source_entry: SourceEntry | None = source_map.get(source_name)
         if source_entry is None:
             return match.group(0)
-        resolved_source: str = render_source_relation(source_entry)
+        resolved_source: str = _render_source_relation(adapter=adapter, source_entry=source_entry)
         warehouse_cols: tuple[ColumnInfo, ...] | None = source_warehouse_columns.get(source_name)
         if source_entry.expression is None and warehouse_cols:
             _validate_declared_columns(
@@ -71,6 +71,20 @@ def resolve_source_references(
         )
 
     return _SOURCE_PATTERN.sub(_replace_source, query_sql)
+
+
+def _render_source_relation(*, adapter: BaseAdapter, source_entry: SourceEntry) -> str:
+    if source_entry.expression is not None:
+        return render_source_relation(source_entry)
+    table_name: str = source_entry.table if source_entry.table is not None else source_entry.name
+    rendered: str | None = adapter.render_qualified_name(
+        database=source_entry.database,
+        schema=source_entry.schema,
+        name=table_name,
+    )
+    if rendered is not None:
+        return rendered
+    return render_source_relation(source_entry)
 
 
 def _build_relation_cast_subquery(

@@ -13,6 +13,7 @@ from sqlbuild.compiler.lineage.types import InferredNullability
 class BigQueryExpressionInferenceProfileTestCase:
     description: str
     expected_sqlglot_dialect: str
+    expected_identifier_limit: int
     expected_rule_results: dict[str, InferredNullability]
 
 
@@ -52,6 +53,13 @@ class BigQueryRenderCloneTestCase:
     hard_copy: bool
     expected_statements: tuple[str, ...]
     expected_supports_zero_copy: bool
+
+
+@dataclass(frozen=True)
+class BigQueryRenderDropViewTestCase:
+    description: str
+    target: str
+    expected_statements: tuple[str, ...]
 
 
 @dataclass(frozen=True)

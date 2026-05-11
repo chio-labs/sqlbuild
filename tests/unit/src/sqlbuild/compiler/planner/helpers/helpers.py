@@ -40,11 +40,13 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.helpers.scenario_artifacts import build_scenario_relation_map
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeResult,
     ChangeDetectionResult,
+    PlanOutput,
     ScenarioArtifactIdentity,
     ScenarioRelationMap,
     WarehouseSnapshot,
@@ -308,6 +310,49 @@ def build_compiled_scenario_with_name(name: str) -> CompiledSqlScenario:
         ),
         sql_body="SELECT 1",
     )
+
+
+def build_scenario_cli_identifier_limit_pipeline(
+    *, model_name: str
+) -> tuple[CompiledSqlScenario, CompilePipelineResult]:
+    """Build a minimal pipeline result for CLI scenario identifier-limit tests."""
+
+    project: CompiledProject = build_test_project(
+        model_deps={model_name: ("raw__orders",)},
+        source_names=("raw__orders",),
+    )
+    scenario: CompiledSqlScenario = CompiledSqlScenario(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.SQL_SCENARIO,
+            name="long_identifier_scenario",
+        ),
+        name="long_identifier_scenario",
+        scenario_file=DiscoveredSqlScenarioFile(
+            file_path=Path("tests/scenarios/long_identifier_scenario.sql"),
+            relative_path=Path("tests/scenarios/long_identifier_scenario.sql"),
+            contents="",
+            header_values={},
+            name="long_identifier_scenario",
+            sql_body="SELECT 1",
+        ),
+        sql_body="SELECT 1",
+        authored_ctes=(
+            CompileSqlScenarioCte(
+                name="__source__raw__orders",
+                sql_body="SELECT 1 AS order_id",
+            ),
+        ),
+        expected_ctes=(
+            CompileSqlScenarioCte(
+                name=f"__expected__{model_name}",
+                sql_body="SELECT 1 AS order_id",
+            ),
+        ),
+        source_fixture_names=("raw__orders",),
+        expected_model_names=(model_name,),
+    )
+    project = replace(project, sql_scenarios=(scenario,))
+    return scenario, CompilePipelineResult(project=project, plan_output=PlanOutput())
 
 
 def build_scenario_relation_test_map() -> ScenarioRelationMap:

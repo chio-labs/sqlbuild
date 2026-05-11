@@ -291,6 +291,13 @@ class ScenarioRelationMapTestCase:
 
 
 @dataclass(frozen=True)
+class ScenarioCliPlanIdentifierLimitTestCase:
+    description: str
+    model_name: str
+    expected_model_physical_name: str
+
+
+@dataclass(frozen=True)
 class ScenarioRelationMapErrorTestCase:
     description: str
     artifacts: tuple[ScenarioArtifactIdentity, ...]
@@ -304,7 +311,7 @@ class ScenarioRelationPlanTestCase:
     graph_plan: ScenarioGraphPlan
     expected_model_target_names: dict[str, str]
     expected_seed_target_names: dict[str, str]
-    expected_source_expressions: dict[str, str]
+    expected_source_expressions: dict[str, str | None]
 
 
 @dataclass(frozen=True)
