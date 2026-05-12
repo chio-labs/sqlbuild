@@ -17,3 +17,11 @@ class RealDbtManifestCompileTestCase:
     description: str
     sqlbuild_model_sql: str
     expected_compiled_sql: str
+
+
+@dataclass(frozen=True)
+class RealDbtCombinedGraphTestCase:
+    description: str
+    sqlbuild_model_sql_by_name: dict[str, str]
+    expected_downstream_from: str
+    expected_downstream_keys: tuple[str, ...]

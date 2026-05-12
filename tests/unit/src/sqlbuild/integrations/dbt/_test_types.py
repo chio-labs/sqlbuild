@@ -77,3 +77,15 @@ class DbtManifestResolutionErrorTestCase:
     package_name: str | None
     model_name: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class DbtCombinedGraphTestCase:
+    description: str
+    manifest_data: dict[str, object]
+    sqlbuild_model_sql_by_name: dict[str, str]
+    expected_upstream_edges: tuple[tuple[str, tuple[str, ...]], ...]
+    expected_downstream_from: str
+    expected_downstream_keys: tuple[str, ...]
+    expected_upstream_from: str
+    expected_upstream_keys: tuple[str, ...]

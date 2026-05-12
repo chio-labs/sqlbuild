@@ -108,6 +108,7 @@ def _parse_model(*, unique_id: str, raw_node: dict[object, object]) -> DbtManife
     relation_name: str | None = _optional_str(raw_node.get("relation_name"))
     if relation_name is None:
         relation_name = _render_relation_name(database=database, schema=schema, name=alias or name)
+    depends_on_nodes: tuple[str, ...] = _parse_depends_on_nodes(raw_node.get("depends_on"))
     return DbtManifestModel(
         unique_id=unique_id,
         package_name=package_name,
@@ -116,6 +117,7 @@ def _parse_model(*, unique_id: str, raw_node: dict[object, object]) -> DbtManife
         schema=schema,
         alias=alias,
         relation_name=relation_name,
+        depends_on_nodes=depends_on_nodes,
         payload={str(key): value for key, value in raw_node.items()},
     )
 
@@ -135,3 +137,13 @@ def _optional_str(value: object) -> str | None:
     if isinstance(value, str) and value:
         return value
     return None
+
+
+def _parse_depends_on_nodes(value: object) -> tuple[str, ...]:
+    if not isinstance(value, dict):
+        return ()
+    depends_on: dict[str, object] = cast(dict[str, object], value)
+    raw_nodes: object | None = depends_on.get("nodes")
+    if not isinstance(raw_nodes, list):
+        return ()
+    return tuple(node for node in raw_nodes if isinstance(node, str) and node)

@@ -6,6 +6,7 @@ import json
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
+from typing import cast
 
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
@@ -135,7 +136,7 @@ class DbtRunner:
 
     def _invoke(self, *, argv: tuple[str, ...], cwd: Path | None) -> DbtCommandResult:
         invoker: DbtInvoker = self.invoker if self.invoker is not None else _subprocess_invoker
-        return invoker(argv, cwd)
+        return cast(DbtCommandResult, invoker(argv, cwd))
 
 
 def _append_common_options(argv: tuple[str, ...], *, options: DbtCliOptions) -> tuple[str, ...]:
