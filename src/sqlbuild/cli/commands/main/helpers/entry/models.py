@@ -72,6 +72,8 @@ class CliNamespace:
     scenario_max_snapshot_total_bytes: int | None = None
     select: list[str] = field(default_factory=list)
     exclude: list[str] = field(default_factory=list)
+    dbt_command: str | None = None
+    dbt_args: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -95,6 +97,7 @@ class CliEntrypointHandlers:
         ],
         int,
     ]
+    run_dbt_plan: Callable[[Path | None, tuple[str, ...], bool], int]
     run_build: Callable[
         [
             Path | None,

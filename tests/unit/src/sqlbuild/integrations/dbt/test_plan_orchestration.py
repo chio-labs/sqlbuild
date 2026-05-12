@@ -275,7 +275,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
         expected_dbt_skipped=True,
         expected_sqlbuild_skipped=False,
         dbt_command_args=("--select", "path:models/marts"),
-        expected_primary_dbt_command_argv=("dbt", "plan", "--select", "path:models/marts"),
+        expected_primary_dbt_command_argv=("dbt", "ls", "--select", "path:models/marts"),
         expected_path_translations=(("path:models/marts", "path:marts"),),
     ),
     DbtPlanOrchestrationTestCase(

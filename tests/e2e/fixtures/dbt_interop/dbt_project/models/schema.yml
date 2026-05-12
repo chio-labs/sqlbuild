@@ -1,0 +1,21 @@
+version: 2
+
+models:
+  - name: stg_orders
+    columns:
+      - name: order_id
+        data_tests:
+          - not_null
+          - unique
+
+  - name: fact_orders
+    columns:
+      - name: order_id
+        data_tests:
+          - not_null
+
+  - name: dbt_only
+    columns:
+      - name: order_id
+        data_tests:
+          - not_null

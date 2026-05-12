@@ -163,14 +163,16 @@ def _build_supplemental_dbt_argvs(
 ) -> tuple[tuple[str, ...], ...]:
     if not selector_terms:
         return ()
-    argv: tuple[str, ...] = _append_dbt_options((dbt_executable, command.value), options=options)
+    dbt_command: str = "ls" if command == DbtInteropCommand.PLAN else command.value
+    argv: tuple[str, ...] = _append_dbt_options((dbt_executable, dbt_command), options=options)
     return ((*argv, "--select", *selector_terms),)
 
 
 def _build_primary_dbt_argv(
     *, command: DbtInteropCommand, dbt_executable: str, dbt_command_args: Sequence[str]
 ) -> tuple[str, ...]:
-    return (dbt_executable, command.value, *dbt_command_args)
+    dbt_command: str = "ls" if command == DbtInteropCommand.PLAN else command.value
+    return (dbt_executable, dbt_command, *dbt_command_args)
 
 
 def _build_sqlbuild_argvs(
