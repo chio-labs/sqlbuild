@@ -27,6 +27,7 @@ from tests.integration.src.sqlbuild.integrations.dbt._test_types import (
     RealDbtCombinedGraphTestCase,
 )
 from tests.integration.src.sqlbuild.integrations.dbt.helpers import (
+    attach_dbt_manifest_file,
     build_sqlbuild_project_with_manifest,
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import graph_key_stable_ids
@@ -69,14 +70,15 @@ def test_given_real_dbt_manifest_and_sqlbuild_project_when_building_graph_then_e
         manifest_source=dbt_project_dir / "target/manifest.json",
         model_sql_by_name=test_case.sqlbuild_model_sql_by_name,
     )
-    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
-        project_dir=sqlbuild_project_dir
+    manifest_source: Path = dbt_project_dir / "target/manifest.json"
+    discovered_inputs: DiscoveredProjectInputs = attach_dbt_manifest_file(
+        discovered_inputs=discover_project_inputs(project_dir=sqlbuild_project_dir),
+        manifest_source=manifest_source,
     )
     compile_inputs: CompileProjectInputs = build_compile_inputs(discovered_inputs)
     project: CompiledProject = assemble_compiled_project(compile_inputs)
-    assert discovered_inputs.dbt_manifest_file is not None
     manifest: DbtManifestIndex = build_dbt_manifest_index(
-        raw_data=json.loads(discovered_inputs.dbt_manifest_file.contents)
+        raw_data=json.loads(manifest_source.read_text(encoding="utf-8"))
     )
 
     graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
