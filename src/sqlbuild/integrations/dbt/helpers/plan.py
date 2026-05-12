@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import json
 import re
+from collections import defaultdict
 from collections.abc import Sequence
 
+from sqlbuild.cli.commands.main.helpers.plan.formatter import format_plan
+from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt.models import DbtInteropPlan, DbtInteropSelectionResult, DbtLsNode
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSkipReason
 from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
-from sqlbuild.shared.helpers.colors import blue_bold, green_bold, yellow_bold
+from sqlbuild.shared.helpers.colors import blue_bold, green_bold, orange_bold, yellow_bold
+from sqlbuild.shared.helpers.display import DisplayOptions, append_overflow_line, visible_entries
 
 _ANSI_ESCAPE_PATTERN: re.Pattern[str] = re.compile(r"\033\[[0-9;]*m")
 
@@ -24,6 +28,7 @@ def build_dbt_interop_plan(
     dbt_required_selector_terms: Sequence[str] = (),
     supplemental_dbt_command_argvs: Sequence[Sequence[str]] = (),
     warnings: Sequence[str] = (),
+    sqlbuild_plan_output: PlanOutput | None = None,
 ) -> DbtInteropPlan:
     """Build a display-ready plan from dbt preflight and SQLBuild selection results."""
 
@@ -37,9 +42,11 @@ def build_dbt_interop_plan(
     return DbtInteropPlan(
         command=normalized_command,
         dbt_command_argv=tuple(dbt_command_argv),
+        dbt_selected_nodes=tuple(dbt_ls_nodes),
         dbt_selected_unique_ids=dbt_selected_unique_ids,
         sqlbuild_command_argvs=tuple(tuple(argv) for argv in sqlbuild_command_argvs),
         selection=selection,
+        sqlbuild_plan_output=sqlbuild_plan_output,
         dbt_required_selector_terms=tuple(dbt_required_selector_terms),
         supplemental_dbt_command_argvs=tuple(
             tuple(argv) for argv in supplemental_dbt_command_argvs
@@ -50,19 +57,27 @@ def build_dbt_interop_plan(
     )
 
 
-def format_dbt_interop_plan(plan: DbtInteropPlan, *, use_color: bool = True) -> str:
+def format_dbt_interop_plan(
+    plan: DbtInteropPlan,
+    *,
+    use_color: bool = True,
+    display_options: DisplayOptions | None = None,
+) -> str:
     """Format a dbt interop plan for human CLI output."""
 
     lines: list[str] = []
+    resolved_display_options: DisplayOptions = display_options or DisplayOptions()
     selected_count: int = len(
         frozenset((*plan.dbt_selected_unique_ids, *plan.selection.dbt_required_unique_ids))
     ) + len(plan.selection.sqlbuild_model_names)
     lines.append(green_bold(f"Plan ready ({selected_count} selected)"))
     lines.append("")
-    _format_dbt_section(lines, plan)
+    _format_dbt_section(lines, plan, display_options=resolved_display_options)
     lines.append("")
-    _format_sqlbuild_section(lines, plan)
-    _format_anchor_section(lines, plan)
+    _format_sqlbuild_section(
+        lines, plan, use_color=use_color, display_options=resolved_display_options
+    )
+    _format_anchor_section(lines, plan, display_options=resolved_display_options)
     _format_path_translation_section(lines, plan)
     _format_warning_section(lines, plan)
     result: str = "\n".join(lines)
@@ -107,8 +122,13 @@ def format_dbt_interop_plan_json(plan: DbtInteropPlan) -> str:
     return json.dumps(result, indent=2)
 
 
-def _format_dbt_section(lines: list[str], plan: DbtInteropPlan) -> None:
-    lines.append(green_bold("dbt"))
+def _format_dbt_section(
+    lines: list[str], plan: DbtInteropPlan, *, display_options: DisplayOptions
+) -> None:
+    dbt_count: int = len(
+        frozenset((*plan.dbt_selected_unique_ids, *plan.selection.dbt_required_unique_ids))
+    )
+    lines.append(green_bold(f"dbt ({dbt_count} selected)"))
     if plan.dbt_skip_reason is not None:
         lines.append("  skipped: no dbt work selected")
         return
@@ -116,28 +136,108 @@ def _format_dbt_section(lines: list[str], plan: DbtInteropPlan) -> None:
     argv: tuple[str, ...]
     for argv in plan.supplemental_dbt_command_argvs:
         lines.append(f"  command: {' '.join(argv)}")
-    if plan.dbt_selected_unique_ids:
-        lines.append(f"  selected: {len(plan.dbt_selected_unique_ids)}")
+    _format_dbt_selected_nodes(lines, plan, display_options=display_options)
     if plan.selection.dbt_required_unique_ids:
+        lines.append("")
         lines.append(f"  required: {len(plan.selection.dbt_required_unique_ids)}")
         if plan.dbt_required_selector_terms:
             lines.append(f"    selectors: {' '.join(plan.dbt_required_selector_terms)}")
         unique_id: str
-        for unique_id in plan.selection.dbt_required_unique_ids:
+        visible_required: Sequence[str] = visible_entries(
+            plan.selection.dbt_required_unique_ids, options=display_options
+        )
+        for unique_id in visible_required:
             lines.append(f"    {unique_id}")
+        append_overflow_line(
+            lines,
+            total_count=len(plan.selection.dbt_required_unique_ids),
+            visible_count=len(visible_required),
+            indent="    ",
+            options=display_options,
+        )
 
 
-def _format_sqlbuild_section(lines: list[str], plan: DbtInteropPlan) -> None:
-    lines.append(green_bold("SQLBuild"))
+def _format_dbt_selected_nodes(
+    lines: list[str], plan: DbtInteropPlan, *, display_options: DisplayOptions
+) -> None:
+    if not plan.dbt_selected_nodes:
+        return
+    nodes_by_type: dict[str, list[DbtLsNode]] = defaultdict(list)
+    node: DbtLsNode
+    for node in sorted(plan.dbt_selected_nodes, key=_dbt_node_sort_key):
+        nodes_by_type[_dbt_resource_type_label(node.resource_type)].append(node)
+    section_label: str
+    nodes: list[DbtLsNode]
+    for section_label, nodes in sorted(nodes_by_type.items()):
+        lines.append("")
+        lines.append(f"  {section_label} ({len(nodes)})")
+        labels: tuple[str, ...] = tuple(_dbt_node_display_name(node) for node in nodes)
+        name_width: int = resolve_name_column_width(labels)
+        visible_nodes: Sequence[DbtLsNode] = visible_entries(nodes, options=display_options)
+        for node in visible_nodes:
+            name: str = _dbt_node_display_name(node)
+            lines.append(
+                "    "
+                + format_aligned_name_value(
+                    plain_name=name,
+                    styled_name=orange_bold(name),
+                    value=node.resource_type or "resource",
+                    name_column_width=name_width,
+                )
+            )
+        append_overflow_line(
+            lines,
+            total_count=len(nodes),
+            visible_count=len(visible_nodes),
+            indent="    ",
+            options=display_options,
+        )
+
+
+def _format_sqlbuild_section(
+    lines: list[str],
+    plan: DbtInteropPlan,
+    *,
+    use_color: bool,
+    display_options: DisplayOptions,
+) -> None:
+    sqlbuild_count: int = len(plan.selection.sqlbuild_model_names)
+    lines.append(green_bold(f"SQLBuild ({sqlbuild_count} selected)"))
     if plan.sqlbuild_skip_reason is not None:
         lines.append("  skipped: no SQLBuild work selected")
         return
     argv: tuple[str, ...]
     for argv in plan.sqlbuild_command_argvs:
         lines.append(f"  command: {' '.join(argv)}")
+    if plan.sqlbuild_plan_output is None:
+        _format_sqlbuild_model_fallback(lines, plan, display_options=display_options)
+        return
+    sqlbuild_plan: str = format_plan(
+        plan.sqlbuild_plan_output,
+        use_color=use_color,
+        include_header=False,
+        display_options=display_options,
+    )
+    if not sqlbuild_plan:
+        return
+    lines.append("")
+    sqlbuild_lines: list[str] = sqlbuild_plan.splitlines()
+    while sqlbuild_lines and not sqlbuild_lines[0]:
+        sqlbuild_lines.pop(0)
+    line: str
+    for line in sqlbuild_lines:
+        lines.append(f"  {line}" if line else "")
+
+
+def _format_sqlbuild_model_fallback(
+    lines: list[str], plan: DbtInteropPlan, *, display_options: DisplayOptions
+) -> None:
     name_width: int = resolve_name_column_width(plan.selection.sqlbuild_model_names)
+    visible_models: Sequence[str] = visible_entries(
+        plan.selection.sqlbuild_model_names, options=display_options
+    )
     model_name: str
-    for model_name in plan.selection.sqlbuild_model_names:
+    for model_name in visible_models:
         lines.append(
             "  "
             + format_aligned_name_value(
@@ -147,9 +247,18 @@ def _format_sqlbuild_section(lines: list[str], plan: DbtInteropPlan) -> None:
                 name_column_width=name_width,
             )
         )
+    append_overflow_line(
+        lines,
+        total_count=len(plan.selection.sqlbuild_model_names),
+        visible_count=len(visible_models),
+        indent="  ",
+        options=display_options,
+    )
 
 
-def _format_anchor_section(lines: list[str], plan: DbtInteropPlan) -> None:
+def _format_anchor_section(
+    lines: list[str], plan: DbtInteropPlan, *, display_options: DisplayOptions
+) -> None:
     if not plan.selection.dbt_anchor_terms:
         return
     lines.append("")
@@ -159,8 +268,16 @@ def _format_anchor_section(lines: list[str], plan: DbtInteropPlan) -> None:
         unique_ids: tuple[str, ...] = plan.selection.dbt_anchor_unique_ids_by_term.get(term, ())
         lines.append(f"  {term}: {len(unique_ids)}")
         unique_id: str
-        for unique_id in unique_ids:
+        visible_unique_ids: Sequence[str] = visible_entries(unique_ids, options=display_options)
+        for unique_id in visible_unique_ids:
             lines.append(f"    {unique_id}")
+        append_overflow_line(
+            lines,
+            total_count=len(unique_ids),
+            visible_count=len(visible_unique_ids),
+            indent="    ",
+            options=display_options,
+        )
 
 
 def _format_path_translation_section(lines: list[str], plan: DbtInteropPlan) -> None:
@@ -186,3 +303,21 @@ def _format_warning_section(lines: list[str], plan: DbtInteropPlan) -> None:
 
 def _strip_ansi(text: str) -> str:
     return _ANSI_ESCAPE_PATTERN.sub("", text)
+
+
+def _dbt_node_display_name(node: DbtLsNode) -> str:
+    if node.package_name and node.name:
+        return f"{node.package_name}.{node.name}"
+    if node.name:
+        return node.name
+    return node.unique_id
+
+
+def _dbt_resource_type_label(resource_type: str | None) -> str:
+    if resource_type is None:
+        return "Resources"
+    return f"{resource_type.replace('_', ' ').title()}s"
+
+
+def _dbt_node_sort_key(node: DbtLsNode) -> tuple[str, str]:
+    return (_dbt_resource_type_label(node.resource_type), _dbt_node_display_name(node))

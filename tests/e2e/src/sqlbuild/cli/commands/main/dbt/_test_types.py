@@ -21,3 +21,10 @@ class DbtPlanRelativeProjectDirTestCase:
     command: tuple[str, ...]
     expected_project_dir: Path
     expected_selected_models: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtPlanHumanCliTestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_stdout_fragments: tuple[str, ...]

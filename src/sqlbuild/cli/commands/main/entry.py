@@ -72,6 +72,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     plan_parser.add_argument("--defer-to", default=None)
     plan_parser.add_argument("--json", action="store_true", default=False)
     plan_parser.add_argument("--full-refresh", action="store_true", default=False)
+    plan_parser.add_argument("--verbose", "-v", action="store_true", default=False)
     add_cursor_override_args(plan_parser)
     add_select_args(plan_parser)
     add_dbt_config_args(plan_parser)
@@ -306,6 +307,7 @@ def _main_with_dependencies(
                 args.no_color,
                 tuple(args.select),
                 tuple(args.exclude),
+                args.verbose,
             )
         if args.command == CliCommand.DBT:
             if args.dbt_command == "plan":

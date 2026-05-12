@@ -12,6 +12,7 @@ _RED: str = "\033[31m"
 _GREEN: str = "\033[32m"
 _YELLOW: str = "\033[33m"
 _BLUE: str = "\033[34m"
+_ORANGE: str = "\033[38;5;208m"
 
 
 def blue(text: str) -> str:
@@ -60,6 +61,12 @@ def blue_bold(text: str) -> str:
     """Blue bold text for model names."""
 
     return f"{_BLUE}{_BOLD}{text}{_RESET}"
+
+
+def orange_bold(text: str) -> str:
+    """Orange bold text for dbt-owned resource names."""
+
+    return f"{_ORANGE}{_BOLD}{text}{_RESET}"
 
 
 def green_bold(text: str) -> str:

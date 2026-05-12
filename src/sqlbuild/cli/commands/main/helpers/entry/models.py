@@ -94,6 +94,7 @@ class CliEntrypointHandlers:
             bool,
             tuple[str, ...],
             tuple[str, ...],
+            bool,
         ],
         int,
     ]

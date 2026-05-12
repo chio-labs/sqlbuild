@@ -9,6 +9,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtPlanCliTestCase,
+    DbtPlanHumanCliTestCase,
     DbtPlanRelativeProjectDirTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
@@ -151,3 +152,40 @@ def test_given_relative_project_dir_when_running_dbt_plan_then_resolves_dbt_conf
     assert isinstance(sqlbuild_payload, dict)
     typed_sqlbuild_payload: Mapping[str, object] = cast(Mapping[str, object], sqlbuild_payload)
     assert typed_sqlbuild_payload["selected_models"] == list(test_case.expected_selected_models)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtPlanHumanCliTestCase(
+            description="outputs grouped dbt and SQLBuild plan sections",
+            command=("dbt", "plan", "--select", "tag:nightly"),
+            expected_stdout_fragments=(
+                "Plan ready (4 selected)",
+                "dbt (3 selected)",
+                "Models (1)",
+                "analytics.stg_orders",
+                "Tests (2)",
+                "SQLBuild (1 selected)",
+                "command: sqb plan --select downstream_orders",
+                "Normal (1)",
+            ),
+        )
+    ],
+    ids=["outputs grouped dbt and SQLBuild plan sections"],
+)
+def test_given_dbt_interop_project_when_running_human_plan_then_outputs_grouped_sections(
+    test_case: DbtPlanHumanCliTestCase,
+    tmp_path: Path,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_interop_project(tmp_path=tmp_path)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    for expected_stdout_fragment in test_case.expected_stdout_fragments:
+        assert expected_stdout_fragment in result.stdout

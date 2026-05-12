@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import cast
 
 import pytest
@@ -11,7 +12,12 @@ from sqlbuild.integrations.dbt.helpers.plan import (
     format_dbt_interop_plan_json,
 )
 from sqlbuild.integrations.dbt.models import DbtInteropPlan, DbtInteropSelectionResult, DbtLsNode
-from tests.unit.src.sqlbuild.integrations.dbt._test_types import DbtPlanTestCase
+from sqlbuild.shared.helpers.display import DisplayOptions
+from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
+    DbtPlanHumanFormatterTestCase,
+    DbtPlanTestCase,
+)
+from tests.unit.src.sqlbuild.integrations.dbt.helpers import build_sqlbuild_plan_output
 
 PLAN_TEST_CASES: list[DbtPlanTestCase] = [
     DbtPlanTestCase(
@@ -200,6 +206,80 @@ PLAN_TEST_CASES: list[DbtPlanTestCase] = [
     ),
 ]
 
+FORMATTER_TEST_CASES: list[DbtPlanHumanFormatterTestCase] = [
+    DbtPlanHumanFormatterTestCase(
+        description="caps dbt and SQLBuild resource sections with verbose guidance",
+        dbt_ls_nodes=tuple(
+            DbtLsNode(
+                unique_id=f"model.analytics.model_{index}",
+                resource_type="model",
+                package_name="analytics",
+                name=f"model_{index}",
+            )
+            for index in range(3)
+        ),
+        sqlbuild_model_names=("local_one", "local_two", "local_three"),
+        sqlbuild_plan_model_names=(),
+        display_limit=2,
+        use_color=False,
+        expected_human_fragments=(
+            "analytics.model_0",
+            "analytics.model_1",
+            "local_one",
+            "local_two",
+            "... and 1 more (use --verbose to show all)",
+        ),
+        expected_human_regex_fragments=(),
+        expected_absent_fragments=("analytics.model_2", "local_three          model"),
+    ),
+    DbtPlanHumanFormatterTestCase(
+        description="groups dbt resources and styles dbt names orange",
+        dbt_ls_nodes=(
+            DbtLsNode(
+                unique_id="test.analytics.unique_orders.abc123",
+                resource_type="test",
+                package_name="analytics",
+                name="unique_orders",
+            ),
+            DbtLsNode(
+                unique_id="model.analytics.orders",
+                resource_type="model",
+                package_name="analytics",
+                name="orders",
+            ),
+        ),
+        sqlbuild_model_names=(),
+        sqlbuild_plan_model_names=(),
+        display_limit=None,
+        use_color=True,
+        expected_human_fragments=(
+            "dbt (2 selected)",
+            "Models (1)",
+            "Tests (1)",
+            "analytics.orders",
+            "analytics.unique_orders",
+        ),
+        expected_human_regex_fragments=(r"\x1b\[38;5;208m\x1b\[1manalytics\.orders\x1b\[0m",),
+        expected_absent_fragments=(),
+    ),
+    DbtPlanHumanFormatterTestCase(
+        description="reuses SQLBuild plan formatter sections when plan output is present",
+        dbt_ls_nodes=(),
+        sqlbuild_model_names=("downstream_orders",),
+        sqlbuild_plan_model_names=("downstream_orders",),
+        display_limit=None,
+        use_color=False,
+        expected_human_fragments=(
+            "SQLBuild (1 selected)",
+            "command: sqb plan --select downstream_orders",
+            "Normal (1)",
+            "1 table",
+        ),
+        expected_human_regex_fragments=(),
+        expected_absent_fragments=(),
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -262,3 +342,43 @@ def test_given_dbt_interop_plan_inputs_when_building_plan_then_formats_expected_
         assert fragment in human_output
     for fragment in test_case.expected_json_fragments:
         assert fragment in json_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    FORMATTER_TEST_CASES,
+    ids=[case.description for case in FORMATTER_TEST_CASES],
+)
+def test_given_dbt_interop_plan_when_formatting_human_output_then_uses_expected_sections(
+    test_case: DbtPlanHumanFormatterTestCase,
+) -> None:
+    selection: DbtInteropSelectionResult = DbtInteropSelectionResult(
+        sqlbuild_model_names=test_case.sqlbuild_model_names
+    )
+    plan: DbtInteropPlan = build_dbt_interop_plan(
+        command="plan",
+        dbt_command_argv=("dbt", "ls", "--select", "tag:nightly"),
+        dbt_ls_nodes=test_case.dbt_ls_nodes,
+        sqlbuild_command_argvs=(("sqb", "plan", "--select", *test_case.sqlbuild_model_names),)
+        if test_case.sqlbuild_model_names
+        else (),
+        selection=selection,
+        sqlbuild_plan_output=(
+            build_sqlbuild_plan_output(test_case.sqlbuild_plan_model_names)
+            if test_case.sqlbuild_plan_model_names
+            else None
+        ),
+    )
+
+    human_output: str = format_dbt_interop_plan(
+        plan,
+        use_color=test_case.use_color,
+        display_options=DisplayOptions(max_entries_per_section=test_case.display_limit),
+    )
+
+    for expected_fragment in test_case.expected_human_fragments:
+        assert expected_fragment in human_output
+    for expected_regex in test_case.expected_human_regex_fragments:
+        assert re.search(expected_regex, human_output)
+    for absent_fragment in test_case.expected_absent_fragments:
+        assert absent_fragment not in human_output

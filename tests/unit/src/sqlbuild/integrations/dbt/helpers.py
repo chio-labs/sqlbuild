@@ -6,12 +6,22 @@ from pathlib import Path
 from sqlbuild.compiler.compile.helpers.assembly import assemble_compiled_project
 from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
 from sqlbuild.compiler.compile.models import (
+    CompiledObjectKey,
     CompiledProject,
+    CompiledRelationTarget,
     CompileModelConfig,
     CompileModelInput,
     CompileProjectInputs,
 )
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
+from sqlbuild.compiler.planner.models import BackfillResult, ModelPlanEntry, PlanOutput
+from sqlbuild.compiler.planner.types import (
+    BackfillAction,
+    MaterializationType,
+    PlanAction,
+    PlanReason,
+)
 from sqlbuild.integrations.dbt.helpers.graph import dbt_model_graph_key, sqlbuild_model_graph_key
 from sqlbuild.integrations.dbt.helpers.runner import build_dbt_ls_argv
 from sqlbuild.integrations.dbt.models import (
@@ -88,6 +98,40 @@ def build_dbt_ls_command_result(
 
     stdout: str = "\n".join(json.dumps({"unique_id": unique_id}) for unique_id in unique_ids)
     return DbtCommandResult(argv=argv, returncode=0, stdout=stdout)
+
+
+def build_sqlbuild_plan_output(model_names: tuple[str, ...]) -> PlanOutput:
+    """Build a minimal SQLBuild plan output for dbt formatter tests."""
+
+    return PlanOutput(
+        model_entries=tuple(
+            _build_sqlbuild_model_plan_entry(model_name) for model_name in model_names
+        )
+    )
+
+
+def _build_sqlbuild_model_plan_entry(model_name: str) -> ModelPlanEntry:
+    return ModelPlanEntry(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.MODEL,
+            name=model_name,
+        ),
+        name=model_name,
+        relative_path=Path(f"models/{model_name}.sql"),
+        materialization_type=MaterializationType.TABLE,
+        action=PlanAction.CREATE_TABLE,
+        reason=PlanReason.NO_CHANGE,
+        target=CompiledRelationTarget(
+            database=None,
+            schema=None,
+            name=model_name,
+            qualified_name=None,
+        ),
+        fingerprint_query_sql="select 1",
+        resolved_sql="select 1",
+        logical_ddl="",
+        backfill=BackfillResult(action=BackfillAction.WARN_ONLY),
+    )
 
 
 def build_dbt_plan_mapping_invoker(

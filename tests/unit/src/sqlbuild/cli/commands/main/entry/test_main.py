@@ -1152,6 +1152,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
             bool,
             tuple[str, ...],
             tuple[str, ...],
+            bool,
         ]
     ] = []
 
@@ -1165,6 +1166,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
         no_color: bool,
         select: tuple[str, ...],
         exclude: tuple[str, ...],
+        verbose: bool,
     ) -> int:
         received_args.append(
             (
@@ -1177,6 +1179,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
                 no_color,
                 select,
                 exclude,
+                verbose,
             )
         )
         return test_case.expected_exit_code
@@ -1194,6 +1197,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
         test_case.expected_no_color,
         ("orders",),
         ("customers",),
+        False,
     )
 
 
