@@ -125,3 +125,22 @@ class DbtSelectionTestCase:
     expected_dbt_anchor_terms: tuple[str, ...] = ()
     expected_dbt_anchor_unique_ids_by_term: dict[str, tuple[str, ...]] | None = None
     expected_path_translations: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class DbtPlanTestCase:
+    description: str
+    command: str
+    dbt_command_argv: tuple[str, ...]
+    dbt_ls_unique_ids: tuple[str, ...]
+    sqlbuild_command_argvs: tuple[tuple[str, ...], ...]
+    selection_sqlbuild_model_names: tuple[str, ...]
+    selection_dbt_required_unique_ids: tuple[str, ...]
+    selection_dbt_anchor_terms: tuple[str, ...]
+    selection_dbt_anchor_unique_ids_by_term: dict[str, tuple[str, ...]]
+    selection_path_translations: tuple[tuple[str, str], ...]
+    warnings: tuple[str, ...]
+    expected_dbt_skipped: bool
+    expected_sqlbuild_skipped: bool
+    expected_human_fragments: tuple[str, ...]
+    expected_json_fragments: tuple[str, ...]

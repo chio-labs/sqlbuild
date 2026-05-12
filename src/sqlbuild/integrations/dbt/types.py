@@ -30,3 +30,10 @@ class DbtInteropCommand(StrEnum):
     BUILD = "build"
     TEST = "test"
     CLONE = "clone"
+
+
+class DbtInteropSkipReason(StrEnum):
+    """Reason one side of a dbt interop plan has no work."""
+
+    NO_DBT_WORK = "no_dbt_work"
+    NO_SQLBUILD_WORK = "no_sqlbuild_work"

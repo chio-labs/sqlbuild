@@ -9,6 +9,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,
     DbtCombinedGraphResourceType,
     DbtInteropCommand,
+    DbtInteropSkipReason,
 )
 
 
@@ -165,3 +166,17 @@ class DbtInteropSelectionResult:
     dbt_anchor_terms: tuple[str, ...] = field(default_factory=tuple)
     dbt_anchor_unique_ids_by_term: dict[str, tuple[str, ...]] = field(default_factory=dict)
     path_translations: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtInteropPlan:
+    """Plan output for one future `sqb dbt` command."""
+
+    command: DbtInteropCommand
+    dbt_command_argv: tuple[str, ...]
+    dbt_selected_unique_ids: tuple[str, ...]
+    sqlbuild_command_argvs: tuple[tuple[str, ...], ...]
+    selection: DbtInteropSelectionResult
+    dbt_skip_reason: DbtInteropSkipReason | None = None
+    sqlbuild_skip_reason: DbtInteropSkipReason | None = None
+    warnings: tuple[str, ...] = field(default_factory=tuple)
