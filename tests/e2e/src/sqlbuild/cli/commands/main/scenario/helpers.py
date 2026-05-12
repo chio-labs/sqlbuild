@@ -255,6 +255,22 @@ def maybe_corrupt_scenario_snapshot_jsonl(
     jsonl_path.write_text('{"id": 1, "amount": 10}\nnot-json\n', encoding="utf-8")
 
 
+def maybe_corrupt_scenario_snapshot_dialect(
+    *, project_dir: Path, scenario_name: str, enabled: bool
+) -> None:
+    """Optionally replace the captured dialect with an unsupported dialect name."""
+
+    if not enabled:
+        return
+    manifest_path: Path = (
+        project_dir / "tests" / "_scenario_snapshots" / scenario_name / "scenario.json"
+    )
+    manifest_data: object = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert isinstance(manifest_data, dict)
+    manifest_data["capture_dialect"] = "not_a_sqlglot_dialect"
+    manifest_path.write_text(json.dumps(manifest_data, indent=2) + "\n", encoding="utf-8")
+
+
 def maybe_capture_scenario_snapshot(
     *, project_dir: Path, scenario_name: str, enabled: bool
 ) -> None:

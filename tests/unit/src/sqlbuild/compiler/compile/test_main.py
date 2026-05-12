@@ -22,6 +22,7 @@ from sqlbuild.spec.models.project import (
     ProjectConfig,
 )
 from tests.unit.src.sqlbuild.compiler.compile._test_helpers import (
+    attach_dbt_manifest_file,
     base_repo_files,
     expected_or_actual,
 )
@@ -1928,7 +1929,7 @@ sqlglot = false
         description="resolves dbt refs from discovered manifest",
         repo_files=base_repo_files()
         | {
-            "target/manifest.json": """
+            "dbt/target/manifest.json": """
 {
   "nodes": {
     "model.analytics.stg_orders": {
@@ -1992,7 +1993,10 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
 
     write_repo_files(tmp_path, test_case.repo_files)
 
-    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+    discovered_inputs: DiscoveredProjectInputs = attach_dbt_manifest_file(
+        discovered_inputs=discover_project_inputs(project_dir=tmp_path),
+        project_dir=tmp_path,
+    )
     compile_inputs: CompileProjectInputs = build_compile_inputs(
         discovered_inputs,
         selected_environment=test_case.selected_environment,
@@ -2970,7 +2974,7 @@ path = "${CTX:schema}"
         description="raises when dbt ref is ambiguous in discovered manifest",
         repo_files=base_repo_files()
         | {
-            "target/manifest.json": """
+            "dbt/target/manifest.json": """
 {
   "nodes": {
     "model.analytics.orders": {
@@ -3001,7 +3005,7 @@ path = "${CTX:schema}"
         description="raises when dbt and SQLBuild model names overlap",
         repo_files=base_repo_files()
         | {
-            "target/manifest.json": """
+            "dbt/target/manifest.json": """
 {
   "nodes": {
     "model.analytics.orders": {
@@ -3042,7 +3046,10 @@ def test_given_attachment_conflicts_when_building_compile_inputs_then_it_raises_
 
     write_repo_files(tmp_path, test_case.repo_files)
 
-    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+    discovered_inputs: DiscoveredProjectInputs = attach_dbt_manifest_file(
+        discovered_inputs=discover_project_inputs(project_dir=tmp_path),
+        project_dir=tmp_path,
+    )
 
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
         build_compile_inputs(

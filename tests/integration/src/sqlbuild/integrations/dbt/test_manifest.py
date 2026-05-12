@@ -15,6 +15,8 @@ from tests.integration.src.sqlbuild.integrations.dbt._test_types import (
 )
 from tests.integration.src.sqlbuild.integrations.dbt.helpers import attach_dbt_manifest_file
 
+pytestmark: pytest.MarkDecorator = pytest.mark.dbt
+
 
 @pytest.mark.parametrize(
     "test_case",

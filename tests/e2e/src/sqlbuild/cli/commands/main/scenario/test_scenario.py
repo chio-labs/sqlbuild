@@ -22,6 +22,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     build_scenario_project_files,
     list_scenario_relation_names,
     maybe_capture_scenario_snapshot,
+    maybe_corrupt_scenario_snapshot_dialect,
     maybe_corrupt_scenario_snapshot_jsonl,
     maybe_write_stale_order_totals_scenario,
     scenario_relation_name_by_suffix,
@@ -397,21 +398,11 @@ SCENARIO_LOCAL_DUCKDB_TEST_CASES: tuple[ScenarioLocalRetainE2ETestCase, ...] = (
         ),
         retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
         expected_count=1,
+        corrupt_capture_dialect=True,
         additional_project_files=(
             (
-                "sqlbuild_project.toml",
-                'name = "scenario_demo"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "scenario_demo.duckdb"\n\n'
-                "[defaults]\n"
-                'materialized = "table"\n\n'
-                "[settings]\n"
-                "sql_validation = false\n",
-            ),
-            (
                 "functions/sql/bad_transpile_function.sql",
-                "FUNCTION (arguments (amount INTEGER), returns BOOLEAN);\n\namount >\n",
+                "FUNCTION (arguments (amount INTEGER), returns BOOLEAN);\n\namount > 9\n",
             ),
             (
                 "models/local_sql_function_transpile_error.sql",
@@ -973,6 +964,11 @@ def test_given_captured_snapshot_when_running_local_scenario_then_manages_local_
         project_dir=project_dir,
         scenario_name=test_case.scenario_name,
         enabled=test_case.corrupt_jsonl,
+    )
+    maybe_corrupt_scenario_snapshot_dialect(
+        project_dir=project_dir,
+        scenario_name=test_case.scenario_name,
+        enabled=test_case.corrupt_capture_dialect,
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(

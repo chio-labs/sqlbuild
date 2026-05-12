@@ -19,6 +19,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import REPO_ROOT, run_sqb
 
+pytestmark: pytest.MarkDecorator = pytest.mark.dbt
+
 PLAN_CLI_TEST_CASES: list[DbtPlanCliTestCase] = [
     DbtPlanCliTestCase(
         description="reports SQLBuild-only selected work and dbt skip",
