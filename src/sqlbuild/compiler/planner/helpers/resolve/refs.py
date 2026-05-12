@@ -13,11 +13,13 @@ from sqlbuild.compiler.compile.models import (
     CompiledSeed,
 )
 from sqlbuild.compiler.planner.models import CursorBounds
+from sqlbuild.integrations.dbt.main.resolve_manifest_model import resolve_manifest_model
+from sqlbuild.integrations.dbt.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
 
 _REF_PATTERN: re.Pattern[str] = re.compile(r'__ref\("([^"]+)"\)')
 _SEED_PATTERN: re.Pattern[str] = re.compile(r'__seed\("([^"]+)"\)')
-_DBT_REF_PATTERN: re.Pattern[str] = re.compile(r'__dbt_ref\("([^"]+)"\)')
+_DBT_REF_PATTERN: re.Pattern[str] = re.compile(r'__dbt_ref\(\s*"([^"]+)"\s*(?:,\s*"([^"]+)"\s*)?\)')
 _UDF_PATTERN: re.Pattern[str] = re.compile(r'__udf\("([^"]+)"\)')
 _TABLE_FUNCTION_CALL_PATTERN: re.Pattern[str] = re.compile(
     r'__table_fn\("([^"]+)"\)\s*\(([^()]*)\)'
@@ -67,16 +69,24 @@ def resolve_ref_references(
     return _SEED_PATTERN.sub(_replace_seed, _REF_PATTERN.sub(_replace_ref, query_sql))
 
 
-def resolve_dbt_ref_references(*, query_sql: str) -> str:
-    """Reject dbt refs until dbt manifest resolution is supported."""
+def resolve_dbt_ref_references(
+    *, query_sql: str, dbt_manifest: DbtManifestIndex | None = None
+) -> str:
+    """Replace all __dbt_ref() calls with dbt manifest relation names."""
 
-    match: re.Match[str] | None = _DBT_REF_PATTERN.search(query_sql)
-    if match is not None:
-        raise NotImplementedError(
-            f"__dbt_ref('{match.group(1)}') is not supported yet; "
-            "support may be added in a future release"
+    def _replace_dbt_ref(match: re.Match[str]) -> str:
+        if dbt_manifest is None:
+            return match.group(0)
+        first_arg: str = match.group(1)
+        second_arg: str | None = match.group(2)
+        model: DbtManifestModel = resolve_manifest_model(
+            manifest=dbt_manifest,
+            package_name=first_arg if second_arg is not None else None,
+            name=second_arg if second_arg is not None else first_arg,
         )
-    return query_sql
+        return model.relation_name
+
+    return _DBT_REF_PATTERN.sub(_replace_dbt_ref, query_sql)
 
 
 def resolve_udf_references(

@@ -14,6 +14,8 @@ from sqlbuild.compiler.planner.helpers.resolve.refs import (
     resolve_table_function_references,
 )
 from sqlbuild.compiler.planner.models import CursorBounds
+from sqlbuild.integrations.dbt.helpers.manifest import build_dbt_manifest_index
+from sqlbuild.integrations.dbt.models import DbtManifestIndex
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.unit.src.sqlbuild.compiler.planner.helpers.resolve._test_types import (
     ApplyDeferredTargetsTestCase,
@@ -21,6 +23,10 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.resolve._test_types import
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers.resolve.helpers import (
     build_target,
+)
+from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
+    build_manifest_data,
+    build_manifest_model_node,
 )
 
 _MODEL_TARGETS: dict[str, CompiledRelationTarget] = {
@@ -128,9 +134,40 @@ TABLE_FUNCTION_TEST_CASES: list[RefResolutionTestCase] = [
     ),
 ]
 
+DBT_REF_TEST_CASES: list[RefResolutionTestCase] = [
+    RefResolutionTestCase(
+        description="replaces one arg dbt ref with manifest relation",
+        query_sql='SELECT * FROM __dbt_ref("external_model")',
+        expected_sql="SELECT * FROM analytics.external_model",
+    ),
+    RefResolutionTestCase(
+        description="replaces package qualified dbt ref with manifest relation",
+        query_sql='SELECT * FROM __dbt_ref("stripe", "orders")',
+        expected_sql="SELECT * FROM stripe.orders",
+    ),
+]
+
 _CURSOR_BOUNDS: CursorBounds = CursorBounds(start="2024-01-15", end="2024-02-01")
 _INTEGER_CURSOR_BOUNDS: CursorBounds = CursorBounds(start="10", end="20")
 _CURSOR_INPUTS: dict[str, str] = {"orders": "event_time"}
+_DBT_MANIFEST: DbtManifestIndex = build_dbt_manifest_index(
+    raw_data=build_manifest_data(
+        nodes=(
+            build_manifest_model_node(
+                unique_id="model.analytics.external_model",
+                package_name="analytics",
+                name="external_model",
+                relation_name="analytics.external_model",
+            ),
+            build_manifest_model_node(
+                unique_id="model.stripe.orders",
+                package_name="stripe",
+                name="orders",
+                relation_name="stripe.orders",
+            ),
+        )
+    )
+)
 
 
 @pytest.mark.parametrize(
@@ -216,20 +253,18 @@ def test_given_refs_with_exclusive_cursor_when_resolving_then_returns_expected_s
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        RefResolutionTestCase(
-            description="raises for dbt ref placeholder",
-            query_sql='SELECT * FROM __dbt_ref("external_model")',
-            expected_sql=r"__dbt_ref\('external_model'\) is not supported yet",
-        ),
-    ],
-    ids=["raises for dbt ref placeholder"],
+    DBT_REF_TEST_CASES,
+    ids=[case.description for case in DBT_REF_TEST_CASES],
 )
-def test_given_dbt_ref_when_resolving_then_raises_not_supported(
+def test_given_dbt_ref_when_resolving_then_returns_expected_sql(
     test_case: RefResolutionTestCase,
 ) -> None:
-    with pytest.raises(NotImplementedError, match=test_case.expected_sql):
-        resolve_dbt_ref_references(query_sql=test_case.query_sql)
+    result: str = resolve_dbt_ref_references(
+        query_sql=test_case.query_sql,
+        dbt_manifest=_DBT_MANIFEST,
+    )
+
+    assert result == test_case.expected_sql
 
 
 @pytest.mark.parametrize(

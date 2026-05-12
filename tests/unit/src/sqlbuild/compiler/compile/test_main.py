@@ -1924,6 +1924,53 @@ sqlglot = false
         expected_model_references=((),),
         expected_audit_references=(),
     ),
+    BuildCompileInputsTestCase(
+        description="resolves dbt refs from discovered manifest",
+        repo_files=base_repo_files()
+        | {
+            "target/manifest.json": """
+{
+  "nodes": {
+    "model.analytics.stg_orders": {
+      "unique_id": "model.analytics.stg_orders",
+      "resource_type": "model",
+      "package_name": "analytics",
+      "name": "stg_orders",
+      "relation_name": "analytics.stg_orders"
+    },
+    "model.stripe.orders": {
+      "unique_id": "model.stripe.orders",
+      "resource_type": "model",
+      "package_name": "stripe",
+      "name": "orders",
+      "relation_name": "stripe.orders"
+    }
+  }
+}
+""".strip()
+            + "\n",
+            "models/fact_orders.sql": (
+                'MODEL ();\n\nselect * from __dbt_ref("stg_orders") '
+                'union all select * from __dbt_ref("stripe", "orders")\n'
+            ),
+        },
+        selected_environment=None,
+        cli_vars=None,
+        run_id="test_run",
+        expected_model_schema_names=(None,),
+        expected_model_config_values=({},),
+        expected_model_query_sqls=(
+            "select * from analytics.stg_orders union all select * from stripe.orders",
+        ),
+        expected_model_path_defaults=(None,),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_effective_environment_name=None,
+        expected_effective_connection={},
+        expected_effective_vars={},
+        expected_model_references=((("dbt_ref", "stg_orders"), ("dbt_ref", "orders")),),
+        expected_audit_references=(),
+    ),
 ]
 
 
@@ -2312,7 +2359,7 @@ SELECT * FROM __dbt_ref("stg_orders")
         run_id=None,
         expected_error_fragment=(
             r"Model file models/staging/orders\.sql uses __dbt_ref\('stg_orders'\) "
-            "but dbt refs are not supported yet"
+            "but no dbt manifest was found"
         ),
     ),
     BuildCompileInputsErrorTestCase(
@@ -2908,6 +2955,71 @@ path = "${CTX:schema}"
         selected_environment=None,
         run_id=None,
         expected_error_fragment="tags must be a list",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when dbt ref has no discovered manifest",
+        repo_files=base_repo_files()
+        | {
+            "models/fact_orders.sql": 'MODEL ();\n\nselect * from __dbt_ref("orders")\n',
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="but no dbt manifest was found",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when dbt ref is ambiguous in discovered manifest",
+        repo_files=base_repo_files()
+        | {
+            "target/manifest.json": """
+{
+  "nodes": {
+    "model.analytics.orders": {
+      "unique_id": "model.analytics.orders",
+      "resource_type": "model",
+      "package_name": "analytics",
+      "name": "orders",
+      "relation_name": "analytics.orders"
+    },
+    "model.stripe.orders": {
+      "unique_id": "model.stripe.orders",
+      "resource_type": "model",
+      "package_name": "stripe",
+      "name": "orders",
+      "relation_name": "stripe.orders"
+    }
+  }
+}
+""".strip()
+            + "\n",
+            "models/fact_orders.sql": 'MODEL ();\n\nselect * from __dbt_ref("orders")\n',
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="dbt model 'orders' is ambiguous across packages",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when dbt and SQLBuild model names overlap",
+        repo_files=base_repo_files()
+        | {
+            "target/manifest.json": """
+{
+  "nodes": {
+    "model.analytics.orders": {
+      "unique_id": "model.analytics.orders",
+      "resource_type": "model",
+      "package_name": "analytics",
+      "name": "orders",
+      "relation_name": "analytics.orders"
+    }
+  }
+}
+""".strip()
+            + "\n",
+            "models/orders.sql": "MODEL ();\n\nselect 1\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="dbt and SQLBuild models share names: orders",
     ),
 ]
 

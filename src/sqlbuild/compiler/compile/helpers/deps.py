@@ -91,7 +91,11 @@ def _reference_dep(
     if reference.ref_kind == SqlReferenceKind.DBT_REF:
         return CompiledObjectKey(
             resource_type=CompiledResourceType.DBT_REF,
-            name=reference.ref_name,
+            name=(
+                f"{reference.ref_package}.{reference.ref_name}"
+                if reference.ref_package is not None
+                else reference.ref_name
+            ),
         )
     if reference.ref_kind in {SqlReferenceKind.UDF, SqlReferenceKind.TABLE_FUNCTION}:
         return CompiledObjectKey(
