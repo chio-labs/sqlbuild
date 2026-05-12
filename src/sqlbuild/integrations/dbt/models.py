@@ -154,3 +154,14 @@ class DbtInteropRoutedArgs:
     exclude: tuple[str, ...] = field(default_factory=tuple)
     dbt_args: tuple[str, ...] = field(default_factory=tuple)
     sqlbuild_args: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtInteropSelectionResult:
+    """SQLBuild-side selection produced from `sqb dbt` selectors."""
+
+    sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
+    dbt_required_unique_ids: tuple[str, ...] = field(default_factory=tuple)
+    dbt_anchor_terms: tuple[str, ...] = field(default_factory=tuple)
+    dbt_anchor_unique_ids_by_term: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    path_translations: tuple[tuple[str, str], ...] = field(default_factory=tuple)

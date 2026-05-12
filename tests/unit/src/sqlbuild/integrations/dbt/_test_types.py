@@ -108,3 +108,20 @@ class DbtArgRoutingErrorTestCase:
     command: str
     args: tuple[str, ...]
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class DbtSelectionTestCase:
+    description: str
+    manifest_data: dict[str, object]
+    sqlbuild_model_sql_by_name: dict[str, str]
+    sqlbuild_model_tags_by_name: dict[str, tuple[str, ...]]
+    sqlbuild_model_path_by_name: dict[str, str]
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    dbt_anchor_unique_ids_by_term: dict[str, tuple[str, ...]]
+    expected_sqlbuild_model_names: tuple[str, ...]
+    expected_dbt_required_unique_ids: tuple[str, ...]
+    expected_dbt_anchor_terms: tuple[str, ...] = ()
+    expected_dbt_anchor_unique_ids_by_term: dict[str, tuple[str, ...]] | None = None
+    expected_path_translations: tuple[tuple[str, str], ...] = ()

@@ -6,6 +6,7 @@ from sqlbuild.compiler.compile.helpers.assembly import assemble_compiled_project
 from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
 from sqlbuild.compiler.compile.models import (
     CompiledProject,
+    CompileModelConfig,
     CompileModelInput,
     CompileProjectInputs,
 )
@@ -104,13 +105,29 @@ def build_manifest_model_node(
 def build_compiled_project_with_models(sql_by_model_name: dict[str, str]) -> CompiledProject:
     """Build a minimal compiled project from model SQL strings."""
 
+    return build_compiled_project_with_model_specs(
+        sql_by_model_name=sql_by_model_name,
+        tags_by_model_name={},
+        path_by_model_name={},
+    )
+
+
+def build_compiled_project_with_model_specs(
+    *,
+    sql_by_model_name: dict[str, str],
+    tags_by_model_name: dict[str, tuple[str, ...]],
+    path_by_model_name: dict[str, str],
+) -> CompiledProject:
+    """Build a minimal compiled project from model SQL, tags, and relative paths."""
+
     model_inputs: list[CompileModelInput] = []
     model_name: str
     sql: str
     for model_name, sql in sql_by_model_name.items():
+        relative_path: Path = Path(path_by_model_name.get(model_name, f"models/{model_name}.sql"))
         model_file: DiscoveredSqlModelFile = DiscoveredSqlModelFile(
-            file_path=Path("/repo/models") / f"{model_name}.sql",
-            relative_path=Path("models") / f"{model_name}.sql",
+            file_path=Path("/repo") / relative_path,
+            relative_path=relative_path,
             contents=f"MODEL ();\n\n{sql}\n",
             header_values={},
             header_column_locations={},
@@ -120,6 +137,11 @@ def build_compiled_project_with_models(sql_by_model_name: dict[str, str]) -> Com
         model_inputs.append(
             CompileModelInput(
                 model_file=model_file,
+                config=CompileModelConfig(
+                    values={"tags": tags_by_model_name.get(model_name, ())}
+                    if model_name in tags_by_model_name
+                    else {}
+                ),
                 query_sql=sql,
                 references=extract_sql_references(sql),
             )
