@@ -5,6 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlbuild.integrations.dbt.types import (
+    DbtCombinedGraphOwner,
+    DbtCombinedGraphResourceType,
+)
+
 
 @dataclass(frozen=True)
 class DbtCliOptions:
@@ -89,6 +94,7 @@ class DbtManifestModel:
     database: str | None = None
     schema: str | None = None
     alias: str | None = None
+    depends_on_nodes: tuple[str, ...] = field(default_factory=tuple)
     payload: dict[str, object] = field(default_factory=dict)
 
 
@@ -99,3 +105,40 @@ class DbtManifestIndex:
     models_by_unique_id: dict[str, DbtManifestModel]
     models_by_name: dict[str, tuple[DbtManifestModel, ...]]
     models_by_package_and_name: dict[tuple[str, str], DbtManifestModel]
+
+
+@dataclass(frozen=True, order=True)
+class DbtCombinedGraphKey:
+    """Stable owner-qualified key for one combined dbt/SQLBuild graph node."""
+
+    owner: DbtCombinedGraphOwner
+    resource_type: DbtCombinedGraphResourceType
+    name: str
+
+    def __post_init__(self) -> None:
+        from sqlbuild.integrations.dbt.types import (
+            DbtCombinedGraphOwner,
+            DbtCombinedGraphResourceType,
+        )
+
+        object.__setattr__(self, "owner", DbtCombinedGraphOwner(self.owner))
+        object.__setattr__(
+            self,
+            "resource_type",
+            DbtCombinedGraphResourceType(self.resource_type),
+        )
+
+    @property
+    def stable_id(self) -> str:
+        """Return a stable string form for plan JSON and diagnostics."""
+
+        return f"{self.owner}:{self.resource_type}:{self.name}"
+
+
+@dataclass(frozen=True)
+class DbtCombinedGraph:
+    """Combined downstream-only dbt and SQLBuild graph."""
+
+    nodes: frozenset[DbtCombinedGraphKey]
+    upstream_deps: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]]
+    downstream_deps: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]]

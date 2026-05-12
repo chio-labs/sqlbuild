@@ -3,8 +3,20 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from enum import StrEnum
 from pathlib import Path
 
-from sqlbuild.integrations.dbt.models import DbtCommandResult
+type DbtInvoker = Callable[[tuple[str, ...], Path | None], object]
 
-type DbtInvoker = Callable[[tuple[str, ...], Path | None], DbtCommandResult]
+
+class DbtCombinedGraphOwner(StrEnum):
+    """Owner namespace for a combined dbt/SQLBuild graph node."""
+
+    DBT = "dbt"
+    SQLBUILD = "sqb"
+
+
+class DbtCombinedGraphResourceType(StrEnum):
+    """Resource type namespace for a combined dbt/SQLBuild graph node."""
+
+    MODEL = "model"
