@@ -8,6 +8,8 @@ from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
 from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult, DbtLsResult
 from tests.integration.src.sqlbuild.integrations.dbt._test_types import RealDbtRunnerTestCase
 
+pytestmark: pytest.MarkDecorator = pytest.mark.dbt
+
 REAL_DBT_LS_TEST_CASES: list[RealDbtRunnerTestCase] = [
     RealDbtRunnerTestCase(
         description="lists all project models",

@@ -15,6 +15,8 @@ from tests.integration.src.sqlbuild.integrations.dbt.helpers import (
     resolve_expected_dbt_argvs,
 )
 
+pytestmark: pytest.MarkDecorator = pytest.mark.dbt
+
 PLAN_TEST_CASES: list[RealDbtInteropPlanTestCase] = [
     RealDbtInteropPlanTestCase(
         description="plans dbt-only tag selector and skips SQLBuild work",

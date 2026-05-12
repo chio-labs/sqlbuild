@@ -32,6 +32,8 @@ from tests.integration.src.sqlbuild.integrations.dbt.helpers import (
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import graph_key_stable_ids
 
+pytestmark: pytest.MarkDecorator = pytest.mark.dbt
+
 
 @pytest.mark.parametrize(
     "test_case",
