@@ -36,6 +36,12 @@ def prepare_dbt_interop_project(*, tmp_path: Path) -> Path:
     return root_dir / "sqlbuild_project"
 
 
+def static_dbt_interop_project_dir() -> Path:
+    """Return the repository fixture SQLBuild project path."""
+
+    return DBT_INTEROP_FIXTURE_DIR / "sqlbuild_project"
+
+
 def load_json_stdout(stdout: str) -> dict[str, object]:
     """Load JSON command output."""
 

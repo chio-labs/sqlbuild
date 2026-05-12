@@ -7,13 +7,17 @@ from typing import cast
 
 import pytest
 
-from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import DbtPlanCliTestCase
+from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
+    DbtPlanCliTestCase,
+    DbtPlanRelativeProjectDirTestCase,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     load_json_stdout,
     prepare_dbt_interop_project,
     skip_unless_dbt_is_runnable,
+    static_dbt_interop_project_dir,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import REPO_ROOT, run_sqb
 
 PLAN_CLI_TEST_CASES: list[DbtPlanCliTestCase] = [
     DbtPlanCliTestCase(
@@ -115,3 +119,33 @@ def test_given_dbt_interop_project_when_running_plan_json_then_outputs_expected_
         for translation in path_translations_payload
         if isinstance(translation, dict)
     ] == list(test_case.expected_path_translations)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtPlanRelativeProjectDirTestCase(
+            description="resolves dbt config paths from relative SQLBuild project dir",
+            command=("dbt", "plan", "--json", "--select", "tag:nightly"),
+            expected_project_dir=static_dbt_interop_project_dir().relative_to(REPO_ROOT),
+            expected_selected_models=("downstream_orders",),
+        )
+    ],
+    ids=["resolves dbt config paths from relative SQLBuild project dir"],
+)
+def test_given_relative_project_dir_when_running_dbt_plan_then_resolves_dbt_config_paths(
+    test_case: DbtPlanRelativeProjectDirTestCase,
+) -> None:
+    skip_unless_dbt_is_runnable()
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=test_case.expected_project_dir,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    payload: dict[str, object] = load_json_stdout(result.stdout)
+    sqlbuild_payload: object = payload["sqlbuild"]
+    assert isinstance(sqlbuild_payload, dict)
+    typed_sqlbuild_payload: Mapping[str, object] = cast(Mapping[str, object], sqlbuild_payload)
+    assert typed_sqlbuild_payload["selected_models"] == list(test_case.expected_selected_models)

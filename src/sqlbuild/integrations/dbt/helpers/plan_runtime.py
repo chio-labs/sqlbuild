@@ -69,8 +69,8 @@ def parse_optional_path_flag(
         return None
     path: Path = Path(raw_value).expanduser()
     if path.is_absolute():
-        return path
-    return project_root / path
+        return path.resolve()
+    return (project_root.expanduser().resolve() / path).resolve()
 
 
 def resolve_dbt_manifest_path(*, options: DbtCliOptions) -> Path:
