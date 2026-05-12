@@ -58,7 +58,8 @@ def resolve_dbt_config(
 def _resolve_optional_path(*, project_root: Path, raw_value: str | None) -> Path | None:
     if raw_value is None:
         return None
+    resolved_project_root: Path = project_root.expanduser().resolve()
     path: Path = Path(raw_value).expanduser()
     if path.is_absolute():
-        return path
-    return project_root / path
+        return path.resolve()
+    return (resolved_project_root / path).resolve()

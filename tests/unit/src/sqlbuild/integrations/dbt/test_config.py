@@ -45,10 +45,10 @@ CONFIG_RESOLUTION_TEST_CASES: list[DbtConfigResolutionTestCase] = [
         cli_target="prod",
         cli_target_path="../dbt-target",
         require_project_dir=True,
-        expected_project_dir=Path("/repo/../analytics"),
-        expected_profiles_dir=Path("/repo/../profiles"),
+        expected_project_dir=Path("/analytics"),
+        expected_profiles_dir=Path("/profiles"),
         expected_target="prod",
-        expected_target_path=Path("/repo/../dbt-target"),
+        expected_target_path=Path("/dbt-target"),
     ),
     DbtConfigResolutionTestCase(
         description="normal sqb commands can omit project dir when dbt is not required",
