@@ -237,8 +237,12 @@ def test_given_dbt_interop_plan_inputs_when_building_plan_then_formats_expected_
     assert (plan.dbt_skip_reason is not None) == test_case.expected_dbt_skipped
     assert (plan.sqlbuild_skip_reason is not None) == test_case.expected_sqlbuild_skipped
     assert json_data["command"] == test_case.command
+    assert dbt_data["supplemental_argvs"] == [
+        list(argv) for argv in plan.supplemental_dbt_command_argvs
+    ]
     assert dbt_data["selected_unique_ids"] == list(test_case.dbt_ls_unique_ids)
     assert dbt_data["required_unique_ids"] == list(test_case.selection_dbt_required_unique_ids)
+    assert dbt_data["required_selector_terms"] == list(plan.dbt_required_selector_terms)
     assert dbt_data["skipped"] == test_case.expected_dbt_skipped
     assert sqlbuild_data["selected_models"] == list(test_case.selection_sqlbuild_model_names)
     assert sqlbuild_data["skipped"] == test_case.expected_sqlbuild_skipped

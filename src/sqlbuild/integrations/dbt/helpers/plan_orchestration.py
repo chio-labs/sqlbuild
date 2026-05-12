@@ -1,0 +1,236 @@
+"""Pure orchestration for dbt interop plan inputs."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+
+from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompileSqlReference
+from sqlbuild.compiler.compile.types import SqlReferenceKind
+from sqlbuild.integrations.dbt.helpers.manifest import resolve_dbt_manifest_model
+from sqlbuild.integrations.dbt.helpers.plan import build_dbt_interop_plan
+from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
+from sqlbuild.integrations.dbt.helpers.selection import resolve_dbt_interop_sqlbuild_selection
+from sqlbuild.integrations.dbt.models import (
+    DbtCliOptions,
+    DbtCombinedGraph,
+    DbtInteropPlan,
+    DbtInteropSelectionResult,
+    DbtLsResult,
+    DbtManifestIndex,
+    DbtManifestModel,
+)
+from sqlbuild.integrations.dbt.types import DbtInteropCommand
+
+
+def plan_dbt_interop_command(
+    *,
+    command: DbtInteropCommand | str,
+    project: CompiledProject,
+    manifest: DbtManifestIndex,
+    graph: DbtCombinedGraph,
+    dbt_runner: DbtRunner,
+    dbt_options: DbtCliOptions,
+    select: Sequence[str],
+    exclude: Sequence[str] = (),
+    dbt_command_args: Sequence[str] = (),
+    sqlbuild_command_args: Sequence[str] = (),
+    dbt_executable: str = "dbt",
+    sqlbuild_executable: str = "sqb",
+) -> DbtInteropPlan:
+    """Plan dbt and SQLBuild work from already-compiled interop inputs."""
+
+    normalized_command: DbtInteropCommand = DbtInteropCommand(command)
+    full_dbt_ls: DbtLsResult = dbt_runner.ls(
+        options=dbt_options,
+        select=select,
+        exclude=exclude,
+    )
+    anchors_by_term: dict[str, tuple[str, ...]] = {}
+    term: str
+    for term in select:
+        if not _is_dbt_anchor_term(term=term, project=project):
+            continue
+        anchor_ls: DbtLsResult = dbt_runner.ls(
+            options=dbt_options,
+            select=(term,),
+            exclude=exclude,
+        )
+        anchors_by_term[term] = tuple(node.unique_id for node in anchor_ls.nodes)
+
+    selection: DbtInteropSelectionResult = resolve_dbt_interop_sqlbuild_selection(
+        project=project,
+        graph=graph,
+        select=select,
+        exclude=exclude,
+        dbt_anchor_unique_ids_by_term=anchors_by_term,
+    )
+    dbt_required_selector_terms: tuple[str, ...] = _build_required_dbt_selector_terms(
+        project=project,
+        manifest=manifest,
+        selected_model_names=selection.sqlbuild_model_names,
+        required_unique_ids=selection.dbt_required_unique_ids,
+    )
+    supplemental_dbt_argvs: tuple[tuple[str, ...], ...] = _build_supplemental_dbt_argvs(
+        command=normalized_command,
+        dbt_executable=dbt_executable,
+        options=dbt_options,
+        selector_terms=dbt_required_selector_terms,
+    )
+    return build_dbt_interop_plan(
+        command=normalized_command,
+        dbt_command_argv=_build_primary_dbt_argv(
+            command=normalized_command,
+            dbt_executable=dbt_executable,
+            dbt_command_args=dbt_command_args,
+        ),
+        dbt_ls_nodes=full_dbt_ls.nodes,
+        sqlbuild_command_argvs=_build_sqlbuild_argvs(
+            command=normalized_command,
+            sqlbuild_executable=sqlbuild_executable,
+            selected_model_names=selection.sqlbuild_model_names,
+            sqlbuild_command_args=sqlbuild_command_args,
+        ),
+        selection=selection,
+        dbt_required_selector_terms=dbt_required_selector_terms,
+        supplemental_dbt_command_argvs=supplemental_dbt_argvs,
+    )
+
+
+def _is_dbt_anchor_term(*, term: str, project: CompiledProject) -> bool:
+    if not term.endswith("+"):
+        return False
+    core: str = term.removeprefix("+").removesuffix("+")
+    return not _matches_sqlbuild_direct_selector(term=core, project=project)
+
+
+def _matches_sqlbuild_direct_selector(*, term: str, project: CompiledProject) -> bool:
+    model_names: frozenset[str] = frozenset(model.name for model in project.models)
+    if term in model_names:
+        return True
+    if term.startswith("tag:"):
+        tag: str = term.removeprefix("tag:")
+        return any(
+            tag in _as_string_tuple(model.config.values.get("tags")) for model in project.models
+        )
+    if term.startswith("path:"):
+        raw_path: str = term.removeprefix("path:")
+        translated_path: str = _translate_dbt_path_selector(raw_path)
+        return any(
+            _model_path_selector(model) == translated_path
+            or _model_path_selector(model).startswith(f"{translated_path}/")
+            for model in project.models
+        )
+    return False
+
+
+def _build_required_dbt_selector_terms(
+    *,
+    project: CompiledProject,
+    manifest: DbtManifestIndex,
+    selected_model_names: Sequence[str],
+    required_unique_ids: Sequence[str],
+) -> tuple[str, ...]:
+    required_ids: frozenset[str] = frozenset(required_unique_ids)
+    if not required_ids:
+        return ()
+    selected_names: frozenset[str] = frozenset(selected_model_names)
+    terms: set[str] = set()
+    model: CompiledModel
+    for model in project.models:
+        if model.name not in selected_names:
+            continue
+        reference: CompileSqlReference
+        for reference in model.references:
+            if reference.ref_kind != SqlReferenceKind.DBT_REF:
+                continue
+            dbt_model: DbtManifestModel = resolve_dbt_manifest_model(
+                manifest=manifest,
+                package_name=reference.ref_package,
+                name=reference.ref_name,
+            )
+            if dbt_model.unique_id not in required_ids:
+                continue
+            terms.add(f"+{dbt_model.package_name}.{dbt_model.name}")
+    return tuple(sorted(terms))
+
+
+def _build_supplemental_dbt_argvs(
+    *,
+    command: DbtInteropCommand,
+    dbt_executable: str,
+    options: DbtCliOptions,
+    selector_terms: Sequence[str],
+) -> tuple[tuple[str, ...], ...]:
+    if not selector_terms:
+        return ()
+    argv: tuple[str, ...] = _append_dbt_options((dbt_executable, command.value), options=options)
+    return ((*argv, "--select", *selector_terms),)
+
+
+def _build_primary_dbt_argv(
+    *, command: DbtInteropCommand, dbt_executable: str, dbt_command_args: Sequence[str]
+) -> tuple[str, ...]:
+    return (dbt_executable, command.value, *dbt_command_args)
+
+
+def _build_sqlbuild_argvs(
+    *,
+    command: DbtInteropCommand,
+    sqlbuild_executable: str,
+    selected_model_names: Sequence[str],
+    sqlbuild_command_args: Sequence[str],
+) -> tuple[tuple[str, ...], ...]:
+    if not selected_model_names:
+        return ()
+    return (
+        (
+            sqlbuild_executable,
+            command.value,
+            "--select",
+            *selected_model_names,
+            *sqlbuild_command_args,
+        ),
+    )
+
+
+def _translate_dbt_path_selector(raw_path: str) -> str:
+    if raw_path == "models":
+        return ""
+    if raw_path.startswith("models/"):
+        return raw_path.removeprefix("models/")
+    return raw_path
+
+
+def _model_path_selector(model: CompiledModel) -> str:
+    parent: str = model.relative_path.parent.as_posix()
+    if parent == "models":
+        return ""
+    if parent.startswith("models/"):
+        return parent.removeprefix("models/")
+    return parent
+
+
+def _as_string_tuple(value: object) -> tuple[str, ...]:
+    if isinstance(value, tuple):
+        return tuple(str(item) for item in value)
+    if isinstance(value, list):
+        return tuple(str(item) for item in value)
+    return ()
+
+
+def _append_dbt_options(argv: tuple[str, ...], *, options: DbtCliOptions) -> tuple[str, ...]:
+    if options.project_dir is not None:
+        argv = (*argv, "--project-dir", str(options.project_dir))
+    if options.profiles_dir is not None:
+        argv = (*argv, "--profiles-dir", str(options.profiles_dir))
+    if options.target is not None:
+        argv = (*argv, "--target", options.target)
+    if options.target_path is not None:
+        argv = (*argv, "--target-path", str(options.target_path))
+    if options.vars is not None:
+        argv = (*argv, "--vars", options.vars)
+    if options.state is not None:
+        argv = (*argv, "--state", str(options.state))
+    if options.defer:
+        argv = (*argv, "--defer")
+    return argv

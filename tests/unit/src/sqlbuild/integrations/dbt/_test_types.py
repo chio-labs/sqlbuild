@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild.integrations.dbt.models import DbtCommandResult
+from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult
 from sqlbuild.spec.models.project import DbtConfig
 
 
@@ -144,3 +144,32 @@ class DbtPlanTestCase:
     expected_sqlbuild_skipped: bool
     expected_human_fragments: tuple[str, ...]
     expected_json_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtPlanOrchestrationTestCase:
+    description: str
+    command: str
+    manifest_data: dict[str, object]
+    sqlbuild_model_sql_by_name: dict[str, str]
+    sqlbuild_model_tags_by_name: dict[str, tuple[str, ...]]
+    sqlbuild_model_path_by_name: dict[str, str]
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    full_dbt_ls_unique_ids: tuple[str, ...]
+    anchor_dbt_ls_unique_ids_by_term: dict[str, tuple[str, ...]]
+    expected_dbt_ls_selects: tuple[tuple[str, ...], ...]
+    expected_sqlbuild_model_names: tuple[str, ...]
+    expected_dbt_required_unique_ids: tuple[str, ...]
+    expected_dbt_required_selector_terms: tuple[str, ...]
+    expected_supplemental_dbt_command_argvs: tuple[tuple[str, ...], ...]
+    expected_sqlbuild_command_argvs: tuple[tuple[str, ...], ...]
+    expected_dbt_skipped: bool
+    expected_sqlbuild_skipped: bool
+    dbt_options: DbtCliOptions | None = None
+    dbt_command_args: tuple[str, ...] = ()
+    sqlbuild_command_args: tuple[str, ...] = ()
+    expected_primary_dbt_command_argv: tuple[str, ...] = ()
+    expected_dbt_ls_excludes: tuple[tuple[str, ...], ...] = ()
+    expected_dbt_anchor_terms: tuple[str, ...] = ()
+    expected_path_translations: tuple[tuple[str, str], ...] = field(default_factory=tuple)
