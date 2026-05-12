@@ -177,6 +177,8 @@ class DbtInteropPlan:
     dbt_selected_unique_ids: tuple[str, ...]
     sqlbuild_command_argvs: tuple[tuple[str, ...], ...]
     selection: DbtInteropSelectionResult
+    dbt_required_selector_terms: tuple[str, ...] = field(default_factory=tuple)
+    supplemental_dbt_command_argvs: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     dbt_skip_reason: DbtInteropSkipReason | None = None
     sqlbuild_skip_reason: DbtInteropSkipReason | None = None
     warnings: tuple[str, ...] = field(default_factory=tuple)

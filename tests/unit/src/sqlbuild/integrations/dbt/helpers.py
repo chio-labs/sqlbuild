@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from sqlbuild.compiler.compile.helpers.assembly import assemble_compiled_project
@@ -12,6 +13,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from sqlbuild.integrations.dbt.helpers.graph import dbt_model_graph_key, sqlbuild_model_graph_key
+from sqlbuild.integrations.dbt.helpers.runner import build_dbt_ls_argv
 from sqlbuild.integrations.dbt.models import (
     DbtCliConfigOverrides,
     DbtCliOptions,
@@ -62,6 +64,93 @@ class RecordingDbtInvoker:
     def __call__(self, argv: tuple[str, ...], cwd: Path | None) -> DbtCommandResult:
         self.calls.append((argv, cwd))
         return self.result
+
+
+class MappingDbtInvoker:
+    """Record dbt invocations and return results by argv."""
+
+    def __init__(self, results_by_argv: dict[tuple[str, ...], DbtCommandResult]) -> None:
+        self.results_by_argv = results_by_argv
+        self.calls: list[tuple[tuple[str, ...], Path | None]] = []
+
+    def __call__(self, argv: tuple[str, ...], cwd: Path | None) -> DbtCommandResult:
+        self.calls.append((argv, cwd))
+        result: DbtCommandResult | None = self.results_by_argv.get(argv)
+        if result is not None:
+            return result
+        return DbtCommandResult(argv=argv, returncode=0, stdout="")
+
+
+def build_dbt_ls_command_result(
+    *, argv: tuple[str, ...], unique_ids: tuple[str, ...]
+) -> DbtCommandResult:
+    """Build a dbt ls command result with JSON-lines nodes."""
+
+    stdout: str = "\n".join(json.dumps({"unique_id": unique_id}) for unique_id in unique_ids)
+    return DbtCommandResult(argv=argv, returncode=0, stdout=stdout)
+
+
+def build_dbt_plan_mapping_invoker(
+    *,
+    options: DbtCliOptions,
+    select: tuple[str, ...],
+    exclude: tuple[str, ...],
+    full_dbt_ls_unique_ids: tuple[str, ...],
+    anchor_dbt_ls_unique_ids_by_term: dict[str, tuple[str, ...]],
+) -> MappingDbtInvoker:
+    """Build a mapping invoker for plan orchestration dbt ls calls."""
+
+    results_by_argv: dict[tuple[str, ...], DbtCommandResult] = {}
+    full_argv: tuple[str, ...] = build_dbt_ls_argv(
+        dbt_executable="dbt",
+        options=options,
+        select=select,
+        exclude=exclude,
+    )
+    results_by_argv[full_argv] = build_dbt_ls_command_result(
+        argv=full_argv,
+        unique_ids=full_dbt_ls_unique_ids,
+    )
+    term: str
+    unique_ids: tuple[str, ...]
+    for term, unique_ids in anchor_dbt_ls_unique_ids_by_term.items():
+        anchor_argv: tuple[str, ...] = build_dbt_ls_argv(
+            dbt_executable="dbt",
+            options=options,
+            select=(term,),
+            exclude=exclude,
+        )
+        results_by_argv[anchor_argv] = build_dbt_ls_command_result(
+            argv=anchor_argv,
+            unique_ids=unique_ids,
+        )
+    return MappingDbtInvoker(results_by_argv=results_by_argv)
+
+
+def extract_dbt_ls_selects(argv: tuple[str, ...]) -> tuple[str, ...]:
+    """Extract select terms from a dbt ls argv for assertions."""
+
+    if "--select" not in argv:
+        return ()
+    values: list[str] = []
+    index: int = argv.index("--select") + 1
+    while index < len(argv) and not argv[index].startswith("--"):
+        values.append(argv[index])
+        index += 1
+    return tuple(values)
+
+
+def extract_dbt_ls_excludes(argv: tuple[str, ...]) -> tuple[str, ...]:
+    """Extract exclude terms from a dbt ls argv for assertions."""
+
+    if "--exclude" not in argv:
+        return ()
+    values: list[str] = []
+    index: int = argv.index("--exclude") + 1
+    while index < len(argv) and not argv[index].startswith("--"):
+        values.append(argv[index])
+        index += 1
+    return tuple(values)
 
 
 def build_manifest_data(*, nodes: tuple[dict[str, object], ...]) -> dict[str, object]:

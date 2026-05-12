@@ -21,6 +21,8 @@ def build_dbt_interop_plan(
     dbt_ls_nodes: Sequence[DbtLsNode],
     sqlbuild_command_argvs: Sequence[Sequence[str]],
     selection: DbtInteropSelectionResult,
+    dbt_required_selector_terms: Sequence[str] = (),
+    supplemental_dbt_command_argvs: Sequence[Sequence[str]] = (),
     warnings: Sequence[str] = (),
 ) -> DbtInteropPlan:
     """Build a display-ready plan from dbt preflight and SQLBuild selection results."""
@@ -38,6 +40,10 @@ def build_dbt_interop_plan(
         dbt_selected_unique_ids=dbt_selected_unique_ids,
         sqlbuild_command_argvs=tuple(tuple(argv) for argv in sqlbuild_command_argvs),
         selection=selection,
+        dbt_required_selector_terms=tuple(dbt_required_selector_terms),
+        supplemental_dbt_command_argvs=tuple(
+            tuple(argv) for argv in supplemental_dbt_command_argvs
+        ),
         dbt_skip_reason=None if dbt_has_work else DbtInteropSkipReason.NO_DBT_WORK,
         sqlbuild_skip_reason=None if sqlbuild_has_work else DbtInteropSkipReason.NO_SQLBUILD_WORK,
         warnings=tuple(warnings),
@@ -70,8 +76,10 @@ def format_dbt_interop_plan_json(plan: DbtInteropPlan) -> str:
         "command": plan.command.value,
         "dbt": {
             "argv": list(plan.dbt_command_argv),
+            "supplemental_argvs": [list(argv) for argv in plan.supplemental_dbt_command_argvs],
             "selected_unique_ids": list(plan.dbt_selected_unique_ids),
             "required_unique_ids": list(plan.selection.dbt_required_unique_ids),
+            "required_selector_terms": list(plan.dbt_required_selector_terms),
             "skipped": plan.dbt_skip_reason is not None,
             "skip_reason": plan.dbt_skip_reason.value if plan.dbt_skip_reason is not None else None,
         },
@@ -105,10 +113,15 @@ def _format_dbt_section(lines: list[str], plan: DbtInteropPlan) -> None:
         lines.append("  skipped: no dbt work selected")
         return
     lines.append(f"  command: {' '.join(plan.dbt_command_argv)}")
+    argv: tuple[str, ...]
+    for argv in plan.supplemental_dbt_command_argvs:
+        lines.append(f"  command: {' '.join(argv)}")
     if plan.dbt_selected_unique_ids:
         lines.append(f"  selected: {len(plan.dbt_selected_unique_ids)}")
     if plan.selection.dbt_required_unique_ids:
         lines.append(f"  required: {len(plan.selection.dbt_required_unique_ids)}")
+        if plan.dbt_required_selector_terms:
+            lines.append(f"    selectors: {' '.join(plan.dbt_required_selector_terms)}")
         unique_id: str
         for unique_id in plan.selection.dbt_required_unique_ids:
             lines.append(f"    {unique_id}")
