@@ -8,6 +8,7 @@ from pathlib import Path
 from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,
     DbtCombinedGraphResourceType,
+    DbtInteropCommand,
 )
 
 
@@ -142,3 +143,14 @@ class DbtCombinedGraph:
     nodes: frozenset[DbtCombinedGraphKey]
     upstream_deps: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]]
     downstream_deps: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]]
+
+
+@dataclass(frozen=True)
+class DbtInteropRoutedArgs:
+    """Arguments split for a future `sqb dbt` command execution."""
+
+    command: DbtInteropCommand
+    select: tuple[str, ...] = field(default_factory=tuple)
+    exclude: tuple[str, ...] = field(default_factory=tuple)
+    dbt_args: tuple[str, ...] = field(default_factory=tuple)
+    sqlbuild_args: tuple[str, ...] = field(default_factory=tuple)
