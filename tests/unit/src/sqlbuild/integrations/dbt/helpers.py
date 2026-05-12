@@ -46,3 +46,38 @@ class RecordingDbtInvoker:
     def __call__(self, argv: tuple[str, ...], cwd: Path | None) -> DbtCommandResult:
         self.calls.append((argv, cwd))
         return self.result
+
+
+def build_manifest_data(*, nodes: tuple[dict[str, object], ...]) -> dict[str, object]:
+    """Build a minimal dbt manifest payload for model lookup tests."""
+
+    return {"nodes": {str(node["unique_id"]): node for node in nodes}}
+
+
+def build_manifest_model_node(
+    *,
+    unique_id: str,
+    package_name: str,
+    name: str,
+    relation_name: str | None = None,
+    database: str | None = None,
+    schema: str | None = None,
+    alias: str | None = None,
+) -> dict[str, object]:
+    """Build a minimal dbt manifest model node."""
+
+    node: dict[str, object] = {
+        "unique_id": unique_id,
+        "resource_type": "model",
+        "package_name": package_name,
+        "name": name,
+    }
+    if relation_name is not None:
+        node["relation_name"] = relation_name
+    if database is not None:
+        node["database"] = database
+    if schema is not None:
+        node["schema"] = schema
+    if alias is not None:
+        node["alias"] = alias
+    return node

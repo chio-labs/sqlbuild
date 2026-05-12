@@ -59,3 +59,21 @@ class DbtRunnerCommandTestCase:
     description: str
     command_result: DbtCommandResult
     expected_argv: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtManifestResolutionTestCase:
+    description: str
+    manifest_data: dict[str, object]
+    package_name: str | None
+    model_name: str
+    expected_relation_name: str
+
+
+@dataclass(frozen=True)
+class DbtManifestResolutionErrorTestCase:
+    description: str
+    manifest_data: dict[str, object]
+    package_name: str | None
+    model_name: str
+    expected_error_fragment: str

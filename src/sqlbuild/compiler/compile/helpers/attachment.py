@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import fields, replace
 from datetime import UTC, datetime
@@ -84,6 +85,9 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.shared.helpers.schema_audits import parse_audit_instance
+from sqlbuild.integrations.dbt.main.build_manifest_index import build_manifest_index
+from sqlbuild.integrations.dbt.main.resolve_manifest_model import resolve_manifest_model
+from sqlbuild.integrations.dbt.models import DbtManifestIndex
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot
 from sqlbuild.spec.models.project import (
     ClonePolicy,
@@ -103,6 +107,8 @@ from sqlbuild.spec.models.schema import (
     SourceLocation,
 )
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
+
+_DBT_REF_PATTERN: re.Pattern[str] = re.compile(r'__dbt_ref\(\s*"([^"]+)"\s*(?:,\s*"([^"]+)"\s*)?\)')
 
 
 def build_model_inputs(
@@ -124,6 +130,11 @@ def build_model_inputs(
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
     known_function_names: set[str] = build_known_function_names(discovered_inputs)
     known_table_function_names: set[str] = build_known_table_function_names(discovered_inputs)
+    dbt_manifest: DbtManifestIndex | None = build_optional_dbt_manifest_index(discovered_inputs)
+    validate_no_duplicate_dbt_model_names(
+        known_model_names=known_model_names,
+        dbt_manifest=dbt_manifest,
+    )
     custom_materialization_names: frozenset[str] = frozenset(
         mf.name for mf in discovered_inputs.materialization_files
     )
@@ -186,7 +197,11 @@ def build_model_inputs(
             known_source_names=known_source_names,
             known_function_names=known_function_names,
             known_table_function_names=known_table_function_names,
-            has_dbt_manifest=discovered_inputs.dbt_manifest_file is not None,
+            dbt_manifest=dbt_manifest,
+        )
+        expanded_query_sql = resolve_model_dbt_ref_references(
+            query_sql=expanded_query_sql,
+            dbt_manifest=dbt_manifest,
         )
         validate_incremental_config(
             config=effective_config,
@@ -1679,7 +1694,7 @@ def validate_model_references(
     known_source_names: set[str],
     known_function_names: set[str],
     known_table_function_names: set[str],
-    has_dbt_manifest: bool,
+    dbt_manifest: DbtManifestIndex | None,
 ) -> None:
     """Validate extracted model refs against discovered project inputs."""
 
@@ -1722,9 +1737,20 @@ def validate_model_references(
                 f"'{reference.ref_name}'"
             )
         if reference.ref_kind == SqlReferenceKind.DBT_REF:
-            raise CompileInputError(
-                f"Model file {model_file.relative_path} uses __dbt_ref('{reference.ref_name}') "
-                "but dbt refs are not supported yet; support may be added in a future release"
+            if dbt_manifest is None:
+                raise CompileInputError(
+                    f"Model file {model_file.relative_path} uses __dbt_ref('{reference.ref_name}') "
+                    "but no dbt manifest was found",
+                    code="C214",
+                    help=(
+                        "Run dbt compile or configure dbt target_path so SQLBuild can "
+                        "read manifest.json."
+                    ),
+                )
+            resolve_manifest_model(
+                manifest=dbt_manifest,
+                package_name=reference.ref_package,
+                name=reference.ref_name,
             )
         if (
             reference.ref_kind == SqlReferenceKind.UDF
@@ -1749,6 +1775,26 @@ def validate_model_references(
                 f"'{reference.ref_name}', but table functions are terminal resources and cannot "
                 "be model dependencies"
             )
+
+
+def resolve_model_dbt_ref_references(
+    *, query_sql: str, dbt_manifest: DbtManifestIndex | None
+) -> str:
+    """Replace model __dbt_ref() calls with dbt manifest relation names."""
+
+    if dbt_manifest is None:
+        return query_sql
+
+    def _replace_dbt_ref(match: re.Match[str]) -> str:
+        first_arg: str = match.group(1)
+        second_arg: str | None = match.group(2)
+        return resolve_manifest_model(
+            manifest=dbt_manifest,
+            package_name=first_arg if second_arg is not None else None,
+            name=second_arg if second_arg is not None else first_arg,
+        ).relation_name
+
+    return _DBT_REF_PATTERN.sub(_replace_dbt_ref, query_sql)
 
 
 def validate_function_references(
@@ -1999,6 +2045,44 @@ def build_known_ref_names(discovered_inputs: DiscoveredProjectInputs) -> set[str
         discovered_model_file.file_path.stem
         for discovered_model_file in discovered_inputs.model_files
     }
+
+
+def build_optional_dbt_manifest_index(
+    discovered_inputs: DiscoveredProjectInputs,
+) -> DbtManifestIndex | None:
+    """Build a dbt manifest index if discovery found manifest.json."""
+
+    if discovered_inputs.dbt_manifest_file is None:
+        return None
+    try:
+        raw_data: object = json.loads(discovered_inputs.dbt_manifest_file.contents)
+    except json.JSONDecodeError as exc:
+        raise CompileInputError(
+            f"Invalid dbt manifest JSON: {exc.msg}",
+            code="C211",
+        ) from exc
+    return build_manifest_index(raw_data=raw_data)
+
+
+def validate_no_duplicate_dbt_model_names(
+    *, known_model_names: set[str], dbt_manifest: DbtManifestIndex | None
+) -> None:
+    """Reject ambiguous ownership between dbt and SQLBuild models."""
+
+    if dbt_manifest is None:
+        return
+    duplicate_names: tuple[str, ...] = tuple(
+        sorted(name for name in known_model_names if name in dbt_manifest.models_by_name)
+    )
+    if duplicate_names:
+        raise CompileInputError(
+            f"dbt and SQLBuild models share names: {', '.join(duplicate_names)}",
+            code="C215",
+            help=(
+                "Rename either the dbt model or SQLBuild model; owner-qualified names "
+                "are not supported."
+            ),
+        )
 
 
 def build_known_seed_names(discovered_inputs: DiscoveredProjectInputs) -> set[str]:

@@ -10,3 +10,10 @@ class RealDbtRunnerTestCase:
     exclude: tuple[str, ...]
     resource_types: tuple[str, ...]
     expected_unique_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RealDbtManifestCompileTestCase:
+    description: str
+    sqlbuild_model_sql: str
+    expected_compiled_sql: str

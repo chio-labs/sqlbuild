@@ -85,6 +85,7 @@ class CompileSqlReference:
 
     ref_kind: SqlReferenceKind | str
     ref_name: str
+    ref_package: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "ref_kind", SqlReferenceKind(self.ref_kind))
