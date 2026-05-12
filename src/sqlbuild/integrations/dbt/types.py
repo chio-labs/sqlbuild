@@ -20,3 +20,13 @@ class DbtCombinedGraphResourceType(StrEnum):
     """Resource type namespace for a combined dbt/SQLBuild graph node."""
 
     MODEL = "model"
+
+
+class DbtInteropCommand(StrEnum):
+    """dbt interop commands with SQLBuild participation."""
+
+    PLAN = "plan"
+    RUN = "run"
+    BUILD = "build"
+    TEST = "test"
+    CLONE = "clone"

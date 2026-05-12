@@ -89,3 +89,22 @@ class DbtCombinedGraphTestCase:
     expected_downstream_keys: tuple[str, ...]
     expected_upstream_from: str
     expected_upstream_keys: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtArgRoutingTestCase:
+    description: str
+    command: str
+    args: tuple[str, ...]
+    expected_select: tuple[str, ...]
+    expected_exclude: tuple[str, ...]
+    expected_dbt_args: tuple[str, ...]
+    expected_sqlbuild_args: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtArgRoutingErrorTestCase:
+    description: str
+    command: str
+    args: tuple[str, ...]
+    expected_error_fragment: str
