@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
+
+from sqlbuild.compiler.discovery.models import DiscoveredDbtManifestFile, DiscoveredProjectInputs
 
 
 def build_sqlbuild_project_with_manifest(
@@ -25,6 +28,21 @@ def build_sqlbuild_project_with_manifest(
         encoding="utf-8",
     )
     return project_dir
+
+
+def attach_dbt_manifest_file(
+    *, discovered_inputs: DiscoveredProjectInputs, manifest_source: Path
+) -> DiscoveredProjectInputs:
+    """Attach a dbt manifest explicitly for dbt interop integration tests."""
+
+    return replace(
+        discovered_inputs,
+        dbt_manifest_file=DiscoveredDbtManifestFile(
+            file_path=manifest_source,
+            relative_path=Path("manifest.json"),
+            contents=manifest_source.read_text(encoding="utf-8"),
+        ),
+    )
 
 
 def build_sqlbuild_project_with_dbt_config(

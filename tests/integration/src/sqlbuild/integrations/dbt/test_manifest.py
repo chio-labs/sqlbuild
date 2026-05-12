@@ -13,6 +13,7 @@ from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult
 from tests.integration.src.sqlbuild.integrations.dbt._test_types import (
     RealDbtManifestCompileTestCase,
 )
+from tests.integration.src.sqlbuild.integrations.dbt.helpers import attach_dbt_manifest_file
 
 
 @pytest.mark.parametrize(
@@ -57,8 +58,9 @@ def test_given_real_dbt_manifest_when_compiling_sqlbuild_then_resolves_dbt_ref(
         encoding="utf-8",
     )
 
-    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
-        project_dir=sqlbuild_project_dir
+    discovered_inputs: DiscoveredProjectInputs = attach_dbt_manifest_file(
+        discovered_inputs=discover_project_inputs(project_dir=sqlbuild_project_dir),
+        manifest_source=dbt_project_dir / "target/manifest.json",
     )
     compile_inputs: CompileProjectInputs = build_compile_inputs(discovered_inputs)
 

@@ -8,7 +8,6 @@ from sqlbuild.compiler.discovery.helpers.discovery_validation import validate_di
 from sqlbuild.compiler.discovery.helpers.filesystem import (
     discover_adapter_file,
     discover_audit_files,
-    discover_dbt_manifest_file,
     discover_macro_files,
     discover_materialization_files,
     discover_model_files,
@@ -56,7 +55,6 @@ def discover_project_inputs(*, project_dir: Path) -> DiscoveredProjectInputs:
         audit_files=discover_audit_files(project_dir=project_dir),
         macro_files=discover_macro_files(project_dir=project_dir),
         materialization_files=discover_materialization_files(project_dir=project_dir),
-        dbt_manifest_file=discover_dbt_manifest_file(project_dir=project_dir),
         adapter_file=discover_adapter_file(project_dir=project_dir),
     )
     validate_discovered_inputs(discovered_inputs)

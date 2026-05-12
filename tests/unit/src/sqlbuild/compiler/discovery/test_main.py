@@ -85,7 +85,7 @@ SELECT 1
             expected_audit_block_names=(None,),
             expected_audit_block_sql_bodies=("SELECT 1",),
             expected_macro_paths=("macros/name_helpers.py",),
-            expected_manifest_path="target/manifest.json",
+            expected_manifest_path=None,
             expected_adapter_path="adapter.py",
         )
     ],
