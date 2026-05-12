@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,
     DbtCombinedGraphResourceType,
@@ -174,9 +175,11 @@ class DbtInteropPlan:
 
     command: DbtInteropCommand
     dbt_command_argv: tuple[str, ...]
+    dbt_selected_nodes: tuple[DbtLsNode, ...]
     dbt_selected_unique_ids: tuple[str, ...]
     sqlbuild_command_argvs: tuple[tuple[str, ...], ...]
     selection: DbtInteropSelectionResult
+    sqlbuild_plan_output: PlanOutput | None = None
     dbt_required_selector_terms: tuple[str, ...] = field(default_factory=tuple)
     supplemental_dbt_command_argvs: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     dbt_skip_reason: DbtInteropSkipReason | None = None

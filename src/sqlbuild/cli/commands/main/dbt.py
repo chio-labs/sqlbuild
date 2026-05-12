@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+from typing import TextIO
 
+from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
 from sqlbuild.integrations.dbt.models import DbtInteropPlan
 from sqlbuild.integrations.dbt.pipeline.main.plan import plan_dbt_interop_from_project
 from sqlbuild.integrations.dbt.pipeline.main.render_plan import (
     render_dbt_interop_plan,
 )
 from sqlbuild.shared.helpers.colors import supports_color
+from sqlbuild.shared.helpers.display import DisplayOptions
 
 
 def run_dbt_plan(
@@ -20,12 +24,36 @@ def run_dbt_plan(
     """Execute `sqb dbt plan`."""
 
     json_output: bool = "--json" in args
-    routed_args: tuple[str, ...] = tuple(arg for arg in args if arg != "--json")
+    verbose: bool = "--verbose" in args or "-v" in args
+    routed_args: tuple[str, ...] = tuple(
+        arg for arg in args if arg not in {"--json", "--verbose", "-v"}
+    )
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
+    use_color: bool = not no_color and not json_output and supports_color()
+    progress_stream: TextIO = sys.stderr if json_output else sys.stdout
+    planning_progress: PlanningProgressReporter = PlanningProgressReporter(
+        stream=progress_stream,
+        use_color=use_color,
+    )
+    if not json_output:
+        progress_stream.write("\n")
+        progress_stream.flush()
     plan: DbtInteropPlan = plan_dbt_interop_from_project(
         project_dir=effective_project_dir,
         args=routed_args,
+        on_progress=planning_progress.on_progress,
+        progress_stream=progress_stream,
+        use_color=use_color,
     )
-    use_color: bool = not no_color and supports_color()
-    print(render_dbt_interop_plan(plan, json_output=json_output, use_color=use_color))
+    display_options: DisplayOptions = DisplayOptions(
+        max_entries_per_section=None if verbose else 50
+    )
+    print(
+        render_dbt_interop_plan(
+            plan,
+            json_output=json_output,
+            use_color=use_color,
+            display_options=display_options,
+        )
+    )
     return 0

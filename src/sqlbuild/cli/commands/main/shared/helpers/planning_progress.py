@@ -30,4 +30,12 @@ class PlanningProgressReporter:
 
 
 def _is_planning_completion_message(message: str) -> bool:
-    return message.startswith("Inspected ") or message.startswith("Generated ")
+    return message.startswith(
+        (
+            "Built ",
+            "Compiled ",
+            "Generated ",
+            "Inspected ",
+            "Loaded ",
+        )
+    )

@@ -7,11 +7,20 @@ from sqlbuild.integrations.dbt.helpers.plan import (
     format_dbt_interop_plan_json,
 )
 from sqlbuild.integrations.dbt.models import DbtInteropPlan
+from sqlbuild.shared.helpers.display import DisplayOptions
 
 
-def render_dbt_interop_plan(plan: DbtInteropPlan, *, json_output: bool, use_color: bool) -> str:
+def render_dbt_interop_plan(
+    plan: DbtInteropPlan,
+    *,
+    json_output: bool,
+    use_color: bool,
+    display_options: DisplayOptions | None = None,
+) -> str:
     """Render a dbt interop plan in the requested CLI output format."""
 
     if json_output:
         return format_dbt_interop_plan_json(plan)
-    return "\n" + format_dbt_interop_plan(plan, use_color=use_color)
+    return "\n" + format_dbt_interop_plan(
+        plan, use_color=use_color, display_options=display_options
+    )

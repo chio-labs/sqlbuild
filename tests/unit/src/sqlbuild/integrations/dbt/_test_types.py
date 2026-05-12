@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult
+from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult, DbtLsNode
 from sqlbuild.spec.models.project import DbtConfig
 
 
@@ -144,6 +144,19 @@ class DbtPlanTestCase:
     expected_sqlbuild_skipped: bool
     expected_human_fragments: tuple[str, ...]
     expected_json_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtPlanHumanFormatterTestCase:
+    description: str
+    dbt_ls_nodes: tuple[DbtLsNode, ...]
+    sqlbuild_model_names: tuple[str, ...]
+    sqlbuild_plan_model_names: tuple[str, ...]
+    display_limit: int | None
+    use_color: bool
+    expected_human_fragments: tuple[str, ...]
+    expected_human_regex_fragments: tuple[str, ...]
+    expected_absent_fragments: tuple[str, ...]
 
 
 @dataclass(frozen=True)
