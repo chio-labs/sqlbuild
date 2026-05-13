@@ -12,6 +12,7 @@ _RED: str = "\033[31m"
 _GREEN: str = "\033[32m"
 _YELLOW: str = "\033[33m"
 _BLUE: str = "\033[34m"
+_LIGHT_GREEN: str = "\033[92m"
 _ORANGE: str = "\033[38;5;208m"
 
 
@@ -69,10 +70,22 @@ def orange_bold(text: str) -> str:
     return f"{_ORANGE}{_BOLD}{text}{_RESET}"
 
 
+def orange(text: str) -> str:
+    """Orange text for dbt-owned section labels."""
+
+    return f"{_ORANGE}{text}{_RESET}"
+
+
 def green_bold(text: str) -> str:
     """Green bold text for successful section headers."""
 
     return f"{_GREEN}{_BOLD}{text}{_RESET}"
+
+
+def light_green(text: str) -> str:
+    """Light green text for nested section headers."""
+
+    return f"{_LIGHT_GREEN}{text}{_RESET}"
 
 
 def yellow_bold(text: str) -> str:

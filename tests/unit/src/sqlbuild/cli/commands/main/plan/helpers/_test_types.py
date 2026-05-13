@@ -16,3 +16,4 @@ class FormatPlanTestCase:
     full_refresh: bool = False
     expected_fragments: tuple[str, ...] = field(default_factory=tuple)
     unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_ordered_fragments: tuple[str, ...] = field(default_factory=tuple)
