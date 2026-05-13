@@ -1869,7 +1869,7 @@ def validate_audit_references(
         if reference.ref_kind == SqlReferenceKind.DBT_REF:
             raise CompileInputError(
                 f"Audit file {audit_file.relative_path} may not use "
-                f"__dbt_ref('{reference.ref_name}') right now"
+                f"__dbt_ref('{reference.ref_name}'); audit dbt model checks belong in dbt"
             )
         if (
             reference.ref_kind == SqlReferenceKind.REF
