@@ -204,6 +204,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     dbt_subparsers.add_parser("run")
     dbt_subparsers.add_parser("build")
     dbt_subparsers.add_parser("test")
+    dbt_subparsers.add_parser("debug")
     return parser
 
 
@@ -255,6 +256,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             args=args,
             no_color=no_color,
         ),
+        run_dbt_debug=lambda project_dir, args, no_color: run_dbt_command(
+            command=DbtInteropCommand.DEBUG,
+            project_dir=project_dir,
+            args=args,
+            no_color=no_color,
+        ),
         run_build=run_build,
         run_run=run_run,
         run_test=run_test,
@@ -286,7 +293,13 @@ def _main_with_dependencies(
         args: CliNamespace = CliNamespace()
         unknown_args: list[str]
         _, unknown_args = parser.parse_known_args(argv, namespace=args)
-        if args.command == CliCommand.DBT and args.dbt_command in {"plan", "run", "build", "test"}:
+        if args.command == CliCommand.DBT and args.dbt_command in {
+            "plan",
+            "run",
+            "build",
+            "test",
+            "debug",
+        }:
             args.dbt_args = unknown_args
         elif unknown_args:
             parser.error(f"unrecognized arguments: {' '.join(unknown_args)}")
@@ -345,6 +358,8 @@ def _main_with_dependencies(
                 return handlers.run_dbt_build(project_dir, tuple(args.dbt_args), args.no_color)
             if args.dbt_command == "test":
                 return handlers.run_dbt_test(project_dir, tuple(args.dbt_args), args.no_color)
+            if args.dbt_command == "debug":
+                return handlers.run_dbt_debug(project_dir, tuple(args.dbt_args), args.no_color)
             raise CliUserError("dbt requires a subcommand such as 'plan'", code="C237")
         if args.command == CliCommand.BUILD:
             cursor_overrides = CursorOverrides(

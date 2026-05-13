@@ -18,3 +18,12 @@ class DbtExecutionWrapperTestCase:
     args: tuple[str, ...]
     expected_forwarded_args: tuple[str, ...]
     expected_progress_stream_name: str
+
+
+@dataclass(frozen=True)
+class DbtDebugWrapperTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_dbt_args: tuple[str, ...]
+    expected_sqlbuild_no_connection: bool
+    expected_exit_code: int

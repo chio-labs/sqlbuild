@@ -24,10 +24,12 @@ def build_dbt_compile_argv(*, dbt_executable: str, options: DbtCliOptions) -> tu
     return _append_common_options((dbt_executable, "compile"), options=options)
 
 
-def build_dbt_debug_argv(*, dbt_executable: str, options: DbtCliOptions) -> tuple[str, ...]:
+def build_dbt_debug_argv(
+    *, dbt_executable: str, options: DbtCliOptions, args: Sequence[str] = ()
+) -> tuple[str, ...]:
     """Build argv for dbt debug."""
 
-    return _append_common_options((dbt_executable, "debug"), options=options)
+    return (*_append_common_options((dbt_executable, "debug"), options=options), *args)
 
 
 def build_dbt_command_argv(
@@ -112,11 +114,11 @@ class DbtRunner:
         )
         return self._invoke(argv=argv, cwd=options.project_dir)
 
-    def debug(self, *, options: DbtCliOptions) -> DbtCommandResult:
+    def debug(self, *, options: DbtCliOptions, args: Sequence[str] = ()) -> DbtCommandResult:
         """Run dbt debug."""
 
         argv: tuple[str, ...] = build_dbt_debug_argv(
-            dbt_executable=self.dbt_executable, options=options
+            dbt_executable=self.dbt_executable, options=options, args=args
         )
         return self._invoke(argv=argv, cwd=options.project_dir)
 

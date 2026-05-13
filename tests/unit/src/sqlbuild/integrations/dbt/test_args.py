@@ -134,43 +134,6 @@ ROUTING_TEST_CASES: list[DbtArgRoutingTestCase] = [
         expected_sqlbuild_args=("--vars", '{"suite":"nightly"}', "--concurrency", "3"),
     ),
     DbtArgRoutingTestCase(
-        description="passes full refresh to dbt only for clone",
-        command="clone",
-        args=("--full-refresh",),
-        expected_select=(),
-        expected_exclude=(),
-        expected_dbt_args=("--full-refresh",),
-        expected_sqlbuild_args=(),
-    ),
-    DbtArgRoutingTestCase(
-        description="passes event time to dbt only for clone",
-        command="clone",
-        args=(
-            "--event-time-start",
-            "2024-09-01",
-            "--event-time-end",
-            "2024-09-04",
-        ),
-        expected_select=(),
-        expected_exclude=(),
-        expected_dbt_args=(
-            "--event-time-start",
-            "2024-09-01",
-            "--event-time-end",
-            "2024-09-04",
-        ),
-        expected_sqlbuild_args=(),
-    ),
-    DbtArgRoutingTestCase(
-        description="passes vars and threads to both sides for clone",
-        command="clone",
-        args=("--vars", '{"clone":"yes"}', "--threads", "2"),
-        expected_select=(),
-        expected_exclude=(),
-        expected_dbt_args=("--vars", '{"clone":"yes"}', "--threads", "2"),
-        expected_sqlbuild_args=("--vars", '{"clone":"yes"}', "--concurrency", "2"),
-    ),
-    DbtArgRoutingTestCase(
         description="routes dbt project runtime flags only to dbt",
         command="build",
         args=(
@@ -346,15 +309,6 @@ ROUTING_TEST_CASES: list[DbtArgRoutingTestCase] = [
         expected_sqlbuild_args=("--fail-fast", "--verbose"),
     ),
     DbtArgRoutingTestCase(
-        description="routes SQLBuild hard copy for clone only",
-        command="clone",
-        args=("--sqb-hard-copy", "--sqb-defer-to", "prod"),
-        expected_select=(),
-        expected_exclude=(),
-        expected_dbt_args=(),
-        expected_sqlbuild_args=("--hard-copy", "--defer-to", "prod"),
-    ),
-    DbtArgRoutingTestCase(
         description="passes unknown dbt-native flags through to dbt",
         command="test",
         args=("--store-failures", "--favor-state"),
@@ -403,26 +357,6 @@ ROUTING_TEST_CASES: list[DbtArgRoutingTestCase] = [
             "--end-cursor-int",
             "20",
         ),
-    ),
-    DbtArgRoutingTestCase(
-        description="does not conflict dbt-only event time with SQLBuild timestamp cursor on clone",
-        command="clone",
-        args=(
-            "--event-time-start",
-            "2024-09-01",
-            "--event-time-end",
-            "2024-09-04",
-            "--sqb-hard-copy",
-        ),
-        expected_select=(),
-        expected_exclude=(),
-        expected_dbt_args=(
-            "--event-time-start",
-            "2024-09-01",
-            "--event-time-end",
-            "2024-09-04",
-        ),
-        expected_sqlbuild_args=("--hard-copy",),
     ),
 ]
 
@@ -514,7 +448,7 @@ ERROR_TEST_CASES: list[DbtArgRoutingErrorTestCase] = [
         expected_error_fragment="is not a valid SQLBuild option",
     ),
     DbtArgRoutingErrorTestCase(
-        description="rejects clone-only SQLBuild option on run",
+        description="rejects unsupported SQLBuild hard copy option on run",
         command="run",
         args=("--sqb-hard-copy",),
         expected_error_fragment="is not a valid SQLBuild option",
@@ -523,12 +457,6 @@ ERROR_TEST_CASES: list[DbtArgRoutingErrorTestCase] = [
         description="rejects run-only SQLBuild execution flag on plan",
         command="plan",
         args=("--sqb-fail-fast",),
-        expected_error_fragment="is not a valid SQLBuild option",
-    ),
-    DbtArgRoutingErrorTestCase(
-        description="rejects cursor SQLBuild option on clone",
-        command="clone",
-        args=("--sqb-start-cursor-int", "1"),
         expected_error_fragment="is not a valid SQLBuild option",
     ),
     DbtArgRoutingErrorTestCase(
@@ -563,9 +491,9 @@ ERROR_TEST_CASES: list[DbtArgRoutingErrorTestCase] = [
     ),
     DbtArgRoutingErrorTestCase(
         description="rejects unsupported dbt interop command",
-        command="debug",
+        command="clone",
         args=(),
-        expected_error_fragment="debug",
+        expected_error_fragment="clone",
     ),
 ]
 
