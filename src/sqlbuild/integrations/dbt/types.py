@@ -29,7 +29,7 @@ class DbtInteropCommand(StrEnum):
     RUN = "run"
     BUILD = "build"
     TEST = "test"
-    CLONE = "clone"
+    DEBUG = "debug"
 
 
 class DbtInteropSqlbuildTestAction(StrEnum):

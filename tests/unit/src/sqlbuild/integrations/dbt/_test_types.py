@@ -64,6 +64,16 @@ class DbtRunnerCommandTestCase:
 
 
 @dataclass(frozen=True)
+class DbtDebugPipelineTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_argv: tuple[str, ...]
+    expected_stdout: str
+    expected_stderr: str
+    expected_returncode: int
+
+
+@dataclass(frozen=True)
 class DbtManifestResolutionTestCase:
     description: str
     manifest_data: dict[str, object]

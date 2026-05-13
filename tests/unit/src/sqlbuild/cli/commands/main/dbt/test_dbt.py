@@ -11,6 +11,7 @@ from sqlbuild.cli.commands.main.dbt import run_dbt_command
 from sqlbuild.integrations.dbt.models import DbtInteropPlan
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from tests.unit.src.sqlbuild.cli.commands.main.dbt._test_types import (
+    DbtDebugWrapperTestCase,
     DbtExecutionWrapperTestCase,
     DbtPlanProgressTestCase,
 )
@@ -59,6 +60,26 @@ EXECUTION_WRAPPER_TEST_CASES: list[DbtExecutionWrapperTestCase] = [
         args=("--json", "--verbose", "--select", "test_type:data"),
         expected_forwarded_args=("--select", "test_type:data"),
         expected_progress_stream_name="stderr",
+    ),
+]
+
+DEBUG_WRAPPER_TEST_CASES: list[DbtDebugWrapperTestCase] = [
+    DbtDebugWrapperTestCase(
+        description="debug runs dbt then SQLBuild diagnostics and skips SQLBuild connection",
+        args=("--project-dir", "dbt_project", "--no-connection"),
+        expected_dbt_args=("--project-dir", "dbt_project", "--no-connection"),
+        expected_sqlbuild_no_connection=True,
+        expected_exit_code=0,
+    ),
+    DbtDebugWrapperTestCase(
+        description="debug returns failure when dbt debug fails after SQLBuild diagnostics",
+        args=(
+            "--project-dir",
+            "dbt_project",
+        ),
+        expected_dbt_args=("--project-dir", "dbt_project"),
+        expected_sqlbuild_no_connection=False,
+        expected_exit_code=1,
     ),
 ]
 
@@ -153,3 +174,55 @@ def test_given_dbt_execution_command_when_running_then_routes_expected_stream_an
         sys.stderr if test_case.expected_progress_stream_name == "stderr" else sys.stdout
     )
     assert captured_calls[0][2] is expected_stream
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    DEBUG_WRAPPER_TEST_CASES,
+    ids=[case.description for case in DEBUG_WRAPPER_TEST_CASES],
+)
+def test_given_dbt_debug_command_when_running_then_invokes_dbt_and_sqlbuild_debug(
+    test_case: DbtDebugWrapperTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dbt_calls: list[tuple[Path, tuple[str, ...], object, object]] = []
+    sqlbuild_calls: list[tuple[Path | None, bool, bool, bool]] = []
+
+    def debug_dbt_from_project(
+        *,
+        project_dir: Path,
+        args: tuple[str, ...],
+        stdout_stream: object,
+        stderr_stream: object,
+    ) -> int:
+        dbt_calls.append((project_dir, args, stdout_stream, stderr_stream))
+        return 1 if "fails" in test_case.description else 0
+
+    def run_sqlbuild_debug(
+        project_dir: Path | None,
+        no_color: bool,
+        no_connection: bool,
+        json_output: bool,
+    ) -> int:
+        sqlbuild_calls.append((project_dir, no_color, no_connection, json_output))
+        return 0
+
+    monkeypatch.setattr(
+        "sqlbuild.cli.commands.main.dbt_debug.debug_dbt_from_project", debug_dbt_from_project
+    )
+    monkeypatch.setattr(
+        "sqlbuild.cli.commands.main.dbt_debug.run_sqlbuild_debug", run_sqlbuild_debug
+    )
+
+    exit_code: int = run_dbt_command(
+        command=DbtInteropCommand.DEBUG,
+        project_dir=Path("/project"),
+        args=test_case.args,
+        no_color=True,
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert dbt_calls == [(Path("/project"), test_case.expected_dbt_args, sys.stdout, sys.stderr)]
+    assert sqlbuild_calls == [
+        (Path("/project"), True, test_case.expected_sqlbuild_no_connection, False)
+    ]

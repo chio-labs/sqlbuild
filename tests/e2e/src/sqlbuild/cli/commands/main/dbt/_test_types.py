@@ -74,3 +74,11 @@ class DbtTestCliTestCase:
     expected_stdout_fragments: tuple[str, ...]
     expected_absent_stdout_fragments: tuple[str, ...] = ()
     expected_query_assertions: tuple[DbtExecutionQueryAssertion, ...] = ()
+
+
+@dataclass(frozen=True)
+class DbtDebugCliTestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_stdout_fragments: tuple[str, ...]
+    expected_returncode: int = 0

@@ -172,6 +172,29 @@ DBT_EXECUTION_DISPATCH_TEST_CASES: list[MainTestCase] = [
         expected_project_dir=Path("/tmp/demo"),
         expected_dbt_args=("--select", "test_type:data", "--indirect-selection", "eager"),
     ),
+    MainTestCase(
+        description="dispatches dbt debug and preserves dbt args",
+        argv=[
+            "--project-dir",
+            "/tmp/demo",
+            "dbt",
+            "debug",
+            "--project-dir",
+            "dbt_project",
+            "--profiles-dir",
+            "profiles",
+            "--no-connection",
+        ],
+        expected_exit_code=29,
+        expected_project_dir=Path("/tmp/demo"),
+        expected_dbt_args=(
+            "--project-dir",
+            "dbt_project",
+            "--profiles-dir",
+            "profiles",
+            "--no-connection",
+        ),
+    ),
 ]
 
 
@@ -301,6 +324,7 @@ def test_given_dbt_execution_arguments_when_running_with_dependencies_then_it_di
             run_dbt_run=run_dbt_execution,
             run_dbt_build=run_dbt_execution,
             run_dbt_test=run_dbt_execution,
+            run_dbt_debug=run_dbt_execution,
         ),
     )
 

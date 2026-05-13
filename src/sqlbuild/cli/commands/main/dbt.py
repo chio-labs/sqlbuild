@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
+from sqlbuild.cli.commands.main.dbt_debug import run_dbt_debug_command
 from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
 from sqlbuild.integrations.dbt.models import DbtInteropPlan
 from sqlbuild.integrations.dbt.pipeline.main.execute import execute_dbt_interop_from_project
@@ -25,6 +26,8 @@ def run_dbt_command(
 
     if command == DbtInteropCommand.PLAN:
         return _run_dbt_plan(project_dir=project_dir, args=args, no_color=no_color)
+    if command == DbtInteropCommand.DEBUG:
+        return run_dbt_debug_command(project_dir=project_dir, args=args, no_color=no_color)
     return _run_dbt_execution_command(
         command=command,
         project_dir=project_dir,
