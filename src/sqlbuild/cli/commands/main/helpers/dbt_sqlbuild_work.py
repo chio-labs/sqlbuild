@@ -1,4 +1,4 @@
-"""SQLBuild execution helpers for dbt interop commands."""
+"""SQLBuild work helpers for dbt interop commands."""
 
 from __future__ import annotations
 
