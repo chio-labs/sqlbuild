@@ -272,8 +272,8 @@ FORMATTER_TEST_CASES: list[DbtPlanHumanFormatterTestCase] = [
         expected_human_fragments=(
             "SQLBuild (1 selected)",
             "command: sqb plan --select downstream_orders",
-            "Normal (1)",
-            "1 table",
+            "Models (1 standard run)",
+            "downstream_orders    table",
         ),
         expected_human_regex_fragments=(),
         expected_absent_fragments=(),

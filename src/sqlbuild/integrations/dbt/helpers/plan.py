@@ -12,7 +12,15 @@ from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt.models import DbtInteropPlan, DbtInteropSelectionResult, DbtLsNode
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSkipReason
 from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
-from sqlbuild.shared.helpers.colors import blue_bold, green_bold, orange_bold, yellow_bold
+from sqlbuild.shared.helpers.colors import (
+    blue,
+    blue_bold,
+    green_bold,
+    light_green,
+    orange,
+    orange_bold,
+    yellow_bold,
+)
 from sqlbuild.shared.helpers.display import DisplayOptions, append_overflow_line, visible_entries
 
 _ANSI_ESCAPE_PATTERN: re.Pattern[str] = re.compile(r"\033\[[0-9;]*m")
@@ -128,7 +136,7 @@ def _format_dbt_section(
     dbt_count: int = len(
         frozenset((*plan.dbt_selected_unique_ids, *plan.selection.dbt_required_unique_ids))
     )
-    lines.append(green_bold(f"dbt ({dbt_count} selected)"))
+    lines.append(orange_bold(f"dbt ({dbt_count} selected)"))
     if plan.dbt_skip_reason is not None:
         lines.append("  skipped: no dbt work selected")
         return
@@ -170,7 +178,7 @@ def _format_dbt_selected_nodes(
     nodes: list[DbtLsNode]
     for section_label, nodes in sorted(nodes_by_type.items()):
         lines.append("")
-        lines.append(f"  {section_label} ({len(nodes)})")
+        lines.append(f"  {orange(f'{section_label} ({len(nodes)})')}")
         labels: tuple[str, ...] = tuple(_dbt_node_display_name(node) for node in nodes)
         name_width: int = resolve_name_column_width(labels)
         visible_nodes: Sequence[DbtLsNode] = visible_entries(nodes, options=display_options)
@@ -202,7 +210,7 @@ def _format_sqlbuild_section(
     display_options: DisplayOptions,
 ) -> None:
     sqlbuild_count: int = len(plan.selection.sqlbuild_model_names)
-    lines.append(green_bold(f"SQLBuild ({sqlbuild_count} selected)"))
+    lines.append(blue_bold(f"SQLBuild ({sqlbuild_count} selected)"))
     if plan.sqlbuild_skip_reason is not None:
         lines.append("  skipped: no SQLBuild work selected")
         return
@@ -217,6 +225,7 @@ def _format_sqlbuild_section(
         use_color=use_color,
         include_header=False,
         display_options=display_options,
+        section_header_style=blue,
     )
     if not sqlbuild_plan:
         return
