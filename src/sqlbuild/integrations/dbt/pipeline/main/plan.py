@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.adapter.shared.types import BuiltinAdapter
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
@@ -206,6 +207,7 @@ def _build_sqlbuild_plan_output(
     on_connection_start: Callable[[int], None] | None,
     on_connection_complete: Callable[[int, float], None] | None,
     on_connection_error: Callable[[int, float], None] | None,
+    deferred_relations: dict[str, RelationInfo] | None = None,
 ) -> PlanOutput | None:
     if not selected_model_names:
         return None
@@ -236,6 +238,7 @@ def _build_sqlbuild_plan_output(
                 cursor_overrides=cursor_overrides,
                 full_refresh="--full-refresh" in sqlbuild_args,
                 on_progress=on_progress,
+                deferred_relations=deferred_relations,
             )
         except PlannerInputError:
             return _build_display_only_sqlbuild_plan(

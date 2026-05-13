@@ -1,3 +1,3 @@
 {{ config(tags=['finance']) }}
 
-select order_id from {{ ref('stg_orders') }}
+select order_id, ordered_at from {{ ref('stg_orders') }}

@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
-from sqlbuild.cli.commands.main.dbt import run_dbt_plan
+from sqlbuild.cli.commands.main.dbt import run_dbt_build, run_dbt_plan, run_dbt_run
 from sqlbuild.integrations.dbt.models import DbtInteropPlan
-from tests.unit.src.sqlbuild.cli.commands.main.dbt._test_types import DbtPlanProgressTestCase
+from sqlbuild.integrations.dbt.types import DbtInteropCommand
+from tests.unit.src.sqlbuild.cli.commands.main.dbt._test_types import (
+    DbtExecutionWrapperTestCase,
+    DbtPlanProgressTestCase,
+)
 from tests.unit.src.sqlbuild.cli.commands.main.dbt.helpers import build_empty_dbt_plan
 
 PROGRESS_TEST_CASES: list[DbtPlanProgressTestCase] = [
@@ -29,6 +34,23 @@ PROGRESS_TEST_CASES: list[DbtPlanProgressTestCase] = [
             "Compiling dbt project...",
             "Generated dbt interop plan.",
         ),
+    ),
+]
+
+EXECUTION_WRAPPER_TEST_CASES: list[DbtExecutionWrapperTestCase] = [
+    DbtExecutionWrapperTestCase(
+        description="dbt run strips local json and verbose flags before execution",
+        command_name="run",
+        args=("--json", "--verbose", "--select", "tag:nightly"),
+        expected_forwarded_args=("--select", "tag:nightly"),
+        expected_progress_stream_name="stderr",
+    ),
+    DbtExecutionWrapperTestCase(
+        description="dbt build keeps human output on stdout",
+        command_name="build",
+        args=("--select", "tag:nightly"),
+        expected_forwarded_args=("--select", "tag:nightly"),
+        expected_progress_stream_name="stdout",
     ),
 ]
 
@@ -71,3 +93,46 @@ def test_given_dbt_plan_when_running_then_writes_progress_to_expected_stream(
         assert fragment in captured.out
     for fragment in test_case.expected_stderr_fragments:
         assert fragment in captured.err
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    EXECUTION_WRAPPER_TEST_CASES,
+    ids=[case.description for case in EXECUTION_WRAPPER_TEST_CASES],
+)
+def test_given_dbt_execution_command_when_running_then_routes_expected_stream_and_args(
+    test_case: DbtExecutionWrapperTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_calls: list[tuple[DbtInteropCommand, tuple[str, ...], object]] = []
+
+    def execute_dbt_interop_from_project(
+        *,
+        command: DbtInteropCommand,
+        project_dir: Path,
+        args: tuple[str, ...],
+        on_progress: Callable[[str], None],
+        progress_stream: object,
+        dbt_stdout_stream: object,
+        use_color: bool,
+        verbose: bool,
+        json_output: bool,
+    ) -> int:
+        del project_dir, on_progress, dbt_stdout_stream, use_color, verbose, json_output
+        captured_calls.append((command, args, progress_stream))
+        return 0
+
+    monkeypatch.setattr(
+        "sqlbuild.cli.commands.main.dbt.execute_dbt_interop_from_project",
+        execute_dbt_interop_from_project,
+    )
+
+    command_fn = run_dbt_run if test_case.command_name == "run" else run_dbt_build
+    exit_code: int = command_fn(project_dir=Path("/project"), args=test_case.args, no_color=True)
+
+    assert exit_code == 0
+    assert captured_calls[0][1] == test_case.expected_forwarded_args
+    expected_stream: object = (
+        sys.stderr if test_case.expected_progress_stream_name == "stderr" else sys.stdout
+    )
+    assert captured_calls[0][2] is expected_stream

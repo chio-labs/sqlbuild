@@ -3,4 +3,4 @@ analytics:
   outputs:
     dev:
       type: duckdb
-      path: ':memory:'
+      path: '../sqlbuild_project/dbt_interop.duckdb'

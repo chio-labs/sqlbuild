@@ -26,7 +26,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
             expected_exit_code=0,
             expected_fresh_plan_fragments=(
                 "Plan ready (17 selected)",
-                "Function changed (3)",
+                "Changed functions (3)",
                 "customer_orders",
                 "table function",
                 "First run (13)",
@@ -45,7 +45,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 "Inspecting warehouse state...",
                 "Generated plan. (<time>)",
                 "Plan ready (17 selected)",
-                "Function changed (3)",
+                "Changed functions (3)",
                 "First run (13)",
                 "Seeds (1)",
             ),

@@ -99,6 +99,8 @@ class CliEntrypointHandlers:
         int,
     ]
     run_dbt_plan: Callable[[Path | None, tuple[str, ...], bool], int]
+    run_dbt_run: Callable[[Path | None, tuple[str, ...], bool], int]
+    run_dbt_build: Callable[[Path | None, tuple[str, ...], bool], int]
     run_build: Callable[
         [
             Path | None,

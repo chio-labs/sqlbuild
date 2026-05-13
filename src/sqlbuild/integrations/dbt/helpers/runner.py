@@ -30,6 +30,18 @@ def build_dbt_debug_argv(*, dbt_executable: str, options: DbtCliOptions) -> tupl
     return _append_common_options((dbt_executable, "debug"), options=options)
 
 
+def build_dbt_command_argv(
+    *,
+    dbt_executable: str,
+    command: str,
+    options: DbtCliOptions,
+    args: Sequence[str] = (),
+) -> tuple[str, ...]:
+    """Build argv for an executable dbt command with resolved common options."""
+
+    return (*_append_common_options((dbt_executable, command), options=options), *args)
+
+
 def build_dbt_ls_argv(
     *,
     dbt_executable: str,
@@ -138,6 +150,11 @@ class DbtRunner:
     def _invoke(self, *, argv: tuple[str, ...], cwd: Path | None) -> DbtCommandResult:
         invoker: DbtInvoker = self.invoker if self.invoker is not None else _subprocess_invoker
         return cast(DbtCommandResult, invoker(argv, cwd))
+
+    def invoke(self, *, argv: tuple[str, ...], cwd: Path | None) -> DbtCommandResult:
+        """Run an explicit dbt argv."""
+
+        return self._invoke(argv=argv, cwd=cwd)
 
 
 def _append_common_options(argv: tuple[str, ...], *, options: DbtCliOptions) -> tuple[str, ...]:

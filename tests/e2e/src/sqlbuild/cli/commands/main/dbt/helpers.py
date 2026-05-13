@@ -33,6 +33,16 @@ def prepare_dbt_interop_project(*, tmp_path: Path) -> Path:
     db_path: Path = root_dir / "sqlbuild_project" / "dbt_interop.duckdb"
     if db_path.exists():
         db_path.unlink()
+    profiles_path: Path = root_dir / "profiles" / "profiles.yml"
+    profiles_path.write_text(
+        "analytics:\n"
+        "  target: dev\n"
+        "  outputs:\n"
+        "    dev:\n"
+        "      type: duckdb\n"
+        f"      path: '{db_path.as_posix()}'\n",
+        encoding="utf-8",
+    )
     return root_dir / "sqlbuild_project"
 
 

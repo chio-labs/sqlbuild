@@ -232,6 +232,72 @@ def test_given_dbt_plan_arguments_when_running_with_dependencies_then_it_dispatc
     "test_case",
     [
         MainTestCase(
+            description="dispatches dbt run and preserves dbt args",
+            argv=[
+                "--project-dir",
+                "/tmp/demo",
+                "dbt",
+                "run",
+                "--select",
+                "tag:nightly",
+                "--sqb-start-cursor-int",
+                "10",
+            ],
+            expected_exit_code=17,
+            expected_project_dir=Path("/tmp/demo"),
+            expected_dbt_args=("--select", "tag:nightly", "--sqb-start-cursor-int", "10"),
+        ),
+        MainTestCase(
+            description="dispatches dbt build and preserves dbt args",
+            argv=[
+                "--project-dir",
+                "/tmp/demo",
+                "dbt",
+                "build",
+                "--select",
+                "tag:nightly",
+            ],
+            expected_exit_code=19,
+            expected_project_dir=Path("/tmp/demo"),
+            expected_dbt_args=("--select", "tag:nightly"),
+        ),
+    ],
+    ids=[
+        "dispatches dbt run and preserves dbt args",
+        "dispatches dbt build and preserves dbt args",
+    ],
+)
+def test_given_dbt_execution_arguments_when_running_with_dependencies_then_it_dispatches_handler(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[tuple[Path | None, tuple[str, ...], bool]] = []
+
+    def run_dbt_execution(
+        project_dir: Path | None,
+        args: tuple[str, ...],
+        no_color: bool,
+    ) -> int:
+        received_args.append((project_dir, args, no_color))
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(
+            run_dbt_run=run_dbt_execution,
+            run_dbt_build=run_dbt_execution,
+        ),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [
+        (test_case.expected_project_dir, test_case.expected_dbt_args, test_case.expected_no_color)
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
             description="rejects dbt without subcommand",
             argv=["dbt"],
             expected_exit_code=1,
