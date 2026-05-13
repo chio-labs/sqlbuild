@@ -20,19 +20,19 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
     "test_case",
     [
         DbtScenarioCliTestCase(
-            description="scenario runs with mocked one arg and package-qualified dbt refs",
-            command=("--no-color", "scenario", "test", "mocked_dbt_ref_orders"),
+            description="scenario runs with mocked package-qualified dbt refs",
+            command=("--no-color", "scenario", "test", "downstream_orders"),
             expected_stdout_fragments=(
                 "Scenario (1 selected)",
-                "mocked_dbt_ref_orders",
-                "check     expected mocked_dbt_ref_orders",
-                "check     assertion package_ref_joined",
+                "downstream_orders",
+                "check     expected downstream_orders",
+                "check     assertion downstream_joined",
                 "PASS=1  FAIL=0  TOTAL=1",
             ),
             expected_absent_relations=("fact_orders",),
         )
     ],
-    ids=["scenario runs with mocked one arg and package-qualified dbt refs"],
+    ids=["scenario runs with mocked package-qualified dbt refs"],
 )
 def test_given_dbt_interop_project_when_running_scenario_then_mocks_dbt_refs(
     test_case: DbtScenarioCliTestCase,

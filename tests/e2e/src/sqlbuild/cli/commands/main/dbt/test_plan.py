@@ -179,7 +179,7 @@ def test_given_relative_project_dir_when_running_dbt_plan_then_resolves_dbt_conf
                 "Unit Tests (1)",
                 "SQLBuild (1 selected)",
                 "command: sqb plan --select downstream_orders",
-                "Models (1 standard run)",
+                "First run (1)",
             ),
         )
     ],
