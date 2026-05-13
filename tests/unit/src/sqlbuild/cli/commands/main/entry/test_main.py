@@ -125,6 +125,55 @@ COMPILE_DISPATCH_TEST_CASES: list[MainTestCase] = [
     ),
 ]
 
+DBT_EXECUTION_DISPATCH_TEST_CASES: list[MainTestCase] = [
+    MainTestCase(
+        description="dispatches dbt run and preserves dbt args",
+        argv=[
+            "--project-dir",
+            "/tmp/demo",
+            "dbt",
+            "run",
+            "--select",
+            "tag:nightly",
+            "--sqb-start-cursor-int",
+            "10",
+        ],
+        expected_exit_code=17,
+        expected_project_dir=Path("/tmp/demo"),
+        expected_dbt_args=("--select", "tag:nightly", "--sqb-start-cursor-int", "10"),
+    ),
+    MainTestCase(
+        description="dispatches dbt build and preserves dbt args",
+        argv=[
+            "--project-dir",
+            "/tmp/demo",
+            "dbt",
+            "build",
+            "--select",
+            "tag:nightly",
+        ],
+        expected_exit_code=19,
+        expected_project_dir=Path("/tmp/demo"),
+        expected_dbt_args=("--select", "tag:nightly"),
+    ),
+    MainTestCase(
+        description="dispatches dbt test and preserves dbt args",
+        argv=[
+            "--project-dir",
+            "/tmp/demo",
+            "dbt",
+            "test",
+            "--select",
+            "test_type:data",
+            "--indirect-selection",
+            "eager",
+        ],
+        expected_exit_code=23,
+        expected_project_dir=Path("/tmp/demo"),
+        expected_dbt_args=("--select", "test_type:data", "--indirect-selection", "eager"),
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -230,42 +279,8 @@ def test_given_dbt_plan_arguments_when_running_with_dependencies_then_it_dispatc
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        MainTestCase(
-            description="dispatches dbt run and preserves dbt args",
-            argv=[
-                "--project-dir",
-                "/tmp/demo",
-                "dbt",
-                "run",
-                "--select",
-                "tag:nightly",
-                "--sqb-start-cursor-int",
-                "10",
-            ],
-            expected_exit_code=17,
-            expected_project_dir=Path("/tmp/demo"),
-            expected_dbt_args=("--select", "tag:nightly", "--sqb-start-cursor-int", "10"),
-        ),
-        MainTestCase(
-            description="dispatches dbt build and preserves dbt args",
-            argv=[
-                "--project-dir",
-                "/tmp/demo",
-                "dbt",
-                "build",
-                "--select",
-                "tag:nightly",
-            ],
-            expected_exit_code=19,
-            expected_project_dir=Path("/tmp/demo"),
-            expected_dbt_args=("--select", "tag:nightly"),
-        ),
-    ],
-    ids=[
-        "dispatches dbt run and preserves dbt args",
-        "dispatches dbt build and preserves dbt args",
-    ],
+    DBT_EXECUTION_DISPATCH_TEST_CASES,
+    ids=[case.description for case in DBT_EXECUTION_DISPATCH_TEST_CASES],
 )
 def test_given_dbt_execution_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
@@ -285,6 +300,7 @@ def test_given_dbt_execution_arguments_when_running_with_dependencies_then_it_di
         handlers=build_handlers(
             run_dbt_run=run_dbt_execution,
             run_dbt_build=run_dbt_execution,
+            run_dbt_test=run_dbt_execution,
         ),
     )
 

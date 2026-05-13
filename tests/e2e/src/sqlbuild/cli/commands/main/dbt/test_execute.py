@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -434,7 +436,10 @@ def test_given_dbt_interop_execution_case_when_planning_then_selected_models_mat
     planned_payload: dict[str, object] = load_json_stdout(planned_result.stdout)
     planned_sqlbuild_payload: object = planned_payload["sqlbuild"]
     assert isinstance(planned_sqlbuild_payload, dict)
-    assert planned_sqlbuild_payload["selected_models"] == list(
+    typed_sqlbuild_payload: Mapping[str, object] = cast(
+        Mapping[str, object], planned_sqlbuild_payload
+    )
+    assert typed_sqlbuild_payload["selected_models"] == list(
         test_case.expected_planned_sqlbuild_models or ()
     )
 

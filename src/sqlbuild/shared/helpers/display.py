@@ -3,17 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
 
-DEFAULT_MAX_DISPLAY_ENTRIES: int = 50
-
-
-@dataclass(frozen=True)
-class DisplayOptions:
-    """Options controlling bounded human output."""
-
-    max_entries_per_section: int | None = DEFAULT_MAX_DISPLAY_ENTRIES
-    overflow_flag: str = "--verbose"
+from sqlbuild.shared.models import DisplayOptions
 
 
 def visible_entries[T](entries: Sequence[T], *, options: DisplayOptions) -> Sequence[T]:

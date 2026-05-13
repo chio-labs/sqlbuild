@@ -18,7 +18,22 @@ from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.shared.helpers.display import DisplayOptions
 
 
-def run_dbt_plan(
+def run_dbt_command(
+    *, command: DbtInteropCommand, project_dir: Path | None, args: tuple[str, ...], no_color: bool
+) -> int:
+    """Execute one `sqb dbt` interop command."""
+
+    if command == DbtInteropCommand.PLAN:
+        return _run_dbt_plan(project_dir=project_dir, args=args, no_color=no_color)
+    return _run_dbt_execution_command(
+        command=command,
+        project_dir=project_dir,
+        args=args,
+        no_color=no_color,
+    )
+
+
+def _run_dbt_plan(
     project_dir: Path | None,
     args: tuple[str, ...],
     no_color: bool = False,
@@ -59,28 +74,6 @@ def run_dbt_plan(
         )
     )
     return 0
-
-
-def run_dbt_run(project_dir: Path | None, args: tuple[str, ...], no_color: bool = False) -> int:
-    """Execute `sqb dbt run`."""
-
-    return _run_dbt_execution_command(
-        command=DbtInteropCommand.RUN,
-        project_dir=project_dir,
-        args=args,
-        no_color=no_color,
-    )
-
-
-def run_dbt_build(project_dir: Path | None, args: tuple[str, ...], no_color: bool = False) -> int:
-    """Execute `sqb dbt build`."""
-
-    return _run_dbt_execution_command(
-        command=DbtInteropCommand.BUILD,
-        project_dir=project_dir,
-        args=args,
-        no_color=no_color,
-    )
 
 
 def _run_dbt_execution_command(
