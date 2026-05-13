@@ -38,7 +38,7 @@ PLAN_CLI_TEST_CASES: list[DbtPlanCliTestCase] = [
     DbtPlanCliTestCase(
         description="reports dbt trailing plus anchors and downstream SQLBuild work",
         command=("dbt", "plan", "--json", "--select", "fact_orders+"),
-        expected_selected_models=("downstream_orders", "mart_orders"),
+        expected_selected_models=("downstream_orders", "event_time_orders", "mart_orders"),
         expected_dbt_skipped=False,
         expected_sqlbuild_skipped=False,
         expected_anchor_terms=("fact_orders+",),
@@ -46,7 +46,12 @@ PLAN_CLI_TEST_CASES: list[DbtPlanCliTestCase] = [
     DbtPlanCliTestCase(
         description="reports dbt path translation for SQLBuild model paths",
         command=("dbt", "plan", "--json", "--select", "path:models/marts"),
-        expected_selected_models=("deprecated_orders", "downstream_orders", "mart_orders"),
+        expected_selected_models=(
+            "deprecated_orders",
+            "downstream_orders",
+            "event_time_orders",
+            "mart_orders",
+        ),
         expected_dbt_skipped=False,
         expected_sqlbuild_skipped=False,
         expected_path_translations=(("path:models/marts", "path:marts"),),
@@ -166,11 +171,12 @@ def test_given_relative_project_dir_when_running_dbt_plan_then_resolves_dbt_conf
             description="outputs grouped dbt and SQLBuild plan sections",
             command=("dbt", "plan", "--select", "tag:nightly"),
             expected_stdout_fragments=(
-                "Plan ready (4 selected)",
-                "dbt (3 selected)",
+                "Plan ready (6 selected)",
+                "dbt (5 selected)",
                 "Models (1)",
                 "analytics.stg_orders",
                 "Tests (2)",
+                "Unit Tests (1)",
                 "SQLBuild (1 selected)",
                 "command: sqb plan --select downstream_orders",
                 "Models (1 standard run)",

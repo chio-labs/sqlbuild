@@ -19,3 +19,11 @@ models:
       - name: order_id
         data_tests:
           - not_null
+
+unit_tests:
+  - name: stg_orders_unit
+    model: stg_orders
+    given: []
+    expect:
+      rows:
+        - {order_id: 1, ordered_at: "2026-01-01 00:00:00"}

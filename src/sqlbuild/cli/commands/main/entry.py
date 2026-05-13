@@ -32,6 +32,7 @@ from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
+from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from sqlbuild.shared.constants import (
     SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
     SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
@@ -202,6 +203,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     dbt_subparsers.add_parser("plan")
     dbt_subparsers.add_parser("run")
     dbt_subparsers.add_parser("build")
+    dbt_subparsers.add_parser("test")
     return parser
 
 
@@ -212,7 +214,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.build import run_build
     from sqlbuild.cli.commands.main.clone import run_clone
     from sqlbuild.cli.commands.main.compile import run_compile
-    from sqlbuild.cli.commands.main.dbt import run_dbt_build, run_dbt_plan, run_dbt_run
+    from sqlbuild.cli.commands.main.dbt import run_dbt_command
     from sqlbuild.cli.commands.main.debug import run_debug
     from sqlbuild.cli.commands.main.diff import run_diff
     from sqlbuild.cli.commands.main.helpers.scenario.capture import run_scenario_capture
@@ -229,9 +231,30 @@ def main(argv: Sequence[str] | None = None) -> int:
     handlers: CliEntrypointHandlers = CliEntrypointHandlers(
         run_compile=run_compile,
         run_plan=run_plan,
-        run_dbt_plan=run_dbt_plan,
-        run_dbt_run=run_dbt_run,
-        run_dbt_build=run_dbt_build,
+        run_dbt_plan=lambda project_dir, args, no_color: run_dbt_command(
+            command=DbtInteropCommand.PLAN,
+            project_dir=project_dir,
+            args=args,
+            no_color=no_color,
+        ),
+        run_dbt_run=lambda project_dir, args, no_color: run_dbt_command(
+            command=DbtInteropCommand.RUN,
+            project_dir=project_dir,
+            args=args,
+            no_color=no_color,
+        ),
+        run_dbt_build=lambda project_dir, args, no_color: run_dbt_command(
+            command=DbtInteropCommand.BUILD,
+            project_dir=project_dir,
+            args=args,
+            no_color=no_color,
+        ),
+        run_dbt_test=lambda project_dir, args, no_color: run_dbt_command(
+            command=DbtInteropCommand.TEST,
+            project_dir=project_dir,
+            args=args,
+            no_color=no_color,
+        ),
         run_build=run_build,
         run_run=run_run,
         run_test=run_test,
@@ -263,7 +286,7 @@ def _main_with_dependencies(
         args: CliNamespace = CliNamespace()
         unknown_args: list[str]
         _, unknown_args = parser.parse_known_args(argv, namespace=args)
-        if args.command == CliCommand.DBT and args.dbt_command in {"plan", "run", "build"}:
+        if args.command == CliCommand.DBT and args.dbt_command in {"plan", "run", "build", "test"}:
             args.dbt_args = unknown_args
         elif unknown_args:
             parser.error(f"unrecognized arguments: {' '.join(unknown_args)}")
@@ -320,6 +343,8 @@ def _main_with_dependencies(
                 return handlers.run_dbt_run(project_dir, tuple(args.dbt_args), args.no_color)
             if args.dbt_command == "build":
                 return handlers.run_dbt_build(project_dir, tuple(args.dbt_args), args.no_color)
+            if args.dbt_command == "test":
+                return handlers.run_dbt_test(project_dir, tuple(args.dbt_args), args.no_color)
             raise CliUserError("dbt requires a subcommand such as 'plan'", code="C237")
         if args.command == CliCommand.BUILD:
             cursor_overrides = CursorOverrides(

@@ -1,6 +1,9 @@
 name = "dbt_interop_demo"
 adapter = "duckdb"
 
+[settings]
+default_audit_severity = "warn"
+
 [connection]
 database = "dbt_interop.duckdb"
 

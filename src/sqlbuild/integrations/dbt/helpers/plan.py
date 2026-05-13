@@ -7,7 +7,7 @@ import re
 from collections import defaultdict
 from collections.abc import Sequence
 
-from sqlbuild.cli.commands.main.helpers.plan.formatter import format_plan
+from sqlbuild.cli.commands.main.plan_format import format_plan
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt.models import DbtInteropPlan, DbtInteropSelectionResult, DbtLsNode
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSkipReason
@@ -44,7 +44,9 @@ def build_dbt_interop_plan(
         sorted(node.unique_id for node in dbt_ls_nodes)
     )
     sqlbuild_model_names: tuple[str, ...] = selection.sqlbuild_model_names
-    dbt_has_work: bool = bool(dbt_selected_unique_ids or selection.dbt_required_unique_ids)
+    dbt_has_work: bool = bool(dbt_selected_unique_ids)
+    if normalized_command != DbtInteropCommand.TEST:
+        dbt_has_work = bool(dbt_selected_unique_ids or selection.dbt_required_unique_ids)
     sqlbuild_has_work: bool = bool(sqlbuild_model_names)
     return DbtInteropPlan(
         command=normalized_command,

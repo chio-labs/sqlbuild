@@ -5,8 +5,9 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+from _pytest.capture import CaptureResult
 
-from sqlbuild.cli.commands.main.dbt import run_dbt_build, run_dbt_plan, run_dbt_run
+from sqlbuild.cli.commands.main.dbt import run_dbt_command
 from sqlbuild.integrations.dbt.models import DbtInteropPlan
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from tests.unit.src.sqlbuild.cli.commands.main.dbt._test_types import (
@@ -52,6 +53,13 @@ EXECUTION_WRAPPER_TEST_CASES: list[DbtExecutionWrapperTestCase] = [
         expected_forwarded_args=("--select", "tag:nightly"),
         expected_progress_stream_name="stdout",
     ),
+    DbtExecutionWrapperTestCase(
+        description="dbt test strips local json and verbose flags before execution",
+        command_name="test",
+        args=("--json", "--verbose", "--select", "test_type:data"),
+        expected_forwarded_args=("--select", "test_type:data"),
+        expected_progress_stream_name="stderr",
+    ),
 ]
 
 
@@ -85,9 +93,14 @@ def test_given_dbt_plan_when_running_then_writes_progress_to_expected_stream(
     )
     args: tuple[str, ...] = ("--json",) if test_case.json_output else ()
 
-    exit_code: int = run_dbt_plan(project_dir=Path("/project"), args=args, no_color=True)
+    exit_code: int = run_dbt_command(
+        command=DbtInteropCommand.PLAN,
+        project_dir=Path("/project"),
+        args=args,
+        no_color=True,
+    )
 
-    captured = capsys.readouterr()
+    captured: CaptureResult[str] = capsys.readouterr()
     assert exit_code == 0
     for fragment in test_case.expected_stdout_fragments:
         assert fragment in captured.out
@@ -127,8 +140,12 @@ def test_given_dbt_execution_command_when_running_then_routes_expected_stream_an
         execute_dbt_interop_from_project,
     )
 
-    command_fn = run_dbt_run if test_case.command_name == "run" else run_dbt_build
-    exit_code: int = command_fn(project_dir=Path("/project"), args=test_case.args, no_color=True)
+    exit_code: int = run_dbt_command(
+        command=DbtInteropCommand(test_case.command_name),
+        project_dir=Path("/project"),
+        args=test_case.args,
+        no_color=True,
+    )
 
     assert exit_code == 0
     assert captured_calls[0][1] == test_case.expected_forwarded_args

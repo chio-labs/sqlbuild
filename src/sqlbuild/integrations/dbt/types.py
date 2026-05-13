@@ -32,6 +32,13 @@ class DbtInteropCommand(StrEnum):
     CLONE = "clone"
 
 
+class DbtInteropSqlbuildTestAction(StrEnum):
+    """SQLBuild validation actions used by `sqb dbt test`."""
+
+    TEST = "test"
+    AUDIT = "audit"
+
+
 class DbtInteropSkipReason(StrEnum):
     """Reason one side of a dbt interop plan has no work."""
 

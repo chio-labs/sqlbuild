@@ -20,7 +20,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtManifestIndex,
     DbtManifestModel,
 )
-from sqlbuild.integrations.dbt.types import DbtInteropCommand
+from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSqlbuildTestAction
 
 
 def plan_dbt_interop_command(
@@ -90,6 +90,7 @@ def plan_dbt_interop_command(
         sqlbuild_command_argvs=_build_sqlbuild_argvs(
             command=normalized_command,
             sqlbuild_executable=sqlbuild_executable,
+            select=select,
             selected_model_names=selection.sqlbuild_model_names,
             sqlbuild_command_args=sqlbuild_command_args,
         ),
@@ -175,6 +176,8 @@ def _build_supplemental_dbt_argvs(
     options: DbtCliOptions,
     selector_terms: Sequence[str],
 ) -> tuple[tuple[str, ...], ...]:
+    if command == DbtInteropCommand.TEST:
+        return ()
     if not selector_terms:
         return ()
     dbt_command: str = "ls" if command == DbtInteropCommand.PLAN else command.value
@@ -193,11 +196,23 @@ def _build_sqlbuild_argvs(
     *,
     command: DbtInteropCommand,
     sqlbuild_executable: str,
+    select: Sequence[str],
     selected_model_names: Sequence[str],
     sqlbuild_command_args: Sequence[str],
 ) -> tuple[tuple[str, ...], ...]:
     if not selected_model_names:
         return ()
+    if command == DbtInteropCommand.TEST:
+        return tuple(
+            (
+                sqlbuild_executable,
+                action.value,
+                "--select",
+                *selected_model_names,
+                *sqlbuild_command_args,
+            )
+            for action in resolve_sqlbuild_test_actions(select=select)
+        )
     return (
         (
             sqlbuild_executable,
@@ -207,6 +222,27 @@ def _build_sqlbuild_argvs(
             *sqlbuild_command_args,
         ),
     )
+
+
+def resolve_sqlbuild_test_actions(
+    *, select: Sequence[str]
+) -> tuple[DbtInteropSqlbuildTestAction, ...]:
+    """Map dbt test-type selectors to SQLBuild validation actions."""
+
+    has_data_selector: bool = False
+    has_unit_selector: bool = False
+    term: str
+    for term in select:
+        core: str = term.removeprefix("+").removesuffix("+")
+        if core == "test_type:data":
+            has_data_selector = True
+        elif core == "test_type:unit":
+            has_unit_selector = True
+    if has_data_selector and not has_unit_selector:
+        return (DbtInteropSqlbuildTestAction.AUDIT,)
+    if has_unit_selector and not has_data_selector:
+        return (DbtInteropSqlbuildTestAction.TEST,)
+    return (DbtInteropSqlbuildTestAction.TEST, DbtInteropSqlbuildTestAction.AUDIT)
 
 
 def _translate_dbt_path_selector(raw_path: str) -> str:
