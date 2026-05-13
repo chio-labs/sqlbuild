@@ -6,10 +6,10 @@ from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.integrations.dbt.helpers.graph import build_dbt_combined_graph
 from sqlbuild.integrations.dbt.helpers.manifest import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.helpers.selection import resolve_dbt_interop_sqlbuild_selection
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,
     DbtInteropSelectionResult,
-    DbtManifestIndex,
 )
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import DbtSelectionTestCase
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (

@@ -86,30 +86,6 @@ class DbtLsResult:
     command: DbtCommandResult
 
 
-@dataclass(frozen=True)
-class DbtManifestModel:
-    """One dbt model node needed for SQLBuild dbt_ref resolution."""
-
-    unique_id: str
-    package_name: str
-    name: str
-    relation_name: str
-    database: str | None = None
-    schema: str | None = None
-    alias: str | None = None
-    depends_on_nodes: tuple[str, ...] = field(default_factory=tuple)
-    payload: dict[str, object] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class DbtManifestIndex:
-    """Lookup indexes for dbt model nodes in a manifest."""
-
-    models_by_unique_id: dict[str, DbtManifestModel]
-    models_by_name: dict[str, tuple[DbtManifestModel, ...]]
-    models_by_package_and_name: dict[tuple[str, str], DbtManifestModel]
-
-
 @dataclass(frozen=True, order=True)
 class DbtCombinedGraphKey:
     """Stable owner-qualified key for one combined dbt/SQLBuild graph node."""

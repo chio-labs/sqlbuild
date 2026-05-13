@@ -14,12 +14,15 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.integrations.dbt.main.resolve_manifest_model import resolve_manifest_model
-from sqlbuild.integrations.dbt.models import DbtManifestIndex, DbtManifestModel
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
 
 _REF_PATTERN: re.Pattern[str] = re.compile(r'__ref\("([^"]+)"\)')
 _SEED_PATTERN: re.Pattern[str] = re.compile(r'__seed\("([^"]+)"\)')
-_DBT_REF_PATTERN: re.Pattern[str] = re.compile(r'__dbt_ref\(\s*"([^"]+)"\s*(?:,\s*"([^"]+)"\s*)?\)')
+_DBT_REF_PATTERN: re.Pattern[str] = re.compile(
+    r'__dbt_ref\(\s*"([^"]+)"\s*(?:,\s*"([^"]+)"\s*)?\)',
+    re.IGNORECASE,
+)
 _UDF_PATTERN: re.Pattern[str] = re.compile(r'__udf\("([^"]+)"\)')
 _TABLE_FUNCTION_CALL_PATTERN: re.Pattern[str] = re.compile(
     r'__table_fn\("([^"]+)"\)\s*\(([^()]*)\)'

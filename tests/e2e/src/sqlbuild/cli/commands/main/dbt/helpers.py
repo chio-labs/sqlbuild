@@ -46,6 +46,29 @@ def prepare_dbt_interop_project(*, tmp_path: Path) -> Path:
     return root_dir / "sqlbuild_project"
 
 
+def compile_dbt_interop_manifest(*, project_dir: Path) -> subprocess.CompletedProcess[str]:
+    """Run dbt compile so plain SQLBuild commands can validate dbt refs."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    profiles_dir: Path = project_dir.parent / "profiles"
+    target_path: Path = dbt_project_dir / "target"
+    return subprocess.run(
+        (
+            "dbt",
+            "compile",
+            "--project-dir",
+            dbt_project_dir.as_posix(),
+            "--profiles-dir",
+            profiles_dir.as_posix(),
+            "--target-path",
+            target_path.as_posix(),
+        ),
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+
 def static_dbt_interop_project_dir() -> Path:
     """Return the repository fixture SQLBuild project path."""
 

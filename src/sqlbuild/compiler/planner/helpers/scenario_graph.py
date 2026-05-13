@@ -64,10 +64,12 @@ def plan_scenario_graph(
     ref_fixture_names: frozenset[str] = frozenset(scenario.ref_fixture_names)
     source_fixture_names: frozenset[str] = frozenset(scenario.source_fixture_names)
     seed_fixture_names: frozenset[str] = frozenset(scenario.seed_fixture_names)
+    dbt_ref_fixture_names: frozenset[str] = frozenset(scenario.dbt_ref_fixture_names)
     model_names: set[str] = set()
     required_ref_fixture_names: set[str] = set()
     required_source_names: set[str] = set()
     required_seed_names: set[str] = set()
+    required_dbt_ref_fixture_names: set[str] = set()
     function_deps: list[CompiledObjectKey] = []
     seen_function_deps: set[CompiledObjectKey] = set()
 
@@ -82,6 +84,7 @@ def plan_scenario_graph(
             required_ref_fixture_names=required_ref_fixture_names,
             required_source_names=required_source_names,
             required_seed_names=required_seed_names,
+            required_dbt_ref_fixture_names=required_dbt_ref_fixture_names,
             function_deps=function_deps,
             seen_function_deps=seen_function_deps,
             warnings=warnings,
@@ -104,6 +107,20 @@ def plan_scenario_graph(
             )
         )
 
+    dbt_ref_fixture_name: str
+    for dbt_ref_fixture_name in sorted(required_dbt_ref_fixture_names - dbt_ref_fixture_names):
+        warnings.append(
+            PlanWarning(
+                model_name=None,
+                severity=WarningSeverity.ERROR,
+                message=(
+                    f"Scenario '{scenario.name}' requires dbt ref '{dbt_ref_fixture_name}', "
+                    "but no fixture was provided. Add a CTE named "
+                    f"__dbt_ref__{dbt_ref_fixture_name} AS (...)."
+                ),
+            )
+        )
+
     plan: ScenarioGraphPlan = ScenarioGraphPlan(
         key=scenario.key,
         name=scenario.name,
@@ -114,6 +131,7 @@ def plan_scenario_graph(
         ref_fixture_names=tuple(sorted(required_ref_fixture_names)),
         seed_names=tuple(sorted(required_seed_names)),
         seed_fixture_names=tuple(sorted(required_seed_names & seed_fixture_names)),
+        dbt_ref_fixture_names=tuple(sorted(required_dbt_ref_fixture_names)),
         function_deps=tuple(function_deps),
     )
     return plan, tuple(warnings)
@@ -270,6 +288,7 @@ def _walk_model_upstream(
     required_ref_fixture_names: set[str],
     required_source_names: set[str],
     required_seed_names: set[str],
+    required_dbt_ref_fixture_names: set[str],
     function_deps: list[CompiledObjectKey],
     seen_function_deps: set[CompiledObjectKey],
     warnings: list[PlanWarning],
@@ -308,6 +327,7 @@ def _walk_model_upstream(
                 required_ref_fixture_names=required_ref_fixture_names,
                 required_source_names=required_source_names,
                 required_seed_names=required_seed_names,
+                required_dbt_ref_fixture_names=required_dbt_ref_fixture_names,
                 function_deps=function_deps,
                 seen_function_deps=seen_function_deps,
                 warnings=warnings,
@@ -318,6 +338,9 @@ def _walk_model_upstream(
             continue
         if dep_key.resource_type == CompiledResourceType.SEED:
             required_seed_names.add(dep_key.name)
+            continue
+        if dep_key.resource_type == CompiledResourceType.DBT_REF:
+            required_dbt_ref_fixture_names.add(dep_key.name.replace(".", "__"))
             continue
         if dep_key.resource_type == CompiledResourceType.FUNCTION:
             if dep_key in seen_function_deps:

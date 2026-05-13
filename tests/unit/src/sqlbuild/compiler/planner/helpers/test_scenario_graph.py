@@ -147,6 +147,21 @@ PLAN_TEST_CASES: list[PlanScenarioGraphTestCase] = [
             seed_fixture_names=("country_codes",),
         ),
     ),
+    PlanScenarioGraphTestCase(
+        description="dbt ref fixture boundary stops traversal at dbt-owned relation",
+        model_deps={"daily_revenue": ("stripe.payments",)},
+        source_names=(),
+        seed_names=(),
+        expected_model_names=("daily_revenue",),
+        dbt_ref_fixture_names=("stripe__payments",),
+        expected_plan=ScenarioGraphPlan(
+            key=SCENARIO_KEY,
+            name="revenue__customer_refund",
+            target_model_names=("daily_revenue",),
+            model_names=("daily_revenue",),
+            dbt_ref_fixture_names=("stripe__payments",),
+        ),
+    ),
 ]
 
 
@@ -166,6 +181,7 @@ def test_given_scenario_when_planning_graph_then_infers_expected_slice(
             model_deps=test_case.model_deps,
             source_names=test_case.source_names,
             seed_names=test_case.seed_names,
+            dbt_ref_names=("stripe.payments",),
         ),
     )
 
@@ -233,6 +249,14 @@ ERROR_TEST_CASES: list[PlanScenarioGraphErrorTestCase] = [
         seed_fixture_names=("country_codes",),
         expected_error_fragment="fixture for unknown seed 'country_codes'",
     ),
+    PlanScenarioGraphErrorTestCase(
+        description="missing dbt ref fixture fails clearly",
+        model_deps={"daily_revenue": ("stripe.payments",)},
+        source_names=(),
+        seed_names=(),
+        expected_model_names=("daily_revenue",),
+        expected_error_fragment="requires dbt ref 'stripe__payments'",
+    ),
 ]
 
 
@@ -252,6 +276,7 @@ def test_given_invalid_scenario_when_planning_graph_then_returns_clear_error(
             model_deps=test_case.model_deps,
             source_names=test_case.source_names,
             seed_names=test_case.seed_names,
+            dbt_ref_names=("stripe.payments",),
         ),
     )
 

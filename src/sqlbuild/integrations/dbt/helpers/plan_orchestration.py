@@ -11,14 +11,13 @@ from sqlbuild.integrations.dbt.helpers.manifest import resolve_dbt_manifest_mode
 from sqlbuild.integrations.dbt.helpers.plan import build_dbt_interop_plan
 from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
 from sqlbuild.integrations.dbt.helpers.selection import resolve_dbt_interop_sqlbuild_selection
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraph,
     DbtInteropPlan,
     DbtInteropSelectionResult,
     DbtLsResult,
-    DbtManifestIndex,
-    DbtManifestModel,
 )
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSqlbuildTestAction
 

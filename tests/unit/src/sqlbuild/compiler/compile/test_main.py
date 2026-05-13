@@ -1926,7 +1926,7 @@ sqlglot = false
         expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
-        description="resolves dbt refs from discovered manifest",
+        description="validates dbt refs from discovered manifest while preserving markers",
         repo_files=base_repo_files()
         | {
             "dbt/target/manifest.json": """
@@ -1961,7 +1961,8 @@ sqlglot = false
         expected_model_schema_names=(None,),
         expected_model_config_values=({},),
         expected_model_query_sqls=(
-            "select * from analytics.stg_orders union all select * from stripe.orders",
+            'select * from __dbt_ref("stg_orders") '
+            'union all select * from __dbt_ref("stripe", "orders")',
         ),
         expected_model_path_defaults=(None,),
         expected_seed_names=(),

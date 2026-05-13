@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.compiler.compile.constants import (
     ASSERT_TEST_CTE_PREFIX,
+    DBT_REF_TEST_CTE_PREFIX,
     EXPECTED_TEST_CTE_PREFIX,
     MACRO_TEST_CTE_PREFIX,
     REF_TEST_CTE_PREFIX,
@@ -80,6 +81,7 @@ def _classify_sql_test_ctes(
     mock_model_names: list[str] = []
     mock_source_names: list[str] = []
     mock_seed_names: list[str] = []
+    mock_dbt_ref_names: list[str] = []
     expected_model_names: list[str] = []
     assertion_ctes: list[CompileSqlTestCte] = []
     assertion_names: list[str] = []
@@ -128,6 +130,17 @@ def _classify_sql_test_ctes(
             )
             authored_ctes.append(cte)
             continue
+        if cte.name.startswith(DBT_REF_TEST_CTE_PREFIX):
+            mock_dbt_ref_names.append(
+                _require_prefixed_name(
+                    cte_name=cte.name,
+                    prefix=DBT_REF_TEST_CTE_PREFIX,
+                    label="__dbt_ref__<model> or __dbt_ref__<package>__<model>",
+                    file_label=file_label,
+                )
+            )
+            authored_ctes.append(cte)
+            continue
         if cte.name.startswith(EXPECTED_TEST_CTE_PREFIX):
             expected_model_names.append(
                 _require_prefixed_name(
@@ -156,10 +169,15 @@ def _classify_sql_test_ctes(
             )
         authored_ctes.append(cte)
 
-    if not mock_model_names and not mock_source_names and not mock_seed_names:
+    if (
+        not mock_model_names
+        and not mock_source_names
+        and not mock_seed_names
+        and not mock_dbt_ref_names
+    ):
         raise CompileInputError(
             f"SQL test '{file_label}' must define at least one __ref__*, __source__*, "
-            "or __seed__* mock CTE"
+            "__seed__*, or __dbt_ref__* mock CTE"
         )
     if not expected_model_names and not assertion_names:
         raise CompileInputError(
@@ -172,6 +190,7 @@ def _classify_sql_test_ctes(
         mock_model_names=tuple(mock_model_names),
         mock_source_names=tuple(mock_source_names),
         mock_seed_names=tuple(mock_seed_names),
+        mock_dbt_ref_names=tuple(mock_dbt_ref_names),
         expected_model_names=tuple(expected_model_names),
         assertion_ctes=tuple(assertion_ctes),
         assertion_names=tuple(assertion_names),

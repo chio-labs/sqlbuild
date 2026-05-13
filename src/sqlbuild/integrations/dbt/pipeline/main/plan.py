@@ -26,13 +26,13 @@ from sqlbuild.integrations.dbt.helpers.plan_runtime import (
     resolve_dbt_plan_options,
 )
 from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraph,
     DbtCommandResult,
     DbtInteropPlan,
     DbtInteropRoutedArgs,
-    DbtManifestIndex,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import (
     build_sqlbuild_plan_output,

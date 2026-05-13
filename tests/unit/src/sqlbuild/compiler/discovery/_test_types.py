@@ -36,3 +36,10 @@ class DiscoverProjectInputsErrorTestCase:
     description: str
     repo_files: dict[str, str]
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class DiscoverDbtManifestTargetPathTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_manifest_path: str

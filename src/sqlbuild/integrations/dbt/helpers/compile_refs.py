@@ -13,7 +13,7 @@ from sqlbuild.integrations.dbt.helpers.manifest import (
     build_dbt_manifest_index,
     resolve_dbt_manifest_model,
 )
-from sqlbuild.integrations.dbt.models import DbtManifestIndex
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 
 _DBT_REF_PATTERN: re.Pattern[str] = re.compile(r'__dbt_ref\(\s*"([^"]+)"\s*(?:,\s*"([^"]+)"\s*)?\)')
 

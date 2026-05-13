@@ -6,13 +6,12 @@ from typing import TextIO
 
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.integrations.dbt.helpers.runner import DbtRunner, build_dbt_command_argv
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCommandResult,
     DbtInteropPlan,
     DbtLsNode,
-    DbtManifestIndex,
-    DbtManifestModel,
 )
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from sqlbuild.shared.helpers.colors import dim, orange_bold

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.integrations.dbt.helpers.compile_refs import resolve_compile_dbt_ref_references
-from sqlbuild.integrations.dbt.models import DbtManifestIndex
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 
 
 def resolve_compile_model_refs(*, query_sql: str, dbt_manifest: DbtManifestIndex | None) -> str:

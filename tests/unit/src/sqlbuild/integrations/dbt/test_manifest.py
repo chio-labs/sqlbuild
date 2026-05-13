@@ -7,7 +7,7 @@ from sqlbuild.integrations.dbt.helpers.manifest import (
     build_dbt_manifest_index,
     resolve_dbt_manifest_model,
 )
-from sqlbuild.integrations.dbt.models import DbtManifestIndex, DbtManifestModel
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtManifestResolutionErrorTestCase,
     DbtManifestResolutionTestCase,

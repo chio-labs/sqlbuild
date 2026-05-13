@@ -17,11 +17,11 @@ from sqlbuild.integrations.dbt.helpers.graph import (
 )
 from sqlbuild.integrations.dbt.helpers.manifest import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraph,
     DbtCommandResult,
-    DbtManifestIndex,
 )
 from tests.integration.src.sqlbuild.integrations.dbt._test_types import (
     RealDbtCombinedGraphTestCase,

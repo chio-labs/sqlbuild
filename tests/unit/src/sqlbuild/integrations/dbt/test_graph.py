@@ -9,7 +9,8 @@ from sqlbuild.integrations.dbt.helpers.graph import (
     expand_combined_upstream,
 )
 from sqlbuild.integrations.dbt.helpers.manifest import build_dbt_manifest_index
-from sqlbuild.integrations.dbt.models import DbtCombinedGraph, DbtManifestIndex
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
+from sqlbuild.integrations.dbt.models import DbtCombinedGraph
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import DbtCombinedGraphTestCase
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     build_compiled_project_with_models,

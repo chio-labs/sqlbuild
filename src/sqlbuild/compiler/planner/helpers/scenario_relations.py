@@ -9,6 +9,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.constants import (
+    DBT_REF_TEST_CTE_PREFIX,
     REF_TEST_CTE_PREFIX,
     SEED_TEST_CTE_PREFIX,
     SOURCE_TEST_CTE_PREFIX,
@@ -69,6 +70,10 @@ _SEED_PATTERN: re.Pattern[str] = re.compile(
 _SOURCE_PATTERN: re.Pattern[str] = re.compile(
     r"__source\(\s*[\"']?(?P<name>[A-Za-z_][A-Za-z0-9_.]*)[\"']?\s*\)"
 )
+_DBT_REF_PATTERN: re.Pattern[str] = re.compile(
+    r'__dbt_ref\(\s*["\'](?P<first>[A-Za-z_][A-Za-z0-9_]*)["\']\s*'
+    r'(?:,\s*["\'](?P<second>[A-Za-z_][A-Za-z0-9_]*)["\']\s*)?\)'
+)
 
 
 def build_scenario_relation_plan(
@@ -91,6 +96,7 @@ def build_scenario_relation_plan(
     model_targets: dict[str, CompiledRelationTarget] = {}
     source_fixture_targets: dict[str, CompiledRelationTarget] = {}
     ref_fixture_targets: dict[str, CompiledRelationTarget] = {}
+    dbt_ref_fixture_targets: dict[str, CompiledRelationTarget] = {}
     seed_fixture_targets: dict[str, CompiledRelationTarget] = {}
     seed_targets: dict[str, CompiledRelationTarget] = {}
     source_map: dict[str, SourceEntry] = {}
@@ -137,6 +143,16 @@ def build_scenario_relation_plan(
             type_enforcement=False,
         )
 
+    dbt_ref_name: str
+    for dbt_ref_name in graph_plan.dbt_ref_fixture_names:
+        dbt_ref_fixture_targets[dbt_ref_name] = _target_for_artifact(
+            artifacts=artifacts,
+            kind=ScenarioArtifactKind.DBT_REF,
+            logical_name=dbt_ref_name,
+            database=database,
+            schema=schema,
+        )
+
     seed_name: str
     for seed_name in graph_plan.seed_names:
         target = _target_for_artifact(
@@ -163,6 +179,7 @@ def build_scenario_relation_plan(
         source_map=source_map,
         source_fixture_targets=source_fixture_targets,
         ref_fixture_targets=ref_fixture_targets,
+        dbt_ref_fixture_targets=dbt_ref_fixture_targets,
         seed_fixture_targets=seed_fixture_targets,
     )
 
@@ -201,9 +218,18 @@ def resolve_scenario_check_sql(
             return match.group(0)
         return render_source_relation(source)
 
+    def _replace_dbt_ref(match: re.Match[str]) -> str:
+        target: CompiledRelationTarget | None = relation_plan.dbt_ref_fixture_targets.get(
+            _dbt_ref_fixture_name(match)
+        )
+        if target is None or target.qualified_name is None:
+            return match.group(0)
+        return target.qualified_name
+
     result: str = _REF_PATTERN.sub(_replace_ref, sql)
     result = _SEED_PATTERN.sub(_replace_seed, result)
-    return _SOURCE_PATTERN.sub(_replace_source, result)
+    result = _SOURCE_PATTERN.sub(_replace_source, result)
+    return _DBT_REF_PATTERN.sub(_replace_dbt_ref, result)
 
 
 def build_scenario_execution_plan(
@@ -270,10 +296,14 @@ def build_scenario_execution_plan(
             model.name,
             kind=ScenarioArtifactKind.MODEL,
         )
+        scenario_query_sql: str = _resolve_model_dbt_ref_fixtures(
+            query_sql=model.query_sql,
+            relation_plan=relation_plan,
+        )
         entry: ModelPlanEntry
         model_warnings: tuple[PlanWarning, ...]
         entry, model_warnings = plan_model(
-            model=replace(model, target=scenario_target),
+            model=replace(model, target=scenario_target, query_sql=scenario_query_sql),
             snapshot=effective_snapshot,
             adapter=adapter,
             model_targets=relation_plan.model_targets,
@@ -388,6 +418,10 @@ def build_scenario_fixture_plans(
         scenario=scenario,
         prefix=SEED_TEST_CTE_PREFIX,
     )
+    dbt_ref_ctes: dict[str, str] = _extract_fixture_ctes(
+        scenario=scenario,
+        prefix=DBT_REF_TEST_CTE_PREFIX,
+    )
 
     plans: list[ScenarioFixturePlan] = []
     source_name: str
@@ -439,6 +473,24 @@ def build_scenario_fixture_plans(
                 ),
                 sql=_wrap_sql_with_helpers(
                     sql=_required_fixture_sql(seed_ctes, seed_name, kind="seed"),
+                    helper_ctes=helper_ctes,
+                ),
+            )
+        )
+
+    dbt_ref_name: str
+    for dbt_ref_name in graph_plan.dbt_ref_fixture_names:
+        plans.append(
+            ScenarioFixturePlan(
+                kind=ScenarioArtifactKind.DBT_REF,
+                logical_name=dbt_ref_name,
+                target=_required_target(
+                    relation_plan.dbt_ref_fixture_targets,
+                    dbt_ref_name,
+                    kind=ScenarioArtifactKind.DBT_REF,
+                ),
+                sql=_wrap_sql_with_helpers(
+                    sql=_required_fixture_sql(dbt_ref_ctes, dbt_ref_name, kind="dbt_ref"),
                     helper_ctes=helper_ctes,
                 ),
             )
@@ -519,12 +571,17 @@ def _resolve_scenario_check_sql_with_sqlglot(
             return table
         function_name: str = str(anonymous.this).lower()
         expressions: list[Any] = list(anonymous.expressions)
-        if len(expressions) != 1:
+        if len(expressions) not in {1, 2}:
             return table
         argument: Any = expressions[0]
         if not hasattr(argument, "name"):
             return table
         referenced_name: str = str(argument.name)
+        if function_name == "__dbt_ref" and len(expressions) == 2:
+            second_argument: Any = expressions[1]
+            if not hasattr(second_argument, "name"):
+                return table
+            referenced_name = f"{referenced_name}__{second_argument.name}"
         target_name: str | None = _scenario_target_name_for_marker(
             function_name=function_name,
             referenced_name=referenced_name,
@@ -575,6 +632,8 @@ def _extract_helper_ctes(scenario: CompiledSqlScenario) -> tuple[CompileSqlScena
         if cte.name.startswith(REF_TEST_CTE_PREFIX):
             continue
         if cte.name.startswith(SEED_TEST_CTE_PREFIX):
+            continue
+        if cte.name.startswith(DBT_REF_TEST_CTE_PREFIX):
             continue
         helpers.append(cte)
     return tuple(helpers)
@@ -637,7 +696,30 @@ def _scenario_target_name_for_marker(
     if function_name == "__source":
         source: SourceEntry | None = relation_plan.source_map.get(referenced_name)
         return None if source is None else render_source_relation(source)
+    if function_name == "__dbt_ref":
+        target = relation_plan.dbt_ref_fixture_targets.get(referenced_name)
+        return None if target is None else target.qualified_name
     return None
+
+
+def _resolve_model_dbt_ref_fixtures(*, query_sql: str, relation_plan: ScenarioRelationPlan) -> str:
+    def _replace_dbt_ref(match: re.Match[str]) -> str:
+        target: CompiledRelationTarget | None = relation_plan.dbt_ref_fixture_targets.get(
+            _dbt_ref_fixture_name(match)
+        )
+        if target is None or target.qualified_name is None:
+            return match.group(0)
+        return target.qualified_name
+
+    return _DBT_REF_PATTERN.sub(_replace_dbt_ref, query_sql)
+
+
+def _dbt_ref_fixture_name(match: re.Match[str]) -> str:
+    first: str = match.group("first")
+    second: str | None = match.group("second")
+    if second is None:
+        return first
+    return f"{first}__{second}"
 
 
 def _target_for_artifact(
