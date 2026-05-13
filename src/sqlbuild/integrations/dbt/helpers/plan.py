@@ -16,7 +16,6 @@ from sqlbuild.shared.helpers.colors import (
     blue,
     blue_bold,
     green_bold,
-    light_green,
     orange,
     orange_bold,
     yellow_bold,

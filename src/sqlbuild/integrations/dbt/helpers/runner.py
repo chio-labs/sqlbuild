@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
 
+from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCommandResult,
@@ -158,13 +159,19 @@ def _append_common_options(argv: tuple[str, ...], *, options: DbtCliOptions) -> 
 
 
 def _subprocess_invoker(argv: tuple[str, ...], cwd: Path | None) -> DbtCommandResult:
-    completed: subprocess.CompletedProcess[str] = subprocess.run(
-        argv,
-        cwd=cwd,
-        capture_output=True,
-        check=False,
-        text=True,
-    )
+    try:
+        completed: subprocess.CompletedProcess[str] = subprocess.run(
+            argv,
+            cwd=cwd,
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+    except OSError as error:
+        raise DbtInteropRuntimeError(
+            "failed to execute dbt",
+            help=str(error),
+        ) from error
     return DbtCommandResult(
         argv=argv,
         returncode=completed.returncode,

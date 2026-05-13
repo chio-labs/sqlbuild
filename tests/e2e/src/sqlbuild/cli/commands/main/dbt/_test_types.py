@@ -28,3 +28,10 @@ class DbtPlanHumanCliTestCase:
     description: str
     command: tuple[str, ...]
     expected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtPlanErrorCliTestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_stderr_fragments: tuple[str, ...]

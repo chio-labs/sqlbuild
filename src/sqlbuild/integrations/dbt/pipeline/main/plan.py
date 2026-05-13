@@ -32,6 +32,7 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
+from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.helpers.args import route_dbt_interop_args
 from sqlbuild.integrations.dbt.helpers.graph import build_dbt_combined_graph
 from sqlbuild.integrations.dbt.helpers.manifest import load_dbt_manifest_index
@@ -83,7 +84,10 @@ def plan_dbt_interop_from_project(
     _report_progress(on_progress, "Compiling dbt project...")
     compile_result: DbtCommandResult = runner.compile(options=dbt_options)
     if compile_result.returncode != 0:
-        raise ValueError(compile_result.stderr or compile_result.stdout or "dbt compile failed")
+        raise DbtInteropRuntimeError(
+            "dbt compile failed",
+            help=_dbt_failure_detail(compile_result),
+        )
     _report_progress(
         on_progress, f"Compiled dbt project. ({time.monotonic() - dbt_compile_start:.2f}s)"
     )
@@ -181,6 +185,11 @@ def plan_dbt_interop_from_project(
 def _report_progress(on_progress: Callable[[str], None] | None, message: str) -> None:
     if on_progress is not None:
         on_progress(message)
+
+
+def _dbt_failure_detail(result: DbtCommandResult) -> str | None:
+    detail: str = (result.stderr or result.stdout).strip()
+    return detail or None
 
 
 def _build_sqlbuild_plan_output(

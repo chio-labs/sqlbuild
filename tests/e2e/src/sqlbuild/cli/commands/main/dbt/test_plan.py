@@ -9,6 +9,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtPlanCliTestCase,
+    DbtPlanErrorCliTestCase,
     DbtPlanHumanCliTestCase,
     DbtPlanRelativeProjectDirTestCase,
 )
@@ -18,7 +19,11 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     skip_unless_dbt_is_runnable,
     static_dbt_interop_project_dir,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import REPO_ROOT, run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    REPO_ROOT,
+    prepare_inline_project,
+    run_sqb,
+)
 
 pytestmark: pytest.MarkDecorator = pytest.mark.dbt
 
@@ -168,7 +173,7 @@ def test_given_relative_project_dir_when_running_dbt_plan_then_resolves_dbt_conf
                 "Tests (2)",
                 "SQLBuild (1 selected)",
                 "command: sqb plan --select downstream_orders",
-                "Normal (1)",
+                "Models (1 standard run)",
             ),
         )
     ],
@@ -189,3 +194,40 @@ def test_given_dbt_interop_project_when_running_human_plan_then_outputs_grouped_
     assert result.returncode == 0, result.stderr or result.stdout
     for expected_stdout_fragment in test_case.expected_stdout_fragments:
         assert expected_stdout_fragment in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtPlanErrorCliTestCase(
+            description="renders missing dbt project config with coded error",
+            command=("dbt", "plan", "--json", "--select", "anything"),
+            expected_stderr_fragments=(
+                "error[C240]: dbt project directory is not configured",
+                "= help: Add [dbt].project_dir",
+            ),
+        )
+    ],
+    ids=["renders missing dbt project config with coded error"],
+)
+def test_given_missing_dbt_project_config_when_running_plan_then_renders_coded_error(
+    test_case: DbtPlanErrorCliTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="missing_dbt_config",
+        repo_files={
+            "sqlbuild_project.toml": 'name = "missing_dbt_config"\nadapter = "duckdb"\n',
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 1
+    expected_stderr_fragment: str
+    for expected_stderr_fragment in test_case.expected_stderr_fragments:
+        assert expected_stderr_fragment in result.stderr
