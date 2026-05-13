@@ -15,7 +15,7 @@ from sqlbuild.compiler.planner.helpers.resolve.refs import (
 )
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.integrations.dbt.helpers.manifest import build_dbt_manifest_index
-from sqlbuild.integrations.dbt.models import DbtManifestIndex
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.unit.src.sqlbuild.compiler.planner.helpers.resolve._test_types import (
     ApplyDeferredTargetsTestCase,

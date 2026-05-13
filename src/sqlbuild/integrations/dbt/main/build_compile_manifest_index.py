@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.integrations.dbt.helpers.compile_refs import build_compile_dbt_manifest_index
-from sqlbuild.integrations.dbt.models import DbtManifestIndex
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 
 
 def build_compile_manifest_index(*, manifest_contents: str | None) -> DbtManifestIndex | None:

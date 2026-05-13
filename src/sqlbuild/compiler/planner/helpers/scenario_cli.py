@@ -88,6 +88,11 @@ def _scenario_artifacts(graph_plan: ScenarioGraphPlan) -> tuple[ScenarioArtifact
         artifacts.append(
             ScenarioArtifactIdentity(kind=ScenarioArtifactKind.REF, logical_name=ref_name)
         )
+    dbt_ref_name: str
+    for dbt_ref_name in graph_plan.dbt_ref_fixture_names:
+        artifacts.append(
+            ScenarioArtifactIdentity(kind=ScenarioArtifactKind.DBT_REF, logical_name=dbt_ref_name)
+        )
     seed_name: str
     for seed_name in graph_plan.seed_names:
         artifacts.append(

@@ -10,11 +10,10 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, SqlReferenceKind
 from sqlbuild.integrations.dbt.helpers.manifest import resolve_dbt_manifest_model
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,
     DbtCombinedGraphKey,
-    DbtManifestIndex,
-    DbtManifestModel,
 )
 from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtCombinedGraphResourceType
 

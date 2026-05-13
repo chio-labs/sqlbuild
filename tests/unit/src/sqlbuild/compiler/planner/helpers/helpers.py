@@ -104,12 +104,19 @@ def function_key(name: str) -> CompiledObjectKey:
     return CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name=name)
 
 
+def dbt_ref_key(name: str) -> CompiledObjectKey:
+    """Build a dbt ref object key."""
+
+    return CompiledObjectKey(resource_type=CompiledResourceType.DBT_REF, name=name)
+
+
 def build_test_project(
     *,
     model_deps: dict[str, tuple[str, ...]] | None = None,
     model_paths: dict[str, str] | None = None,
     source_names: tuple[str, ...] = (),
     seed_names: tuple[str, ...] = (),
+    dbt_ref_names: tuple[str, ...] = (),
     function_names: tuple[str, ...] = (),
     sql_test_expected_model_names: tuple[str, ...] = (),
 ) -> CompiledProject:
@@ -118,13 +125,20 @@ def build_test_project(
     effective_paths: dict[str, str] = model_paths or {}
     source_name_set: set[str] = set(source_names)
     seed_name_set: set[str] = set(seed_names)
+    dbt_ref_name_set: set[str] = set(dbt_ref_names)
     function_name_set: set[str] = set(function_names)
     models: list[CompiledModel] = []
     model_name: str
     dep_names: tuple[str, ...]
     for model_name, dep_names in (model_deps or {}).items():
         deps: tuple[CompiledObjectKey, ...] = tuple(
-            _resolve_dep_key(d, source_name_set, seed_name_set, function_name_set)
+            _resolve_dep_key(
+                d,
+                source_name_set,
+                seed_name_set,
+                dbt_ref_name_set,
+                function_name_set,
+            )
             for d in dep_names
         )
         rel_path: str = effective_paths.get(model_name, f"models/{model_name}.sql")
@@ -286,6 +300,7 @@ def build_scenario_from_test_case(
         source_fixture_names=test_case.source_fixture_names,
         ref_fixture_names=test_case.ref_fixture_names,
         seed_fixture_names=test_case.seed_fixture_names,
+        dbt_ref_fixture_names=test_case.dbt_ref_fixture_names,
         expected_model_names=test_case.expected_model_names,
         assertion_names=tuple(cte.name.removeprefix("__assert__") for cte in assertion_ctes),
     )
@@ -364,6 +379,7 @@ def build_scenario_relation_test_map() -> ScenarioRelationMap:
         artifacts=(
             ScenarioArtifactIdentity(kind="source", logical_name="raw__orders"),
             ScenarioArtifactIdentity(kind="ref", logical_name="stg_customers"),
+            ScenarioArtifactIdentity(kind="dbt_ref", logical_name="stripe__payments"),
             ScenarioArtifactIdentity(kind="seed", logical_name="country_codes"),
             ScenarioArtifactIdentity(kind="model", logical_name="daily_revenue"),
             ScenarioArtifactIdentity(kind="model", logical_name="customer_revenue"),
@@ -393,7 +409,8 @@ def build_scenario_relation_test_project() -> CompiledProject:
                     query_sql=(
                         'SELECT * FROM __source("raw__orders") '
                         'JOIN __ref("stg_customers") USING (customer_id) '
-                        'JOIN __seed("country_codes") USING (country_code)'
+                        'JOIN __seed("country_codes") USING (country_code) '
+                        'JOIN __dbt_ref("stripe", "payments") USING (customer_id)'
                     ),
                 )
             )
@@ -427,6 +444,10 @@ def build_scenario_relation_test_scenario(
         CompileSqlScenarioCte(
             name="__ref__stg_customers",
             sql_body="SELECT 10 AS customer_id",
+        ),
+        CompileSqlScenarioCte(
+            name="__dbt_ref__stripe__payments",
+            sql_body="SELECT 1 AS payment_id, 10 AS customer_id",
         ),
     )
     if include_seed_fixture:
@@ -468,6 +489,7 @@ def build_scenario_relation_test_scenario(
         ),
         source_fixture_names=("raw__orders",),
         ref_fixture_names=("stg_customers",),
+        dbt_ref_fixture_names=("stripe__payments",),
         seed_fixture_names=("country_codes",) if include_seed_fixture else (),
         expected_model_names=("daily_revenue",),
         assertion_names=("no_negative_revenue",),
@@ -502,6 +524,7 @@ def _resolve_dep_key(
     name: str,
     source_names: set[str],
     seed_names: set[str],
+    dbt_ref_names: set[str],
     function_names: set[str],
 ) -> CompiledObjectKey:
     """Resolve a dependency name to the correct key type."""
@@ -510,6 +533,8 @@ def _resolve_dep_key(
         return source_key(name)
     if name in seed_names:
         return seed_key(name)
+    if name in dbt_ref_names:
+        return CompiledObjectKey(resource_type=CompiledResourceType.DBT_REF, name=name)
     if name in function_names:
         return function_key(name)
     return model_key(name)

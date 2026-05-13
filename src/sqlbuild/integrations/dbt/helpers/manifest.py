@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.integrations.dbt.models import DbtManifestIndex, DbtManifestModel
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 
 
 def load_dbt_manifest_index(*, manifest_path: Path) -> DbtManifestIndex:

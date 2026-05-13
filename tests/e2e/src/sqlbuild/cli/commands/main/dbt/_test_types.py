@@ -77,6 +77,14 @@ class DbtTestCliTestCase:
 
 
 @dataclass(frozen=True)
+class DbtScenarioCliTestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_stdout_fragments: tuple[str, ...]
+    expected_absent_relations: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class DbtDebugCliTestCase:
     description: str
     command: tuple[str, ...]

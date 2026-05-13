@@ -50,6 +50,7 @@ SCENARIO_NAME: str = "revenue__customer_refund"
                 model_names=("daily_revenue",),
                 source_fixture_names=("raw__orders",),
                 ref_fixture_names=("stg_customers",),
+                dbt_ref_fixture_names=("stripe__payments",),
                 seed_names=("country_codes",),
                 seed_fixture_names=("country_codes",),
             ),
@@ -62,6 +63,9 @@ SCENARIO_NAME: str = "revenue__customer_refund"
             },
             expected_source_expressions={
                 "raw__orders": None,
+            },
+            expected_dbt_ref_target_names={
+                "stripe__payments": "scenario_schema.__sqb_51b385aebe20__dbt_ref__stripe__payments",
             },
         )
     ],
@@ -86,6 +90,9 @@ def test_given_scenario_graph_when_building_relation_plan_then_returns_scenario_
     assert {
         name: source.expression for name, source in result.source_map.items()
     } == test_case.expected_source_expressions
+    assert {
+        name: target.qualified_name for name, target in result.dbt_ref_fixture_targets.items()
+    } == test_case.expected_dbt_ref_target_names
 
 
 @pytest.mark.parametrize(
@@ -100,6 +107,7 @@ def test_given_scenario_graph_when_building_relation_plan_then_returns_scenario_
                 model_names=("daily_revenue",),
                 source_fixture_names=("raw__orders",),
                 ref_fixture_names=("stg_customers",),
+                dbt_ref_fixture_names=("stripe__payments",),
                 seed_names=("country_codes",),
                 seed_fixture_names=("country_codes",),
             ),
@@ -112,6 +120,10 @@ def test_given_scenario_graph_when_building_relation_plan_then_returns_scenario_
                     "WITH helper_orders AS (SELECT 1 AS order_id, 10 AS customer_id) "
                     "SELECT 10 AS customer_id"
                 ),
+                "dbt_ref:stripe__payments": (
+                    "WITH helper_orders AS (SELECT 1 AS order_id, 10 AS customer_id) "
+                    "SELECT 1 AS payment_id, 10 AS customer_id"
+                ),
                 "seed:country_codes": (
                     "WITH helper_orders AS (SELECT 1 AS order_id, 10 AS customer_id) "
                     "SELECT 'US' AS country_code"
@@ -120,6 +132,9 @@ def test_given_scenario_graph_when_building_relation_plan_then_returns_scenario_
             expected_fixture_targets={
                 "source:raw__orders": "scenario_schema.__sqb_51b385aebe20__source__raw__orders",
                 "ref:stg_customers": "scenario_schema.__sqb_51b385aebe20__ref__stg_customers",
+                "dbt_ref:stripe__payments": (
+                    "scenario_schema.__sqb_51b385aebe20__dbt_ref__stripe__payments"
+                ),
                 "seed:country_codes": "scenario_schema.__sqb_51b385aebe20__seed__country_codes",
             },
         )
@@ -164,6 +179,7 @@ def test_given_scenario_helpers_when_building_fixture_plans_then_fixtures_are_se
                 model_names=("daily_revenue",),
                 source_fixture_names=("raw__orders",),
                 ref_fixture_names=("stg_customers",),
+                dbt_ref_fixture_names=("stripe__payments",),
                 seed_names=("country_codes",),
                 seed_fixture_names=("country_codes",),
                 function_deps=(build_compiled_function(body_sql="").key,),
@@ -176,11 +192,15 @@ def test_given_scenario_helpers_when_building_fixture_plans_then_fixtures_are_se
                     "scenario_schema.__sqb_51b385aebe20__source__raw__orders",
                     "scenario_schema.__sqb_51b385aebe20__ref__stg_customers",
                     "scenario_schema.__sqb_51b385aebe20__seed__country_codes",
+                    "scenario_schema.__sqb_51b385aebe20__dbt_ref__stripe__payments",
                 ),
             },
             expected_fixture_targets={
                 "source:raw__orders": "scenario_schema.__sqb_51b385aebe20__source__raw__orders",
                 "ref:stg_customers": "scenario_schema.__sqb_51b385aebe20__ref__stg_customers",
+                "dbt_ref:stripe__payments": (
+                    "scenario_schema.__sqb_51b385aebe20__dbt_ref__stripe__payments"
+                ),
                 "seed:country_codes": "scenario_schema.__sqb_51b385aebe20__seed__country_codes",
             },
             expected_seed_entry_targets={},
@@ -377,6 +397,13 @@ CHECK_SQL_TEST_CASES: list[ScenarioCheckSqlResolutionTestCase] = [
         ),
     ),
     ScenarioCheckSqlResolutionTestCase(
+        description="resolves dbt ref markers to scenario fixture relations",
+        sql='SELECT * FROM __dbt_ref("stripe", "payments") p',
+        expected_sql=(
+            "SELECT * FROM scenario_schema.__sqb_51b385aebe20__dbt_ref__stripe__payments AS p"
+        ),
+    ),
+    ScenarioCheckSqlResolutionTestCase(
         description="sqlglot check sql resolution ignores strings and comments",
         sql=(
             "SELECT '__ref(daily_revenue)' AS marker_text "
@@ -421,6 +448,7 @@ def test_given_scenario_check_sql_when_resolving_then_uses_scenario_relations(
             model_names=("daily_revenue",),
             source_fixture_names=("raw__orders",),
             ref_fixture_names=("stg_customers",),
+            dbt_ref_fixture_names=("stripe__payments",),
             seed_names=("country_codes",),
             seed_fixture_names=("country_codes",),
         ),

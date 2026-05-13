@@ -10,6 +10,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtTestCliTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
+    compile_dbt_interop_manifest,
     prepare_dbt_interop_project,
     skip_unless_dbt_is_runnable,
 )
@@ -156,6 +157,44 @@ def test_given_prebuilt_dbt_interop_project_when_running_test_then_executes_expe
         assert query_duckdb(db_path=db_path, sql=query_assertion.sql) == list(
             query_assertion.expected_rows
         ), query_assertion.description
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtTestCliTestCase(
+            description="SQLBuild unit test mocks one arg and package-qualified dbt refs",
+            setup_command=("dbt", "compile"),
+            command=("--no-color", "test", "--select", "mocked_dbt_ref_orders"),
+            expected_stdout_fragments=(
+                "Execution  sqb test",
+                "test_mocked_dbt_ref_orders",
+                "PASS",
+            ),
+        )
+    ],
+    ids=["SQLBuild unit test mocks one arg and package-qualified dbt refs"],
+)
+def test_given_dbt_manifest_when_running_sqlbuild_test_then_mocks_dbt_refs(
+    test_case: DbtTestCliTestCase,
+    tmp_path: Path,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_interop_project(tmp_path=tmp_path)
+    setup_result: subprocess.CompletedProcess[str] = compile_dbt_interop_manifest(
+        project_dir=project_dir
+    )
+    assert setup_result.returncode == 0, setup_result.stderr or setup_result.stdout
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    expected_stdout_fragment: str
+    for expected_stdout_fragment in test_case.expected_stdout_fragments:
+        assert expected_stdout_fragment in result.stdout
 
 
 @pytest.mark.parametrize(

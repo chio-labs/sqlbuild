@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from sqlbuild.compiler.discovery.exceptions import SchemaParseError
@@ -317,18 +318,25 @@ def discover_materialization_files(
     )
 
 
-def discover_dbt_manifest_file(*, project_dir: Path) -> DiscoveredDbtManifestFile | None:
+def discover_dbt_manifest_file(
+    *, project_dir: Path, target_path: str | None = None
+) -> DiscoveredDbtManifestFile | None:
     """Discover an optional dbt manifest.json in common locations."""
 
-    candidate_paths: tuple[Path, ...] = (
-        project_dir / "manifest.json",
-        project_dir / "target" / "manifest.json",
-    )
+    candidate_paths: list[Path] = []
+    if target_path is not None:
+        raw_target_path: Path = Path(target_path)
+        resolved_target_path: Path = (
+            raw_target_path if raw_target_path.is_absolute() else project_dir / raw_target_path
+        )
+        candidate_paths.append(resolved_target_path / "manifest.json")
+
     for file_path in candidate_paths:
         if file_path.is_file():
+            relative_path: Path = Path(os.path.relpath(file_path, project_dir))
             return DiscoveredDbtManifestFile(
                 file_path=file_path,
-                relative_path=file_path.relative_to(project_dir),
+                relative_path=relative_path,
                 contents=file_path.read_text(encoding="utf-8"),
             )
     return None

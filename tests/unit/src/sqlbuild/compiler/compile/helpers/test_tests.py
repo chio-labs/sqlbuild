@@ -10,6 +10,21 @@ from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
 
 TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
     ExtractSqlTestCtesTestCase(
+        description="extracts dbt ref mocks from dbt ref prefixed ctes",
+        sql="""
+        WITH
+        __dbt_ref__orders AS (SELECT 1 AS order_id),
+        __dbt_ref__stripe__payments AS (SELECT 1 AS payment_id),
+        __expected__fact_orders AS (SELECT 1 AS order_id)
+        SELECT 1
+        """.strip(),
+        expected_authored_cte_names=("__dbt_ref__orders", "__dbt_ref__stripe__payments"),
+        expected_mock_model_names=(),
+        expected_mock_source_names=(),
+        expected_expected_model_names=("fact_orders",),
+        expected_mock_dbt_ref_names=("orders", "stripe__payments"),
+    ),
+    ExtractSqlTestCtesTestCase(
         description="extracts zero-row assertion ctes",
         sql="""
         WITH
@@ -267,6 +282,7 @@ def test_given_sql_test_cte_variants_when_extracting_then_it_returns_expected_ro
     assert extracted_ctes.mock_model_names == test_case.expected_mock_model_names
     assert extracted_ctes.mock_source_names == test_case.expected_mock_source_names
     assert extracted_ctes.mock_seed_names == test_case.expected_mock_seed_names
+    assert extracted_ctes.mock_dbt_ref_names == test_case.expected_mock_dbt_ref_names
     assert extracted_ctes.expected_model_names == test_case.expected_expected_model_names
     assert extracted_ctes.assertion_names == test_case.expected_assertion_names
     assert extracted_ctes.macro_mocks == test_case.expected_macro_mocks

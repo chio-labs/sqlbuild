@@ -38,6 +38,8 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditFile,
     DiscoveredProjectInputs,
 )
+from sqlbuild.integrations.dbt.main.build_compile_manifest_index import build_compile_manifest_index
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.spec.models.project import (
     EnvironmentConfig,
     SettingsConfig,
@@ -90,6 +92,13 @@ def build_compile_inputs(
     )
     resolved_run_id: str = resolve_run_id(selected_run_id=run_id)
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
+    dbt_manifest: DbtManifestIndex | None = build_compile_manifest_index(
+        manifest_contents=(
+            None
+            if discovered_inputs.dbt_manifest_file is None
+            else discovered_inputs.dbt_manifest_file.contents
+        )
+    )
 
     model_inputs: tuple[CompileModelInput, ...] = build_model_inputs(
         discovered_inputs,
@@ -100,6 +109,7 @@ def build_compile_inputs(
         run_id=resolved_run_id,
         macro_context=macro_context,
         no_sql_validation=no_sql_validation,
+        dbt_manifest=dbt_manifest,
     )
     seed_inputs: tuple[CompileSeedInput, ...] = build_seed_inputs(discovered_inputs)
     sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = build_sql_function_inputs(
@@ -170,4 +180,5 @@ def build_compile_inputs(
         scenario_inputs=scenario_inputs,
         audit_inputs=audit_inputs,
         diagnostics=diagnostics,
+        dbt_manifest=dbt_manifest,
     )

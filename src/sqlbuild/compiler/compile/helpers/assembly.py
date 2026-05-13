@@ -109,6 +109,7 @@ def assemble_compiled_project(
             for scenario_input in inputs.scenario_inputs
         ),
         diagnostics=inputs.diagnostics,
+        dbt_manifest=inputs.dbt_manifest,
     )
 
 
@@ -334,6 +335,7 @@ def _assemble_compiled_sql_test(
         mock_model_names=test_input.mock_model_names,
         mock_source_names=test_input.mock_source_names,
         mock_seed_names=test_input.mock_seed_names,
+        mock_dbt_ref_names=test_input.mock_dbt_ref_names,
         expected_model_names=test_input.expected_model_names,
         assertion_ctes=test_input.assertion_ctes,
         assertion_names=test_input.assertion_names,
@@ -404,6 +406,7 @@ def _assemble_compiled_sql_scenario(
         source_fixture_names=scenario_input.source_fixture_names,
         ref_fixture_names=scenario_input.ref_fixture_names,
         seed_fixture_names=scenario_input.seed_fixture_names,
+        dbt_ref_fixture_names=scenario_input.dbt_ref_fixture_names,
         expected_model_names=scenario_input.expected_model_names,
         assertion_names=scenario_input.assertion_names,
     )

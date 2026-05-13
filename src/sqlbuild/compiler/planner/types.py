@@ -120,4 +120,5 @@ class ScenarioArtifactKind(StrEnum):
     SOURCE = "source"
     REF = "ref"
     SEED = "seed"
+    DBT_REF = "dbt_ref"
     MODEL = "model"

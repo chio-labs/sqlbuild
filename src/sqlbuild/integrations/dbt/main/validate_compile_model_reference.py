@@ -6,7 +6,7 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.models import CompileSqlReference
 from sqlbuild.integrations.dbt.helpers.compile_refs import validate_compile_dbt_model_reference
-from sqlbuild.integrations.dbt.models import DbtManifestIndex
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 
 
 def validate_compile_model_reference(

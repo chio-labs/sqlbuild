@@ -365,6 +365,7 @@ class ScenarioGraphPlan:
     ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     seed_names: tuple[str, ...] = field(default_factory=tuple)
     seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    dbt_ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     function_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
 
 
@@ -408,6 +409,7 @@ class ScenarioRelationPlan:
     source_fixture_targets: dict[str, CompiledRelationTarget] = field(default_factory=dict)
     ref_fixture_targets: dict[str, CompiledRelationTarget] = field(default_factory=dict)
     seed_fixture_targets: dict[str, CompiledRelationTarget] = field(default_factory=dict)
+    dbt_ref_fixture_targets: dict[str, CompiledRelationTarget] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

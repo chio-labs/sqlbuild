@@ -229,6 +229,7 @@ class PlanScenarioGraphTestCase:
     source_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    dbt_ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     expected_plan: ScenarioGraphPlan | None = None
 
 
@@ -243,6 +244,7 @@ class PlanScenarioGraphErrorTestCase:
     source_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    dbt_ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     expected_error_fragment: str = ""
 
 
@@ -312,6 +314,7 @@ class ScenarioRelationPlanTestCase:
     expected_model_target_names: dict[str, str]
     expected_seed_target_names: dict[str, str]
     expected_source_expressions: dict[str, str | None]
+    expected_dbt_ref_target_names: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
