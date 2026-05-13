@@ -163,17 +163,17 @@ def test_given_prebuilt_dbt_interop_project_when_running_test_then_executes_expe
     "test_case",
     [
         DbtTestCliTestCase(
-            description="SQLBuild unit test mocks one arg and package-qualified dbt refs",
+            description="SQLBuild unit test mocks package-qualified dbt refs",
             setup_command=("dbt", "compile"),
-            command=("--no-color", "test", "--select", "mocked_dbt_ref_orders"),
+            command=("--no-color", "test", "--select", "downstream_orders"),
             expected_stdout_fragments=(
                 "Execution  sqb test",
-                "test_mocked_dbt_ref_orders",
+                "test_downstream_orders",
                 "PASS",
             ),
         )
     ],
-    ids=["SQLBuild unit test mocks one arg and package-qualified dbt refs"],
+    ids=["SQLBuild unit test mocks package-qualified dbt refs"],
 )
 def test_given_dbt_manifest_when_running_sqlbuild_test_then_mocks_dbt_refs(
     test_case: DbtTestCliTestCase,

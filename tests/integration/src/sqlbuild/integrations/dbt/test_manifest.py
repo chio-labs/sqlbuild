@@ -22,14 +22,14 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
     "test_case",
     [
         RealDbtManifestCompileTestCase(
-            description="resolves SQLBuild dbt ref from real dbt manifest",
+            description="validates and preserves SQLBuild dbt ref from real dbt manifest",
             sqlbuild_model_sql='MODEL ();\n\nselect order_id from __dbt_ref("stg_orders")\n',
-            expected_compiled_sql='select order_id from "memory"."main"."stg_orders"',
+            expected_compiled_sql='select order_id from __dbt_ref("stg_orders")',
         ),
     ],
-    ids=["resolves SQLBuild dbt ref from real dbt manifest"],
+    ids=["validates and preserves SQLBuild dbt ref from real dbt manifest"],
 )
-def test_given_real_dbt_manifest_when_compiling_sqlbuild_then_resolves_dbt_ref(
+def test_given_real_dbt_manifest_when_compiling_sqlbuild_then_preserves_dbt_ref(
     test_case: RealDbtManifestCompileTestCase,
     real_dbt_executable: str,
     dbt_project_dir: Path,
