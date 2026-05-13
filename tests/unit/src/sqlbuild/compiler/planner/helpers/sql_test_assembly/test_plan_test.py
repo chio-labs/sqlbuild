@@ -435,8 +435,12 @@ def test_given_test_and_project_when_planning_then_produces_expected_chain(
     expected_sev: WarningSeverity | None = test_case.expected_warning_severity
     actual_sevs: tuple[WarningSeverity, ...] = tuple(w.severity for w in warnings)
     assert (expected_sev is None) or all(s == expected_sev for s in actual_sevs)
-    if test_case.expected_error_fragment is not None:
-        assert any(test_case.expected_error_fragment in w.message for w in warnings)
+    expected_error_fragments: tuple[str, ...] = (
+        () if test_case.expected_error_fragment is None else (test_case.expected_error_fragment,)
+    )
+    expected_error_fragment: str
+    for expected_error_fragment in expected_error_fragments:
+        assert any(expected_error_fragment in w.message for w in warnings)
 
 
 @pytest.mark.parametrize(

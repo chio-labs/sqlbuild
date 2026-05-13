@@ -278,6 +278,13 @@ class ValidateModelAttachedAuditRefsTestCase:
 
 
 @dataclass(frozen=True)
+class ValidateAuditRefsErrorTestCase:
+    description: str
+    references: tuple[CompileSqlReference, ...]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class CustomMaterializationConfigErrorTestCase:
     description: str
     config_values: dict[str, object]
