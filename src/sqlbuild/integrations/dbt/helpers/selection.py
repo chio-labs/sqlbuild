@@ -32,6 +32,7 @@ def resolve_dbt_interop_sqlbuild_selection(
     anchors_by_term: Mapping[str, Sequence[str]] = dbt_anchor_unique_ids_by_term or {}
     models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
     selected_sqlbuild: set[str] = set()
+    directly_selected_sqlbuild: set[str] = set()
     required_dbt: set[str] = set()
     anchor_terms: list[str] = []
     anchor_result: dict[str, tuple[str, ...]] = {}
@@ -49,6 +50,9 @@ def resolve_dbt_interop_sqlbuild_selection(
         if translated_path is not None:
             path_translations.append((term, translated_path))
         if direct_keys:
+            directly_selected_sqlbuild.update(
+                key.name for key in direct_keys if key.owner == DbtCombinedGraphOwner.SQLBUILD
+            )
             expanded_keys: set[DbtCombinedGraphKey] = set(direct_keys)
             key: DbtCombinedGraphKey
             if parsed.upstream:
@@ -85,6 +89,12 @@ def resolve_dbt_interop_sqlbuild_selection(
         exclude=exclude,
     )
     selected_sqlbuild.difference_update(excluded_sqlbuild)
+    directly_selected_sqlbuild.difference_update(excluded_sqlbuild)
+    _add_direct_dbt_requirements(
+        graph=graph,
+        selected_sqlbuild=directly_selected_sqlbuild,
+        required_dbt=required_dbt,
+    )
     return DbtInteropSelectionResult(
         sqlbuild_model_names=tuple(sorted(selected_sqlbuild)),
         dbt_required_unique_ids=tuple(sorted(required_dbt)),
@@ -150,6 +160,25 @@ def _add_expanded_keys(
             selected_sqlbuild.add(key.name)
         elif key.owner == DbtCombinedGraphOwner.DBT:
             required_dbt.add(key.name)
+
+
+def _add_direct_dbt_requirements(
+    *,
+    graph: DbtCombinedGraph,
+    selected_sqlbuild: set[str],
+    required_dbt: set[str],
+) -> None:
+    """Add immediate dbt upstream requirements for selected SQLBuild models."""
+
+    model_name: str
+    for model_name in selected_sqlbuild:
+        upstream_keys: tuple[DbtCombinedGraphKey, ...] = graph.upstream_deps.get(
+            sqlbuild_model_graph_key(model_name), ()
+        )
+        upstream_key: DbtCombinedGraphKey
+        for upstream_key in upstream_keys:
+            if upstream_key.owner == DbtCombinedGraphOwner.DBT:
+                required_dbt.add(upstream_key.name)
 
 
 def _resolve_excluded_sqlbuild_names(

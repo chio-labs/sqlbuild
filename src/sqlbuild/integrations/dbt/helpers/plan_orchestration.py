@@ -164,7 +164,7 @@ def _build_required_dbt_selector_terms(
             )
             if dbt_model.unique_id not in required_ids:
                 continue
-            terms.add(f"+{dbt_model.package_name}.{dbt_model.name}")
+            terms.add(f"+{dbt_model.name}")
     return tuple(sorted(terms))
 
 

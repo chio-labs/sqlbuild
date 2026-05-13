@@ -28,8 +28,7 @@ def resolve_dbt_config(
     if require_project_dir and project_dir is None:
         raise DbtInteropConfigError(
             "dbt project directory is not configured",
-            help="Add [dbt].project_dir to sqlbuild_project.toml or pass --project-dir "
-            "to sqb dbt.",
+            help="Add [dbt].project_dir to sqlbuild_project.toml or pass --project-dir to sqb dbt.",
         )
 
     raw_profiles_dir: str | None = (

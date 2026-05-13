@@ -72,7 +72,7 @@ SELECTION_TEST_CASES: list[DbtSelectionTestCase] = [
         exclude=(),
         dbt_anchor_unique_ids_by_term={},
         expected_sqlbuild_model_names=("fact_orders",),
-        expected_dbt_required_unique_ids=(),
+        expected_dbt_required_unique_ids=("model.analytics.int_orders",),
     ),
     DbtSelectionTestCase(
         description="selects SQLBuild leading plus upstream dbt and SQLBuild deps",
@@ -111,7 +111,7 @@ SELECTION_TEST_CASES: list[DbtSelectionTestCase] = [
         exclude=(),
         dbt_anchor_unique_ids_by_term={},
         expected_sqlbuild_model_names=("fact_orders", "mart_orders"),
-        expected_dbt_required_unique_ids=(),
+        expected_dbt_required_unique_ids=("model.analytics.int_orders",),
     ),
     DbtSelectionTestCase(
         description="selects SQLBuild both plus upstream dbt and downstream SQLBuild",
@@ -138,7 +138,7 @@ SELECTION_TEST_CASES: list[DbtSelectionTestCase] = [
         exclude=(),
         dbt_anchor_unique_ids_by_term={},
         expected_sqlbuild_model_names=("fact_orders", "mart_orders"),
-        expected_dbt_required_unique_ids=(),
+        expected_dbt_required_unique_ids=("model.analytics.int_orders",),
     ),
     DbtSelectionTestCase(
         description="selects SQLBuild tag upstream expansion",
@@ -165,7 +165,7 @@ SELECTION_TEST_CASES: list[DbtSelectionTestCase] = [
         exclude=(),
         dbt_anchor_unique_ids_by_term={},
         expected_sqlbuild_model_names=("fact_orders", "mart_orders"),
-        expected_dbt_required_unique_ids=(),
+        expected_dbt_required_unique_ids=("model.analytics.int_orders",),
     ),
     DbtSelectionTestCase(
         description="does not select SQLBuild for dbt leading plus only",
@@ -289,7 +289,7 @@ SELECTION_TEST_CASES: list[DbtSelectionTestCase] = [
         exclude=(),
         dbt_anchor_unique_ids_by_term={"state:modified": ("model.analytics.int_orders",)},
         expected_sqlbuild_model_names=("fact_orders", "mart_orders"),
-        expected_dbt_required_unique_ids=(),
+        expected_dbt_required_unique_ids=("model.analytics.int_orders",),
     ),
     DbtSelectionTestCase(
         description="treats comma expression as one trailing-plus dbt anchor term",
@@ -319,7 +319,7 @@ SELECTION_TEST_CASES: list[DbtSelectionTestCase] = [
         exclude=(),
         dbt_anchor_unique_ids_by_term={},
         expected_sqlbuild_model_names=("fact_orders", "mart_orders"),
-        expected_dbt_required_unique_ids=(),
+        expected_dbt_required_unique_ids=("model.analytics.int_orders",),
         expected_path_translations=(("path:models/marts", "path:marts"),),
     ),
     DbtSelectionTestCase(
@@ -348,7 +348,7 @@ SELECTION_TEST_CASES: list[DbtSelectionTestCase] = [
         exclude=(),
         dbt_anchor_unique_ids_by_term={},
         expected_sqlbuild_model_names=("fact_orders", "mart_orders"),
-        expected_dbt_required_unique_ids=(),
+        expected_dbt_required_unique_ids=("model.analytics.int_orders",),
         expected_path_translations=(("path:models/marts+", "path:marts"),),
     ),
     DbtSelectionTestCase(
@@ -361,7 +361,7 @@ SELECTION_TEST_CASES: list[DbtSelectionTestCase] = [
         exclude=(),
         dbt_anchor_unique_ids_by_term={},
         expected_sqlbuild_model_names=("fact_orders", "mart_orders"),
-        expected_dbt_required_unique_ids=(),
+        expected_dbt_required_unique_ids=("model.analytics.int_orders",),
     ),
     DbtSelectionTestCase(
         description="applies SQLBuild exclude to final selected set",

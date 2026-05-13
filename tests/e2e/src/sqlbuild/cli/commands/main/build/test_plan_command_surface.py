@@ -19,12 +19,12 @@ TEST_CASES: list[PlanCommandBuildE2ETestCase] = [
         expected_exit_code=0,
         expected_fragments=(
             "Plan ready (10 selected)",
-            "Functions (2)",
+            "Functions (2 standard run)",
             "is_completed_order",
             "sql udf",
             "is_completed_order_py",
             "python udf",
-            "Normal (8)",
+            "Models (8 standard run)",
         ),
         expected_stream="stdout",
     ),
@@ -32,7 +32,11 @@ TEST_CASES: list[PlanCommandBuildE2ETestCase] = [
         description="plan exclude removes marts branch from selected scope",
         command=("--no-color", "plan", "--select", "/marts", "--exclude", "hourly_order_activity"),
         expected_exit_code=0,
-        expected_fragments=("Plan ready (9 selected)", "Functions (2)", "Normal (7)"),
+        expected_fragments=(
+            "Plan ready (9 selected)",
+            "Functions (2 standard run)",
+            "Models (7 standard run)",
+        ),
         expected_stream="stdout",
     ),
 ]

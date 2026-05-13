@@ -200,6 +200,8 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     dbt_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
     dbt_subparsers = dbt_parser.add_subparsers(dest="dbt_command")
     dbt_subparsers.add_parser("plan")
+    dbt_subparsers.add_parser("run")
+    dbt_subparsers.add_parser("build")
     return parser
 
 
@@ -210,7 +212,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.build import run_build
     from sqlbuild.cli.commands.main.clone import run_clone
     from sqlbuild.cli.commands.main.compile import run_compile
-    from sqlbuild.cli.commands.main.dbt import run_dbt_plan
+    from sqlbuild.cli.commands.main.dbt import run_dbt_build, run_dbt_plan, run_dbt_run
     from sqlbuild.cli.commands.main.debug import run_debug
     from sqlbuild.cli.commands.main.diff import run_diff
     from sqlbuild.cli.commands.main.helpers.scenario.capture import run_scenario_capture
@@ -228,6 +230,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_compile=run_compile,
         run_plan=run_plan,
         run_dbt_plan=run_dbt_plan,
+        run_dbt_run=run_dbt_run,
+        run_dbt_build=run_dbt_build,
         run_build=run_build,
         run_run=run_run,
         run_test=run_test,
@@ -259,7 +263,7 @@ def _main_with_dependencies(
         args: CliNamespace = CliNamespace()
         unknown_args: list[str]
         _, unknown_args = parser.parse_known_args(argv, namespace=args)
-        if args.command == CliCommand.DBT and args.dbt_command == "plan":
+        if args.command == CliCommand.DBT and args.dbt_command in {"plan", "run", "build"}:
             args.dbt_args = unknown_args
         elif unknown_args:
             parser.error(f"unrecognized arguments: {' '.join(unknown_args)}")
@@ -312,6 +316,10 @@ def _main_with_dependencies(
         if args.command == CliCommand.DBT:
             if args.dbt_command == "plan":
                 return handlers.run_dbt_plan(project_dir, tuple(args.dbt_args), args.no_color)
+            if args.dbt_command == "run":
+                return handlers.run_dbt_run(project_dir, tuple(args.dbt_args), args.no_color)
+            if args.dbt_command == "build":
+                return handlers.run_dbt_build(project_dir, tuple(args.dbt_args), args.no_color)
             raise CliUserError("dbt requires a subcommand such as 'plan'", code="C237")
         if args.command == CliCommand.BUILD:
             cursor_overrides = CursorOverrides(

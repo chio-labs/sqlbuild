@@ -5,6 +5,13 @@ from pathlib import Path
 
 
 @dataclass(frozen=True)
+class DbtExecutionQueryAssertion:
+    description: str
+    sql: str
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class DbtPlanCliTestCase:
     description: str
     command: tuple[str, ...]
@@ -35,3 +42,25 @@ class DbtPlanErrorCliTestCase:
     description: str
     command: tuple[str, ...]
     expected_stderr_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtExecutionCliTestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_row_counts: tuple[tuple[str, int], ...]
+    unexpected_relations: tuple[str, ...] = ()
+    expected_stdout_fragments: tuple[str, ...] = ()
+    expected_absent_stdout_fragments: tuple[str, ...] = ()
+    expected_query_assertions: tuple[DbtExecutionQueryAssertion, ...] = ()
+    expected_planned_sqlbuild_models: tuple[str, ...] | None = None
+    rerun_count: int = 1
+
+
+@dataclass(frozen=True)
+class DbtExecutionFailureCliTestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_stdout_fragments: tuple[str, ...]
+    expected_absent_stdout_fragments: tuple[str, ...]
+    expected_absent_relations: tuple[str, ...] = ()

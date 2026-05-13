@@ -417,7 +417,7 @@ class BuildProgressCallbacks:
         line: str
         for line_index, line in enumerate(_format_error_lines(message)):
             display_label: str = label if line_index == 0 else ""
-            self._stream.write(f"{pad}{display_label:<{_TYPE_WIDTH}}{line}\n")
+            self._stream.write(f"{pad}{display_label:<{_TYPE_WIDTH - 1}} {line}\n")
 
 
 def format_build_header(*, command: str, target: str | None, concurrency: int) -> str:
