@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
 from sqlbuild.integrations.dbt.helpers.config import resolve_dbt_config
 from sqlbuild.integrations.dbt.models import ResolvedDbtConfig
 from sqlbuild.spec.models.project import DbtConfig
@@ -100,6 +101,8 @@ def test_given_dbt_config_when_resolving_then_returns_expected_values(
             config=DbtConfig(),
             cli_project_dir=None,
             expected_error_fragment="dbt project directory is not configured",
+            expected_code="C240",
+            expected_help_fragment="Add [dbt].project_dir",
         )
     ],
     ids=["requires project dir when dbt interop command needs dbt"],
@@ -107,10 +110,14 @@ def test_given_dbt_config_when_resolving_then_returns_expected_values(
 def test_given_missing_required_dbt_project_when_resolving_then_raises_value_error(
     test_case: DbtConfigErrorTestCase,
 ) -> None:
-    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+    with pytest.raises(DbtInteropConfigError, match=test_case.expected_error_fragment) as captured:
         resolve_dbt_config(
             project_root=Path("/repo"),
             config=test_case.config,
             overrides=build_cli_overrides(project_dir=test_case.cli_project_dir),
             require_project_dir=True,
         )
+
+    assert captured.value.code == test_case.expected_code
+    assert captured.value.help is not None
+    assert test_case.expected_help_fragment in captured.value.help

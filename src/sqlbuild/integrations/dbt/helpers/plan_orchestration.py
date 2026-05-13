@@ -6,6 +6,7 @@ from collections.abc import Sequence
 
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompileSqlReference
 from sqlbuild.compiler.compile.types import SqlReferenceKind
+from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.helpers.manifest import resolve_dbt_manifest_model
 from sqlbuild.integrations.dbt.helpers.plan import build_dbt_interop_plan
 from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
@@ -45,6 +46,7 @@ def plan_dbt_interop_command(
         select=select,
         exclude=exclude,
     )
+    _raise_for_dbt_ls_failure(full_dbt_ls)
     anchors_by_term: dict[str, tuple[str, ...]] = {}
     term: str
     for term in select:
@@ -55,6 +57,7 @@ def plan_dbt_interop_command(
             select=(term,),
             exclude=exclude,
         )
+        _raise_for_dbt_ls_failure(anchor_ls)
         anchors_by_term[term] = tuple(node.unique_id for node in anchor_ls.nodes)
 
     selection: DbtInteropSelectionResult = resolve_dbt_interop_sqlbuild_selection(
@@ -101,6 +104,17 @@ def _is_dbt_anchor_term(*, term: str, project: CompiledProject) -> bool:
         return False
     core: str = term.removeprefix("+").removesuffix("+")
     return not _matches_sqlbuild_direct_selector(term=core, project=project)
+
+
+def _raise_for_dbt_ls_failure(result: DbtLsResult) -> None:
+    if result.command.returncode == 0:
+        return
+    raise DbtInteropRuntimeError("dbt ls failed", help=_dbt_failure_detail(result))
+
+
+def _dbt_failure_detail(result: DbtLsResult) -> str | None:
+    detail: str = (result.command.stderr or result.command.stdout).strip()
+    return detail or None
 
 
 def _matches_sqlbuild_direct_selector(*, term: str, project: CompiledProject) -> bool:

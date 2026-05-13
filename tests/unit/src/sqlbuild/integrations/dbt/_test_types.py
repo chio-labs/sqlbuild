@@ -28,6 +28,8 @@ class DbtConfigErrorTestCase:
     config: DbtConfig
     cli_project_dir: str | None
     expected_error_fragment: str
+    expected_code: str
+    expected_help_fragment: str
 
 
 @dataclass(frozen=True)
@@ -186,3 +188,13 @@ class DbtPlanOrchestrationTestCase:
     expected_dbt_ls_excludes: tuple[tuple[str, ...], ...] = ()
     expected_dbt_anchor_terms: tuple[str, ...] = ()
     expected_path_translations: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtPlanOrchestrationErrorTestCase:
+    description: str
+    select: tuple[str, ...]
+    failed_select: tuple[str, ...]
+    expected_error_fragment: str
+    expected_code: str
+    expected_help_fragment: str

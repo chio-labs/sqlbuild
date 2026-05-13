@@ -5,17 +5,22 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.helpers.graph import build_dbt_combined_graph
 from sqlbuild.integrations.dbt.helpers.manifest import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.helpers.plan_orchestration import plan_dbt_interop_command
-from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
+from sqlbuild.integrations.dbt.helpers.runner import DbtRunner, build_dbt_ls_argv
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraph,
+    DbtCommandResult,
     DbtInteropPlan,
     DbtManifestIndex,
 )
-from tests.unit.src.sqlbuild.integrations.dbt._test_types import DbtPlanOrchestrationTestCase
+from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
+    DbtPlanOrchestrationErrorTestCase,
+    DbtPlanOrchestrationTestCase,
+)
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     MappingDbtInvoker,
     build_compiled_project_with_model_specs,
@@ -512,6 +517,25 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
     ),
 ]
 
+PLAN_ORCHESTRATION_ERROR_TEST_CASES: list[DbtPlanOrchestrationErrorTestCase] = [
+    DbtPlanOrchestrationErrorTestCase(
+        description="raises coded error when full dbt ls fails",
+        select=("state:modified",),
+        failed_select=("state:modified",),
+        expected_error_fragment="dbt ls failed",
+        expected_code="C241",
+        expected_help_fragment="dbt selector failed",
+    ),
+    DbtPlanOrchestrationErrorTestCase(
+        description="raises coded error when anchor dbt ls fails",
+        select=("state:modified", "package:stripe+"),
+        failed_select=("package:stripe+",),
+        expected_error_fragment="dbt ls failed",
+        expected_code="C241",
+        expected_help_fragment="dbt anchor failed",
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -570,3 +594,50 @@ def test_given_dbt_interop_inputs_when_planning_then_returns_expected_plan(
     assert plan.sqlbuild_command_argvs == test_case.expected_sqlbuild_command_argvs
     assert (plan.dbt_skip_reason is not None) == test_case.expected_dbt_skipped
     assert (plan.sqlbuild_skip_reason is not None) == test_case.expected_sqlbuild_skipped
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    PLAN_ORCHESTRATION_ERROR_TEST_CASES,
+    ids=[case.description for case in PLAN_ORCHESTRATION_ERROR_TEST_CASES],
+)
+def test_given_failing_dbt_ls_when_planning_then_raises_coded_error(
+    test_case: DbtPlanOrchestrationErrorTestCase,
+) -> None:
+    manifest: DbtManifestIndex = build_dbt_manifest_index(raw_data=_MANIFEST_DATA)
+    project: CompiledProject = build_compiled_project_with_model_specs(
+        sql_by_model_name=_SQLBUILD_SQL,
+        tags_by_model_name=_SQLBUILD_TAGS,
+        path_by_model_name=_SQLBUILD_PATHS,
+    )
+    graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
+    failed_argv: tuple[str, ...] = build_dbt_ls_argv(
+        dbt_executable="dbt",
+        options=_DBT_OPTIONS,
+        select=test_case.failed_select,
+    )
+    invoker: MappingDbtInvoker = MappingDbtInvoker(
+        results_by_argv={
+            failed_argv: DbtCommandResult(
+                argv=failed_argv,
+                returncode=2,
+                stderr=test_case.expected_help_fragment,
+            )
+        }
+    )
+    runner: DbtRunner = DbtRunner(invoker=invoker)
+
+    with pytest.raises(DbtInteropRuntimeError, match=test_case.expected_error_fragment) as captured:
+        plan_dbt_interop_command(
+            command="plan",
+            project=project,
+            manifest=manifest,
+            graph=graph,
+            dbt_runner=runner,
+            dbt_options=_DBT_OPTIONS,
+            select=test_case.select,
+        )
+
+    assert captured.value.code == test_case.expected_code
+    assert captured.value.help is not None
+    assert test_case.expected_help_fragment in captured.value.help
