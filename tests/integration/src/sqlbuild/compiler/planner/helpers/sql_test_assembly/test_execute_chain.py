@@ -1,14 +1,28 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledProject, CompiledSqlTest
+from sqlbuild.compiler.compile.models import (
+    CompiledDirectLogicSqlTestPayload,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledSqlTest,
+    CompileSqlTestCte,
+)
+from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
+from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, DiscoveredSqlTestFile
 from sqlbuild.compiler.planner.helpers.sql_test_assembly import plan_test
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
+from sqlbuild.executor.testing.main.execute import execute_sql_test
+from sqlbuild.executor.testing.models import SqlTestExecutionResult
+from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.compiler.planner.helpers.sql_test_assembly._test_types import (
     ExecuteChainTestCase,
+    ExecuteMacroTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.planner.helpers.sql_test_assembly.helpers import (
     build_test_and_project,
@@ -221,6 +235,87 @@ def test_given_chain_when_executing_resolved_sql_then_produces_expected_rows(
         rows: list[Any] = result.fetchall()
         actual: tuple[tuple[object, ...], ...] = tuple(tuple(row) for row in rows)
         assert expected_rows is None or actual == expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExecuteMacroTestCase(
+            description="macro test direct comparison executes through test runner",
+            helper_ctes={"input_values": "SELECT '  PAID  ' AS raw_status"},
+            actual_sql="SELECT LOWER(TRIM(raw_status)) AS status FROM input_values",
+            expected_sql="SELECT 'paid' AS status",
+            expected_rows=(("paid",),),
+        )
+    ],
+    ids=["macro test direct comparison executes through test runner"],
+)
+def test_given_macro_test_plan_when_executing_then_it_passes_direct_comparison(
+    test_case: ExecuteMacroTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    test_file: DiscoveredSqlTestFile = DiscoveredSqlTestFile(
+        file_path=Path("tests/unit/test_macro.sql"),
+        relative_path=Path("tests/unit/test_macro.sql"),
+        contents="",
+        blocks=(),
+    )
+    test_block: DiscoveredSqlTestBlock = DiscoveredSqlTestBlock(
+        test_index=1,
+        header_values={"mode": SqlTestMode.MACRO.value, "name": "normalizes status"},
+        sql_body="",
+        name="normalizes status",
+        mode=SqlTestMode.MACRO,
+    )
+    helper_ctes: tuple[CompileSqlTestCte, ...] = tuple(
+        CompileSqlTestCte(name=name, sql_body=sql) for name, sql in test_case.helper_ctes.items()
+    )
+    sql_test: CompiledSqlTest = CompiledSqlTest(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.SQL_TEST,
+            name="normalizes status",
+        ),
+        scope_deps=(CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),),
+        name="normalizes status",
+        test_file=test_file,
+        test_block=test_block,
+        sql_body="",
+        mode=SqlTestMode.MACRO,
+        payload=CompiledDirectLogicSqlTestPayload(
+            mode=SqlTestMode.MACRO,
+            helper_ctes=helper_ctes,
+            actual_cte=CompileSqlTestCte(
+                name="__macro_actual__",
+                sql_body=test_case.actual_sql,
+            ),
+            expected_cte=CompileSqlTestCte(
+                name="__macro_expected__",
+                sql_body=test_case.expected_sql,
+            ),
+            tested_resource_names=("normalize_status",),
+        ),
+    )
+
+    entry, warnings = plan_test(
+        test=sql_test,
+        project=CompiledProject(
+            run_id="test_run",
+            effective_environment_name=None,
+            effective_connection={},
+            effective_vars={},
+        ),
+    )
+    result: SqlTestExecutionResult = execute_sql_test(
+        test_entry=entry, adapter=adapter, connection=connection
+    )
+
+    assert warnings == ()
+    assert entry.chain[0].model_name == "macro normalizes status"
+    rows: list[Any] = connection.execute(entry.chain[0].resolved_sql).fetchall()
+    assert tuple(tuple(row) for row in rows) == test_case.expected_rows
+    assert result.outcome == SqlTestOutcome.PASS
+    assert result.step_results[0].model_name == "macro normalizes status"
 
 
 @pytest.mark.parametrize(

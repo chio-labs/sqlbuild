@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.shared.types import SqlReferenceKind
 
 PRESERVE_ENVIRONMENT_VALUE: str = "preserve"
@@ -26,6 +27,9 @@ SOURCE_TEST_CTE_PREFIX: str = SqlReferenceKind.SOURCE.fixture_cte_prefix
 SEED_TEST_CTE_PREFIX: str = SqlReferenceKind.SEED.fixture_cte_prefix
 DBT_REF_TEST_CTE_PREFIX: str = SqlReferenceKind.DBT_REF.fixture_cte_prefix
 MACRO_TEST_CTE_PREFIX: str = "__macro__"
+MACRO_ACTUAL_TEST_CTE_NAME: str = "__macro_actual__"
+MACRO_EXPECTED_TEST_CTE_NAME: str = "__macro_expected__"
+DEFAULT_SQL_TEST_MODE: SqlTestMode = SqlTestMode.MODEL
 ASSERT_SCENARIO_CTE_PREFIX: str = ASSERT_TEST_CTE_PREFIX
 RESERVED_SQL_TEST_CTE_NAMES: frozenset[str] = frozenset(
     {

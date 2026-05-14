@@ -24,3 +24,13 @@ class PlanTestChainTestCase:
     expected_error_fragment: str | None = None
     sql_body: str = ""
     expected_cte_bodies: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class PlanMacroTestCase:
+    description: str
+    helper_ctes: dict[str, str]
+    actual_sql: str
+    expected_sql: str
+    expected_actual_fragment: str
+    expected_expected_fragment: str

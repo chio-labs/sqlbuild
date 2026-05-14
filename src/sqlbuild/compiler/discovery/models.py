@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
+from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry, SourceLocation
 from sqlbuild.spec.models.source import SourceEntry
@@ -93,6 +95,7 @@ class DiscoveredSqlTestBlock:
     header_values: dict[str, object]
     sql_body: str
     name: str | None = None
+    mode: SqlTestMode = DEFAULT_SQL_TEST_MODE
 
 
 @dataclass(frozen=True)

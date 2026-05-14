@@ -24,6 +24,11 @@ from sqlbuild.spec.models.project import (
 from tests.unit.src.sqlbuild.compiler.compile._test_helpers import (
     base_repo_files,
     build_external_sql_reference_resolver,
+    compile_sql_test_authored_cte_names,
+    compile_sql_test_expected_model_names,
+    compile_sql_test_mock_model_names,
+    compile_sql_test_mock_seed_names,
+    compile_sql_test_mock_source_names,
     expected_or_actual,
 )
 from tests.unit.src.sqlbuild.compiler.compile._test_types import (
@@ -2124,25 +2129,37 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
     )
     assert (
         tuple(
-            tuple(cte.name for cte in test_input.authored_ctes)
+            compile_sql_test_authored_cte_names(test_input)
             for test_input in compile_inputs.test_inputs
         )
         == test_case.expected_test_authored_cte_names
     )
     assert (
-        tuple(test_input.mock_model_names for test_input in compile_inputs.test_inputs)
+        tuple(
+            compile_sql_test_mock_model_names(test_input)
+            for test_input in compile_inputs.test_inputs
+        )
         == test_case.expected_test_mock_model_names
     )
     assert (
-        tuple(test_input.mock_source_names for test_input in compile_inputs.test_inputs)
+        tuple(
+            compile_sql_test_mock_source_names(test_input)
+            for test_input in compile_inputs.test_inputs
+        )
         == test_case.expected_test_mock_source_names
     )
     assert (
-        tuple(test_input.mock_seed_names for test_input in compile_inputs.test_inputs)
+        tuple(
+            compile_sql_test_mock_seed_names(test_input)
+            for test_input in compile_inputs.test_inputs
+        )
         == test_case.expected_test_mock_seed_names
     )
     assert (
-        tuple(test_input.expected_model_names for test_input in compile_inputs.test_inputs)
+        tuple(
+            compile_sql_test_expected_model_names(test_input)
+            for test_input in compile_inputs.test_inputs
+        )
         == test_case.expected_test_expected_model_names
     )
     assert (

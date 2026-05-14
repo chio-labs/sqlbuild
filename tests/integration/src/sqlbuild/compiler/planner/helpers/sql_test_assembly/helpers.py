@@ -11,6 +11,7 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
+    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationTarget,
@@ -86,10 +87,12 @@ def build_test_and_project(
         test_file=_STUB_TEST_FILE,
         test_block=_STUB_TEST_BLOCK,
         sql_body=sql_body,
-        authored_ctes=tuple(authored_ctes),
-        mock_model_names=tuple(test_case.mock_ref_ctes.keys()),
-        mock_source_names=tuple(test_case.mock_source_ctes.keys()),
-        expected_model_names=test_case.expected_model_names,
+        payload=CompiledModelSqlTestPayload(
+            authored_ctes=tuple(authored_ctes),
+            mock_model_names=tuple(test_case.mock_ref_ctes.keys()),
+            mock_source_names=tuple(test_case.mock_source_ctes.keys()),
+            expected_model_names=test_case.expected_model_names,
+        ),
     )
 
     models: list[CompiledModel] = []
