@@ -4,14 +4,7 @@ from __future__ import annotations
 
 import re
 
-from sqlbuild.compiler.compile.types import SqlReferenceKind
-
-REF_CALL_NAME: str = f"__{SqlReferenceKind.REF.value}"
-SEED_CALL_NAME: str = f"__{SqlReferenceKind.SEED.value}"
-SOURCE_CALL_NAME: str = f"__{SqlReferenceKind.SOURCE.value}"
-DBT_REF_CALL_NAME: str = f"__{SqlReferenceKind.DBT_REF.value}"
-UDF_CALL_NAME: str = f"__{SqlReferenceKind.UDF.value}"
-TABLE_FUNCTION_CALL_NAME: str = f"__{SqlReferenceKind.TABLE_FUNCTION.value}"
+from sqlbuild.shared.types import SqlReferenceKind
 
 PRESERVE_ENVIRONMENT_VALUE: str = "preserve"
 
@@ -28,10 +21,10 @@ GENERIC_AUDIT_RAW_PARAMETER_PATTERN: re.Pattern[str] = re.compile(
 )
 EXPECTED_TEST_CTE_PREFIX: str = "__expected__"
 ASSERT_TEST_CTE_PREFIX: str = "__assert__"
-REF_TEST_CTE_PREFIX: str = "__ref__"
-SOURCE_TEST_CTE_PREFIX: str = "__source__"
-SEED_TEST_CTE_PREFIX: str = "__seed__"
-DBT_REF_TEST_CTE_PREFIX: str = "__dbt_ref__"
+REF_TEST_CTE_PREFIX: str = SqlReferenceKind.REF.fixture_cte_prefix
+SOURCE_TEST_CTE_PREFIX: str = SqlReferenceKind.SOURCE.fixture_cte_prefix
+SEED_TEST_CTE_PREFIX: str = SqlReferenceKind.SEED.fixture_cte_prefix
+DBT_REF_TEST_CTE_PREFIX: str = SqlReferenceKind.DBT_REF.fixture_cte_prefix
 MACRO_TEST_CTE_PREFIX: str = "__macro__"
 ASSERT_SCENARIO_CTE_PREFIX: str = ASSERT_TEST_CTE_PREFIX
 RESERVED_SQL_TEST_CTE_NAMES: frozenset[str] = frozenset(

@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompileSqlReference
-from sqlbuild.compiler.compile.types import SqlReferenceKind
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.helpers.manifest import resolve_dbt_manifest_model
 from sqlbuild.integrations.dbt.helpers.plan import build_dbt_interop_plan
@@ -20,6 +19,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtLsResult,
 )
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSqlbuildTestAction
+from sqlbuild.shared.types import SqlReferenceKind
 
 
 def plan_dbt_interop_command(

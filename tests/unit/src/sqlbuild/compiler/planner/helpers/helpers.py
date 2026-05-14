@@ -27,7 +27,6 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledResourceType,
-    SqlReferenceKind,
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
@@ -53,6 +52,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import BackfillAction
 from sqlbuild.compiler.shared.helpers.hashing import compute_query_hash
+from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.schema import SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (

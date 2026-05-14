@@ -20,10 +20,13 @@ from sqlbuild.shared.constants import (
     SCENARIO_PLAN_SQLGLOT_PARSE,
     SCENARIO_PLAN_SQLGLOT_UNAVAILABLE,
 )
+from sqlbuild.shared.helpers.sql_reference_patterns import reference_call_prefix_pattern_text
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot, import_sqlglot_expressions
+from sqlbuild.shared.types import SqlReferenceKind
 
 _REF_PATTERN: re.Pattern[str] = re.compile(
-    r"__ref\(\s*[\"']?(?P<name>[A-Za-z_][A-Za-z0-9_.]*)[\"']?\s*\)"
+    rf"{reference_call_prefix_pattern_text(SqlReferenceKind.REF)}\s*"
+    r"[\"']?(?P<name>[A-Za-z_][A-Za-z0-9_.]*)[\"']?\s*\)"
 )
 
 
@@ -200,7 +203,7 @@ def _extract_assertion_target_names_with_sqlglot(
         if not isinstance(anonymous, anonymous_type):
             continue
         function_name: str = str(anonymous.this).lower()
-        if function_name != "__ref":
+        if function_name != SqlReferenceKind.REF.function_name:
             continue
         expressions: list[Any] = list(anonymous.expressions)
         if len(expressions) != 1:

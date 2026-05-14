@@ -17,13 +17,14 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     CompileSqlReference,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType, SqlReferenceKind
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
 )
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
+from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.schema import SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
 

@@ -33,11 +33,19 @@ from sqlbuild.compiler.planner.models import (
     SqlTestPlanEntry,
 )
 from sqlbuild.compiler.planner.types import WarningSeverity
+from sqlbuild.shared.helpers.sql_reference_patterns import (
+    quoted_reference_call_pattern,
+    reference_call_prefix_pattern_text,
+)
+from sqlbuild.shared.types import SqlReferenceKind
 
-_REF_PATTERN: re.Pattern[str] = re.compile(r'__ref\("([^"]+)"\)')
-_SOURCE_PATTERN: re.Pattern[str] = re.compile(r'__source\("([^"]+)"\)')
-_SEED_PATTERN: re.Pattern[str] = re.compile(r'__seed\("([^"]+)"\)')
-_DBT_REF_PATTERN: re.Pattern[str] = re.compile(r'__dbt_ref\("([^"]+)"(?:,\s*"([^"]+)")?\)')
+_REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.REF)
+_SOURCE_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SOURCE)
+_SEED_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SEED)
+_DBT_REF_PATTERN: re.Pattern[str] = re.compile(
+    rf'{reference_call_prefix_pattern_text(SqlReferenceKind.DBT_REF)}"([^"]+)"'
+    r'(?:,\s*"([^"]+)")?\)'
+)
 
 
 def plan_test(
@@ -384,7 +392,7 @@ def _validate_resolved_sql(
                 severity=WarningSeverity.ERROR,
                 message=(
                     f"test '{test_name}': model '{model_name}'"
-                    f' references __ref("{ref_name}") which has'
+                    f" references {SqlReferenceKind.REF.example_call(ref_name)} which has"
                     f" no mock and is not in the expected chain"
                 ),
             )
@@ -398,7 +406,7 @@ def _validate_resolved_sql(
                 severity=WarningSeverity.ERROR,
                 message=(
                     f"test '{test_name}': model '{model_name}'"
-                    f' references __source("{source_name}") which'
+                    f" references {SqlReferenceKind.SOURCE.example_call(source_name)} which"
                     f" has no mock"
                 ),
             )
@@ -412,7 +420,7 @@ def _validate_resolved_sql(
                 severity=WarningSeverity.ERROR,
                 message=(
                     f"test '{test_name}': model '{model_name}'"
-                    f' references __seed("{seed_name}") which'
+                    f" references {SqlReferenceKind.SEED.example_call(seed_name)} which"
                     f" has no mock"
                 ),
             )

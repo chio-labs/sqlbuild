@@ -67,7 +67,6 @@ from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompileContextKey,
     FunctionLanguage,
-    SqlReferenceKind,
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
@@ -85,7 +84,7 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.shared.helpers.schema_audits import parse_audit_instance
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.shared.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.spec.models.project import (
     ClonePolicy,
     DefaultsConfig,
@@ -1327,7 +1326,9 @@ def build_model_attached_audit_inputs(
                 generic_audit_definitions=generic_audit_definitions,
                 implicit_arguments={
                     "model": model_input.model_file.file_path.stem,
-                    "relation": f'__ref("{model_input.model_file.file_path.stem}")',
+                    "relation": SqlReferenceKind.REF.example_call(
+                        model_input.model_file.file_path.stem
+                    ),
                 },
                 attached_target_kind=AttachedAuditTargetKind.MODEL,
                 attached_target_name=model_input.model_file.file_path.stem,
@@ -1352,7 +1353,9 @@ def build_model_attached_audit_inputs(
                     generic_audit_definitions=generic_audit_definitions,
                     implicit_arguments={
                         "model": model_input.model_file.file_path.stem,
-                        "relation": f'__ref("{model_input.model_file.file_path.stem}")',
+                        "relation": SqlReferenceKind.REF.example_call(
+                            model_input.model_file.file_path.stem
+                        ),
                         "column": column_entry.name,
                     },
                     attached_target_kind=AttachedAuditTargetKind.MODEL,
@@ -1396,7 +1399,9 @@ def build_source_attached_audit_inputs(
                 generic_audit_definitions=generic_audit_definitions,
                 implicit_arguments={
                     "source": source_input.source_entry.name,
-                    "relation": f'__source("{source_input.source_entry.name}")',
+                    "relation": SqlReferenceKind.SOURCE.example_call(
+                        source_input.source_entry.name
+                    ),
                 },
                 attached_target_kind=AttachedAuditTargetKind.SOURCE,
                 attached_target_name=source_input.source_entry.name,
@@ -1421,7 +1426,9 @@ def build_source_attached_audit_inputs(
                     generic_audit_definitions=generic_audit_definitions,
                     implicit_arguments={
                         "source": source_input.source_entry.name,
-                        "relation": f'__source("{source_input.source_entry.name}")',
+                        "relation": SqlReferenceKind.SOURCE.example_call(
+                            source_input.source_entry.name
+                        ),
                         "column": column_entry.name,
                     },
                     attached_target_kind=AttachedAuditTargetKind.SOURCE,
@@ -1697,8 +1704,9 @@ def validate_model_references(
             if reference.ref_name in known_seed_names:
                 raise CompileInputError(
                     f"Model file {model_file.relative_path} references seed '{reference.ref_name}' "
-                    f'with __ref(...). Use __seed("{reference.ref_name}") for seed '
-                    "references; __ref only resolves models."
+                    f"with {SqlReferenceKind.REF.placeholder_call()}. Use "
+                    f"{SqlReferenceKind.SEED.example_call(reference.ref_name)} for seed "
+                    f"references; {SqlReferenceKind.REF.function_name} only resolves models."
                 )
             raise CompileInputError(
                 f"Model file {model_file.relative_path} references unknown model "
@@ -1712,7 +1720,9 @@ def validate_model_references(
                 raise CompileInputError(
                     f"Model file {model_file.relative_path} references model "
                     f"'{reference.ref_name}' "
-                    f'with __seed(...). Use __ref("{reference.ref_name}") for model references.'
+                    f"with {SqlReferenceKind.SEED.placeholder_call()}. Use "
+                    f"{SqlReferenceKind.REF.example_call(reference.ref_name)} for model "
+                    "references."
                 )
             raise CompileInputError(
                 f"Model file {model_file.relative_path} references unknown seed "
@@ -1730,7 +1740,8 @@ def validate_model_references(
             if external_sql_reference_resolver is None:
                 raise CompileInputError(
                     f"Model file {model_file.relative_path} uses "
-                    f"__dbt_ref('{reference.ref_name}') but no dbt manifest was found",
+                    f"{SqlReferenceKind.DBT_REF.example_call(reference.ref_name)} "
+                    "but no dbt manifest was found",
                     code="C214",
                     help=(
                         "Run dbt compile or configure dbt target_path so SQLBuild can read "
@@ -1757,7 +1768,8 @@ def validate_model_references(
         ):
             raise CompileInputError(
                 f"Model file {model_file.relative_path} references table function "
-                f"'{reference.ref_name}' with __udf(); use __table_fn() in SQL contexts "
+                f"'{reference.ref_name}' with {SqlReferenceKind.UDF.placeholder_call('')}; "
+                f"use {SqlReferenceKind.TABLE_FUNCTION.placeholder_call('')} in SQL contexts "
                 "that support table-valued functions"
             )
         if reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION:
@@ -1789,8 +1801,10 @@ def validate_function_references(
             if reference.ref_name in known_seed_names:
                 raise CompileInputError(
                     f"SQL function file {function_file.relative_path} references seed "
-                    f"'{reference.ref_name}' with __ref(...). Use __seed(\"{reference.ref_name}\") "
-                    "for seed references; __ref only resolves models."
+                    f"'{reference.ref_name}' with {SqlReferenceKind.REF.placeholder_call()}. "
+                    f"Use {SqlReferenceKind.SEED.example_call(reference.ref_name)} "
+                    f"for seed references; {SqlReferenceKind.REF.function_name} only "
+                    "resolves models."
                 )
             raise CompileInputError(
                 f"SQL function file {function_file.relative_path} references unknown model "
@@ -1815,7 +1829,8 @@ def validate_function_references(
         if reference.ref_kind == SqlReferenceKind.DBT_REF:
             raise CompileInputError(
                 f"SQL function file {function_file.relative_path} uses "
-                f"__dbt_ref('{reference.ref_name}') but dbt refs are not supported yet; "
+                f"{SqlReferenceKind.DBT_REF.example_call(reference.ref_name)} but dbt refs "
+                "are not supported yet; "
                 "support may be added in a future release"
             )
         if (
@@ -1832,7 +1847,8 @@ def validate_function_references(
         ):
             raise CompileInputError(
                 f"SQL function file {function_file.relative_path} references table function "
-                f"'{reference.ref_name}' with __udf(); use __table_fn()"
+                f"'{reference.ref_name}' with {SqlReferenceKind.UDF.placeholder_call('')}; "
+                f"use {SqlReferenceKind.TABLE_FUNCTION.placeholder_call('')}"
             )
         if (
             reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION
@@ -1840,7 +1856,9 @@ def validate_function_references(
         ):
             raise CompileInputError(
                 f"SQL function file {function_file.relative_path} references scalar function "
-                f"'{reference.ref_name}' with __table_fn(); use __udf() for scalar UDFs"
+                f"'{reference.ref_name}' with "
+                f"{SqlReferenceKind.TABLE_FUNCTION.placeholder_call('')}; "
+                f"use {SqlReferenceKind.UDF.placeholder_call('')} for scalar UDFs"
             )
 
 
@@ -1859,7 +1877,8 @@ def validate_audit_references(
         if reference.ref_kind == SqlReferenceKind.DBT_REF:
             raise CompileInputError(
                 f"Audit file {audit_file.relative_path} may not use "
-                f"__dbt_ref('{reference.ref_name}'); audit dbt model checks belong in dbt"
+                f"{SqlReferenceKind.DBT_REF.example_call(reference.ref_name)}; audit dbt "
+                "model checks belong in dbt"
             )
         if (
             reference.ref_kind == SqlReferenceKind.REF
@@ -1868,8 +1887,9 @@ def validate_audit_references(
             if reference.ref_name in known_seed_names:
                 raise CompileInputError(
                     f"Audit file {audit_file.relative_path} references seed '{reference.ref_name}' "
-                    f'with __ref(...). Use __seed("{reference.ref_name}") for seed '
-                    "references; __ref only resolves models."
+                    f"with {SqlReferenceKind.REF.placeholder_call()}. Use "
+                    f"{SqlReferenceKind.SEED.example_call(reference.ref_name)} for seed "
+                    f"references; {SqlReferenceKind.REF.function_name} only resolves models."
                 )
             raise CompileInputError(
                 f"Audit file {audit_file.relative_path} references unknown model "
@@ -2940,7 +2960,7 @@ def validate_model_attached_audit_references(
     if attached_target_name not in ref_names:
         raise CompileInputError(
             f"{audit_label}: model-attached audit must reference the attached model "
-            f"'{attached_target_name}' via __ref()"
+            f"'{attached_target_name}' via {SqlReferenceKind.REF.placeholder_call('')}"
         )
 
 

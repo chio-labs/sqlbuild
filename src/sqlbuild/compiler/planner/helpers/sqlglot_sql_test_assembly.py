@@ -5,10 +5,17 @@ from __future__ import annotations
 from collections import OrderedDict
 from typing import Any
 
+from sqlbuild.compiler.compile.constants import (
+    DBT_REF_TEST_CTE_PREFIX,
+    REF_TEST_CTE_PREFIX,
+    SEED_TEST_CTE_PREFIX,
+    SOURCE_TEST_CTE_PREFIX,
+)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileSqlTestCte
 from sqlbuild.compiler.planner.models import SqlglotResolvedTestSql
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot, import_sqlglot_expressions
+from sqlbuild.shared.types import SqlReferenceKind
 
 
 def try_resolve_test_model_sql_with_sqlglot(
@@ -80,17 +87,20 @@ def try_resolve_test_model_sql_with_sqlglot(
             return table
         function_name: str = str(anonymous.this).lower()
         expressions: list[Any] = list(anonymous.expressions)
-        if len(expressions) != 1 and function_name != "__dbt_ref":
+        if len(expressions) != 1 and function_name != SqlReferenceKind.DBT_REF.function_name:
             return table
-        if function_name == "__dbt_ref" and len(expressions) not in {1, 2}:
+        if function_name == SqlReferenceKind.DBT_REF.function_name and len(expressions) not in {
+            1,
+            2,
+        }:
             return table
         argument: Any = expressions[0]
         if not hasattr(argument, "name"):
             return table
         referenced_name: str = str(argument.name)
 
-        if function_name == "__ref":
-            generated_name: str = f"__ref__{referenced_name}"
+        if function_name == SqlReferenceKind.REF.function_name:
+            generated_name: str = f"{REF_TEST_CTE_PREFIX}{referenced_name}"
             if referenced_name in resolved_chain:
                 _ensure_available(generated_name, referenced_name, "ref")
                 chain_sql: SqlglotResolvedTestSql = resolved_chain[referenced_name]
@@ -112,8 +122,8 @@ def try_resolve_test_model_sql_with_sqlglot(
                 return table
             return table
 
-        if function_name == "__source":
-            generated_name = f"__source__{referenced_name}"
+        if function_name == SqlReferenceKind.SOURCE.function_name:
+            generated_name = f"{SOURCE_TEST_CTE_PREFIX}{referenced_name}"
             if referenced_name in mock_sources:
                 reachable_mocks.add(referenced_name)
                 _ensure_available(generated_name, referenced_name, "source")
@@ -125,8 +135,8 @@ def try_resolve_test_model_sql_with_sqlglot(
                 return table
             return table
 
-        if function_name == "__seed":
-            generated_name = f"__seed__{referenced_name}"
+        if function_name == SqlReferenceKind.SEED.function_name:
+            generated_name = f"{SEED_TEST_CTE_PREFIX}{referenced_name}"
             if referenced_name in mock_seeds:
                 reachable_mocks.add(referenced_name)
                 _ensure_available(generated_name, referenced_name, "seed")
@@ -138,7 +148,7 @@ def try_resolve_test_model_sql_with_sqlglot(
                 return table
             return table
 
-        if function_name == "__dbt_ref":
+        if function_name == SqlReferenceKind.DBT_REF.function_name:
             dbt_ref_name: str
             if len(expressions) == 1:
                 dbt_ref_name = referenced_name
@@ -146,7 +156,7 @@ def try_resolve_test_model_sql_with_sqlglot(
                 dbt_ref_name = f"{referenced_name}__{expressions[1].name}"
             else:
                 return table
-            generated_name = f"__dbt_ref__{dbt_ref_name}"
+            generated_name = f"{DBT_REF_TEST_CTE_PREFIX}{dbt_ref_name}"
             if dbt_ref_name in mock_dbt_refs:
                 reachable_mocks.add(dbt_ref_name)
                 _ensure_available(generated_name, dbt_ref_name, "dbt_ref")
@@ -158,7 +168,7 @@ def try_resolve_test_model_sql_with_sqlglot(
                 return table
             return table
 
-        if function_name == "__udf":
+        if function_name == SqlReferenceKind.UDF.function_name:
             target: str | None = function_targets.get(referenced_name)
             if target is not None:
                 table.set("this", identifier_type(this=target, quoted=False))
