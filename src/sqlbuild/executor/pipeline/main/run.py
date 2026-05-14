@@ -55,7 +55,7 @@ def run_build_pipeline(
     on_sub_progress: Callable[[str], None] | None = None,
     custom_materializations: dict[str, Callable[..., MaterializationResult]] | None = None,
     environment: str = "",
-    effective_vars: dict[str, str] | None = None,
+    effective_vars: dict[str, object] | None = None,
     on_connection_start: Callable[[int], None] | None = None,
     on_connection_complete: Callable[[int, float], None] | None = None,
     on_connection_error: Callable[[int, float], None] | None = None,

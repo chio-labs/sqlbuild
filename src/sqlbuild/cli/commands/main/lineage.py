@@ -41,6 +41,7 @@ def run_lineage(
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     lineage_mode: ColumnLineageMode = ColumnLineageMode.RICH,
+    cli_vars: dict[str, object] | None = None,
 ) -> int:
     """Execute the lineage command."""
 
@@ -67,6 +68,7 @@ def run_lineage(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         no_sql_validation=no_sql_validation,
+        cli_vars=cli_vars,
     )
     lineage_graph: LineageGraph
     if target is not None:

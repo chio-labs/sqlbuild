@@ -123,6 +123,24 @@ COMPILE_DISPATCH_TEST_CASES: list[MainTestCase] = [
         expected_exit_code=3,
         expected_compile_lineage_mode=CompileLineageMode.NONE,
     ),
+    MainTestCase(
+        description="passes sqlbuild vars to compile handler",
+        argv=[
+            "compile",
+            "--vars",
+            '{"schema":"analytics","limit":10,"enabled":true,"optional":null,'
+            '"grants":{"role":"analyst"},"roles":["reporter"]}',
+        ],
+        expected_exit_code=3,
+        expected_vars={
+            "schema": "analytics",
+            "limit": 10,
+            "enabled": True,
+            "optional": None,
+            "grants": {"role": "analyst"},
+            "roles": ["reporter"],
+        },
+    ),
 ]
 
 DBT_EXECUTION_DISPATCH_TEST_CASES: list[MainTestCase] = [
@@ -386,7 +404,9 @@ def test_given_clone_command_arguments_when_running_with_dependencies_then_it_di
         hard_copy: bool,
         select: tuple[str, ...],
         exclude: tuple[str, ...],
+        cli_vars: dict[str, object],
     ) -> int:
+        del cli_vars
         received_args.append(
             (
                 project_dir,
@@ -456,7 +476,9 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
         select: tuple[str, ...],
         exclude: tuple[str, ...],
         verbose: bool,
+        cli_vars: dict[str, object],
     ) -> int:
+        del cli_vars
         received_args.append(
             (
                 project_dir,
@@ -856,7 +878,9 @@ def test_given_lineage_command_arguments_when_running_with_dependencies_then_it_
         select: tuple[str, ...],
         exclude: tuple[str, ...],
         lineage_mode: ColumnLineageMode,
+        cli_vars: dict[str, object],
     ) -> int:
+        del cli_vars
         received_args.append(
             (
                 project_dir,
@@ -930,7 +954,9 @@ def test_given_verbose_diff_arguments_when_running_then_it_dispatches_verbose_fl
         select: tuple[str, ...],
         exclude: tuple[str, ...],
         verbose: bool,
+        cli_vars: dict[str, object],
     ) -> int:
+        del cli_vars
         del project_dir, no_color, no_sql_validation, from_environment, to_environment, full
         del schema_only, bounded, max_column_examples, max_row_only_examples, select, exclude
         received_verbose.append(verbose)
@@ -985,7 +1011,9 @@ def test_given_diff_example_cap_arguments_when_running_then_it_dispatches_caps(
         select: tuple[str, ...],
         exclude: tuple[str, ...],
         verbose: bool,
+        cli_vars: dict[str, object],
     ) -> int:
+        del cli_vars
         del project_dir, no_color, no_sql_validation, from_environment, to_environment, full
         del schema_only, bounded, select, exclude, verbose
         received_caps.append((max_column_examples, max_row_only_examples))
@@ -1074,7 +1102,16 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
     test_case: MainTestCase,
 ) -> None:
     received_args: list[
-        tuple[Path | None, bool, str | None, bool, bool, bool, CompileLineageMode]
+        tuple[
+            Path | None,
+            bool,
+            str | None,
+            bool,
+            bool,
+            bool,
+            CompileLineageMode,
+            dict[str, object],
+        ]
     ] = []
 
     def run_compile(
@@ -1085,6 +1122,7 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
         manifest: bool,
         no_color: bool,
         lineage_mode: CompileLineageMode,
+        cli_vars: dict[str, object],
     ) -> int:
         received_args.append(
             (
@@ -1095,6 +1133,7 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
                 manifest,
                 no_color,
                 lineage_mode,
+                cli_vars,
             )
         )
         return test_case.expected_exit_code
@@ -1114,6 +1153,7 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
             test_case.expected_manifest,
             False,
             test_case.expected_compile_lineage_mode,
+            {} if test_case.expected_vars is None else test_case.expected_vars,
         )
     ]
 
@@ -1150,6 +1190,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         exclude: tuple[str, ...],
         verbose: bool = False,
         debug: bool = False,
+        cli_vars: dict[str, object] | None = None,
     ) -> int:
         del project_dir
         del no_sql_validation
@@ -1159,6 +1200,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         del select
         del exclude
         del verbose
+        del cli_vars
         received_args.append((no_color, fail_fast, full_refresh, debug))
         return test_case.expected_exit_code
 
@@ -1208,6 +1250,7 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
         exclude: tuple[str, ...],
         verbose: bool = False,
         debug: bool = False,
+        cli_vars: dict[str, object] | None = None,
     ) -> int:
         del project_dir
         del no_sql_validation
@@ -1220,6 +1263,7 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
         del exclude
         del verbose
         del debug
+        del cli_vars
         received_args.append(full_refresh)
         return test_case.expected_exit_code
 
@@ -1259,6 +1303,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
             tuple[str, ...],
             tuple[str, ...],
             bool,
+            dict[str, object],
         ]
     ] = []
 
@@ -1273,6 +1318,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
         select: tuple[str, ...],
         exclude: tuple[str, ...],
         verbose: bool,
+        cli_vars: dict[str, object],
     ) -> int:
         received_args.append(
             (
@@ -1286,6 +1332,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
                 select,
                 exclude,
                 verbose,
+                cli_vars,
             )
         )
         return test_case.expected_exit_code
@@ -1304,6 +1351,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
         ("orders",),
         ("customers",),
         False,
+        {},
     )
 
 
@@ -1391,6 +1439,7 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
         manifest: bool,
         no_color: bool,
         lineage_mode: CompileLineageMode,
+        cli_vars: dict[str, object],
     ) -> int:
         del no_sql_validation
         del defer_to
@@ -1398,6 +1447,7 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
         del manifest
         del no_color
         del lineage_mode
+        del cli_vars
         assert project_dir is not None
         raise test_case.error_factory(project_dir)
 

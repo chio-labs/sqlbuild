@@ -13,7 +13,10 @@ from sqlbuild.spec.models.project import EnvironmentConfig
 
 
 def build_effective_connection_config(
-    *, discovered_inputs: DiscoveredProjectInputs, selected_environment: str | None = None
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    selected_environment: str | None = None,
+    cli_vars: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Build the effective project connection config without compiling resources."""
 
@@ -29,11 +32,11 @@ def build_effective_connection_config(
             local_config=discovered_inputs.local_config,
             environment_name=environment_name,
         )
-    effective_vars: dict[str, str] = build_effective_vars(
+    effective_vars: dict[str, object] = build_effective_vars(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
         environment_config=environment_config,
-        cli_vars={},
+        cli_vars={} if cli_vars is None else cli_vars,
     )
     return build_effective_connection(
         project_config=discovered_inputs.project_config,

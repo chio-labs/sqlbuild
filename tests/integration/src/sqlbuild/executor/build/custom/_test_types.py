@@ -67,7 +67,7 @@ class ContextVerificationTestCase:
     custom_config: dict[str, object]
     custom_placeholders: dict[str, str]
     environment: str
-    effective_vars: dict[str, str]
+    effective_vars: dict[str, object]
     expected_is_first_run: bool
     expected_is_full_refresh: bool
     expected_query_changed: bool

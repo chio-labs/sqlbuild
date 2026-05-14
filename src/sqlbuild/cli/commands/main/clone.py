@@ -39,6 +39,7 @@ def run_clone(
     hard_copy: bool,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
+    cli_vars: dict[str, object] | None = None,
 ) -> int:
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
@@ -61,11 +62,13 @@ def run_clone(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
         environment_name=from_environment,
+        cli_vars=cli_vars,
     )
     target_connection_config: dict[str, object] = resolve_environment_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
         environment_name=to_environment,
+        cli_vars=cli_vars,
     )
     source_connection: Any = adapter.connect(source_connection_config)
     target_connection: Any = adapter.connect(target_connection_config)
@@ -78,6 +81,7 @@ def run_clone(
             no_sql_validation=no_sql_validation,
             select=select,
             exclude=exclude,
+            cli_vars=cli_vars,
             target_connection=target_connection,
             external_sql_reference_resolver=resolve_external_sql_reference_resolver(
                 project_dir=effective_project_dir,

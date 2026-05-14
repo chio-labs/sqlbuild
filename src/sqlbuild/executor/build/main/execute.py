@@ -44,7 +44,7 @@ def execute_build_plan(
     on_node_complete: Callable[[object], None] | None = None,
     custom_materializations: dict[str, Callable[..., MaterializationResult]] | None = None,
     environment: str = "",
-    effective_vars: dict[str, str] | None = None,
+    effective_vars: dict[str, object] | None = None,
     warehouse_relations: dict[str, RelationInfo] | None = None,
     on_sub_progress: Callable[[str], None] | None = None,
 ) -> BuildExecutionResult:

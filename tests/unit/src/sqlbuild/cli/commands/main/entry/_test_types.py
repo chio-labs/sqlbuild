@@ -24,6 +24,7 @@ class MainTestCase:
     expected_column_lineage_mode: ColumnLineageMode = ColumnLineageMode.RICH
     expected_scenario_selectors: tuple[str, ...] = ()
     expected_dbt_args: tuple[str, ...] = ()
+    expected_vars: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)

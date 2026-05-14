@@ -30,7 +30,7 @@ class MaterializationContext:
     existing_relation: RelationInfo | None
     run_id: str
     environment: str
-    vars: dict[str, str]
+    vars: dict[str, object]
     unique_key: tuple[str, ...]
     declared_columns: tuple[ColumnInfo, ...]
     is_first_run: bool

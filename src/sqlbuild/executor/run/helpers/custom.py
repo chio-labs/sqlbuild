@@ -39,7 +39,7 @@ def execute_custom_entry(
     run_id: str,
     query_change_tracking: bool,
     environment: str,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
     existing_relation: RelationInfo | None,
     on_progress: Callable[[str], None] | None = None,
 ) -> ModelExecutionResult:

@@ -99,7 +99,7 @@ def run_custom_entry(
     model_targets: dict[str, CompiledRelationTarget] | None = None,
     existing_relation: RelationInfo | None = None,
     environment: str = "test",
-    effective_vars: dict[str, str] | None = None,
+    effective_vars: dict[str, object] | None = None,
 ) -> ModelExecutionResult:
     """Execute a custom materialization lifecycle with full control over parameters."""
 

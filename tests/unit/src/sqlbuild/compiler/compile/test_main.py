@@ -1052,15 +1052,19 @@ schema = "preserve"
         expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
-        description="expands macros in model query and hook sql strings",
+        description="expands macros in model query and sql interpolation in hook strings",
         repo_files=base_repo_files()
         | {
             "macros/common.py": """
-def project_columns() -> str:
-    return "order_id, customer_id"
+def project_columns(ctx) -> str:
+    optional_suffix = "" if ctx.vars["optional_suffix"] is None else ctx.vars["optional_suffix"]
+    return (
+        "order_id, customer_id, "
+        f"'{ctx.vars['run_label']}' AS label, "
+        f"'{ctx.vars['grants']['role']}' AS role, "
+        f"'{optional_suffix}' AS suffix"
+    )
 
-def grant_target(target_name: str) -> str:
-    return f"GRANT SELECT ON {target_name} TO analyst_role"
 """.strip()
             + "\n",
             "sqlbuild_project.toml": """
@@ -1083,7 +1087,7 @@ database = "analytics"
             "models/staging/orders.sql": """
 MODEL (
   alias orders_dev,
-  post_hook ['@grant_target(\\'${CTX:target.qualified}\\')'],
+  post_hook ['GRANT SELECT ON @@CTX:target.qualified TO analyst_role'],
 );
 
 select @project_columns() from __source("raw_orders")
@@ -1094,7 +1098,8 @@ TEST ();
 
 WITH
 __source__raw_orders AS (
-  SELECT @project_columns() FROM raw_orders
+  SELECT @project_columns()
+  FROM raw_orders
 ),
 __expected__orders AS (
   SELECT @project_columns()
@@ -1116,7 +1121,11 @@ sources:
             + "\n",
         },
         selected_environment=None,
-        cli_vars=None,
+        cli_vars={
+            "run_label": "cli_macro",
+            "grants": {"role": "analyst"},
+            "optional_suffix": None,
+        },
         run_id="run_123",
         expected_model_schema_names=(None,),
         expected_model_config_values=(
@@ -1134,10 +1143,11 @@ sources:
             """
 WITH
 __source__raw_orders AS (
-  SELECT order_id, customer_id FROM raw_orders
+  SELECT order_id, customer_id, 'cli_macro' AS label, 'analyst' AS role, '' AS suffix
+  FROM raw_orders
 ),
 __expected__orders AS (
-  SELECT order_id, customer_id
+  SELECT order_id, customer_id, 'cli_macro' AS label, 'analyst' AS role, '' AS suffix
 )
 SELECT 1
 """.strip(),
@@ -1147,11 +1157,21 @@ SELECT 1
         expected_test_mock_source_names=(("raw_orders",),),
         expected_test_mock_seed_names=((),),
         expected_test_expected_model_names=(("orders",),),
-        expected_audit_sql_bodies=('SELECT order_id, customer_id FROM __source("raw_orders")',),
+        expected_audit_sql_bodies=(
+            "SELECT order_id, customer_id, 'cli_macro' AS label, 'analyst' AS role, "
+            "'' AS suffix FROM __source(\"raw_orders\")",
+        ),
         expected_effective_environment_name="dev",
         expected_effective_connection={},
-        expected_effective_vars={},
-        expected_model_query_sqls=('select order_id, customer_id from __source("raw_orders")',),
+        expected_effective_vars={
+            "run_label": "cli_macro",
+            "grants": {"role": "analyst"},
+            "optional_suffix": None,
+        },
+        expected_model_query_sqls=(
+            "select order_id, customer_id, 'cli_macro' AS label, 'analyst' AS role, "
+            "'' AS suffix from __source(\"raw_orders\")",
+        ),
         expected_model_references=((("source", "raw_orders"),),),
         expected_audit_references=((("source", "raw_orders"),),),
     ),
@@ -2949,6 +2969,19 @@ path = "${CTX:schema}"
         selected_environment=None,
         run_id=None,
         expected_error_fragment="SQL syntax error in post_hook for model 'broken'",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when hook sql uses config template syntax",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/broken.sql": (
+                "MODEL (post_hook 'GRANT SELECT ON ${CTX:target.qualified} TO analyst');\n\n"
+                "SELECT 1 AS id\n"
+            ),
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment=r"hook SQL .* does not allow \$\{\.\.\.\} templates",
     ),
     BuildCompileInputsErrorTestCase(
         description="raises when model header tags is a string instead of list",
