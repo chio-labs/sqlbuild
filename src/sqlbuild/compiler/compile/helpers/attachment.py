@@ -2872,7 +2872,7 @@ def resolve_audit_severity(
     default_severity: str | None,
     audit_label: str,
 ) -> str:
-    """Resolve effective audit severity from instance, then project default."""
+    """Resolve audit severity from instance, project default, or error fallback."""
 
     from sqlbuild.compiler.auditing.types import AuditSeverity
 
@@ -2892,10 +2892,7 @@ def resolve_audit_severity(
                 f"valid values: {', '.join(sorted(valid_values))}"
             )
         return default_severity
-    raise CompileInputError(
-        f"{audit_label}: severity is required; set it on the audit instance "
-        f"or set settings.default_audit_severity in sqlbuild_project.toml"
-    )
+    return AuditSeverity.ERROR
 
 
 def resolve_audit_run_scope(
