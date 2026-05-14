@@ -27,7 +27,7 @@ from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_proj
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.main.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
-from sqlbuild.shared.types import ExternalReferenceResolver
+from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.project import EnvironmentConfig, resolve_effective_adapter_name
 
 
@@ -46,7 +46,7 @@ def run_compile_pipeline(
     on_connection_complete: Callable[[int, float], None] | None = None,
     on_connection_error: Callable[[int, float], None] | None = None,
     on_progress: Callable[[str], None] | None = None,
-    external_reference_resolver: ExternalReferenceResolver | None = None,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> CompilePipelineResult:
     """Run compile inputs, assembly, planning, and manifest generation."""
 
@@ -78,7 +78,7 @@ def run_compile_pipeline(
             cursor_overrides=cursor_overrides,
             full_refresh=full_refresh,
             on_progress=on_progress,
-            external_reference_resolver=external_reference_resolver,
+            external_sql_reference_resolver=external_sql_reference_resolver,
         )
     finally:
         adapter.close(connection)
@@ -96,13 +96,13 @@ def _build_result(
     cursor_overrides: CursorOverrides | None = None,
     full_refresh: bool = False,
     on_progress: Callable[[str], None] | None = None,
-    external_reference_resolver: ExternalReferenceResolver | None = None,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> CompilePipelineResult:
     project: CompiledProject = build_compiled_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         no_sql_validation=no_sql_validation,
-        external_reference_resolver=external_reference_resolver,
+        external_sql_reference_resolver=external_sql_reference_resolver,
     )
 
     deferred_targets: dict[str, CompiledRelationTarget] | None = None

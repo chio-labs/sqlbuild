@@ -106,7 +106,7 @@ def plan_dbt_interop_from_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         no_sql_validation=no_sql_validation,
-        external_reference_resolver=DbtCompileReferenceResolver(dbt_manifest=manifest),
+        external_sql_reference_resolver=DbtCompileReferenceResolver(dbt_manifest=manifest),
     )
     _report_progress(
         on_progress,

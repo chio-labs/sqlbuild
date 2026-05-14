@@ -17,7 +17,7 @@ from sqlbuild.cli.commands.main.shared.helpers.connection import (
     resolve_environment_connection_config,
 )
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
-    resolve_external_reference_resolver,
+    resolve_external_sql_reference_resolver,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -79,7 +79,7 @@ def run_clone(
             select=select,
             exclude=exclude,
             target_connection=target_connection,
-            external_reference_resolver=resolve_external_reference_resolver(
+            external_sql_reference_resolver=resolve_external_sql_reference_resolver(
                 project_dir=effective_project_dir,
                 discovered_inputs=discovered_inputs,
             ),

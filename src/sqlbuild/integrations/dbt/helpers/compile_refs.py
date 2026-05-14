@@ -14,7 +14,7 @@ from sqlbuild.integrations.dbt.helpers.manifest import (
     resolve_dbt_manifest_model,
 )
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
-from sqlbuild.shared.types import ExternalReferenceResolver
+from sqlbuild.shared.types import ExternalSqlReferenceResolver
 
 _DBT_REF_PATTERN: re.Pattern[str] = re.compile(r'__dbt_ref\(\s*"([^"]+)"\s*(?:,\s*"([^"]+)"\s*)?\)')
 
@@ -37,7 +37,7 @@ class DbtCompileReferenceResolver:
         ref_kind: str,
         ref_name: str,
         ref_package: str | None,
-        owner_relative_path: Path,
+        owner_relative_sql_path: Path,
     ) -> None:
         validate_compile_dbt_model_reference(
             reference=CompileSqlReference(
@@ -45,7 +45,7 @@ class DbtCompileReferenceResolver:
                 ref_name=ref_name,
                 ref_package=ref_package,
             ),
-            model_relative_path=owner_relative_path,
+            model_relative_path=owner_relative_sql_path,
             dbt_manifest=self._dbt_manifest,
         )
 
@@ -67,9 +67,9 @@ class DbtCompileReferenceResolver:
         ).relation_name
 
 
-def build_compile_external_reference_resolver(
+def build_compile_external_sql_reference_resolver(
     *, manifest_contents: str | None
-) -> ExternalReferenceResolver | None:
+) -> ExternalSqlReferenceResolver | None:
     """Build a compile-time external reference resolver from dbt manifest contents."""
 
     if manifest_contents is None:

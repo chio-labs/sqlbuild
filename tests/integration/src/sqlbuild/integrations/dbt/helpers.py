@@ -5,7 +5,7 @@ from pathlib import Path
 from sqlbuild.integrations.dbt.main.build_compile_reference_resolver import (
     build_compile_reference_resolver,
 )
-from sqlbuild.shared.types import ExternalReferenceResolver
+from sqlbuild.shared.types import ExternalSqlReferenceResolver
 
 
 def build_sqlbuild_project_with_manifest(
@@ -32,7 +32,9 @@ def build_sqlbuild_project_with_manifest(
     return project_dir
 
 
-def build_external_reference_resolver(*, manifest_source: Path) -> ExternalReferenceResolver | None:
+def build_external_sql_reference_resolver(
+    *, manifest_source: Path
+) -> ExternalSqlReferenceResolver | None:
     """Build a dbt-backed resolver for attached manifest integration tests."""
 
     return build_compile_reference_resolver(

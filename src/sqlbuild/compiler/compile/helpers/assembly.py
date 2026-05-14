@@ -109,7 +109,7 @@ def assemble_compiled_project(
             for scenario_input in inputs.scenario_inputs
         ),
         diagnostics=inputs.diagnostics,
-        external_reference_resolver=inputs.external_reference_resolver,
+        external_sql_reference_resolver=inputs.external_sql_reference_resolver,
     )
 
 

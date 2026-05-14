@@ -11,7 +11,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
-    resolve_external_reference_resolver,
+    resolve_external_sql_reference_resolver,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -53,7 +53,7 @@ def run_seed(
         select=select,
         exclude=exclude,
         connection_config=connection_config,
-        external_reference_resolver=resolve_external_reference_resolver(
+        external_sql_reference_resolver=resolve_external_sql_reference_resolver(
             project_dir=effective_project_dir,
             discovered_inputs=discovered_inputs,
         ),

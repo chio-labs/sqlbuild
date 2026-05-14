@@ -14,7 +14,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
-from sqlbuild.shared.types import ExternalReferenceResolver
+from sqlbuild.shared.types import ExternalSqlReferenceResolver
 
 _REF_PATTERN: re.Pattern[str] = re.compile(r'__ref\("([^"]+)"\)')
 _SEED_PATTERN: re.Pattern[str] = re.compile(r'__seed\("([^"]+)"\)')
@@ -72,16 +72,16 @@ def resolve_ref_references(
 
 
 def resolve_dbt_ref_references(
-    *, query_sql: str, external_reference_resolver: ExternalReferenceResolver | None = None
+    *, query_sql: str, external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
 ) -> str:
     """Replace all __dbt_ref() calls with external relation names."""
 
     def _replace_dbt_ref(match: re.Match[str]) -> str:
-        if external_reference_resolver is None:
+        if external_sql_reference_resolver is None:
             return match.group(0)
         first_arg: str = match.group(1)
         second_arg: str | None = match.group(2)
-        relation_name: str | None = external_reference_resolver.resolve_reference(
+        relation_name: str | None = external_sql_reference_resolver.resolve_reference(
             ref_kind="dbt_ref",
             ref_package=first_arg if second_arg is not None else None,
             ref_name=second_arg if second_arg is not None else first_arg,
