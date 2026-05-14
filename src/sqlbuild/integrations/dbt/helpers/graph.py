@@ -8,7 +8,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompileSqlReference,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType, SqlReferenceKind
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.integrations.dbt.helpers.manifest import resolve_dbt_manifest_model
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
@@ -16,6 +16,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraphKey,
 )
 from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtCombinedGraphResourceType
+from sqlbuild.shared.types import SqlReferenceKind
 
 
 def build_dbt_combined_graph(

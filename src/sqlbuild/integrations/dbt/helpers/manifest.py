@@ -8,6 +8,7 @@ from typing import Any, cast
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
+from sqlbuild.shared.types import SqlReferenceKind
 
 
 def load_dbt_manifest_index(*, manifest_path: Path) -> DbtManifestIndex:
@@ -76,8 +77,8 @@ def resolve_dbt_manifest_model(
                 f"dbt model '{package_name}.{name}' was not found in manifest",
                 code="C212",
                 help=(
-                    "Check the __dbt_ref(...) package/name or run dbt compile to refresh "
-                    "manifest.json."
+                    f"Check the {SqlReferenceKind.DBT_REF.placeholder_call()} package/name "
+                    "or run dbt compile to refresh manifest.json."
                 ),
             )
         return model
@@ -87,14 +88,20 @@ def resolve_dbt_manifest_model(
         raise CompileInputError(
             f"dbt model '{name}' was not found in manifest",
             code="C212",
-            help="Check the __dbt_ref(...) name or run dbt compile to refresh manifest.json.",
+            help=(
+                f"Check the {SqlReferenceKind.DBT_REF.placeholder_call()} name or run dbt "
+                "compile to refresh manifest.json."
+            ),
         )
     if len(matches) > 1:
         packages: str = ", ".join(sorted(model.package_name for model in matches))
         raise CompileInputError(
             f"dbt model '{name}' is ambiguous across packages: {packages}",
             code="C213",
-            help=f'Use __dbt_ref("package_name", "{name}") to choose one dbt model.',
+            help=(
+                f"Use {SqlReferenceKind.DBT_REF.example_call('package_name', name)} to "
+                "choose one dbt model."
+            ),
         )
     return matches[0]
 

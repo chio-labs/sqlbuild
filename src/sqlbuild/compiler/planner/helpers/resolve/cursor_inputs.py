@@ -7,7 +7,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationTarget,
     CompileSqlReference,
 )
-from sqlbuild.compiler.compile.types import SqlReferenceKind
+from sqlbuild.shared.types import SqlReferenceKind
 
 
 def has_model_backed_cursor_inputs(

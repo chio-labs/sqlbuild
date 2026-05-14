@@ -8,15 +8,18 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileSqlReference
-from sqlbuild.compiler.compile.types import SqlReferenceKind
 from sqlbuild.integrations.dbt.helpers.manifest import (
     build_dbt_manifest_index,
     resolve_dbt_manifest_model,
 )
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.shared.helpers.sql_reference_patterns import reference_call_prefix_pattern_text
+from sqlbuild.shared.types import ExternalSqlReferenceResolver, SqlReferenceKind
 
-_DBT_REF_PATTERN: re.Pattern[str] = re.compile(r'__dbt_ref\(\s*"([^"]+)"\s*(?:,\s*"([^"]+)"\s*)?\)')
+_DBT_REF_PATTERN: re.Pattern[str] = re.compile(
+    rf'{reference_call_prefix_pattern_text(SqlReferenceKind.DBT_REF)}\s*"([^"]+)"\s*'
+    r'(?:,\s*"([^"]+)"\s*)?\)'
+)
 
 
 class DbtCompileReferenceResolver:
@@ -127,8 +130,9 @@ def validate_compile_dbt_model_reference(
         return
     if dbt_manifest is None:
         raise CompileInputError(
-            f"Model file {model_relative_path} uses __dbt_ref('{reference.ref_name}') "
-            "but no dbt manifest was found",
+            f"Model file {model_relative_path} uses "
+            f"{SqlReferenceKind.DBT_REF.example_call(reference.ref_name)} but no dbt "
+            "manifest was found",
             code="C214",
             help=(
                 "Run dbt compile or configure dbt target_path so SQLBuild can read manifest.json."

@@ -9,9 +9,11 @@ from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.compiler.shared.helpers.sources import render_source_relation
+from sqlbuild.shared.helpers.sql_reference_patterns import quoted_reference_call_pattern
+from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 
-_SOURCE_PATTERN: re.Pattern[str] = re.compile(r'__source\("([^"]+)"\)')
+_SOURCE_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SOURCE)
 
 
 def resolve_source_references(

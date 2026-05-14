@@ -14,11 +14,12 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     CompileSqlReference,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType, SqlReferenceKind
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.helpers.resolve.resolve import resolve_model_sql
 from sqlbuild.compiler.planner.models import BackfillResult, WarehouseSnapshot
 from sqlbuild.compiler.planner.types import BackfillAction
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
+from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.source import SourceEntry
 
 
