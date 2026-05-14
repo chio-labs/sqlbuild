@@ -38,9 +38,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditFile,
     DiscoveredProjectInputs,
 )
-from sqlbuild.integrations.dbt.main.build_compile_reference_resolver import (
-    build_compile_reference_resolver,
-)
 from sqlbuild.shared.types import ExternalReferenceResolver
 from sqlbuild.spec.models.project import (
     EnvironmentConfig,
@@ -57,6 +54,7 @@ def build_compile_inputs(
     run_id: str | None = None,
     no_sql_validation: bool = False,
     python_functions_inherit_default_namespace: bool = True,
+    external_reference_resolver: ExternalReferenceResolver | None = None,
 ) -> CompileProjectInputs:
     """Attach discovered metadata into the first compile input snapshot."""
 
@@ -94,16 +92,6 @@ def build_compile_inputs(
     )
     resolved_run_id: str = resolve_run_id(selected_run_id=run_id)
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
-    external_reference_resolver: ExternalReferenceResolver | None = (
-        build_compile_reference_resolver(
-            manifest_contents=(
-                None
-                if discovered_inputs.dbt_manifest_file is None
-                else discovered_inputs.dbt_manifest_file.contents
-            )
-        )
-    )
-
     model_inputs: tuple[CompileModelInput, ...] = build_model_inputs(
         discovered_inputs,
         effective_vars=effective_vars,

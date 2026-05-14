@@ -11,6 +11,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.shared.types import ExternalReferenceResolver
 
 
 def compile_project_for_diff_environment(
@@ -19,6 +20,7 @@ def compile_project_for_diff_environment(
     adapter: BaseAdapter,
     environment_name: str,
     no_sql_validation: bool,
+    external_reference_resolver: ExternalReferenceResolver | None = None,
 ) -> CompiledProject:
     """Compile a project for one diff environment."""
 
@@ -27,6 +29,7 @@ def compile_project_for_diff_environment(
         adapter=adapter,
         selected_environment=environment_name,
         no_sql_validation=no_sql_validation,
+        external_reference_resolver=external_reference_resolver,
     )
 
 

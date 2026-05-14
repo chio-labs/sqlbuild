@@ -4,6 +4,10 @@ from dataclasses import replace
 from pathlib import Path
 
 from sqlbuild.compiler.discovery.models import DiscoveredDbtManifestFile, DiscoveredProjectInputs
+from sqlbuild.integrations.dbt.main.build_compile_reference_resolver import (
+    build_compile_reference_resolver,
+)
+from sqlbuild.shared.types import ExternalReferenceResolver
 
 
 def build_sqlbuild_project_with_manifest(
@@ -42,6 +46,20 @@ def attach_dbt_manifest_file(
             relative_path=Path("manifest.json"),
             contents=manifest_source.read_text(encoding="utf-8"),
         ),
+    )
+
+
+def build_external_reference_resolver(
+    discovered_inputs: DiscoveredProjectInputs,
+) -> ExternalReferenceResolver | None:
+    """Build a dbt-backed resolver for attached manifest integration tests."""
+
+    return build_compile_reference_resolver(
+        manifest_contents=(
+            None
+            if discovered_inputs.dbt_manifest_file is None
+            else discovered_inputs.dbt_manifest_file.contents
+        )
     )
 
 

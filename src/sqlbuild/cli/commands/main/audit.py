@@ -11,6 +11,9 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
+from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
+    resolve_external_reference_resolver,
+)
 from sqlbuild.cli.commands.main.shared.helpers.nested_progress import NestedCommandProgressCallbacks
 from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
 from sqlbuild.cli.commands.main.shared.helpers.progress import format_build_header
@@ -82,6 +85,9 @@ def run_audit(
         on_connection_complete=connection_progress.on_connection_complete,
         on_connection_error=connection_progress.on_connection_error,
         on_progress=planning_progress.on_progress,
+        external_reference_resolver=resolve_external_reference_resolver(
+            discovered_inputs=discovered_inputs
+        ),
     )
 
     audit_count: int = len(pipeline_result.plan_output.audit_entries)
