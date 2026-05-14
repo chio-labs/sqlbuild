@@ -39,6 +39,12 @@ SEVERITY_VALID_TEST_CASES: list[ResolveAuditSeverityTestCase] = [
         expected_severity="warn",
     ),
     ResolveAuditSeverityTestCase(
+        description="falls back to error when instance and project default are None",
+        instance_severity=None,
+        default_severity=None,
+        expected_severity="error",
+    ),
+    ResolveAuditSeverityTestCase(
         description="instance warn is valid",
         instance_severity="warn",
         default_severity=None,
@@ -65,12 +71,6 @@ def test_given_valid_severity_inputs_when_resolving_then_returns_expected(
 
 
 SEVERITY_ERROR_TEST_CASES: list[ResolveAuditSeverityTestCase] = [
-    ResolveAuditSeverityTestCase(
-        description="no instance and no default raises compile error",
-        instance_severity=None,
-        default_severity=None,
-        expected_error_fragment="severity is required",
-    ),
     ResolveAuditSeverityTestCase(
         description="unknown instance severity raises compile error",
         instance_severity="critical",
