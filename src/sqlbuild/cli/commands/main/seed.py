@@ -54,7 +54,8 @@ def run_seed(
         exclude=exclude,
         connection_config=connection_config,
         external_reference_resolver=resolve_external_reference_resolver(
-            discovered_inputs=discovered_inputs
+            project_dir=effective_project_dir,
+            discovered_inputs=discovered_inputs,
         ),
     )
 

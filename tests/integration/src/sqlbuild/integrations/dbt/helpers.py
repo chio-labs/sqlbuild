@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from pathlib import Path
 
-from sqlbuild.compiler.discovery.models import DiscoveredDbtManifestFile, DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.main.build_compile_reference_resolver import (
     build_compile_reference_resolver,
 )
@@ -34,32 +32,11 @@ def build_sqlbuild_project_with_manifest(
     return project_dir
 
 
-def attach_dbt_manifest_file(
-    *, discovered_inputs: DiscoveredProjectInputs, manifest_source: Path
-) -> DiscoveredProjectInputs:
-    """Attach a dbt manifest explicitly for dbt interop integration tests."""
-
-    return replace(
-        discovered_inputs,
-        dbt_manifest_file=DiscoveredDbtManifestFile(
-            file_path=manifest_source,
-            relative_path=Path("manifest.json"),
-            contents=manifest_source.read_text(encoding="utf-8"),
-        ),
-    )
-
-
-def build_external_reference_resolver(
-    discovered_inputs: DiscoveredProjectInputs,
-) -> ExternalReferenceResolver | None:
+def build_external_reference_resolver(*, manifest_source: Path) -> ExternalReferenceResolver | None:
     """Build a dbt-backed resolver for attached manifest integration tests."""
 
     return build_compile_reference_resolver(
-        manifest_contents=(
-            None
-            if discovered_inputs.dbt_manifest_file is None
-            else discovered_inputs.dbt_manifest_file.contents
-        )
+        manifest_contents=manifest_source.read_text(encoding="utf-8")
     )
 
 

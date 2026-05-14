@@ -86,7 +86,8 @@ def run_diff(
         select=select,
         exclude=exclude,
         external_reference_resolver=resolve_external_reference_resolver(
-            discovered_inputs=discovered_inputs
+            project_dir=effective_project_dir,
+            discovered_inputs=discovered_inputs,
         ),
     )
     if not selected_names:

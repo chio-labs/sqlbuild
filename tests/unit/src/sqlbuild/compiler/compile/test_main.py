@@ -22,7 +22,6 @@ from sqlbuild.spec.models.project import (
     ProjectConfig,
 )
 from tests.unit.src.sqlbuild.compiler.compile._test_helpers import (
-    attach_dbt_manifest_file,
     base_repo_files,
     build_external_reference_resolver,
     expected_or_actual,
@@ -1995,17 +1994,14 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
 
     write_repo_files(tmp_path, test_case.repo_files)
 
-    discovered_inputs: DiscoveredProjectInputs = attach_dbt_manifest_file(
-        discovered_inputs=discover_project_inputs(project_dir=tmp_path),
-        project_dir=tmp_path,
-    )
+    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
     compile_inputs: CompileProjectInputs = build_compile_inputs(
         discovered_inputs,
         selected_environment=test_case.selected_environment,
         cli_vars=test_case.cli_vars,
         run_id=test_case.run_id,
         no_sql_validation=test_case.no_sql_validation,
-        external_reference_resolver=build_external_reference_resolver(discovered_inputs),
+        external_reference_resolver=build_external_reference_resolver(project_dir=tmp_path),
     )
 
     assert (
@@ -3050,17 +3046,14 @@ def test_given_attachment_conflicts_when_building_compile_inputs_then_it_raises_
 
     write_repo_files(tmp_path, test_case.repo_files)
 
-    discovered_inputs: DiscoveredProjectInputs = attach_dbt_manifest_file(
-        discovered_inputs=discover_project_inputs(project_dir=tmp_path),
-        project_dir=tmp_path,
-    )
+    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
 
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
         build_compile_inputs(
             discovered_inputs,
             selected_environment=test_case.selected_environment,
             run_id=test_case.run_id,
-            external_reference_resolver=build_external_reference_resolver(discovered_inputs),
+            external_reference_resolver=build_external_reference_resolver(project_dir=tmp_path),
         )
 
 

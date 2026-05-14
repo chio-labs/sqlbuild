@@ -80,7 +80,8 @@ def run_clone(
             exclude=exclude,
             target_connection=target_connection,
             external_reference_resolver=resolve_external_reference_resolver(
-                discovered_inputs=discovered_inputs
+                project_dir=effective_project_dir,
+                discovered_inputs=discovered_inputs,
             ),
         )
         target_model_entries: tuple[ModelPlanEntry, ...] = clone_pipeline.target_model_entries
