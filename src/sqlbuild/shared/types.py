@@ -27,7 +27,7 @@ class SqlReferenceKind(StrEnum):
         quoted_args: str = ", ".join(f'"{arg}"' for arg in args)
         return f"{self.function_name}({quoted_args})"
 
-    def placeholder_call(self, placeholder: str = "...") -> str:
+    def placeholder_call(self, placeholder: str = "") -> str:
         return f"{self.function_name}({placeholder})"
 
 

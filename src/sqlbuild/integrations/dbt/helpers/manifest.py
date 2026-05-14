@@ -77,7 +77,7 @@ def resolve_dbt_manifest_model(
                 f"dbt model '{package_name}.{name}' was not found in manifest",
                 code="C212",
                 help=(
-                    f"Check the {SqlReferenceKind.DBT_REF.placeholder_call()} package/name "
+                    f"Check the {SqlReferenceKind.DBT_REF.placeholder_call('...')} package/name "
                     "or run dbt compile to refresh manifest.json."
                 ),
             )
@@ -89,7 +89,7 @@ def resolve_dbt_manifest_model(
             f"dbt model '{name}' was not found in manifest",
             code="C212",
             help=(
-                f"Check the {SqlReferenceKind.DBT_REF.placeholder_call()} name or run dbt "
+                f"Check the {SqlReferenceKind.DBT_REF.placeholder_call('...')} name or run dbt "
                 "compile to refresh manifest.json."
             ),
         )

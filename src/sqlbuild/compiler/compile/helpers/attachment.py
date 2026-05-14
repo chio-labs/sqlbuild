@@ -1704,7 +1704,7 @@ def validate_model_references(
             if reference.ref_name in known_seed_names:
                 raise CompileInputError(
                     f"Model file {model_file.relative_path} references seed '{reference.ref_name}' "
-                    f"with {SqlReferenceKind.REF.placeholder_call()}. Use "
+                    f"with {SqlReferenceKind.REF.placeholder_call('...')}. Use "
                     f"{SqlReferenceKind.SEED.example_call(reference.ref_name)} for seed "
                     f"references; {SqlReferenceKind.REF.function_name} only resolves models."
                 )
@@ -1720,7 +1720,7 @@ def validate_model_references(
                 raise CompileInputError(
                     f"Model file {model_file.relative_path} references model "
                     f"'{reference.ref_name}' "
-                    f"with {SqlReferenceKind.SEED.placeholder_call()}. Use "
+                    f"with {SqlReferenceKind.SEED.placeholder_call('...')}. Use "
                     f"{SqlReferenceKind.REF.example_call(reference.ref_name)} for model "
                     "references."
                 )
@@ -1768,8 +1768,8 @@ def validate_model_references(
         ):
             raise CompileInputError(
                 f"Model file {model_file.relative_path} references table function "
-                f"'{reference.ref_name}' with {SqlReferenceKind.UDF.placeholder_call('')}; "
-                f"use {SqlReferenceKind.TABLE_FUNCTION.placeholder_call('')} in SQL contexts "
+                f"'{reference.ref_name}' with {SqlReferenceKind.UDF.placeholder_call()}; "
+                f"use {SqlReferenceKind.TABLE_FUNCTION.placeholder_call()} in SQL contexts "
                 "that support table-valued functions"
             )
         if reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION:
@@ -1801,7 +1801,7 @@ def validate_function_references(
             if reference.ref_name in known_seed_names:
                 raise CompileInputError(
                     f"SQL function file {function_file.relative_path} references seed "
-                    f"'{reference.ref_name}' with {SqlReferenceKind.REF.placeholder_call()}. "
+                    f"'{reference.ref_name}' with {SqlReferenceKind.REF.placeholder_call('...')}. "
                     f"Use {SqlReferenceKind.SEED.example_call(reference.ref_name)} "
                     f"for seed references; {SqlReferenceKind.REF.function_name} only "
                     "resolves models."
@@ -1847,8 +1847,8 @@ def validate_function_references(
         ):
             raise CompileInputError(
                 f"SQL function file {function_file.relative_path} references table function "
-                f"'{reference.ref_name}' with {SqlReferenceKind.UDF.placeholder_call('')}; "
-                f"use {SqlReferenceKind.TABLE_FUNCTION.placeholder_call('')}"
+                f"'{reference.ref_name}' with {SqlReferenceKind.UDF.placeholder_call()}; "
+                f"use {SqlReferenceKind.TABLE_FUNCTION.placeholder_call()}"
             )
         if (
             reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION
@@ -1857,8 +1857,8 @@ def validate_function_references(
             raise CompileInputError(
                 f"SQL function file {function_file.relative_path} references scalar function "
                 f"'{reference.ref_name}' with "
-                f"{SqlReferenceKind.TABLE_FUNCTION.placeholder_call('')}; "
-                f"use {SqlReferenceKind.UDF.placeholder_call('')} for scalar UDFs"
+                f"{SqlReferenceKind.TABLE_FUNCTION.placeholder_call()}; "
+                f"use {SqlReferenceKind.UDF.placeholder_call()} for scalar UDFs"
             )
 
 
@@ -1887,7 +1887,7 @@ def validate_audit_references(
             if reference.ref_name in known_seed_names:
                 raise CompileInputError(
                     f"Audit file {audit_file.relative_path} references seed '{reference.ref_name}' "
-                    f"with {SqlReferenceKind.REF.placeholder_call()}. Use "
+                    f"with {SqlReferenceKind.REF.placeholder_call('...')}. Use "
                     f"{SqlReferenceKind.SEED.example_call(reference.ref_name)} for seed "
                     f"references; {SqlReferenceKind.REF.function_name} only resolves models."
                 )
@@ -2960,7 +2960,7 @@ def validate_model_attached_audit_references(
     if attached_target_name not in ref_names:
         raise CompileInputError(
             f"{audit_label}: model-attached audit must reference the attached model "
-            f"'{attached_target_name}' via {SqlReferenceKind.REF.placeholder_call('')}"
+            f"'{attached_target_name}' via {SqlReferenceKind.REF.placeholder_call()}"
         )
 
 
