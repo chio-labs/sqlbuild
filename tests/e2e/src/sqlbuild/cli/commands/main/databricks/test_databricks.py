@@ -32,6 +32,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     assert_optional_local_replay_rows,
     build_real_warehouse_local_replay_project_files,
     build_real_warehouse_remote_scenario_project_files,
+    maybe_corrupt_scenario_snapshot_dialect,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     prepare_inline_project,
@@ -84,7 +85,9 @@ DATABRICKS_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES: list[DatabricksScenarioLocalRep
         description="reports databricks local transpilation failures as X607",
         scenario_name="local_transpile_error",
         model_sql=(
-            'MODEL (materialized table);\n\nSELECT *\nFROM __source("raw_events")\nQUALIFY\n'
+            "MODEL (materialized table);\n\n"
+            "SELECT customer_id, amount_cents\n"
+            'FROM __source("raw_events")\n'
         ),
         scenario_sql=(
             "SCENARIO ();\n\n"
@@ -104,6 +107,7 @@ DATABRICKS_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES: list[DatabricksScenarioLocalRep
             "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
         ),
         expected_return_code=1,
+        corrupt_capture_dialect=True,
     ),
     DatabricksScenarioLocalReplayE2ETestCase(
         description="reports databricks local DuckDB execution failures as X608",
@@ -236,6 +240,11 @@ def test_given_databricks_scenario_capture_when_replaying_locally_then_transpila
             project_dir=project_dir,
         )
         assert capture_result.returncode == 0, capture_result.stdout + capture_result.stderr
+        maybe_corrupt_scenario_snapshot_dialect(
+            project_dir=project_dir,
+            scenario_name=test_case.scenario_name,
+            enabled=test_case.corrupt_capture_dialect,
+        )
 
         replay_result: subprocess.CompletedProcess[str] = run_sqb(
             command=("--no-color", "scenario", "test", test_case.scenario_name, "--local"),
