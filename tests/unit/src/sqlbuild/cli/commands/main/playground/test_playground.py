@@ -115,3 +115,4 @@ def test_given_playground_command_when_running_then_it_prints_next_steps(
     for expected_fragment in test_case.expected_stdout_fragments:
         assert expected_fragment in captured.out
     assert (tmp_path / test_case.target_path / "sqlbuild_project.toml").is_file()
+    assert (tmp_path / test_case.target_path / ".agents/skills/sqlbuild/SKILL.md").is_file()

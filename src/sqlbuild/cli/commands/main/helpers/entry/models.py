@@ -70,6 +70,10 @@ class CliNamespace:
     scenario_max_snapshot_total_rows: int | None = None
     scenario_max_snapshot_bytes: int | None = None
     scenario_max_snapshot_total_bytes: int | None = None
+    skills_command: str | None = None
+    skills_global: bool = False
+    skills_target: list[str] = field(default_factory=list)
+    skills_force: bool = False
     select: list[str] = field(default_factory=list)
     exclude: list[str] = field(default_factory=list)
     dbt_command: str | None = None
@@ -204,6 +208,7 @@ class CliEntrypointHandlers:
     ]
     run_janitor: Callable[[Path | None, bool, bool, int | None], int]
     run_playground: Callable[[Path | None, str], int]
+    run_skills_update: Callable[[Path | None, bool, tuple[str, ...], bool], int]
     run_scenario: Callable[
         [
             Path | None,
