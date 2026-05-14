@@ -14,6 +14,7 @@ from sqlbuild.compiler.planner.helpers.resolve.refs import (
     resolve_table_function_references,
 )
 from sqlbuild.compiler.planner.models import CursorBounds
+from sqlbuild.integrations.dbt.helpers.compile_refs import DbtCompileReferenceResolver
 from sqlbuild.integrations.dbt.helpers.manifest import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
@@ -168,6 +169,7 @@ _DBT_MANIFEST: DbtManifestIndex = build_dbt_manifest_index(
         )
     )
 )
+_DBT_RESOLVER: DbtCompileReferenceResolver = DbtCompileReferenceResolver(dbt_manifest=_DBT_MANIFEST)
 
 
 @pytest.mark.parametrize(
@@ -261,7 +263,7 @@ def test_given_dbt_ref_when_resolving_then_returns_expected_sql(
 ) -> None:
     result: str = resolve_dbt_ref_references(
         query_sql=test_case.query_sql,
-        dbt_manifest=_DBT_MANIFEST,
+        external_reference_resolver=_DBT_RESOLVER,
     )
 
     assert result == test_case.expected_sql

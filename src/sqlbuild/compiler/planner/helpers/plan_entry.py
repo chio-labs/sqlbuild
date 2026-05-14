@@ -61,7 +61,7 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
 )
 from sqlbuild.compiler.shared.helpers.sources import render_source_relation
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
+from sqlbuild.shared.types import ExternalReferenceResolver
 from sqlbuild.spec.models.schema import SchemaColumn
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -89,7 +89,7 @@ def plan_model(
     start_cursor_override: str | None,
     end_cursor_override: str | None,
     backfill_override: BackfillResult | None = None,
-    dbt_manifest: DbtManifestIndex | None = None,
+    external_reference_resolver: ExternalReferenceResolver | None = None,
 ) -> tuple[ModelPlanEntry, tuple[PlanWarning, ...]]:
     """Build a plan entry and warnings for a single model."""
 
@@ -124,7 +124,7 @@ def plan_model(
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
         suppress_runtime_cursor_bounds=suppress_runtime_cursor_bounds,
-        dbt_manifest=dbt_manifest,
+        external_reference_resolver=external_reference_resolver,
     )
 
     action: PlanAction

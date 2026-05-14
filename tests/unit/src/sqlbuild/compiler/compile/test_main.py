@@ -2401,7 +2401,8 @@ SELECT * FROM __dbt_ref("stg_orders")
         selected_environment=None,
         run_id=None,
         expected_error_fragment=(
-            r"Audit file audits/orders\.sql may not use __dbt_ref\('stg_orders'\) right now"
+            r"Audit file audits/orders\.sql may not use __dbt_ref\('stg_orders'\); "
+            "audit dbt model checks belong in dbt"
         ),
     ),
     BuildCompileInputsErrorTestCase(

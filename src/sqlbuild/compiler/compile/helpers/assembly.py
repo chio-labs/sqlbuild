@@ -109,7 +109,7 @@ def assemble_compiled_project(
             for scenario_input in inputs.scenario_inputs
         ),
         diagnostics=inputs.diagnostics,
-        dbt_manifest=inputs.dbt_manifest,
+        external_reference_resolver=inputs.external_reference_resolver,
     )
 
 

@@ -13,9 +13,8 @@ from sqlbuild.compiler.compile.models import (
     CompiledSeed,
 )
 from sqlbuild.compiler.planner.models import CursorBounds
-from sqlbuild.integrations.dbt.main.resolve_manifest_model import resolve_manifest_model
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
+from sqlbuild.shared.types import ExternalReferenceResolver
 
 _REF_PATTERN: re.Pattern[str] = re.compile(r'__ref\("([^"]+)"\)')
 _SEED_PATTERN: re.Pattern[str] = re.compile(r'__seed\("([^"]+)"\)')
@@ -73,21 +72,21 @@ def resolve_ref_references(
 
 
 def resolve_dbt_ref_references(
-    *, query_sql: str, dbt_manifest: DbtManifestIndex | None = None
+    *, query_sql: str, external_reference_resolver: ExternalReferenceResolver | None = None
 ) -> str:
-    """Replace all __dbt_ref() calls with dbt manifest relation names."""
+    """Replace all __dbt_ref() calls with external relation names."""
 
     def _replace_dbt_ref(match: re.Match[str]) -> str:
-        if dbt_manifest is None:
+        if external_reference_resolver is None:
             return match.group(0)
         first_arg: str = match.group(1)
         second_arg: str | None = match.group(2)
-        model: DbtManifestModel = resolve_manifest_model(
-            manifest=dbt_manifest,
-            package_name=first_arg if second_arg is not None else None,
-            name=second_arg if second_arg is not None else first_arg,
+        relation_name: str | None = external_reference_resolver.resolve_reference(
+            ref_kind="dbt_ref",
+            ref_package=first_arg if second_arg is not None else None,
+            ref_name=second_arg if second_arg is not None else first_arg,
         )
-        return model.relation_name
+        return match.group(0) if relation_name is None else relation_name
 
     return _DBT_REF_PATTERN.sub(_replace_dbt_ref, query_sql)
 
