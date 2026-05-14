@@ -14,7 +14,6 @@ from tests.integration.src.sqlbuild.integrations.dbt._test_types import (
     RealDbtManifestCompileTestCase,
 )
 from tests.integration.src.sqlbuild.integrations.dbt.helpers import (
-    attach_dbt_manifest_file,
     build_external_reference_resolver,
 )
 
@@ -63,13 +62,15 @@ def test_given_real_dbt_manifest_when_compiling_sqlbuild_then_preserves_dbt_ref(
         encoding="utf-8",
     )
 
-    discovered_inputs: DiscoveredProjectInputs = attach_dbt_manifest_file(
-        discovered_inputs=discover_project_inputs(project_dir=sqlbuild_project_dir),
-        manifest_source=dbt_project_dir / "target/manifest.json",
+    manifest_source: Path = dbt_project_dir / "target/manifest.json"
+    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
+        project_dir=sqlbuild_project_dir
     )
     compile_inputs: CompileProjectInputs = build_compile_inputs(
         discovered_inputs,
-        external_reference_resolver=build_external_reference_resolver(discovered_inputs),
+        external_reference_resolver=build_external_reference_resolver(
+            manifest_source=manifest_source
+        ),
     )
 
     assert compile_inputs.model_inputs[0].query_sql == test_case.expected_compiled_sql

@@ -137,15 +137,6 @@ class DiscoveredMacroFile:
 
 
 @dataclass(frozen=True)
-class DiscoveredDbtManifestFile:
-    """A discovered dbt manifest file and its raw JSON contents."""
-
-    file_path: Path
-    relative_path: Path
-    contents: str
-
-
-@dataclass(frozen=True)
 class DiscoveredAdapterFile:
     """A detected project adapter Python file."""
 
@@ -179,5 +170,4 @@ class DiscoveredProjectInputs:
     audit_files: tuple[DiscoveredAuditFile, ...] = field(default_factory=tuple)
     macro_files: tuple[DiscoveredMacroFile, ...] = field(default_factory=tuple)
     materialization_files: tuple[DiscoveredMaterializationFile, ...] = field(default_factory=tuple)
-    dbt_manifest_file: DiscoveredDbtManifestFile | None = None
     adapter_file: DiscoveredAdapterFile | None = None

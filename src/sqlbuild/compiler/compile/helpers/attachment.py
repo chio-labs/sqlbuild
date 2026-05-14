@@ -450,7 +450,6 @@ def build_sql_function_inputs(
             known_source_names=known_source_names,
             known_function_names=known_function_names,
             known_table_function_names=known_table_function_names,
-            has_dbt_manifest=discovered_inputs.dbt_manifest_file is not None,
         )
         function_inputs.append(
             CompileSqlFunctionInput(
@@ -1778,7 +1777,6 @@ def validate_function_references(
     known_source_names: set[str],
     known_function_names: set[str],
     known_table_function_names: set[str],
-    has_dbt_manifest: bool,
 ) -> None:
     """Validate extracted SQL function refs against discovered project inputs."""
 

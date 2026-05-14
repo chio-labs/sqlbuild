@@ -128,7 +128,8 @@ def run_scenario_capture(
         on_connection_error=connection_progress.on_connection_error,
         on_progress=planning_progress.on_progress,
         external_reference_resolver=resolve_external_reference_resolver(
-            discovered_inputs=discovered_inputs
+            project_dir=effective_project_dir,
+            discovered_inputs=discovered_inputs,
         ),
     )
     scenarios: tuple[CompiledSqlScenario, ...] = select_scenarios(
