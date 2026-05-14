@@ -5,7 +5,10 @@ from __future__ import annotations
 from sqlbuild.compiler.compile.constants import (
     ASSERT_TEST_CTE_PREFIX,
     DBT_REF_TEST_CTE_PREFIX,
+    DEFAULT_SQL_TEST_MODE,
     EXPECTED_TEST_CTE_PREFIX,
+    MACRO_ACTUAL_TEST_CTE_NAME,
+    MACRO_EXPECTED_TEST_CTE_NAME,
     MACRO_TEST_CTE_PREFIX,
     REF_TEST_CTE_PREFIX,
     RESERVED_SQL_TEST_CTE_NAMES,
@@ -13,6 +16,7 @@ from sqlbuild.compiler.compile.constants import (
     SOURCE_TEST_CTE_PREFIX,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.helpers.macros import find_macro_call_names
 from sqlbuild.compiler.compile.helpers.sql_scanning import (
     find_matching_paren,
     is_identifier_character,
@@ -25,11 +29,14 @@ from sqlbuild.compiler.compile.helpers.sqlglot_tests import (
     extract_expected_branch_column_names_with_sqlglot,
 )
 from sqlbuild.compiler.compile.models import CompileSqlTestCte, CompileSqlTestCtes
+from sqlbuild.compiler.compile.types import SqlTestMode
 
 _CONTEXT: str = "SQL test"
 
 
-def extract_sql_test_ctes(*, sql: str, file_label: str) -> CompileSqlTestCtes:
+def extract_sql_test_ctes(
+    *, sql: str, file_label: str, mode: SqlTestMode = DEFAULT_SQL_TEST_MODE
+) -> CompileSqlTestCtes:
     """Extract top-level SQL-native test mock and expected CTEs."""
 
     index: int = _skip_ignorable(sql=sql, start=0)
@@ -70,10 +77,70 @@ def extract_sql_test_ctes(*, sql: str, file_label: str) -> CompileSqlTestCtes:
         break
 
     _validate_ceremonial_select(sql=sql, start=index, file_label=file_label)
-    return _classify_sql_test_ctes(ctes=tuple(ctes), file_label=file_label)
+    return _classify_sql_test_ctes(ctes=tuple(ctes), file_label=file_label, mode=mode)
 
 
 def _classify_sql_test_ctes(
+    *, ctes: tuple[CompileSqlTestCte, ...], file_label: str, mode: SqlTestMode
+) -> CompileSqlTestCtes:
+    match mode:
+        case SqlTestMode.MODEL:
+            return _classify_model_sql_test_ctes(ctes=ctes, file_label=file_label)
+        case SqlTestMode.MACRO:
+            return _classify_macro_sql_test_ctes(ctes=ctes, file_label=file_label)
+        case SqlTestMode.UDF | SqlTestMode.TABLE_FN:
+            raise CompileInputError(
+                f"SQL test '{file_label}' mode '{mode.value}' is reserved but not implemented yet"
+            )
+        case _:
+            raise CompileInputError(f"SQL test '{file_label}' has unsupported mode '{mode}'")
+
+
+def _classify_macro_sql_test_ctes(
+    *, ctes: tuple[CompileSqlTestCte, ...], file_label: str
+) -> CompileSqlTestCtes:
+    authored_ctes: list[CompileSqlTestCte] = []
+    macro_actual_cte: CompileSqlTestCte | None = None
+    macro_expected_cte: CompileSqlTestCte | None = None
+
+    cte: CompileSqlTestCte
+    for cte in ctes:
+        if cte.name == MACRO_ACTUAL_TEST_CTE_NAME:
+            if macro_actual_cte is not None:
+                raise CompileInputError(
+                    f"SQL test '{file_label}' mode 'macro' must define exactly one "
+                    f"{MACRO_ACTUAL_TEST_CTE_NAME} CTE"
+                )
+            macro_actual_cte = cte
+            continue
+        if cte.name == MACRO_EXPECTED_TEST_CTE_NAME:
+            if macro_expected_cte is not None:
+                raise CompileInputError(
+                    f"SQL test '{file_label}' mode 'macro' must define exactly one "
+                    f"{MACRO_EXPECTED_TEST_CTE_NAME} CTE"
+                )
+            _validate_expected_cte_query(cte=cte, file_label=file_label, label=cte.name)
+            macro_expected_cte = cte
+            continue
+        if _is_model_mode_cte(cte.name):
+            raise CompileInputError(
+                f"SQL test '{file_label}' is mode 'macro' but defines model-test CTE '{cte.name}'"
+            )
+        if cte.name in RESERVED_SQL_TEST_CTE_NAMES:
+            raise CompileInputError(
+                f"SQL test '{file_label}' uses reserved helper CTE name '{cte.name}'"
+            )
+        authored_ctes.append(cte)
+
+    return _validate_macro_test_ctes(
+        authored_ctes=tuple(authored_ctes),
+        macro_actual_cte=macro_actual_cte,
+        macro_expected_cte=macro_expected_cte,
+        file_label=file_label,
+    )
+
+
+def _classify_model_sql_test_ctes(
     *, ctes: tuple[CompileSqlTestCte, ...], file_label: str
 ) -> CompileSqlTestCtes:
     authored_ctes: list[CompileSqlTestCte] = []
@@ -88,6 +155,11 @@ def _classify_sql_test_ctes(
 
     cte: CompileSqlTestCte
     for cte in ctes:
+        if cte.name in {MACRO_ACTUAL_TEST_CTE_NAME, MACRO_EXPECTED_TEST_CTE_NAME}:
+            raise CompileInputError(
+                f"SQL test '{file_label}' is mode '{DEFAULT_SQL_TEST_MODE.value}' but defines "
+                f"macro-test CTE '{cte.name}'; use TEST (mode: {SqlTestMode.MACRO.value})"
+            )
         if cte.name.startswith(MACRO_TEST_CTE_PREFIX):
             macro_name: str = _require_prefixed_name(
                 cte_name=cte.name,
@@ -169,17 +241,19 @@ def _classify_sql_test_ctes(
             )
         authored_ctes.append(cte)
 
-    if (
-        not mock_model_names
-        and not mock_source_names
-        and not mock_seed_names
-        and not mock_dbt_ref_names
-    ):
+    mock_target_names: tuple[str, ...] = (
+        *mock_model_names,
+        *mock_source_names,
+        *mock_seed_names,
+        *mock_dbt_ref_names,
+    )
+    if not mock_target_names:
         raise CompileInputError(
             f"SQL test '{file_label}' must define at least one __ref__*, __source__*, "
             "__seed__*, or __dbt_ref__* mock CTE"
         )
-    if not expected_model_names and not assertion_names:
+    check_names: tuple[str, ...] = (*expected_model_names, *assertion_names)
+    if not check_names:
         raise CompileInputError(
             f"SQL test '{file_label}' must define at least one __expected__<model> or "
             "__assert__<assertion> CTE"
@@ -194,6 +268,54 @@ def _classify_sql_test_ctes(
         expected_model_names=tuple(expected_model_names),
         assertion_ctes=tuple(assertion_ctes),
         assertion_names=tuple(assertion_names),
+    )
+
+
+def _is_model_mode_cte(cte_name: str) -> bool:
+    return cte_name.startswith(
+        (
+            MACRO_TEST_CTE_PREFIX,
+            REF_TEST_CTE_PREFIX,
+            SOURCE_TEST_CTE_PREFIX,
+            SEED_TEST_CTE_PREFIX,
+            DBT_REF_TEST_CTE_PREFIX,
+            EXPECTED_TEST_CTE_PREFIX,
+            ASSERT_TEST_CTE_PREFIX,
+        )
+    )
+
+
+def _validate_macro_test_ctes(
+    *,
+    authored_ctes: tuple[CompileSqlTestCte, ...],
+    macro_actual_cte: CompileSqlTestCte | None,
+    macro_expected_cte: CompileSqlTestCte | None,
+    file_label: str,
+) -> CompileSqlTestCtes:
+    if macro_actual_cte is None or macro_expected_cte is None:
+        raise CompileInputError(
+            f"SQL test '{file_label}' mode 'macro' must define exactly one "
+            f"{MACRO_ACTUAL_TEST_CTE_NAME} CTE and exactly one "
+            f"{MACRO_EXPECTED_TEST_CTE_NAME} CTE"
+        )
+    helper_cte: CompileSqlTestCte
+    for helper_cte in authored_ctes:
+        macro_names: tuple[str, ...] = find_macro_call_names(helper_cte.sql_body)
+        if macro_names:
+            raise CompileInputError(
+                f"SQL test '{file_label}' mode 'macro' helper CTE '{helper_cte.name}' "
+                "must not call macros; call macros only in __macro_actual__"
+            )
+    expected_macro_names: tuple[str, ...] = find_macro_call_names(macro_expected_cte.sql_body)
+    if expected_macro_names:
+        raise CompileInputError(
+            f"SQL test '{file_label}' mode 'macro' CTE {MACRO_EXPECTED_TEST_CTE_NAME} "
+            "must not call macros"
+        )
+    return CompileSqlTestCtes(
+        authored_ctes=authored_ctes,
+        macro_actual_cte=macro_actual_cte,
+        macro_expected_cte=macro_expected_cte,
     )
 
 
@@ -240,11 +362,11 @@ def _read_sql_string_literal(*, sql: str, start: int) -> tuple[str, int]:
     raise CompileInputError("SQL test macro mock has an unterminated string literal")
 
 
-def _validate_expected_cte_query(*, cte: CompileSqlTestCte, file_label: str) -> None:
+def _validate_expected_cte_query(
+    *, cte: CompileSqlTestCte, file_label: str, label: str = "__expected__<model>"
+) -> None:
     if _contains_select_star(cte.sql_body):
-        raise CompileInputError(
-            f"SQL test '{file_label}' must not use SELECT * in __expected__<model> CTEs"
-        )
+        raise CompileInputError(f"SQL test '{file_label}' must not use SELECT * in {label} CTEs")
     branch_column_names: tuple[tuple[str, ...], ...] = _extract_expected_branch_column_names(
         sql=cte.sql_body,
         file_label=file_label,

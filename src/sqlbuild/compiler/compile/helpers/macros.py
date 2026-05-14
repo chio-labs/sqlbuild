@@ -108,6 +108,25 @@ def expand_sql_macros(
     return "".join(rendered_sql_parts)
 
 
+def find_macro_call_names(sql: str) -> tuple[str, ...]:
+    """Return unique authored macro call names in encounter order."""
+
+    names: list[str] = []
+    seen: set[str] = set()
+    cursor: int = 0
+    while cursor < len(sql):
+        macro_start_index: int | None = _find_next_macro_start(sql=sql, start_index=cursor)
+        if macro_start_index is None:
+            break
+        macro_name: str = _parse_macro_name(sql=sql, call_start_index=macro_start_index)
+        if macro_name not in seen:
+            seen.add(macro_name)
+            names.append(macro_name)
+        opening_paren_index: int = _skip_whitespace(sql, macro_start_index + 1 + len(macro_name))
+        cursor = _find_matching_paren(sql=sql, opening_paren_index=opening_paren_index) + 1
+    return tuple(names)
+
+
 def _load_macro_module(*, macro_file: DiscoveredMacroFile) -> ModuleType:
     module_name: str = "sqlbuild_project_macro_" + "_".join(
         macro_file.relative_path.with_suffix("").parts

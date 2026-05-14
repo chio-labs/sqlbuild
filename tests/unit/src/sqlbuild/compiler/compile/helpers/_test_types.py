@@ -6,7 +6,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlReference,
     InferredColumn,
 )
-from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
+from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, SqlTestMode
 from sqlbuild.compiler.lineage.types import InferredNullability
 
 
@@ -39,6 +39,9 @@ class ExtractSqlTestCtesTestCase:
     expected_mock_dbt_ref_names: tuple[str, ...] = ()
     expected_assertion_names: tuple[str, ...] = ()
     expected_macro_mocks: dict[str, str] = field(default_factory=dict)
+    mode: SqlTestMode = SqlTestMode.MODEL
+    expected_macro_actual_cte_name: str | None = None
+    expected_macro_expected_cte_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -46,6 +49,7 @@ class ExtractSqlTestCtesErrorTestCase:
     description: str
     sql: str
     expected_error_fragment: str
+    mode: SqlTestMode = SqlTestMode.MODEL
 
 
 @dataclass(frozen=True)
@@ -135,6 +139,9 @@ class AssembleCompiledProjectTestCase:
     expected_test_names: tuple[str, ...]
     expected_test_scope_deps: tuple[tuple[CompiledObjectKey, ...], ...]
     expected_test_expected_model_names: tuple[tuple[str, ...], ...]
+    expected_model_macro_deps: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
+    expected_test_modes: tuple[str, ...] = field(default_factory=tuple)
+    expected_tested_macro_names: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     expected_seed_target_schemas: tuple[str | None, ...] = field(default_factory=tuple)
     expected_seed_target_databases: tuple[str | None, ...] = field(default_factory=tuple)
     expected_seed_target_qualified_names: tuple[str | None, ...] = field(default_factory=tuple)

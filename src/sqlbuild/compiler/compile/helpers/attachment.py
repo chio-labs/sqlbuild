@@ -20,6 +20,7 @@ from sqlbuild.compiler.compile.constants import (
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.helpers.macros import (
     expand_sql_macros,
+    find_macro_call_names,
     load_project_macros,
 )
 from sqlbuild.compiler.compile.helpers.model_config_validation import (
@@ -67,6 +68,7 @@ from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompileContextKey,
     FunctionLanguage,
+    SqlTestMode,
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
@@ -1058,6 +1060,19 @@ def build_test_inputs(
     for test_file in discovered_inputs.test_files:
         test_block: DiscoveredSqlTestBlock
         for test_block in test_file.blocks:
+            test_mode: SqlTestMode = test_block.mode
+            tested_macro_names: tuple[str, ...] = ()
+            if test_mode == SqlTestMode.MACRO:
+                raw_test_ctes: CompileSqlTestCtes = _validate_raw_macro_test_ctes(
+                    test_block=test_block,
+                    test_file=test_file,
+                    test_mode=test_mode,
+                )
+                tested_macro_names = _infer_tested_macro_names(
+                    raw_test_ctes=raw_test_ctes,
+                    test_file=test_file,
+                    loaded_macros=loaded_macros,
+                )
             expanded_sql_body: str = expand_authored_sql(
                 sql=test_block.sql_body,
                 file_path=test_file.file_path,
@@ -1068,6 +1083,7 @@ def build_test_inputs(
             test_ctes: CompileSqlTestCtes = extract_sql_test_ctes(
                 sql=expanded_sql_body,
                 file_label=str(test_file.relative_path),
+                mode=test_mode,
             )
             validate_test_ctes(
                 test_ctes=test_ctes,
@@ -1091,9 +1107,55 @@ def build_test_inputs(
                     expected_model_names=test_ctes.expected_model_names,
                     assertion_ctes=test_ctes.assertion_ctes,
                     assertion_names=test_ctes.assertion_names,
+                    mode=test_mode,
+                    macro_actual_cte=test_ctes.macro_actual_cte,
+                    macro_expected_cte=test_ctes.macro_expected_cte,
+                    tested_macro_names=tested_macro_names,
                 )
             )
     return tuple(test_inputs)
+
+
+def _validate_raw_macro_test_ctes(
+    *,
+    test_block: DiscoveredSqlTestBlock,
+    test_file: DiscoveredSqlTestFile,
+    test_mode: SqlTestMode,
+) -> CompileSqlTestCtes:
+    return extract_sql_test_ctes(
+        sql=test_block.sql_body,
+        file_label=str(test_file.relative_path),
+        mode=test_mode,
+    )
+
+
+def _infer_tested_macro_names(
+    *,
+    raw_test_ctes: CompileSqlTestCtes,
+    test_file: DiscoveredSqlTestFile,
+    loaded_macros: dict[str, LoadedMacro],
+) -> tuple[str, ...]:
+    if raw_test_ctes.macro_actual_cte is None:
+        raise CompileInputError(
+            f"SQL test file {test_file.relative_path} mode 'macro' must define exactly one "
+            "__macro_actual__ CTE and exactly one __macro_expected__ CTE"
+        )
+    tested_macro_names: tuple[str, ...] = find_macro_call_names(
+        raw_test_ctes.macro_actual_cte.sql_body
+    )
+    if not tested_macro_names:
+        raise CompileInputError(
+            f"SQL test file {test_file.relative_path} mode 'macro' must call at least one "
+            "macro in __macro_actual__"
+        )
+    tested_macro_name: str
+    for tested_macro_name in tested_macro_names:
+        if tested_macro_name not in loaded_macros:
+            raise CompileInputError(
+                f"SQL test file {test_file.relative_path} references unknown macro "
+                f"'@{tested_macro_name}'"
+            )
+    return tested_macro_names
 
 
 def build_scenario_inputs(
