@@ -79,7 +79,7 @@ def _validate_source_attached_audit(*, audit: CompiledAudit) -> None:
         if ref.ref_kind == SqlReferenceKind.REF:
             raise ValueError(
                 f"audit '{audit.name}': source-attached audit must not reference models "
-                f"via {SqlReferenceKind.REF.placeholder_call('')}; found "
+                f"via {SqlReferenceKind.REF.placeholder_call()}; found "
                 f"{SqlReferenceKind.REF.example_call(ref.ref_name)}"
             )
 

@@ -30,31 +30,31 @@ def assert_no_unresolved_sql_markers(*, sql: str, context: str) -> None:
     if _UNRESOLVED_REF_PATTERN.search(sql):
         raise _coded_value_error(
             f"{context} still contains unresolved "
-            f"{SqlReferenceKind.REF.placeholder_call('')} markers",
+            f"{SqlReferenceKind.REF.placeholder_call()} markers",
             code="R001",
         )
     if _UNRESOLVED_SEED_PATTERN.search(sql):
         raise _coded_value_error(
             f"{context} still contains unresolved "
-            f"{SqlReferenceKind.SEED.placeholder_call('')} markers",
+            f"{SqlReferenceKind.SEED.placeholder_call()} markers",
             code="R002",
         )
     if _UNRESOLVED_SOURCE_PATTERN.search(sql):
         raise _coded_value_error(
             f"{context} still contains unresolved "
-            f"{SqlReferenceKind.SOURCE.placeholder_call('')} markers",
+            f"{SqlReferenceKind.SOURCE.placeholder_call()} markers",
             code="R003",
         )
     if _UNRESOLVED_UDF_PATTERN.search(sql):
         raise _coded_value_error(
             f"{context} still contains unresolved "
-            f"{SqlReferenceKind.UDF.placeholder_call('')} markers",
+            f"{SqlReferenceKind.UDF.placeholder_call()} markers",
             code="R004",
         )
     if _UNRESOLVED_TABLE_FUNCTION_PATTERN.search(sql):
         raise _coded_value_error(
             f"{context} still contains unresolved "
-            f"{SqlReferenceKind.TABLE_FUNCTION.placeholder_call('')} markers",
+            f"{SqlReferenceKind.TABLE_FUNCTION.placeholder_call()} markers",
             code="R005",
         )
 
