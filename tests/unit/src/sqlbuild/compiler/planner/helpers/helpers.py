@@ -12,6 +12,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
     CompiledModel,
+    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationTarget,
@@ -240,6 +241,9 @@ def build_test_project(
                     sql_body="SELECT 1",
                 ),
                 sql_body="SELECT 1",
+                payload=CompiledModelSqlTestPayload(
+                    expected_model_names=sql_test_expected_model_names,
+                ),
             )
         )
 

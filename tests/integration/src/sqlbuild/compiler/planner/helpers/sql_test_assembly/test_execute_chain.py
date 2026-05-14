@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from sqlbuild.compiler.compile.models import (
+    CompiledDirectLogicSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledSqlTest,
@@ -280,17 +281,20 @@ def test_given_macro_test_plan_when_executing_then_it_passes_direct_comparison(
         test_file=test_file,
         test_block=test_block,
         sql_body="",
-        authored_ctes=helper_ctes,
         mode=SqlTestMode.MACRO,
-        macro_actual_cte=CompileSqlTestCte(
-            name="__macro_actual__",
-            sql_body=test_case.actual_sql,
+        payload=CompiledDirectLogicSqlTestPayload(
+            mode=SqlTestMode.MACRO,
+            helper_ctes=helper_ctes,
+            actual_cte=CompileSqlTestCte(
+                name="__macro_actual__",
+                sql_body=test_case.actual_sql,
+            ),
+            expected_cte=CompileSqlTestCte(
+                name="__macro_expected__",
+                sql_body=test_case.expected_sql,
+            ),
+            tested_resource_names=("normalize_status",),
         ),
-        macro_expected_cte=CompileSqlTestCte(
-            name="__macro_expected__",
-            sql_body=test_case.expected_sql,
-        ),
-        tested_macro_names=("normalize_status",),
     )
 
     entry, warnings = plan_test(

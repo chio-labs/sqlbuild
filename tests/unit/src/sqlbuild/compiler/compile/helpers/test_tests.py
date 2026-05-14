@@ -3,13 +3,17 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.compile.helpers.tests import CompileSqlTestCtes, extract_sql_test_ctes
+from sqlbuild.compiler.compile.models import (
+    CompileDirectLogicSqlTestCtes,
+    CompileModelSqlTestCtes,
+)
 from sqlbuild.compiler.compile.types import SqlTestMode
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     ExtractSqlTestCtesErrorTestCase,
     ExtractSqlTestCtesTestCase,
 )
 
-TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
+MODEL_TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
     ExtractSqlTestCtesTestCase(
         description="extracts dbt ref mocks from dbt ref prefixed ctes",
         sql="""
@@ -260,33 +264,15 @@ TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
         expected_mock_source_names=("raw_orders",),
         expected_expected_model_names=("orders",),
     ),
-    ExtractSqlTestCtesTestCase(
-        description="extracts unsuffixed macro actual expected ctes in macro mode",
-        sql="""
-        WITH input_values AS (SELECT '  PAID  ' AS raw_status),
-        __macro_actual__ AS (
-          SELECT @normalize_status("raw_status") AS status FROM input_values
-        ),
-        __macro_expected__ AS (SELECT 'paid' AS status)
-        SELECT 1
-        """.strip(),
-        mode=SqlTestMode.MACRO,
-        expected_authored_cte_names=("input_values",),
-        expected_mock_model_names=(),
-        expected_mock_source_names=(),
-        expected_expected_model_names=(),
-        expected_macro_actual_cte_name="__macro_actual__",
-        expected_macro_expected_cte_name="__macro_expected__",
-    ),
 ]
 
 
 @pytest.mark.parametrize(
     "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+    MODEL_TEST_CASES,
+    ids=[case.description for case in MODEL_TEST_CASES],
 )
-def test_given_sql_test_cte_variants_when_extracting_then_it_returns_expected_roles(
+def test_given_model_sql_test_cte_variants_when_extracting_then_it_returns_expected_roles(
     test_case: ExtractSqlTestCtesTestCase,
 ) -> None:
     extracted_ctes: CompileSqlTestCtes = extract_sql_test_ctes(
@@ -295,23 +281,60 @@ def test_given_sql_test_cte_variants_when_extracting_then_it_returns_expected_ro
         mode=test_case.mode,
     )
 
+    assert isinstance(extracted_ctes.payload, CompileModelSqlTestCtes)
     assert (
-        tuple(cte.name for cte in extracted_ctes.authored_ctes)
+        tuple(cte.name for cte in extracted_ctes.payload.authored_ctes)
         == test_case.expected_authored_cte_names
     )
-    assert extracted_ctes.mock_model_names == test_case.expected_mock_model_names
-    assert extracted_ctes.mock_source_names == test_case.expected_mock_source_names
-    assert extracted_ctes.mock_seed_names == test_case.expected_mock_seed_names
-    assert extracted_ctes.mock_dbt_ref_names == test_case.expected_mock_dbt_ref_names
-    assert extracted_ctes.expected_model_names == test_case.expected_expected_model_names
-    assert extracted_ctes.assertion_names == test_case.expected_assertion_names
-    assert extracted_ctes.macro_mocks == test_case.expected_macro_mocks
+    assert extracted_ctes.payload.mock_model_names == test_case.expected_mock_model_names
+    assert extracted_ctes.payload.mock_source_names == test_case.expected_mock_source_names
+    assert extracted_ctes.payload.mock_seed_names == test_case.expected_mock_seed_names
+    assert extracted_ctes.payload.mock_dbt_ref_names == test_case.expected_mock_dbt_ref_names
+    assert extracted_ctes.payload.expected_model_names == test_case.expected_expected_model_names
+    assert extracted_ctes.payload.assertion_names == test_case.expected_assertion_names
+    assert extracted_ctes.payload.macro_mocks == test_case.expected_macro_mocks
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExtractSqlTestCtesTestCase(
+            description="extracts unsuffixed macro actual expected ctes in macro mode",
+            sql="""
+            WITH input_values AS (SELECT '  PAID  ' AS raw_status),
+            __macro_actual__ AS (
+              SELECT @normalize_status("raw_status") AS status FROM input_values
+            ),
+            __macro_expected__ AS (SELECT 'paid' AS status)
+            SELECT 1
+            """.strip(),
+            mode=SqlTestMode.MACRO,
+            expected_authored_cte_names=("input_values",),
+            expected_mock_model_names=(),
+            expected_mock_source_names=(),
+            expected_expected_model_names=(),
+            expected_macro_actual_cte_name="__macro_actual__",
+            expected_macro_expected_cte_name="__macro_expected__",
+        )
+    ],
+    ids=["extracts unsuffixed macro actual expected ctes in macro mode"],
+)
+def test_given_macro_sql_test_cte_variants_when_extracting_then_it_returns_expected_roles(
+    test_case: ExtractSqlTestCtesTestCase,
+) -> None:
+    extracted_ctes: CompileSqlTestCtes = extract_sql_test_ctes(
+        sql=test_case.sql,
+        file_label="tests/unit/orders.sql",
+        mode=test_case.mode,
+    )
+
+    assert isinstance(extracted_ctes.payload, CompileDirectLogicSqlTestCtes)
     assert (
-        extracted_ctes.macro_actual_cte.name if extracted_ctes.macro_actual_cte else None
-    ) == test_case.expected_macro_actual_cte_name
-    assert (
-        extracted_ctes.macro_expected_cte.name if extracted_ctes.macro_expected_cte else None
-    ) == test_case.expected_macro_expected_cte_name
+        tuple(cte.name for cte in extracted_ctes.payload.helper_ctes)
+        == test_case.expected_authored_cte_names
+    )
+    assert extracted_ctes.payload.actual_cte.name == test_case.expected_macro_actual_cte_name
+    assert extracted_ctes.payload.expected_cte.name == test_case.expected_macro_expected_cte_name
 
 
 ERROR_TEST_CASES: list[ExtractSqlTestCtesErrorTestCase] = [

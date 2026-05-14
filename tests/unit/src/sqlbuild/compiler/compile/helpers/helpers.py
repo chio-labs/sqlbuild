@@ -1,7 +1,12 @@
 from pathlib import Path
 
 from sqlbuild.compiler.compile.helpers.macros import load_project_macros
-from sqlbuild.compiler.compile.models import LoadedMacro
+from sqlbuild.compiler.compile.models import (
+    CompiledDirectLogicSqlTestPayload,
+    CompiledModelSqlTestPayload,
+    CompiledSqlTest,
+    LoadedMacro,
+)
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile
 
 
@@ -19,3 +24,15 @@ def build_loaded_macros(tmp_path: Path, macro_file_contents: str) -> dict[str, L
             ),
         )
     )
+
+
+def compiled_sql_test_expected_model_names(test: CompiledSqlTest) -> tuple[str, ...]:
+    if not isinstance(test.payload, CompiledModelSqlTestPayload):
+        return ()
+    return test.payload.expected_model_names
+
+
+def compiled_sql_test_tested_resource_names(test: CompiledSqlTest) -> tuple[str, ...]:
+    if not isinstance(test.payload, CompiledDirectLogicSqlTestPayload):
+        return ()
+    return test.payload.tested_resource_names

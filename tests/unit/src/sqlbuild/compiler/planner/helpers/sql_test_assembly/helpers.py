@@ -16,6 +16,7 @@ from sqlbuild.compiler.compile.helpers.macros import expand_sql_macros
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModel,
+    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationTarget,
@@ -119,17 +120,19 @@ def build_test_and_project(
         test_file=_STUB_TEST_FILE,
         test_block=_STUB_TEST_BLOCK,
         sql_body=sql_body,
-        authored_ctes=tuple(authored_ctes),
-        macro_mocks=test_case.macro_mocks,
-        model_query_overrides=_build_model_query_overrides(
-            test_case=test_case,
-            loaded_macros=loaded_macros,
+        payload=CompiledModelSqlTestPayload(
+            authored_ctes=tuple(authored_ctes),
+            macro_mocks=test_case.macro_mocks,
+            model_query_overrides=_build_model_query_overrides(
+                test_case=test_case,
+                loaded_macros=loaded_macros,
+            ),
+            mock_model_names=tuple(test_case.mock_ref_ctes.keys()),
+            mock_source_names=tuple(test_case.mock_source_ctes.keys()),
+            mock_seed_names=tuple(test_case.mock_seed_ctes.keys()),
+            mock_dbt_ref_names=tuple(test_case.mock_dbt_ref_ctes.keys()),
+            expected_model_names=test_case.expected_model_names,
         ),
-        mock_model_names=tuple(test_case.mock_ref_ctes.keys()),
-        mock_source_names=tuple(test_case.mock_source_ctes.keys()),
-        mock_seed_names=tuple(test_case.mock_seed_ctes.keys()),
-        mock_dbt_ref_names=tuple(test_case.mock_dbt_ref_ctes.keys()),
-        expected_model_names=test_case.expected_model_names,
     )
 
     models: list[CompiledModel] = []
