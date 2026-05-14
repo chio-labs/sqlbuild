@@ -39,6 +39,7 @@ Thumbs.db
 
 # Logs
 *.log
+**/.user.yml
 
 # Local databases and data
 *.db

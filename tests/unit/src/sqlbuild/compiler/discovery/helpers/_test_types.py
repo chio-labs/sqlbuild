@@ -34,6 +34,10 @@ class LoadProjectConfigTestCase:
             "max_total_bytes": None,
         }
     )
+    expected_dbt_project_dir: str | None = None
+    expected_dbt_profiles_dir: str | None = None
+    expected_dbt_target: str | None = None
+    expected_dbt_target_path: str | None = None
 
 
 @dataclass(frozen=True)

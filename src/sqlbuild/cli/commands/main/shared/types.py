@@ -23,3 +23,4 @@ class CliCommand(StrEnum):
     INIT = "init"
     PLAYGROUND = "playground"
     SCENARIO = "scenario"
+    DBT = "dbt"

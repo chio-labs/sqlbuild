@@ -155,17 +155,7 @@ sqb scenario test --local --sync-snapshots
 sqb scenario test --local --refresh
 ```
 
-Snapshots are committable test data, so review them for sensitive warehouse values before committing. Capture safety limits can be set in config and overridden on the CLI:
-
-```toml
-[scenario.snapshot_limits]
-max_rows_per_relation = 10000
-max_total_rows = 50000
-max_bytes_per_relation = 5000000
-max_total_bytes = 25000000
-```
-
-Use `--force` to bypass snapshot size limits when you intentionally want a larger capture.
+Snapshots are committable test data. Review them for sensitive values before committing.
 
 ## Documentation
 

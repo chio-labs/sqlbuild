@@ -19,6 +19,63 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.sql_test_assembly.helpers 
 
 PLAN_TEST_CASES: list[PlanTestChainTestCase] = [
     PlanTestChainTestCase(
+        description="single model with mock dbt ref replaces dbt ref in sql",
+        model_queries={
+            "orders": 'SELECT order_id, amount FROM __dbt_ref("stg_orders")',
+        },
+        mock_ref_ctes={},
+        mock_source_ctes={},
+        mock_dbt_ref_ctes={
+            "stg_orders": "SELECT 1 AS order_id, 100 AS amount",
+        },
+        helper_ctes={},
+        expected_model_names=("orders",),
+        expected_chain_length=1,
+        expected_sql_fragments={
+            "orders": "SELECT 1 AS order_id, 100 AS amount",
+        },
+        expected_cte_bodies={
+            "orders": "SELECT 1 AS order_id, 100 AS amount",
+        },
+    ),
+    PlanTestChainTestCase(
+        description="single model with package-qualified mock dbt ref replaces dbt ref in sql",
+        model_queries={
+            "payments": 'SELECT payment_id FROM __dbt_ref("stripe", "payments")',
+        },
+        mock_ref_ctes={},
+        mock_source_ctes={},
+        mock_dbt_ref_ctes={
+            "stripe__payments": "SELECT 1 AS payment_id",
+        },
+        helper_ctes={},
+        expected_model_names=("payments",),
+        expected_chain_length=1,
+        expected_sql_fragments={
+            "payments": "SELECT 1 AS payment_id",
+        },
+        expected_cte_bodies={
+            "payments": "SELECT 1 AS payment_id",
+        },
+    ),
+    PlanTestChainTestCase(
+        description="single model with unmocked dbt ref reports missing mock error",
+        model_queries={
+            "payments": 'SELECT payment_id FROM __dbt_ref("stripe", "payments")',
+        },
+        mock_ref_ctes={},
+        mock_source_ctes={},
+        helper_ctes={},
+        expected_model_names=("payments",),
+        expected_chain_length=1,
+        expected_warning_count=1,
+        expected_warning_severity=WarningSeverity.ERROR,
+        expected_error_fragment="__dbt_ref__stripe__payments which has no mock",
+        expected_cte_bodies={
+            "payments": 'SELECT payment_id FROM __dbt_ref("stripe", "payments")',
+        },
+    ),
+    PlanTestChainTestCase(
         description="sql test macro mocks override model macro expansion before refs resolve",
         model_queries={
             "orders": "SELECT 1 AS id, 'real' AS country FROM __source(\"raw\")",
@@ -378,6 +435,12 @@ def test_given_test_and_project_when_planning_then_produces_expected_chain(
     expected_sev: WarningSeverity | None = test_case.expected_warning_severity
     actual_sevs: tuple[WarningSeverity, ...] = tuple(w.severity for w in warnings)
     assert (expected_sev is None) or all(s == expected_sev for s in actual_sevs)
+    expected_error_fragments: tuple[str, ...] = (
+        () if test_case.expected_error_fragment is None else (test_case.expected_error_fragment,)
+    )
+    expected_error_fragment: str
+    for expected_error_fragment in expected_error_fragments:
+        assert any(expected_error_fragment in w.message for w in warnings)
 
 
 @pytest.mark.parametrize(

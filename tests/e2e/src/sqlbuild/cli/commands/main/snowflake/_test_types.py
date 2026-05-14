@@ -51,6 +51,7 @@ class SnowflakeScenarioLocalReplayE2ETestCase:
     scenario_name: str = "transpilable_event_rollup"
     expected_local_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
     local_rows_sql: str = ""
+    corrupt_capture_dialect: bool = False
 
 
 @dataclass(frozen=True)

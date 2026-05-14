@@ -69,6 +69,7 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, PlanReason
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -109,6 +110,7 @@ def build_execution_plan(
     )
 
     execution_order: tuple[CompiledObjectKey, ...] = topologically_order_keys(upstream_deps)
+    dbt_manifest: DbtManifestIndex | None = project.dbt_manifest
 
     execute: Any = adapter.execute
     warehouse_start: float = time.monotonic()
@@ -233,6 +235,7 @@ def build_execution_plan(
             full_refresh=full_refresh,
             start_cursor_override=resolved_start,
             end_cursor_override=resolved_end,
+            dbt_manifest=dbt_manifest,
         )
 
         model_cursor_types[entry.name] = entry.cursor_type
@@ -265,6 +268,7 @@ def build_execution_plan(
                     action=cascade.effective_action,
                     duration=cascade.effective_duration,
                 ),
+                dbt_manifest=dbt_manifest,
             )
             entry = replace(entry, cascade=cascade)
             effective_cascades[entry.name] = cascade

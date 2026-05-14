@@ -21,6 +21,22 @@ from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
 
 TEST_CASES: list[ExtractSqlScenarioCtesTestCase] = [
     ExtractSqlScenarioCtesTestCase(
+        description="extracts dbt ref fixtures",
+        sql="""
+        WITH
+        __dbt_ref__orders AS (SELECT 1 AS order_id),
+        __dbt_ref__stripe__payments AS (SELECT 1 AS payment_id),
+        __expected__fact_orders AS (SELECT 1 AS order_id)
+        SELECT 1
+        """.strip(),
+        expected_authored_cte_names=("__dbt_ref__orders", "__dbt_ref__stripe__payments"),
+        expected_source_fixture_names=(),
+        expected_ref_fixture_names=(),
+        expected_dbt_ref_fixture_names=("orders", "stripe__payments"),
+        expected_expected_model_names=("fact_orders",),
+        expected_assertion_names=(),
+    ),
+    ExtractSqlScenarioCtesTestCase(
         description="extracts source ref seed fixtures expectations and assertions",
         sql="""
         WITH
@@ -114,6 +130,7 @@ def test_given_sql_scenario_cte_variants_when_extracting_then_it_returns_expecte
     assert extracted_ctes.source_fixture_names == test_case.expected_source_fixture_names
     assert extracted_ctes.ref_fixture_names == test_case.expected_ref_fixture_names
     assert extracted_ctes.seed_fixture_names == test_case.expected_seed_fixture_names
+    assert extracted_ctes.dbt_ref_fixture_names == test_case.expected_dbt_ref_fixture_names
     assert extracted_ctes.expected_model_names == test_case.expected_expected_model_names
     assert extracted_ctes.assertion_names == test_case.expected_assertion_names
 
@@ -126,7 +143,8 @@ ERROR_TEST_CASES: list[ExtractSqlScenarioCtesErrorTestCase] = [
         SELECT 1
         """.strip(),
         expected_error_fragment=(
-            r"must define at least one __source__\*, __ref__\*, or __seed__\* fixture CTE"
+            r"must define at least one __source__\*, __ref__\*, __seed__\*, "
+            r"or __dbt_ref__\* fixture CTE"
         ),
     ),
     ExtractSqlScenarioCtesErrorTestCase(
@@ -261,6 +279,7 @@ def test_given_discovered_scenario_when_building_scenario_inputs_then_it_attache
     assert scenario_input.source_fixture_names == test_case.expected_source_fixture_names
     assert scenario_input.ref_fixture_names == test_case.expected_ref_fixture_names
     assert scenario_input.seed_fixture_names == test_case.expected_seed_fixture_names
+    assert scenario_input.dbt_ref_fixture_names == test_case.expected_dbt_ref_fixture_names
     assert scenario_input.expected_model_names == test_case.expected_expected_model_names
     assert scenario_input.assertion_names == test_case.expected_assertion_names
     assert test_case.expected_sql_fragment in scenario_input.sql_body

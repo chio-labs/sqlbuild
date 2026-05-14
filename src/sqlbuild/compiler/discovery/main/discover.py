@@ -56,7 +56,10 @@ def discover_project_inputs(*, project_dir: Path) -> DiscoveredProjectInputs:
         audit_files=discover_audit_files(project_dir=project_dir),
         macro_files=discover_macro_files(project_dir=project_dir),
         materialization_files=discover_materialization_files(project_dir=project_dir),
-        dbt_manifest_file=discover_dbt_manifest_file(project_dir=project_dir),
+        dbt_manifest_file=discover_dbt_manifest_file(
+            project_dir=project_dir,
+            target_path=project_config.dbt.target_path,
+        ),
         adapter_file=discover_adapter_file(project_dir=project_dir),
     )
     validate_discovered_inputs(discovered_inputs)

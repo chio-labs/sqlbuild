@@ -13,6 +13,7 @@ class PlanTestChainTestCase:
     expected_model_names: tuple[str, ...]
     expected_chain_length: int
     mock_seed_ctes: dict[str, str] = field(default_factory=dict)
+    mock_dbt_ref_ctes: dict[str, str] = field(default_factory=dict)
     macro_mocks: dict[str, str] = field(default_factory=dict)
     loaded_macro_outputs: dict[str, str] = field(default_factory=dict)
     function_targets: dict[str, str] = field(default_factory=dict)

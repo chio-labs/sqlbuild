@@ -21,6 +21,7 @@ from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.shared.helpers.colors import supports_color
+from sqlbuild.shared.helpers.display import DisplayOptions
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
@@ -34,6 +35,7 @@ def run_plan(
     no_color: bool = False,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
+    verbose: bool = False,
 ) -> int:
     """Execute the plan command."""
 
@@ -88,5 +90,16 @@ def run_plan(
         print(format_plan_json(plan_output))
         return 0
 
-    print("\n" + format_plan(plan_output, full_refresh=full_refresh, use_color=use_color))
+    display_options: DisplayOptions = DisplayOptions(
+        max_entries_per_section=None if verbose else 50
+    )
+    print(
+        "\n"
+        + format_plan(
+            plan_output,
+            full_refresh=full_refresh,
+            use_color=use_color,
+            display_options=display_options,
+        )
+    )
     return 0

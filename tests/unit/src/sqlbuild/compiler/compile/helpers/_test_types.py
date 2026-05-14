@@ -36,6 +36,7 @@ class ExtractSqlTestCtesTestCase:
     expected_mock_source_names: tuple[str, ...]
     expected_expected_model_names: tuple[str, ...]
     expected_mock_seed_names: tuple[str, ...] = ()
+    expected_mock_dbt_ref_names: tuple[str, ...] = ()
     expected_assertion_names: tuple[str, ...] = ()
     expected_macro_mocks: dict[str, str] = field(default_factory=dict)
 
@@ -57,6 +58,7 @@ class ExtractSqlScenarioCtesTestCase:
     expected_expected_model_names: tuple[str, ...]
     expected_assertion_names: tuple[str, ...]
     expected_seed_fixture_names: tuple[str, ...] = ()
+    expected_dbt_ref_fixture_names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -77,6 +79,7 @@ class BuildScenarioInputsTestCase:
     expected_expected_model_names: tuple[str, ...]
     expected_assertion_names: tuple[str, ...]
     expected_sql_fragment: str
+    expected_dbt_ref_fixture_names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -272,6 +275,13 @@ class ValidateModelAttachedAuditRefsTestCase:
     attached_target_name: str
     expected_valid: bool = True
     expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
+class ValidateAuditRefsErrorTestCase:
+    description: str
+    references: tuple[CompileSqlReference, ...]
+    expected_error_fragment: str
 
 
 @dataclass(frozen=True)

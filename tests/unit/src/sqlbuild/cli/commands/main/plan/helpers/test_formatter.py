@@ -29,7 +29,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers.helpers import (
 
 TEST_CASES: list[FormatPlanTestCase] = [
     FormatPlanTestCase(
-        description="normal section shows aggregate counts by strategy and cursor type",
+        description="routine models section shows names with strategy and cursor type",
         plan_output=build_plan_output(
             model_entries=(
                 build_model_entry(
@@ -58,12 +58,15 @@ TEST_CASES: list[FormatPlanTestCase] = [
             ),
         ),
         expected_fragments=(
-            "Normal (3)",
+            "Models (3 standard run)",
+            "stg_orders",
+            "fact_orders",
+            "fact_events",
             "delete_insert (timestamp)",
             "delete_insert (integer, microbatch)",
             "view",
         ),
-        unexpected_fragments=("stg_orders", "fact_orders", "fact_events"),
+        unexpected_fragments=("Normal",),
     ),
     FormatPlanTestCase(
         description="first run shows materialization label with strategy and microbatch",
@@ -277,7 +280,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
         ),
         expected_fragments=(
             "Plan ready (3 selected)",
-            "Functions (2)",
+            "Functions (2 standard run)",
             "is_completed_order",
             "sql udf",
             "is_completed_order_py",
@@ -299,7 +302,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
             ),
         ),
         expected_fragments=(
-            "Function changed (1)",
+            "Changed functions (1)",
             "is_completed_order",
             "sql udf",
             "policy: query_change_backfill=full",
@@ -457,6 +460,51 @@ TEST_CASES: list[FormatPlanTestCase] = [
         expected_fragments=("atomic_swap (custom)",),
     ),
     FormatPlanTestCase(
+        description="changed sections appear before routine resource sections",
+        plan_output=build_plan_output(
+            model_entries=(
+                build_model_entry(
+                    name="fact_orders",
+                    action=PlanAction.CREATE_TABLE,
+                    reason=PlanReason.QUERY_CHANGED,
+                    backfill_action=BackfillAction.FULL,
+                    previous_query_sql="SELECT order_id FROM raw",
+                ),
+                build_model_entry(
+                    name="stg_orders",
+                    action=PlanAction.CREATE_VIEW,
+                    reason=PlanReason.NO_CHANGE,
+                    materialization_type=MaterializationType.VIEW,
+                ),
+            ),
+            function_entries=(
+                build_function_entry(name="is_completed_order"),
+                build_function_entry(
+                    name="normalize_email",
+                    reason=PlanReason.QUERY_CHANGED,
+                    backfill_action=BackfillAction.FULL,
+                    previous_query_sql="returns=TEXT\nbody=old_email",
+                ),
+            ),
+            seed_entries=(build_seed_entry(name="waffle_types"),),
+        ),
+        expected_fragments=(
+            "normalize_email",
+            "is_completed_order",
+            "fact_orders",
+            "stg_orders",
+            "waffle_types",
+        ),
+        unexpected_fragments=("Functions (2", "Models (2"),
+        expected_ordered_fragments=(
+            "Changed functions (1)",
+            "Query changed (1)",
+            "Models (1 standard run)",
+            "Functions (1 standard run)",
+            "Seeds (1)",
+        ),
+    ),
+    FormatPlanTestCase(
         description="detail rows align value column to longest displayed name",
         plan_output=build_plan_output(
             model_entries=(
@@ -506,3 +554,8 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
         assert fragment in result, f"Expected '{fragment}' in output:\n{result}"
     for fragment in test_case.unexpected_fragments:
         assert fragment not in result, f"Did not expect '{fragment}' in output:\n{result}"
+    previous_index: int = -1
+    for fragment in test_case.expected_ordered_fragments:
+        current_index: int = result.index(fragment)
+        assert current_index > previous_index, result
+        previous_index = current_index

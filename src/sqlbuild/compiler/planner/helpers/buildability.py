@@ -29,6 +29,8 @@ def check_buildability(
         for dep_key in dep_keys:
             if dep_key.resource_type == CompiledResourceType.SQL_TEST:
                 continue
+            if dep_key.resource_type == CompiledResourceType.DBT_REF:
+                continue
             if dep_key in selected_keys:
                 continue
             if dep_key.name in snapshot.existing_relations:

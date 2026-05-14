@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from _pytest.capture import CaptureResult
 
 from sqlbuild.cli.commands.main.entry import _main_with_dependencies, main
 from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
@@ -124,6 +125,78 @@ COMPILE_DISPATCH_TEST_CASES: list[MainTestCase] = [
     ),
 ]
 
+DBT_EXECUTION_DISPATCH_TEST_CASES: list[MainTestCase] = [
+    MainTestCase(
+        description="dispatches dbt run and preserves dbt args",
+        argv=[
+            "--project-dir",
+            "/tmp/demo",
+            "dbt",
+            "run",
+            "--select",
+            "tag:nightly",
+            "--sqb-start-cursor-int",
+            "10",
+        ],
+        expected_exit_code=17,
+        expected_project_dir=Path("/tmp/demo"),
+        expected_dbt_args=("--select", "tag:nightly", "--sqb-start-cursor-int", "10"),
+    ),
+    MainTestCase(
+        description="dispatches dbt build and preserves dbt args",
+        argv=[
+            "--project-dir",
+            "/tmp/demo",
+            "dbt",
+            "build",
+            "--select",
+            "tag:nightly",
+        ],
+        expected_exit_code=19,
+        expected_project_dir=Path("/tmp/demo"),
+        expected_dbt_args=("--select", "tag:nightly"),
+    ),
+    MainTestCase(
+        description="dispatches dbt test and preserves dbt args",
+        argv=[
+            "--project-dir",
+            "/tmp/demo",
+            "dbt",
+            "test",
+            "--select",
+            "test_type:data",
+            "--indirect-selection",
+            "eager",
+        ],
+        expected_exit_code=23,
+        expected_project_dir=Path("/tmp/demo"),
+        expected_dbt_args=("--select", "test_type:data", "--indirect-selection", "eager"),
+    ),
+    MainTestCase(
+        description="dispatches dbt debug and preserves dbt args",
+        argv=[
+            "--project-dir",
+            "/tmp/demo",
+            "dbt",
+            "debug",
+            "--project-dir",
+            "dbt_project",
+            "--profiles-dir",
+            "profiles",
+            "--no-connection",
+        ],
+        expected_exit_code=29,
+        expected_project_dir=Path("/tmp/demo"),
+        expected_dbt_args=(
+            "--project-dir",
+            "dbt_project",
+            "--profiles-dir",
+            "profiles",
+            "--no-connection",
+        ),
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -166,6 +239,124 @@ def test_given_compile_command_arguments_when_running_with_dependencies_then_it_
     )
 
     assert exit_code == test_case.expected_exit_code
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="dispatches dbt plan and preserves dbt args",
+            argv=[
+                "--project-dir",
+                "/tmp/demo",
+                "--no-color",
+                "dbt",
+                "plan",
+                "--json",
+                "--select",
+                "path:models/marts",
+                "--project-dir",
+                "dbt_project",
+                "--sqb-start-cursor-int",
+                "10",
+            ],
+            expected_exit_code=13,
+            expected_project_dir=Path("/tmp/demo"),
+            expected_no_color=True,
+            expected_dbt_args=(
+                "--json",
+                "--select",
+                "path:models/marts",
+                "--project-dir",
+                "dbt_project",
+                "--sqb-start-cursor-int",
+                "10",
+            ),
+        )
+    ],
+    ids=["dispatches dbt plan and preserves dbt args"],
+)
+def test_given_dbt_plan_arguments_when_running_with_dependencies_then_it_dispatches_handler(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[tuple[Path | None, tuple[str, ...], bool]] = []
+
+    def run_dbt_plan(
+        project_dir: Path | None,
+        args: tuple[str, ...],
+        no_color: bool,
+    ) -> int:
+        received_args.append((project_dir, args, no_color))
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_dbt_plan=run_dbt_plan),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [
+        (test_case.expected_project_dir, test_case.expected_dbt_args, test_case.expected_no_color)
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    DBT_EXECUTION_DISPATCH_TEST_CASES,
+    ids=[case.description for case in DBT_EXECUTION_DISPATCH_TEST_CASES],
+)
+def test_given_dbt_execution_arguments_when_running_with_dependencies_then_it_dispatches_handler(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[tuple[Path | None, tuple[str, ...], bool]] = []
+
+    def run_dbt_execution(
+        project_dir: Path | None,
+        args: tuple[str, ...],
+        no_color: bool,
+    ) -> int:
+        received_args.append((project_dir, args, no_color))
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(
+            run_dbt_run=run_dbt_execution,
+            run_dbt_build=run_dbt_execution,
+            run_dbt_test=run_dbt_execution,
+            run_dbt_debug=run_dbt_execution,
+        ),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [
+        (test_case.expected_project_dir, test_case.expected_dbt_args, test_case.expected_no_color)
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="rejects dbt without subcommand",
+            argv=["dbt"],
+            expected_exit_code=1,
+        )
+    ],
+    ids=["rejects dbt without subcommand"],
+)
+def test_given_dbt_without_subcommand_when_running_with_dependencies_then_it_returns_cli_error(
+    test_case: MainTestCase,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(),
+    )
+
+    captured: CaptureResult[str] = capsys.readouterr()
+    assert exit_code == test_case.expected_exit_code
+    assert "error[C237]: dbt requires a subcommand such as 'plan'" in captured.err
 
 
 @pytest.mark.parametrize(
@@ -1067,6 +1258,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
             bool,
             tuple[str, ...],
             tuple[str, ...],
+            bool,
         ]
     ] = []
 
@@ -1080,6 +1272,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
         no_color: bool,
         select: tuple[str, ...],
         exclude: tuple[str, ...],
+        verbose: bool,
     ) -> int:
         received_args.append(
             (
@@ -1092,6 +1285,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
                 no_color,
                 select,
                 exclude,
+                verbose,
             )
         )
         return test_case.expected_exit_code
@@ -1109,6 +1303,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
         test_case.expected_no_color,
         ("orders",),
         ("customers",),
+        False,
     )
 
 

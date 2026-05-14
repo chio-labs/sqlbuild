@@ -10,6 +10,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._test_helpers import (
     base_repo_files,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._test_types import (
+    DiscoverDbtManifestTargetPathTestCase,
     DiscoverProjectInputsErrorTestCase,
     DiscoverProjectInputsTestCase,
 )
@@ -85,7 +86,7 @@ SELECT 1
             expected_audit_block_names=(None,),
             expected_audit_block_sql_bodies=("SELECT 1",),
             expected_macro_paths=("macros/name_helpers.py",),
-            expected_manifest_path="target/manifest.json",
+            expected_manifest_path=None,
             expected_adapter_path="adapter.py",
         )
     ],
@@ -212,6 +213,48 @@ def test_given_project_repo_slice_when_discovering_inputs_then_it_returns_expect
     assert discovered_inputs.project_config.name == "demo"
     assert discovered_inputs.project_config.adapter == "duckdb"
     assert discovered_inputs.local_config.environment == "dev"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DiscoverDbtManifestTargetPathTestCase(
+            description="discovers dbt manifest from configured target path outside project",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+
+[dbt]
+target_path = "../dbt_project/target"
+""".strip()
+                + "\n",
+                "../dbt_project/target/manifest.json": (
+                    '{"metadata": {"dbt_schema_version": "v12"}}\n'
+                ),
+            },
+            expected_manifest_path="../dbt_project/target/manifest.json",
+        )
+    ],
+    ids=["discovers dbt manifest from configured target path outside project"],
+)
+def test_given_dbt_target_path_when_discovering_inputs_then_loads_configured_manifest(
+    test_case: DiscoverDbtManifestTargetPathTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        test_case.repo_files,
+    )
+
+    discovered_inputs: object = discover_project_inputs(project_dir=tmp_path)
+
+    assert discovered_inputs.dbt_manifest_file is not None
+    assert (
+        str(discovered_inputs.dbt_manifest_file.relative_path) == test_case.expected_manifest_path
+    )
 
 
 DISCOVERY_ERROR_TEST_CASES: list[DiscoverProjectInputsErrorTestCase] = [

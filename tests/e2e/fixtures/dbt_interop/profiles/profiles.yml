@@ -1,0 +1,6 @@
+analytics:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: '../sqlbuild_project/dbt_interop.duckdb'

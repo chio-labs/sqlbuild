@@ -41,6 +41,8 @@ check-type-annotation-conventions = "scripts.type_annotations.check_type_annotat
 [dependency-groups]
 dev = [
   "commitizen>=4.9.1",
+  "dbt-core>=1.9.0,<1.11",
+  "dbt-duckdb>=1.9.0,<1.11",
   "jsonschema>=4.23.0",
   "pre-commit>=4.3.0",
   "pytest>=8.4.2",
@@ -62,6 +64,7 @@ update_changelog_on_bump = false
 testpaths = ["tests"]
 norecursedirs = [".venv", "dist", "*.egg-info", ".git", ".tox"]
 markers = [
+  "dbt: tests that require dbt interop dependencies and dbt project setup",
   "real_warehouse: tests that require live external warehouse credentials",
   "snowflake: tests that require a live Snowflake warehouse",
   "bigquery: tests that require a live BigQuery warehouse",

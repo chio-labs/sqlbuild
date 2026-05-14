@@ -6,6 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from sqlbuild.compiler.compile.constants import (
+    DBT_REF_TEST_CTE_PREFIX,
     EXPECTED_TEST_CTE_PREFIX,
     REF_TEST_CTE_PREFIX,
     SEED_TEST_CTE_PREFIX,
@@ -83,6 +84,13 @@ def build_test_and_project(
                 sql_body=body,
             )
         )
+    for name, body in test_case.mock_dbt_ref_ctes.items():
+        authored_ctes.append(
+            CompileSqlTestCte(
+                name=f"{DBT_REF_TEST_CTE_PREFIX}{name}",
+                sql_body=body,
+            )
+        )
     for name, body in test_case.helper_ctes.items():
         authored_ctes.append(CompileSqlTestCte(name=name, sql_body=body))
 
@@ -92,6 +100,7 @@ def build_test_and_project(
             test_case.mock_ref_ctes,
             test_case.mock_source_ctes,
             test_case.mock_seed_ctes,
+            test_case.mock_dbt_ref_ctes,
             test_case.helper_ctes,
             test_case.expected_cte_bodies,
         )
@@ -119,6 +128,7 @@ def build_test_and_project(
         mock_model_names=tuple(test_case.mock_ref_ctes.keys()),
         mock_source_names=tuple(test_case.mock_source_ctes.keys()),
         mock_seed_names=tuple(test_case.mock_seed_ctes.keys()),
+        mock_dbt_ref_names=tuple(test_case.mock_dbt_ref_ctes.keys()),
         expected_model_names=test_case.expected_model_names,
     )
 
@@ -242,6 +252,7 @@ def _build_test_sql_body(
     mock_refs: dict[str, str],
     mock_sources: dict[str, str],
     mock_seeds: dict[str, str],
+    mock_dbt_refs: dict[str, str],
     helpers: dict[str, str],
     expected_bodies: dict[str, str],
 ) -> str:
@@ -256,6 +267,8 @@ def _build_test_sql_body(
         parts.append(f"{SOURCE_TEST_CTE_PREFIX}{name} AS ({body})")
     for name, body in mock_seeds.items():
         parts.append(f"{SEED_TEST_CTE_PREFIX}{name} AS ({body})")
+    for name, body in mock_dbt_refs.items():
+        parts.append(f"{DBT_REF_TEST_CTE_PREFIX}{name} AS ({body})")
     for name, body in helpers.items():
         parts.append(f"{name} AS ({body})")
     for name, body in expected_bodies.items():
