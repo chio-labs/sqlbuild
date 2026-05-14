@@ -12,11 +12,12 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.connection_progress import build_connection_progress_reporter
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.discovery.models import DiscoveredDbtManifestFile, DiscoveredProjectInputs
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.helpers.args import route_dbt_interop_args
+from sqlbuild.integrations.dbt.helpers.compile_refs import DbtCompileReferenceResolver
 from sqlbuild.integrations.dbt.helpers.graph import build_dbt_combined_graph
 from sqlbuild.integrations.dbt.helpers.manifest import load_dbt_manifest_index
 from sqlbuild.integrations.dbt.helpers.plan_orchestration import plan_dbt_interop_command
@@ -87,14 +88,6 @@ def plan_dbt_interop_from_project(
     )
     sqlbuild_compile_start: float = time.monotonic()
     _report_progress(on_progress, "Compiling SQLBuild project...")
-    discovered_with_manifest: DiscoveredProjectInputs = replace(
-        discovered_inputs,
-        dbt_manifest_file=DiscoveredDbtManifestFile(
-            file_path=manifest_path,
-            relative_path=Path("manifest.json"),
-            contents=manifest_path.read_text(encoding="utf-8"),
-        ),
-    )
     adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
@@ -110,9 +103,10 @@ def plan_dbt_interop_from_project(
         else None
     )
     project: CompiledProject = build_compiled_project(
-        discovered_inputs=discovered_with_manifest,
+        discovered_inputs=discovered_inputs,
         adapter=adapter,
         no_sql_validation=no_sql_validation,
+        external_sql_reference_resolver=DbtCompileReferenceResolver(dbt_manifest=manifest),
     )
     _report_progress(
         on_progress,
@@ -142,7 +136,7 @@ def plan_dbt_interop_from_project(
     )
     sqlbuild_plan_output: PlanOutput | None = build_sqlbuild_plan_output(
         project_dir=project_dir,
-        discovered_inputs=discovered_with_manifest,
+        discovered_inputs=discovered_inputs,
         project=project,
         adapter=adapter,
         adapter_name=adapter_name,

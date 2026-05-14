@@ -14,8 +14,69 @@ from sqlbuild.integrations.dbt.helpers.manifest import (
     resolve_dbt_manifest_model,
 )
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
+from sqlbuild.shared.types import ExternalSqlReferenceResolver
 
 _DBT_REF_PATTERN: re.Pattern[str] = re.compile(r'__dbt_ref\(\s*"([^"]+)"\s*(?:,\s*"([^"]+)"\s*)?\)')
+
+
+class DbtCompileReferenceResolver:
+    """External reference resolver backed by a dbt manifest index."""
+
+    def __init__(self, *, dbt_manifest: DbtManifestIndex | None) -> None:
+        self._dbt_manifest = dbt_manifest
+
+    def validate_model_names(self, *, known_model_names: set[str]) -> None:
+        validate_compile_dbt_model_names(
+            known_model_names=known_model_names,
+            dbt_manifest=self._dbt_manifest,
+        )
+
+    def validate_reference(
+        self,
+        *,
+        ref_kind: str,
+        ref_name: str,
+        ref_package: str | None,
+        owner_relative_sql_path: Path,
+    ) -> None:
+        validate_compile_dbt_model_reference(
+            reference=CompileSqlReference(
+                ref_kind=ref_kind,
+                ref_name=ref_name,
+                ref_package=ref_package,
+            ),
+            model_relative_path=owner_relative_sql_path,
+            dbt_manifest=self._dbt_manifest,
+        )
+
+    def resolve_reference(
+        self,
+        *,
+        ref_kind: str,
+        ref_name: str,
+        ref_package: str | None,
+    ) -> str | None:
+        if ref_kind != SqlReferenceKind.DBT_REF:
+            return None
+        if self._dbt_manifest is None:
+            return None
+        return resolve_dbt_manifest_model(
+            manifest=self._dbt_manifest,
+            package_name=ref_package,
+            name=ref_name,
+        ).relation_name
+
+
+def build_compile_external_sql_reference_resolver(
+    *, manifest_contents: str | None
+) -> ExternalSqlReferenceResolver | None:
+    """Build a compile-time external reference resolver from dbt manifest contents."""
+
+    if manifest_contents is None:
+        return None
+    return DbtCompileReferenceResolver(
+        dbt_manifest=build_compile_dbt_manifest_index(manifest_contents=manifest_contents)
+    )
 
 
 def build_compile_dbt_manifest_index(*, manifest_contents: str | None) -> DbtManifestIndex | None:

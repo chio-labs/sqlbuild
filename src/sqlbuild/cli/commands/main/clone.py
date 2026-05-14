@@ -16,6 +16,9 @@ from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import (
     resolve_environment_connection_config,
 )
+from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
+    resolve_external_sql_reference_resolver,
+)
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.clone import run_clone_pipeline
@@ -76,6 +79,10 @@ def run_clone(
             select=select,
             exclude=exclude,
             target_connection=target_connection,
+            external_sql_reference_resolver=resolve_external_sql_reference_resolver(
+                project_dir=effective_project_dir,
+                discovered_inputs=discovered_inputs,
+            ),
         )
         target_model_entries: tuple[ModelPlanEntry, ...] = clone_pipeline.target_model_entries
         target_seed_entries: tuple[SeedPlanEntry, ...] = clone_pipeline.target_seed_entries

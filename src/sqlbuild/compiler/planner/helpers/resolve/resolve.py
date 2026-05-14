@@ -35,7 +35,7 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, IncrementalMode, MaterializationType
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
+from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -55,7 +55,7 @@ def resolve_model_sql(
     start_cursor_override: str | None,
     end_cursor_override: str | None,
     suppress_runtime_cursor_bounds: bool = False,
-    dbt_manifest: DbtManifestIndex | None = None,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> str:
     """Resolve all references in a model's query SQL to produce executable SQL."""
 
@@ -100,7 +100,10 @@ def resolve_model_sql(
         lower_bound_inclusive=lower_bound_inclusive,
     )
 
-    query_sql = resolve_dbt_ref_references(query_sql=query_sql, dbt_manifest=dbt_manifest)
+    query_sql = resolve_dbt_ref_references(
+        query_sql=query_sql,
+        external_sql_reference_resolver=external_sql_reference_resolver,
+    )
     query_sql = resolve_udf_references(query_sql=query_sql, function_targets=function_targets or {})
     query_sql = resolve_table_function_references(
         query_sql=query_sql,

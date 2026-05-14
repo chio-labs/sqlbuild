@@ -19,6 +19,9 @@ from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
+from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
+    resolve_external_sql_reference_resolver,
+)
 from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
 from sqlbuild.cli.commands.main.shared.helpers.progress import format_build_header
 from sqlbuild.cli.commands.main.shared.helpers.status import TransientStatusReporter
@@ -124,6 +127,10 @@ def run_scenario_capture(
         on_connection_complete=connection_progress.on_connection_complete,
         on_connection_error=connection_progress.on_connection_error,
         on_progress=planning_progress.on_progress,
+        external_sql_reference_resolver=resolve_external_sql_reference_resolver(
+            project_dir=effective_project_dir,
+            discovered_inputs=discovered_inputs,
+        ),
     )
     scenarios: tuple[CompiledSqlScenario, ...] = select_scenarios(
         project=pipeline_result.project,

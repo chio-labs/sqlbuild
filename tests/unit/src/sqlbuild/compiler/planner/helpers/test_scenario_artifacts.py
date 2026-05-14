@@ -158,6 +158,18 @@ VALID_ARTIFACT_NAME_RECOGNITION_TEST_CASES: list[ScenarioArtifactNameRecognition
         expected_kind="model",
         expected_logical_name="very_long_customer_revenue__f3f1eed0",
     ),
+    ScenarioArtifactNameRecognitionTestCase(
+        description="recognizes generated dbt ref artifact name",
+        physical_name=build_scenario_artifact_name(
+            hash_prefix="51b385aebe20",
+            kind="dbt_ref",
+            logical_name="stripe__payments",
+        ),
+        expected_is_scenario_artifact=True,
+        expected_hash_prefix="51b385aebe20",
+        expected_kind="dbt_ref",
+        expected_logical_name="stripe__payments",
+    ),
 ]
 
 INVALID_ARTIFACT_NAME_RECOGNITION_TEST_CASES: list[ScenarioArtifactNameRecognitionTestCase] = [

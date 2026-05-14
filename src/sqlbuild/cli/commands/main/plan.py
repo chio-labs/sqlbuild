@@ -13,6 +13,9 @@ from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import (
     ConnectionProgressReporter,
 )
+from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
+    resolve_external_sql_reference_resolver,
+)
 from sqlbuild.cli.commands.main.shared.helpers.json_output import format_plan_json
 from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -82,6 +85,10 @@ def run_plan(
         on_connection_complete=connection_progress.on_connection_complete,
         on_connection_error=connection_progress.on_connection_error,
         on_progress=planning_progress.on_progress,
+        external_sql_reference_resolver=resolve_external_sql_reference_resolver(
+            project_dir=effective_project_dir,
+            discovered_inputs=discovered_inputs,
+        ),
     )
 
     plan_output: PlanOutput = pipeline_result.plan_output
