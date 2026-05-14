@@ -10,6 +10,9 @@ from pathlib import Path
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
+from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
+    resolve_external_reference_resolver,
+)
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
@@ -50,6 +53,9 @@ def run_seed(
         select=select,
         exclude=exclude,
         connection_config=connection_config,
+        external_reference_resolver=resolve_external_reference_resolver(
+            discovered_inputs=discovered_inputs
+        ),
     )
 
     use_color: bool = not no_color and supports_color()

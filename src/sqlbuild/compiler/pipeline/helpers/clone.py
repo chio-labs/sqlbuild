@@ -10,6 +10,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.models import ClonePipelineResult
 from sqlbuild.compiler.planner.main.clone import run_clone_planning
+from sqlbuild.shared.types import ExternalReferenceResolver
 
 
 def prepare_clone_pipeline(
@@ -22,18 +23,21 @@ def prepare_clone_pipeline(
     select: tuple[str, ...],
     exclude: tuple[str, ...],
     target_connection: Any,
+    external_reference_resolver: ExternalReferenceResolver | None = None,
 ) -> ClonePipelineResult:
     source_project: CompiledProject = _compile_project_for_environment(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         environment_name=from_environment,
         no_sql_validation=no_sql_validation,
+        external_reference_resolver=external_reference_resolver,
     )
     target_project: CompiledProject = _compile_project_for_environment(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         environment_name=to_environment,
         no_sql_validation=no_sql_validation,
+        external_reference_resolver=external_reference_resolver,
     )
     (
         clone_plan,
@@ -66,10 +70,12 @@ def _compile_project_for_environment(
     adapter: BaseAdapter,
     environment_name: str,
     no_sql_validation: bool,
+    external_reference_resolver: ExternalReferenceResolver | None,
 ) -> CompiledProject:
     return build_compiled_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         selected_environment=environment_name,
         no_sql_validation=no_sql_validation,
+        external_reference_resolver=external_reference_resolver,
     )

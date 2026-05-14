@@ -24,6 +24,7 @@ from sqlbuild.spec.models.project import (
 from tests.unit.src.sqlbuild.compiler.compile._test_helpers import (
     attach_dbt_manifest_file,
     base_repo_files,
+    build_external_reference_resolver,
     expected_or_actual,
 )
 from tests.unit.src.sqlbuild.compiler.compile._test_types import (
@@ -2004,6 +2005,7 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
         cli_vars=test_case.cli_vars,
         run_id=test_case.run_id,
         no_sql_validation=test_case.no_sql_validation,
+        external_reference_resolver=build_external_reference_resolver(discovered_inputs),
     )
 
     assert (
@@ -3058,6 +3060,7 @@ def test_given_attachment_conflicts_when_building_compile_inputs_then_it_raises_
             discovered_inputs,
             selected_environment=test_case.selected_environment,
             run_id=test_case.run_id,
+            external_reference_resolver=build_external_reference_resolver(discovered_inputs),
         )
 
 

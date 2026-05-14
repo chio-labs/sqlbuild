@@ -17,6 +17,7 @@ from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_proj
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.helpers.args import route_dbt_interop_args
+from sqlbuild.integrations.dbt.helpers.compile_refs import DbtCompileReferenceResolver
 from sqlbuild.integrations.dbt.helpers.graph import build_dbt_combined_graph
 from sqlbuild.integrations.dbt.helpers.manifest import load_dbt_manifest_index
 from sqlbuild.integrations.dbt.helpers.plan_orchestration import plan_dbt_interop_command
@@ -113,6 +114,7 @@ def plan_dbt_interop_from_project(
         discovered_inputs=discovered_with_manifest,
         adapter=adapter,
         no_sql_validation=no_sql_validation,
+        external_reference_resolver=DbtCompileReferenceResolver(dbt_manifest=manifest),
     )
     _report_progress(
         on_progress,

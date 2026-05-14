@@ -15,6 +15,9 @@ from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import (
     resolve_environment_connection_config,
 )
+from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
+    resolve_external_reference_resolver,
+)
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.diff import run_diff_pipeline
@@ -82,6 +85,9 @@ def run_diff(
         no_sql_validation=no_sql_validation,
         select=select,
         exclude=exclude,
+        external_reference_resolver=resolve_external_reference_resolver(
+            discovered_inputs=discovered_inputs
+        ),
     )
     if not selected_names:
         raise CliUserError("no diffable models found in the selected scope", code="C207")

@@ -9,6 +9,7 @@ from sqlbuild.compiler.compile.models import CompiledProject, CompileProjectInpu
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.helpers.target_defaults import apply_target_defaults
 from sqlbuild.compiler.pipeline.helpers.target_validation import validate_project_targets
+from sqlbuild.shared.types import ExternalReferenceResolver
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
@@ -18,6 +19,7 @@ def build_compiled_project(
     adapter: BaseAdapter,
     selected_environment: str | None = None,
     no_sql_validation: bool = False,
+    external_reference_resolver: ExternalReferenceResolver | None = None,
 ) -> CompiledProject:
     """Build one compiled project with adapter defaults and target validation applied."""
 
@@ -28,6 +30,7 @@ def build_compiled_project(
         python_functions_inherit_default_namespace=(
             adapter.python_functions_inherit_default_namespace()
         ),
+        external_reference_resolver=external_reference_resolver,
     )
     project: CompiledProject = apply_target_defaults(
         assemble_project(
