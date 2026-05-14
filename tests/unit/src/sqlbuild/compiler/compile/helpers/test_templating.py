@@ -87,6 +87,28 @@ TEST_CASES: list[ExpandTemplateDataTestCase] = [
         preserve_unknown_context=False,
         expected_value="flag=true",
     ),
+    ExpandTemplateDataTestCase(
+        description="embedded expression stringifies null variable as empty string",
+        value="schema_${optional_suffix}",
+        variables={"optional_suffix": None},
+        context_values={},
+        context_label="model config",
+        allow_context=False,
+        preserve_context_tokens=False,
+        preserve_unknown_context=False,
+        expected_value="schema_",
+    ),
+    ExpandTemplateDataTestCase(
+        description="full template preserves structured variable value",
+        value="${grants}",
+        variables={"grants": {"role": "analyst"}},
+        context_values={},
+        context_label="model config",
+        allow_context=False,
+        preserve_context_tokens=False,
+        preserve_unknown_context=False,
+        expected_value={"role": "analyst"},
+    ),
 ]
 
 
@@ -160,6 +182,20 @@ ERROR_TEST_CASES: list[ExpandTemplateDataErrorTestCase] = [
         preserve_context_tokens=False,
         preserve_unknown_context=False,
         expected_error_fragment="unterminated single-quoted string",
+    ),
+    ExpandTemplateDataErrorTestCase(
+        description="embedded structured variable raises clear error",
+        value="schema_${grants}",
+        variables={"grants": {"role": "analyst"}},
+        context_values={},
+        context_label="model config",
+        allow_context=False,
+        preserve_context_tokens=False,
+        preserve_unknown_context=False,
+        expected_error_fragment=(
+            r"model config variable 'grants' is an object and cannot be interpolated "
+            r'as text: \{"role":"analyst"\}. Use a macro to consume structured vars\.'
+        ),
     ),
 ]
 

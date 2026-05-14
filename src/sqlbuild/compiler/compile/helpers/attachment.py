@@ -104,11 +104,14 @@ from sqlbuild.spec.models.schema import (
 )
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 
+_HOOK_TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{[^}]+\}")
+_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hook", "post_hook"})
+
 
 def build_model_inputs(
     discovered_inputs: DiscoveredProjectInputs,
     *,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
     effective_settings: SettingsConfig,
     environment_config: EnvironmentConfig | None,
     effective_environment_name: str | None,
@@ -217,6 +220,13 @@ def build_model_inputs(
                 values=effective_config.values,
                 file_path=model_file.file_path,
                 effective_vars=effective_vars,
+                context_values=build_model_context_values(
+                    values=effective_config.values,
+                    model_name=model_file.file_path.stem,
+                    effective_environment_name=effective_environment_name,
+                    run_id=run_id,
+                    include_target_values=True,
+                ),
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
             ),
@@ -331,7 +341,7 @@ def build_seed_inputs(discovered_inputs: DiscoveredProjectInputs) -> tuple[Compi
 def build_sql_function_inputs(
     discovered_inputs: DiscoveredProjectInputs,
     *,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
     effective_settings: SettingsConfig,
     environment_config: EnvironmentConfig | None,
     adapter_name: str,
@@ -580,7 +590,7 @@ def build_sql_function_inputs(
 def _parse_function_arguments(
     *,
     function_file: DiscoveredSqlFunctionFile,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
 ) -> tuple[FunctionArgument, ...]:
     raw_arguments: object | None = function_file.header_values.get("arguments")
     if raw_arguments is None:
@@ -614,7 +624,7 @@ def _parse_function_arguments(
 
 
 def _parse_python_function_arguments(
-    function_file: DiscoveredPythonFunctionFile, effective_vars: dict[str, str]
+    function_file: DiscoveredPythonFunctionFile, effective_vars: dict[str, object]
 ) -> tuple[FunctionArgument, ...]:
     raw_arguments: object | None = function_file.header_values.get("arguments")
     if raw_arguments is None:
@@ -651,7 +661,7 @@ def _parse_sql_function_returns(
     *,
     raw_returns: object,
     function_file: DiscoveredSqlFunctionFile,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
 ) -> tuple[str, tuple[FunctionReturnColumn, ...]]:
     if isinstance(raw_returns, str) and raw_returns.strip():
         returns: str = _expand_function_header_value(
@@ -710,7 +720,7 @@ def _parse_optional_function_header(
     *,
     header_values: dict[str, object],
     key: str,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
     relative_path: Path,
     language: str,
 ) -> str | None:
@@ -743,7 +753,7 @@ def _parse_python_packages(*, raw_packages: object | None, relative_path: Path) 
 
 
 def _expand_function_header_value(
-    *, raw_value: str, effective_vars: dict[str, str], context_label: str
+    *, raw_value: str, effective_vars: dict[str, object], context_label: str
 ) -> str:
     return str(
         expand_template_data(
@@ -789,7 +799,7 @@ def _resolve_function_namespace(
     *,
     defaults: DefaultsConfig,
     environment_config: EnvironmentConfig | None,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
 ) -> tuple[str | None, str | None]:
     database: str | None = defaults.database
     schema: str | None = defaults.schema
@@ -810,7 +820,7 @@ def _resolve_function_namespace(
 
 
 def _expand_function_environment_value(
-    *, raw_value: str, effective_vars: dict[str, str], context_label: str
+    *, raw_value: str, effective_vars: dict[str, object], context_label: str
 ) -> str | None:
     if raw_value == PRESERVE_ENVIRONMENT_VALUE:
         return None
@@ -830,7 +840,7 @@ def _expand_function_environment_value(
 def build_source_inputs(
     discovered_inputs: DiscoveredProjectInputs,
     *,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
     effective_settings: SettingsConfig,
     macro_context: MacroContext,
     no_sql_validation: bool = False,
@@ -876,7 +886,7 @@ def expand_source_entry_templates(
     *,
     source_entry: SourceEntry,
     file_path: Path,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
     loaded_macros: dict[str, LoadedMacro],
     macro_context: MacroContext,
 ) -> SourceEntry:
@@ -942,7 +952,7 @@ def expand_source_entry_templates(
 
 
 def expand_source_column_templates(
-    *, source_name: str, column: SourceColumnEntry, effective_vars: dict[str, str]
+    *, source_name: str, column: SourceColumnEntry, effective_vars: dict[str, object]
 ) -> SourceColumnEntry:
     return replace(
         column,
@@ -981,7 +991,7 @@ def expand_source_column_templates(
 def expand_schema_audit_instance_templates(
     *,
     audit_instance: SchemaAuditInstance,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
     context_label: str,
 ) -> SchemaAuditInstance:
     return replace(
@@ -1003,7 +1013,7 @@ def expand_schema_audit_instance_templates(
 
 
 def _expand_source_template_value(
-    *, raw_value: str | None, effective_vars: dict[str, str], context_label: str
+    *, raw_value: str | None, effective_vars: dict[str, object], context_label: str
 ) -> str | None:
     if raw_value is None:
         return None
@@ -1017,7 +1027,7 @@ def _expand_source_template_value(
 
 
 def _expand_source_template_object(
-    *, value: object, effective_vars: dict[str, str], context_label: str
+    *, value: object, effective_vars: dict[str, object], context_label: str
 ) -> object:
     return expand_template_data(
         value,
@@ -1033,13 +1043,13 @@ def _expand_source_template_object(
 def build_test_inputs(
     discovered_inputs: DiscoveredProjectInputs,
     *,
-    effective_vars: dict[str, str] | None = None,
+    effective_vars: dict[str, object] | None = None,
     macro_context: MacroContext,
 ) -> tuple[CompileSqlTestInput, ...]:
     """Build compile-time test inputs from discovered SQL-native test blocks."""
 
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
-    vars_for_substitution: dict[str, str] = effective_vars or {}
+    vars_for_substitution: dict[str, object] = effective_vars or {}
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
     known_seed_names: set[str] = build_known_seed_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
@@ -1089,13 +1099,13 @@ def build_test_inputs(
 def build_scenario_inputs(
     discovered_inputs: DiscoveredProjectInputs,
     *,
-    effective_vars: dict[str, str] | None = None,
+    effective_vars: dict[str, object] | None = None,
     macro_context: MacroContext,
 ) -> tuple[CompileSqlScenarioInput, ...]:
     """Build compile-time scenario inputs from discovered SQL-native scenario files."""
 
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
-    vars_for_substitution: dict[str, str] = effective_vars or {}
+    vars_for_substitution: dict[str, object] = effective_vars or {}
     scenario_inputs: list[CompileSqlScenarioInput] = []
     scenario_file: DiscoveredSqlScenarioFile
     for scenario_file in discovered_inputs.scenario_files:
@@ -1200,7 +1210,7 @@ def build_audit_inputs(
     effective_settings: SettingsConfig,
     model_inputs: tuple[CompileModelInput, ...],
     source_inputs: tuple[CompileSourceInput, ...],
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
     macro_context: MacroContext,
     generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]]
     | None = None,
@@ -1305,7 +1315,7 @@ def build_model_attached_audit_inputs(
     known_source_names: set[str],
     default_audit_severity: str | None,
     default_audit_run_scope: str | None,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
     macro_context: MacroContext,
 ) -> tuple[CompileAuditInput, ...]:
     """Render schema-attached model audits into compile audit inputs."""
@@ -1386,7 +1396,7 @@ def build_source_attached_audit_inputs(
     known_source_names: set[str],
     default_audit_severity: str | None,
     default_audit_run_scope: str | None,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
     macro_context: MacroContext,
 ) -> tuple[CompileAuditInput, ...]:
     """Render source-attached audits into compile audit inputs."""
@@ -1466,7 +1476,7 @@ def build_attached_audit_input(
     known_source_names: set[str],
     default_audit_severity: str | None,
     default_audit_run_scope: str | None,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
     macro_context: MacroContext,
 ) -> CompileAuditInput:
     """Render one attached generic audit instance into a compile audit input."""
@@ -1996,7 +2006,7 @@ def build_effective_connection(
     project_config: ProjectConfig,
     local_config: LocalConfig,
     environment_config: EnvironmentConfig | None,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
 ) -> dict[str, object]:
     """Merge base project connection with the selected environment overrides."""
 
@@ -2092,11 +2102,11 @@ def build_effective_vars(
     project_config: ProjectConfig,
     local_config: LocalConfig,
     environment_config: EnvironmentConfig | None,
-    cli_vars: dict[str, str],
-) -> dict[str, str]:
+    cli_vars: dict[str, object],
+) -> dict[str, object]:
     """Merge effective vars using the locked precedence order."""
 
-    values: dict[str, str] = dict(project_config.vars)
+    values: dict[str, object] = dict(project_config.vars)
     if environment_config is not None:
         values.update(environment_config.vars)
     values.update(local_config.vars)
@@ -2110,7 +2120,7 @@ def build_model_config(
     path_defaults: dict[str, dict[str, object]],
     matched_path_default: str | None,
     model_header_values: dict[str, object],
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
     environment_config: EnvironmentConfig | None,
     model_name: str,
     effective_environment_name: str | None,
@@ -2125,6 +2135,13 @@ def build_model_config(
         matched_path_default=matched_path_default,
         model_header_values=model_header_values,
     )
+    raw_hook_values: dict[str, object] = {
+        hook_key: layered_values[hook_key]
+        for hook_key in _MODEL_HOOK_KEYS
+        if hook_key in layered_values
+    }
+    for hook_key in raw_hook_values:
+        del layered_values[hook_key]
     early_resolved_values: dict[str, object] = resolve_early_model_templates(
         values=layered_values,
         effective_vars=effective_vars,
@@ -2167,6 +2184,7 @@ def build_model_config(
         effective_environment_name=effective_environment_name,
         run_id=run_id,
     )
+    target_resolved_values.update(raw_hook_values)
     validate_model_config_has_no_macros(values=target_resolved_values)
     return CompileModelConfig(
         values=target_resolved_values,
@@ -2180,7 +2198,8 @@ def expand_model_hook_macros(
     *,
     values: dict[str, object],
     file_path: Path,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
+    context_values: dict[str, str | None],
     loaded_macros: dict[str, LoadedMacro],
     macro_context: MacroContext,
 ) -> dict[str, object]:
@@ -2188,7 +2207,7 @@ def expand_model_hook_macros(
 
     expanded_values: dict[str, object] = dict(values)
     hook_key: str
-    for hook_key in ("pre_hook", "post_hook"):
+    for hook_key in _MODEL_HOOK_KEYS:
         raw_hook_value: object | None = expanded_values.get(hook_key)
         if raw_hook_value is None:
             continue
@@ -2196,6 +2215,7 @@ def expand_model_hook_macros(
             value=raw_hook_value,
             file_path=file_path,
             effective_vars=effective_vars,
+            context_values=context_values,
             loaded_macros=loaded_macros,
             macro_context=macro_context,
         )
@@ -2206,17 +2226,24 @@ def expand_sql_macros_in_value(
     *,
     value: object,
     file_path: Path,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
+    context_values: dict[str, str | None],
     loaded_macros: dict[str, LoadedMacro],
     macro_context: MacroContext,
 ) -> object:
     """Recursively expand SQL interpolation and macros in hook container shapes."""
 
     if isinstance(value, str):
+        if _HOOK_TEMPLATE_PATTERN.search(value) is not None:
+            raise CompileInputError(
+                f"hook SQL in '{file_path}' does not allow ${{...}} templates; "
+                "use @@CTX:..., @@ENV:..., or @@project_var syntax"
+            )
         return expand_authored_sql(
             sql=value,
             file_path=file_path,
             effective_vars=effective_vars,
+            context_values=context_values,
             loaded_macros=loaded_macros,
             macro_context=macro_context,
         )
@@ -2226,6 +2253,7 @@ def expand_sql_macros_in_value(
                 value=item,
                 file_path=file_path,
                 effective_vars=effective_vars,
+                context_values=context_values,
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
             )
@@ -2237,6 +2265,7 @@ def expand_sql_macros_in_value(
                 value=item,
                 file_path=file_path,
                 effective_vars=effective_vars,
+                context_values=context_values,
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
             )
@@ -2254,7 +2283,7 @@ def validate_model_config_has_no_macros(*, values: dict[str, object]) -> None:
 def validate_no_macros_in_config_value(*, value: object, path: tuple[str, ...]) -> None:
     """Recursively reject macro calls outside hook fields."""
 
-    if path and path[0] in {"pre_hook", "post_hook"}:
+    if path and path[0] in _MODEL_HOOK_KEYS:
         return
     if isinstance(value, str):
         if MACRO_CALL_PATTERN.search(value) is not None:
@@ -2588,7 +2617,7 @@ def _merge_schema_tags(
 def resolve_early_model_templates(
     *,
     values: dict[str, object],
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
     effective_environment_name: str | None,
     run_id: str,
 ) -> dict[str, object]:
@@ -2727,7 +2756,7 @@ def build_run_context_values(
 def apply_environment_database_schema_overrides(
     *,
     values: dict[str, object],
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
     environment_config: EnvironmentConfig | None,
     model_context_values: dict[str, str | None],
 ) -> None:

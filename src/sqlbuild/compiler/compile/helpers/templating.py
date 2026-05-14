@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from sqlbuild.compiler.compile.constants import TEMPLATE_PATTERN
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import TemplateNamespace
+from sqlbuild.shared.helpers.project_var_values import render_project_var_text
 
 
 @dataclass(frozen=True)
@@ -43,13 +44,13 @@ _TEMPLATE_SYMBOLS: frozenset[str] = frozenset({"(", ")", ","})
 _TEMPLATE_QUOTE_NAMES: dict[str, str] = {"'": "single", '"': "double"}
 
 
-def expand_effective_vars(raw_values: dict[str, str]) -> dict[str, str]:
+def expand_effective_vars(raw_values: dict[str, object]) -> dict[str, object]:
     """Resolve merged effective vars with recursive `${name}` expansion."""
 
-    resolved_values: dict[str, str] = {}
+    resolved_values: dict[str, object] = {}
     resolving_keys: list[str] = []
 
-    def resolve_key(key: str) -> str:
+    def resolve_key(key: str) -> object:
         if key not in raw_values:
             raise CompileInputError(f"effective vars references unknown variable '{key}'")
         if key in resolved_values:
@@ -59,8 +60,13 @@ def expand_effective_vars(raw_values: dict[str, str]) -> dict[str, str]:
             raise CompileInputError(f"effective vars contain a cyclic reference: {cycle}")
 
         resolving_keys.append(key)
+        raw_value: object = raw_values[key]
+        if not isinstance(raw_value, str):
+            resolving_keys.pop()
+            resolved_values[key] = raw_value
+            return raw_value
         resolved_value: str = expand_template_string(
-            raw_values[key],
+            raw_value,
             variables=raw_values,
             resolve_variable=resolve_key,
             context_values={},
@@ -82,7 +88,7 @@ def expand_effective_vars(raw_values: dict[str, str]) -> dict[str, str]:
 def expand_template_data(
     value: object,
     *,
-    variables: dict[str, str],
+    variables: dict[str, object],
     context_values: dict[str, str | None],
     context_label: str,
     allow_context: bool,
@@ -154,8 +160,8 @@ def expand_template_data(
 def expand_template_string(
     value: str,
     *,
-    variables: dict[str, str],
-    resolve_variable: Callable[[str], str],
+    variables: dict[str, object],
+    resolve_variable: Callable[[str], object],
     context_values: dict[str, str | None],
     context_label: str,
     allow_context: bool,
@@ -180,8 +186,8 @@ class _TemplateResolver:
     def __init__(
         self,
         *,
-        variables: dict[str, str],
-        resolve_variable: Callable[[str], str],
+        variables: dict[str, object],
+        resolve_variable: Callable[[str], object],
         context_values: dict[str, str | None],
         context_label: str,
         allow_context: bool,
@@ -198,7 +204,11 @@ class _TemplateResolver:
 
     def expand_string(self, value: str) -> str:
         def replace_match(match: re.Match[str]) -> str:
-            return _stringify_template_value(self.evaluate_token(match.group(1)))
+            token: str = match.group(1)
+            return _stringify_template_value(
+                value=self.evaluate_token(token),
+                label=f"{self.context_label} variable '{token}'",
+            )
 
         return TEMPLATE_PATTERN.sub(replace_match, value)
 
@@ -453,12 +463,11 @@ def _is_truthy_template_value(value: object) -> bool:
     return True
 
 
-def _stringify_template_value(value: object) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    return str(value)
+def _stringify_template_value(*, value: object, label: str) -> str:
+    try:
+        return render_project_var_text(value=value, label=label)
+    except ValueError as error:
+        raise CompileInputError(str(error)) from error
 
 
 def _is_missing_template_value_error(message: str) -> bool:
@@ -471,7 +480,7 @@ def _is_missing_template_value_error(message: str) -> bool:
     )
 
 
-def _lookup_variable(*, name: str, variables: dict[str, str], context_label: str) -> str:
+def _lookup_variable(*, name: str, variables: dict[str, object], context_label: str) -> object:
     if name not in variables:
         raise CompileInputError(f"{context_label} references unknown variable '{name}'")
     return variables[name]

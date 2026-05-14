@@ -6,7 +6,7 @@ class BuildCompileInputsTestCase:
     description: str
     repo_files: dict[str, str]
     selected_environment: str | None
-    cli_vars: dict[str, str] | None
+    cli_vars: dict[str, object] | None
     run_id: str | None
     expected_model_schema_names: tuple[str | None, ...]
     expected_model_config_values: tuple[dict[str, object], ...]
@@ -15,7 +15,7 @@ class BuildCompileInputsTestCase:
     expected_source_names: tuple[str, ...]
     expected_effective_environment_name: str | None
     expected_effective_connection: dict[str, object]
-    expected_effective_vars: dict[str, str]
+    expected_effective_vars: dict[str, object]
     expected_source_expressions: tuple[str | None, ...] | None = None
     expected_source_relations: tuple[tuple[str | None, str | None, str | None], ...] | None = None
     expected_model_schema_descriptions: tuple[str | None, ...] | None = None
@@ -97,7 +97,7 @@ class SeedRefRegressionTestCase:
 class ResolveEnvironmentConfigTestCase:
     description: str
     expected_connection: dict[str, object]
-    expected_vars: dict[str, str]
+    expected_vars: dict[str, object]
     expected_database: str
     expected_schema: str
     expected_allow_as_source: bool

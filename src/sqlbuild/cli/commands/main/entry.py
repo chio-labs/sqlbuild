@@ -26,6 +26,7 @@ from sqlbuild.cli.commands.main.shared.helpers.parsers import (
     add_execution_args,
     add_scenario_snapshot_safety_args,
     add_select_args,
+    add_vars_args,
 )
 from sqlbuild.cli.commands.main.shared.types import CliCommand
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
@@ -66,6 +67,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
         default=CompileLineageMode.FAST.value,
         help="Column lineage mode: fast (default), rich (slower), or none",
     )
+    add_vars_args(compile_parser)
     add_dbt_config_args(compile_parser)
 
     plan_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PLAN)
@@ -76,6 +78,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     plan_parser.add_argument("--verbose", "-v", action="store_true", default=False)
     add_cursor_override_args(plan_parser)
     add_select_args(plan_parser)
+    add_vars_args(plan_parser)
     add_dbt_config_args(plan_parser)
 
     build_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.BUILD)
@@ -84,6 +87,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     add_cursor_override_args(build_parser)
     add_execution_args(build_parser)
     add_select_args(build_parser)
+    add_vars_args(build_parser)
     add_dbt_config_args(build_parser)
 
     run_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.RUN)
@@ -92,21 +96,25 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     add_cursor_override_args(run_parser)
     add_execution_args(run_parser)
     add_select_args(run_parser)
+    add_vars_args(run_parser)
     add_dbt_config_args(run_parser)
 
     test_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.TEST)
     test_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     add_select_args(test_parser)
+    add_vars_args(test_parser)
     add_dbt_config_args(test_parser)
 
     audit_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.AUDIT)
     audit_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     audit_parser.add_argument("--defer-to", default=None)
     add_select_args(audit_parser)
+    add_vars_args(audit_parser)
     add_dbt_config_args(audit_parser)
 
     seed_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.SEED)
     add_select_args(seed_parser)
+    add_vars_args(seed_parser)
 
     clone_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.CLONE)
     clone_parser.add_argument("--no-sql-validation", action="store_true", default=False)
@@ -114,6 +122,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     clone_parser.add_argument("--to", dest="to_environment", required=True)
     clone_parser.add_argument("--hard-copy", action="store_true", default=False)
     add_select_args(clone_parser)
+    add_vars_args(clone_parser)
     add_dbt_config_args(clone_parser)
 
     diff_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DIFF)
@@ -126,6 +135,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     diff_parser.add_argument("--max-column-examples", type=int, default=None)
     diff_parser.add_argument("--max-row-only-examples", type=int, default=None)
     add_select_args(diff_parser)
+    add_vars_args(diff_parser)
     debug_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DEBUG)
     debug_parser.add_argument("--json", action="store_true", default=False)
     debug_parser.add_argument("--no-connection", action="store_true", default=False)
@@ -165,6 +175,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
         help="Column lineage mode: rich (default) or fast",
     )
     add_select_args(lineage_parser)
+    add_vars_args(lineage_parser)
     subparsers.add_parser(CliCommand.CLEAN)
     janitor_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.JANITOR)
     janitor_parser.add_argument("--auto-approve", action="store_true", default=False)
@@ -329,6 +340,7 @@ def _main_with_dependencies(
                 args.manifest,
                 args.no_color,
                 CompileLineageMode(args.compile_lineage_mode),
+                args.vars,
             )
         if args.command == CliCommand.PLAN:
             cursor_overrides: CursorOverrides = CursorOverrides(
@@ -348,6 +360,7 @@ def _main_with_dependencies(
                 tuple(args.select),
                 tuple(args.exclude),
                 args.verbose,
+                args.vars,
             )
         if args.command == CliCommand.DBT:
             if args.dbt_command == "plan":
@@ -381,6 +394,7 @@ def _main_with_dependencies(
                 tuple(args.exclude),
                 args.verbose,
                 args.debug,
+                args.vars,
             )
         if args.command == CliCommand.RUN:
             cursor_overrides = CursorOverrides(
@@ -402,6 +416,7 @@ def _main_with_dependencies(
                 tuple(args.exclude),
                 args.verbose,
                 args.debug,
+                args.vars,
             )
         if args.command == CliCommand.TEST:
             return handlers.run_test(
@@ -410,6 +425,7 @@ def _main_with_dependencies(
                 args.no_color,
                 tuple(args.select),
                 tuple(args.exclude),
+                args.vars,
             )
         if args.command == CliCommand.AUDIT:
             return handlers.run_audit(
@@ -419,6 +435,7 @@ def _main_with_dependencies(
                 args.no_color,
                 tuple(args.select),
                 tuple(args.exclude),
+                args.vars,
             )
         if args.command == CliCommand.SEED:
             return handlers.run_seed(
@@ -426,6 +443,7 @@ def _main_with_dependencies(
                 args.no_color,
                 tuple(args.select),
                 tuple(args.exclude),
+                args.vars,
             )
         if args.command == CliCommand.LINEAGE:
             return handlers.run_lineage(
@@ -438,6 +456,7 @@ def _main_with_dependencies(
                 tuple(args.select),
                 tuple(args.exclude),
                 ColumnLineageMode(args.lineage_mode),
+                args.vars,
             )
         if args.command == CliCommand.CLONE:
             if args.from_environment is None or args.to_environment is None:
@@ -451,6 +470,7 @@ def _main_with_dependencies(
                 args.hard_copy,
                 tuple(args.select),
                 tuple(args.exclude),
+                args.vars,
             )
         if args.command == CliCommand.DIFF:
             from_environment: str
@@ -470,6 +490,7 @@ def _main_with_dependencies(
                 tuple(args.select),
                 tuple(args.exclude),
                 args.verbose,
+                args.vars,
             )
         if args.command == CliCommand.QUERY:
             query_limit: int | None = None if args.query_no_limit else args.query_limit

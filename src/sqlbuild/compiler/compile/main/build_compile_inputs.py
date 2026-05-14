@@ -50,7 +50,7 @@ def build_compile_inputs(
     discovered_inputs: DiscoveredProjectInputs,
     *,
     selected_environment: str | None = None,
-    cli_vars: dict[str, str] | None = None,
+    cli_vars: dict[str, object] | None = None,
     run_id: str | None = None,
     no_sql_validation: bool = False,
     python_functions_inherit_default_namespace: bool = True,
@@ -71,7 +71,7 @@ def build_compile_inputs(
             environment_name=effective_environment_name,
         )
 
-    effective_vars: dict[str, str] = build_effective_vars(
+    effective_vars: dict[str, object] = build_effective_vars(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
         environment_config=effective_environment,

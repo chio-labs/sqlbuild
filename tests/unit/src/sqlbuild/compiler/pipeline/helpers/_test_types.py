@@ -13,7 +13,7 @@ class DeferredTargetTestCase:
     logical_database: str | None
     env_schema: str | None
     env_database: str | None
-    effective_vars: dict[str, str]
+    effective_vars: dict[str, object]
     default_schema: str | None
     default_database: str | None
     expected_schema: str | None

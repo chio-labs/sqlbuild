@@ -22,6 +22,7 @@ def prepare_clone_pipeline(
     no_sql_validation: bool,
     select: tuple[str, ...],
     exclude: tuple[str, ...],
+    cli_vars: dict[str, object] | None,
     target_connection: Any,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> ClonePipelineResult:
@@ -30,6 +31,7 @@ def prepare_clone_pipeline(
         adapter=adapter,
         environment_name=from_environment,
         no_sql_validation=no_sql_validation,
+        cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     target_project: CompiledProject = _compile_project_for_environment(
@@ -37,6 +39,7 @@ def prepare_clone_pipeline(
         adapter=adapter,
         environment_name=to_environment,
         no_sql_validation=no_sql_validation,
+        cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     (
@@ -70,6 +73,7 @@ def _compile_project_for_environment(
     adapter: BaseAdapter,
     environment_name: str,
     no_sql_validation: bool,
+    cli_vars: dict[str, object] | None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
 ) -> CompiledProject:
     return build_compiled_project(
@@ -77,5 +81,6 @@ def _compile_project_for_environment(
         adapter=adapter,
         selected_environment=environment_name,
         no_sql_validation=no_sql_validation,
+        cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )

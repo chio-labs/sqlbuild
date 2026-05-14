@@ -21,6 +21,7 @@ def run_diff_pipeline(
     no_sql_validation: bool,
     select: tuple[str, ...],
     exclude: tuple[str, ...],
+    cli_vars: dict[str, object] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> tuple[CompiledProject, CompiledProject, tuple[str, ...]]:
     """Compile both environments and resolve selected diffable model names."""
@@ -30,6 +31,7 @@ def run_diff_pipeline(
         adapter=adapter,
         environment_name=from_environment,
         no_sql_validation=no_sql_validation,
+        cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     right_project: CompiledProject = compile_project_for_diff_environment(
@@ -37,6 +39,7 @@ def run_diff_pipeline(
         adapter=adapter,
         environment_name=to_environment,
         no_sql_validation=no_sql_validation,
+        cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     selected_names: tuple[str, ...] = resolve_diff_model_names(

@@ -76,7 +76,7 @@ class MacroContext:
     adapter_name: str
     sqlglot_enabled: bool
     environment_name: str | None
-    vars: dict[str, str] = field(default_factory=dict)
+    vars: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -286,7 +286,7 @@ class CompileProjectInputs:
     effective_environment: EnvironmentConfig | None = None
     effective_connection: dict[str, object] = field(default_factory=dict)
     effective_settings: SettingsConfig = field(default_factory=SettingsConfig)
-    effective_vars: dict[str, str] = field(default_factory=dict)
+    effective_vars: dict[str, object] = field(default_factory=dict)
     loaded_macros: dict[str, LoadedMacro] = field(default_factory=dict)
     model_inputs: tuple[CompileModelInput, ...] = field(default_factory=tuple)
     seed_inputs: tuple[CompileSeedInput, ...] = field(default_factory=tuple)
@@ -442,7 +442,7 @@ class CompiledProject:
     run_id: str
     effective_environment_name: str | None
     effective_connection: dict[str, object]
-    effective_vars: dict[str, str]
+    effective_vars: dict[str, object]
     settings: SettingsConfig = field(default_factory=SettingsConfig)
     scenario: ScenarioConfig = field(default_factory=ScenarioConfig)
     models: tuple[CompiledModel, ...] = field(default_factory=tuple)

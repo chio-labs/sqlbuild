@@ -74,6 +74,7 @@ class CliNamespace:
     exclude: list[str] = field(default_factory=list)
     dbt_command: str | None = None
     dbt_args: list[str] = field(default_factory=list)
+    vars: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -81,7 +82,8 @@ class CliEntrypointHandlers:
     """Injected command handlers for the CLI entrypoint."""
 
     run_compile: Callable[
-        [Path | None, bool, str | None, bool, bool, bool, CompileLineageMode], int
+        [Path | None, bool, str | None, bool, bool, bool, CompileLineageMode, dict[str, object]],
+        int,
     ]
     run_plan: Callable[
         [
@@ -95,6 +97,7 @@ class CliEntrypointHandlers:
             tuple[str, ...],
             tuple[str, ...],
             bool,
+            dict[str, object],
         ],
         int,
     ]
@@ -117,6 +120,7 @@ class CliEntrypointHandlers:
             tuple[str, ...],
             bool,
             bool,
+            dict[str, object],
         ],
         int,
     ]
@@ -134,16 +138,32 @@ class CliEntrypointHandlers:
             tuple[str, ...],
             bool,
             bool,
+            dict[str, object],
         ],
         int,
     ]
-    run_test: Callable[[Path | None, bool, bool, tuple[str, ...], tuple[str, ...]], int]
-    run_audit: Callable[
-        [Path | None, bool, str | None, bool, tuple[str, ...], tuple[str, ...]], int
+    run_test: Callable[
+        [Path | None, bool, bool, tuple[str, ...], tuple[str, ...], dict[str, object]], int
     ]
-    run_seed: Callable[[Path | None, bool, tuple[str, ...], tuple[str, ...]], int]
+    run_audit: Callable[
+        [Path | None, bool, str | None, bool, tuple[str, ...], tuple[str, ...], dict[str, object]],
+        int,
+    ]
+    run_seed: Callable[
+        [Path | None, bool, tuple[str, ...], tuple[str, ...], dict[str, object]], int
+    ]
     run_clone: Callable[
-        [Path | None, bool, bool, str, str, bool, tuple[str, ...], tuple[str, ...]],
+        [
+            Path | None,
+            bool,
+            bool,
+            str,
+            str,
+            bool,
+            tuple[str, ...],
+            tuple[str, ...],
+            dict[str, object],
+        ],
         int,
     ]
     run_diff: Callable[
@@ -161,6 +181,7 @@ class CliEntrypointHandlers:
             tuple[str, ...],
             tuple[str, ...],
             bool,
+            dict[str, object],
         ],
         int,
     ]
@@ -177,6 +198,7 @@ class CliEntrypointHandlers:
             tuple[str, ...],
             tuple[str, ...],
             ColumnLineageMode,
+            dict[str, object],
         ],
         int,
     ]
