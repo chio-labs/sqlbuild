@@ -15,13 +15,13 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
-    SqlReferenceKind,
 )
 from sqlbuild.compiler.planner.helpers.audit_scheduling import (
     resolve_attachment_kind,
     resolve_effective_run_scope,
 )
 from sqlbuild.compiler.planner.types import MaterializationType
+from sqlbuild.shared.types import SqlReferenceKind
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     ResolveAttachmentErrorTestCase,
     ResolveAttachmentTestCase,

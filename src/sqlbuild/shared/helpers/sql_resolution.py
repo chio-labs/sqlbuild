@@ -4,11 +4,24 @@ from __future__ import annotations
 
 import re
 
-_UNRESOLVED_REF_PATTERN: re.Pattern[str] = re.compile(r"__ref\(")
-_UNRESOLVED_SEED_PATTERN: re.Pattern[str] = re.compile(r"__seed\(")
-_UNRESOLVED_SOURCE_PATTERN: re.Pattern[str] = re.compile(r"__source\(")
-_UNRESOLVED_UDF_PATTERN: re.Pattern[str] = re.compile(r"__udf\(")
-_UNRESOLVED_TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(r"__table_fn\(")
+from sqlbuild.shared.helpers.sql_reference_patterns import reference_call_prefix_pattern_text
+from sqlbuild.shared.types import SqlReferenceKind
+
+_UNRESOLVED_REF_PATTERN: re.Pattern[str] = re.compile(
+    reference_call_prefix_pattern_text(SqlReferenceKind.REF)
+)
+_UNRESOLVED_SEED_PATTERN: re.Pattern[str] = re.compile(
+    reference_call_prefix_pattern_text(SqlReferenceKind.SEED)
+)
+_UNRESOLVED_SOURCE_PATTERN: re.Pattern[str] = re.compile(
+    reference_call_prefix_pattern_text(SqlReferenceKind.SOURCE)
+)
+_UNRESOLVED_UDF_PATTERN: re.Pattern[str] = re.compile(
+    reference_call_prefix_pattern_text(SqlReferenceKind.UDF)
+)
+_UNRESOLVED_TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(
+    reference_call_prefix_pattern_text(SqlReferenceKind.TABLE_FUNCTION)
+)
 
 
 def assert_no_unresolved_sql_markers(*, sql: str, context: str) -> None:
@@ -16,27 +29,32 @@ def assert_no_unresolved_sql_markers(*, sql: str, context: str) -> None:
 
     if _UNRESOLVED_REF_PATTERN.search(sql):
         raise _coded_value_error(
-            f"{context} still contains unresolved __ref() markers",
+            f"{context} still contains unresolved "
+            f"{SqlReferenceKind.REF.placeholder_call()} markers",
             code="R001",
         )
     if _UNRESOLVED_SEED_PATTERN.search(sql):
         raise _coded_value_error(
-            f"{context} still contains unresolved __seed() markers",
+            f"{context} still contains unresolved "
+            f"{SqlReferenceKind.SEED.placeholder_call()} markers",
             code="R002",
         )
     if _UNRESOLVED_SOURCE_PATTERN.search(sql):
         raise _coded_value_error(
-            f"{context} still contains unresolved __source() markers",
+            f"{context} still contains unresolved "
+            f"{SqlReferenceKind.SOURCE.placeholder_call()} markers",
             code="R003",
         )
     if _UNRESOLVED_UDF_PATTERN.search(sql):
         raise _coded_value_error(
-            f"{context} still contains unresolved __udf() markers",
+            f"{context} still contains unresolved "
+            f"{SqlReferenceKind.UDF.placeholder_call()} markers",
             code="R004",
         )
     if _UNRESOLVED_TABLE_FUNCTION_PATTERN.search(sql):
         raise _coded_value_error(
-            f"{context} still contains unresolved __table_fn() markers",
+            f"{context} still contains unresolved "
+            f"{SqlReferenceKind.TABLE_FUNCTION.placeholder_call()} markers",
             code="R005",
         )
 

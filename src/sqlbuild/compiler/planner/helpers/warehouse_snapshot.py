@@ -19,7 +19,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledSource,
     CompileSqlReference,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType, SqlReferenceKind
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
@@ -27,6 +27,7 @@ from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
 from sqlbuild.compiler.planner.models import ModelCursorSnapshot, WarehouseSnapshot
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.compiler.shared.helpers.sources import render_source_relation
+from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.source import SourceEntry
 
 _CURSOR_BATCH_SIZE: int = 100

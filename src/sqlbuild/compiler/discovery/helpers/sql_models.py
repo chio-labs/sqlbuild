@@ -10,6 +10,7 @@ from typing import Any
 from sqlbuild.compiler.discovery.exceptions import ModelSqlParseError
 from sqlbuild.compiler.discovery.helpers.constants import MODEL_HEADER_PATTERN
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot
+from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.schema import SourceLocation
 
 
@@ -28,7 +29,13 @@ _SYMBOLS: frozenset[str] = frozenset({"(", ")", "[", "]", ","})
 _QUOTE_NAMES: dict[str, str] = {"'": "single", '"': "double"}
 _INTEGER_PATTERN: re.Pattern[str] = re.compile(r"^[+-]?\d+$")
 _FLOAT_PATTERN: re.Pattern[str] = re.compile(r"^[+-]?(?:\d+\.\d*|\d*\.\d+)$")
-_RELATION_CALL_NAMES: frozenset[str] = frozenset({"__ref", "__seed", "__source"})
+_RELATION_CALL_NAMES: frozenset[str] = frozenset(
+    {
+        SqlReferenceKind.REF.function_name,
+        SqlReferenceKind.SEED.function_name,
+        SqlReferenceKind.SOURCE.function_name,
+    }
+)
 
 
 def parse_model_sql(contents: str, file_path: Path) -> tuple[dict[str, object], str]:

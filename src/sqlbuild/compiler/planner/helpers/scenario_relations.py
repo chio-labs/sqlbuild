@@ -58,20 +58,26 @@ from sqlbuild.shared.constants import (
     SCENARIO_PLAN_SQLGLOT_UNAVAILABLE,
     SCENARIO_PLAN_UNKNOWN_SEED,
 )
+from sqlbuild.shared.helpers.sql_reference_patterns import reference_call_prefix_pattern_text
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot, import_sqlglot_expressions
+from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.source import SourceEntry
 
 _REF_PATTERN: re.Pattern[str] = re.compile(
-    r"__ref\(\s*[\"']?(?P<name>[A-Za-z_][A-Za-z0-9_.]*)[\"']?\s*\)"
+    rf"{reference_call_prefix_pattern_text(SqlReferenceKind.REF)}\s*"
+    r"[\"']?(?P<name>[A-Za-z_][A-Za-z0-9_.]*)[\"']?\s*\)"
 )
 _SEED_PATTERN: re.Pattern[str] = re.compile(
-    r"__seed\(\s*[\"']?(?P<name>[A-Za-z_][A-Za-z0-9_.]*)[\"']?\s*\)"
+    rf"{reference_call_prefix_pattern_text(SqlReferenceKind.SEED)}\s*"
+    r"[\"']?(?P<name>[A-Za-z_][A-Za-z0-9_.]*)[\"']?\s*\)"
 )
 _SOURCE_PATTERN: re.Pattern[str] = re.compile(
-    r"__source\(\s*[\"']?(?P<name>[A-Za-z_][A-Za-z0-9_.]*)[\"']?\s*\)"
+    rf"{reference_call_prefix_pattern_text(SqlReferenceKind.SOURCE)}\s*"
+    r"[\"']?(?P<name>[A-Za-z_][A-Za-z0-9_.]*)[\"']?\s*\)"
 )
 _DBT_REF_PATTERN: re.Pattern[str] = re.compile(
-    r'__dbt_ref\(\s*["\'](?P<first>[A-Za-z_][A-Za-z0-9_]*)["\']\s*'
+    rf'{reference_call_prefix_pattern_text(SqlReferenceKind.DBT_REF)}\s*["\']'
+    r'(?P<first>[A-Za-z_][A-Za-z0-9_]*)["\']\s*'
     r'(?:,\s*["\'](?P<second>[A-Za-z_][A-Za-z0-9_]*)["\']\s*)?\)'
 )
 
@@ -577,7 +583,7 @@ def _resolve_scenario_check_sql_with_sqlglot(
         if not hasattr(argument, "name"):
             return table
         referenced_name: str = str(argument.name)
-        if function_name == "__dbt_ref" and len(expressions) == 2:
+        if function_name == SqlReferenceKind.DBT_REF.function_name and len(expressions) == 2:
             second_argument: Any = expressions[1]
             if not hasattr(second_argument, "name"):
                 return table
@@ -687,16 +693,16 @@ def _required_target(
 def _scenario_target_name_for_marker(
     *, function_name: str, referenced_name: str, relation_plan: ScenarioRelationPlan
 ) -> str | None:
-    if function_name == "__ref":
+    if function_name == SqlReferenceKind.REF.function_name:
         target: CompiledRelationTarget | None = relation_plan.model_targets.get(referenced_name)
         return None if target is None else target.qualified_name
-    if function_name == "__seed":
+    if function_name == SqlReferenceKind.SEED.function_name:
         target = relation_plan.seed_targets.get(referenced_name)
         return None if target is None else target.qualified_name
-    if function_name == "__source":
+    if function_name == SqlReferenceKind.SOURCE.function_name:
         source: SourceEntry | None = relation_plan.source_map.get(referenced_name)
         return None if source is None else render_source_relation(source)
-    if function_name == "__dbt_ref":
+    if function_name == SqlReferenceKind.DBT_REF.function_name:
         target = relation_plan.dbt_ref_fixture_targets.get(referenced_name)
         return None if target is None else target.qualified_name
     return None

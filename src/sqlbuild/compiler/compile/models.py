@@ -10,7 +10,6 @@ from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledResourceType,
     FunctionLanguage,
-    SqlReferenceKind,
 )
 from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic
 from sqlbuild.compiler.discovery.models import (
@@ -28,7 +27,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.shared.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.spec.models.project import (
     EnvironmentConfig,
     LocalConfig,
