@@ -1,0 +1,1 @@
+"""Skills command unit tests."""
