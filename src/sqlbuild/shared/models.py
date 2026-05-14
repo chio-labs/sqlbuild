@@ -4,6 +4,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
+from sqlbuild.shared.constants import DEFAULT_MAX_DISPLAY_ENTRIES
+
+
+@dataclass(frozen=True)
+class DisplayOptions:
+    """Options controlling bounded human output."""
+
+    max_entries_per_section: int | None = DEFAULT_MAX_DISPLAY_ENTRIES
+    overflow_flag: str = "--verbose"
 
 
 @dataclass(frozen=True)

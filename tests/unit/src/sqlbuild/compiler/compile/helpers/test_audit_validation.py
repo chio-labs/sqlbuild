@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from sqlbuild.compiler.auditing.types import AuditRunScope
@@ -9,14 +11,17 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.helpers.attachment import (
     resolve_audit_run_scope,
     resolve_audit_severity,
+    validate_audit_references,
     validate_model_attached_audit_references,
 )
 from sqlbuild.compiler.compile.models import CompileSqlReference
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, SqlReferenceKind
+from sqlbuild.compiler.discovery.models import DiscoveredAuditFile
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     ResolveAuditRunScopeErrorTestCase,
     ResolveAuditRunScopeTestCase,
     ResolveAuditSeverityTestCase,
+    ValidateAuditRefsErrorTestCase,
     ValidateModelAttachedAuditRefsTestCase,
 )
 
@@ -255,4 +260,38 @@ def test_given_invalid_attached_audit_refs_when_validating_then_raises(
             attached_target_kind=test_case.attached_target_kind,
             attached_target_name=test_case.attached_target_name,
             audit_label="test audit",
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ValidateAuditRefsErrorTestCase(
+            description="dbt ref in audit raises compile error",
+            references=(CompileSqlReference(ref_kind=SqlReferenceKind.DBT_REF, ref_name="orders"),),
+            expected_error_fragment="audit dbt model checks belong in dbt",
+        ),
+    ],
+    ids=["dbt ref in audit raises compile error"],
+)
+def test_given_invalid_audit_refs_when_validating_then_raises(
+    test_case: ValidateAuditRefsErrorTestCase,
+) -> None:
+    audit_file: DiscoveredAuditFile = DiscoveredAuditFile(
+        file_path=Path("audits/dbt_model_check.sql"),
+        relative_path=Path("audits/dbt_model_check.sql"),
+        contents="",
+        blocks=(),
+    )
+
+    with pytest.raises(
+        CompileInputError,
+        match=test_case.expected_error_fragment,
+    ):
+        validate_audit_references(
+            references=test_case.references,
+            audit_file=audit_file,
+            known_model_names=set(),
+            known_seed_names=set(),
+            known_source_names=set(),
         )

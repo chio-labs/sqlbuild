@@ -10,6 +10,7 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     build_snapshot_from_relation_names,
+    dbt_ref_key,
     model_key,
     seed_key,
     source_key,
@@ -68,6 +69,17 @@ CHECK_BUILDABILITY_TEST_CASES: list[CheckBuildabilityTestCase] = [
                 required_by=(model_key("x"), model_key("z")),
             ),
         ),
+    ),
+    CheckBuildabilityTestCase(
+        description=(
+            "dbt ref dep is external and does not require warehouse relation by logical name"
+        ),
+        selected_keys=frozenset({model_key("report")}),
+        upstream_deps={
+            model_key("report"): (dbt_ref_key("analytics.fact_orders"),),
+        },
+        existing_relation_names=(),
+        expected_missing=(),
     ),
     CheckBuildabilityTestCase(
         description="source dep satisfied by warehouse relation",

@@ -30,6 +30,23 @@ def add_select_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--exclude", nargs="+", action="extend", default=[])
 
 
+def add_dbt_config_args(parser: argparse.ArgumentParser, *, prefix: str = "dbt") -> None:
+    """Add dbt configuration flags to a subparser."""
+
+    flag_prefix: str = f"{prefix}-" if prefix else ""
+    dest_prefix: str = f"{prefix}_" if prefix else ""
+    parser.add_argument(
+        f"--{flag_prefix}project-dir", dest=f"{dest_prefix}project_dir", default=None
+    )
+    parser.add_argument(
+        f"--{flag_prefix}profiles-dir", dest=f"{dest_prefix}profiles_dir", default=None
+    )
+    parser.add_argument(f"--{flag_prefix}target", dest=f"{dest_prefix}target", default=None)
+    parser.add_argument(
+        f"--{flag_prefix}target-path", dest=f"{dest_prefix}target_path", default=None
+    )
+
+
 def add_scenario_snapshot_safety_args(parser: argparse.ArgumentParser) -> None:
     """Add scenario snapshot capture safety flags to a subparser."""
 

@@ -419,6 +419,18 @@ max_total_bytes = -1
 """.strip(),
         expected_error_fragment="scenario.snapshot_limits values must be >= 0",
     ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when dbt config contains unknown key",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[dbt]
+project_dir = "../dbt"
+threads = 8
+""".strip(),
+        expected_error_fragment=r"dbt contains unknown key\(s\): threads",
+    ),
 ]
 
 LOCAL_CONFIG_ERROR_TEST_CASES: list[LoadLocalConfigErrorTestCase] = [
@@ -533,6 +545,12 @@ max_rows_per_relation = 100
 max_total_rows = 200
 max_bytes_per_relation = 300
 max_total_bytes = 400
+
+[dbt]
+project_dir = "../dbt"
+profiles_dir = "../profiles"
+target = "prod"
+target_path = "target/dbt"
 """.strip(),
             expected_name="demo",
             expected_adapter="duckdb",
@@ -573,6 +591,10 @@ max_total_bytes = 400
                 "max_bytes_per_relation": 300,
                 "max_total_bytes": 400,
             },
+            expected_dbt_project_dir="../dbt",
+            expected_dbt_profiles_dir="../profiles",
+            expected_dbt_target="prod",
+            expected_dbt_target_path="target/dbt",
         )
     ],
     ids=["loads expected fields from project config"],
@@ -612,6 +634,10 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
         "max_bytes_per_relation": config.scenario.snapshot_limits.max_bytes_per_relation,
         "max_total_bytes": config.scenario.snapshot_limits.max_total_bytes,
     } == test_case.expected_snapshot_limits
+    assert config.dbt.project_dir == test_case.expected_dbt_project_dir
+    assert config.dbt.profiles_dir == test_case.expected_dbt_profiles_dir
+    assert config.dbt.target == test_case.expected_dbt_target
+    assert config.dbt.target_path == test_case.expected_dbt_target_path
 
 
 @pytest.mark.parametrize(

@@ -17,6 +17,10 @@ class CliNamespace:
 
     command: str | None = None
     project_dir: str | None = None
+    dbt_project_dir: str | None = None
+    dbt_profiles_dir: str | None = None
+    dbt_target: str | None = None
+    dbt_target_path: str | None = None
     no_sql_validation: bool = False
     defer_to: str | None = None
     environment_range: str | None = None
@@ -68,6 +72,8 @@ class CliNamespace:
     scenario_max_snapshot_total_bytes: int | None = None
     select: list[str] = field(default_factory=list)
     exclude: list[str] = field(default_factory=list)
+    dbt_command: str | None = None
+    dbt_args: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -88,9 +94,15 @@ class CliEntrypointHandlers:
             bool,
             tuple[str, ...],
             tuple[str, ...],
+            bool,
         ],
         int,
     ]
+    run_dbt_plan: Callable[[Path | None, tuple[str, ...], bool], int]
+    run_dbt_run: Callable[[Path | None, tuple[str, ...], bool], int]
+    run_dbt_build: Callable[[Path | None, tuple[str, ...], bool], int]
+    run_dbt_test: Callable[[Path | None, tuple[str, ...], bool], int]
+    run_dbt_debug: Callable[[Path | None, tuple[str, ...], bool], int]
     run_build: Callable[
         [
             Path | None,

@@ -75,7 +75,23 @@ def _parse_reference_at(*, sql: str, start: int) -> tuple[CompileSqlReference, i
     )
     raw_arguments: str = sql[open_paren_index + 1 : closing_paren_index]
     argument_values: tuple[str, ...] = _split_top_level_arguments(raw_arguments)
-    if len(argument_values) != 1:
+    if ref_kind == SqlReferenceKind.DBT_REF:
+        if len(argument_values) not in {1, 2}:
+            raise CompileInputError(
+                f"{ref_prefix(ref_kind)} must contain one name argument or package/name arguments"
+            )
+        if len(argument_values) == 2:
+            return (
+                CompileSqlReference(
+                    ref_kind=ref_kind,
+                    ref_package=_parse_reference_name(
+                        raw_value=argument_values[0], ref_kind=ref_kind
+                    ),
+                    ref_name=_parse_reference_name(raw_value=argument_values[1], ref_kind=ref_kind),
+                ),
+                closing_paren_index + 1,
+            )
+    elif len(argument_values) != 1:
         raise CompileInputError(f"{ref_prefix(ref_kind)} must contain exactly one name argument")
     return (
         CompileSqlReference(

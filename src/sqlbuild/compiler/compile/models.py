@@ -28,6 +28,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.spec.models.project import (
     EnvironmentConfig,
     LocalConfig,
@@ -85,6 +86,7 @@ class CompileSqlReference:
 
     ref_kind: SqlReferenceKind | str
     ref_name: str
+    ref_package: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "ref_kind", SqlReferenceKind(self.ref_kind))
@@ -118,6 +120,7 @@ class CompileSqlTestCtes:
     mock_model_names: tuple[str, ...] = field(default_factory=tuple)
     mock_source_names: tuple[str, ...] = field(default_factory=tuple)
     mock_seed_names: tuple[str, ...] = field(default_factory=tuple)
+    mock_dbt_ref_names: tuple[str, ...] = field(default_factory=tuple)
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
@@ -141,6 +144,7 @@ class CompileSqlScenarioCtes:
     source_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    dbt_ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
 
@@ -225,6 +229,7 @@ class CompileSqlTestInput:
     mock_model_names: tuple[str, ...] = field(default_factory=tuple)
     mock_source_names: tuple[str, ...] = field(default_factory=tuple)
     mock_seed_names: tuple[str, ...] = field(default_factory=tuple)
+    mock_dbt_ref_names: tuple[str, ...] = field(default_factory=tuple)
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
@@ -242,6 +247,7 @@ class CompileSqlScenarioInput:
     source_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    dbt_ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
 
@@ -291,6 +297,7 @@ class CompileProjectInputs:
     scenario_inputs: tuple[CompileSqlScenarioInput, ...] = field(default_factory=tuple)
     audit_inputs: tuple[CompileAuditInput, ...] = field(default_factory=tuple)
     diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
+    dbt_manifest: DbtManifestIndex | None = None
 
 
 @dataclass(frozen=True)
@@ -404,6 +411,7 @@ class CompiledSqlTest:
     mock_model_names: tuple[str, ...] = field(default_factory=tuple)
     mock_source_names: tuple[str, ...] = field(default_factory=tuple)
     mock_seed_names: tuple[str, ...] = field(default_factory=tuple)
+    mock_dbt_ref_names: tuple[str, ...] = field(default_factory=tuple)
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
@@ -423,6 +431,7 @@ class CompiledSqlScenario:
     source_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
+    dbt_ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
 
@@ -445,3 +454,4 @@ class CompiledProject:
     sql_tests: tuple[CompiledSqlTest, ...] = field(default_factory=tuple)
     sql_scenarios: tuple[CompiledSqlScenario, ...] = field(default_factory=tuple)
     diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
+    dbt_manifest: DbtManifestIndex | None = None

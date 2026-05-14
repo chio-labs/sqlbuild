@@ -107,6 +107,16 @@ class ScenarioConfig:
 
 
 @dataclass(frozen=True)
+class DbtConfig:
+    """dbt interop configuration."""
+
+    project_dir: str | None = None
+    profiles_dir: str | None = None
+    target: str | None = None
+    target_path: str | None = None
+
+
+@dataclass(frozen=True)
 class ProjectConfig:
     """Shared project configuration loaded from sqlbuild_project.toml."""
 
@@ -121,6 +131,7 @@ class ProjectConfig:
     environments: dict[str, EnvironmentConfig] = field(default_factory=dict)
     janitor: JanitorConfig = field(default_factory=JanitorConfig)
     scenario: ScenarioConfig = field(default_factory=ScenarioConfig)
+    dbt: DbtConfig = field(default_factory=DbtConfig)
 
 
 @dataclass(frozen=True)

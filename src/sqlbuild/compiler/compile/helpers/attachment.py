@@ -84,6 +84,16 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.shared.helpers.schema_audits import parse_audit_instance
+from sqlbuild.integrations.dbt.main.build_compile_manifest_index import (
+    build_compile_manifest_index,
+)
+from sqlbuild.integrations.dbt.main.validate_compile_model_names import (
+    validate_compile_model_names,
+)
+from sqlbuild.integrations.dbt.main.validate_compile_model_reference import (
+    validate_compile_model_reference,
+)
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot
 from sqlbuild.spec.models.project import (
     ClonePolicy,
@@ -115,6 +125,7 @@ def build_model_inputs(
     run_id: str,
     macro_context: MacroContext,
     no_sql_validation: bool = False,
+    dbt_manifest: DbtManifestIndex | None = None,
 ) -> tuple[CompileModelInput, ...]:
     """Attach schema metadata to discovered model files."""
 
@@ -124,6 +135,18 @@ def build_model_inputs(
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
     known_function_names: set[str] = build_known_function_names(discovered_inputs)
     known_table_function_names: set[str] = build_known_table_function_names(discovered_inputs)
+    if dbt_manifest is None:
+        dbt_manifest = build_compile_manifest_index(
+            manifest_contents=(
+                None
+                if discovered_inputs.dbt_manifest_file is None
+                else discovered_inputs.dbt_manifest_file.contents
+            )
+        )
+    validate_compile_model_names(
+        known_model_names=known_model_names,
+        dbt_manifest=dbt_manifest,
+    )
     custom_materialization_names: frozenset[str] = frozenset(
         mf.name for mf in discovered_inputs.materialization_files
     )
@@ -186,7 +209,7 @@ def build_model_inputs(
             known_source_names=known_source_names,
             known_function_names=known_function_names,
             known_table_function_names=known_table_function_names,
-            has_dbt_manifest=discovered_inputs.dbt_manifest_file is not None,
+            dbt_manifest=dbt_manifest,
         )
         validate_incremental_config(
             config=effective_config,
@@ -1075,6 +1098,7 @@ def build_test_inputs(
                     mock_model_names=test_ctes.mock_model_names,
                     mock_source_names=test_ctes.mock_source_names,
                     mock_seed_names=test_ctes.mock_seed_names,
+                    mock_dbt_ref_names=test_ctes.mock_dbt_ref_names,
                     expected_model_names=test_ctes.expected_model_names,
                     assertion_ctes=test_ctes.assertion_ctes,
                     assertion_names=test_ctes.assertion_names,
@@ -1117,6 +1141,7 @@ def build_scenario_inputs(
                 source_fixture_names=scenario_ctes.source_fixture_names,
                 ref_fixture_names=scenario_ctes.ref_fixture_names,
                 seed_fixture_names=scenario_ctes.seed_fixture_names,
+                dbt_ref_fixture_names=scenario_ctes.dbt_ref_fixture_names,
                 expected_model_names=scenario_ctes.expected_model_names,
                 assertion_names=scenario_ctes.assertion_names,
             )
@@ -1679,7 +1704,7 @@ def validate_model_references(
     known_source_names: set[str],
     known_function_names: set[str],
     known_table_function_names: set[str],
-    has_dbt_manifest: bool,
+    dbt_manifest: DbtManifestIndex | None,
 ) -> None:
     """Validate extracted model refs against discovered project inputs."""
 
@@ -1722,9 +1747,10 @@ def validate_model_references(
                 f"'{reference.ref_name}'"
             )
         if reference.ref_kind == SqlReferenceKind.DBT_REF:
-            raise CompileInputError(
-                f"Model file {model_file.relative_path} uses __dbt_ref('{reference.ref_name}') "
-                "but dbt refs are not supported yet; support may be added in a future release"
+            validate_compile_model_reference(
+                reference=reference,
+                model_relative_path=model_file.relative_path,
+                dbt_manifest=dbt_manifest,
             )
         if (
             reference.ref_kind == SqlReferenceKind.UDF
@@ -1843,7 +1869,7 @@ def validate_audit_references(
         if reference.ref_kind == SqlReferenceKind.DBT_REF:
             raise CompileInputError(
                 f"Audit file {audit_file.relative_path} may not use "
-                f"__dbt_ref('{reference.ref_name}') right now"
+                f"__dbt_ref('{reference.ref_name}'); audit dbt model checks belong in dbt"
             )
         if (
             reference.ref_kind == SqlReferenceKind.REF

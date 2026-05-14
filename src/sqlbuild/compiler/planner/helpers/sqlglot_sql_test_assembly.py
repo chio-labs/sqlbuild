@@ -17,6 +17,7 @@ def try_resolve_test_model_sql_with_sqlglot(
     mock_refs: dict[str, str],
     mock_sources: dict[str, str],
     mock_seeds: dict[str, str],
+    mock_dbt_refs: dict[str, str],
     function_targets: dict[str, str],
     helper_ctes: tuple[CompileSqlTestCte, ...],
     resolved_chain: dict[str, SqlglotResolvedTestSql],
@@ -79,7 +80,9 @@ def try_resolve_test_model_sql_with_sqlglot(
             return table
         function_name: str = str(anonymous.this).lower()
         expressions: list[Any] = list(anonymous.expressions)
-        if len(expressions) != 1:
+        if len(expressions) != 1 and function_name != "__dbt_ref":
+            return table
+        if function_name == "__dbt_ref" and len(expressions) not in {1, 2}:
             return table
         argument: Any = expressions[0]
         if not hasattr(argument, "name"):
@@ -130,6 +133,26 @@ def try_resolve_test_model_sql_with_sqlglot(
                 generated_ctes.setdefault(
                     generated_name,
                     _wrap_mock_body(mock_seeds[referenced_name]),
+                )
+                table.set("this", identifier_type(this=generated_name, quoted=False))
+                return table
+            return table
+
+        if function_name == "__dbt_ref":
+            dbt_ref_name: str
+            if len(expressions) == 1:
+                dbt_ref_name = referenced_name
+            elif len(expressions) == 2 and hasattr(expressions[1], "name"):
+                dbt_ref_name = f"{referenced_name}__{expressions[1].name}"
+            else:
+                return table
+            generated_name = f"__dbt_ref__{dbt_ref_name}"
+            if dbt_ref_name in mock_dbt_refs:
+                reachable_mocks.add(dbt_ref_name)
+                _ensure_available(generated_name, dbt_ref_name, "dbt_ref")
+                generated_ctes.setdefault(
+                    generated_name,
+                    _wrap_mock_body(mock_dbt_refs[dbt_ref_name]),
                 )
                 table.set("this", identifier_type(this=generated_name, quoted=False))
                 return table

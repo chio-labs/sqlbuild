@@ -22,6 +22,7 @@ from sqlbuild.cli.commands.main.helpers.lineage.constants import COLUMN_LINEAGE_
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.parsers import (
     add_cursor_override_args,
+    add_dbt_config_args,
     add_execution_args,
     add_scenario_snapshot_safety_args,
     add_select_args,
@@ -31,6 +32,7 @@ from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
+from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from sqlbuild.shared.constants import (
     SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
     SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
@@ -64,14 +66,17 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
         default=CompileLineageMode.FAST.value,
         help="Column lineage mode: fast (default), rich (slower), or none",
     )
+    add_dbt_config_args(compile_parser)
 
     plan_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PLAN)
     plan_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     plan_parser.add_argument("--defer-to", default=None)
     plan_parser.add_argument("--json", action="store_true", default=False)
     plan_parser.add_argument("--full-refresh", action="store_true", default=False)
+    plan_parser.add_argument("--verbose", "-v", action="store_true", default=False)
     add_cursor_override_args(plan_parser)
     add_select_args(plan_parser)
+    add_dbt_config_args(plan_parser)
 
     build_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.BUILD)
     build_parser.add_argument("--no-sql-validation", action="store_true", default=False)
@@ -79,6 +84,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     add_cursor_override_args(build_parser)
     add_execution_args(build_parser)
     add_select_args(build_parser)
+    add_dbt_config_args(build_parser)
 
     run_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.RUN)
     run_parser.add_argument("--no-sql-validation", action="store_true", default=False)
@@ -86,15 +92,18 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     add_cursor_override_args(run_parser)
     add_execution_args(run_parser)
     add_select_args(run_parser)
+    add_dbt_config_args(run_parser)
 
     test_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.TEST)
     test_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     add_select_args(test_parser)
+    add_dbt_config_args(test_parser)
 
     audit_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.AUDIT)
     audit_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     audit_parser.add_argument("--defer-to", default=None)
     add_select_args(audit_parser)
+    add_dbt_config_args(audit_parser)
 
     seed_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.SEED)
     add_select_args(seed_parser)
@@ -105,6 +114,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     clone_parser.add_argument("--to", dest="to_environment", required=True)
     clone_parser.add_argument("--hard-copy", action="store_true", default=False)
     add_select_args(clone_parser)
+    add_dbt_config_args(clone_parser)
 
     diff_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DIFF)
     diff_parser.add_argument("environment_range", metavar="FROM:TO")
@@ -187,6 +197,14 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     scenario_capture_parser.add_argument("scenario_selector", nargs="*", metavar="scenario")
     scenario_capture_parser.add_argument("--retain", dest="scenario_retain", action="store_true")
     add_scenario_snapshot_safety_args(scenario_capture_parser)
+    dbt_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DBT)
+    dbt_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
+    dbt_subparsers = dbt_parser.add_subparsers(dest="dbt_command")
+    dbt_subparsers.add_parser("plan")
+    dbt_subparsers.add_parser("run")
+    dbt_subparsers.add_parser("build")
+    dbt_subparsers.add_parser("test")
+    dbt_subparsers.add_parser("debug")
     return parser
 
 
@@ -197,6 +215,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.build import run_build
     from sqlbuild.cli.commands.main.clone import run_clone
     from sqlbuild.cli.commands.main.compile import run_compile
+    from sqlbuild.cli.commands.main.dbt import run_dbt_command
     from sqlbuild.cli.commands.main.debug import run_debug
     from sqlbuild.cli.commands.main.diff import run_diff
     from sqlbuild.cli.commands.main.helpers.scenario.capture import run_scenario_capture
@@ -213,6 +232,36 @@ def main(argv: Sequence[str] | None = None) -> int:
     handlers: CliEntrypointHandlers = CliEntrypointHandlers(
         run_compile=run_compile,
         run_plan=run_plan,
+        run_dbt_plan=lambda project_dir, args, no_color: run_dbt_command(
+            command=DbtInteropCommand.PLAN,
+            project_dir=project_dir,
+            args=args,
+            no_color=no_color,
+        ),
+        run_dbt_run=lambda project_dir, args, no_color: run_dbt_command(
+            command=DbtInteropCommand.RUN,
+            project_dir=project_dir,
+            args=args,
+            no_color=no_color,
+        ),
+        run_dbt_build=lambda project_dir, args, no_color: run_dbt_command(
+            command=DbtInteropCommand.BUILD,
+            project_dir=project_dir,
+            args=args,
+            no_color=no_color,
+        ),
+        run_dbt_test=lambda project_dir, args, no_color: run_dbt_command(
+            command=DbtInteropCommand.TEST,
+            project_dir=project_dir,
+            args=args,
+            no_color=no_color,
+        ),
+        run_dbt_debug=lambda project_dir, args, no_color: run_dbt_command(
+            command=DbtInteropCommand.DEBUG,
+            project_dir=project_dir,
+            args=args,
+            no_color=no_color,
+        ),
         run_build=run_build,
         run_run=run_run,
         run_test=run_test,
@@ -242,7 +291,18 @@ def _main_with_dependencies(
     parser: argparse.ArgumentParser = _build_parser(use_color=use_color)
     try:
         args: CliNamespace = CliNamespace()
-        parser.parse_args(argv, namespace=args)
+        unknown_args: list[str]
+        _, unknown_args = parser.parse_known_args(argv, namespace=args)
+        if args.command == CliCommand.DBT and args.dbt_command in {
+            "plan",
+            "run",
+            "build",
+            "test",
+            "debug",
+        }:
+            args.dbt_args = unknown_args
+        elif unknown_args:
+            parser.error(f"unrecognized arguments: {' '.join(unknown_args)}")
     except SystemExit as error:
         if isinstance(error.code, int):
             return error.code
@@ -287,7 +347,20 @@ def _main_with_dependencies(
                 args.no_color,
                 tuple(args.select),
                 tuple(args.exclude),
+                args.verbose,
             )
+        if args.command == CliCommand.DBT:
+            if args.dbt_command == "plan":
+                return handlers.run_dbt_plan(project_dir, tuple(args.dbt_args), args.no_color)
+            if args.dbt_command == "run":
+                return handlers.run_dbt_run(project_dir, tuple(args.dbt_args), args.no_color)
+            if args.dbt_command == "build":
+                return handlers.run_dbt_build(project_dir, tuple(args.dbt_args), args.no_color)
+            if args.dbt_command == "test":
+                return handlers.run_dbt_test(project_dir, tuple(args.dbt_args), args.no_color)
+            if args.dbt_command == "debug":
+                return handlers.run_dbt_debug(project_dir, tuple(args.dbt_args), args.no_color)
+            raise CliUserError("dbt requires a subcommand such as 'plan'", code="C237")
         if args.command == CliCommand.BUILD:
             cursor_overrides = CursorOverrides(
                 start_ts=args.start_cursor_ts,

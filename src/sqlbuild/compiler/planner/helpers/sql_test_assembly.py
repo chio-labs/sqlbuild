@@ -6,6 +6,7 @@ import re
 
 from sqlbuild.compiler.compile.constants import (
     ASSERT_TEST_CTE_PREFIX,
+    DBT_REF_TEST_CTE_PREFIX,
     EXPECTED_TEST_CTE_PREFIX,
     REF_TEST_CTE_PREFIX,
     SEED_TEST_CTE_PREFIX,
@@ -36,6 +37,7 @@ from sqlbuild.compiler.planner.types import WarningSeverity
 _REF_PATTERN: re.Pattern[str] = re.compile(r'__ref\("([^"]+)"\)')
 _SOURCE_PATTERN: re.Pattern[str] = re.compile(r'__source\("([^"]+)"\)')
 _SEED_PATTERN: re.Pattern[str] = re.compile(r'__seed\("([^"]+)"\)')
+_DBT_REF_PATTERN: re.Pattern[str] = re.compile(r'__dbt_ref\("([^"]+)"(?:,\s*"([^"]+)")?\)')
 
 
 def plan_test(
@@ -53,6 +55,7 @@ def plan_test(
     mock_refs: dict[str, str] = _extract_mock_refs(test)
     mock_sources: dict[str, str] = _extract_mock_sources(test)
     mock_seeds: dict[str, str] = _extract_mock_seeds(test)
+    mock_dbt_refs: dict[str, str] = _extract_mock_dbt_refs(test)
     helper_ctes: tuple[CompileSqlTestCte, ...] = _extract_helper_ctes(test)
     expected_map: dict[str, str] = _extract_expected_ctes(test)
     assertion_map: dict[str, str] = _extract_assertion_ctes(test)
@@ -99,6 +102,7 @@ def plan_test(
             mock_refs=mock_refs,
             mock_sources=mock_sources,
             mock_seeds=mock_seeds,
+            mock_dbt_refs=mock_dbt_refs,
             helper_ctes=helper_ctes,
             resolved_chain=resolved,
             reachable_mocks=reachable_mocks,
@@ -111,6 +115,7 @@ def plan_test(
                 mock_refs=mock_refs,
                 mock_sources=mock_sources,
                 mock_seeds=mock_seeds,
+                mock_dbt_refs=mock_dbt_refs,
                 function_targets={
                     name: target.qualified_name
                     for name, target in function_targets.items()
@@ -157,6 +162,7 @@ def plan_test(
                     mock_refs=mock_refs,
                     mock_sources=mock_sources,
                     mock_seeds=mock_seeds,
+                    mock_dbt_refs=mock_dbt_refs,
                     helper_ctes=helper_ctes,
                     function_targets=function_targets,
                 ),
@@ -197,6 +203,18 @@ def plan_test(
             )
         )
 
+    unreachable_dbt_ref: str
+    for unreachable_dbt_ref in sorted(set(mock_dbt_refs) - reachable_mocks):
+        warnings.append(
+            PlanWarning(
+                model_name=None,
+                severity=WarningSeverity.WARNING,
+                message=(
+                    f"test '{test.name}' mock __dbt_ref__{unreachable_dbt_ref} is unreachable"
+                ),
+            )
+        )
+
     entry: SqlTestPlanEntry = SqlTestPlanEntry(
         key=test.key,
         name=test.name,
@@ -226,6 +244,7 @@ def _resolve_assertion_sql(
     mock_refs: dict[str, str],
     mock_sources: dict[str, str],
     mock_seeds: dict[str, str],
+    mock_dbt_refs: dict[str, str],
     helper_ctes: tuple[CompileSqlTestCte, ...],
     function_targets: dict[str, CompiledRelationTarget],
 ) -> str:
@@ -238,6 +257,7 @@ def _resolve_assertion_sql(
         mock_refs=mock_refs,
         mock_sources=mock_sources,
         mock_seeds=mock_seeds,
+        mock_dbt_refs=mock_dbt_refs,
         helper_ctes=helper_ctes,
         resolved_chain=assertion_resolved_chain,
         reachable_mocks=reachable_mocks,
@@ -280,6 +300,7 @@ def _resolve_test_model_sql(
     mock_refs: dict[str, str],
     mock_sources: dict[str, str],
     mock_seeds: dict[str, str],
+    mock_dbt_refs: dict[str, str],
     helper_ctes: tuple[CompileSqlTestCte, ...],
     resolved_chain: dict[str, str],
     reachable_mocks: set[str],
@@ -324,9 +345,23 @@ def _resolve_test_model_sql(
             )
         return match.group(0)
 
+    def _replace_dbt_ref(match: re.Match[str]) -> str:
+        dbt_ref_name: str = _dbt_ref_fixture_name(
+            package_name=match.group(1), model_name=match.group(2)
+        )
+        if dbt_ref_name in mock_dbt_refs:
+            reachable_mocks.add(dbt_ref_name)
+            mock_body: str = mock_dbt_refs[dbt_ref_name]
+            return _wrap_mock_with_helpers(
+                mock_body=mock_body,
+                helper_with=helper_with,
+            )
+        return match.group(0)
+
     result: str = _REF_PATTERN.sub(_replace_ref, query_sql)
     result = _SOURCE_PATTERN.sub(_replace_source, result)
     result = _SEED_PATTERN.sub(_replace_seed, result)
+    result = _DBT_REF_PATTERN.sub(_replace_dbt_ref, result)
     result = resolve_udf_references(query_sql=result, function_targets=function_targets)
     return result
 
@@ -379,6 +414,21 @@ def _validate_resolved_sql(
                     f"test '{test_name}': model '{model_name}'"
                     f' references __seed("{seed_name}") which'
                     f" has no mock"
+                ),
+            )
+        )
+    dbt_ref_match: re.Match[str]
+    for dbt_ref_match in _DBT_REF_PATTERN.finditer(resolved_sql):
+        dbt_ref_name: str = _dbt_ref_fixture_name(
+            package_name=dbt_ref_match.group(1), model_name=dbt_ref_match.group(2)
+        )
+        warnings.append(
+            PlanWarning(
+                model_name=model_name,
+                severity=WarningSeverity.ERROR,
+                message=(
+                    f"test '{test_name}': model '{model_name}' references "
+                    f"__dbt_ref__{dbt_ref_name} which has no mock"
                 ),
             )
         )
@@ -488,6 +538,24 @@ def _extract_mock_seeds(test: CompiledSqlTest) -> dict[str, str]:
     return result
 
 
+def _extract_mock_dbt_refs(test: CompiledSqlTest) -> dict[str, str]:
+    """Extract mock dbt ref CTE bodies keyed by fixture name."""
+
+    result: dict[str, str] = {}
+    cte: CompileSqlTestCte
+    for cte in test.authored_ctes:
+        if cte.name.startswith(DBT_REF_TEST_CTE_PREFIX):
+            name: str = cte.name.removeprefix(DBT_REF_TEST_CTE_PREFIX)
+            result[name] = cte.sql_body
+    return result
+
+
+def _dbt_ref_fixture_name(*, package_name: str, model_name: str | None) -> str:
+    if model_name is None:
+        return package_name
+    return f"{package_name}__{model_name}"
+
+
 def _extract_helper_ctes(
     test: CompiledSqlTest,
 ) -> tuple[CompileSqlTestCte, ...]:
@@ -501,6 +569,8 @@ def _extract_helper_ctes(
         if cte.name.startswith(SOURCE_TEST_CTE_PREFIX):
             continue
         if cte.name.startswith(SEED_TEST_CTE_PREFIX):
+            continue
+        if cte.name.startswith(DBT_REF_TEST_CTE_PREFIX):
             continue
         if cte.name.startswith(ASSERT_TEST_CTE_PREFIX):
             continue

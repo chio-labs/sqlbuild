@@ -5,6 +5,7 @@ from __future__ import annotations
 import difflib
 import re
 from collections import Counter
+from collections.abc import Callable, Sequence
 
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
@@ -24,7 +25,16 @@ from sqlbuild.compiler.planner.types import (
     WarningSeverity,
 )
 from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
-from sqlbuild.shared.helpers.colors import blue_bold, green, green_bold, red, yellow, yellow_bold
+from sqlbuild.shared.helpers.colors import (
+    blue_bold,
+    green,
+    green_bold,
+    light_green,
+    red,
+    yellow,
+    yellow_bold,
+)
+from sqlbuild.shared.helpers.display import DisplayOptions, append_overflow_line, visible_entries
 
 _REASON_GROUP_ORDER: tuple[PlanReason, ...] = (
     PlanReason.QUERY_CHANGED,
@@ -46,13 +56,29 @@ _SCHEMA_CHANGE_SYMBOLS: dict[SchemaChangeKind, str] = {
 }
 
 
-def format_plan(plan: PlanOutput, *, full_refresh: bool = False, use_color: bool = True) -> str:
+def format_plan(
+    plan: PlanOutput,
+    *,
+    full_refresh: bool = False,
+    use_color: bool = True,
+    include_header: bool = True,
+    display_options: DisplayOptions | None = None,
+    section_header_style: Callable[[str], str] = light_green,
+) -> str:
     """Format plan output grouped by reason with inline detail."""
 
     lines: list[str] = []
 
+    resolved_display_options: DisplayOptions = display_options or DisplayOptions()
+
     if full_refresh:
-        _format_full_refresh(lines, plan)
+        _format_full_refresh(
+            lines,
+            plan,
+            include_header=include_header,
+            display_options=resolved_display_options,
+            section_header_style=section_header_style,
+        )
         result: str = "\n".join(lines)
         return result if use_color else _strip_ansi(result)
 
@@ -60,18 +86,21 @@ def format_plan(plan: PlanOutput, *, full_refresh: bool = False, use_color: bool
     selected_count: int = _selected_count(plan)
     name_column_width: int = _resolve_name_column_width(plan)
 
-    header: str = f"Plan ready ({selected_count} selected)"
-    lines.append(green_bold(header))
+    if include_header:
+        header: str = f"Plan ready ({selected_count} selected)"
+        lines.append(green_bold(header))
 
     normal: list[ModelPlanEntry] = _collect_normal(active)
     cascade: list[ModelPlanEntry] = _collect_upstream_changed(active)
     groups: dict[PlanReason, list[ModelPlanEntry]] = _group_by_reason(active, cascade)
 
-    _format_functions(lines, plan, name_column_width=name_column_width)
-
-    if normal:
-        lines.append("")
-        _format_normal_section(lines, normal)
+    _format_changed_functions(
+        lines,
+        plan,
+        name_column_width=name_column_width,
+        display_options=resolved_display_options,
+        section_header_style=section_header_style,
+    )
 
     reason: PlanReason
     for reason in _REASON_GROUP_ORDER:
@@ -80,36 +109,94 @@ def format_plan(plan: PlanOutput, *, full_refresh: bool = False, use_color: bool
             continue
         label: str = _REASON_GROUP_LABELS[reason]
         lines.append("")
-        lines.append(green_bold(f"{label} ({len(entries)})"))
+        lines.append(section_header_style(f"{label} ({len(entries)})"))
         entry: ModelPlanEntry
-        for entry in entries:
+        visible: Sequence[ModelPlanEntry] = visible_entries(
+            entries, options=resolved_display_options
+        )
+        for entry in visible:
             _format_detail_entry(lines, entry, reason, name_column_width=name_column_width)
+        append_overflow_line(
+            lines,
+            total_count=len(entries),
+            visible_count=len(visible),
+            indent="  ",
+            options=resolved_display_options,
+        )
 
     if cascade:
         lines.append("")
-        lines.append(green_bold(f"Upstream changed ({len(cascade)})"))
+        lines.append(section_header_style(f"Upstream changed ({len(cascade)})"))
         entry_c: ModelPlanEntry
-        for entry_c in cascade:
+        visible_cascade: Sequence[ModelPlanEntry] = visible_entries(
+            cascade, options=resolved_display_options
+        )
+        for entry_c in visible_cascade:
             _format_upstream_changed_entry(lines, entry_c, name_column_width=name_column_width)
+        append_overflow_line(
+            lines,
+            total_count=len(cascade),
+            visible_count=len(visible_cascade),
+            indent="  ",
+            options=resolved_display_options,
+        )
 
-    _format_seeds(lines, plan)
+    if normal:
+        lines.append("")
+        _format_routine_models_section(
+            lines,
+            normal,
+            name_column_width=name_column_width,
+            display_options=resolved_display_options,
+            section_header_style=section_header_style,
+        )
+
+    _format_routine_functions(
+        lines,
+        plan,
+        name_column_width=name_column_width,
+        display_options=resolved_display_options,
+        section_header_style=section_header_style,
+    )
+
+    _format_seeds(
+        lines,
+        plan,
+        display_options=resolved_display_options,
+        section_header_style=section_header_style,
+    )
     _format_warnings(lines, plan)
 
     output: str = "\n".join(lines)
     return output if use_color else _strip_ansi(output)
 
 
-def _format_full_refresh(lines: list[str], plan: PlanOutput) -> None:
+def _format_full_refresh(
+    lines: list[str],
+    plan: PlanOutput,
+    *,
+    include_header: bool,
+    display_options: DisplayOptions,
+    section_header_style: Callable[[str], str],
+) -> None:
     """Format the full refresh variant of plan output."""
 
     selected_count: int = _selected_count(plan)
     active: list[ModelPlanEntry] = [e for e in plan.model_entries if e.action != PlanAction.SKIP]
     name_column_width: int = _resolve_name_column_width(plan)
 
-    lines.append(green_bold(f"Plan ready (full refresh, {selected_count} selected)"))
+    if include_header:
+        lines.append(green_bold(f"Plan ready (full refresh, {selected_count} selected)"))
 
-    _format_functions(lines, plan, name_column_width=name_column_width)
-    lines.append("")
+    _format_functions(
+        lines,
+        plan,
+        name_column_width=name_column_width,
+        display_options=display_options,
+        section_header_style=section_header_style,
+    )
+    if lines:
+        lines.append("")
 
     counts: Counter[str] = Counter()
     entry: ModelPlanEntry
@@ -117,13 +204,18 @@ def _format_full_refresh(lines: list[str], plan: PlanOutput) -> None:
         label: str = _materialization_label(entry)
         counts[label] += 1
 
-    lines.append(green_bold(f"Full refresh ({len(active)})"))
+    lines.append(section_header_style(f"Full refresh ({len(active)})"))
     count_label: str
     count_value: int
     for count_label, count_value in counts.most_common():
         lines.append(f"  {count_value:>3} {count_label}")
 
-    _format_seeds(lines, plan)
+    _format_seeds(
+        lines,
+        plan,
+        display_options=display_options,
+        section_header_style=section_header_style,
+    )
 
 
 def _selected_count(plan: PlanOutput) -> int:
@@ -176,20 +268,34 @@ def _group_by_reason(
     return groups
 
 
-def _format_normal_section(lines: list[str], entries: list[ModelPlanEntry]) -> None:
-    """Format the Normal aggregate counts section."""
+def _format_routine_models_section(
+    lines: list[str],
+    entries: list[ModelPlanEntry],
+    *,
+    name_column_width: int,
+    display_options: DisplayOptions,
+    section_header_style: Callable[[str], str],
+) -> None:
+    """Format routine model work by resource name."""
 
-    counts: Counter[str] = Counter()
+    lines.append(section_header_style(f"Models ({len(entries)} standard run)"))
+    visible: Sequence[ModelPlanEntry] = visible_entries(entries, options=display_options)
     entry: ModelPlanEntry
-    for entry in entries:
-        label: str = _materialization_label(entry)
-        counts[label] += 1
-
-    lines.append(green_bold(f"Normal ({len(entries)})"))
-    count_label: str
-    count_value: int
-    for count_label, count_value in counts.most_common():
-        lines.append(f"  {count_value:>3} {count_label}")
+    for entry in visible:
+        lines.append(
+            _format_name_value_line(
+                entry.name,
+                _materialization_label(entry),
+                name_column_width=name_column_width,
+            )
+        )
+    append_overflow_line(
+        lines,
+        total_count=len(entries),
+        visible_count=len(visible),
+        indent="  ",
+        options=display_options,
+    )
 
 
 def _materialization_label(entry: ModelPlanEntry) -> str:
@@ -399,51 +505,133 @@ def _backfill_value(action: BackfillAction, duration: str) -> str:
     return str(action)
 
 
-def _format_seeds(lines: list[str], plan: PlanOutput) -> None:
+def _format_seeds(
+    lines: list[str],
+    plan: PlanOutput,
+    *,
+    display_options: DisplayOptions,
+    section_header_style: Callable[[str], str],
+) -> None:
     """Append the seeds section."""
 
     if not plan.seed_entries:
         return
     lines.append("")
-    lines.append(green_bold(f"Seeds ({len(plan.seed_entries)})"))
+    lines.append(section_header_style(f"Seeds ({len(plan.seed_entries)})"))
     seed_entry: object
-    for seed_entry in plan.seed_entries:
+    visible: Sequence[object] = visible_entries(plan.seed_entries, options=display_options)
+    for seed_entry in visible:
         lines.append(f"  {getattr(seed_entry, 'name', str(seed_entry))}")
+    append_overflow_line(
+        lines,
+        total_count=len(plan.seed_entries),
+        visible_count=len(visible),
+        indent="  ",
+        options=display_options,
+    )
 
 
-def _format_functions(lines: list[str], plan: PlanOutput, *, name_column_width: int) -> None:
+def _format_functions(
+    lines: list[str],
+    plan: PlanOutput,
+    *,
+    name_column_width: int,
+    display_options: DisplayOptions,
+    section_header_style: Callable[[str], str],
+) -> None:
     """Append the functions section."""
+
+    _format_changed_functions(
+        lines,
+        plan,
+        name_column_width=name_column_width,
+        display_options=display_options,
+        section_header_style=section_header_style,
+    )
+    _format_routine_functions(
+        lines,
+        plan,
+        name_column_width=name_column_width,
+        display_options=display_options,
+        section_header_style=section_header_style,
+    )
+
+
+def _format_changed_functions(
+    lines: list[str],
+    plan: PlanOutput,
+    *,
+    name_column_width: int,
+    display_options: DisplayOptions,
+    section_header_style: Callable[[str], str],
+) -> None:
+    """Append changed functions with details."""
 
     if not plan.function_entries:
         return
     changed_entries: list[FunctionPlanEntry] = [
         entry for entry in plan.function_entries if entry.reason != PlanReason.NO_CHANGE
     ]
+    if not changed_entries:
+        return
+    lines.append("")
+    lines.append(section_header_style(f"Changed functions ({len(changed_entries)})"))
+    function_entry: FunctionPlanEntry
+    visible_changed: Sequence[FunctionPlanEntry] = visible_entries(
+        changed_entries, options=display_options
+    )
+    for function_entry in visible_changed:
+        _format_function_entry(
+            lines,
+            function_entry,
+            show_details=True,
+            name_column_width=name_column_width,
+        )
+    append_overflow_line(
+        lines,
+        total_count=len(changed_entries),
+        visible_count=len(visible_changed),
+        indent="  ",
+        options=display_options,
+    )
+
+
+def _format_routine_functions(
+    lines: list[str],
+    plan: PlanOutput,
+    *,
+    name_column_width: int,
+    display_options: DisplayOptions,
+    section_header_style: Callable[[str], str],
+) -> None:
+    """Append routine functions by resource name."""
+
+    if not plan.function_entries:
+        return
     unchanged_entries: list[FunctionPlanEntry] = [
         entry for entry in plan.function_entries if entry.reason == PlanReason.NO_CHANGE
     ]
-    if changed_entries:
-        lines.append("")
-        lines.append(green_bold(f"Function changed ({len(changed_entries)})"))
-        function_entry: FunctionPlanEntry
-        for function_entry in changed_entries:
-            _format_function_entry(
-                lines,
-                function_entry,
-                show_details=True,
-                name_column_width=name_column_width,
-            )
     if not unchanged_entries:
         return
     lines.append("")
-    lines.append(green_bold(f"Functions ({len(unchanged_entries)})"))
-    for function_entry in unchanged_entries:
+    lines.append(section_header_style(f"Functions ({len(unchanged_entries)} standard run)"))
+    visible_unchanged: Sequence[FunctionPlanEntry] = visible_entries(
+        unchanged_entries, options=display_options
+    )
+    for function_entry in visible_unchanged:
         _format_function_entry(
             lines,
             function_entry,
             show_details=False,
             name_column_width=name_column_width,
         )
+    append_overflow_line(
+        lines,
+        total_count=len(unchanged_entries),
+        visible_count=len(visible_unchanged),
+        indent="  ",
+        options=display_options,
+    )
 
 
 def _format_function_entry(

@@ -70,6 +70,7 @@ class ScenarioLocalRetainE2ETestCase:
     expected_rows: tuple[tuple[object, ...], ...] = ()
     expected_duckdb_exists: bool = True
     corrupt_jsonl: bool = False
+    corrupt_capture_dialect: bool = False
     additional_project_files: tuple[tuple[str, str], ...] = ()
 
 
