@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
 
 
 class SqlReferenceKind(StrEnum):
@@ -23,8 +23,10 @@ class SqlReferenceKind(StrEnum):
     def fixture_cte_prefix(self) -> str:
         return f"{self.function_name}__"
 
-    def example_call(self, *args: str) -> str:
-        quoted_args: str = ", ".join(f'"{arg}"' for arg in args)
+    def example_call(self, *args: str, quote: Literal["'", '"'] = "'") -> str:
+        quoted_args: str = ", ".join(
+            f"{quote}{arg.replace(quote, quote + quote)}{quote}" for arg in args
+        )
         return f"{self.function_name}({quoted_args})"
 
     def placeholder_call(self, placeholder: str = "") -> str:

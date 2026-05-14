@@ -1327,7 +1327,8 @@ def build_model_attached_audit_inputs(
                 implicit_arguments={
                     "model": model_input.model_file.file_path.stem,
                     "relation": SqlReferenceKind.REF.example_call(
-                        model_input.model_file.file_path.stem
+                        model_input.model_file.file_path.stem,
+                        quote='"',
                     ),
                 },
                 attached_target_kind=AttachedAuditTargetKind.MODEL,
@@ -1354,7 +1355,8 @@ def build_model_attached_audit_inputs(
                     implicit_arguments={
                         "model": model_input.model_file.file_path.stem,
                         "relation": SqlReferenceKind.REF.example_call(
-                            model_input.model_file.file_path.stem
+                            model_input.model_file.file_path.stem,
+                            quote='"',
                         ),
                         "column": column_entry.name,
                     },
@@ -1400,7 +1402,8 @@ def build_source_attached_audit_inputs(
                 implicit_arguments={
                     "source": source_input.source_entry.name,
                     "relation": SqlReferenceKind.SOURCE.example_call(
-                        source_input.source_entry.name
+                        source_input.source_entry.name,
+                        quote='"',
                     ),
                 },
                 attached_target_kind=AttachedAuditTargetKind.SOURCE,
@@ -1427,7 +1430,8 @@ def build_source_attached_audit_inputs(
                     implicit_arguments={
                         "source": source_input.source_entry.name,
                         "relation": SqlReferenceKind.SOURCE.example_call(
-                            source_input.source_entry.name
+                            source_input.source_entry.name,
+                            quote='"',
                         ),
                         "column": column_entry.name,
                     },
