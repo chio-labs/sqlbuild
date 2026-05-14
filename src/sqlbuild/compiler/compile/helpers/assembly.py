@@ -11,14 +11,17 @@ from sqlbuild.compiler.compile.helpers.deps import (
     model_build_deps,
     sql_test_scope_deps,
 )
-from sqlbuild.compiler.compile.helpers.macros import expand_sql_macros
+from sqlbuild.compiler.compile.helpers.macros import expand_sql_macros, find_macro_call_names
 from sqlbuild.compiler.compile.helpers.sqlglot_columns import infer_columns_with_sqlglot
 from sqlbuild.compiler.compile.helpers.templating import expand_template_data
 from sqlbuild.compiler.compile.models import (
     CompileAuditInput,
     CompiledAudit,
+    CompiledDirectLogicSqlTestPayload,
     CompiledFunction,
+    CompileDirectLogicSqlTestInputPayload,
     CompiledModel,
+    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationTarget,
@@ -27,6 +30,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledSqlScenario,
     CompiledSqlTest,
     CompileModelInput,
+    CompileModelSqlTestInputPayload,
     CompileProjectInputs,
     CompileSeedInput,
     CompileSourceInput,
@@ -37,7 +41,10 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
     MacroContext,
 )
-from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    AttachedAuditTargetKind,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.spec.models.project import (
     DefaultsConfig,
@@ -149,6 +156,7 @@ def _assemble_compiled_model(
         inferred_columns=inferred_columns,
         authored_sql=model_input.model_file.contents,
         output_column_locations=model_input.model_file.output_column_locations,
+        macro_deps=find_macro_call_names(model_input.macro_source_sql),
     )
 
 
@@ -311,35 +319,77 @@ def _assemble_compiled_sql_test(
     inputs: CompileProjectInputs,
 ) -> CompiledSqlTest:
     test_name: str = _resolve_test_name(test_input)
-    assertion_target_model_names: tuple[str, ...] = _extract_sql_test_assertion_ref_targets(
-        assertion_ctes=test_input.assertion_ctes
-    )
+    compiled_payload: CompiledModelSqlTestPayload | CompiledDirectLogicSqlTestPayload
+    scope_deps: tuple[CompiledObjectKey, ...]
+    if isinstance(test_input.payload, CompileDirectLogicSqlTestInputPayload):
+        scope_deps = _macro_sql_test_scope_deps(
+            tested_macro_names=test_input.payload.tested_resource_names,
+            model_inputs=model_inputs,
+        )
+        compiled_payload = CompiledDirectLogicSqlTestPayload(
+            mode=test_input.payload.mode,
+            helper_ctes=test_input.payload.helper_ctes,
+            actual_cte=test_input.payload.actual_cte,
+            expected_cte=test_input.payload.expected_cte,
+            tested_resource_names=test_input.payload.tested_resource_names,
+        )
+    else:
+        model_payload: CompileModelSqlTestInputPayload = test_input.payload
+        assertion_target_model_names: tuple[str, ...] = _extract_sql_test_assertion_ref_targets(
+            assertion_ctes=model_payload.assertion_ctes
+        )
+        scope_deps = sql_test_scope_deps(
+            expected_model_names=tuple(
+                dict.fromkeys((*model_payload.expected_model_names, *assertion_target_model_names))
+            )
+        )
+        compiled_payload = CompiledModelSqlTestPayload(
+            authored_ctes=model_payload.authored_ctes,
+            macro_mocks=model_payload.macro_mocks,
+            model_query_overrides=_build_test_model_query_overrides(
+                test_input=test_input,
+                model_inputs=model_inputs,
+                inputs=inputs,
+            ),
+            mock_model_names=model_payload.mock_model_names,
+            mock_source_names=model_payload.mock_source_names,
+            mock_seed_names=model_payload.mock_seed_names,
+            mock_dbt_ref_names=model_payload.mock_dbt_ref_names,
+            expected_model_names=model_payload.expected_model_names,
+            assertion_ctes=model_payload.assertion_ctes,
+            assertion_names=model_payload.assertion_names,
+        )
     return CompiledSqlTest(
         key=CompiledObjectKey(resource_type=CompiledResourceType.SQL_TEST, name=test_name),
-        scope_deps=sql_test_scope_deps(
-            expected_model_names=tuple(
-                dict.fromkeys((*test_input.expected_model_names, *assertion_target_model_names))
-            )
-        ),
+        scope_deps=scope_deps,
         name=test_name,
         test_file=test_input.test_file,
         test_block=test_input.test_block,
         sql_body=test_input.sql_body,
-        authored_ctes=test_input.authored_ctes,
-        macro_mocks=test_input.macro_mocks,
-        model_query_overrides=_build_test_model_query_overrides(
-            test_input=test_input,
-            model_inputs=model_inputs,
-            inputs=inputs,
-        ),
-        mock_model_names=test_input.mock_model_names,
-        mock_source_names=test_input.mock_source_names,
-        mock_seed_names=test_input.mock_seed_names,
-        mock_dbt_ref_names=test_input.mock_dbt_ref_names,
-        expected_model_names=test_input.expected_model_names,
-        assertion_ctes=test_input.assertion_ctes,
-        assertion_names=test_input.assertion_names,
+        mode=test_input.mode,
+        payload=compiled_payload,
     )
+
+
+def _macro_sql_test_scope_deps(
+    *, tested_macro_names: tuple[str, ...], model_inputs: tuple[CompileModelInput, ...]
+) -> tuple[CompiledObjectKey, ...]:
+    tested_names: frozenset[str] = frozenset(tested_macro_names)
+    scope_deps: list[CompiledObjectKey] = []
+    model_input: CompileModelInput
+    for model_input in model_inputs:
+        model_macro_deps: frozenset[str] = frozenset(
+            find_macro_call_names(model_input.macro_source_sql)
+        )
+        if not tested_names.intersection(model_macro_deps):
+            continue
+        scope_deps.append(
+            CompiledObjectKey(
+                resource_type=CompiledResourceType.MODEL,
+                name=model_input.model_file.file_path.stem,
+            )
+        )
+    return tuple(scope_deps)
 
 
 def _extract_sql_test_assertion_ref_targets(
@@ -362,7 +412,9 @@ def _build_test_model_query_overrides(
 ) -> dict[str, str]:
     """Build per-test model SQL with macro mocks applied."""
 
-    if not test_input.macro_mocks:
+    if not isinstance(test_input.payload, CompileModelSqlTestInputPayload):
+        return {}
+    if not test_input.payload.macro_mocks:
         return {}
     macro_context: MacroContext = MacroContext(
         adapter_name=resolve_effective_adapter_name(
@@ -382,7 +434,7 @@ def _build_test_model_query_overrides(
             sql=macro_source_sql,
             file_path=model_input.model_file.file_path,
             loaded_macros=inputs.loaded_macros,
-            macro_overrides=test_input.macro_mocks,
+            macro_overrides=test_input.payload.macro_mocks,
             macro_context=macro_context,
         )
     return overrides

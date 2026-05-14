@@ -24,6 +24,10 @@ from tests.unit.src.sqlbuild.compiler.compile._test_helpers import (
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     AssembleCompiledProjectTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.compile.helpers.helpers import (
+    compiled_sql_test_expected_model_names,
+    compiled_sql_test_tested_resource_names,
+)
 
 ASSEMBLE_COMPILED_PROJECT_TEST_CASES: list[AssembleCompiledProjectTestCase] = [
     AssembleCompiledProjectTestCase(
@@ -103,6 +107,9 @@ SELECT 1
             (CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),),
         ),
         expected_test_expected_model_names=(("orders",),),
+        expected_model_macro_deps=((),),
+        expected_test_modes=("model",),
+        expected_tested_macro_names=((),),
     ),
     AssembleCompiledProjectTestCase(
         description="assembles seed targets using local environment database templates",
@@ -157,6 +164,9 @@ seeds:
         expected_test_names=(),
         expected_test_scope_deps=(),
         expected_test_expected_model_names=(),
+        expected_model_macro_deps=(),
+        expected_test_modes=(),
+        expected_tested_macro_names=(),
     ),
     AssembleCompiledProjectTestCase(
         description="assembles seed targets using seed declaration templates",
@@ -207,6 +217,51 @@ seeds:
         expected_test_names=(),
         expected_test_scope_deps=(),
         expected_test_expected_model_names=(),
+        expected_model_macro_deps=(),
+        expected_test_modes=(),
+        expected_tested_macro_names=(),
+    ),
+    AssembleCompiledProjectTestCase(
+        description="assembles macro test scope from models using inferred macro deps",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
+            "macros/status.py": (
+                'def normalize_status(value):\n    return f"LOWER(TRIM({value}))"\n'
+            ),
+            "models/orders.sql": (
+                "MODEL ();\n\nSELECT @normalize_status(\"'  PAID  '\") AS status\n"
+            ),
+            "models/customers.sql": "MODEL ();\n\nSELECT 'active' AS status\n",
+            "tests/unit/test_normalize_status.sql": """
+TEST (mode: macro, name: "normalizes status");
+
+WITH
+input_values AS (SELECT '  PAID  ' AS raw_status),
+__macro_actual__ AS (
+  SELECT @normalize_status("raw_status") AS status FROM input_values
+),
+__macro_expected__ AS (SELECT 'paid' AS status)
+SELECT 1
+""".strip()
+            + "\n",
+        },
+        expected_model_names=("customers", "orders"),
+        expected_model_deps=((), ()),
+        expected_model_target_names=("customers", "orders"),
+        expected_model_target_schemas=(None, None),
+        expected_source_names=(),
+        expected_seed_names=(),
+        expected_audit_names=(),
+        expected_audit_scope_deps=(),
+        expected_test_names=("normalizes status",),
+        expected_test_scope_deps=(
+            (CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),),
+        ),
+        expected_test_expected_model_names=((),),
+        expected_model_macro_deps=((), ("normalize_status",)),
+        expected_test_modes=("macro",),
+        expected_tested_macro_names=(("normalize_status",),),
     ),
 ]
 
@@ -232,6 +287,7 @@ def test_given_compile_inputs_when_assembling_compiled_project_then_returns_expe
 
     assert tuple(m.name for m in compiled.models) == test_case.expected_model_names
     assert tuple(m.deps for m in compiled.models) == test_case.expected_model_deps
+    assert tuple(m.macro_deps for m in compiled.models) == test_case.expected_model_macro_deps
     assert tuple(m.target.name for m in compiled.models) == test_case.expected_model_target_names
     assert (
         tuple(m.target.schema for m in compiled.models) == test_case.expected_model_target_schemas
@@ -254,7 +310,12 @@ def test_given_compile_inputs_when_assembling_compiled_project_then_returns_expe
     )
     assert tuple(t.name for t in compiled.sql_tests) == test_case.expected_test_names
     assert tuple(t.scope_deps for t in compiled.sql_tests) == test_case.expected_test_scope_deps
+    assert tuple(t.mode.value for t in compiled.sql_tests) == test_case.expected_test_modes
     assert (
-        tuple(t.expected_model_names for t in compiled.sql_tests)
+        tuple(compiled_sql_test_tested_resource_names(t) for t in compiled.sql_tests)
+        == test_case.expected_tested_macro_names
+    )
+    assert (
+        tuple(compiled_sql_test_expected_model_names(t) for t in compiled.sql_tests)
         == test_case.expected_test_expected_model_names
     )

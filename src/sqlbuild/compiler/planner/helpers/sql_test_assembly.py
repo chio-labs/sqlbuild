@@ -13,7 +13,9 @@ from sqlbuild.compiler.compile.constants import (
     SOURCE_TEST_CTE_PREFIX,
 )
 from sqlbuild.compiler.compile.models import (
+    CompiledDirectLogicSqlTestPayload,
     CompiledModel,
+    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationTarget,
@@ -21,6 +23,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlTestCte,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.resolve.refs import resolve_udf_references
 from sqlbuild.compiler.planner.helpers.sqlglot_sql_test_assembly import (
     try_resolve_test_model_sql_with_sqlglot,
@@ -56,6 +59,11 @@ def plan_test(
 ) -> tuple[SqlTestPlanEntry, tuple[PlanWarning, ...]]:
     """Build a test plan entry with chained resolution."""
 
+    if isinstance(test.payload, CompiledDirectLogicSqlTestPayload):
+        return _plan_macro_test(test=test, sqlglot_enabled=sqlglot_enabled), ()
+
+    model_payload: CompiledModelSqlTestPayload = test.payload
+
     model_map: dict[str, CompiledModel] = {m.name: m for m in project.models}
     function_targets: dict[str, CompiledRelationTarget] = {
         function.name: function.target for function in project.functions
@@ -72,7 +80,7 @@ def plan_test(
     )
 
     expected_names: tuple[str, ...] = tuple(
-        dict.fromkeys((*test.expected_model_names, *assertion_target_names))
+        dict.fromkeys((*model_payload.expected_model_names, *assertion_target_names))
     )
     ordered_names: tuple[str, ...] = _topo_sort_expected(
         expected_names=expected_names,
@@ -235,6 +243,38 @@ def plan_test(
     return entry, tuple(warnings)
 
 
+def _plan_macro_test(*, test: CompiledSqlTest, sqlglot_enabled: bool) -> SqlTestPlanEntry:
+    if not isinstance(test.payload, CompiledDirectLogicSqlTestPayload):
+        raise PlannerInputError(f"test '{test.name}' is not a direct-logic SQL test")
+    helper_ctes: tuple[CompileSqlTestCte, ...] = test.payload.helper_ctes
+    helper_with: str = _build_helper_with_clause(helper_ctes)
+    return SqlTestPlanEntry(
+        key=test.key,
+        name=test.name,
+        chain=(
+            ChainStep(
+                model_name=f"macro {test.name}",
+                resolved_sql=_wrap_direct_logic_sql(
+                    sql=test.payload.actual_cte.sql_body,
+                    helper_with=helper_with,
+                ),
+                expected_cte_sql=_wrap_direct_logic_sql(
+                    sql=test.payload.expected_cte.sql_body,
+                    helper_with=helper_with,
+                ),
+            ),
+        ),
+        scope_deps=test.scope_deps,
+        sqlglot_enabled=sqlglot_enabled,
+    )
+
+
+def _wrap_direct_logic_sql(*, sql: str, helper_with: str) -> str:
+    if helper_with:
+        return f"{helper_with} {sql}"
+    return sql
+
+
 def _extract_assertion_ref_targets(*, assertion_map: dict[str, str]) -> tuple[str, ...]:
     targets: list[str] = []
     sql: str
@@ -299,7 +339,9 @@ def _resolve_test_model_query_sql(
 ) -> str:
     """Resolve model SQL for one SQL test, applying test macro mocks if present."""
 
-    return test.model_query_overrides.get(model.name, model.query_sql)
+    if not isinstance(test.payload, CompiledModelSqlTestPayload):
+        raise PlannerInputError(f"test '{test.name}' is not a model SQL test")
+    return test.payload.model_query_overrides.get(model.name, model.query_sql)
 
 
 def _resolve_test_model_sql(
@@ -514,8 +556,10 @@ def _extract_mock_refs(test: CompiledSqlTest) -> dict[str, str]:
     """Extract mock ref CTE bodies keyed by model name."""
 
     result: dict[str, str] = {}
+    if not isinstance(test.payload, CompiledModelSqlTestPayload):
+        return result
     cte: CompileSqlTestCte
-    for cte in test.authored_ctes:
+    for cte in test.payload.authored_ctes:
         if cte.name.startswith(REF_TEST_CTE_PREFIX):
             name: str = cte.name.removeprefix(REF_TEST_CTE_PREFIX)
             result[name] = cte.sql_body
@@ -526,8 +570,10 @@ def _extract_mock_sources(test: CompiledSqlTest) -> dict[str, str]:
     """Extract mock source CTE bodies keyed by source name."""
 
     result: dict[str, str] = {}
+    if not isinstance(test.payload, CompiledModelSqlTestPayload):
+        return result
     cte: CompileSqlTestCte
-    for cte in test.authored_ctes:
+    for cte in test.payload.authored_ctes:
         if cte.name.startswith(SOURCE_TEST_CTE_PREFIX):
             name: str = cte.name.removeprefix(SOURCE_TEST_CTE_PREFIX)
             result[name] = cte.sql_body
@@ -538,8 +584,10 @@ def _extract_mock_seeds(test: CompiledSqlTest) -> dict[str, str]:
     """Extract mock seed CTE bodies keyed by seed name."""
 
     result: dict[str, str] = {}
+    if not isinstance(test.payload, CompiledModelSqlTestPayload):
+        return result
     cte: CompileSqlTestCte
-    for cte in test.authored_ctes:
+    for cte in test.payload.authored_ctes:
         if cte.name.startswith(SEED_TEST_CTE_PREFIX):
             name: str = cte.name.removeprefix(SEED_TEST_CTE_PREFIX)
             result[name] = cte.sql_body
@@ -550,8 +598,10 @@ def _extract_mock_dbt_refs(test: CompiledSqlTest) -> dict[str, str]:
     """Extract mock dbt ref CTE bodies keyed by fixture name."""
 
     result: dict[str, str] = {}
+    if not isinstance(test.payload, CompiledModelSqlTestPayload):
+        return result
     cte: CompileSqlTestCte
-    for cte in test.authored_ctes:
+    for cte in test.payload.authored_ctes:
         if cte.name.startswith(DBT_REF_TEST_CTE_PREFIX):
             name: str = cte.name.removeprefix(DBT_REF_TEST_CTE_PREFIX)
             result[name] = cte.sql_body
@@ -570,8 +620,10 @@ def _extract_helper_ctes(
     """Extract helper CTEs (not mock refs, not mock sources)."""
 
     helpers: list[CompileSqlTestCte] = []
+    if not isinstance(test.payload, CompiledModelSqlTestPayload):
+        return tuple(helpers)
     cte: CompileSqlTestCte
-    for cte in test.authored_ctes:
+    for cte in test.payload.authored_ctes:
         if cte.name.startswith(REF_TEST_CTE_PREFIX):
             continue
         if cte.name.startswith(SOURCE_TEST_CTE_PREFIX):
@@ -613,8 +665,10 @@ def _extract_assertion_ctes(
     test: CompiledSqlTest,
 ) -> dict[str, str]:
     result: dict[str, str] = {}
+    if not isinstance(test.payload, CompiledModelSqlTestPayload):
+        return result
     cte: CompileSqlTestCte
-    for cte in test.assertion_ctes:
+    for cte in test.payload.assertion_ctes:
         assertion_name: str = cte.name.removeprefix(ASSERT_TEST_CTE_PREFIX)
         result[assertion_name] = cte.sql_body
     return result

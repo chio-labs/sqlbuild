@@ -20,6 +20,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
     build_assertion_test_project_files,
     build_chain_test_project_files,
+    build_macro_test_project_files,
 )
 
 SQLGLOT_CHAIN_TEST_CASES: list[SqlglotChainSqlTestE2ETestCase] = [
@@ -66,13 +67,14 @@ SQLGLOT_CHAIN_TEST_CASES: list[SqlglotChainSqlTestE2ETestCase] = [
         SqlTestE2ETestCase(
             description="test runs SQL unit tests and all pass",
             expected_exit_code=0,
-            expected_stdout_fragment="PASS=2",
+            expected_stdout_fragment="PASS=3",
             expected_stdout_fragments=(
                 "Execution  sqb test  (concurrency: 1)",
                 "Connecting to duckdb...",
                 "Connected to duckdb.",
                 "check   expected stg_orders",
                 "check   expected fact_orders",
+                "check   expected macro calculates line total cents",
             ),
             expected_ordered_stdout_fragments=(
                 "Execution  sqb test  (concurrency: 1)",
@@ -80,7 +82,7 @@ SQLGLOT_CHAIN_TEST_CASES: list[SqlglotChainSqlTestE2ETestCase] = [
                 "Connected to duckdb. (<time>)",
                 "Inspecting warehouse state...",
                 "Generated plan. (<time>)",
-                "Test (2 selected, 2 models)",
+                "Test (3 selected, 3 models)",
                 "Connecting to duckdb...",
                 "Connected to duckdb. (<time>)",
                 "Preparing test functions...",
@@ -171,6 +173,62 @@ def test_given_chain_sql_test_when_running_test_then_generated_sql_is_valid(
     unexpected_fragment: str
     for unexpected_fragment in test_case.unexpected_artifact_fragments:
         assert unexpected_fragment not in artifact_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlTestE2ETestCase(
+            description="macro SQL unit test passes and writes direct comparison artifact",
+            expected_exit_code=0,
+            expected_stdout_fragment="PASS=1",
+            expected_stdout_fragments=(
+                "normalizes status",
+                "check   expected macro normalizes status",
+            ),
+        )
+    ],
+    ids=["macro SQL unit test passes and writes direct comparison artifact"],
+)
+def test_given_macro_sql_test_when_running_test_then_actual_and_expected_are_compared(
+    test_case: SqlTestE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="macro_test_project",
+        repo_files=build_macro_test_project_files(),
+    )
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+    assert "PASS=2" in build_result.stdout
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "test"),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    assert test_case.expected_stdout_fragment in result.stdout
+    expected_fragment: str
+    for expected_fragment in test_case.expected_stdout_fragments:
+        assert expected_fragment in result.stdout
+    runtime_artifact_sql: str = (
+        project_dir
+        / "target"
+        / "run"
+        / "tests"
+        / "macro normalizes status"
+        / "normalizes status.sql"
+    ).read_text(encoding="utf-8")
+    assert "__actual__macro_normalizes_status" in runtime_artifact_sql
+    assert "LOWER(TRIM(raw_status)) AS status" in runtime_artifact_sql
+    assert "__expected__macro_normalizes_status" in runtime_artifact_sql
 
 
 @pytest.mark.parametrize(

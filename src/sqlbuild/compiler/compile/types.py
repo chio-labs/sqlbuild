@@ -42,3 +42,10 @@ class CompiledResourceType(StrEnum):
 class FunctionLanguage(StrEnum):
     SQL = "sql"
     PYTHON = "python"
+
+
+class SqlTestMode(StrEnum):
+    MODEL = "model"
+    MACRO = "macro"
+    UDF = "udf"
+    TABLE_FN = "table_fn"

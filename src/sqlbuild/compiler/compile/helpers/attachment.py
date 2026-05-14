@@ -20,6 +20,7 @@ from sqlbuild.compiler.compile.constants import (
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.helpers.macros import (
     expand_sql_macros,
+    find_macro_call_names,
     load_project_macros,
 )
 from sqlbuild.compiler.compile.helpers.model_config_validation import (
@@ -47,8 +48,12 @@ from sqlbuild.compiler.compile.helpers.templating import (
 from sqlbuild.compiler.compile.helpers.tests import extract_sql_test_ctes
 from sqlbuild.compiler.compile.models import (
     CompileAuditInput,
+    CompileDirectLogicSqlTestCtes,
+    CompileDirectLogicSqlTestInputPayload,
     CompileModelConfig,
     CompileModelInput,
+    CompileModelSqlTestCtes,
+    CompileModelSqlTestInputPayload,
     CompileSeedInput,
     CompileSourceInput,
     CompileSqlFunctionInput,
@@ -67,6 +72,7 @@ from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompileContextKey,
     FunctionLanguage,
+    SqlTestMode,
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
@@ -1058,6 +1064,19 @@ def build_test_inputs(
     for test_file in discovered_inputs.test_files:
         test_block: DiscoveredSqlTestBlock
         for test_block in test_file.blocks:
+            test_mode: SqlTestMode = test_block.mode
+            tested_macro_names: tuple[str, ...] = ()
+            if test_mode == SqlTestMode.MACRO:
+                raw_test_ctes: CompileSqlTestCtes = _validate_raw_macro_test_ctes(
+                    test_block=test_block,
+                    test_file=test_file,
+                    test_mode=test_mode,
+                )
+                tested_macro_names = _infer_tested_macro_names(
+                    raw_test_ctes=raw_test_ctes,
+                    test_file=test_file,
+                    loaded_macros=loaded_macros,
+                )
             expanded_sql_body: str = expand_authored_sql(
                 sql=test_block.sql_body,
                 file_path=test_file.file_path,
@@ -1068,6 +1087,7 @@ def build_test_inputs(
             test_ctes: CompileSqlTestCtes = extract_sql_test_ctes(
                 sql=expanded_sql_body,
                 file_label=str(test_file.relative_path),
+                mode=test_mode,
             )
             validate_test_ctes(
                 test_ctes=test_ctes,
@@ -1077,23 +1097,90 @@ def build_test_inputs(
                 known_source_names=known_source_names,
                 loaded_macros=loaded_macros,
             )
+            test_payload: (
+                CompileModelSqlTestInputPayload | CompileDirectLogicSqlTestInputPayload
+            ) = _build_test_input_payload(
+                test_ctes=test_ctes,
+                tested_macro_names=tested_macro_names,
+            )
             test_inputs.append(
                 CompileSqlTestInput(
                     test_file=test_file,
                     test_block=test_block,
                     sql_body=expanded_sql_body,
-                    authored_ctes=test_ctes.authored_ctes,
-                    macro_mocks=test_ctes.macro_mocks,
-                    mock_model_names=test_ctes.mock_model_names,
-                    mock_source_names=test_ctes.mock_source_names,
-                    mock_seed_names=test_ctes.mock_seed_names,
-                    mock_dbt_ref_names=test_ctes.mock_dbt_ref_names,
-                    expected_model_names=test_ctes.expected_model_names,
-                    assertion_ctes=test_ctes.assertion_ctes,
-                    assertion_names=test_ctes.assertion_names,
+                    mode=test_mode,
+                    payload=test_payload,
                 )
             )
     return tuple(test_inputs)
+
+
+def _build_test_input_payload(
+    *, test_ctes: CompileSqlTestCtes, tested_macro_names: tuple[str, ...]
+) -> CompileModelSqlTestInputPayload | CompileDirectLogicSqlTestInputPayload:
+    match test_ctes.payload:
+        case CompileModelSqlTestCtes() as model_payload:
+            return CompileModelSqlTestInputPayload(
+                authored_ctes=model_payload.authored_ctes,
+                macro_mocks=model_payload.macro_mocks,
+                mock_model_names=model_payload.mock_model_names,
+                mock_source_names=model_payload.mock_source_names,
+                mock_seed_names=model_payload.mock_seed_names,
+                mock_dbt_ref_names=model_payload.mock_dbt_ref_names,
+                expected_model_names=model_payload.expected_model_names,
+                assertion_ctes=model_payload.assertion_ctes,
+                assertion_names=model_payload.assertion_names,
+            )
+        case CompileDirectLogicSqlTestCtes() as direct_logic_payload:
+            return CompileDirectLogicSqlTestInputPayload(
+                mode=direct_logic_payload.mode,
+                helper_ctes=direct_logic_payload.helper_ctes,
+                actual_cte=direct_logic_payload.actual_cte,
+                expected_cte=direct_logic_payload.expected_cte,
+                tested_resource_names=tested_macro_names,
+            )
+
+
+def _validate_raw_macro_test_ctes(
+    *,
+    test_block: DiscoveredSqlTestBlock,
+    test_file: DiscoveredSqlTestFile,
+    test_mode: SqlTestMode,
+) -> CompileSqlTestCtes:
+    return extract_sql_test_ctes(
+        sql=test_block.sql_body,
+        file_label=str(test_file.relative_path),
+        mode=test_mode,
+    )
+
+
+def _infer_tested_macro_names(
+    *,
+    raw_test_ctes: CompileSqlTestCtes,
+    test_file: DiscoveredSqlTestFile,
+    loaded_macros: dict[str, LoadedMacro],
+) -> tuple[str, ...]:
+    if not isinstance(raw_test_ctes.payload, CompileDirectLogicSqlTestCtes):
+        raise CompileInputError(
+            f"SQL test file {test_file.relative_path} mode 'macro' must define exactly one "
+            "__macro_actual__ CTE and exactly one __macro_expected__ CTE"
+        )
+    tested_macro_names: tuple[str, ...] = find_macro_call_names(
+        raw_test_ctes.payload.actual_cte.sql_body
+    )
+    if not tested_macro_names:
+        raise CompileInputError(
+            f"SQL test file {test_file.relative_path} mode 'macro' must call at least one "
+            "macro in __macro_actual__"
+        )
+    tested_macro_name: str
+    for tested_macro_name in tested_macro_names:
+        if tested_macro_name not in loaded_macros:
+            raise CompileInputError(
+                f"SQL test file {test_file.relative_path} references unknown macro "
+                f"'@{tested_macro_name}'"
+            )
+    return tested_macro_names
 
 
 def build_scenario_inputs(
@@ -1149,32 +1236,37 @@ def validate_test_ctes(
 ) -> None:
     """Validate SQL-native test CTE targets against discovered inputs."""
 
+    if isinstance(test_ctes.payload, CompileDirectLogicSqlTestCtes):
+        return
+
+    model_payload: CompileModelSqlTestCtes = test_ctes.payload
+
     mock_model_name: str
-    for mock_model_name in test_ctes.mock_model_names:
+    for mock_model_name in model_payload.mock_model_names:
         if mock_model_name not in known_model_names:
             raise CompileInputError(
                 f"SQL test file {test_file.relative_path} mocks unknown model '{mock_model_name}'"
             )
     mock_source_name: str
-    for mock_source_name in test_ctes.mock_source_names:
+    for mock_source_name in model_payload.mock_source_names:
         if mock_source_name not in known_source_names:
             raise CompileInputError(
                 f"SQL test file {test_file.relative_path} mocks unknown source '{mock_source_name}'"
             )
     mock_seed_name: str
-    for mock_seed_name in test_ctes.mock_seed_names:
+    for mock_seed_name in model_payload.mock_seed_names:
         if mock_seed_name not in known_seed_names:
             raise CompileInputError(
                 f"SQL test file {test_file.relative_path} mocks unknown seed '{mock_seed_name}'"
             )
     macro_mock_name: str
-    for macro_mock_name in test_ctes.macro_mocks:
+    for macro_mock_name in model_payload.macro_mocks:
         if macro_mock_name not in loaded_macros:
             raise CompileInputError(
                 f"SQL test file {test_file.relative_path} mocks unknown macro '{macro_mock_name}'"
             )
     expected_model_name: str
-    for expected_model_name in test_ctes.expected_model_names:
+    for expected_model_name in model_payload.expected_model_names:
         if expected_model_name not in known_model_names:
             raise CompileInputError(
                 f"SQL test file {test_file.relative_path} expects unknown model "
@@ -1183,7 +1275,7 @@ def validate_test_ctes(
 
     assertion_target_name: str
     for assertion_target_name in _extract_sql_test_assertion_ref_targets(
-        assertion_ctes=test_ctes.assertion_ctes
+        assertion_ctes=model_payload.assertion_ctes
     ):
         if assertion_target_name not in known_model_names:
             raise CompileInputError(

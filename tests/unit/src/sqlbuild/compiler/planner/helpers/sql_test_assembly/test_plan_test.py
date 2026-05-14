@@ -1,8 +1,18 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledProject, CompiledSqlTest
+from sqlbuild.compiler.compile.models import (
+    CompiledDirectLogicSqlTestPayload,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledSqlTest,
+    CompileSqlTestCte,
+)
+from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
+from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, DiscoveredSqlTestFile
 from sqlbuild.compiler.planner.helpers.sql_test_assembly import plan_test
 from sqlbuild.compiler.planner.models import (
     ChainStep,
@@ -11,6 +21,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import WarningSeverity
 from tests.unit.src.sqlbuild.compiler.planner.helpers.sql_test_assembly._test_types import (
+    PlanMacroTestCase,
     PlanTestChainTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers.sql_test_assembly.helpers import (
@@ -441,6 +452,83 @@ def test_given_test_and_project_when_planning_then_produces_expected_chain(
     expected_error_fragment: str
     for expected_error_fragment in expected_error_fragments:
         assert any(expected_error_fragment in w.message for w in warnings)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PlanMacroTestCase(
+            description="plans macro test as one direct comparison chain step with helpers",
+            helper_ctes={"input_values": "SELECT '  PAID  ' AS raw_status"},
+            actual_sql="SELECT LOWER(TRIM(raw_status)) AS status FROM input_values",
+            expected_sql="SELECT 'paid' AS status",
+            expected_actual_fragment="SELECT LOWER(TRIM(raw_status)) AS status FROM input_values",
+            expected_expected_fragment="SELECT 'paid' AS status",
+        )
+    ],
+    ids=["plans macro test as one direct comparison chain step with helpers"],
+)
+def test_given_macro_sql_test_when_planning_then_compares_actual_to_expected_directly(
+    test_case: PlanMacroTestCase,
+) -> None:
+    test_file: DiscoveredSqlTestFile = DiscoveredSqlTestFile(
+        file_path=Path("tests/unit/test_macro.sql"),
+        relative_path=Path("tests/unit/test_macro.sql"),
+        contents="",
+        blocks=(),
+    )
+    test_block: DiscoveredSqlTestBlock = DiscoveredSqlTestBlock(
+        test_index=1,
+        header_values={"mode": "macro", "name": "normalizes status"},
+        sql_body="",
+        name="normalizes status",
+        mode=SqlTestMode.MACRO,
+    )
+    helper_ctes: tuple[CompileSqlTestCte, ...] = tuple(
+        CompileSqlTestCte(name=name, sql_body=sql) for name, sql in test_case.helper_ctes.items()
+    )
+    sql_test: CompiledSqlTest = CompiledSqlTest(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.SQL_TEST,
+            name="normalizes status",
+        ),
+        scope_deps=(CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),),
+        name="normalizes status",
+        test_file=test_file,
+        test_block=test_block,
+        sql_body="",
+        mode=SqlTestMode.MACRO,
+        payload=CompiledDirectLogicSqlTestPayload(
+            mode=SqlTestMode.MACRO,
+            helper_ctes=helper_ctes,
+            actual_cte=CompileSqlTestCte(
+                name="__macro_actual__",
+                sql_body=test_case.actual_sql,
+            ),
+            expected_cte=CompileSqlTestCte(
+                name="__macro_expected__",
+                sql_body=test_case.expected_sql,
+            ),
+            tested_resource_names=("normalize_status",),
+        ),
+    )
+
+    entry, warnings = plan_test(
+        test=sql_test,
+        project=CompiledProject(
+            run_id="test_run",
+            effective_environment_name=None,
+            effective_connection={},
+            effective_vars={},
+        ),
+    )
+
+    assert warnings == ()
+    assert len(entry.chain) == 1
+    assert entry.chain[0].model_name == "macro normalizes status"
+    assert test_case.expected_actual_fragment in entry.chain[0].resolved_sql
+    assert entry.chain[0].expected_cte_sql is not None
+    assert test_case.expected_expected_fragment in entry.chain[0].expected_cte_sql
 
 
 @pytest.mark.parametrize(
