@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/chio-labs/sqlbuild/compare/v0.9.0...v0.10.0) (2026-05-14)
+
+
+### Features
+
+* add skills update command ([e2546eb](https://github.com/chio-labs/sqlbuild/commit/e2546eb6b6d8963ba60c80d858612a861f667487))
+
 ## [0.9.0](https://github.com/chio-labs/sqlbuild/compare/v0.8.0...v0.9.0) (2026-05-14)
 
 
