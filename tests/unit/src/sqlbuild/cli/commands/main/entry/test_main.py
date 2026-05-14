@@ -1095,6 +1095,62 @@ def test_given_playground_command_when_running_then_it_dispatches_handler(
 
 @pytest.mark.parametrize(
     "test_case",
+    [
+        MainTestCase(
+            description="dispatches skills update through injected handler",
+            argv=[
+                "--project-dir",
+                "/tmp/demo",
+                "skills",
+                "update",
+                "--global",
+                "--target",
+                "opencode",
+                "--target",
+                "agents",
+                "--force",
+            ],
+            expected_exit_code=31,
+            expected_project_dir=Path("/tmp/demo"),
+            expected_skills_global=True,
+            expected_skills_targets=("opencode", "agents"),
+            expected_skills_force=True,
+        )
+    ],
+    ids=["dispatches skills update through injected handler"],
+)
+def test_given_skills_update_command_when_running_then_it_dispatches_handler(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[tuple[Path | None, bool, tuple[str, ...], bool]] = []
+
+    def run_skills_update(
+        project_dir: Path | None,
+        global_install: bool,
+        targets: tuple[str, ...],
+        force: bool,
+    ) -> int:
+        received_args.append((project_dir, global_install, targets, force))
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_skills_update=run_skills_update),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [
+        (
+            test_case.expected_project_dir,
+            test_case.expected_skills_global,
+            test_case.expected_skills_targets,
+            test_case.expected_skills_force,
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
     COMPILE_DISPATCH_TEST_CASES,
     ids=[case.description for case in COMPILE_DISPATCH_TEST_CASES],
 )

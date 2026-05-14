@@ -216,6 +216,19 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     dbt_subparsers.add_parser("build")
     dbt_subparsers.add_parser("test")
     dbt_subparsers.add_parser("debug")
+    skills_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.SKILLS)
+    skills_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
+    skills_subparsers = skills_parser.add_subparsers(dest="skills_command")
+    skills_update_parser: argparse.ArgumentParser = skills_subparsers.add_parser("update")
+    skills_update_parser.add_argument("--global", dest="skills_global", action="store_true")
+    skills_update_parser.add_argument(
+        "--target",
+        dest="skills_target",
+        action="append",
+        choices=("opencode", "claude", "agents"),
+        default=[],
+    )
+    skills_update_parser.add_argument("--force", dest="skills_force", action="store_true")
     return parser
 
 
@@ -238,6 +251,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.run import run_run
     from sqlbuild.cli.commands.main.scenario import run_scenario
     from sqlbuild.cli.commands.main.seed import run_seed
+    from sqlbuild.cli.commands.main.skills import run_skills_update
     from sqlbuild.cli.commands.main.test import run_test
 
     handlers: CliEntrypointHandlers = CliEntrypointHandlers(
@@ -285,6 +299,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_lineage=run_lineage,
         run_janitor=run_janitor,
         run_playground=run_playground,
+        run_skills_update=run_skills_update,
         run_scenario=run_scenario,
         run_scenario_capture=run_scenario_capture,
     )
@@ -516,6 +531,15 @@ def _main_with_dependencies(
             )
         if args.command == CliCommand.PLAYGROUND:
             return handlers.run_playground(project_dir, args.playground_path)
+        if args.command == CliCommand.SKILLS:
+            if args.skills_command == "update":
+                return handlers.run_skills_update(
+                    project_dir,
+                    args.skills_global,
+                    tuple(args.skills_target),
+                    args.skills_force,
+                )
+            raise CliUserError("skills requires a subcommand such as 'update'", code="C807")
         if args.command == CliCommand.SCENARIO:
             if args.scenario_command == "test":
                 if args.scenario_local and args.scenario_retain:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.cli.commands.main.helpers.playground.copy import create_playground_project
+from sqlbuild.cli.commands.main.helpers.skills.update import update_sqlbuild_skills
 from sqlbuild.shared.helpers.colors import blue_bold, dim, green_bold, supports_color
 
 
@@ -17,6 +18,7 @@ def run_playground(project_dir: Path | None, target_path: str) -> int:
         target_dir = base_dir / target_dir
 
     create_playground_project(target_dir=target_dir)
+    update_sqlbuild_skills(project_dir=target_dir)
     display_path: str = str(target_path)
     use_color: bool = supports_color()
     heading: str = (

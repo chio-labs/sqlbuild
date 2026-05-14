@@ -24,3 +24,4 @@ class CliCommand(StrEnum):
     PLAYGROUND = "playground"
     SCENARIO = "scenario"
     DBT = "dbt"
+    SKILLS = "skills"
