@@ -3,7 +3,7 @@ from pathlib import Path
 from sqlbuild.integrations.dbt.main.build_compile_reference_resolver import (
     build_compile_reference_resolver,
 )
-from sqlbuild.shared.types import ExternalReferenceResolver
+from sqlbuild.shared.types import ExternalSqlReferenceResolver
 
 
 def base_repo_files() -> dict[str, str]:
@@ -14,7 +14,9 @@ def base_repo_files() -> dict[str, str]:
     }
 
 
-def build_external_reference_resolver(*, project_dir: Path) -> ExternalReferenceResolver | None:
+def build_external_sql_reference_resolver(
+    *, project_dir: Path
+) -> ExternalSqlReferenceResolver | None:
     manifest_path: Path = project_dir / "dbt" / "target" / "manifest.json"
     if not manifest_path.is_file():
         return None

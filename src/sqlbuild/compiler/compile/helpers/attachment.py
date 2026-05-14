@@ -85,7 +85,7 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.shared.helpers.schema_audits import parse_audit_instance
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot
-from sqlbuild.shared.types import ExternalReferenceResolver
+from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.project import (
     ClonePolicy,
     DefaultsConfig,
@@ -116,7 +116,7 @@ def build_model_inputs(
     run_id: str,
     macro_context: MacroContext,
     no_sql_validation: bool = False,
-    external_reference_resolver: ExternalReferenceResolver | None = None,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> tuple[CompileModelInput, ...]:
     """Attach schema metadata to discovered model files."""
 
@@ -126,8 +126,8 @@ def build_model_inputs(
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
     known_function_names: set[str] = build_known_function_names(discovered_inputs)
     known_table_function_names: set[str] = build_known_table_function_names(discovered_inputs)
-    if external_reference_resolver is not None:
-        external_reference_resolver.validate_model_names(known_model_names=known_model_names)
+    if external_sql_reference_resolver is not None:
+        external_sql_reference_resolver.validate_model_names(known_model_names=known_model_names)
     custom_materialization_names: frozenset[str] = frozenset(
         mf.name for mf in discovered_inputs.materialization_files
     )
@@ -190,7 +190,7 @@ def build_model_inputs(
             known_source_names=known_source_names,
             known_function_names=known_function_names,
             known_table_function_names=known_table_function_names,
-            external_reference_resolver=external_reference_resolver,
+            external_sql_reference_resolver=external_sql_reference_resolver,
         )
         validate_incremental_config(
             config=effective_config,
@@ -1684,7 +1684,7 @@ def validate_model_references(
     known_source_names: set[str],
     known_function_names: set[str],
     known_table_function_names: set[str],
-    external_reference_resolver: ExternalReferenceResolver | None,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
 ) -> None:
     """Validate extracted model refs against discovered project inputs."""
 
@@ -1727,7 +1727,7 @@ def validate_model_references(
                 f"'{reference.ref_name}'"
             )
         if reference.ref_kind == SqlReferenceKind.DBT_REF:
-            if external_reference_resolver is None:
+            if external_sql_reference_resolver is None:
                 raise CompileInputError(
                     f"Model file {model_file.relative_path} uses "
                     f"__dbt_ref('{reference.ref_name}') but no dbt manifest was found",
@@ -1737,11 +1737,11 @@ def validate_model_references(
                         "manifest.json."
                     ),
                 )
-            external_reference_resolver.validate_reference(
+            external_sql_reference_resolver.validate_reference(
                 ref_kind=reference.ref_kind,
                 ref_name=reference.ref_name,
                 ref_package=reference.ref_package,
-                owner_relative_path=model_file.relative_path,
+                owner_relative_sql_path=model_file.relative_path,
             )
         if (
             reference.ref_kind == SqlReferenceKind.UDF

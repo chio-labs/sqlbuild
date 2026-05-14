@@ -8,12 +8,12 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.main.build_compile_reference_resolver import (
     build_compile_reference_resolver,
 )
-from sqlbuild.shared.types import ExternalReferenceResolver
+from sqlbuild.shared.types import ExternalSqlReferenceResolver
 
 
-def resolve_external_reference_resolver(
+def resolve_external_sql_reference_resolver(
     *, project_dir: Path, discovered_inputs: DiscoveredProjectInputs
-) -> ExternalReferenceResolver | None:
+) -> ExternalSqlReferenceResolver | None:
     """Build the external reference resolver configured for a discovered project."""
 
     manifest_contents: str | None = _read_dbt_manifest_contents(

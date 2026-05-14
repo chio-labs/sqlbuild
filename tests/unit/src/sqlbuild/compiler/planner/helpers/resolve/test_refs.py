@@ -263,7 +263,7 @@ def test_given_dbt_ref_when_resolving_then_returns_expected_sql(
 ) -> None:
     result: str = resolve_dbt_ref_references(
         query_sql=test_case.query_sql,
-        external_reference_resolver=_DBT_RESOLVER,
+        external_sql_reference_resolver=_DBT_RESOLVER,
     )
 
     assert result == test_case.expected_sql

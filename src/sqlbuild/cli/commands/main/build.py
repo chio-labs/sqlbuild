@@ -14,7 +14,7 @@ from sqlbuild.cli.commands.main.shared.helpers.connection_progress import (
     ConnectionProgressReporter,
 )
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
-    resolve_external_reference_resolver,
+    resolve_external_sql_reference_resolver,
 )
 from sqlbuild.cli.commands.main.shared.helpers.plan_format import format_plan
 from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
@@ -101,7 +101,7 @@ def run_build(
         on_connection_complete=connection_progress.on_connection_complete,
         on_connection_error=connection_progress.on_connection_error,
         on_progress=planning_progress.on_progress,
-        external_reference_resolver=resolve_external_reference_resolver(
+        external_sql_reference_resolver=resolve_external_sql_reference_resolver(
             project_dir=effective_project_dir,
             discovered_inputs=discovered_inputs,
         ),
