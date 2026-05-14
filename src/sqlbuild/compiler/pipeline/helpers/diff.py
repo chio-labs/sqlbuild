@@ -20,6 +20,7 @@ def compile_project_for_diff_environment(
     adapter: BaseAdapter,
     environment_name: str,
     no_sql_validation: bool,
+    cli_vars: dict[str, object] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> CompiledProject:
     """Compile a project for one diff environment."""
@@ -29,6 +30,7 @@ def compile_project_for_diff_environment(
         adapter=adapter,
         selected_environment=environment_name,
         no_sql_validation=no_sql_validation,
+        cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
 

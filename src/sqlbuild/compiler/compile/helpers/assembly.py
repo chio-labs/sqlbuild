@@ -219,7 +219,7 @@ def _assemble_compiled_seed(
     *,
     defaults: DefaultsConfig,
     environment_config: EnvironmentConfig | None,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
 ) -> CompiledSeed:
     target: CompiledRelationTarget = _build_seed_relation_target(
         seed_entry=seed_input.schema_entry,
@@ -448,7 +448,7 @@ def _build_seed_relation_target(
     seed_entry: SchemaSeedEntry,
     defaults: DefaultsConfig,
     environment_config: EnvironmentConfig | None,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
 ) -> CompiledRelationTarget:
     resolved_namespace: tuple[str | None, str | None] = _resolve_target_namespace(
         defaults=defaults,
@@ -487,7 +487,7 @@ def _resolve_target_namespace(
     *,
     defaults: DefaultsConfig,
     environment_config: EnvironmentConfig | None,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
 ) -> tuple[str | None, str | None]:
     database: str | None = defaults.database
     schema: str | None = defaults.schema
@@ -508,7 +508,7 @@ def _resolve_target_namespace(
 
 
 def _expand_seed_environment_value(
-    *, raw_value: str, effective_vars: dict[str, str], context_label: str
+    *, raw_value: str, effective_vars: dict[str, object], context_label: str
 ) -> str | None:
     if raw_value == "preserve":
         return None
@@ -531,7 +531,7 @@ def _expand_seed_target_value(
     seed_name: str,
     database: str | None,
     schema: str | None,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
     context_label: str,
 ) -> str | None:
     if raw_value == "preserve":

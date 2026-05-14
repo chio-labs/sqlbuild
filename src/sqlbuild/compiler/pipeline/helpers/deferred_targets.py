@@ -16,6 +16,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledSeed,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.shared.helpers.project_var_values import render_project_var_text
 from sqlbuild.spec.models.project import EnvironmentConfig
 
 _CTX_PATTERN: re.Pattern[str] = re.compile(r"\$\{CTX:([^}]+)\}")
@@ -26,7 +27,7 @@ def build_deferred_targets(
     *,
     project: CompiledProject,
     deferred_env: EnvironmentConfig,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
     default_schema: str | None,
     default_database: str | None,
     render_qualified_name: Callable[..., str | None],
@@ -103,7 +104,7 @@ def _resolve_deferred_target(
     *,
     target: CompiledRelationTarget,
     deferred_env: EnvironmentConfig,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
     default_schema: str | None,
     default_database: str | None,
     render_qualified_name: Callable[..., str | None],
@@ -145,7 +146,7 @@ def _resolve_env_field(
     *,
     env_value: str | None,
     logical_value: str | None,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
 ) -> str | None:
     """Resolve one environment schema or database field against the logical value."""
 
@@ -164,7 +165,12 @@ def _resolve_env_field(
 
     def _replace_var(match: re.Match[str]) -> str:
         var_name: str = match.group(1)
-        return effective_vars.get(var_name, match.group(0))
+        if var_name not in effective_vars:
+            return match.group(0)
+        return render_project_var_text(
+            value=effective_vars[var_name],
+            label=f"deferred target variable '${{{var_name}}}'",
+        )
 
     result = _VAR_PATTERN.sub(_replace_var, result)
 

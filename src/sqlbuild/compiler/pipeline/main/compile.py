@@ -42,6 +42,7 @@ def run_compile_pipeline(
     cursor_overrides: CursorOverrides | None = None,
     full_refresh: bool = False,
     connection_config: dict[str, object] | None = None,
+    cli_vars: dict[str, object] | None = None,
     on_connection_start: Callable[[int], None] | None = None,
     on_connection_complete: Callable[[int, float], None] | None = None,
     on_connection_error: Callable[[int, float], None] | None = None,
@@ -53,7 +54,10 @@ def run_compile_pipeline(
     effective_config: dict[str, object] = (
         connection_config
         if connection_config is not None
-        else build_effective_connection_config(discovered_inputs=discovered_inputs)
+        else build_effective_connection_config(
+            discovered_inputs=discovered_inputs,
+            cli_vars=cli_vars,
+        )
     )
     if on_connection_start is not None:
         on_connection_start(1)
@@ -77,6 +81,7 @@ def run_compile_pipeline(
             exclude=exclude,
             cursor_overrides=cursor_overrides,
             full_refresh=full_refresh,
+            cli_vars=cli_vars,
             on_progress=on_progress,
             external_sql_reference_resolver=external_sql_reference_resolver,
         )
@@ -95,6 +100,7 @@ def _build_result(
     exclude: tuple[str, ...] = (),
     cursor_overrides: CursorOverrides | None = None,
     full_refresh: bool = False,
+    cli_vars: dict[str, object] | None = None,
     on_progress: Callable[[str], None] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> CompilePipelineResult:
@@ -102,6 +108,7 @@ def _build_result(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         no_sql_validation=no_sql_validation,
+        cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
 

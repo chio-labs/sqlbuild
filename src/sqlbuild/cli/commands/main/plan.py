@@ -39,6 +39,7 @@ def run_plan(
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     verbose: bool = False,
+    cli_vars: dict[str, object] | None = None,
 ) -> int:
     """Execute the plan command."""
 
@@ -55,7 +56,9 @@ def run_plan(
         project_dir=effective_project_dir,
     )
     connection_config: dict[str, object] = resolve_project_connection_config(
-        discovered_inputs=discovered_inputs, project_dir=effective_project_dir
+        discovered_inputs=discovered_inputs,
+        project_dir=effective_project_dir,
+        cli_vars=cli_vars,
     )
     use_color: bool = not no_color and not json_output and supports_color()
     progress_stream: TextIO = sys.stderr if json_output else sys.stdout
@@ -81,6 +84,7 @@ def run_plan(
         select=select,
         exclude=exclude,
         connection_config=connection_config,
+        cli_vars=cli_vars,
         on_connection_start=connection_progress.on_connection_start,
         on_connection_complete=connection_progress.on_connection_complete,
         on_connection_error=connection_progress.on_connection_error,

@@ -40,6 +40,7 @@ def run_diff(
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     verbose: bool = False,
+    cli_vars: dict[str, object] | None = None,
 ) -> int:
     """Execute the diff command."""
 
@@ -85,6 +86,7 @@ def run_diff(
         no_sql_validation=no_sql_validation,
         select=select,
         exclude=exclude,
+        cli_vars=cli_vars,
         external_sql_reference_resolver=resolve_external_sql_reference_resolver(
             project_dir=effective_project_dir,
             discovered_inputs=discovered_inputs,
@@ -102,6 +104,7 @@ def run_diff(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
         environment_name=to_environment,
+        cli_vars=cli_vars,
     )
     connection: Any = adapter.connect(connection_config)
     try:

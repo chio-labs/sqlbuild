@@ -22,6 +22,7 @@ def build_project_graph(
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
     no_sql_validation: bool = False,
+    cli_vars: dict[str, object] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> ProjectGraph:
     """Build the static dependency graph for a compiled project."""
@@ -30,6 +31,7 @@ def build_project_graph(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         no_sql_validation=no_sql_validation,
+        cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (

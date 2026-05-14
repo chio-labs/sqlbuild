@@ -29,6 +29,7 @@ def run_seed(
     no_color: bool = False,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
+    cli_vars: dict[str, object] | None = None,
 ) -> int:
     """Execute the seed command."""
 
@@ -46,6 +47,7 @@ def run_seed(
     connection_config: dict[str, object] = resolve_project_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
+        cli_vars=cli_vars,
     )
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered_inputs,
@@ -53,6 +55,7 @@ def run_seed(
         select=select,
         exclude=exclude,
         connection_config=connection_config,
+        cli_vars=cli_vars,
         external_sql_reference_resolver=resolve_external_sql_reference_resolver(
             project_dir=effective_project_dir,
             discovered_inputs=discovered_inputs,
