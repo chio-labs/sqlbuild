@@ -84,17 +84,8 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.shared.helpers.schema_audits import parse_audit_instance
-from sqlbuild.integrations.dbt.main.build_compile_manifest_index import (
-    build_compile_manifest_index,
-)
-from sqlbuild.integrations.dbt.main.validate_compile_model_names import (
-    validate_compile_model_names,
-)
-from sqlbuild.integrations.dbt.main.validate_compile_model_reference import (
-    validate_compile_model_reference,
-)
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot
+from sqlbuild.shared.types import ExternalReferenceResolver
 from sqlbuild.spec.models.project import (
     ClonePolicy,
     DefaultsConfig,
@@ -125,7 +116,7 @@ def build_model_inputs(
     run_id: str,
     macro_context: MacroContext,
     no_sql_validation: bool = False,
-    dbt_manifest: DbtManifestIndex | None = None,
+    external_reference_resolver: ExternalReferenceResolver | None = None,
 ) -> tuple[CompileModelInput, ...]:
     """Attach schema metadata to discovered model files."""
 
@@ -135,18 +126,8 @@ def build_model_inputs(
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
     known_function_names: set[str] = build_known_function_names(discovered_inputs)
     known_table_function_names: set[str] = build_known_table_function_names(discovered_inputs)
-    if dbt_manifest is None:
-        dbt_manifest = build_compile_manifest_index(
-            manifest_contents=(
-                None
-                if discovered_inputs.dbt_manifest_file is None
-                else discovered_inputs.dbt_manifest_file.contents
-            )
-        )
-    validate_compile_model_names(
-        known_model_names=known_model_names,
-        dbt_manifest=dbt_manifest,
-    )
+    if external_reference_resolver is not None:
+        external_reference_resolver.validate_model_names(known_model_names=known_model_names)
     custom_materialization_names: frozenset[str] = frozenset(
         mf.name for mf in discovered_inputs.materialization_files
     )
@@ -209,7 +190,7 @@ def build_model_inputs(
             known_source_names=known_source_names,
             known_function_names=known_function_names,
             known_table_function_names=known_table_function_names,
-            dbt_manifest=dbt_manifest,
+            external_reference_resolver=external_reference_resolver,
         )
         validate_incremental_config(
             config=effective_config,
@@ -1704,7 +1685,7 @@ def validate_model_references(
     known_source_names: set[str],
     known_function_names: set[str],
     known_table_function_names: set[str],
-    dbt_manifest: DbtManifestIndex | None,
+    external_reference_resolver: ExternalReferenceResolver | None,
 ) -> None:
     """Validate extracted model refs against discovered project inputs."""
 
@@ -1747,10 +1728,21 @@ def validate_model_references(
                 f"'{reference.ref_name}'"
             )
         if reference.ref_kind == SqlReferenceKind.DBT_REF:
-            validate_compile_model_reference(
-                reference=reference,
-                model_relative_path=model_file.relative_path,
-                dbt_manifest=dbt_manifest,
+            if external_reference_resolver is None:
+                raise CompileInputError(
+                    f"Model file {model_file.relative_path} uses "
+                    f"__dbt_ref('{reference.ref_name}') but no dbt manifest was found",
+                    code="C214",
+                    help=(
+                        "Run dbt compile or configure dbt target_path so SQLBuild can read "
+                        "manifest.json."
+                    ),
+                )
+            external_reference_resolver.validate_reference(
+                ref_kind=reference.ref_kind,
+                ref_name=reference.ref_name,
+                ref_package=reference.ref_package,
+                owner_relative_path=model_file.relative_path,
             )
         if (
             reference.ref_kind == SqlReferenceKind.UDF
