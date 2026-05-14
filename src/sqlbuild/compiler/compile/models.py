@@ -113,8 +113,8 @@ class CompileSqlTestCte:
 
 
 @dataclass(frozen=True)
-class CompileSqlTestCtes:
-    """Extracted top-level SQL-native test CTE semantics."""
+class CompileModelSqlTestCtes:
+    """Extracted model-mode SQL-native test CTE semantics."""
 
     authored_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
     macro_mocks: dict[str, str] = field(default_factory=dict)
@@ -125,8 +125,24 @@ class CompileSqlTestCtes:
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
-    macro_actual_cte: CompileSqlTestCte | None = None
-    macro_expected_cte: CompileSqlTestCte | None = None
+
+
+@dataclass(frozen=True)
+class CompileDirectLogicSqlTestCtes:
+    """Extracted direct-logic SQL-native test CTE semantics."""
+
+    mode: SqlTestMode
+    helper_ctes: tuple[CompileSqlTestCte, ...]
+    actual_cte: CompileSqlTestCte
+    expected_cte: CompileSqlTestCte
+
+
+@dataclass(frozen=True)
+class CompileSqlTestCtes:
+    """Extracted top-level SQL-native test CTE semantics."""
+
+    mode: SqlTestMode
+    payload: CompileModelSqlTestCtes | CompileDirectLogicSqlTestCtes
 
 
 @dataclass(frozen=True)
@@ -221,12 +237,9 @@ class CompileSourceInput:
 
 
 @dataclass(frozen=True)
-class CompileSqlTestInput:
-    """One discovered SQL-native test block with compile-time SQL expansion applied."""
+class CompileModelSqlTestInputPayload:
+    """Model-mode SQL test compile payload."""
 
-    test_file: DiscoveredSqlTestFile
-    test_block: DiscoveredSqlTestBlock
-    sql_body: str
     authored_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
     macro_mocks: dict[str, str] = field(default_factory=dict)
     mock_model_names: tuple[str, ...] = field(default_factory=tuple)
@@ -236,10 +249,30 @@ class CompileSqlTestInput:
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class CompileDirectLogicSqlTestInputPayload:
+    """Direct-logic SQL test compile payload."""
+
+    actual_cte: CompileSqlTestCte
+    expected_cte: CompileSqlTestCte
+    mode: SqlTestMode
+    helper_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
+    tested_resource_names: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class CompileSqlTestInput:
+    """One discovered SQL-native test block with compile-time SQL expansion applied."""
+
+    test_file: DiscoveredSqlTestFile
+    test_block: DiscoveredSqlTestBlock
+    sql_body: str
     mode: SqlTestMode = DEFAULT_SQL_TEST_MODE
-    macro_actual_cte: CompileSqlTestCte | None = None
-    macro_expected_cte: CompileSqlTestCte | None = None
-    tested_macro_names: tuple[str, ...] = field(default_factory=tuple)
+    payload: CompileModelSqlTestInputPayload | CompileDirectLogicSqlTestInputPayload = field(
+        default_factory=CompileModelSqlTestInputPayload
+    )
 
 
 @dataclass(frozen=True)
@@ -404,15 +437,9 @@ class CompiledAudit:
 
 
 @dataclass(frozen=True)
-class CompiledSqlTest:
-    """Compiled SQL-native unit test metadata selected by expected targets."""
+class CompiledModelSqlTestPayload:
+    """Compiled model-mode SQL test payload."""
 
-    key: CompiledObjectKey
-    scope_deps: tuple[CompiledObjectKey, ...]
-    name: str
-    test_file: DiscoveredSqlTestFile
-    test_block: DiscoveredSqlTestBlock
-    sql_body: str
     authored_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
     macro_mocks: dict[str, str] = field(default_factory=dict)
     model_query_overrides: dict[str, str] = field(default_factory=dict)
@@ -423,10 +450,33 @@ class CompiledSqlTest:
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class CompiledDirectLogicSqlTestPayload:
+    """Compiled direct-logic SQL test payload."""
+
+    actual_cte: CompileSqlTestCte
+    expected_cte: CompileSqlTestCte
     mode: SqlTestMode = DEFAULT_SQL_TEST_MODE
-    macro_actual_cte: CompileSqlTestCte | None = None
-    macro_expected_cte: CompileSqlTestCte | None = None
-    tested_macro_names: tuple[str, ...] = field(default_factory=tuple)
+    helper_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
+    tested_resource_names: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class CompiledSqlTest:
+    """Compiled SQL-native unit test metadata selected by expected targets."""
+
+    key: CompiledObjectKey
+    scope_deps: tuple[CompiledObjectKey, ...]
+    name: str
+    test_file: DiscoveredSqlTestFile
+    test_block: DiscoveredSqlTestBlock
+    sql_body: str
+    mode: SqlTestMode = DEFAULT_SQL_TEST_MODE
+    payload: CompiledModelSqlTestPayload | CompiledDirectLogicSqlTestPayload = field(
+        default_factory=CompiledModelSqlTestPayload
+    )
 
 
 @dataclass(frozen=True)

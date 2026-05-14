@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile.models import (
+    CompiledDirectLogicSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledSqlTest,
@@ -461,7 +462,7 @@ def test_given_test_and_project_when_planning_then_produces_expected_chain(
             helper_ctes={"input_values": "SELECT '  PAID  ' AS raw_status"},
             actual_sql="SELECT LOWER(TRIM(raw_status)) AS status FROM input_values",
             expected_sql="SELECT 'paid' AS status",
-            expected_actual_fragment="WITH input_values AS (SELECT '  PAID  ' AS raw_status)",
+            expected_actual_fragment="SELECT LOWER(TRIM(raw_status)) AS status FROM input_values",
             expected_expected_fragment="SELECT 'paid' AS status",
         )
     ],
@@ -496,17 +497,20 @@ def test_given_macro_sql_test_when_planning_then_compares_actual_to_expected_dir
         test_file=test_file,
         test_block=test_block,
         sql_body="",
-        authored_ctes=helper_ctes,
         mode=SqlTestMode.MACRO,
-        macro_actual_cte=CompileSqlTestCte(
-            name="__macro_actual__",
-            sql_body=test_case.actual_sql,
+        payload=CompiledDirectLogicSqlTestPayload(
+            mode=SqlTestMode.MACRO,
+            helper_ctes=helper_ctes,
+            actual_cte=CompileSqlTestCte(
+                name="__macro_actual__",
+                sql_body=test_case.actual_sql,
+            ),
+            expected_cte=CompileSqlTestCte(
+                name="__macro_expected__",
+                sql_body=test_case.expected_sql,
+            ),
+            tested_resource_names=("normalize_status",),
         ),
-        macro_expected_cte=CompileSqlTestCte(
-            name="__macro_expected__",
-            sql_body=test_case.expected_sql,
-        ),
-        tested_macro_names=("normalize_status",),
     )
 
     entry, warnings = plan_test(

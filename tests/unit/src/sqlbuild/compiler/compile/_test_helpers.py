@@ -1,5 +1,9 @@
 from pathlib import Path
 
+from sqlbuild.compiler.compile.models import (
+    CompileModelSqlTestInputPayload,
+    CompileSqlTestInput,
+)
 from sqlbuild.integrations.dbt.main.build_compile_reference_resolver import (
     build_compile_reference_resolver,
 )
@@ -29,3 +33,33 @@ def expected_or_actual[T](expected: T | None, actual: T) -> T:
     if expected is None:
         return actual
     return expected
+
+
+def compile_sql_test_authored_cte_names(test_input: CompileSqlTestInput) -> tuple[str, ...]:
+    if not isinstance(test_input.payload, CompileModelSqlTestInputPayload):
+        return ()
+    return tuple(cte.name for cte in test_input.payload.authored_ctes)
+
+
+def compile_sql_test_mock_model_names(test_input: CompileSqlTestInput) -> tuple[str, ...]:
+    if not isinstance(test_input.payload, CompileModelSqlTestInputPayload):
+        return ()
+    return test_input.payload.mock_model_names
+
+
+def compile_sql_test_mock_source_names(test_input: CompileSqlTestInput) -> tuple[str, ...]:
+    if not isinstance(test_input.payload, CompileModelSqlTestInputPayload):
+        return ()
+    return test_input.payload.mock_source_names
+
+
+def compile_sql_test_mock_seed_names(test_input: CompileSqlTestInput) -> tuple[str, ...]:
+    if not isinstance(test_input.payload, CompileModelSqlTestInputPayload):
+        return ()
+    return test_input.payload.mock_seed_names
+
+
+def compile_sql_test_expected_model_names(test_input: CompileSqlTestInput) -> tuple[str, ...]:
+    if not isinstance(test_input.payload, CompileModelSqlTestInputPayload):
+        return ()
+    return test_input.payload.expected_model_names

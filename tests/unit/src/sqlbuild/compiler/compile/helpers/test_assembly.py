@@ -24,6 +24,10 @@ from tests.unit.src.sqlbuild.compiler.compile._test_helpers import (
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     AssembleCompiledProjectTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.compile.helpers.helpers import (
+    compiled_sql_test_expected_model_names,
+    compiled_sql_test_tested_resource_names,
+)
 
 ASSEMBLE_COMPILED_PROJECT_TEST_CASES: list[AssembleCompiledProjectTestCase] = [
     AssembleCompiledProjectTestCase(
@@ -308,10 +312,10 @@ def test_given_compile_inputs_when_assembling_compiled_project_then_returns_expe
     assert tuple(t.scope_deps for t in compiled.sql_tests) == test_case.expected_test_scope_deps
     assert tuple(t.mode.value for t in compiled.sql_tests) == test_case.expected_test_modes
     assert (
-        tuple(t.tested_macro_names for t in compiled.sql_tests)
+        tuple(compiled_sql_test_tested_resource_names(t) for t in compiled.sql_tests)
         == test_case.expected_tested_macro_names
     )
     assert (
-        tuple(t.expected_model_names for t in compiled.sql_tests)
+        tuple(compiled_sql_test_expected_model_names(t) for t in compiled.sql_tests)
         == test_case.expected_test_expected_model_names
     )

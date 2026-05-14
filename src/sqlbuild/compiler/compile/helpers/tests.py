@@ -28,7 +28,12 @@ from sqlbuild.compiler.compile.helpers.sql_scanning import (
 from sqlbuild.compiler.compile.helpers.sqlglot_tests import (
     extract_expected_branch_column_names_with_sqlglot,
 )
-from sqlbuild.compiler.compile.models import CompileSqlTestCte, CompileSqlTestCtes
+from sqlbuild.compiler.compile.models import (
+    CompileDirectLogicSqlTestCtes,
+    CompileModelSqlTestCtes,
+    CompileSqlTestCte,
+    CompileSqlTestCtes,
+)
 from sqlbuild.compiler.compile.types import SqlTestMode
 
 _CONTEXT: str = "SQL test"
@@ -132,12 +137,13 @@ def _classify_macro_sql_test_ctes(
             )
         authored_ctes.append(cte)
 
-    return _validate_macro_test_ctes(
+    direct_logic_payload: CompileDirectLogicSqlTestCtes = _validate_macro_test_ctes(
         authored_ctes=tuple(authored_ctes),
         macro_actual_cte=macro_actual_cte,
         macro_expected_cte=macro_expected_cte,
         file_label=file_label,
     )
+    return CompileSqlTestCtes(mode=SqlTestMode.MACRO, payload=direct_logic_payload)
 
 
 def _classify_model_sql_test_ctes(
@@ -258,7 +264,7 @@ def _classify_model_sql_test_ctes(
             f"SQL test '{file_label}' must define at least one __expected__<model> or "
             "__assert__<assertion> CTE"
         )
-    return CompileSqlTestCtes(
+    model_payload: CompileModelSqlTestCtes = CompileModelSqlTestCtes(
         authored_ctes=tuple(authored_ctes),
         macro_mocks=macro_mocks,
         mock_model_names=tuple(mock_model_names),
@@ -269,6 +275,7 @@ def _classify_model_sql_test_ctes(
         assertion_ctes=tuple(assertion_ctes),
         assertion_names=tuple(assertion_names),
     )
+    return CompileSqlTestCtes(mode=SqlTestMode.MODEL, payload=model_payload)
 
 
 def _is_model_mode_cte(cte_name: str) -> bool:
@@ -291,7 +298,7 @@ def _validate_macro_test_ctes(
     macro_actual_cte: CompileSqlTestCte | None,
     macro_expected_cte: CompileSqlTestCte | None,
     file_label: str,
-) -> CompileSqlTestCtes:
+) -> CompileDirectLogicSqlTestCtes:
     if macro_actual_cte is None or macro_expected_cte is None:
         raise CompileInputError(
             f"SQL test '{file_label}' mode 'macro' must define exactly one "
@@ -312,10 +319,11 @@ def _validate_macro_test_ctes(
             f"SQL test '{file_label}' mode 'macro' CTE {MACRO_EXPECTED_TEST_CTE_NAME} "
             "must not call macros"
         )
-    return CompileSqlTestCtes(
-        authored_ctes=authored_ctes,
-        macro_actual_cte=macro_actual_cte,
-        macro_expected_cte=macro_expected_cte,
+    return CompileDirectLogicSqlTestCtes(
+        mode=SqlTestMode.MACRO,
+        helper_ctes=authored_ctes,
+        actual_cte=macro_actual_cte,
+        expected_cte=macro_expected_cte,
     )
 
 

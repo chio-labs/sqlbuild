@@ -13,6 +13,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
     CompiledModel,
+    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledSeed,
@@ -237,10 +238,13 @@ def _audit_resource(audit: CompiledAudit) -> dict[str, object]:
 
 
 def _test_resource(test: CompiledSqlTest) -> dict[str, object]:
+    expected_models: list[str] = []
+    if isinstance(test.payload, CompiledModelSqlTestPayload):
+        expected_models = list(test.payload.expected_model_names)
     return {
         "name": test.name,
         "relative_path": str(test.test_file.relative_path),
-        "expected_models": list(test.expected_model_names),
+        "expected_models": expected_models,
     }
 
 
