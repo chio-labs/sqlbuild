@@ -72,7 +72,7 @@ class ExtractSqlScenarioCtesErrorTestCase:
 class BuildScenarioInputsTestCase:
     description: str
     sql_body: str
-    effective_vars: dict[str, str]
+    effective_vars: dict[str, object]
     expected_source_fixture_names: tuple[str, ...]
     expected_ref_fixture_names: tuple[str, ...]
     expected_seed_fixture_names: tuple[str, ...]
@@ -180,24 +180,26 @@ class IncrementalConfigErrorTestCase:
 class SubstituteSqlVarsTestCase:
     description: str
     sql: str
-    effective_vars: dict[str, str]
+    effective_vars: dict[str, object]
     expected_sql: str
     environment_variables: dict[str, str] = field(default_factory=dict)
+    context_values: dict[str, str | None] | None = None
 
 
 @dataclass(frozen=True)
 class SubstituteSqlVarsErrorTestCase:
     description: str
     sql: str
-    effective_vars: dict[str, str]
+    effective_vars: dict[str, object]
     expected_error_fragment: str
+    context_values: dict[str, str | None] | None = None
 
 
 @dataclass(frozen=True)
 class ExpandTemplateDataTestCase:
     description: str
     value: object
-    variables: dict[str, str]
+    variables: dict[str, object]
     context_values: dict[str, str | None]
     context_label: str
     allow_context: bool
@@ -210,7 +212,7 @@ class ExpandTemplateDataTestCase:
 class ExpandTemplateDataErrorTestCase:
     description: str
     value: object
-    variables: dict[str, str]
+    variables: dict[str, object]
     context_values: dict[str, str | None]
     context_label: str
     allow_context: bool

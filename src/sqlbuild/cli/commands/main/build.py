@@ -49,6 +49,7 @@ def run_build(
     exclude: tuple[str, ...] = (),
     verbose: bool = False,
     debug: bool = False,
+    cli_vars: dict[str, object] | None = None,
 ) -> int:
     """Execute the build command."""
 
@@ -67,6 +68,7 @@ def run_build(
     connection_config: dict[str, object] = resolve_project_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
+        cli_vars=cli_vars,
     )
     use_color: bool = not no_color and supports_color()
     progress_stream: TextIO = sys.stderr if debug else sys.stdout
@@ -97,6 +99,7 @@ def run_build(
         exclude=exclude,
         full_refresh=full_refresh,
         connection_config=connection_config,
+        cli_vars=cli_vars,
         on_connection_start=connection_progress.on_connection_start,
         on_connection_complete=connection_progress.on_connection_complete,
         on_connection_error=connection_progress.on_connection_error,

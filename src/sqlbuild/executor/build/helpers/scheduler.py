@@ -78,7 +78,7 @@ class BuildScheduler:
         on_progress: Callable[[str], None] | None,
         custom_materializations: dict[str, Callable[..., MaterializationResult]] | None = None,
         environment: str = "",
-        effective_vars: dict[str, str] | None = None,
+        effective_vars: dict[str, object] | None = None,
         warehouse_relations: dict[str, RelationInfo] | None = None,
         on_sub_progress: Callable[[str], None] | None = None,
     ) -> None:
@@ -100,7 +100,7 @@ class BuildScheduler:
             custom_materializations or {}
         )
         self._environment: str = environment
-        self._effective_vars: dict[str, str] = effective_vars or {}
+        self._effective_vars: dict[str, object] = effective_vars or {}
         self._warehouse_relations: dict[str, RelationInfo] = warehouse_relations or {}
         self._on_sub_progress: Callable[[str], None] | None = on_sub_progress
 
@@ -621,7 +621,7 @@ def _dispatch_model(
     query_change_tracking: bool,
     custom_materializations: dict[str, Callable[..., MaterializationResult]] | None = None,
     environment: str = "",
-    effective_vars: dict[str, str] | None = None,
+    effective_vars: dict[str, object] | None = None,
     warehouse_relations: dict[str, RelationInfo] | None = None,
     on_progress: Callable[[str], None] | None = None,
 ) -> ModelExecutionResult:

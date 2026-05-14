@@ -79,6 +79,26 @@ SUBSTITUTION_TEST_CASES: list[SubstituteSqlVarsTestCase] = [
         effective_vars={"partition_start": "should_not_appear"},
         expected_sql="SELECT * FROM orders WHERE ds >= @@@partition_start",
     ),
+    SubstituteSqlVarsTestCase(
+        description="replaces context value when allowed",
+        sql="GRANT SELECT ON @@CTX:target.qualified TO role analytics",
+        effective_vars={},
+        context_values={"target.qualified": "analytics.marts.orders"},
+        expected_sql="GRANT SELECT ON analytics.marts.orders TO role analytics",
+    ),
+    SubstituteSqlVarsTestCase(
+        description="replaces context value inside quoted SQL string when allowed",
+        sql="SELECT '@@CTX:model.name' AS model_name",
+        effective_vars={},
+        context_values={"model.name": "orders"},
+        expected_sql="SELECT 'orders' AS model_name",
+    ),
+    SubstituteSqlVarsTestCase(
+        description="renders scalar json var values as SQL text",
+        sql="SELECT @@limit AS limit, @@enabled AS enabled, '@@optional' AS optional",
+        effective_vars={"limit": 10, "enabled": True, "optional": None},
+        expected_sql="SELECT 10 AS limit, true AS enabled, '' AS optional",
+    ),
 ]
 
 SUBSTITUTE_SQL_VARS_ERROR_TEST_CASES: list[SubstituteSqlVarsErrorTestCase] = [
@@ -99,6 +119,38 @@ SUBSTITUTE_SQL_VARS_ERROR_TEST_CASES: list[SubstituteSqlVarsErrorTestCase] = [
         sql="SELECT '@@ENV:SQLBUILD_MISSING_ENV'",
         effective_vars={},
         expected_error_fragment="unknown environment variable '@@ENV:SQLBUILD_MISSING_ENV'",
+    ),
+    SubstituteSqlVarsErrorTestCase(
+        description="raises on unknown allowed CTX token",
+        sql="SELECT @@CTX:target.qualified",
+        effective_vars={},
+        context_values={"model.name": "orders"},
+        expected_error_fragment="references unknown CTX key 'target.qualified'",
+    ),
+    SubstituteSqlVarsErrorTestCase(
+        description="raises on unavailable allowed CTX token",
+        sql="SELECT @@CTX:target.database",
+        effective_vars={},
+        context_values={"target.database": None},
+        expected_error_fragment="references CTX key 'target.database' but no value is available",
+    ),
+    SubstituteSqlVarsErrorTestCase(
+        description="raises with preview on structured object var interpolation",
+        sql="SELECT @@grants",
+        effective_vars={"grants": {"role": "analyst"}},
+        expected_error_fragment=(
+            r"SQL variable '@@grants' is an object and cannot be interpolated as text: "
+            r'\{"role":"analyst"\}. Use a macro to consume structured vars\.'
+        ),
+    ),
+    SubstituteSqlVarsErrorTestCase(
+        description="raises with preview on structured array var interpolation",
+        sql="SELECT @@roles",
+        effective_vars={"roles": ["analyst", "reporter"]},
+        expected_error_fragment=(
+            r"SQL variable '@@roles' is an array and cannot be interpolated as text: "
+            r'\["analyst","reporter"\]. Use a macro to consume structured vars\.'
+        ),
     ),
 ]
 
@@ -121,6 +173,7 @@ def test_given_sql_and_vars_when_substituting_then_returns_expected(
         sql=test_case.sql,
         file_path=_FILE_PATH,
         effective_vars=test_case.effective_vars,
+        context_values=test_case.context_values,
     )
 
     assert result == test_case.expected_sql
@@ -139,4 +192,5 @@ def test_given_missing_var_when_substituting_then_raises(
             sql=test_case.sql,
             file_path=_FILE_PATH,
             effective_vars=test_case.effective_vars,
+            context_values=test_case.context_values,
         )

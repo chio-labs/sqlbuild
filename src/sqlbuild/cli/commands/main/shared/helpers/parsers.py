@@ -3,6 +3,33 @@
 from __future__ import annotations
 
 import argparse
+import json
+from typing import Any
+
+
+def parse_cli_vars(value: str) -> dict[str, object]:
+    """Parse SQLBuild CLI project vars from a JSON object."""
+
+    try:
+        parsed: Any = json.loads(value)
+    except json.JSONDecodeError as error:
+        raise argparse.ArgumentTypeError(f"--vars must be valid JSON: {error.msg}") from error
+    if not isinstance(parsed, dict):
+        raise argparse.ArgumentTypeError("--vars must be a JSON object")
+    result: dict[str, object] = {}
+    key: object
+    item_value: object
+    for key, item_value in parsed.items():
+        if not isinstance(key, str):
+            raise argparse.ArgumentTypeError("--vars keys must be strings")
+        result[key] = item_value
+    return result
+
+
+def add_vars_args(parser: argparse.ArgumentParser) -> None:
+    """Add SQLBuild project variable override flags to a subparser."""
+
+    parser.add_argument("--vars", dest="vars", type=parse_cli_vars, default={})
 
 
 def add_cursor_override_args(parser: argparse.ArgumentParser) -> None:

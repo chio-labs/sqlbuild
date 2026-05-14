@@ -43,6 +43,7 @@ def run_test(
     no_color: bool = False,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
+    cli_vars: dict[str, object] | None = None,
 ) -> int:
     """Execute the test command."""
 
@@ -60,6 +61,7 @@ def run_test(
     connection_config: dict[str, object] = resolve_project_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
+        cli_vars=cli_vars,
     )
     use_color: bool = not no_color and supports_color()
     progress_stream: TextIO = sys.stdout
@@ -87,6 +89,7 @@ def run_test(
         select=select,
         exclude=exclude,
         connection_config=connection_config,
+        cli_vars=cli_vars,
         on_connection_start=connection_progress.on_connection_start,
         on_connection_complete=connection_progress.on_connection_complete,
         on_connection_error=connection_progress.on_connection_error,

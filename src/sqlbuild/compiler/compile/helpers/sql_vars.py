@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from pathlib import Path
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
@@ -19,13 +20,14 @@ from sqlbuild.compiler.compile.helpers.sql_scanning import (
     skip_quoted_text,
 )
 from sqlbuild.compiler.compile.models import LoadedMacro, MacroContext
+from sqlbuild.shared.helpers.project_var_values import render_project_var_text
 
 _CONTEXT: str = "SQL interpolation"
 
 
 def validate_var_macro_collision(
     *,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
     loaded_macros: dict[str, LoadedMacro],
 ) -> None:
     """Raise if any project var name collides with a macro name."""
@@ -43,9 +45,10 @@ def expand_authored_sql(
     *,
     sql: str,
     file_path: Path,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
     loaded_macros: dict[str, LoadedMacro],
     macro_context: MacroContext,
+    context_values: Mapping[str, str | None] | None = None,
 ) -> str:
     """Apply SQL interpolation and macro expansion to authored SQL text."""
 
@@ -53,6 +56,7 @@ def expand_authored_sql(
         sql=sql,
         file_path=file_path,
         effective_vars=effective_vars,
+        context_values=context_values,
     )
     return expand_sql_macros(
         sql=interpolated_sql,
@@ -66,9 +70,10 @@ def substitute_sql_vars(
     *,
     sql: str,
     file_path: Path,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
+    context_values: Mapping[str, str | None] | None = None,
 ) -> str:
-    """Replace @@name and @@ENV:NAME references in SQL text.
+    """Replace @@name, @@ENV:NAME, and allowed @@CTX:name references in SQL text.
 
     Interpolation works inside quoted SQL strings. Comments are preserved as
     authored. Deferred @@@name placeholders are preserved for later phases.
@@ -88,6 +93,7 @@ def substitute_sql_vars(
                     segment=sql[cursor:end],
                     file_path=file_path,
                     effective_vars=effective_vars,
+                    context_values=context_values,
                 )
             )
             cursor = end
@@ -110,6 +116,7 @@ def substitute_sql_vars(
                 start=cursor,
                 file_path=file_path,
                 effective_vars=effective_vars,
+                context_values=context_values,
             )
             parts.append(rendered_token)
             cursor = next_cursor
@@ -123,7 +130,8 @@ def _interpolate_sql_segment(
     *,
     segment: str,
     file_path: Path,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
+    context_values: Mapping[str, str | None] | None,
 ) -> str:
     if "@@" not in segment:
         return segment
@@ -138,6 +146,7 @@ def _interpolate_sql_segment(
                 start=cursor,
                 file_path=file_path,
                 effective_vars=effective_vars,
+                context_values=context_values,
             )
             parts.append(rendered_token)
             cursor = next_cursor
@@ -152,7 +161,8 @@ def _render_interpolation_token(
     sql: str,
     start: int,
     file_path: Path,
-    effective_vars: dict[str, str],
+    effective_vars: dict[str, object],
+    context_values: Mapping[str, str | None] | None,
 ) -> tuple[str, int]:
     if sql.startswith("@@@", start):
         name_start: int = start + 3
@@ -175,7 +185,24 @@ def _render_interpolation_token(
         return os.environ[env_name], env_name_end
 
     if sql.startswith("CTX:", token_start):
-        raise CompileInputError(f"SQL text in '{file_path}' does not allow @@CTX templates")
+        context_name_start: int = token_start + len("CTX:")
+        context_name_end: int = _consume_context_name(sql=sql, start=context_name_start)
+        if context_name_end == context_name_start:
+            raise CompileInputError(f"invalid CTX interpolation token in '{file_path}'")
+        context_name: str = sql[context_name_start:context_name_end]
+        if context_values is None:
+            raise CompileInputError(f"SQL text in '{file_path}' does not allow @@CTX templates")
+        if context_name not in context_values:
+            raise CompileInputError(
+                f"SQL text in '{file_path}' references unknown CTX key '{context_name}'"
+            )
+        context_value: str | None = context_values[context_name]
+        if context_value is None:
+            raise CompileInputError(
+                f"SQL text in '{file_path}' references CTX key '{context_name}' "
+                "but no value is available"
+            )
+        return context_value, context_name_end
 
     if token_start < len(sql) and _is_identifier_start(sql[token_start]):
         name_end = _consume_identifier(sql=sql, start=token_start)
@@ -185,7 +212,13 @@ def _render_interpolation_token(
                 f"unknown project variable '@@{var_name}' in '{file_path}'. "
                 f"Available vars: {', '.join(sorted(effective_vars)) or 'none'}"
             )
-        return effective_vars[var_name], name_end
+        try:
+            return render_project_var_text(
+                value=effective_vars[var_name],
+                label=f"SQL variable '@@{var_name}'",
+            ), name_end
+        except ValueError as error:
+            raise CompileInputError(str(error)) from error
 
     return "@@", start + 2
 
@@ -200,5 +233,12 @@ def _consume_identifier(*, sql: str, start: int) -> int:
 def _consume_env_name(*, sql: str, start: int) -> int:
     cursor: int = start
     while cursor < len(sql) and (sql[cursor].isalnum() or sql[cursor] == "_"):
+        cursor += 1
+    return cursor
+
+
+def _consume_context_name(*, sql: str, start: int) -> int:
+    cursor: int = start
+    while cursor < len(sql) and (sql[cursor].isalnum() or sql[cursor] in {"_", "."}):
         cursor += 1
     return cursor

@@ -83,6 +83,7 @@ MODEL (
   incremental_mode microbatch,
   batch_size 1d,
   tags [marts],
+  post_hook ["grant select on @@CTX:target.qualified to role analytics"],
 );
 
 SELECT

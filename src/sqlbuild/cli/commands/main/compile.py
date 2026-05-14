@@ -43,6 +43,7 @@ def run_compile(
     manifest: bool = False,
     no_color: bool = False,
     lineage_mode: CompileLineageMode = CompileLineageMode.FAST,
+    cli_vars: dict[str, object] | None = None,
 ) -> int:
     """Execute the compile command."""
 
@@ -66,6 +67,7 @@ def run_compile(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         no_sql_validation=no_sql_validation,
+        cli_vars=cli_vars,
     )
     graph_ms: int = _elapsed_ms(graph_start)
     lineage_start: float = time.monotonic()

@@ -20,6 +20,7 @@ def run_clone_pipeline(
     no_sql_validation: bool = False,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
+    cli_vars: dict[str, object] | None = None,
     target_connection: Any,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> ClonePipelineResult:
@@ -31,6 +32,7 @@ def run_clone_pipeline(
         no_sql_validation=no_sql_validation,
         select=select,
         exclude=exclude,
+        cli_vars=cli_vars,
         target_connection=target_connection,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
