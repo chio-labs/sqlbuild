@@ -27,7 +27,6 @@ class DiscoverProjectInputsTestCase:
     expected_audit_block_names: tuple[str | None, ...]
     expected_audit_block_sql_bodies: tuple[str, ...]
     expected_macro_paths: tuple[str, ...]
-    expected_manifest_path: str | None
     expected_adapter_path: str | None
 
 
@@ -36,10 +35,3 @@ class DiscoverProjectInputsErrorTestCase:
     description: str
     repo_files: dict[str, str]
     expected_error_fragment: str
-
-
-@dataclass(frozen=True)
-class DiscoverDbtManifestTargetPathTestCase:
-    description: str
-    repo_files: dict[str, str]
-    expected_manifest_path: str

@@ -108,6 +108,14 @@ PLAN_TEST_CASES: list[JanitorPlanTestCase] = [
         expected_candidate_names=("__sqb_a13f09c2e7b8__model__daily_revenue",),
     ),
     JanitorPlanTestCase(
+        description="dbt scenario artifact is eligible when tracked-only is enabled",
+        relation_infos=(
+            relation_info("__sqb_a13f09c2e7b8__dbt_ref__stripe__payments", created_at=OLD_TIME),
+        ),
+        delete_tracked_only=True,
+        expected_candidate_names=("__sqb_a13f09c2e7b8__dbt_ref__stripe__payments",),
+    ),
+    JanitorPlanTestCase(
         description="scenario-like relation is not eligible when tracked-only is enabled",
         relation_infos=(
             relation_info("__sqb_a13f09c2e7b__model__daily_revenue", created_at=OLD_TIME),

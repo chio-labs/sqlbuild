@@ -14,6 +14,7 @@ from sqlbuild.compiler.pipeline.helpers.graph import (
 )
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.shared.types import ExternalSqlReferenceResolver
 
 
 def build_project_graph(
@@ -21,6 +22,7 @@ def build_project_graph(
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
     no_sql_validation: bool = False,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> ProjectGraph:
     """Build the static dependency graph for a compiled project."""
 
@@ -28,6 +30,7 @@ def build_project_graph(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         no_sql_validation=no_sql_validation,
+        external_sql_reference_resolver=external_sql_reference_resolver,
     )
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
         build_static_upstream_deps(project)

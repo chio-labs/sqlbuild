@@ -1,7 +1,9 @@
-from dataclasses import replace
 from pathlib import Path
 
-from sqlbuild.compiler.discovery.models import DiscoveredDbtManifestFile, DiscoveredProjectInputs
+from sqlbuild.integrations.dbt.main.build_compile_reference_resolver import (
+    build_compile_reference_resolver,
+)
+from sqlbuild.shared.types import ExternalSqlReferenceResolver
 
 
 def base_repo_files() -> dict[str, str]:
@@ -12,19 +14,14 @@ def base_repo_files() -> dict[str, str]:
     }
 
 
-def attach_dbt_manifest_file(
-    *, discovered_inputs: DiscoveredProjectInputs, project_dir: Path
-) -> DiscoveredProjectInputs:
+def build_external_sql_reference_resolver(
+    *, project_dir: Path
+) -> ExternalSqlReferenceResolver | None:
     manifest_path: Path = project_dir / "dbt" / "target" / "manifest.json"
     if not manifest_path.is_file():
-        return discovered_inputs
-    return replace(
-        discovered_inputs,
-        dbt_manifest_file=DiscoveredDbtManifestFile(
-            file_path=manifest_path,
-            relative_path=manifest_path.relative_to(project_dir),
-            contents=manifest_path.read_text(encoding="utf-8"),
-        ),
+        return None
+    return build_compile_reference_resolver(
+        manifest_contents=manifest_path.read_text(encoding="utf-8")
     )
 
 

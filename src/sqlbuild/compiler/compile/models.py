@@ -28,7 +28,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
+from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.project import (
     EnvironmentConfig,
     LocalConfig,
@@ -297,7 +297,7 @@ class CompileProjectInputs:
     scenario_inputs: tuple[CompileSqlScenarioInput, ...] = field(default_factory=tuple)
     audit_inputs: tuple[CompileAuditInput, ...] = field(default_factory=tuple)
     diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
-    dbt_manifest: DbtManifestIndex | None = None
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
 
 
 @dataclass(frozen=True)
@@ -454,4 +454,4 @@ class CompiledProject:
     sql_tests: tuple[CompiledSqlTest, ...] = field(default_factory=tuple)
     sql_scenarios: tuple[CompiledSqlScenario, ...] = field(default_factory=tuple)
     diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
-    dbt_manifest: DbtManifestIndex | None = None
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
