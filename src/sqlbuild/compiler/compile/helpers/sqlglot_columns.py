@@ -9,15 +9,24 @@ from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
 from sqlbuild.adapter.shared.types import FunctionNullabilityRule
 from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.shared.helpers.sql_reference_patterns import (
+    quoted_reference_call_pattern,
+    reference_call_prefix_pattern_text,
+)
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot, import_sqlglot_expressions
+from sqlbuild.shared.types import SqlReferenceKind
 
-_REF_PATTERN: re.Pattern[str] = re.compile(r'__ref\("([^"]+)"\)')
-_SEED_PATTERN: re.Pattern[str] = re.compile(r'__seed\("([^"]+)"\)')
-_SOURCE_PATTERN: re.Pattern[str] = re.compile(r'__source\("([^"]+)"\)')
-_DBT_REF_PATTERN: re.Pattern[str] = re.compile(r'__dbt_ref\("([^"]+)"\)')
-_UDF_PATTERN: re.Pattern[str] = re.compile(r'__udf\("([A-Za-z_][A-Za-z0-9_]*)"\)\s*(?=\()')
+_REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.REF)
+_SEED_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SEED)
+_SOURCE_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SOURCE)
+_DBT_REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.DBT_REF)
+_UDF_PATTERN: re.Pattern[str] = re.compile(
+    rf"{reference_call_prefix_pattern_text(SqlReferenceKind.UDF)}"
+    r'"([A-Za-z_][A-Za-z0-9_]*)"\)\s*(?=\()'
+)
 _TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(
-    r'__table_fn\("([A-Za-z_][A-Za-z0-9_]*)"\)\s*(?=\()'
+    rf"{reference_call_prefix_pattern_text(SqlReferenceKind.TABLE_FUNCTION)}"
+    r'"([A-Za-z_][A-Za-z0-9_]*)"\)\s*(?=\()'
 )
 _PLACEHOLDER_PATTERN: re.Pattern[str] = re.compile(r"@@@(\w+)")
 

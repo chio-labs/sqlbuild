@@ -2,14 +2,6 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.constants import (
-    DBT_REF_CALL_NAME,
-    REF_CALL_NAME,
-    SEED_CALL_NAME,
-    SOURCE_CALL_NAME,
-    TABLE_FUNCTION_CALL_NAME,
-    UDF_CALL_NAME,
-)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.helpers.sql_scanning import (
     find_matching_paren,
@@ -18,7 +10,7 @@ from sqlbuild.compiler.compile.helpers.sql_scanning import (
     skip_quoted_text,
 )
 from sqlbuild.compiler.compile.models import CompileSqlReference
-from sqlbuild.compiler.compile.types import SqlReferenceKind
+from sqlbuild.shared.types import SqlReferenceKind
 
 _CONTEXT: str = "SQL reference"
 
@@ -54,17 +46,17 @@ def extract_sql_references(sql: str) -> tuple[CompileSqlReference, ...]:
 
 def _parse_reference_at(*, sql: str, start: int) -> tuple[CompileSqlReference, int] | None:
     ref_kind: SqlReferenceKind | None = None
-    if sql.startswith(f"{DBT_REF_CALL_NAME}(", start):
+    if sql.startswith(f"{SqlReferenceKind.DBT_REF.function_name}(", start):
         ref_kind = SqlReferenceKind.DBT_REF
-    elif sql.startswith(f"{SEED_CALL_NAME}(", start):
+    elif sql.startswith(f"{SqlReferenceKind.SEED.function_name}(", start):
         ref_kind = SqlReferenceKind.SEED
-    elif sql.startswith(f"{SOURCE_CALL_NAME}(", start):
+    elif sql.startswith(f"{SqlReferenceKind.SOURCE.function_name}(", start):
         ref_kind = SqlReferenceKind.SOURCE
-    elif sql.startswith(f"{UDF_CALL_NAME}(", start):
+    elif sql.startswith(f"{SqlReferenceKind.UDF.function_name}(", start):
         ref_kind = SqlReferenceKind.UDF
-    elif sql.startswith(f"{TABLE_FUNCTION_CALL_NAME}(", start):
+    elif sql.startswith(f"{SqlReferenceKind.TABLE_FUNCTION.function_name}(", start):
         ref_kind = SqlReferenceKind.TABLE_FUNCTION
-    elif sql.startswith(f"{REF_CALL_NAME}(", start):
+    elif sql.startswith(f"{SqlReferenceKind.REF.function_name}(", start):
         ref_kind = SqlReferenceKind.REF
     if ref_kind is None:
         return None
@@ -104,17 +96,7 @@ def _parse_reference_at(*, sql: str, start: int) -> tuple[CompileSqlReference, i
 
 def ref_prefix(ref_kind: SqlReferenceKind | str) -> str:
     normalized_ref_kind: SqlReferenceKind = SqlReferenceKind(ref_kind)
-    if normalized_ref_kind == SqlReferenceKind.DBT_REF:
-        return DBT_REF_CALL_NAME
-    if normalized_ref_kind == SqlReferenceKind.SOURCE:
-        return SOURCE_CALL_NAME
-    if normalized_ref_kind == SqlReferenceKind.SEED:
-        return SEED_CALL_NAME
-    if normalized_ref_kind == SqlReferenceKind.UDF:
-        return UDF_CALL_NAME
-    if normalized_ref_kind == SqlReferenceKind.TABLE_FUNCTION:
-        return TABLE_FUNCTION_CALL_NAME
-    return REF_CALL_NAME
+    return normalized_ref_kind.function_name
 
 
 def _split_top_level_arguments(raw_arguments: str) -> tuple[str, ...]:

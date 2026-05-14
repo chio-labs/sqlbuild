@@ -2,8 +2,35 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
+
+
+class SqlReferenceKind(StrEnum):
+    REF = "ref"
+    SEED = "seed"
+    SOURCE = "source"
+    DBT_REF = "dbt_ref"
+    UDF = "udf"
+    TABLE_FUNCTION = "table_fn"
+
+    @property
+    def function_name(self) -> str:
+        return f"__{self.value}"
+
+    @property
+    def fixture_cte_prefix(self) -> str:
+        return f"{self.function_name}__"
+
+    def example_call(self, *args: str, quote: Literal["'", '"'] = "'") -> str:
+        quoted_args: str = ", ".join(
+            f"{quote}{arg.replace(quote, quote + quote)}{quote}" for arg in args
+        )
+        return f"{self.function_name}({quoted_args})"
+
+    def placeholder_call(self, placeholder: str = "") -> str:
+        return f"{self.function_name}({placeholder})"
 
 
 class ExternalSqlReferenceResolver(Protocol):

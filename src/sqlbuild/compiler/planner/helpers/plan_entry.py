@@ -17,7 +17,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledSource,
     CompileSqlReference,
 )
-from sqlbuild.compiler.compile.types import SqlReferenceKind
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.constants import (
     METADATA_NAME_FILTER_LIMIT,
@@ -61,7 +60,7 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
 )
 from sqlbuild.compiler.shared.helpers.sources import render_source_relation
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.shared.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.spec.models.schema import SchemaColumn
 from sqlbuild.spec.models.source import SourceEntry
 

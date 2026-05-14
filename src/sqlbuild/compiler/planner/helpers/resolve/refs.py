@@ -14,17 +14,24 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.shared.helpers.sql_reference_patterns import (
+    quoted_reference_call_pattern,
+    quoted_reference_call_pattern_text,
+    reference_call_prefix_pattern_text,
+)
+from sqlbuild.shared.types import ExternalSqlReferenceResolver, SqlReferenceKind
 
-_REF_PATTERN: re.Pattern[str] = re.compile(r'__ref\("([^"]+)"\)')
-_SEED_PATTERN: re.Pattern[str] = re.compile(r'__seed\("([^"]+)"\)')
+_REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.REF)
+_SEED_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SEED)
 _DBT_REF_PATTERN: re.Pattern[str] = re.compile(
-    r'__dbt_ref\(\s*"([^"]+)"\s*(?:,\s*"([^"]+)"\s*)?\)',
+    rf'{reference_call_prefix_pattern_text(SqlReferenceKind.DBT_REF)}\s*"([^"]+)"\s*'
+    r'(?:,\s*"([^"]+)"\s*)?\)',
     re.IGNORECASE,
 )
-_UDF_PATTERN: re.Pattern[str] = re.compile(r'__udf\("([^"]+)"\)')
+_UDF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.UDF)
 _TABLE_FUNCTION_CALL_PATTERN: re.Pattern[str] = re.compile(
-    r'__table_fn\("([^"]+)"\)\s*\(([^()]*)\)'
+    rf"{quoted_reference_call_pattern_text(SqlReferenceKind.TABLE_FUNCTION)}\s*"
+    r"\(([^()]*)\)"
 )
 
 

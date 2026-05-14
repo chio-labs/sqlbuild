@@ -14,10 +14,10 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledResourceType,
-    SqlReferenceKind,
 )
 from sqlbuild.compiler.planner.helpers.graph import expand_downstream
 from sqlbuild.compiler.planner.types import MaterializationType
+from sqlbuild.shared.types import SqlReferenceKind
 
 
 def resolve_attachment_kind(
@@ -79,7 +79,8 @@ def _validate_source_attached_audit(*, audit: CompiledAudit) -> None:
         if ref.ref_kind == SqlReferenceKind.REF:
             raise ValueError(
                 f"audit '{audit.name}': source-attached audit must not reference models "
-                f'via __ref(); found __ref("{ref.ref_name}")'
+                f"via {SqlReferenceKind.REF.placeholder_call()}; found "
+                f"{SqlReferenceKind.REF.example_call(ref.ref_name)}"
             )
 
 

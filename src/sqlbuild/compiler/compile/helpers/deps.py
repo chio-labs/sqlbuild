@@ -8,8 +8,8 @@ from sqlbuild.compiler.compile.models import CompiledObjectKey, CompileSqlRefere
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledResourceType,
-    SqlReferenceKind,
 )
+from sqlbuild.shared.types import SqlReferenceKind
 
 
 def model_build_deps(
