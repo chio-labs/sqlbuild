@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.9.0](https://github.com/chio-labs/sqlbuild/compare/v0.8.0...v0.9.0) (2026-05-14)
+
+
+### Features
+
+* add dbt interop debug ([8d71604](https://github.com/chio-labs/sqlbuild/commit/8d7160440446e9a242c3a67b028f50e15a8b7134))
+* add dbt interop foundation ([6d548b9](https://github.com/chio-labs/sqlbuild/commit/6d548b9c386895e707fcbb3a118f24bfc9cb6c26))
+* add dbt interop plan output ([9e5d012](https://github.com/chio-labs/sqlbuild/commit/9e5d0123001a9530e307e97ba485d7a88d2763cc))
+* add warehouse zero copy clone support ([fef64e8](https://github.com/chio-labs/sqlbuild/commit/fef64e8dc1b2cda62c0419d793a1a7ec8cdfa030))
+* build dbt combined graph ([a6ca203](https://github.com/chio-labs/sqlbuild/commit/a6ca203fd9b6f4aa989d3d059c0364048884fbc3))
+* execute dbt interop run and build ([91e80a5](https://github.com/chio-labs/sqlbuild/commit/91e80a5e10cc9e9c91533c61ae0c86e919c79b23))
+* execute dbt interop tests ([cd3c556](https://github.com/chio-labs/sqlbuild/commit/cd3c55678db2df8d2500300ad3624575558f1e2b))
+* mock dbt refs in tests and scenarios ([0bc7d40](https://github.com/chio-labs/sqlbuild/commit/0bc7d40e8e6649390b4dd7df969dfb0343ac3ce5))
+* orchestrate dbt interop plans ([92e8f39](https://github.com/chio-labs/sqlbuild/commit/92e8f39ae03f81e1b09c08c3aa463a6f61c7d042))
+* refine dbt plan output ([4090fa6](https://github.com/chio-labs/sqlbuild/commit/4090fa6a927e7fcf5dada88aa7e124c3d4ed11cd))
+* refine plan section layout ([0ea662c](https://github.com/chio-labs/sqlbuild/commit/0ea662c410065efa8363949014668f19e31541c0))
+* resolve dbt interop selections ([87cdd3a](https://github.com/chio-labs/sqlbuild/commit/87cdd3a6c3b5f90ca3fdfa0b791be2dd1374234f))
+* resolve dbt refs from manifest ([0ab4921](https://github.com/chio-labs/sqlbuild/commit/0ab49216ea0b43c2f293556132aa5074c9bd6ad7))
+* route dbt interop arguments ([7fc4da3](https://github.com/chio-labs/sqlbuild/commit/7fc4da3aa2f615584c169a0781cf690ac31b1881))
+* support adapter sqlglot dialect setting ([56926f3](https://github.com/chio-labs/sqlbuild/commit/56926f34bf8ad197f7c556355d87eead4a01f7fc))
+* wire dbt interop plan cli ([80d72d8](https://github.com/chio-labs/sqlbuild/commit/80d72d8e4fbb0b2ec85486b71840b27a050a02bf))
+
+
+### Bug Fixes
+
+* default audit severity to error ([98f0dea](https://github.com/chio-labs/sqlbuild/commit/98f0dea12cdbc09c7ef5dbe58b79082985d5931d))
+* default audit severity to error ([f9cf03f](https://github.com/chio-labs/sqlbuild/commit/f9cf03f88e00a581c74d3438c5e041bc621724ee))
+* escape reference example calls ([bf8273f](https://github.com/chio-labs/sqlbuild/commit/bf8273fb9a9aec2997384d213ca6f4be37470fee))
+* keep local replay error fixtures valid ([7f48d4c](https://github.com/chio-labs/sqlbuild/commit/7f48d4c48fdae80979bef3a2b2db943b06b74af5))
+* recognize dbt scenario artifacts ([c1f3274](https://github.com/chio-labs/sqlbuild/commit/c1f3274db1ef82aa78f597c97bd25063ea00f6b3))
+* recognize dbt scenario artifacts ([6b8a5f5](https://github.com/chio-labs/sqlbuild/commit/6b8a5f542fbe19d4a824ba3a5b310f9ad840b808))
+* reject dbt refs in audits ([e384ed1](https://github.com/chio-labs/sqlbuild/commit/e384ed185e31c2e0dbbccb826bed0b40f222240c))
+* remove dbt mock fixture model ([e1c3a8d](https://github.com/chio-labs/sqlbuild/commit/e1c3a8da182bb0dce71c9917ad4d29fe19e1cc6a))
+* render coded dbt interop errors ([12395a1](https://github.com/chio-labs/sqlbuild/commit/12395a19e7fbbb82971b814858cace906642f192))
+* require sqlglot for scenario snapshots ([7b6cf94](https://github.com/chio-labs/sqlbuild/commit/7b6cf94d4fbfad66581b0279909830aaabcf5f9a))
+* resolve dbt interop paths absolutely ([c3a21ee](https://github.com/chio-labs/sqlbuild/commit/c3a21ee5e42ac9e9fe8fab79e6c0c08066a8862b))
+* stop ambient dbt manifest discovery ([9e35257](https://github.com/chio-labs/sqlbuild/commit/9e35257b0e12f2c68d8525d684d2f96ac179582b))
+
+
+### Documentation
+
+* use absolute readme logo url ([a5b5d2c](https://github.com/chio-labs/sqlbuild/commit/a5b5d2c8003aa41125752a084b36865e6d7e62bc))
+
 ## [0.8.0](https://github.com/chio-labs/sqlbuild/compare/v0.7.0...v0.8.0) (2026-05-09)
 
 
