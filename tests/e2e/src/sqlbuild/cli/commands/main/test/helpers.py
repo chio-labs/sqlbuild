@@ -100,3 +100,34 @@ def build_assertion_test_project_files(*, failing: bool) -> dict[str, str]:
             "SELECT 1\n"
         ),
     }
+
+
+def build_macro_test_project_files() -> dict[str, str]:
+    """Build an inline project with a macro unit test guarding one model."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "macro_test_demo"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "macro_test_demo.duckdb"\n\n'
+            "[defaults]\n"
+            'materialized = "table"\n'
+        ),
+        "macros/status.py": (
+            'def normalize_status(value: str) -> str:\n    return f"LOWER(TRIM({value}))"\n'
+        ),
+        "models/orders.sql": (
+            "MODEL (materialized table);\n\nSELECT @normalize_status(\"'  PAID  '\") AS status\n"
+        ),
+        "tests/unit/test_normalize_status.sql": (
+            'TEST (mode: macro, name: "normalizes status");\n\n'
+            "WITH\n"
+            "input_values AS (SELECT '  PAID  ' AS raw_status),\n"
+            "__macro_actual__ AS (\n"
+            '  SELECT @normalize_status("raw_status") AS status FROM input_values\n'
+            "),\n"
+            "__macro_expected__ AS (SELECT 'paid' AS status)\n"
+            "SELECT 1\n"
+        ),
+    }

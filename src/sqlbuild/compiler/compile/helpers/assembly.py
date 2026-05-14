@@ -11,7 +11,7 @@ from sqlbuild.compiler.compile.helpers.deps import (
     model_build_deps,
     sql_test_scope_deps,
 )
-from sqlbuild.compiler.compile.helpers.macros import expand_sql_macros
+from sqlbuild.compiler.compile.helpers.macros import expand_sql_macros, find_macro_call_names
 from sqlbuild.compiler.compile.helpers.sqlglot_columns import infer_columns_with_sqlglot
 from sqlbuild.compiler.compile.helpers.templating import expand_template_data
 from sqlbuild.compiler.compile.models import (
@@ -37,7 +37,11 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
     MacroContext,
 )
-from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    AttachedAuditTargetKind,
+    CompiledResourceType,
+    SqlTestMode,
+)
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.spec.models.project import (
     DefaultsConfig,
@@ -149,6 +153,7 @@ def _assemble_compiled_model(
         inferred_columns=inferred_columns,
         authored_sql=model_input.model_file.contents,
         output_column_locations=model_input.model_file.output_column_locations,
+        macro_deps=find_macro_call_names(model_input.macro_source_sql),
     )
 
 
@@ -314,13 +319,21 @@ def _assemble_compiled_sql_test(
     assertion_target_model_names: tuple[str, ...] = _extract_sql_test_assertion_ref_targets(
         assertion_ctes=test_input.assertion_ctes
     )
-    return CompiledSqlTest(
-        key=CompiledObjectKey(resource_type=CompiledResourceType.SQL_TEST, name=test_name),
-        scope_deps=sql_test_scope_deps(
+    scope_deps: tuple[CompiledObjectKey, ...]
+    if test_input.mode == SqlTestMode.MACRO:
+        scope_deps = _macro_sql_test_scope_deps(
+            tested_macro_names=test_input.tested_macro_names,
+            model_inputs=model_inputs,
+        )
+    else:
+        scope_deps = sql_test_scope_deps(
             expected_model_names=tuple(
                 dict.fromkeys((*test_input.expected_model_names, *assertion_target_model_names))
             )
-        ),
+        )
+    return CompiledSqlTest(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.SQL_TEST, name=test_name),
+        scope_deps=scope_deps,
         name=test_name,
         test_file=test_input.test_file,
         test_block=test_input.test_block,
@@ -339,7 +352,32 @@ def _assemble_compiled_sql_test(
         expected_model_names=test_input.expected_model_names,
         assertion_ctes=test_input.assertion_ctes,
         assertion_names=test_input.assertion_names,
+        mode=test_input.mode,
+        macro_actual_cte=test_input.macro_actual_cte,
+        macro_expected_cte=test_input.macro_expected_cte,
+        tested_macro_names=test_input.tested_macro_names,
     )
+
+
+def _macro_sql_test_scope_deps(
+    *, tested_macro_names: tuple[str, ...], model_inputs: tuple[CompileModelInput, ...]
+) -> tuple[CompiledObjectKey, ...]:
+    tested_names: frozenset[str] = frozenset(tested_macro_names)
+    scope_deps: list[CompiledObjectKey] = []
+    model_input: CompileModelInput
+    for model_input in model_inputs:
+        model_macro_deps: frozenset[str] = frozenset(
+            find_macro_call_names(model_input.macro_source_sql)
+        )
+        if not tested_names.intersection(model_macro_deps):
+            continue
+        scope_deps.append(
+            CompiledObjectKey(
+                resource_type=CompiledResourceType.MODEL,
+                name=model_input.model_file.file_path.stem,
+            )
+        )
+    return tuple(scope_deps)
 
 
 def _extract_sql_test_assertion_ref_targets(

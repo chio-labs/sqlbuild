@@ -20,7 +20,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledSqlTest,
     CompileSqlTestCte,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
 from sqlbuild.compiler.planner.helpers.resolve.refs import resolve_udf_references
 from sqlbuild.compiler.planner.helpers.sqlglot_sql_test_assembly import (
     try_resolve_test_model_sql_with_sqlglot,
@@ -55,6 +55,9 @@ def plan_test(
     sqlglot_enabled: bool = False,
 ) -> tuple[SqlTestPlanEntry, tuple[PlanWarning, ...]]:
     """Build a test plan entry with chained resolution."""
+
+    if test.mode == SqlTestMode.MACRO:
+        return _plan_macro_test(test=test, sqlglot_enabled=sqlglot_enabled), ()
 
     model_map: dict[str, CompiledModel] = {m.name: m for m in project.models}
     function_targets: dict[str, CompiledRelationTarget] = {
@@ -233,6 +236,38 @@ def plan_test(
         sqlglot_enabled=sqlglot_enabled,
     )
     return entry, tuple(warnings)
+
+
+def _plan_macro_test(*, test: CompiledSqlTest, sqlglot_enabled: bool) -> SqlTestPlanEntry:
+    if test.macro_actual_cte is None or test.macro_expected_cte is None:
+        raise AssertionError("compiled macro test missing actual/expected CTEs")
+    helper_ctes: tuple[CompileSqlTestCte, ...] = _extract_helper_ctes(test)
+    helper_with: str = _build_helper_with_clause(helper_ctes)
+    return SqlTestPlanEntry(
+        key=test.key,
+        name=test.name,
+        chain=(
+            ChainStep(
+                model_name=f"macro {test.name}",
+                resolved_sql=_wrap_direct_logic_sql(
+                    sql=test.macro_actual_cte.sql_body,
+                    helper_with=helper_with,
+                ),
+                expected_cte_sql=_wrap_direct_logic_sql(
+                    sql=test.macro_expected_cte.sql_body,
+                    helper_with=helper_with,
+                ),
+            ),
+        ),
+        scope_deps=test.scope_deps,
+        sqlglot_enabled=sqlglot_enabled,
+    )
+
+
+def _wrap_direct_logic_sql(*, sql: str, helper_with: str) -> str:
+    if helper_with:
+        return f"{helper_with} {sql}"
+    return sql
 
 
 def _extract_assertion_ref_targets(*, assertion_map: dict[str, str]) -> tuple[str, ...]:

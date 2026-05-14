@@ -6,10 +6,12 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledResourceType,
     FunctionLanguage,
+    SqlTestMode,
 )
 from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic
 from sqlbuild.compiler.discovery.models import (
@@ -123,6 +125,8 @@ class CompileSqlTestCtes:
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
+    macro_actual_cte: CompileSqlTestCte | None = None
+    macro_expected_cte: CompileSqlTestCte | None = None
 
 
 @dataclass(frozen=True)
@@ -232,6 +236,10 @@ class CompileSqlTestInput:
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
+    mode: SqlTestMode = DEFAULT_SQL_TEST_MODE
+    macro_actual_cte: CompileSqlTestCte | None = None
+    macro_expected_cte: CompileSqlTestCte | None = None
+    tested_macro_names: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -327,6 +335,7 @@ class CompiledModel:
     inferred_columns: tuple[InferredColumn, ...] | None = None
     authored_sql: str = ""
     output_column_locations: dict[str, SourceLocation] = field(default_factory=dict)
+    macro_deps: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -414,6 +423,10 @@ class CompiledSqlTest:
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
+    mode: SqlTestMode = DEFAULT_SQL_TEST_MODE
+    macro_actual_cte: CompileSqlTestCte | None = None
+    macro_expected_cte: CompileSqlTestCte | None = None
+    tested_macro_names: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
