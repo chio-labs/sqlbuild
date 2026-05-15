@@ -644,6 +644,111 @@ def test_given_udf_sql_test_when_planning_then_compares_resolved_actual_to_expec
 @pytest.mark.parametrize(
     "test_case",
     [
+        PlanMacroTestCase(
+            description=(
+                "plans table function test as one direct comparison chain step with resolved call"
+            ),
+            helper_ctes={},
+            actual_sql='SELECT customer_id, order_id FROM __table_fn("customer_orders")(42)',
+            expected_sql="SELECT 42 AS customer_id, 1 AS order_id",
+            expected_actual_fragment="FROM main.customer_orders(42)",
+            expected_expected_fragment="SELECT 42 AS customer_id, 1 AS order_id",
+        )
+    ],
+    ids=["plans table function test as one direct comparison chain step with resolved call"],
+)
+def test_given_table_function_sql_test_when_planning_then_compares_resolved_actual_to_expected(
+    test_case: PlanMacroTestCase,
+) -> None:
+    test_file: DiscoveredSqlTestFile = DiscoveredSqlTestFile(
+        file_path=Path("tests/unit/test_table_fn.sql"),
+        relative_path=Path("tests/unit/test_table_fn.sql"),
+        contents="",
+        blocks=(),
+    )
+    test_block: DiscoveredSqlTestBlock = DiscoveredSqlTestBlock(
+        test_index=1,
+        header_values={"mode": "table_fn", "name": "returns customer orders"},
+        sql_body="",
+        name="returns customer orders",
+        mode=SqlTestMode.TABLE_FN,
+    )
+    sql_test: CompiledSqlTest = CompiledSqlTest(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.SQL_TEST,
+            name="returns customer orders",
+        ),
+        scope_deps=(
+            CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name="customer_orders"),
+        ),
+        name="returns customer orders",
+        test_file=test_file,
+        test_block=test_block,
+        sql_body="",
+        mode=SqlTestMode.TABLE_FN,
+        payload=CompiledDirectLogicSqlTestPayload(
+            mode=SqlTestMode.TABLE_FN,
+            helper_ctes=(),
+            actual_cte=CompileSqlTestCte(
+                name="__table_fn_actual__",
+                sql_body=test_case.actual_sql,
+            ),
+            expected_cte=CompileSqlTestCte(
+                name="__table_fn_expected__",
+                sql_body=test_case.expected_sql,
+            ),
+            tested_resource_names=("customer_orders",),
+        ),
+    )
+
+    entry, warnings = plan_test(
+        test=sql_test,
+        adapter=DuckDbAdapter(),
+        project=CompiledProject(
+            run_id="test_run",
+            effective_environment_name=None,
+            effective_connection={},
+            effective_vars={},
+            functions=(
+                CompiledFunction(
+                    key=CompiledObjectKey(
+                        resource_type=CompiledResourceType.FUNCTION,
+                        name="customer_orders",
+                    ),
+                    deps=(),
+                    name="customer_orders",
+                    relative_path=Path("functions/sql/customer_orders.sql"),
+                    arguments=(),
+                    returns="TABLE",
+                    body_sql="",
+                    target=CompiledRelationTarget(
+                        database=None,
+                        schema="main",
+                        name="customer_orders",
+                        qualified_name="main.customer_orders",
+                    ),
+                    fingerprint_target=CompiledRelationTarget(
+                        database=None,
+                        schema="main",
+                        name="customer_orders__fingerprint",
+                        qualified_name="main.customer_orders__fingerprint",
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    assert warnings == ()
+    assert len(entry.chain) == 1
+    assert entry.chain[0].model_name == "table_fn returns customer orders"
+    assert test_case.expected_actual_fragment in entry.chain[0].resolved_sql
+    assert entry.chain[0].expected_cte_sql is not None
+    assert test_case.expected_expected_fragment in entry.chain[0].expected_cte_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         PlanTestChainTestCase(
             description="sqlglot path lifts refs and sources into readable top-level ctes",
             model_queries={

@@ -14,6 +14,8 @@ from sqlbuild.compiler.compile.constants import (
     RESERVED_SQL_TEST_CTE_NAMES,
     SEED_TEST_CTE_PREFIX,
     SOURCE_TEST_CTE_PREFIX,
+    TABLE_FN_ACTUAL_TEST_CTE_NAME,
+    TABLE_FN_EXPECTED_TEST_CTE_NAME,
     UDF_ACTUAL_TEST_CTE_NAME,
     UDF_EXPECTED_TEST_CTE_NAME,
 )
@@ -101,9 +103,7 @@ def _classify_sql_test_ctes(
         case SqlTestMode.UDF:
             return _classify_udf_sql_test_ctes(ctes=ctes, file_label=file_label)
         case SqlTestMode.TABLE_FN:
-            raise CompileInputError(
-                f"SQL test '{file_label}' mode '{mode.value}' is reserved but not implemented yet"
-            )
+            return _classify_table_fn_sql_test_ctes(ctes=ctes, file_label=file_label)
         case _:
             raise CompileInputError(f"SQL test '{file_label}' has unsupported mode '{mode}'")
 
@@ -141,6 +141,11 @@ def _classify_macro_sql_test_ctes(
         if cte.name in {UDF_ACTUAL_TEST_CTE_NAME, UDF_EXPECTED_TEST_CTE_NAME}:
             raise CompileInputError(
                 f"SQL test '{file_label}' is mode 'macro' but defines UDF-test CTE '{cte.name}'"
+            )
+        if cte.name in {TABLE_FN_ACTUAL_TEST_CTE_NAME, TABLE_FN_EXPECTED_TEST_CTE_NAME}:
+            raise CompileInputError(
+                f"SQL test '{file_label}' is mode 'macro' but defines table_fn-test CTE "
+                f"'{cte.name}'"
             )
         if cte.name in RESERVED_SQL_TEST_CTE_NAMES:
             raise CompileInputError(
@@ -191,6 +196,10 @@ def _classify_udf_sql_test_ctes(
             raise CompileInputError(
                 f"SQL test '{file_label}' is mode 'udf' but defines macro-test CTE '{cte.name}'"
             )
+        if cte.name in {TABLE_FN_ACTUAL_TEST_CTE_NAME, TABLE_FN_EXPECTED_TEST_CTE_NAME}:
+            raise CompileInputError(
+                f"SQL test '{file_label}' is mode 'udf' but defines table_fn-test CTE '{cte.name}'"
+            )
         if cte.name in RESERVED_SQL_TEST_CTE_NAMES:
             raise CompileInputError(
                 f"SQL test '{file_label}' uses reserved helper CTE name '{cte.name}'"
@@ -204,6 +213,62 @@ def _classify_udf_sql_test_ctes(
         file_label=file_label,
     )
     return CompileSqlTestCtes(mode=SqlTestMode.UDF, payload=direct_logic_payload)
+
+
+def _classify_table_fn_sql_test_ctes(
+    *, ctes: tuple[CompileSqlTestCte, ...], file_label: str
+) -> CompileSqlTestCtes:
+    authored_ctes: list[CompileSqlTestCte] = []
+    table_fn_actual_cte: CompileSqlTestCte | None = None
+    table_fn_expected_cte: CompileSqlTestCte | None = None
+
+    cte: CompileSqlTestCte
+    for cte in ctes:
+        if cte.name == TABLE_FN_ACTUAL_TEST_CTE_NAME:
+            if table_fn_actual_cte is not None:
+                raise CompileInputError(
+                    f"SQL test '{file_label}' mode 'table_fn' must define exactly one "
+                    f"{TABLE_FN_ACTUAL_TEST_CTE_NAME} CTE"
+                )
+            table_fn_actual_cte = cte
+            continue
+        if cte.name == TABLE_FN_EXPECTED_TEST_CTE_NAME:
+            if table_fn_expected_cte is not None:
+                raise CompileInputError(
+                    f"SQL test '{file_label}' mode 'table_fn' must define exactly one "
+                    f"{TABLE_FN_EXPECTED_TEST_CTE_NAME} CTE"
+                )
+            _validate_expected_cte_query(cte=cte, file_label=file_label, label=cte.name)
+            table_fn_expected_cte = cte
+            continue
+        if _is_model_mode_cte(cte.name):
+            raise CompileInputError(
+                f"SQL test '{file_label}' is mode 'table_fn' but defines model-test CTE "
+                f"'{cte.name}'"
+            )
+        if cte.name in {
+            MACRO_ACTUAL_TEST_CTE_NAME,
+            MACRO_EXPECTED_TEST_CTE_NAME,
+            UDF_ACTUAL_TEST_CTE_NAME,
+            UDF_EXPECTED_TEST_CTE_NAME,
+        }:
+            raise CompileInputError(
+                f"SQL test '{file_label}' is mode 'table_fn' but defines another "
+                f"direct-logic CTE '{cte.name}'"
+            )
+        if cte.name in RESERVED_SQL_TEST_CTE_NAMES:
+            raise CompileInputError(
+                f"SQL test '{file_label}' uses reserved helper CTE name '{cte.name}'"
+            )
+        authored_ctes.append(cte)
+
+    direct_logic_payload: CompileDirectLogicSqlTestCtes = _validate_table_fn_test_ctes(
+        authored_ctes=tuple(authored_ctes),
+        table_fn_actual_cte=table_fn_actual_cte,
+        table_fn_expected_cte=table_fn_expected_cte,
+        file_label=file_label,
+    )
+    return CompileSqlTestCtes(mode=SqlTestMode.TABLE_FN, payload=direct_logic_payload)
 
 
 def _classify_model_sql_test_ctes(
@@ -230,6 +295,11 @@ def _classify_model_sql_test_ctes(
             raise CompileInputError(
                 f"SQL test '{file_label}' is mode '{DEFAULT_SQL_TEST_MODE.value}' but defines "
                 f"UDF-test CTE '{cte.name}'; use TEST (mode: {SqlTestMode.UDF.value})"
+            )
+        if cte.name in {TABLE_FN_ACTUAL_TEST_CTE_NAME, TABLE_FN_EXPECTED_TEST_CTE_NAME}:
+            raise CompileInputError(
+                f"SQL test '{file_label}' is mode '{DEFAULT_SQL_TEST_MODE.value}' but defines "
+                f"table_fn-test CTE '{cte.name}'; use TEST (mode: {SqlTestMode.TABLE_FN.value})"
             )
         if cte.name.startswith(MACRO_TEST_CTE_PREFIX):
             macro_name: str = _require_prefixed_name(
@@ -426,6 +496,43 @@ def _validate_udf_test_ctes(
         helper_ctes=authored_ctes,
         actual_cte=udf_actual_cte,
         expected_cte=udf_expected_cte,
+    )
+
+
+def _validate_table_fn_test_ctes(
+    *,
+    authored_ctes: tuple[CompileSqlTestCte, ...],
+    table_fn_actual_cte: CompileSqlTestCte | None,
+    table_fn_expected_cte: CompileSqlTestCte | None,
+    file_label: str,
+) -> CompileDirectLogicSqlTestCtes:
+    if table_fn_actual_cte is None or table_fn_expected_cte is None:
+        raise CompileInputError(
+            f"SQL test '{file_label}' mode 'table_fn' must define exactly one "
+            f"{TABLE_FN_ACTUAL_TEST_CTE_NAME} CTE and exactly one "
+            f"{TABLE_FN_EXPECTED_TEST_CTE_NAME} CTE"
+        )
+    helper_cte: CompileSqlTestCte
+    for helper_cte in authored_ctes:
+        _validate_no_direct_logic_calls(
+            sql=helper_cte.sql_body,
+            file_label=file_label,
+            mode=SqlTestMode.TABLE_FN,
+            cte_label=f"helper CTE '{helper_cte.name}'",
+            allowed_location=TABLE_FN_ACTUAL_TEST_CTE_NAME,
+        )
+    _validate_no_direct_logic_calls(
+        sql=table_fn_expected_cte.sql_body,
+        file_label=file_label,
+        mode=SqlTestMode.TABLE_FN,
+        cte_label=f"CTE {TABLE_FN_EXPECTED_TEST_CTE_NAME}",
+        allowed_location=TABLE_FN_ACTUAL_TEST_CTE_NAME,
+    )
+    return CompileDirectLogicSqlTestCtes(
+        mode=SqlTestMode.TABLE_FN,
+        helper_ctes=authored_ctes,
+        actual_cte=table_fn_actual_cte,
+        expected_cte=table_fn_expected_cte,
     )
 
 

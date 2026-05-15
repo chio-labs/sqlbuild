@@ -332,6 +332,23 @@ DIRECT_LOGIC_TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
         expected_macro_actual_cte_name="__udf_actual__",
         expected_macro_expected_cte_name="__udf_expected__",
     ),
+    ExtractSqlTestCtesTestCase(
+        description="extracts unsuffixed table function actual expected ctes in table_fn mode",
+        sql="""
+        WITH __table_fn_actual__ AS (
+          SELECT customer_id, order_id FROM __table_fn("customer_orders")(42)
+        ),
+        __table_fn_expected__ AS (SELECT 42 AS customer_id, 1 AS order_id)
+        SELECT 1
+        """.strip(),
+        mode=SqlTestMode.TABLE_FN,
+        expected_authored_cte_names=(),
+        expected_mock_model_names=(),
+        expected_mock_source_names=(),
+        expected_expected_model_names=(),
+        expected_macro_actual_cte_name="__table_fn_actual__",
+        expected_macro_expected_cte_name="__table_fn_expected__",
+    ),
 ]
 
 
@@ -519,6 +536,15 @@ ERROR_TEST_CASES: list[ExtractSqlTestCtesErrorTestCase] = [
         expected_error_fragment=r"use TEST \(mode: udf\)",
     ),
     ExtractSqlTestCtesErrorTestCase(
+        description="raises when model mode includes table function actual cte",
+        sql="""
+        WITH __table_fn_actual__ AS (SELECT * FROM __table_fn("customer_orders")(42)),
+        __table_fn_expected__ AS (SELECT 42 AS customer_id)
+        SELECT 1
+        """.strip(),
+        expected_error_fragment=r"use TEST \(mode: table_fn\)",
+    ),
+    ExtractSqlTestCtesErrorTestCase(
         description="raises when macro mode includes model test cte",
         sql="""
         WITH __source__raw_orders AS (SELECT 1 AS order_id),
@@ -581,6 +607,29 @@ ERROR_TEST_CASES: list[ExtractSqlTestCtesErrorTestCase] = [
         """.strip(),
         mode=SqlTestMode.UDF,
         expected_error_fragment="helper CTE 'helper'.*must not call udf",
+    ),
+    ExtractSqlTestCtesErrorTestCase(
+        description="raises when table function expected calls table function",
+        sql="""
+        WITH __table_fn_actual__ AS (SELECT * FROM __table_fn("customer_orders")(42)),
+        __table_fn_expected__ AS (
+          SELECT customer_id FROM __table_fn("customer_orders")(42)
+        )
+        SELECT 1
+        """.strip(),
+        mode=SqlTestMode.TABLE_FN,
+        expected_error_fragment="__table_fn_expected__.*must not call table_fn",
+    ),
+    ExtractSqlTestCtesErrorTestCase(
+        description="raises when table function helper calls table function",
+        sql="""
+        WITH helper AS (SELECT * FROM __table_fn("customer_orders")(42)),
+        __table_fn_actual__ AS (SELECT * FROM helper),
+        __table_fn_expected__ AS (SELECT 42 AS customer_id)
+        SELECT 1
+        """.strip(),
+        mode=SqlTestMode.TABLE_FN,
+        expected_error_fragment="helper CTE 'helper'.*must not call table_fn",
     ),
 ]
 

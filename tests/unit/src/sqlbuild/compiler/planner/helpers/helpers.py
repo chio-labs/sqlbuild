@@ -24,12 +24,15 @@ from sqlbuild.compiler.compile.models.core import (
     FunctionArgument,
 )
 from sqlbuild.compiler.compile.models.sql_tests import (
+    CompiledDirectLogicSqlTestPayload,
     CompiledModelSqlTestPayload,
     CompiledSqlTest,
+    CompileSqlTestCte,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledResourceType,
+    SqlTestMode,
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
@@ -122,6 +125,7 @@ def build_test_project(
     dbt_ref_names: tuple[str, ...] = (),
     function_names: tuple[str, ...] = (),
     sql_test_expected_model_names: tuple[str, ...] = (),
+    table_fn_test_function_names: tuple[str, ...] = (),
 ) -> CompiledProject:
     """Build a minimal CompiledProject for graph tests."""
 
@@ -245,6 +249,42 @@ def build_test_project(
                 sql_body="SELECT 1",
                 payload=CompiledModelSqlTestPayload(
                     expected_model_names=sql_test_expected_model_names,
+                ),
+            )
+        )
+    if table_fn_test_function_names:
+        sql_tests.append(
+            CompiledSqlTest(
+                key=CompiledObjectKey(
+                    resource_type=CompiledResourceType.SQL_TEST,
+                    name="test_table_functions",
+                ),
+                scope_deps=tuple(function_key(name) for name in table_fn_test_function_names),
+                name="test_table_functions",
+                test_file=DiscoveredSqlTestFile(
+                    file_path=Path("tests/test_table_functions.sql"),
+                    relative_path=Path("tests/test_table_functions.sql"),
+                    contents="SELECT 1",
+                    blocks=(),
+                ),
+                test_block=DiscoveredSqlTestBlock(
+                    test_index=0,
+                    header_values={"mode": "table_fn"},
+                    sql_body="SELECT 1",
+                ),
+                sql_body="SELECT 1",
+                mode=SqlTestMode.TABLE_FN,
+                payload=CompiledDirectLogicSqlTestPayload(
+                    mode=SqlTestMode.TABLE_FN,
+                    actual_cte=CompileSqlTestCte(
+                        name="__table_fn_actual__",
+                        sql_body="SELECT * FROM __table_fn('customer_orders')(42)",
+                    ),
+                    expected_cte=CompileSqlTestCte(
+                        name="__table_fn_expected__",
+                        sql_body="SELECT 1",
+                    ),
+                    tested_resource_names=table_fn_test_function_names,
                 ),
             )
         )

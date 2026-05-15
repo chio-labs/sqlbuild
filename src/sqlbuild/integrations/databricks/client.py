@@ -401,6 +401,9 @@ class DatabricksAdapter(BaseAdapter):
     def render_udf_call(self, *, target: str, call_suffix_sql: str) -> str:
         return f"{target}{call_suffix_sql}"
 
+    def render_table_function_call(self, *, target: str, call_suffix_sql: str) -> str:
+        return f"{target}{call_suffix_sql}"
+
     def render_create_function(
         self,
         *,

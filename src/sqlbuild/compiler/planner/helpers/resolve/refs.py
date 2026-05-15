@@ -17,7 +17,6 @@ from sqlbuild.compiler.shared.helpers.sql_scanning import find_matching_paren
 from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
 from sqlbuild.shared.helpers.sql_reference_patterns import (
     quoted_reference_call_pattern,
-    quoted_reference_call_pattern_text,
     reference_call_prefix_pattern_text,
 )
 from sqlbuild.shared.types import ExternalSqlReferenceResolver, SqlReferenceKind
@@ -30,9 +29,8 @@ _DBT_REF_PATTERN: re.Pattern[str] = re.compile(
     re.IGNORECASE,
 )
 _UDF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.UDF)
-_TABLE_FUNCTION_CALL_PATTERN: re.Pattern[str] = re.compile(
-    rf"{quoted_reference_call_pattern_text(SqlReferenceKind.TABLE_FUNCTION)}\s*"
-    r"\(([^()]*)\)"
+_TABLE_FUNCTION_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(
+    SqlReferenceKind.TABLE_FUNCTION
 )
 
 
@@ -158,18 +156,40 @@ def resolve_table_function_references(
 ) -> str:
     """Replace __table_fn() calls with adapter-specific table function calls."""
 
-    def _replace_table_function(match: re.Match[str]) -> str:
+    parts: list[str] = []
+    last_index: int = 0
+    match: re.Match[str]
+    for match in _TABLE_FUNCTION_PATTERN.finditer(query_sql):
+        parts.append(query_sql[last_index : match.start()])
         function_name: str = match.group(1)
-        arguments_sql: str = match.group(2)
         target: CompiledRelationTarget | None = function_targets.get(function_name)
         if target is None or target.qualified_name is None:
-            return match.group(0)
-        return adapter.render_table_function_call(
-            target=target.qualified_name,
-            arguments_sql=arguments_sql,
-        )
+            parts.append(match.group(0))
+            last_index = match.end()
+            continue
 
-    return _TABLE_FUNCTION_CALL_PATTERN.sub(_replace_table_function, query_sql)
+        call_suffix_start: int = _skip_whitespace(sql=query_sql, start=match.end())
+        if call_suffix_start >= len(query_sql) or query_sql[call_suffix_start] != "(":
+            parts.append(match.group(0))
+            last_index = match.end()
+            continue
+
+        call_suffix_end: int = find_matching_paren(
+            sql=query_sql,
+            open_paren_index=call_suffix_start,
+            context="SQL table function call",
+        )
+        call_suffix_sql: str = query_sql[call_suffix_start : call_suffix_end + 1]
+        parts.append(
+            adapter.render_table_function_call(
+                target=target.qualified_name,
+                call_suffix_sql=call_suffix_sql,
+            )
+        )
+        last_index = call_suffix_end + 1
+
+    parts.append(query_sql[last_index:])
+    return "".join(parts)
 
 
 def _build_cursor_subquery(
