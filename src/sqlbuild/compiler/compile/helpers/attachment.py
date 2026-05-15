@@ -54,6 +54,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompileSourceInput,
     CompileSqlFunctionInput,
     CompileSqlReference,
+    CompileSqlScenarioCte,
     CompileSqlScenarioCtes,
     CompileSqlScenarioInput,
     FunctionArgument,
@@ -1302,6 +1303,7 @@ def build_scenario_inputs(
 
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     vars_for_substitution: dict[str, object] = effective_vars or {}
+    known_source_names: set[str] = build_known_source_names(discovered_inputs)
     scenario_inputs: list[CompileSqlScenarioInput] = []
     scenario_file: DiscoveredSqlScenarioFile
     for scenario_file in discovered_inputs.scenario_files:
@@ -1315,6 +1317,11 @@ def build_scenario_inputs(
         scenario_ctes: CompileSqlScenarioCtes = extract_sql_scenario_ctes(
             sql=expanded_sql_body,
             file_label=str(scenario_file.relative_path),
+        )
+        _validate_scenario_source_references(
+            scenario_ctes=scenario_ctes,
+            scenario_file=scenario_file,
+            known_source_names=known_source_names,
         )
         scenario_inputs.append(
             CompileSqlScenarioInput(
@@ -1332,6 +1339,39 @@ def build_scenario_inputs(
             )
         )
     return tuple(scenario_inputs)
+
+
+def _validate_scenario_source_references(
+    *,
+    scenario_ctes: CompileSqlScenarioCtes,
+    scenario_file: DiscoveredSqlScenarioFile,
+    known_source_names: set[str],
+) -> None:
+    cte: CompileSqlScenarioCte
+    for cte in (*scenario_ctes.expected_ctes, *scenario_ctes.assertion_ctes):
+        references: tuple[CompileSqlReference, ...] = extract_sql_references(cte.sql_body)
+        reference: CompileSqlReference
+        for reference in references:
+            if reference.ref_kind != SqlReferenceKind.SOURCE:
+                continue
+            raise CompileInputError(
+                f"SQL scenario file {scenario_file.relative_path} CTE '{cte.name}' must not "
+                f"reference project source '{reference.ref_name}' with "
+                f"{SqlReferenceKind.SOURCE.placeholder_call()}; source-backed scenario data "
+                "is only allowed in helper and fixture CTEs"
+            )
+
+    for cte in scenario_ctes.authored_ctes:
+        references = extract_sql_references(cte.sql_body)
+        for reference in references:
+            if reference.ref_kind != SqlReferenceKind.SOURCE:
+                continue
+            if reference.ref_name in known_source_names:
+                continue
+            raise CompileInputError(
+                f"SQL scenario file {scenario_file.relative_path} references unknown source "
+                f"'{reference.ref_name}'"
+            )
 
 
 def validate_test_ctes(
