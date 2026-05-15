@@ -21,6 +21,7 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
     ChangeKind,
@@ -59,7 +60,7 @@ class CursorOverrides:
                 try:
                     datetime.fromisoformat(value)
                 except (ValueError, TypeError) as error:
-                    raise ValueError(
+                    raise PlannerInputError(
                         f"{field_name} value '{value}' is not a valid ISO timestamp: {error}"
                     ) from None
         for field_name, value in (
@@ -70,9 +71,11 @@ class CursorOverrides:
                 try:
                     decimal_value: Decimal = Decimal(value)
                     if decimal_value != int(decimal_value):
-                        raise ValueError(f"{field_name} value '{value}' is not a whole number")
+                        raise PlannerInputError(
+                            f"{field_name} value '{value}' is not a whole number"
+                        )
                 except InvalidOperation:
-                    raise ValueError(
+                    raise PlannerInputError(
                         f"{field_name} value '{value}' is not a valid integer"
                     ) from None
 

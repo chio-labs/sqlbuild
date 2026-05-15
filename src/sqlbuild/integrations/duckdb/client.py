@@ -11,6 +11,7 @@ from types import ModuleType
 from typing import Any, ClassVar
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.exceptions import AdapterUserError
 from sqlbuild.adapter.shared.inference_rules import first_arg_nullability
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
@@ -354,7 +355,7 @@ class DuckDbAdapter(BaseAdapter):
         del runtime_version, entry_point, packages
         if language == FunctionLanguage.PYTHON:
             if return_columns:
-                raise ValueError("DuckDB table functions must use SQL language")
+                raise AdapterUserError("DuckDB table functions must use SQL language")
             parameter_types: str = ", ".join(str(arg.type) for arg in arguments)
             return (f"REGISTER PYTHON FUNCTION {target}({parameter_types}) RETURNS {returns}",)
         del returns
@@ -411,10 +412,10 @@ class DuckDbAdapter(BaseAdapter):
             )
         del body_sql, runtime_version, packages
         if source_file_path is None or entry_point is None:
-            raise ValueError("DuckDB Python UDFs require source_file_path and entry_point")
+            raise AdapterUserError("DuckDB Python UDFs require source_file_path and entry_point")
         function_name: str = target.split(".")[-1]
         if target not in {function_name, f"main.{function_name}"}:
-            raise ValueError(
+            raise AdapterUserError(
                 f"DuckDB Python UDF '{function_name}' cannot set database or schema because "
                 "DuckDB registers Python UDFs as connection-scoped functions. Remove "
                 "database/schema from the UDF decorator or use SQL UDFs for schema-qualified "
@@ -440,12 +441,12 @@ class DuckDbAdapter(BaseAdapter):
             module_name, source_file_path
         )
         if spec is None or spec.loader is None:
-            raise ValueError(f"Could not load Python UDF from '{source_file_path}'")
+            raise AdapterUserError(f"Could not load Python UDF from '{source_file_path}'")
         module: ModuleType = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         udf_function: object = getattr(module, entry_point, None)
         if not callable(udf_function):
-            raise ValueError(
+            raise AdapterUserError(
                 f"Python UDF entry_point '{entry_point}' was not found in '{source_file_path}'"
             )
         return udf_function
@@ -1141,7 +1142,7 @@ class DuckDbAdapter(BaseAdapter):
         elif side == "right":
             side_condition = f"__right.{keys[0]} IS NOT NULL AND __left.{keys[0]} IS NULL"
         else:
-            raise ValueError("sample_side_only_rows side must be 'left' or 'right'")
+            raise AdapterUserError("sample_side_only_rows side must be 'left' or 'right'")
         sample_sql: str = (
             f"WITH __left AS ({left_cte}), __right AS ({right_cte}) "
             f"SELECT {key_select_sql} "
@@ -1161,14 +1162,16 @@ class DuckDbAdapter(BaseAdapter):
         keys: tuple[str, ...],
     ) -> None:
         if not keys:
-            raise ValueError("row diff requires at least one unique_key column")
+            raise AdapterUserError("row diff requires at least one unique_key column")
         null_condition: str = " OR ".join(f"{key} IS NULL" for key in keys)
         null_count_sql: str = (
             f"SELECT COUNT(*) FROM ({relation_sql}) AS __key_check WHERE {null_condition}"
         )
         null_row: tuple[Any, ...] = self.execute(connection, null_count_sql).fetchone()
         if int(null_row[0]) > 0:
-            raise ValueError(f"row diff {relation_label} relation contains null unique_key values")
+            raise AdapterUserError(
+                f"row diff {relation_label} relation contains null unique_key values"
+            )
 
         key_list: str = ", ".join(keys)
         duplicate_count_sql: str = (
@@ -1179,7 +1182,7 @@ class DuckDbAdapter(BaseAdapter):
         )
         duplicate_row: tuple[Any, ...] = self.execute(connection, duplicate_count_sql).fetchone()
         if int(duplicate_row[0]) > 0:
-            raise ValueError(
+            raise AdapterUserError(
                 f"row diff {relation_label} relation contains duplicate unique_key values"
             )
 
@@ -1228,7 +1231,9 @@ class DuckDbAdapter(BaseAdapter):
         column_tolerance: RowDiffTolerance | None = tolerances.by_column.get(column)
         if column_tolerance is not None:
             if self.normalize_row_diff_numeric_type(column_type) is None:
-                raise ValueError(f"row diff tolerance for non-numeric column '{column}' is invalid")
+                raise AdapterUserError(
+                    f"row diff tolerance for non-numeric column '{column}' is invalid"
+                )
             self.validate_row_diff_tolerance(
                 column=column,
                 tolerance=column_tolerance,
@@ -1247,7 +1252,7 @@ class DuckDbAdapter(BaseAdapter):
 
     def validate_row_diff_tolerance(self, *, column: str, tolerance: RowDiffTolerance) -> None:
         if tolerance.absolute is None and tolerance.relative is None:
-            raise ValueError(
+            raise AdapterUserError(
                 f"row diff tolerance for column '{column}' must define absolute or relative"
             )
 

@@ -298,7 +298,7 @@ class BigQueryAdapter(BaseAdapter):
         argument_sql: str = ", ".join(f"{argument.name} {argument.type}" for argument in arguments)
         if return_columns:
             if language != FunctionLanguage.SQL:
-                raise ValueError("BigQuery table functions must use SQL language")
+                raise AdapterUserError("BigQuery table functions must use SQL language")
             del returns, runtime_version, entry_point, packages
             return (
                 f"CREATE OR REPLACE TABLE FUNCTION {self._quote_identifier_path(target)}"
@@ -307,7 +307,9 @@ class BigQueryAdapter(BaseAdapter):
             )
         if language == FunctionLanguage.PYTHON:
             if runtime_version is None or entry_point is None:
-                raise ValueError("BigQuery Python UDFs require runtime_version and entry_point")
+                raise AdapterUserError(
+                    "BigQuery Python UDFs require runtime_version and entry_point"
+                )
             package_sql: str = ""
             if packages:
                 package_values: str = ", ".join(f"'{package}'" for package in packages)
@@ -403,7 +405,7 @@ class BigQueryAdapter(BaseAdapter):
         return (f"ALTER TABLE {self._quote_identifier_path(source)} RENAME TO {target_name}",)
 
     def render_swap(self, *, left: str, right: str) -> tuple[str, ...]:
-        raise NotImplementedError("BigQuery does not support atomic table swap")
+        raise AdapterUserError("BigQuery does not support atomic table swap")
 
     def render_clone(
         self,
@@ -896,7 +898,7 @@ class BigQueryAdapter(BaseAdapter):
         )
         row: tuple[Any, ...] | None = self.execute(connection, diff_sql).fetchone()
         if row is None:
-            raise ValueError("BigQuery row diff query returned no result")
+            raise AdapterUserError("BigQuery row diff query returned no result")
         column_results: tuple[RowDiffColumnResult, ...] = tuple(
             RowDiffColumnResult(
                 name=col,
@@ -935,7 +937,7 @@ class BigQueryAdapter(BaseAdapter):
             query += f" WHERE {cursor_filter}"
         result: tuple[Any, ...] | None = self.execute(connection, query).fetchone()
         if result is None:
-            raise ValueError("BigQuery count query returned no result")
+            raise AdapterUserError("BigQuery count query returned no result")
         return self._to_int(result[0])
 
     def sample_unequal_rows(
@@ -1086,7 +1088,7 @@ class BigQueryAdapter(BaseAdapter):
         elif side == "right":
             side_condition = f"__right.{keys[0]} IS NOT NULL AND __left.{keys[0]} IS NULL"
         else:
-            raise ValueError("sample_side_only_rows side must be 'left' or 'right'")
+            raise AdapterUserError("sample_side_only_rows side must be 'left' or 'right'")
         sample_sql: str = (
             f"WITH __left AS ({left_cte}), __right AS ({right_cte}) "
             f"SELECT {key_select_sql} "

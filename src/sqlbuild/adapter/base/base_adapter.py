@@ -6,6 +6,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar
 
+from sqlbuild.adapter.shared.exceptions import AdapterUserError
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
     CursorValue,
@@ -307,13 +308,11 @@ class BaseAdapter(StrictAdapter):
     ) -> tuple[str, ...]:
         del runtime_version, entry_point, packages
         if return_columns:
-            raise NotImplementedError(
+            raise AdapterUserError(
                 f"Adapter '{type(self).__name__}' does not support SQL table functions"
             )
         if language == FunctionLanguage.PYTHON:
-            raise NotImplementedError(
-                f"Adapter '{type(self).__name__}' does not support Python UDFs"
-            )
+            raise AdapterUserError(f"Adapter '{type(self).__name__}' does not support Python UDFs")
         argument_sql: str = ", ".join(f"{arg.name} {arg.type}" for arg in arguments)
         return (
             f"CREATE OR REPLACE FUNCTION {target}({argument_sql}) "
@@ -598,7 +597,7 @@ class BaseAdapter(StrictAdapter):
         infer_types: bool = False,
         statement_recorder: StatementRecorder,
     ) -> None:
-        raise NotImplementedError("load_seed requires an engine-specific implementation")
+        raise AdapterUserError("load_seed requires an engine-specific implementation")
 
     def append(
         self,
@@ -670,7 +669,7 @@ class BaseAdapter(StrictAdapter):
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
-        raise NotImplementedError("merge requires an engine-specific implementation")
+        raise AdapterUserError("merge requires an engine-specific implementation")
 
     def add_columns(
         self,
@@ -680,7 +679,7 @@ class BaseAdapter(StrictAdapter):
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
-        raise NotImplementedError("add_columns requires an engine-specific implementation")
+        raise AdapterUserError("add_columns requires an engine-specific implementation")
 
     def drop_columns(
         self,
@@ -690,7 +689,7 @@ class BaseAdapter(StrictAdapter):
         column_names: tuple[str, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
-        raise NotImplementedError("drop_columns requires an engine-specific implementation")
+        raise AdapterUserError("drop_columns requires an engine-specific implementation")
 
     def alter_column_types(
         self,
@@ -700,7 +699,7 @@ class BaseAdapter(StrictAdapter):
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
-        raise NotImplementedError("alter_column_types requires an engine-specific implementation")
+        raise AdapterUserError("alter_column_types requires an engine-specific implementation")
 
     def diff_schema(
         self,
@@ -709,7 +708,7 @@ class BaseAdapter(StrictAdapter):
         left: str,
         right: str,
     ) -> SchemaDiffResult:
-        raise NotImplementedError("diff_schema requires an engine-specific implementation")
+        raise AdapterUserError("diff_schema requires an engine-specific implementation")
 
     def diff_rows(
         self,
@@ -724,7 +723,7 @@ class BaseAdapter(StrictAdapter):
         start_cursor: CursorValue | None = None,
         end_cursor: CursorValue | None = None,
     ) -> RowDiffResult:
-        raise NotImplementedError("diff_rows requires an engine-specific implementation")
+        raise AdapterUserError("diff_rows requires an engine-specific implementation")
 
     def count_rows(
         self,
@@ -758,7 +757,7 @@ class BaseAdapter(StrictAdapter):
         end_cursor: CursorValue | None = None,
         limit: int = 20,
     ) -> tuple[RowDiffSampleRow, ...]:
-        raise NotImplementedError("sample_unequal_rows requires an engine-specific implementation")
+        raise AdapterUserError("sample_unequal_rows requires an engine-specific implementation")
 
     def sample_side_only_rows(
         self,
@@ -773,9 +772,7 @@ class BaseAdapter(StrictAdapter):
         end_cursor: CursorValue | None = None,
         limit: int = 20,
     ) -> tuple[tuple[tuple[str, object], ...], ...]:
-        raise NotImplementedError(
-            "sample_side_only_rows requires an engine-specific implementation"
-        )
+        raise AdapterUserError("sample_side_only_rows requires an engine-specific implementation")
 
     def validate_row_diff_keys(
         self,
@@ -786,14 +783,16 @@ class BaseAdapter(StrictAdapter):
         keys: tuple[str, ...],
     ) -> None:
         if not keys:
-            raise ValueError("row diff requires at least one unique_key column")
+            raise AdapterUserError("row diff requires at least one unique_key column")
         null_condition: str = " OR ".join(f"{key} IS NULL" for key in keys)
         null_count_sql: str = (
             f"SELECT COUNT(*) FROM ({relation_sql}) AS __key_check WHERE {null_condition}"
         )
         null_row: tuple[Any, ...] = self.execute(connection, null_count_sql).fetchone()
         if int(null_row[0]) > 0:
-            raise ValueError(f"row diff {relation_label} relation contains null unique_key values")
+            raise AdapterUserError(
+                f"row diff {relation_label} relation contains null unique_key values"
+            )
 
         key_list: str = ", ".join(keys)
         duplicate_count_sql: str = (
@@ -804,7 +803,7 @@ class BaseAdapter(StrictAdapter):
         )
         duplicate_row: tuple[Any, ...] = self.execute(connection, duplicate_count_sql).fetchone()
         if int(duplicate_row[0]) > 0:
-            raise ValueError(
+            raise AdapterUserError(
                 f"row diff {relation_label} relation contains duplicate unique_key values"
             )
 
@@ -853,7 +852,9 @@ class BaseAdapter(StrictAdapter):
         column_tolerance: RowDiffTolerance | None = tolerances.by_column.get(column)
         if column_tolerance is not None:
             if self.normalize_row_diff_numeric_type(column_type) is None:
-                raise ValueError(f"row diff tolerance for non-numeric column '{column}' is invalid")
+                raise AdapterUserError(
+                    f"row diff tolerance for non-numeric column '{column}' is invalid"
+                )
             self.validate_row_diff_tolerance(
                 column=column,
                 tolerance=column_tolerance,
@@ -872,7 +873,7 @@ class BaseAdapter(StrictAdapter):
 
     def validate_row_diff_tolerance(self, *, column: str, tolerance: RowDiffTolerance) -> None:
         if tolerance.absolute is None and tolerance.relative is None:
-            raise ValueError(
+            raise AdapterUserError(
                 f"row diff tolerance for column '{column}' must define absolute or relative"
             )
 

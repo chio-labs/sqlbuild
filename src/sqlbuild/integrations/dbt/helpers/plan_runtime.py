@@ -9,6 +9,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.types import BuiltinAdapter
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
 from sqlbuild.integrations.dbt.helpers.config import resolve_dbt_config
 from sqlbuild.integrations.dbt.models import DbtCliConfigOverrides, DbtCliOptions, ResolvedDbtConfig
 from sqlbuild.shared.helpers.adapters import discover_project_adapters
@@ -77,7 +78,7 @@ def resolve_dbt_manifest_path(*, options: DbtCliOptions) -> Path:
     """Resolve the manifest path produced by dbt compile."""
 
     if options.project_dir is None:
-        raise ValueError("dbt project directory is not configured")
+        raise DbtInteropConfigError("dbt project directory is not configured")
     target_path: Path = options.target_path or (options.project_dir / "target")
     return target_path / "manifest.json"
 
@@ -99,7 +100,7 @@ def resolve_dbt_interop_adapter(
         adapter_class = builtin_adapters.get(adapter_name)
     if adapter_class is None:
         available: tuple[str, ...] = tuple(sorted(builtin_adapters))
-        raise ValueError(
+        raise DbtInteropConfigError(
             f"unknown adapter '{adapter_name}'. Available built-in adapters: "
             f"{', '.join(available)}."
         )

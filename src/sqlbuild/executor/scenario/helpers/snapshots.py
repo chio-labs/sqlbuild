@@ -28,7 +28,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotStateResult,
 )
 from sqlbuild.executor.scenario.types import ScenarioSnapshotState
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.executor.shared.exceptions import ExecutorInputError, ExecutorJsonTypeError
 from sqlbuild.shared.constants import (
     SCENARIO_EXEC_CAPTURE_LIMIT_EXCEEDED,
     SCENARIO_EXEC_INTERNAL,
@@ -377,7 +377,7 @@ def _snapshot_json_default(value: object) -> object:
         return str(value)
     if isinstance(value, bytes):
         return value.hex()
-    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+    raise ExecutorJsonTypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
 def read_scenario_snapshot_jsonl(*, file_path: Path) -> tuple[dict[str, object], ...]:

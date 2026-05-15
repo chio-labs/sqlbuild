@@ -8,6 +8,7 @@ from types import ModuleType
 from typing import Any
 
 from sqlbuild.compiler.discovery.models import DiscoveredMaterializationFile
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
 
 
@@ -21,7 +22,7 @@ def load_custom_materializations(
     for mat_file in materialization_files:
         spec: Any = importlib.util.spec_from_file_location(mat_file.name, mat_file.file_path)
         if spec is None or spec.loader is None:
-            raise ValueError(
+            raise PlannerInputError(
                 f"materialization '{mat_file.name}' at {mat_file.file_path} "
                 f"could not be loaded as a Python module"
             )
@@ -29,7 +30,7 @@ def load_custom_materializations(
         spec.loader.exec_module(module)
         materialize_fn: Any = getattr(module, "materialize", None)
         if materialize_fn is None or not callable(materialize_fn):
-            raise ValueError(
+            raise PlannerInputError(
                 f"materialization '{mat_file.name}' at {mat_file.file_path} "
                 f"must define a callable 'materialize' function"
             )

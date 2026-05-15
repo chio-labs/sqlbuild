@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
 
 
 def execute_hooks(
@@ -27,9 +28,13 @@ def execute_hooks(
             if isinstance(hook, str):
                 adapter.execute(connection, hook)
             else:
-                raise ValueError(f"{phase_label} hook entry must be a string, got {type(hook)}")
+                raise ExecutorInputError(
+                    f"{phase_label} hook entry must be a string, got {type(hook)}"
+                )
         return
-    raise ValueError(f"{phase_label} must be a string or list of strings, got {type(hooks)}")
+    raise ExecutorInputError(
+        f"{phase_label} must be a string or list of strings, got {type(hooks)}"
+    )
 
 
 def render_hooks(*, hooks: object, phase_label: str) -> tuple[str, ...]:
@@ -44,6 +49,10 @@ def render_hooks(*, hooks: object, phase_label: str) -> tuple[str, ...]:
             if isinstance(hook, str):
                 statements.append(hook)
             else:
-                raise ValueError(f"{phase_label} hook entry must be a string, got {type(hook)}")
+                raise ExecutorInputError(
+                    f"{phase_label} hook entry must be a string, got {type(hook)}"
+                )
         return tuple(statements)
-    raise ValueError(f"{phase_label} must be a string or list of strings, got {type(hooks)}")
+    raise ExecutorInputError(
+        f"{phase_label} must be a string or list of strings, got {type(hooks)}"
+    )

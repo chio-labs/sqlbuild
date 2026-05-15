@@ -160,11 +160,6 @@ def _validate_sql_syntax_with_message(
 
     try:
         parsed: Any = sqlglot_module.parse_one(cleaned_sql)
-        if require_hook_statement and parsed.key not in _VALID_HOOK_ROOT_KEYS:
-            raise ValueError(
-                "hook SQL must be a valid executable SQL statement, "
-                f"but this parsed as a non-statement expression ('{parsed.key}')"
-            )
     except Exception as exc:
         raise CompileInputError(
             f"{error_prefix}: {exc}\n\n"
@@ -174,3 +169,13 @@ def _validate_sql_syntax_with_message(
             f"in sqlbuild_project.toml.\n"
             f"To skip for this run, use `--no-sql-validation`."
         ) from None
+    if require_hook_statement and parsed.key not in _VALID_HOOK_ROOT_KEYS:
+        raise CompileInputError(
+            f"{error_prefix}: hook SQL must be a valid executable SQL statement, "
+            f"but this parsed as a non-statement expression ('{parsed.key}')\n\n"
+            f"To skip SQL validation for this model, add `sql_validation: false` "
+            f"to the MODEL header.\n"
+            f"To disable project-wide, set `settings.sql_validation: false` "
+            f"in sqlbuild_project.toml.\n"
+            f"To skip for this run, use `--no-sql-validation`."
+        )

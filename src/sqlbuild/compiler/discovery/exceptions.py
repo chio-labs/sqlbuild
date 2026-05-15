@@ -27,6 +27,12 @@ class ModelSqlParseError(DiscoveryError):
     code: str = "D002"
 
 
+class ModelHeaderSyntaxError(DiscoveryError):
+    """Raised when a MODEL(...) SQLBuild header cannot be parsed."""
+
+    code: str = "D002"
+
+
 class SqlTestParseError(DiscoveryError):
     """Raised when an authored SQL-native test file has an invalid shape."""
 

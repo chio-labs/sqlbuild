@@ -16,6 +16,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledSeed,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.shared.helpers.project_var_values import render_project_var_text
 from sqlbuild.spec.models.project import EnvironmentConfig
 
@@ -68,9 +69,9 @@ def resolve_deferred_env(
 
     environments: dict[str, EnvironmentConfig] = discovered_inputs.project_config.environments
     if defer_to not in environments:
-        raise ValueError(f"Unknown deferred environment '{defer_to}'")
+        raise PlannerInputError(f"Unknown deferred environment '{defer_to}'")
     if defer_to == current_env_name:
-        raise ValueError(f"Cannot defer to the current environment '{defer_to}'")
+        raise PlannerInputError(f"Cannot defer to the current environment '{defer_to}'")
     return environments[defer_to]
 
 
