@@ -138,6 +138,7 @@ class CliEntrypointHandlers:
             bool,
             bool,
             dict[str, object],
+            bool,
         ],
         int,
     ]
@@ -156,18 +157,29 @@ class CliEntrypointHandlers:
             bool,
             bool,
             dict[str, object],
+            bool,
         ],
         int,
     ]
     run_test: Callable[
-        [Path | None, bool, bool, tuple[str, ...], tuple[str, ...], dict[str, object]], int
+        [Path | None, bool, bool, tuple[str, ...], tuple[str, ...], dict[str, object], bool],
+        int,
     ]
     run_audit: Callable[
-        [Path | None, bool, str | None, bool, tuple[str, ...], tuple[str, ...], dict[str, object]],
+        [
+            Path | None,
+            bool,
+            str | None,
+            bool,
+            tuple[str, ...],
+            tuple[str, ...],
+            dict[str, object],
+            bool,
+        ],
         int,
     ]
     run_seed: Callable[
-        [Path | None, bool, tuple[str, ...], tuple[str, ...], dict[str, object]], int
+        [Path | None, bool, tuple[str, ...], tuple[str, ...], dict[str, object], bool], int
     ]
     run_clone: Callable[
         [
@@ -238,6 +250,7 @@ class CliEntrypointHandlers:
             int | None,
             int | None,
             int | None,
+            bool,
         ],
         int,
     ]

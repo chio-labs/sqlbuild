@@ -4,7 +4,13 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from dagster import AssetExecutionContext, AssetKey, ExecuteInProcessResult, materialize
+from dagster import (
+    AssetCheckSeverity,
+    AssetExecutionContext,
+    AssetKey,
+    ExecuteInProcessResult,
+    materialize,
+)
 
 from sqlbuild.integrations.dagster import SqlBuildCliResource, SqlBuildProject, sqlbuild_assets
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
@@ -14,9 +20,17 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
 )
 from tests.e2e.src.sqlbuild.integrations.dagster._test_types import (
     DagsterSqlBuildE2ETestCase,
+    DagsterSqlBuildFailedCheckE2ETestCase,
     DagsterSqlBuildSelectionE2ETestCase,
 )
-from tests.e2e.src.sqlbuild.integrations.dagster.helpers import write_sqb_capture_command
+from tests.e2e.src.sqlbuild.integrations.dagster.helpers import (
+    add_failing_daily_revenue_audits,
+    check_names_for_asset,
+    check_severity_for_asset,
+    failed_check_severities_for_asset,
+    materialization_metadata_keys,
+    write_sqb_capture_command,
+)
 
 SELECTION_TEST_CASES: list[DagsterSqlBuildSelectionE2ETestCase] = [
     DagsterSqlBuildSelectionE2ETestCase(
@@ -71,6 +85,11 @@ SELECTION_TEST_CASES: list[DagsterSqlBuildSelectionE2ETestCase] = [
                 ("main", "is_completed_order"),
                 ("main", "fact_orders"),
             ),
+            expected_json_metadata_asset_key=("main", "fact_orders"),
+            expected_json_metadata_keys=("duration_ms", "kind", "name", "status", "target"),
+            expected_check_asset_key=("main", "fact_orders"),
+            expected_check_names=("audit__not_null__order_id", "sql_test__test_fact_orders"),
+            expected_warn_check_name="audit__not_null__order_id",
         )
     ],
     ids=["dagster loads generated dag artifact and executes sqlbuild build"],
@@ -107,6 +126,22 @@ def test_given_waffle_shop_when_executing_sqlbuild_assets_then_dagster_run_succe
     assert set(test_case.expected_asset_keys) <= {
         tuple(asset_key.path) for asset_key in sqlbuild_waffle_shop.keys
     }
+    assert set(test_case.expected_json_metadata_keys) <= materialization_metadata_keys(
+        result=result,
+        asset_key=test_case.expected_json_metadata_asset_key,
+    )
+    assert set(test_case.expected_check_names) <= check_names_for_asset(
+        result=result,
+        asset_key=test_case.expected_check_asset_key,
+    )
+    assert (
+        check_severity_for_asset(
+            result=result,
+            asset_key=test_case.expected_check_asset_key,
+            check_name=test_case.expected_warn_check_name,
+        )
+        == AssetCheckSeverity.WARN
+    )
 
 
 @pytest.mark.parametrize(
@@ -160,3 +195,61 @@ def test_given_dagster_asset_selection_when_executing_sqlbuild_then_uses_select_
     assert test_case.expected_selector_log_line in rendered_logs
     for table_name in test_case.expected_table_names:
         assert table_exists(db_path=project_dir / "waffle_shop.duckdb", table_name=table_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterSqlBuildFailedCheckE2ETestCase(
+            description="failed warn and error audits stay linked to selected asset",
+            selected_asset_key=("main", "daily_revenue"),
+            expected_check_names=(
+                "audit__forced_warning_failure__daily_revenue",
+                "audit__forced_error_failure__daily_revenue",
+            ),
+        )
+    ],
+    ids=["failed warn and error audits stay linked to selected asset"],
+)
+def test_given_failing_sqlbuild_audits_when_executing_dagster_then_links_checks_with_severity(
+    test_case: DagsterSqlBuildFailedCheckE2ETestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_dir: Path = prepare_waffle_shop(tmp_path)
+    sqb_executable: Path = REPO_ROOT / ".venv" / "bin" / "sqb"
+    sqlbuild_project: SqlBuildProject = SqlBuildProject(
+        project_dir=project_dir,
+        sqb_command=(str(sqb_executable),),
+    )
+    build_resource: SqlBuildCliResource = SqlBuildCliResource(
+        project_dir=project_dir,
+        sqb_command=[str(sqb_executable)],
+    )
+    build_resource.cli(["build"]).wait()
+    add_failing_daily_revenue_audits(project_dir=project_dir)
+    monkeypatch.setenv("DAGSTER_IS_DEV_CLI", "1")
+    sqlbuild_project.prepare_if_dev()
+
+    @sqlbuild_assets(project=sqlbuild_project, required_resource_keys={"sqb"})
+    def sqlbuild_waffle_shop(context: AssetExecutionContext) -> Iterator[object]:
+        yield from context.resources.sqb.cli(
+            ["audit", "--select", "daily_revenue"],
+            context=context,
+            raise_on_error=False,
+        ).stream()
+
+    result: ExecuteInProcessResult = materialize(
+        [sqlbuild_waffle_shop],
+        resources={"sqb": SqlBuildCliResource(project_dir=sqlbuild_project)},
+        selection=[AssetKey(list(test_case.selected_asset_key))],
+    )
+
+    assert result.success
+    severities: dict[str, AssetCheckSeverity] = failed_check_severities_for_asset(
+        result=result,
+        asset_key=test_case.selected_asset_key,
+    )
+    assert set(test_case.expected_check_names) <= set(severities)
+    assert severities["audit__forced_warning_failure__daily_revenue"] == AssetCheckSeverity.WARN
+    assert severities["audit__forced_error_failure__daily_revenue"] == AssetCheckSeverity.ERROR
