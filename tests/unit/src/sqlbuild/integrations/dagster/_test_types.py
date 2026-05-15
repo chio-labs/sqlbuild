@@ -42,3 +42,24 @@ class DagsterCliFailureTestCase:
     command_stderr: str
     command_exit_code: int
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class DagsterProjectPrepareTestCase:
+    description: str
+    command_stdout: str
+    expected_dag_contents: str
+
+
+@dataclass(frozen=True)
+class DagsterProjectPrepareFailureTestCase:
+    description: str
+    command_stderr: str
+    command_exit_code: int
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class DagsterProjectDecoratorTestCase:
+    description: str
+    expected_asset_keys: tuple[tuple[str, ...], ...]

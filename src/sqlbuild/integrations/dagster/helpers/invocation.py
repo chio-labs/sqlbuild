@@ -148,7 +148,7 @@ def _build_results_for_selected_assets(
     selected_paths: set[tuple[str, ...]] = set()
     if selected_keys is not None:
         selected_paths = {tuple(key.path) for key in selected_keys}
-    nodes: list[Mapping[str, Any]] = list(dag.get("nodes", ()))
+    nodes: list[Mapping[str, Any]] = _sort_nodes_topologically(dag=dag)
     if selected_paths:
         nodes = [
             node
@@ -163,3 +163,31 @@ def _build_results_for_selected_assets(
         for node in nodes
         if str(node.get("kind")) in {"source", "seed", "model", "function"}
     )
+
+
+def _sort_nodes_topologically(*, dag: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    nodes: list[Mapping[str, Any]] = list(dag.get("nodes", ()))
+    nodes_by_id: dict[str, Mapping[str, Any]] = {str(node.get("id")): node for node in nodes}
+    incoming_by_id: dict[str, set[str]] = {node_id: set() for node_id in nodes_by_id}
+    outgoing_by_id: dict[str, set[str]] = {node_id: set() for node_id in nodes_by_id}
+    for edge in dag.get("edges", ()):
+        from_id: str = str(edge.get("from_id"))
+        to_id: str = str(edge.get("to_id"))
+        if from_id not in nodes_by_id or to_id not in nodes_by_id:
+            continue
+        incoming_by_id[to_id].add(from_id)
+        outgoing_by_id[from_id].add(to_id)
+
+    ordered: list[Mapping[str, Any]] = []
+    ready: list[str] = [node_id for node_id in nodes_by_id if not incoming_by_id[node_id]]
+    while ready:
+        node_id: str = ready.pop(0)
+        ordered.append(nodes_by_id[node_id])
+        for downstream_id in tuple(outgoing_by_id[node_id]):
+            incoming_by_id[downstream_id].discard(node_id)
+            if not incoming_by_id[downstream_id]:
+                ready.append(downstream_id)
+
+    if len(ordered) != len(nodes):
+        return nodes
+    return ordered

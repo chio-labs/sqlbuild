@@ -12,6 +12,7 @@ from sqlbuild.integrations.dagster.helpers.invocation import (
     SqlBuildCliInvocation,
     start_sqlbuild_cli_invocation,
 )
+from sqlbuild.integrations.dagster.models import SqlBuildProject
 
 
 class SqlBuildCliResource(load_dagster().ConfigurableResource):  # type: ignore[misc]
@@ -20,6 +21,27 @@ class SqlBuildCliResource(load_dagster().ConfigurableResource):  # type: ignore[
     project_dir: str = "."
     sqb_command: list[str] = ["sqb"]
     dag_path: str | None = None
+
+    def __init__(
+        self,
+        project_dir: str | Path | SqlBuildProject = ".",
+        sqb_command: list[str] | None = None,
+        dag_path: str | Path | None = None,
+        **kwargs: Any,
+    ) -> None:
+        if isinstance(project_dir, SqlBuildProject):
+            project: SqlBuildProject = project_dir
+            if sqb_command is None:
+                sqb_command = list(project.sqb_command)
+            if dag_path is None:
+                dag_path = project.dag_path
+            project_dir = project.project_dir
+        super().__init__(
+            project_dir=str(project_dir),
+            sqb_command=sqb_command or ["sqb"],
+            dag_path=None if dag_path is None else str(dag_path),
+            **kwargs,
+        )
 
     def cli(
         self,

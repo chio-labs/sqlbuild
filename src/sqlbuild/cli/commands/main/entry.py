@@ -60,6 +60,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     compile_parser.add_argument("--defer-to", default=None)
     compile_parser.add_argument("--json", action="store_true", default=False)
     compile_parser.add_argument("--manifest", action="store_true", default=False)
+    compile_parser.add_argument("--dag", nargs="?", const="", default=None)
     compile_parser.add_argument(
         "--lineage-mode",
         dest="compile_lineage_mode",
@@ -361,6 +362,7 @@ def _main_with_dependencies(
                 args.defer_to,
                 args.json,
                 args.manifest,
+                args.dag,
                 args.no_color,
                 CompileLineageMode(args.compile_lineage_mode),
                 args.vars,

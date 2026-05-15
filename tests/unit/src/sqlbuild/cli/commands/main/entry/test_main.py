@@ -112,6 +112,20 @@ COMPILE_DISPATCH_TEST_CASES: list[MainTestCase] = [
         expected_manifest=True,
     ),
     MainTestCase(
+        description="passes dag flag to compile handler",
+        argv=["compile", "--dag"],
+        expected_exit_code=3,
+        expected_project_dir=None,
+        expected_dag="",
+    ),
+    MainTestCase(
+        description="passes dag artifact path to compile handler",
+        argv=["compile", "--dag", "target/custom_dag.json"],
+        expected_exit_code=3,
+        expected_project_dir=None,
+        expected_dag="target/custom_dag.json",
+    ),
+    MainTestCase(
         description="passes rich lineage mode to compile handler",
         argv=["compile", "--lineage-mode", "rich"],
         expected_exit_code=3,
@@ -1179,6 +1193,7 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
             str | None,
             bool,
             bool,
+            str | None,
             bool,
             CompileLineageMode,
             dict[str, object],
@@ -1191,6 +1206,7 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
         defer_to: str | None,
         json_output: bool,
         manifest: bool,
+        dag_path: str | None,
         no_color: bool,
         lineage_mode: CompileLineageMode,
         cli_vars: dict[str, object],
@@ -1202,6 +1218,7 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
                 defer_to,
                 json_output,
                 manifest,
+                dag_path,
                 no_color,
                 lineage_mode,
                 cli_vars,
@@ -1222,6 +1239,7 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
             None,
             False,
             test_case.expected_manifest,
+            test_case.expected_dag,
             False,
             test_case.expected_compile_lineage_mode,
             {} if test_case.expected_vars is None else test_case.expected_vars,
@@ -1543,6 +1561,7 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
         defer_to: str | None,
         json_output: bool,
         manifest: bool,
+        dag_path: str | None,
         no_color: bool,
         lineage_mode: CompileLineageMode,
         cli_vars: dict[str, object],
@@ -1551,6 +1570,7 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
         del defer_to
         del json_output
         del manifest
+        del dag_path
         del no_color
         del lineage_mode
         del cli_vars
