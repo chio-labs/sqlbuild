@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile.main.build_compile_inputs import build_compile_inputs
-from sqlbuild.compiler.compile.models import CompileProjectInputs
+from sqlbuild.compiler.compile.models.core import CompileProjectInputs
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.helpers.runner import DbtRunner

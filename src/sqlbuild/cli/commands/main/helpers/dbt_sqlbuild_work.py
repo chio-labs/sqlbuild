@@ -21,7 +21,7 @@ from sqlbuild.cli.commands.main.shared.helpers.progress import (
 from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import write_runtime_target
 from sqlbuild.cli.commands.main.shared.helpers.status import TransientStatusReporter
 from sqlbuild.compiler.auditing.types import AuditOutcome
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import BuildExecutionResult

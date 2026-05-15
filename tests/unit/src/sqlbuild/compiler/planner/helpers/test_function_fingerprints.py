@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledFunction
+from sqlbuild.compiler.compile.models.core import CompiledFunction
 from sqlbuild.compiler.planner.helpers.function_fingerprints import (
     build_compiled_function_fingerprint_sql,
     detect_function_change,

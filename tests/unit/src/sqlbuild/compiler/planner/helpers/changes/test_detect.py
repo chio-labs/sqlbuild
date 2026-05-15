@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledModel
+from sqlbuild.compiler.compile.models.core import CompiledModel
 from sqlbuild.compiler.planner.helpers.changes.detect import detect_model_changes
 from sqlbuild.compiler.planner.models import ChangeDetectionResult, WarehouseSnapshot
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind

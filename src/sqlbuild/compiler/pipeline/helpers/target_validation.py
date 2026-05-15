@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.shared.types import BuiltinAdapter
-from sqlbuild.compiler.compile.models import CompiledProject, CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import (
+    CompiledProject,
+    CompiledRelationTarget,
+)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 
 

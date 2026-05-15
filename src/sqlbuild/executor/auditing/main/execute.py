@@ -11,7 +11,7 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.models import CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context

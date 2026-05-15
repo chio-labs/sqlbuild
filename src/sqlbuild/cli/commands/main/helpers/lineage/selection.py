@@ -16,7 +16,10 @@ from sqlbuild.cli.commands.main.helpers.lineage.models import (
 )
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.status import maybe_status
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models.core import (
+    CompiledObjectKey,
+    CompiledProject,
+)
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage.main.columns import build_project_column_lineage
 from sqlbuild.compiler.lineage.models import (

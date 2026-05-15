@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
-from sqlbuild.compiler.compile.models import (
+from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledProject,
     CompiledSeed,

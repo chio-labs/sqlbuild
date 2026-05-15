@@ -12,7 +12,7 @@ from sqlbuild.compiler.compile.constants import (
     SOURCE_TEST_CTE_PREFIX,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompileSqlTestCte
+from sqlbuild.compiler.compile.models.sql_tests import CompileSqlTestCte
 from sqlbuild.compiler.planner.models import SqlglotResolvedTestSql
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot, import_sqlglot_expressions
 from sqlbuild.shared.types import SqlReferenceKind

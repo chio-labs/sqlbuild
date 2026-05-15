@@ -6,7 +6,10 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import (
+    CompiledObjectKey,
+    CompiledRelationTarget,
+)
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.executor.auditing.main.execute import execute_audit

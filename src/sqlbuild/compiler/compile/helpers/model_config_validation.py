@@ -6,7 +6,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompileModelConfig
+from sqlbuild.compiler.compile.models.core import CompileModelConfig
 from sqlbuild.compiler.planner.types import (
     CursorGrain,
     CursorType,

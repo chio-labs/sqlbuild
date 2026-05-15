@@ -14,7 +14,7 @@ from sqlbuild.compiler.compile.constants import (
     SEED_TEST_CTE_PREFIX,
     SOURCE_TEST_CTE_PREFIX,
 )
-from sqlbuild.compiler.compile.models import (
+from sqlbuild.compiler.compile.models.core import (
     CompiledFunction,
     CompiledModel,
     CompiledObjectKey,

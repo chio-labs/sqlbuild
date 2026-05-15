@@ -12,13 +12,15 @@ from sqlbuild.compiler.compile.constants import (
     SEED_TEST_CTE_PREFIX,
     SOURCE_TEST_CTE_PREFIX,
 )
-from sqlbuild.compiler.compile.models import (
-    CompiledDirectLogicSqlTestPayload,
+from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
-    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationTarget,
+)
+from sqlbuild.compiler.compile.models.sql_tests import (
+    CompiledDirectLogicSqlTestPayload,
+    CompiledModelSqlTestPayload,
     CompiledSqlTest,
     CompileSqlTestCte,
 )

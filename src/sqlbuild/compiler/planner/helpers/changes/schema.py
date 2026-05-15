@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.shared.models import ColumnInfo
-from sqlbuild.compiler.compile.models import InferredColumn
+from sqlbuild.compiler.compile.models.core import InferredColumn
 from sqlbuild.compiler.planner.models import SchemaFinding
 from sqlbuild.compiler.planner.types import SchemaChangeKind, SchemaColumnSource
 

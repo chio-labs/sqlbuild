@@ -10,7 +10,7 @@ from sqlbuild.cli.commands.main.helpers.compile.target_writer import (
     write_compile_target,
     write_static_compile_target,
 )
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter

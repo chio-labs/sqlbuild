@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable
 
-from sqlbuild.compiler.compile.models import CompiledSqlScenario
+from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
 from sqlbuild.compiler.planner.constants import (
     SCENARIO_DEFAULT_IDENTIFIER_LIMIT,
     SCENARIO_HASH_PREFIX_LENGTH,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
 from sqlbuild.spec.models.source import SourceEntry
 
 

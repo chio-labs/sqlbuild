@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models.core import (
+    CompiledObjectKey,
+    CompiledProject,
+)
 
 
 def build_unique_id(key: CompiledObjectKey, project_name: str, project: CompiledProject) -> str:

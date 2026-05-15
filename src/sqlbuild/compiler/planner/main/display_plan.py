@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models.core import (
+    CompiledObjectKey,
+    CompiledProject,
+)
 from sqlbuild.compiler.planner.helpers.graph import build_downstream_deps, build_upstream_deps
 from sqlbuild.compiler.planner.helpers.strategy import get_materialization_type
 from sqlbuild.compiler.planner.models import BackfillResult, ModelPlanEntry, PlanOutput

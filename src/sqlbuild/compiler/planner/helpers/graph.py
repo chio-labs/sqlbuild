@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import (
+from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
-    CompiledSqlTest,
 )
+from sqlbuild.compiler.compile.models.sql_tests import CompiledSqlTest
 from sqlbuild.compiler.compile.types import CompiledResourceType
 
 

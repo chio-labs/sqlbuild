@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.auditing.main.render import render_audit_sql
-from sqlbuild.compiler.compile.models import CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
 from sqlbuild.spec.models.source import SourceEntry
 from tests.unit.src.sqlbuild.compiler.auditing.main._test_types import (
     RenderAuditSqlTestCase,

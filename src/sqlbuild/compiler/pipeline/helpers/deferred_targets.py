@@ -9,7 +9,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.constants import PRESERVE_ENVIRONMENT_VALUE
-from sqlbuild.compiler.compile.models import (
+from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledProject,
     CompiledRelationTarget,

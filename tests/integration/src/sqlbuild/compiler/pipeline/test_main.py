@@ -7,7 +7,7 @@ from typing import cast
 import pytest
 
 from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compile_target
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
