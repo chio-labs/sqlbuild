@@ -27,6 +27,7 @@ from sqlbuild.cli.commands.main.shared.helpers.parsers import (
     add_scenario_snapshot_safety_args,
     add_select_args,
     add_vars_args,
+    read_selector_files,
 )
 from sqlbuild.cli.commands.main.shared.types import CliCommand
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
@@ -355,6 +356,7 @@ def _main_with_dependencies(
             logging.getLogger("sqlbuild.cli").debug(
                 "command=%s project_dir=%s", args.command, effective_project_dir
             )
+        select: tuple[str, ...] = (*tuple(args.select), *read_selector_files(args.select_file))
         if args.command == CliCommand.COMPILE:
             return handlers.run_compile(
                 project_dir,
@@ -389,7 +391,7 @@ def _main_with_dependencies(
                 args.json,
                 args.full_refresh,
                 args.no_color,
-                tuple(args.select),
+                select,
                 tuple(args.exclude),
                 args.verbose,
                 args.vars,
@@ -422,7 +424,7 @@ def _main_with_dependencies(
                 args.fail_fast,
                 args.full_refresh,
                 args.concurrency,
-                tuple(args.select),
+                select,
                 tuple(args.exclude),
                 args.verbose,
                 args.debug,
@@ -444,7 +446,7 @@ def _main_with_dependencies(
                 args.fail_fast,
                 args.full_refresh,
                 args.concurrency,
-                tuple(args.select),
+                select,
                 tuple(args.exclude),
                 args.verbose,
                 args.debug,
@@ -455,7 +457,7 @@ def _main_with_dependencies(
                 project_dir,
                 args.no_sql_validation,
                 args.no_color,
-                tuple(args.select),
+                select,
                 tuple(args.exclude),
                 args.vars,
             )
@@ -465,7 +467,7 @@ def _main_with_dependencies(
                 args.no_sql_validation,
                 args.defer_to,
                 args.no_color,
-                tuple(args.select),
+                select,
                 tuple(args.exclude),
                 args.vars,
             )
@@ -473,7 +475,7 @@ def _main_with_dependencies(
             return handlers.run_seed(
                 project_dir,
                 args.no_color,
-                tuple(args.select),
+                select,
                 tuple(args.exclude),
                 args.vars,
             )
@@ -485,7 +487,7 @@ def _main_with_dependencies(
                 args.lineage_format,
                 args.lineage_direction,
                 args.lineage_depth,
-                tuple(args.select),
+                select,
                 tuple(args.exclude),
                 ColumnLineageMode(args.lineage_mode),
                 args.vars,
@@ -500,7 +502,7 @@ def _main_with_dependencies(
                 args.from_environment,
                 args.to_environment,
                 args.hard_copy,
-                tuple(args.select),
+                select,
                 tuple(args.exclude),
                 args.vars,
             )
@@ -519,7 +521,7 @@ def _main_with_dependencies(
                 args.bounded,
                 args.max_column_examples,
                 args.max_row_only_examples,
-                tuple(args.select),
+                select,
                 tuple(args.exclude),
                 args.verbose,
                 args.vars,

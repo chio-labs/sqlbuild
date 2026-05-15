@@ -28,6 +28,8 @@ dg: Any = pytest.importorskip("dagster")
             ),
             expected_model_deps=(("raw", "orders"), ("analytics", "normalize_email")),
             expected_check_names=("audit__not_null__order_id", "audit__freshness__loaded_at"),
+            expected_model_selector="orders",
+            expected_check_selector="audit:not_null:model:orders:order_id",
         )
     ],
     ids=["builds materializable specs and check specs from dag artifact"],
@@ -49,6 +51,8 @@ def test_given_sqlbuild_dag_when_building_specs_then_maps_assets_deps_and_checks
         test_case.expected_model_deps
     )
     assert tuple(spec.name for spec in check_specs) == test_case.expected_check_names
+    assert model_spec.metadata["sqlbuild_selector"] == test_case.expected_model_selector
+    assert check_specs[0].metadata["sqlbuild_check_selector"] == test_case.expected_check_selector
 
 
 @pytest.mark.parametrize(

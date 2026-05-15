@@ -1408,6 +1408,7 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
             argv=["--no-color", "plan", "--select", "orders", "--exclude", "customers"],
             expected_exit_code=4,
             expected_no_color=True,
+            expected_select=("orders",),
         )
     ],
     ids=["passes global no color to plan handler"],
@@ -1472,11 +1473,67 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
         False,
         False,
         test_case.expected_no_color,
-        ("orders",),
+        test_case.expected_select,
         ("customers",),
         False,
         {},
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="passes selectors from select file to plan handler",
+            argv=["plan", "--select", "orders", "--select-file", "selectors.txt"],
+            expected_exit_code=4,
+            expected_select=("orders", "customers", "payments"),
+        )
+    ],
+    ids=["passes selectors from select file to plan handler"],
+)
+def test_given_select_file_when_running_then_dispatches_file_selectors(
+    test_case: MainTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "selectors.txt").write_text("customers\n\n# ignored\npayments\n", encoding="utf-8")
+    received_selects: list[tuple[str, ...]] = []
+
+    def run_plan(
+        project_dir: Path | None,
+        no_sql_validation: bool,
+        defer_to: str | None,
+        cursor_overrides: object,
+        json_output: bool,
+        full_refresh: bool,
+        no_color: bool,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+        verbose: bool,
+        cli_vars: dict[str, object],
+    ) -> int:
+        del (
+            project_dir,
+            no_sql_validation,
+            defer_to,
+            cursor_overrides,
+            json_output,
+            full_refresh,
+            no_color,
+            exclude,
+            verbose,
+            cli_vars,
+        )
+        received_selects.append(select)
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=[*test_case.argv[:4], str(tmp_path / test_case.argv[4])],
+        handlers=build_handlers(run_plan=run_plan),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_selects == [test_case.expected_select]
 
 
 @pytest.mark.parametrize(

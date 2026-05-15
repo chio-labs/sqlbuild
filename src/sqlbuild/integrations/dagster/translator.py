@@ -33,6 +33,7 @@ class SqlBuildDagsterTranslator:
             "sqlbuild_id": node.get("id"),
             "sqlbuild_name": node.get("name"),
             "sqlbuild_kind": node.get("kind"),
+            "sqlbuild_selector": node.get("name"),
         }
         for key in ("path", "target", "description", "columns", "language", "return_kind"):
             if key in node:
@@ -56,6 +57,7 @@ class SqlBuildDagsterTranslator:
             "sqlbuild_check_id": check.get("id"),
             "sqlbuild_check_kind": check.get("kind"),
             "sqlbuild_check_name": check.get("name"),
+            "sqlbuild_check_selector": check.get("id"),
         }
 
 

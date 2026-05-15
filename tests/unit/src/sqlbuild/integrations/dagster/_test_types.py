@@ -9,6 +9,8 @@ class DagsterAssetSpecTestCase:
     expected_asset_keys: tuple[tuple[str, ...], ...]
     expected_model_deps: tuple[tuple[str, ...], ...]
     expected_check_names: tuple[str, ...]
+    expected_model_selector: str
+    expected_check_selector: str
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,15 @@ class DagsterCliFailureTestCase:
     command_stderr: str
     command_exit_code: int
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class DagsterCliSelectionTestCase:
+    description: str
+    selected_asset_keys: tuple[tuple[str, ...], ...]
+    command_args: tuple[str, ...]
+    expected_selectors: tuple[str, ...]
+    expected_uses_select_file: bool
 
 
 @dataclass(frozen=True)
