@@ -3,8 +3,10 @@
 from collections.abc import Iterator
 from pathlib import Path
 
+import dagster as dg
 import pytest
 from dagster import (
+    AssetCheckExecutionContext,
     AssetCheckSeverity,
     AssetExecutionContext,
     AssetKey,
@@ -12,7 +14,12 @@ from dagster import (
     materialize,
 )
 
-from sqlbuild.integrations.dagster import SqlBuildCliResource, SqlBuildProject, sqlbuild_assets
+from sqlbuild.integrations.dagster import (
+    SqlBuildCliResource,
+    SqlBuildProject,
+    sqlbuild_assets,
+    sqlbuild_scenario_checks,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     REPO_ROOT,
     prepare_waffle_shop,
@@ -302,6 +309,70 @@ def test_given_sqlbuild_scenarios_when_executing_dagster_then_emits_scenario_che
         [sqlbuild_waffle_shop],
         resources={"sqb": SqlBuildCliResource(project_dir=sqlbuild_project)},
         selection=[AssetKey(list(asset_key)) for asset_key in test_case.selected_asset_keys],
+    )
+
+    assert result.success
+    rendered_logs: str = capsys.readouterr().err
+    assert test_case.expected_command_fragment in rendered_logs
+    assert test_case.unexpected_command_fragment not in rendered_logs
+    assert set(test_case.expected_daily_revenue_check_names) <= check_names_for_asset(
+        result=result,
+        asset_key=test_case.daily_revenue_asset_key,
+    )
+    assert not set(test_case.unexpected_scenario_order_prices_check_names).intersection(
+        check_names_for_asset(
+            result=result,
+            asset_key=test_case.scenario_order_prices_asset_key,
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterSqlBuildScenarioE2ETestCase(
+            description="scenario helper only runs selected scenario checks",
+            selected_asset_keys=(("main", "daily_revenue"),),
+            expected_command_fragment="scenario test daily_revenue_minimal --json",
+            unexpected_command_fragment="daily_revenue_multi_order",
+            daily_revenue_asset_key=("main", "daily_revenue"),
+            expected_daily_revenue_check_names=("scenario__daily_revenue_minimal",),
+            scenario_order_prices_asset_key=("main", "scenario_order_prices"),
+            unexpected_scenario_order_prices_check_names=(
+                "scenario__fact_order_retained_artifacts",
+            ),
+        )
+    ],
+    ids=["scenario helper only runs selected scenario checks"],
+)
+def test_given_scenario_check_selection_when_executing_dagster_then_runs_only_selected_scenarios(
+    test_case: DagsterSqlBuildScenarioE2ETestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project_dir: Path = prepare_waffle_shop(tmp_path)
+    sqb_executable: Path = REPO_ROOT / ".venv" / "bin" / "sqb"
+    sqlbuild_project: SqlBuildProject = SqlBuildProject(
+        project_dir=project_dir,
+        sqb_command=(str(sqb_executable),),
+    )
+    monkeypatch.setenv("DAGSTER_IS_DEV_CLI", "1")
+    sqlbuild_project.prepare_if_dev()
+
+    @sqlbuild_scenario_checks(project=sqlbuild_project, required_resource_keys={"sqb"})
+    def sqlbuild_waffle_shop_scenarios(context: AssetCheckExecutionContext) -> Iterator[object]:
+        yield from context.resources.sqb.cli(["scenario", "test"], context=context).stream()
+
+    result: ExecuteInProcessResult = materialize(
+        [sqlbuild_waffle_shop_scenarios],
+        resources={"sqb": SqlBuildCliResource(project_dir=sqlbuild_project)},
+        selection=dg.AssetSelection.checks(
+            dg.AssetCheckKey(
+                asset_key=AssetKey(list(test_case.daily_revenue_asset_key)),
+                name="scenario__daily_revenue_minimal",
+            )
+        ),
     )
 
     assert result.success

@@ -1,6 +1,6 @@
 """Optional Dagster integration for SQLBuild."""
 
-from sqlbuild.integrations.dagster.assets import sqlbuild_assets
+from sqlbuild.integrations.dagster.assets import sqlbuild_assets, sqlbuild_scenario_checks
 from sqlbuild.integrations.dagster.helpers.invocation import SqlBuildCliInvocation
 from sqlbuild.integrations.dagster.project import SqlBuildProject
 from sqlbuild.integrations.dagster.resource import SqlBuildCliResource
@@ -12,4 +12,5 @@ __all__ = [
     "SqlBuildDagsterTranslator",
     "SqlBuildProject",
     "sqlbuild_assets",
+    "sqlbuild_scenario_checks",
 ]
