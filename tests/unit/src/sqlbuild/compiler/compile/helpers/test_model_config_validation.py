@@ -11,7 +11,7 @@ from sqlbuild.compiler.compile.helpers.model_config_validation import (
     validate_non_incremental_config,
     validate_placeholder_config,
 )
-from sqlbuild.compiler.compile.models import CompileModelConfig
+from sqlbuild.compiler.compile.models.core import CompileModelConfig
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     CustomMaterializationConfigErrorTestCase,
     CustomMaterializationConfigValidTestCase,

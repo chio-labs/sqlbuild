@@ -9,7 +9,7 @@ from sqlbuild.compiler.compile.helpers.sql_scanning import (
     skip_line_comment,
     skip_quoted_text,
 )
-from sqlbuild.compiler.compile.models import CompileSqlReference
+from sqlbuild.compiler.compile.models.core import CompileSqlReference
 from sqlbuild.shared.types import SqlReferenceKind
 
 _CONTEXT: str = "SQL reference"

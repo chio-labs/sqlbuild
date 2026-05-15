@@ -19,7 +19,10 @@ from sqlbuild.compiler.compile.helpers.sql_scanning import (
     skip_line_comment,
     skip_quoted_text,
 )
-from sqlbuild.compiler.compile.models import LoadedMacro, MacroContext
+from sqlbuild.compiler.compile.models.core import (
+    LoadedMacro,
+    MacroContext,
+)
 from sqlbuild.shared.helpers.project_var_values import render_project_var_text
 
 _CONTEXT: str = "SQL interpolation"

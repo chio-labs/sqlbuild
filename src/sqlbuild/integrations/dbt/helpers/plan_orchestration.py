@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompileSqlReference
+from sqlbuild.compiler.compile.models.core import (
+    CompiledModel,
+    CompiledProject,
+    CompileSqlReference,
+)
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.helpers.manifest import resolve_dbt_manifest_model
 from sqlbuild.integrations.dbt.helpers.plan import build_dbt_interop_plan

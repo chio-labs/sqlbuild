@@ -9,7 +9,10 @@ from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import (
+    CompiledObjectKey,
+    CompiledRelationTarget,
+)
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,

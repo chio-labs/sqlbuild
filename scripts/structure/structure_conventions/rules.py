@@ -531,7 +531,11 @@ def check_type_declarations_outside_types(file_path: Path, module: ast.Module) -
             )
             continue
 
-        if isinstance(node, ast.TypeAlias):
+        if isinstance(node, ast.TypeAlias) and not _is_local_model_union_alias(
+            file_path=file_path,
+            module=module,
+            node=node,
+        ):
             violations.append(
                 Violation(
                     code="SC015",
@@ -1172,6 +1176,40 @@ def _inherits_from_base_names(node: ast.ClassDef, base_names: frozenset[str]) ->
     return any(_base_name(base) in base_names for base in node.bases)
 
 
+def _is_local_model_union_alias(
+    *, file_path: Path, module: ast.Module, node: ast.TypeAlias
+) -> bool:
+    if not _is_within_role_package(file_path, "models"):
+        return False
+
+    model_class_names: frozenset[str] = frozenset(
+        child.name
+        for child in _non_docstring_body(module)
+        if isinstance(child, ast.ClassDef) and _is_allowed_model_class(child)
+    )
+    if not model_class_names:
+        return False
+
+    union_member_names: tuple[str, ...] | None = _local_union_member_names(node.value)
+    if union_member_names is None:
+        return False
+    if len(union_member_names) < 2:
+        return False
+    return all(name in model_class_names for name in union_member_names)
+
+
+def _local_union_member_names(node: ast.expr) -> tuple[str, ...] | None:
+    if isinstance(node, ast.Name):
+        return (node.id,)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        left_names: tuple[str, ...] | None = _local_union_member_names(node.left)
+        right_names: tuple[str, ...] | None = _local_union_member_names(node.right)
+        if left_names is None or right_names is None:
+            return None
+        return (*left_names, *right_names)
+    return None
+
+
 def _base_name(node: ast.expr) -> str | None:
     if isinstance(node, ast.Name):
         return node.id
@@ -1259,17 +1297,28 @@ def _is_allowed_sibling_public_surface(
     parent_package_parts: tuple[str, ...],
     imported_parts: tuple[str, ...],
 ) -> bool:
+    public_surface_names: frozenset[str] = frozenset({"models", "types", "constants", "exceptions"})
     if (
         len(imported_parts) == len(parent_package_parts) + 2
         and imported_parts[len(parent_package_parts)] == "main"
         and imported_parts[-1] != "main"
     ):
         return True
+    if (
+        len(imported_parts) == len(parent_package_parts) + 2
+        and imported_parts[len(parent_package_parts)] in public_surface_names
+    ):
+        return True
+    if (
+        len(imported_parts) == len(parent_package_parts) + 3
+        and imported_parts[len(parent_package_parts) + 1] in public_surface_names
+    ):
+        return True
     if len(imported_parts) != len(parent_package_parts) + 2:
         return False
 
     public_module_name: str = imported_parts[-1]
-    if public_module_name in {"models", "types", "constants", "exceptions"}:
+    if public_module_name in public_surface_names:
         return True
     if "adapter" in parent_package_parts:
         return True

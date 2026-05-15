@@ -20,7 +20,7 @@ from sqlbuild.compiler.compile.helpers.attachment import (
     resolve_run_id,
 )
 from sqlbuild.compiler.compile.helpers.macros import load_project_macros
-from sqlbuild.compiler.compile.models import (
+from sqlbuild.compiler.compile.models.core import (
     CompileAuditInput,
     CompileModelInput,
     CompileProjectInputs,
@@ -28,10 +28,10 @@ from sqlbuild.compiler.compile.models import (
     CompileSourceInput,
     CompileSqlFunctionInput,
     CompileSqlScenarioInput,
-    CompileSqlTestInput,
     LoadedMacro,
     MacroContext,
 )
+from sqlbuild.compiler.compile.models.sql_tests import CompileSqlTestInput
 from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,

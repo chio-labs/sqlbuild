@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompileSqlReference
+from sqlbuild.compiler.compile.models.core import CompileSqlReference
 from sqlbuild.integrations.dbt.helpers.manifest import (
     build_dbt_manifest_index,
     resolve_dbt_manifest_model,

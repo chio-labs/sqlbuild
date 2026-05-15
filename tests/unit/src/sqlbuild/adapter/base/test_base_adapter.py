@@ -6,7 +6,7 @@ import pytest
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile.models import FunctionArgument
+from sqlbuild.compiler.compile.models.core import FunctionArgument
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from tests.unit.src.sqlbuild.adapter.base._test_types import (
     BaseAdapterExpressionInferenceProfileTestCase,

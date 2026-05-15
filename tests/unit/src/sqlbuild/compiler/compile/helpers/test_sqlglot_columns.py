@@ -7,7 +7,7 @@ from sqlbuild.compiler.compile.helpers.sqlglot_columns import (
     infer_columns_with_sqlglot,
     substitute_placeholder_defaults,
 )
-from sqlbuild.compiler.compile.models import InferredColumn
+from sqlbuild.compiler.compile.models.core import InferredColumn
 from sqlbuild.compiler.lineage.types import InferredNullability
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     InferColumnsTestCase,

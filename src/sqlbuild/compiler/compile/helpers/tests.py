@@ -28,7 +28,7 @@ from sqlbuild.compiler.compile.helpers.sql_scanning import (
 from sqlbuild.compiler.compile.helpers.sqlglot_tests import (
     extract_expected_branch_column_names_with_sqlglot,
 )
-from sqlbuild.compiler.compile.models import (
+from sqlbuild.compiler.compile.models.sql_tests import (
     CompileDirectLogicSqlTestCtes,
     CompileModelSqlTestCtes,
     CompileSqlTestCte,

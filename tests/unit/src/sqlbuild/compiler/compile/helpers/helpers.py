@@ -1,11 +1,11 @@
 from pathlib import Path
 
 from sqlbuild.compiler.compile.helpers.macros import load_project_macros
-from sqlbuild.compiler.compile.models import (
+from sqlbuild.compiler.compile.models.core import LoadedMacro
+from sqlbuild.compiler.compile.models.sql_tests import (
     CompiledDirectLogicSqlTestPayload,
     CompiledModelSqlTestPayload,
     CompiledSqlTest,
-    LoadedMacro,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile
 

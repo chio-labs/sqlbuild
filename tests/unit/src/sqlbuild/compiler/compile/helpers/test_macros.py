@@ -5,7 +5,10 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile.helpers.macros import expand_sql_macros
-from sqlbuild.compiler.compile.models import LoadedMacro, MacroContext
+from sqlbuild.compiler.compile.models.core import (
+    LoadedMacro,
+    MacroContext,
+)
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     ExpandSqlMacrosErrorTestCase,
     ExpandSqlMacrosTestCase,

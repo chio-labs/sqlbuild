@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.lineage.helpers.columns import (
     build_project_column_lineage as _build_project_column_lineage,
 )

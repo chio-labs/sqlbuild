@@ -14,7 +14,7 @@ from sqlbuild.compiler.compile.helpers.attachment import (
     validate_audit_references,
     validate_model_attached_audit_references,
 )
-from sqlbuild.compiler.compile.models import CompileSqlReference
+from sqlbuild.compiler.compile.models.core import CompileSqlReference
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.compiler.discovery.models import DiscoveredAuditFile
 from sqlbuild.shared.types import SqlReferenceKind

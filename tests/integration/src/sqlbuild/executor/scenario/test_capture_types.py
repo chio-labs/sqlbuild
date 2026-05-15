@@ -9,7 +9,7 @@ from uuid import UUID
 import duckdb
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.scenario.helpers.snapshots import read_scenario_snapshot_manifest
 from sqlbuild.executor.scenario.main.capture import execute_scenario_snapshot_capture

@@ -4,10 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.models import (
-    CompiledDirectLogicSqlTestPayload,
+from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
+)
+from sqlbuild.compiler.compile.models.sql_tests import (
+    CompiledDirectLogicSqlTestPayload,
     CompiledSqlTest,
     CompileSqlTestCte,
 )

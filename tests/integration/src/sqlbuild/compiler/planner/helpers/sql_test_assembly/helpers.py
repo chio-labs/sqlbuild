@@ -9,14 +9,16 @@ from sqlbuild.compiler.compile.constants import (
     REF_TEST_CTE_PREFIX,
     SOURCE_TEST_CTE_PREFIX,
 )
-from sqlbuild.compiler.compile.models import (
+from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
-    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationTarget,
-    CompiledSqlTest,
     CompileModelConfig,
+)
+from sqlbuild.compiler.compile.models.sql_tests import (
+    CompiledModelSqlTestPayload,
+    CompiledSqlTest,
     CompileSqlTestCte,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType

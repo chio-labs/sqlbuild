@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import (
+    CompiledObjectKey,
+    CompiledRelationTarget,
+)
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,

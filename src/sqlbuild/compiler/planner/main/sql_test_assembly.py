@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledProject, CompiledSqlTest
+from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.compile.models.sql_tests import CompiledSqlTest
 from sqlbuild.compiler.planner.helpers.sql_test_assembly import plan_test
 from sqlbuild.compiler.planner.models import PlanWarning, SqlTestPlanEntry
 

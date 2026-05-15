@@ -7,7 +7,10 @@ from sqlbuild.compiler.compile.helpers.deps import (
     model_build_deps,
     sql_test_scope_deps,
 )
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompileSqlReference
+from sqlbuild.compiler.compile.models.core import (
+    CompiledObjectKey,
+    CompileSqlReference,
+)
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.shared.types import SqlReferenceKind
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
