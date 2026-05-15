@@ -6,38 +6,26 @@ SCENARIO (
 WITH
 __ref__stg_orders AS (
   SELECT
-    1 AS order_id,
-    10 AS customer_id,
-    1 AS waffle_type_id,
-    2 AS quantity,
-    CAST('2026-04-01 09:15:00' AS TIMESTAMP) AS ordered_at,
-    'completed' AS status
-  UNION ALL
-  SELECT
-    2 AS order_id,
-    10 AS customer_id,
-    4 AS waffle_type_id,
-    1 AS quantity,
-    CAST('2026-04-01 10:00:00' AS TIMESTAMP) AS ordered_at,
-    'completed' AS status
+    id AS order_id,
+    customer_id,
+    waffle_type_id,
+    quantity,
+    ordered_at,
+    status
+  FROM __source("raw_orders")
+  WHERE id = 1
 ),
 
 __ref__stg_payments AS (
   SELECT
-    1 AS payment_id,
-    1 AS order_id,
-    1700 AS amount_cents,
-    'credit_card' AS payment_method,
-    CAST('2026-04-01 09:16:00' AS TIMESTAMP) AS paid_at,
-    'success' AS payment_status
-  UNION ALL
-  SELECT
-    2 AS payment_id,
-    2 AS order_id,
-    1050 AS amount_cents,
-    'credit_card' AS payment_method,
-    CAST('2026-04-01 10:01:00' AS TIMESTAMP) AS paid_at,
-    'failed' AS payment_status
+    id AS payment_id,
+    order_id,
+    amount_cents,
+    payment_method,
+    paid_at,
+    status AS payment_status
+  FROM __source("raw_payments")
+  WHERE id = 1
 ),
 
 __expected__daily_revenue AS (
