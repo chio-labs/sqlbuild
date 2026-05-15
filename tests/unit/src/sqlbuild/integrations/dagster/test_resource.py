@@ -15,6 +15,7 @@ from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterCliStreamTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
+    assert_positional_selector_behavior,
     assert_select_file_behavior,
     write_dagster_test_dag,
     write_fake_sqb_command,
@@ -55,6 +56,20 @@ CLI_SELECTION_TEST_CASES: list[DagsterCliSelectionTestCase] = [
         description="explicit SQLBuild selector is preserved",
         selected_asset_keys=(("analytics", "orders"),),
         command_args=("build", "--select", "manual_selector"),
+        expected_selectors=(),
+        expected_uses_select_file=False,
+    ),
+    DagsterCliSelectionTestCase(
+        description="selected Dagster asset appends attached scenario selectors",
+        selected_asset_keys=(("analytics", "orders"),),
+        command_args=("scenario", "test"),
+        expected_selectors=("orders_minimal",),
+        expected_uses_select_file=False,
+    ),
+    DagsterCliSelectionTestCase(
+        description="explicit scenario selector is preserved",
+        selected_asset_keys=(("analytics", "orders"),),
+        command_args=("scenario", "test", "manual_scenario"),
         expected_selectors=(),
         expected_uses_select_file=False,
     ),
@@ -99,6 +114,7 @@ def test_given_sqlbuild_cli_resource_when_waiting_invocation_then_captures_proce
             expected_asset_keys=(
                 ("raw", "orders"),
                 ("analytics", "normalize_email"),
+                ("analytics", "customers"),
                 ("analytics", "orders"),
             ),
         )
@@ -255,6 +271,11 @@ def test_given_selected_dagster_assets_when_invoking_cli_then_applies_sqlbuild_s
 
     assert invocation.is_successful()
     assert invocation.selection == test_case.expected_selectors
+    assert_positional_selector_behavior(
+        command=invocation.command,
+        selectors=test_case.expected_selectors,
+        uses_select_file=test_case.expected_uses_select_file,
+    )
     assert_select_file_behavior(
         command=invocation.command,
         expected_uses_select_file=test_case.expected_uses_select_file,

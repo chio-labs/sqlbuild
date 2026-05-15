@@ -40,3 +40,17 @@ class DagsterSqlBuildFailedCheckE2ETestCase:
     description: str
     selected_asset_key: tuple[str, ...]
     expected_check_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DagsterSqlBuildScenarioE2ETestCase:
+    """Test case for SQLBuild scenario checks emitted through Dagster."""
+
+    description: str
+    selected_asset_keys: tuple[tuple[str, ...], ...]
+    expected_command_fragment: str
+    unexpected_command_fragment: str
+    daily_revenue_asset_key: tuple[str, ...]
+    expected_daily_revenue_check_names: tuple[str, ...]
+    scenario_order_prices_asset_key: tuple[str, ...]
+    unexpected_scenario_order_prices_check_names: tuple[str, ...]

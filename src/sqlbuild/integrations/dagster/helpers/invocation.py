@@ -193,8 +193,9 @@ def _log_invocation(*, context: Any, invocation: SqlBuildCliInvocation) -> None:
     logger.info("SQLBuild command:")
     logger.info("  %s", " ".join(invocation.command))
     if invocation.selection:
-        logger.info("SQLBuild selector file:")
-        logger.info("  %s", invocation.selector_file_path)
+        if invocation.selector_file_path:
+            logger.info("SQLBuild selector file:")
+            logger.info("  %s", invocation.selector_file_path)
         logger.info("SQLBuild selected assets from Dagster (%s):", len(invocation.selection))
         for line in _wrap_selectors(invocation.selection):
             logger.info("  %s", line)
@@ -225,6 +226,8 @@ def _with_selected_asset_args(
 ) -> tuple[tuple[str, ...], tuple[str, ...], Path | None]:
     if dag is None or context is None or not args:
         return args, (), None
+    if len(args) >= 2 and args[0] == "scenario" and args[1] == "test":
+        return _with_selected_scenario_args(args=args, context=context, dag=dag)
     if args[0] not in {"build", "run", "test", "audit", "seed"}:
         return args, (), None
     if "--select" in args or "-s" in args or "--select-file" in args:
@@ -244,6 +247,59 @@ def _with_selected_asset_args(
         return args, (), None
     selector_file: Path = _write_selector_file(tuple(selectors))
     return (*args, "--select-file", str(selector_file)), tuple(selectors), selector_file
+
+
+def _with_selected_scenario_args(
+    *, args: tuple[str, ...], context: Any, dag: Mapping[str, Any]
+) -> tuple[tuple[str, ...], tuple[str, ...], Path | None]:
+    if _has_explicit_scenario_selector(args=args):
+        return args, (), None
+    selected_paths: set[tuple[str, ...]] = _selected_asset_paths(context=context)
+    if not selected_paths:
+        return args, (), None
+    selected_asset_ids: set[str] = {
+        str(node.get("id"))
+        for node in dag.get("nodes", ())
+        if tuple(str(part) for part in node.get("asset_key", ())) in selected_paths
+    }
+    selectors: list[str] = []
+    check: Mapping[str, Any]
+    for check in dag.get("checks", ()):  # type: ignore[assignment]
+        if str(check.get("kind")) != "scenario":
+            continue
+        if not selected_asset_ids.intersection(
+            str(id_) for id_ in check.get("checked_asset_ids", ())
+        ):
+            continue
+        selector: object = check.get("name")
+        if selector is not None:
+            selectors.append(str(selector))
+    if not selectors:
+        return args, (), None
+    return (*args, *selectors), tuple(selectors), None
+
+
+def _has_explicit_scenario_selector(*, args: tuple[str, ...]) -> bool:
+    value_flags: frozenset[str] = frozenset(
+        {
+            "--max-snapshot-rows",
+            "--max-snapshot-total-rows",
+            "--max-snapshot-bytes",
+            "--max-snapshot-total-bytes",
+        }
+    )
+    skip_next: bool = False
+    for arg in args[2:]:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in value_flags:
+            skip_next = True
+            continue
+        if arg.startswith("-"):
+            continue
+        return True
+    return False
 
 
 def _with_json_output_args(

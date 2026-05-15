@@ -35,6 +35,13 @@ def build_dagster_test_dag() -> Mapping[str, Any]:
                 "description": "Clean orders",
                 "tags": ["daily"],
             },
+            {
+                "id": "model:customers",
+                "kind": "model",
+                "name": "customers",
+                "asset_key": ["analytics", "customers"],
+                "path": "models/customers.sql",
+            },
         ],
         "edges": [
             {"from_id": "source:raw_orders", "to_id": "model:orders"},
@@ -56,6 +63,20 @@ def build_dagster_test_dag() -> Mapping[str, Any]:
                 "checked_asset_ids": ["source:raw_orders"],
                 "path": "audits/freshness.sql",
                 "attached_column_name": "loaded_at",
+            },
+            {
+                "id": "sql_scenario:orders_minimal",
+                "kind": "scenario",
+                "name": "orders_minimal",
+                "checked_asset_ids": ["model:orders"],
+                "path": "tests/scenarios/orders_minimal.sql",
+            },
+            {
+                "id": "sql_scenario:customers_minimal",
+                "kind": "scenario",
+                "name": "customers_minimal",
+                "checked_asset_ids": ["model:customers"],
+                "path": "tests/scenarios/customers_minimal.sql",
             },
         ],
     }
@@ -109,3 +130,12 @@ def assert_select_file_behavior(
     if uses_select_file:
         select_file_index: int = command.index("--select-file") + 1
         assert not Path(command[select_file_index]).exists()
+
+
+def assert_positional_selector_behavior(
+    *, command: tuple[str, ...], selectors: tuple[str, ...], uses_select_file: bool
+) -> None:
+    if uses_select_file:
+        return
+    for selector in selectors:
+        assert selector in command
