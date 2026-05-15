@@ -35,7 +35,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_waff
             ),
             expected_check_ids=(
                 "sql_test:test_fact_orders",
-                "audit:not_null",
+                "audit:not_null:model:fact_orders:order_id",
                 "sql_scenario:daily_revenue_minimal",
             ),
             expected_absent_fragments=(

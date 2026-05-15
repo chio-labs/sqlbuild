@@ -171,7 +171,7 @@ def _build_audit_check(audit: CompiledAudit) -> DagCheck:
             _node_id(CompiledObjectKey(resource_type, audit.attached_target_name)),
         )
     return DagCheck(
-        id=_node_id(audit.key),
+        id=_audit_check_id(audit),
         kind="audit",
         name=audit.name,
         checked_asset_ids=checked_asset_ids,
@@ -183,6 +183,16 @@ def _build_audit_check(audit: CompiledAudit) -> DagCheck:
         attached_target_name=audit.attached_target_name,
         attached_column_name=audit.attached_column_name,
     )
+
+
+def _audit_check_id(audit: CompiledAudit) -> str:
+    parts: tuple[str | None, ...] = (
+        _node_id(audit.key),
+        audit.attached_target_kind.value if audit.attached_target_kind is not None else None,
+        audit.attached_target_name,
+        audit.attached_column_name,
+    )
+    return ":".join(part for part in parts if part)
 
 
 def _build_scenario_check(scenario: CompiledSqlScenario) -> DagCheck:
