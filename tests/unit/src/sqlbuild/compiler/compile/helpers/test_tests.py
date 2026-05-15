@@ -295,31 +295,52 @@ def test_given_model_sql_test_cte_variants_when_extracting_then_it_returns_expec
     assert extracted_ctes.payload.macro_mocks == test_case.expected_macro_mocks
 
 
+DIRECT_LOGIC_TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
+    ExtractSqlTestCtesTestCase(
+        description="extracts unsuffixed macro actual expected ctes in macro mode",
+        sql="""
+        WITH input_values AS (SELECT '  PAID  ' AS raw_status),
+        __macro_actual__ AS (
+          SELECT @normalize_status("raw_status") AS status FROM input_values
+        ),
+        __macro_expected__ AS (SELECT 'paid' AS status)
+        SELECT 1
+        """.strip(),
+        mode=SqlTestMode.MACRO,
+        expected_authored_cte_names=("input_values",),
+        expected_mock_model_names=(),
+        expected_mock_source_names=(),
+        expected_expected_model_names=(),
+        expected_macro_actual_cte_name="__macro_actual__",
+        expected_macro_expected_cte_name="__macro_expected__",
+    ),
+    ExtractSqlTestCtesTestCase(
+        description="extracts unsuffixed udf actual expected ctes in udf mode",
+        sql="""
+        WITH input_values AS (SELECT 1250 AS amount_cents),
+        __udf_actual__ AS (
+          SELECT __udf("format_cents")(amount_cents) AS formatted FROM input_values
+        ),
+        __udf_expected__ AS (SELECT '$12.50' AS formatted)
+        SELECT 1
+        """.strip(),
+        mode=SqlTestMode.UDF,
+        expected_authored_cte_names=("input_values",),
+        expected_mock_model_names=(),
+        expected_mock_source_names=(),
+        expected_expected_model_names=(),
+        expected_macro_actual_cte_name="__udf_actual__",
+        expected_macro_expected_cte_name="__udf_expected__",
+    ),
+]
+
+
 @pytest.mark.parametrize(
     "test_case",
-    [
-        ExtractSqlTestCtesTestCase(
-            description="extracts unsuffixed macro actual expected ctes in macro mode",
-            sql="""
-            WITH input_values AS (SELECT '  PAID  ' AS raw_status),
-            __macro_actual__ AS (
-              SELECT @normalize_status("raw_status") AS status FROM input_values
-            ),
-            __macro_expected__ AS (SELECT 'paid' AS status)
-            SELECT 1
-            """.strip(),
-            mode=SqlTestMode.MACRO,
-            expected_authored_cte_names=("input_values",),
-            expected_mock_model_names=(),
-            expected_mock_source_names=(),
-            expected_expected_model_names=(),
-            expected_macro_actual_cte_name="__macro_actual__",
-            expected_macro_expected_cte_name="__macro_expected__",
-        )
-    ],
-    ids=["extracts unsuffixed macro actual expected ctes in macro mode"],
+    DIRECT_LOGIC_TEST_CASES,
+    ids=[case.description for case in DIRECT_LOGIC_TEST_CASES],
 )
-def test_given_macro_sql_test_cte_variants_when_extracting_then_it_returns_expected_roles(
+def test_given_direct_logic_sql_test_cte_variants_when_extracting_then_it_returns_expected_roles(
     test_case: ExtractSqlTestCtesTestCase,
 ) -> None:
     extracted_ctes: CompileSqlTestCtes = extract_sql_test_ctes(
@@ -489,6 +510,15 @@ ERROR_TEST_CASES: list[ExtractSqlTestCtesErrorTestCase] = [
         expected_error_fragment=r"use TEST \(mode: macro\)",
     ),
     ExtractSqlTestCtesErrorTestCase(
+        description="raises when model mode includes udf actual cte",
+        sql="""
+        WITH __udf_actual__ AS (SELECT __udf("format_cents")(1250) AS formatted),
+        __udf_expected__ AS (SELECT '$12.50' AS formatted)
+        SELECT 1
+        """.strip(),
+        expected_error_fragment=r"use TEST \(mode: udf\)",
+    ),
+    ExtractSqlTestCtesErrorTestCase(
         description="raises when macro mode includes model test cte",
         sql="""
         WITH __source__raw_orders AS (SELECT 1 AS order_id),
@@ -519,6 +549,38 @@ ERROR_TEST_CASES: list[ExtractSqlTestCtesErrorTestCase] = [
         """.strip(),
         mode=SqlTestMode.MACRO,
         expected_error_fragment="helper CTE 'helper' must not call macros",
+    ),
+    ExtractSqlTestCtesErrorTestCase(
+        description="raises when udf mode includes model test cte",
+        sql="""
+        WITH __source__raw_orders AS (SELECT 1 AS order_id),
+        __udf_actual__ AS (SELECT __udf("format_cents")(1250) AS formatted),
+        __udf_expected__ AS (SELECT '$12.50' AS formatted)
+        SELECT 1
+        """.strip(),
+        mode=SqlTestMode.UDF,
+        expected_error_fragment="mode 'udf' but defines model-test CTE",
+    ),
+    ExtractSqlTestCtesErrorTestCase(
+        description="raises when udf expected calls udf",
+        sql="""
+        WITH __udf_actual__ AS (SELECT __udf("format_cents")(1250) AS formatted),
+        __udf_expected__ AS (SELECT __udf("format_cents")(1250) AS formatted)
+        SELECT 1
+        """.strip(),
+        mode=SqlTestMode.UDF,
+        expected_error_fragment="__udf_expected__.*must not call udf",
+    ),
+    ExtractSqlTestCtesErrorTestCase(
+        description="raises when udf helper calls udf",
+        sql="""
+        WITH helper AS (SELECT __udf("format_cents")(1250) AS formatted),
+        __udf_actual__ AS (SELECT formatted FROM helper),
+        __udf_expected__ AS (SELECT '$12.50' AS formatted)
+        SELECT 1
+        """.strip(),
+        mode=SqlTestMode.UDF,
+        expected_error_fragment="helper CTE 'helper'.*must not call udf",
     ),
 ]
 

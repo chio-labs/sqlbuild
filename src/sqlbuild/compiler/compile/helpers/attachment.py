@@ -1061,23 +1061,27 @@ def build_test_inputs(
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
     known_seed_names: set[str] = build_known_seed_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
+    known_function_names: set[str] = build_known_function_names(discovered_inputs)
+    known_table_function_names: set[str] = build_known_table_function_names(discovered_inputs)
     test_inputs: list[CompileSqlTestInput] = []
     test_file: DiscoveredSqlTestFile
     for test_file in discovered_inputs.test_files:
         test_block: DiscoveredSqlTestBlock
         for test_block in test_file.blocks:
             test_mode: SqlTestMode = test_block.mode
-            tested_macro_names: tuple[str, ...] = ()
-            if test_mode == SqlTestMode.MACRO:
-                raw_test_ctes: CompileSqlTestCtes = _validate_raw_macro_test_ctes(
+            tested_resource_names: tuple[str, ...] = ()
+            if test_mode in {SqlTestMode.MACRO, SqlTestMode.UDF}:
+                raw_test_ctes: CompileSqlTestCtes = _validate_raw_direct_logic_test_ctes(
                     test_block=test_block,
                     test_file=test_file,
                     test_mode=test_mode,
                 )
-                tested_macro_names = _infer_tested_macro_names(
+                tested_resource_names = _infer_tested_direct_logic_resource_names(
                     raw_test_ctes=raw_test_ctes,
                     test_file=test_file,
                     loaded_macros=loaded_macros,
+                    known_function_names=known_function_names,
+                    known_table_function_names=known_table_function_names,
                 )
             expanded_sql_body: str = expand_authored_sql(
                 sql=test_block.sql_body,
@@ -1103,7 +1107,7 @@ def build_test_inputs(
                 CompileModelSqlTestInputPayload | CompileDirectLogicSqlTestInputPayload
             ) = _build_test_input_payload(
                 test_ctes=test_ctes,
-                tested_macro_names=tested_macro_names,
+                tested_resource_names=tested_resource_names,
             )
             test_inputs.append(
                 CompileSqlTestInput(
@@ -1118,7 +1122,7 @@ def build_test_inputs(
 
 
 def _build_test_input_payload(
-    *, test_ctes: CompileSqlTestCtes, tested_macro_names: tuple[str, ...]
+    *, test_ctes: CompileSqlTestCtes, tested_resource_names: tuple[str, ...]
 ) -> CompileModelSqlTestInputPayload | CompileDirectLogicSqlTestInputPayload:
     match test_ctes.payload:
         case CompileModelSqlTestCtes() as model_payload:
@@ -1139,11 +1143,11 @@ def _build_test_input_payload(
                 helper_ctes=direct_logic_payload.helper_ctes,
                 actual_cte=direct_logic_payload.actual_cte,
                 expected_cte=direct_logic_payload.expected_cte,
-                tested_resource_names=tested_macro_names,
+                tested_resource_names=tested_resource_names,
             )
 
 
-def _validate_raw_macro_test_ctes(
+def _validate_raw_direct_logic_test_ctes(
     *,
     test_block: DiscoveredSqlTestBlock,
     test_file: DiscoveredSqlTestFile,
@@ -1156,16 +1160,25 @@ def _validate_raw_macro_test_ctes(
     )
 
 
-def _infer_tested_macro_names(
+def _infer_tested_direct_logic_resource_names(
     *,
     raw_test_ctes: CompileSqlTestCtes,
     test_file: DiscoveredSqlTestFile,
     loaded_macros: dict[str, LoadedMacro],
+    known_function_names: set[str],
+    known_table_function_names: set[str],
 ) -> tuple[str, ...]:
     if not isinstance(raw_test_ctes.payload, CompileDirectLogicSqlTestCtes):
         raise CompileInputError(
-            f"SQL test file {test_file.relative_path} mode 'macro' must define exactly one "
-            "__macro_actual__ CTE and exactly one __macro_expected__ CTE"
+            f"SQL test file {test_file.relative_path} mode '{raw_test_ctes.mode.value}' must "
+            "define exactly one actual CTE and exactly one expected CTE"
+        )
+    if raw_test_ctes.mode == SqlTestMode.UDF:
+        return _infer_tested_udf_names(
+            raw_test_ctes=raw_test_ctes,
+            test_file=test_file,
+            known_function_names=known_function_names,
+            known_table_function_names=known_table_function_names,
         )
     tested_macro_names: tuple[str, ...] = find_macro_call_names(
         raw_test_ctes.payload.actual_cte.sql_body
@@ -1183,6 +1196,49 @@ def _infer_tested_macro_names(
                 f"'@{tested_macro_name}'"
             )
     return tested_macro_names
+
+
+def _infer_tested_udf_names(
+    *,
+    raw_test_ctes: CompileSqlTestCtes,
+    test_file: DiscoveredSqlTestFile,
+    known_function_names: set[str],
+    known_table_function_names: set[str],
+) -> tuple[str, ...]:
+    if not isinstance(raw_test_ctes.payload, CompileDirectLogicSqlTestCtes):
+        raise CompileInputError(
+            f"SQL test file {test_file.relative_path} mode 'udf' must define exactly one "
+            "__udf_actual__ CTE and exactly one __udf_expected__ CTE"
+        )
+    references: tuple[CompileSqlReference, ...] = extract_sql_references(
+        raw_test_ctes.payload.actual_cte.sql_body
+    )
+    tested_udf_names: tuple[str, ...] = tuple(
+        dict.fromkeys(
+            reference.ref_name
+            for reference in references
+            if reference.ref_kind == SqlReferenceKind.UDF
+        )
+    )
+    if not tested_udf_names:
+        raise CompileInputError(
+            f"SQL test file {test_file.relative_path} mode 'udf' must call at least one "
+            "scalar UDF in __udf_actual__"
+        )
+    tested_udf_name: str
+    for tested_udf_name in tested_udf_names:
+        if tested_udf_name not in known_function_names:
+            raise CompileInputError(
+                f"SQL test file {test_file.relative_path} references unknown SQL function "
+                f"'{tested_udf_name}'"
+            )
+        if tested_udf_name in known_table_function_names:
+            raise CompileInputError(
+                f"SQL test file {test_file.relative_path} references table function "
+                f"'{tested_udf_name}' with {SqlReferenceKind.UDF.placeholder_call()}; use "
+                f"{SqlReferenceKind.TABLE_FUNCTION.placeholder_call()} for table functions"
+            )
+    return tested_udf_names
 
 
 def build_scenario_inputs(

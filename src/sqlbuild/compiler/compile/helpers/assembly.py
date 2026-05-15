@@ -46,8 +46,10 @@ from sqlbuild.compiler.compile.models.sql_tests import (
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledResourceType,
+    SqlTestMode,
 )
 from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.project import (
     DefaultsConfig,
     EnvironmentConfig,
@@ -324,10 +326,16 @@ def _assemble_compiled_sql_test(
     compiled_payload: CompiledModelSqlTestPayload | CompiledDirectLogicSqlTestPayload
     scope_deps: tuple[CompiledObjectKey, ...]
     if isinstance(test_input.payload, CompileDirectLogicSqlTestInputPayload):
-        scope_deps = _macro_sql_test_scope_deps(
-            tested_macro_names=test_input.payload.tested_resource_names,
-            model_inputs=model_inputs,
-        )
+        if test_input.payload.mode == SqlTestMode.MACRO:
+            scope_deps = _macro_sql_test_scope_deps(
+                tested_macro_names=test_input.payload.tested_resource_names,
+                model_inputs=model_inputs,
+            )
+        else:
+            scope_deps = _udf_sql_test_scope_deps(
+                tested_udf_names=test_input.payload.tested_resource_names,
+                model_inputs=model_inputs,
+            )
         compiled_payload = CompiledDirectLogicSqlTestPayload(
             mode=test_input.payload.mode,
             helper_ctes=test_input.payload.helper_ctes,
@@ -384,6 +392,29 @@ def _macro_sql_test_scope_deps(
             find_macro_call_names(model_input.macro_source_sql)
         )
         if not tested_names.intersection(model_macro_deps):
+            continue
+        scope_deps.append(
+            CompiledObjectKey(
+                resource_type=CompiledResourceType.MODEL,
+                name=model_input.model_file.file_path.stem,
+            )
+        )
+    return tuple(scope_deps)
+
+
+def _udf_sql_test_scope_deps(
+    *, tested_udf_names: tuple[str, ...], model_inputs: tuple[CompileModelInput, ...]
+) -> tuple[CompiledObjectKey, ...]:
+    tested_names: frozenset[str] = frozenset(tested_udf_names)
+    scope_deps: list[CompiledObjectKey] = []
+    model_input: CompileModelInput
+    for model_input in model_inputs:
+        model_udf_deps: frozenset[str] = frozenset(
+            reference.ref_name
+            for reference in model_input.references
+            if reference.ref_kind == SqlReferenceKind.UDF
+        )
+        if not tested_names.intersection(model_udf_deps):
             continue
         scope_deps.append(
             CompiledObjectKey(
