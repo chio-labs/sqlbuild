@@ -23,13 +23,27 @@ dg: Any = pytest.importorskip("dagster")
             description="builds materializable specs and check specs from dag artifact",
             expected_asset_keys=(
                 ("raw", "orders"),
+                ("analytics", "waffle_types"),
                 ("analytics", "normalize_email"),
                 ("analytics", "orders"),
+                ("analytics", "customers"),
             ),
             expected_model_deps=(("raw", "orders"), ("analytics", "normalize_email")),
-            expected_check_names=("audit__not_null__order_id", "audit__freshness__loaded_at"),
+            expected_check_names=(
+                "audit__not_null__order_id",
+                "audit__freshness__loaded_at",
+                "scenario__orders_minimal",
+                "scenario__customers_minimal",
+            ),
             expected_model_selector="orders",
             expected_check_selector="audit:not_null:model:orders:order_id",
+            expected_kinds_by_asset_key=(
+                (("raw", "orders"), frozenset({"sqlbuild", "source"})),
+                (("analytics", "waffle_types"), frozenset({"sqlbuild", "seed"})),
+                (("analytics", "normalize_email"), frozenset({"sqlbuild", "function"})),
+                (("analytics", "customers"), frozenset({"sqlbuild", "view"})),
+                (("analytics", "orders"), frozenset({"sqlbuild", "table"})),
+            ),
         )
     ],
     ids=["builds materializable specs and check specs from dag artifact"],
@@ -53,6 +67,9 @@ def test_given_sqlbuild_dag_when_building_specs_then_maps_assets_deps_and_checks
     assert tuple(spec.name for spec in check_specs) == test_case.expected_check_names
     assert model_spec.metadata["sqlbuild_selector"] == test_case.expected_model_selector
     assert check_specs[0].metadata["sqlbuild_check_selector"] == test_case.expected_check_selector
+    assert {tuple(spec.key.path): frozenset(spec.kinds) for spec in asset_specs} == dict(
+        test_case.expected_kinds_by_asset_key
+    )
 
 
 @pytest.mark.parametrize(
@@ -62,7 +79,9 @@ def test_given_sqlbuild_dag_when_building_specs_then_maps_assets_deps_and_checks
             description="decorates user function as dagster assets definition",
             expected_asset_keys=(
                 ("raw", "orders"),
+                ("analytics", "waffle_types"),
                 ("analytics", "normalize_email"),
+                ("analytics", "customers"),
                 ("analytics", "orders"),
             ),
         )

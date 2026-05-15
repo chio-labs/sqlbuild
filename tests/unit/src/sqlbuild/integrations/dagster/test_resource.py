@@ -113,6 +113,7 @@ def test_given_sqlbuild_cli_resource_when_waiting_invocation_then_captures_proce
             command_exit_code=0,
             expected_asset_keys=(
                 ("raw", "orders"),
+                ("analytics", "waffle_types"),
                 ("analytics", "normalize_email"),
                 ("analytics", "customers"),
                 ("analytics", "orders"),

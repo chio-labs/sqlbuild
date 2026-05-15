@@ -11,6 +11,7 @@ class DagsterAssetSpecTestCase:
     expected_check_names: tuple[str, ...]
     expected_model_selector: str
     expected_check_selector: str
+    expected_kinds_by_asset_key: tuple[tuple[tuple[str, ...], frozenset[str]], ...]
 
 
 @dataclass(frozen=True)

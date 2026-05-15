@@ -37,6 +37,7 @@ def build_asset_specs(
                 group_name=translator.get_group_name(node),
                 metadata=translator.get_metadata(node),
                 tags=translator.get_tags(node),
+                kinds=_asset_spec_kinds(node),
             )
         )
     return tuple(specs)
@@ -76,3 +77,17 @@ def _upstream_by_id(dag: Mapping[str, Any]) -> dict[str, list[str]]:
     for edge in dag["edges"]:
         upstream.setdefault(str(edge["to_id"]), []).append(str(edge["from_id"]))
     return upstream
+
+
+def _asset_spec_kinds(node: Mapping[str, Any]) -> set[str]:
+    kind: str = str(node.get("kind"))
+    if kind == "model":
+        materialization_type: str = str(node.get("materialization_type") or "table")
+        if materialization_type == "view":
+            return {"sqlbuild", "view"}
+        return {"sqlbuild", "table"}
+    if kind in {"source", "seed"}:
+        return {"sqlbuild", kind}
+    if kind == "function":
+        return {"sqlbuild", "function"}
+    return {"sqlbuild"}
