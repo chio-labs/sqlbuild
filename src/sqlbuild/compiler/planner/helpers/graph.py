@@ -7,7 +7,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
 )
 from sqlbuild.compiler.compile.models.sql_tests import CompiledSqlTest
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
 
 
 def build_upstream_deps(
@@ -28,6 +28,9 @@ def build_upstream_deps(
 
     test: CompiledSqlTest
     for test in project.sql_tests:
+        if test.mode == SqlTestMode.TABLE_FN:
+            upstream[test.key] = list(_function_scope_deps_for_test(test=test))
+            continue
         upstream[test.key] = list(_function_deps_for_test(test=test, upstream=upstream))
         target_key: CompiledObjectKey
         for target_key in test.scope_deps:
@@ -35,6 +38,14 @@ def build_upstream_deps(
                 upstream[target_key].append(test.key)
 
     return {k: tuple(v) for k, v in upstream.items()}
+
+
+def _function_scope_deps_for_test(*, test: CompiledSqlTest) -> tuple[CompiledObjectKey, ...]:
+    return tuple(
+        scope_dep
+        for scope_dep in test.scope_deps
+        if scope_dep.resource_type == CompiledResourceType.FUNCTION
+    )
 
 
 def _function_deps_for_test(

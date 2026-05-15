@@ -1070,7 +1070,7 @@ def build_test_inputs(
         for test_block in test_file.blocks:
             test_mode: SqlTestMode = test_block.mode
             tested_resource_names: tuple[str, ...] = ()
-            if test_mode in {SqlTestMode.MACRO, SqlTestMode.UDF}:
+            if test_mode in {SqlTestMode.MACRO, SqlTestMode.UDF, SqlTestMode.TABLE_FN}:
                 raw_test_ctes: CompileSqlTestCtes = _validate_raw_direct_logic_test_ctes(
                     test_block=test_block,
                     test_file=test_file,
@@ -1180,6 +1180,13 @@ def _infer_tested_direct_logic_resource_names(
             known_function_names=known_function_names,
             known_table_function_names=known_table_function_names,
         )
+    if raw_test_ctes.mode == SqlTestMode.TABLE_FN:
+        return _infer_tested_table_function_names(
+            raw_test_ctes=raw_test_ctes,
+            test_file=test_file,
+            known_function_names=known_function_names,
+            known_table_function_names=known_table_function_names,
+        )
     tested_macro_names: tuple[str, ...] = find_macro_call_names(
         raw_test_ctes.payload.actual_cte.sql_body
     )
@@ -1239,6 +1246,50 @@ def _infer_tested_udf_names(
                 f"{SqlReferenceKind.TABLE_FUNCTION.placeholder_call()} for table functions"
             )
     return tested_udf_names
+
+
+def _infer_tested_table_function_names(
+    *,
+    raw_test_ctes: CompileSqlTestCtes,
+    test_file: DiscoveredSqlTestFile,
+    known_function_names: set[str],
+    known_table_function_names: set[str],
+) -> tuple[str, ...]:
+    if not isinstance(raw_test_ctes.payload, CompileDirectLogicSqlTestCtes):
+        raise CompileInputError(
+            f"SQL test file {test_file.relative_path} mode 'table_fn' must define exactly one "
+            "__table_fn_actual__ CTE and exactly one __table_fn_expected__ CTE"
+        )
+    references: tuple[CompileSqlReference, ...] = extract_sql_references(
+        raw_test_ctes.payload.actual_cte.sql_body
+    )
+    tested_table_function_names: tuple[str, ...] = tuple(
+        dict.fromkeys(
+            reference.ref_name
+            for reference in references
+            if reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION
+        )
+    )
+    if not tested_table_function_names:
+        raise CompileInputError(
+            f"SQL test file {test_file.relative_path} mode 'table_fn' must call at least one "
+            "table function in __table_fn_actual__"
+        )
+    tested_table_function_name: str
+    for tested_table_function_name in tested_table_function_names:
+        if tested_table_function_name not in known_function_names:
+            raise CompileInputError(
+                f"SQL test file {test_file.relative_path} references unknown SQL function "
+                f"'{tested_table_function_name}'"
+            )
+        if tested_table_function_name not in known_table_function_names:
+            raise CompileInputError(
+                f"SQL test file {test_file.relative_path} references scalar SQL function "
+                f"'{tested_table_function_name}' with "
+                f"{SqlReferenceKind.TABLE_FUNCTION.placeholder_call()}; use "
+                f"{SqlReferenceKind.UDF.placeholder_call()} for scalar UDFs"
+            )
+    return tested_table_function_names
 
 
 def build_scenario_inputs(

@@ -16,3 +16,9 @@ class BracketUdfCallAdapter(DuckDbAdapter):
     def render_udf_call(self, *, target: str, call_suffix_sql: str) -> str:
         arguments_sql: str = call_suffix_sql.removeprefix("(").removesuffix(")")
         return f"{target}[{arguments_sql}]"
+
+
+class BracketTableFunctionCallAdapter(DuckDbAdapter):
+    def render_table_function_call(self, *, target: str, call_suffix_sql: str) -> str:
+        arguments_sql: str = call_suffix_sql.removeprefix("(").removesuffix(")")
+        return f"TABLE({target}[{arguments_sql}])"

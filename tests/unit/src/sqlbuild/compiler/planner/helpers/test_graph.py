@@ -63,6 +63,22 @@ BUILD_UPSTREAM_ORDER_TEST_CASES: list[TopologicalOrderTestCase] = [
             model_key("orders"),
         ),
     ),
+    TopologicalOrderTestCase(
+        description="runs table function tests after their function resource",
+        upstream=build_upstream_deps(
+            build_test_project(
+                function_names=("customer_orders",),
+                table_fn_test_function_names=("customer_orders",),
+            )
+        ),
+        expected_order=(
+            function_key("customer_orders"),
+            CompiledObjectKey(
+                resource_type="sql_test",
+                name="test_table_functions",
+            ),
+        ),
+    ),
 ]
 
 
@@ -341,3 +357,32 @@ def test_given_sql_test_for_function_model_when_building_upstream_then_test_depe
     )
 
     assert upstream[test_key] == test_case.expected_test_upstream_keys
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlTestFunctionGraphDepsTestCase(
+            description="table function sql test depends directly on tested function",
+            expected_test_upstream_keys=(function_key("customer_orders"),),
+        ),
+    ],
+    ids=["table function sql test depends directly on tested function"],
+)
+def test_given_table_function_sql_test_when_building_upstream_then_test_depends_on_function(
+    test_case: SqlTestFunctionGraphDepsTestCase,
+) -> None:
+    test_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type="sql_test",
+        name="test_table_functions",
+    )
+
+    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_upstream_deps(
+        build_test_project(
+            function_names=("customer_orders",),
+            table_fn_test_function_names=("customer_orders",),
+        )
+    )
+
+    assert upstream[test_key] == test_case.expected_test_upstream_keys
+    assert upstream[function_key("customer_orders")] == ()
