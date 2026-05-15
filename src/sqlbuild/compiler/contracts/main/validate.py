@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.shared.types import TypeDialect
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.contracts.helpers.columns import validate_model_column_contracts
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic

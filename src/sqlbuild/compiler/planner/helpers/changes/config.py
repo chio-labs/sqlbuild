@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledModel
+from sqlbuild.compiler.compile.models.core import CompiledModel
 
 
 def get_config_str(model: CompiledModel, key: str) -> str | None:

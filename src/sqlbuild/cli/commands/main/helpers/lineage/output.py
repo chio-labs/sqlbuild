@@ -10,7 +10,7 @@ from sqlbuild.cli.commands.main.helpers.lineage.models import (
     LineageGraph,
     LineageNode,
 )
-from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
 from sqlbuild.shared.helpers.colors import blue_bold, bold, dim

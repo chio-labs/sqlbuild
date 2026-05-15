@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompileSqlReference
+from sqlbuild.compiler.compile.models.core import (
+    CompiledObjectKey,
+    CompileSqlReference,
+)
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledResourceType,

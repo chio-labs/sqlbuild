@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models.core import (
+    CompiledObjectKey,
+    CompiledProject,
+)
 from sqlbuild.compiler.planner.helpers.selectors import (
     parse_selector,
     resolve_selectors,

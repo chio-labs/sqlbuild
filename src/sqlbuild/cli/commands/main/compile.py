@@ -19,7 +19,7 @@ from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.status import maybe_status
 from sqlbuild.compiler.compile.main.load_macros import load_macros
-from sqlbuild.compiler.compile.models import LoadedMacro
+from sqlbuild.compiler.compile.models.core import LoadedMacro
 from sqlbuild.compiler.contracts.main.validate import validate_model_contracts
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic

@@ -6,7 +6,10 @@ from collections.abc import Callable
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledProject, CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import (
+    CompiledProject,
+    CompiledRelationTarget,
+)
 from sqlbuild.compiler.pipeline.helpers.deferred_targets import build_deferred_targets
 from sqlbuild.integrations.bigquery.client import BigQueryAdapter
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter

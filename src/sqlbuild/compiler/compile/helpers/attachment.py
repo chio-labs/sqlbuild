@@ -46,27 +46,29 @@ from sqlbuild.compiler.compile.helpers.templating import (
     expand_template_data,
 )
 from sqlbuild.compiler.compile.helpers.tests import extract_sql_test_ctes
-from sqlbuild.compiler.compile.models import (
+from sqlbuild.compiler.compile.models.core import (
     CompileAuditInput,
-    CompileDirectLogicSqlTestCtes,
-    CompileDirectLogicSqlTestInputPayload,
     CompileModelConfig,
     CompileModelInput,
-    CompileModelSqlTestCtes,
-    CompileModelSqlTestInputPayload,
     CompileSeedInput,
     CompileSourceInput,
     CompileSqlFunctionInput,
     CompileSqlReference,
     CompileSqlScenarioCtes,
     CompileSqlScenarioInput,
-    CompileSqlTestCte,
-    CompileSqlTestCtes,
-    CompileSqlTestInput,
     FunctionArgument,
     FunctionReturnColumn,
     LoadedMacro,
     MacroContext,
+)
+from sqlbuild.compiler.compile.models.sql_tests import (
+    CompileDirectLogicSqlTestCtes,
+    CompileDirectLogicSqlTestInputPayload,
+    CompileModelSqlTestCtes,
+    CompileModelSqlTestInputPayload,
+    CompileSqlTestCte,
+    CompileSqlTestCtes,
+    CompileSqlTestInput,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,

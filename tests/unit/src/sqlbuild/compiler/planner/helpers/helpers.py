@@ -8,22 +8,24 @@ from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
-from sqlbuild.compiler.compile.models import (
+from sqlbuild.compiler.compile.models.core import (
     CompiledAudit,
     CompiledFunction,
     CompiledModel,
-    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationTarget,
     CompiledSeed,
     CompiledSource,
     CompiledSqlScenario,
-    CompiledSqlTest,
     CompileModelConfig,
     CompileSqlReference,
     CompileSqlScenarioCte,
     FunctionArgument,
+)
+from sqlbuild.compiler.compile.models.sql_tests import (
+    CompiledModelSqlTestPayload,
+    CompiledSqlTest,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,

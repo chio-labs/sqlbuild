@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.models.core import (
+    CompiledModel,
+    CompiledProject,
+)
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage.main.columns import build_project_column_lineage
 from sqlbuild.compiler.lineage.models import ColumnLineage, ModelColumnLineage, ProjectColumnLineage

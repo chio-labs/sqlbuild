@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from sqlbuild.adapter.shared.models import ColumnInfo
-from sqlbuild.compiler.compile.models import InferredColumn
+from sqlbuild.compiler.compile.models.core import InferredColumn
 from sqlbuild.compiler.planner.models import BackfillResult, SchemaFinding
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
 

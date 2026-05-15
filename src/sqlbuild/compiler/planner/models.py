@@ -14,7 +14,7 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.models import (
+from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledRelationTarget,
     FunctionReturnColumn,

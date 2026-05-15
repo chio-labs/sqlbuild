@@ -10,7 +10,7 @@ from sqlbuild.cli.commands.main.helpers.dbt_sqlbuild_work import (
     execute_sqlbuild_build_work,
     execute_sqlbuild_test_work,
 )
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSqlbuildTestAction
 

@@ -25,7 +25,7 @@ from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
 from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
 from sqlbuild.cli.commands.main.shared.helpers.progress import format_build_header
 from sqlbuild.cli.commands.main.shared.helpers.status import TransientStatusReporter
-from sqlbuild.compiler.compile.models import CompiledSqlScenario
+from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline

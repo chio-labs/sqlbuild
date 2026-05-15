@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from sqlbuild.adapter.shared.type_normalization import types_equal
 from sqlbuild.adapter.shared.types import TypeDialect
-from sqlbuild.compiler.compile.models import CompiledModel, InferredColumn
+from sqlbuild.compiler.compile.models.core import (
+    CompiledModel,
+    InferredColumn,
+)
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic, RelatedLocation
 from sqlbuild.compiler.diagnostics.types import DiagnosticPhase, DiagnosticSeverity
