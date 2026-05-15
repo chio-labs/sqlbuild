@@ -182,6 +182,7 @@ def build_scenario_relation_plan(
         relation_map=relation_map,
         model_targets=model_targets,
         seed_targets=seed_targets,
+        project_source_map=source_entries,
         source_map=source_map,
         source_fixture_targets=source_fixture_targets,
         ref_fixture_targets=ref_fixture_targets,
@@ -412,6 +413,16 @@ def build_scenario_fixture_plans(
     """Build self-contained fixture SQL plans, including shared helper CTEs."""
 
     helper_ctes: tuple[CompileSqlScenarioCte, ...] = _extract_helper_ctes(scenario)
+    resolved_helper_ctes: tuple[CompileSqlScenarioCte, ...] = tuple(
+        replace(
+            helper_cte,
+            sql_body=_resolve_project_source_refs(
+                sql=helper_cte.sql_body,
+                source_map=relation_plan.project_source_map,
+            ),
+        )
+        for helper_cte in helper_ctes
+    )
     source_ctes: dict[str, str] = _extract_fixture_ctes(
         scenario=scenario,
         prefix=SOURCE_TEST_CTE_PREFIX,
@@ -442,8 +453,11 @@ def build_scenario_fixture_plans(
                     kind=ScenarioArtifactKind.SOURCE,
                 ),
                 sql=_wrap_sql_with_helpers(
-                    sql=_required_fixture_sql(source_ctes, source_name, kind="source"),
-                    helper_ctes=helper_ctes,
+                    sql=_resolve_project_source_refs(
+                        sql=_required_fixture_sql(source_ctes, source_name, kind="source"),
+                        source_map=relation_plan.project_source_map,
+                    ),
+                    helper_ctes=resolved_helper_ctes,
                 ),
             )
         )
@@ -460,8 +474,11 @@ def build_scenario_fixture_plans(
                     kind=ScenarioArtifactKind.REF,
                 ),
                 sql=_wrap_sql_with_helpers(
-                    sql=_required_fixture_sql(ref_ctes, ref_name, kind="ref"),
-                    helper_ctes=helper_ctes,
+                    sql=_resolve_project_source_refs(
+                        sql=_required_fixture_sql(ref_ctes, ref_name, kind="ref"),
+                        source_map=relation_plan.project_source_map,
+                    ),
+                    helper_ctes=resolved_helper_ctes,
                 ),
             )
         )
@@ -478,8 +495,11 @@ def build_scenario_fixture_plans(
                     kind=ScenarioArtifactKind.SEED,
                 ),
                 sql=_wrap_sql_with_helpers(
-                    sql=_required_fixture_sql(seed_ctes, seed_name, kind="seed"),
-                    helper_ctes=helper_ctes,
+                    sql=_resolve_project_source_refs(
+                        sql=_required_fixture_sql(seed_ctes, seed_name, kind="seed"),
+                        source_map=relation_plan.project_source_map,
+                    ),
+                    helper_ctes=resolved_helper_ctes,
                 ),
             )
         )
@@ -496,8 +516,11 @@ def build_scenario_fixture_plans(
                     kind=ScenarioArtifactKind.DBT_REF,
                 ),
                 sql=_wrap_sql_with_helpers(
-                    sql=_required_fixture_sql(dbt_ref_ctes, dbt_ref_name, kind="dbt_ref"),
-                    helper_ctes=helper_ctes,
+                    sql=_resolve_project_source_refs(
+                        sql=_required_fixture_sql(dbt_ref_ctes, dbt_ref_name, kind="dbt_ref"),
+                        source_map=relation_plan.project_source_map,
+                    ),
+                    helper_ctes=resolved_helper_ctes,
                 ),
             )
         )
@@ -662,6 +685,16 @@ def _wrap_sql_with_helpers(*, sql: str, helper_ctes: tuple[CompileSqlScenarioCte
     for helper_cte in helper_ctes:
         helper_parts.append(f"{helper_cte.name} AS ({helper_cte.sql_body})")
     return f"WITH {', '.join(helper_parts)} {sql}"
+
+
+def _resolve_project_source_refs(*, sql: str, source_map: dict[str, SourceEntry]) -> str:
+    def _replace_source(match: re.Match[str]) -> str:
+        source: SourceEntry | None = source_map.get(match.group("name"))
+        if source is None:
+            return match.group(0)
+        return render_source_relation(source)
+
+    return _SOURCE_PATTERN.sub(_replace_source, sql)
 
 
 def _required_fixture_sql(fixture_sql: dict[str, str], logical_name: str, *, kind: str) -> str:

@@ -11,9 +11,15 @@ from sqlbuild.compiler.compile.models.core import (
     CompileSqlScenarioInput,
     MacroContext,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlScenarioFile
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredProjectInputs,
+    DiscoveredSourceFile,
+    DiscoveredSqlScenarioFile,
+)
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
+from sqlbuild.spec.models.source import SourceEntry
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
+    BuildScenarioInputsErrorTestCase,
     BuildScenarioInputsTestCase,
     ExtractSqlScenarioCtesErrorTestCase,
     ExtractSqlScenarioCtesTestCase,
@@ -240,6 +246,47 @@ BUILD_SCENARIO_INPUTS_TEST_CASES: list[BuildScenarioInputsTestCase] = [
         expected_assertion_names=(),
         expected_sql_fragment="SELECT 'US' AS country_code",
     ),
+    BuildScenarioInputsTestCase(
+        description="allows project source references in scenario fixture ctes",
+        sql_body="""
+        WITH
+        __source__raw__orders AS (
+          SELECT order_id FROM __source("raw__orders") WHERE order_id <= 10
+        ),
+        __expected__daily_revenue AS (SELECT 1 AS order_id)
+        SELECT 1
+        """.strip(),
+        effective_vars={},
+        expected_source_fixture_names=("raw__orders",),
+        expected_ref_fixture_names=(),
+        expected_seed_fixture_names=(),
+        expected_expected_model_names=("daily_revenue",),
+        expected_assertion_names=(),
+        expected_sql_fragment='__source("raw__orders")',
+    ),
+]
+
+BUILD_SCENARIO_INPUTS_ERROR_TEST_CASES: list[BuildScenarioInputsErrorTestCase] = [
+    BuildScenarioInputsErrorTestCase(
+        description="rejects project source references in expected ctes",
+        sql_body="""
+        WITH
+        __source__raw__orders AS (SELECT 1 AS order_id),
+        __expected__daily_revenue AS (SELECT order_id FROM __source("raw__orders"))
+        SELECT 1
+        """.strip(),
+        expected_error_fragment="__expected__daily_revenue.*must not reference project source",
+    ),
+    BuildScenarioInputsErrorTestCase(
+        description="rejects unknown project source references in fixture ctes",
+        sql_body="""
+        WITH
+        __source__raw__orders AS (SELECT order_id FROM __source("missing_source")),
+        __expected__daily_revenue AS (SELECT 1 AS order_id)
+        SELECT 1
+        """.strip(),
+        expected_error_fragment="references unknown source 'missing_source'",
+    ),
 ]
 
 
@@ -263,6 +310,14 @@ def test_given_discovered_scenario_when_building_scenario_inputs_then_it_attache
         project_config=ProjectConfig(name="demo", adapter="duckdb"),
         local_config=LocalConfig(),
         scenario_files=(scenario_file,),
+        source_files=(
+            DiscoveredSourceFile(
+                file_path=Path("sources/raw.yml"),
+                relative_path=Path("sources/raw.yml"),
+                contents="",
+                source_entries=(SourceEntry(name="raw__orders", schema="raw", table="orders"),),
+            ),
+        ),
     )
 
     scenario_inputs: tuple[CompileSqlScenarioInput, ...] = build_scenario_inputs(
@@ -283,3 +338,43 @@ def test_given_discovered_scenario_when_building_scenario_inputs_then_it_attache
     assert scenario_input.expected_model_names == test_case.expected_expected_model_names
     assert scenario_input.assertion_names == test_case.expected_assertion_names
     assert test_case.expected_sql_fragment in scenario_input.sql_body
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    BUILD_SCENARIO_INPUTS_ERROR_TEST_CASES,
+    ids=[case.description for case in BUILD_SCENARIO_INPUTS_ERROR_TEST_CASES],
+)
+def test_given_invalid_scenario_source_refs_when_building_inputs_then_it_raises_clear_error(
+    test_case: BuildScenarioInputsErrorTestCase,
+) -> None:
+    scenario_file: DiscoveredSqlScenarioFile = DiscoveredSqlScenarioFile(
+        file_path=Path(__file__),
+        relative_path=Path("tests/scenarios/revenue__customer_refund.sql"),
+        contents="",
+        header_values={},
+        name="revenue__customer_refund",
+        sql_body=test_case.sql_body,
+    )
+    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
+        project_config=ProjectConfig(name="demo", adapter="duckdb"),
+        local_config=LocalConfig(),
+        scenario_files=(scenario_file,),
+        source_files=(
+            DiscoveredSourceFile(
+                file_path=Path("sources/raw.yml"),
+                relative_path=Path("sources/raw.yml"),
+                contents="",
+                source_entries=(SourceEntry(name="raw__orders", schema="raw", table="orders"),),
+            ),
+        ),
+    )
+
+    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+        build_scenario_inputs(
+            discovered_inputs,
+            effective_vars={},
+            macro_context=MacroContext(
+                adapter_name="duckdb", sqlglot_enabled=True, environment_name=None
+            ),
+        )
