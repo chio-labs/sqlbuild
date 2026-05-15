@@ -19,6 +19,7 @@ from sqlbuild.compiler.fingerprints.constants import (
     COLUMN_TIMESTAMP,
     FINGERPRINT_TABLE_NAME,
 )
+from sqlbuild.compiler.fingerprints.exceptions import FingerprintInputError
 
 
 def build_qualified_table_name(
@@ -35,7 +36,7 @@ def build_qualified_table_name(
         name=FINGERPRINT_TABLE_NAME,
     )
     if qualified_name is None:
-        raise ValueError("fingerprint table requires a target schema")
+        raise FingerprintInputError("fingerprint table requires a target schema")
     return qualified_name
 
 

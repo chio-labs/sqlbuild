@@ -416,7 +416,7 @@ class SnowflakeAdapter(BaseAdapter):
         argument_sql: str = ", ".join(f"{argument.name} {argument.type}" for argument in arguments)
         if return_columns:
             if language != FunctionLanguage.SQL:
-                raise ValueError("Snowflake table functions must use SQL language")
+                raise AdapterUserError("Snowflake table functions must use SQL language")
             column_sql: str = ", ".join(f"{column.name} {column.type}" for column in return_columns)
             del returns, runtime_version, entry_point, packages
             return (
@@ -426,7 +426,9 @@ class SnowflakeAdapter(BaseAdapter):
             )
         if language == FunctionLanguage.PYTHON:
             if runtime_version is None or entry_point is None:
-                raise ValueError("Snowflake Python UDFs require runtime_version and entry_point")
+                raise AdapterUserError(
+                    "Snowflake Python UDFs require runtime_version and entry_point"
+                )
             package_clause: str = ""
             if packages:
                 package_values: str = "','".join(packages)
@@ -937,7 +939,7 @@ class SnowflakeAdapter(BaseAdapter):
         elif side == "right":
             side_condition = f"__right.{keys[0]} IS NOT NULL AND __left.{keys[0]} IS NULL"
         else:
-            raise ValueError("sample_side_only_rows side must be 'left' or 'right'")
+            raise AdapterUserError("sample_side_only_rows side must be 'left' or 'right'")
         sample_sql: str = (
             f"WITH __left AS ({left_cte}), __right AS ({right_cte}) "
             f"SELECT {key_select_sql} "
@@ -1004,14 +1006,16 @@ class SnowflakeAdapter(BaseAdapter):
         keys: tuple[str, ...],
     ) -> None:
         if not keys:
-            raise ValueError("row diff requires at least one unique_key column")
+            raise AdapterUserError("row diff requires at least one unique_key column")
         null_condition: str = " OR ".join(f"{key} IS NULL" for key in keys)
         null_count_sql: str = (
             f"SELECT COUNT(*) FROM ({relation_sql}) AS __key_check WHERE {null_condition}"
         )
         null_row: tuple[Any, ...] = self.execute(connection, null_count_sql).fetchone()
         if int(null_row[0]) > 0:
-            raise ValueError(f"row diff {relation_label} relation contains null unique_key values")
+            raise AdapterUserError(
+                f"row diff {relation_label} relation contains null unique_key values"
+            )
 
         key_list: str = ", ".join(keys)
         duplicate_count_sql: str = (
@@ -1022,7 +1026,7 @@ class SnowflakeAdapter(BaseAdapter):
         )
         duplicate_row: tuple[Any, ...] = self.execute(connection, duplicate_count_sql).fetchone()
         if int(duplicate_row[0]) > 0:
-            raise ValueError(
+            raise AdapterUserError(
                 f"row diff {relation_label} relation contains duplicate unique_key values"
             )
 
@@ -1071,7 +1075,9 @@ class SnowflakeAdapter(BaseAdapter):
         column_tolerance: RowDiffTolerance | None = tolerances.by_column.get(column)
         if column_tolerance is not None:
             if self.normalize_row_diff_numeric_type(column_type) is None:
-                raise ValueError(f"row diff tolerance for non-numeric column '{column}' is invalid")
+                raise AdapterUserError(
+                    f"row diff tolerance for non-numeric column '{column}' is invalid"
+                )
             self.validate_row_diff_tolerance(
                 column=column,
                 tolerance=column_tolerance,
@@ -1090,7 +1096,7 @@ class SnowflakeAdapter(BaseAdapter):
 
     def validate_row_diff_tolerance(self, *, column: str, tolerance: RowDiffTolerance) -> None:
         if tolerance.absolute is None and tolerance.relative is None:
-            raise ValueError(
+            raise AdapterUserError(
                 f"row diff tolerance for column '{column}' must define absolute or relative"
             )
 

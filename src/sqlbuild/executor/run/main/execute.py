@@ -34,6 +34,7 @@ from sqlbuild.executor.run.helpers.view import (
     execute_view_entry as execute_view_entry,
 )
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
 from sqlbuild.shared.helpers.naming import (
@@ -326,7 +327,7 @@ def _staged_lifecycle(
                     statement_recorder=statement_recorder,
                 )
         elif existing:
-            raise ValueError(f"Unsupported promotion strategy: {promotion_strategy}")
+            raise ExecutorInputError(f"Unsupported promotion strategy: {promotion_strategy}")
         else:
             with diagnostics_context(sqlbuild_phase="promote", sqlbuild_action_name="rename"):
                 adapter.rename(

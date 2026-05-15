@@ -18,7 +18,7 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
+from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError, DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.helpers.args import route_dbt_interop_args
 from sqlbuild.integrations.dbt.helpers.compile_refs import DbtCompileReferenceResolver
 from sqlbuild.integrations.dbt.helpers.graph import build_dbt_combined_graph
@@ -77,7 +77,7 @@ def execute_dbt_interop_from_project(
     """Execute dbt first, then SQLBuild, for downstream-only interop commands."""
 
     if command not in (DbtInteropCommand.RUN, DbtInteropCommand.BUILD, DbtInteropCommand.TEST):
-        raise ValueError(f"unsupported dbt interop execution command: {command}")
+        raise DbtInteropArgumentError(f"unsupported dbt interop execution command: {command}")
 
     output_stream: TextIO = progress_stream or sys.stdout
     dbt_output_stream: TextIO = dbt_stdout_stream or output_stream

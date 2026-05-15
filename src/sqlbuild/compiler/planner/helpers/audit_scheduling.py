@@ -15,6 +15,7 @@ from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledResourceType,
 )
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.graph import expand_downstream
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.shared.types import SqlReferenceKind
@@ -77,7 +78,7 @@ def _validate_source_attached_audit(*, audit: CompiledAudit) -> None:
     ref: CompileSqlReference
     for ref in audit.references:
         if ref.ref_kind == SqlReferenceKind.REF:
-            raise ValueError(
+            raise PlannerInputError(
                 f"audit '{audit.name}': source-attached audit must not reference models "
                 f"via {SqlReferenceKind.REF.placeholder_call()}; found "
                 f"{SqlReferenceKind.REF.example_call(ref.ref_name)}"
@@ -112,7 +113,7 @@ def _validate_model_attached_audit(
             resource_type=CompiledResourceType.SEED, name=ref.ref_name
         )
         if ref_key not in attached_upstream and seed_key not in attached_upstream:
-            raise ValueError(
+            raise PlannerInputError(
                 f"audit '{audit.name}': model-attached audit on '{audit.attached_target_name}' "
                 f"references '{ref.ref_name}' which is not upstream of "
                 f"'{audit.attached_target_name}'"
