@@ -10,9 +10,11 @@ from sqlbuild.integrations.dagster.helpers.invocation import SqlBuildCliInvocati
 from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterCliFailureTestCase,
     DagsterCliInvocationTestCase,
+    DagsterCliSelectionTestCase,
     DagsterCliStreamTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
+    assert_select_file_behavior,
     write_dagster_test_dag,
     write_fake_sqb_command,
 )
@@ -37,6 +39,23 @@ CLI_INVOCATION_TEST_CASES: list[DagsterCliInvocationTestCase] = [
         expected_success=False,
         expected_stdout="",
         expected_stderr="boom\n",
+    ),
+]
+
+CLI_SELECTION_TEST_CASES: list[DagsterCliSelectionTestCase] = [
+    DagsterCliSelectionTestCase(
+        description="selected Dagster asset appends SQLBuild selector",
+        selected_asset_keys=(("analytics", "orders"),),
+        command_args=("build",),
+        expected_selectors=("orders",),
+        expected_uses_select_file=True,
+    ),
+    DagsterCliSelectionTestCase(
+        description="explicit SQLBuild selector is preserved",
+        selected_asset_keys=(("analytics", "orders"),),
+        command_args=("build", "--select", "manual_selector"),
+        expected_selectors=(),
+        expected_uses_select_file=False,
     ),
 ]
 
@@ -139,3 +158,42 @@ def test_given_sqlbuild_cli_resource_when_waiting_failed_invocation_then_raises_
         resource.cli(["build"]).wait()
 
     assert test_case.expected_error_fragment in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    CLI_SELECTION_TEST_CASES,
+    ids=[case.description for case in CLI_SELECTION_TEST_CASES],
+)
+def test_given_selected_dagster_assets_when_invoking_cli_then_applies_sqlbuild_selectors(
+    test_case: DagsterCliSelectionTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    context: Any = type(
+        "SelectedAssetContext",
+        (),
+        {
+            "selected_asset_keys": {
+                dg.AssetKey(list(asset_key)) for asset_key in test_case.selected_asset_keys
+            }
+        },
+    )()
+    resource: SqlBuildCliResource = SqlBuildCliResource(
+        project_dir=str(project_dir),
+        sqb_command=write_fake_sqb_command(root=tmp_path),
+        dag_path=str(write_dagster_test_dag(root=tmp_path)),
+    )
+
+    invocation: SqlBuildCliInvocation = resource.cli(
+        test_case.command_args,
+        context=context,
+    ).wait()
+
+    assert invocation.is_successful()
+    assert invocation.selection == test_case.expected_selectors
+    assert_select_file_behavior(
+        command=invocation.command,
+        expected_uses_select_file=test_case.expected_uses_select_file,
+    )

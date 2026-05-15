@@ -14,3 +14,15 @@ class DagsterSqlBuildE2ETestCase:
     expected_dag_artifact: str
     expected_table_names: tuple[str, ...]
     expected_asset_keys: tuple[tuple[str, ...], ...]
+
+
+@dataclass(frozen=True)
+class DagsterSqlBuildSelectionE2ETestCase:
+    """Test case for Dagster subset selection passed to SQLBuild."""
+
+    description: str
+    selected_asset_keys: tuple[tuple[str, ...], ...]
+    expected_success: bool
+    expected_selector_file_contents: str
+    expected_selector_log_line: str
+    expected_table_names: tuple[str, ...]

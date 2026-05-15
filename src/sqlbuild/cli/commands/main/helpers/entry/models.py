@@ -76,6 +76,7 @@ class CliNamespace:
     skills_target: list[str] = field(default_factory=list)
     skills_force: bool = False
     select: list[str] = field(default_factory=list)
+    select_file: list[str] = field(default_factory=list)
     exclude: list[str] = field(default_factory=list)
     dbt_command: str | None = None
     dbt_args: list[str] = field(default_factory=list)

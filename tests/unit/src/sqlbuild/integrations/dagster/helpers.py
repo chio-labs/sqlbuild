@@ -99,3 +99,13 @@ def write_dagster_test_dag(*, root: Path) -> Path:
     dag_path: Path = root / "sqlbuild_dag.json"
     dag_path.write_text(json.dumps(build_dagster_test_dag()), encoding="utf-8")
     return dag_path
+
+
+def assert_select_file_behavior(
+    *, command: tuple[str, ...], expected_uses_select_file: bool
+) -> None:
+    uses_select_file: bool = "--select-file" in command
+    assert uses_select_file is expected_uses_select_file
+    if uses_select_file:
+        select_file_index: int = command.index("--select-file") + 1
+        assert not Path(command[select_file_index]).exists()
