@@ -17,14 +17,6 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.helpers.macros import find_macro_call_names
-from sqlbuild.compiler.compile.helpers.sql_scanning import (
-    find_matching_paren,
-    is_identifier_character,
-    is_identifier_start,
-    skip_block_comment,
-    skip_line_comment,
-    skip_quoted_text,
-)
 from sqlbuild.compiler.compile.helpers.sqlglot_tests import (
     extract_expected_branch_column_names_with_sqlglot,
 )
@@ -35,6 +27,14 @@ from sqlbuild.compiler.compile.models.sql_tests import (
     CompileSqlTestCtes,
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
+from sqlbuild.compiler.shared.helpers.sql_scanning import (
+    find_matching_paren,
+    is_identifier_character,
+    is_identifier_start,
+    skip_block_comment,
+    skip_line_comment,
+    skip_quoted_text,
+)
 
 _CONTEXT: str = "SQL test"
 

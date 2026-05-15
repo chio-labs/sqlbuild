@@ -15,6 +15,7 @@ from sqlbuild.compiler.planner.helpers.resolve.refs import (
     resolve_dbt_ref_references,
     resolve_ref_references,
     resolve_table_function_references,
+    resolve_udf_references,
 )
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.integrations.dbt.helpers.compile_refs import DbtCompileReferenceResolver
@@ -26,6 +27,7 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.resolve._test_types import
     RefResolutionTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers.resolve.helpers import (
+    BracketUdfCallAdapter,
     build_target,
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
@@ -54,6 +56,12 @@ _FUNCTION_TARGETS: dict[str, CompiledRelationTarget] = {
         schema="analytics",
         name="customer_orders",
         qualified_name="analytics.customer_orders",
+    ),
+    "format_cents": CompiledRelationTarget(
+        database=None,
+        schema="analytics",
+        name="format_cents",
+        qualified_name="analytics.format_cents",
     ),
 }
 
@@ -135,6 +143,29 @@ TABLE_FUNCTION_TEST_CASES: list[RefResolutionTestCase] = [
         description="leaves unknown table function marker unchanged",
         query_sql='SELECT * FROM __table_fn("missing")(42)',
         expected_sql='SELECT * FROM __table_fn("missing")(42)',
+    ),
+]
+
+UDF_TEST_CASES: list[RefResolutionTestCase] = [
+    RefResolutionTestCase(
+        description="replaces scalar udf marker with default qualified call",
+        query_sql='SELECT __udf("format_cents")(amount_cents) AS amount',
+        expected_sql="SELECT analytics.format_cents(amount_cents) AS amount",
+    ),
+    RefResolutionTestCase(
+        description="replaces scalar udf marker with nested argument suffix",
+        query_sql=('SELECT __udf("format_cents")(COALESCE(a, b), CAST(c AS DECIMAL(10, 2)))'),
+        expected_sql=("SELECT analytics.format_cents(COALESCE(a, b), CAST(c AS DECIMAL(10, 2)))"),
+    ),
+    RefResolutionTestCase(
+        description="leaves unknown scalar udf marker unchanged",
+        query_sql='SELECT __udf("missing")(amount_cents) AS amount',
+        expected_sql='SELECT __udf("missing")(amount_cents) AS amount',
+    ),
+    RefResolutionTestCase(
+        description="leaves scalar udf marker without call suffix unchanged",
+        query_sql='SELECT __udf("format_cents") AS amount',
+        expected_sql='SELECT __udf("format_cents") AS amount',
     ),
 ]
 
@@ -284,6 +315,46 @@ def test_given_table_function_marker_when_resolving_then_returns_expected_sql(
         query_sql=test_case.query_sql,
         function_targets=_FUNCTION_TARGETS,
         adapter=DuckDbAdapter(),
+    )
+
+    assert result == test_case.expected_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    UDF_TEST_CASES,
+    ids=[case.description for case in UDF_TEST_CASES],
+)
+def test_given_udf_marker_when_resolving_then_returns_expected_sql(
+    test_case: RefResolutionTestCase,
+) -> None:
+    result: str = resolve_udf_references(
+        query_sql=test_case.query_sql,
+        function_targets=_FUNCTION_TARGETS,
+        adapter=DuckDbAdapter(),
+    )
+
+    assert result == test_case.expected_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RefResolutionTestCase(
+            description="renders scalar udf calls through adapter seam",
+            query_sql='SELECT __udf("format_cents")(amount_cents) AS amount',
+            expected_sql="SELECT analytics.format_cents[amount_cents] AS amount",
+        )
+    ],
+    ids=["renders scalar udf calls through adapter seam"],
+)
+def test_given_custom_adapter_when_resolving_udf_marker_then_uses_adapter_rendering(
+    test_case: RefResolutionTestCase,
+) -> None:
+    result: str = resolve_udf_references(
+        query_sql=test_case.query_sql,
+        function_targets=_FUNCTION_TARGETS,
+        adapter=BracketUdfCallAdapter(),
     )
 
     assert result == test_case.expected_sql

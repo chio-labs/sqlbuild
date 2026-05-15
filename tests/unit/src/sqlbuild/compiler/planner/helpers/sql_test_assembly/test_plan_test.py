@@ -22,6 +22,7 @@ from sqlbuild.compiler.planner.models import (
     SqlTestPlanEntry,
 )
 from sqlbuild.compiler.planner.types import WarningSeverity
+from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.unit.src.sqlbuild.compiler.planner.helpers.sql_test_assembly._test_types import (
     PlanMacroTestCase,
     PlanTestChainTestCase,
@@ -433,7 +434,7 @@ def test_given_test_and_project_when_planning_then_produces_expected_chain(
 
     entry: SqlTestPlanEntry
     warnings: tuple[PlanWarning, ...]
-    entry, warnings = plan_test(test=compiled_test, project=project)
+    entry, warnings = plan_test(test=compiled_test, project=project, adapter=DuckDbAdapter())
 
     assert len(entry.chain) == test_case.expected_chain_length
 
@@ -517,6 +518,7 @@ def test_given_macro_sql_test_when_planning_then_compares_actual_to_expected_dir
 
     entry, warnings = plan_test(
         test=sql_test,
+        adapter=DuckDbAdapter(),
         project=CompiledProject(
             run_id="test_run",
             effective_environment_name=None,
@@ -568,7 +570,12 @@ def test_given_sqlglot_enabled_when_planning_test_then_it_uses_top_level_generat
 
     entry: SqlTestPlanEntry
     warnings: tuple[PlanWarning, ...]
-    entry, warnings = plan_test(test=compiled_test, project=project, sqlglot_enabled=True)
+    entry, warnings = plan_test(
+        test=compiled_test,
+        project=project,
+        adapter=DuckDbAdapter(),
+        sqlglot_enabled=True,
+    )
 
     assert not warnings
     assert len(entry.chain) == test_case.expected_chain_length
@@ -616,4 +623,9 @@ def test_given_sqlglot_enabled_when_generated_cte_name_conflicts_then_it_raises_
 
     assert test_case.expected_error_fragment is not None
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
-        plan_test(test=compiled_test, project=project, sqlglot_enabled=True)
+        plan_test(
+            test=compiled_test,
+            project=project,
+            adapter=DuckDbAdapter(),
+            sqlglot_enabled=True,
+        )

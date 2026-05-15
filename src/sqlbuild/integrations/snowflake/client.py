@@ -384,6 +384,9 @@ class SnowflakeAdapter(BaseAdapter):
     def render_table_function_call(self, *, target: str, arguments_sql: str) -> str:
         return f"TABLE({target}({arguments_sql}))"
 
+    def render_udf_call(self, *, target: str, call_suffix_sql: str) -> str:
+        return f"{target}{call_suffix_sql}"
+
     def expression_inference_profile(self) -> ExpressionInferenceProfile:
         return ExpressionInferenceProfile(
             sqlglot_dialect=self.sqlglot_dialect(),

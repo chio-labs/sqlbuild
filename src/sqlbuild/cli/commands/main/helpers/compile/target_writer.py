@@ -211,6 +211,7 @@ def _write_static_tests(
         entry, _warnings = build_sql_test_plan_entry(
             test=test,
             project=project,
+            adapter=adapter,
             sqlglot_enabled=project.settings.sqlglot,
         )
         test_path: Path = (

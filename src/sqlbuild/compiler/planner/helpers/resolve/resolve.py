@@ -104,7 +104,11 @@ def resolve_model_sql(
         query_sql=query_sql,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
-    query_sql = resolve_udf_references(query_sql=query_sql, function_targets=function_targets or {})
+    query_sql = resolve_udf_references(
+        query_sql=query_sql,
+        function_targets=function_targets or {},
+        adapter=adapter,
+    )
     query_sql = resolve_table_function_references(
         query_sql=query_sql,
         function_targets=function_targets or {},
@@ -149,7 +153,11 @@ def resolve_function_sql(
         lower_bound_inclusive=True,
     )
     query_sql = resolve_dbt_ref_references(query_sql=query_sql)
-    query_sql = resolve_udf_references(query_sql=query_sql, function_targets=function_targets)
+    query_sql = resolve_udf_references(
+        query_sql=query_sql,
+        function_targets=function_targets,
+        adapter=adapter,
+    )
     return resolve_table_function_references(
         query_sql=query_sql,
         function_targets=function_targets,

@@ -366,6 +366,7 @@ def build_execution_plan(
         test_entry, test_warnings = plan_test(
             test=sql_test,
             project=project,
+            adapter=adapter,
             sqlglot_enabled=sqlglot_enabled,
         )
         test_entries.append(test_entry)
