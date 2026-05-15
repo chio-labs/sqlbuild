@@ -15,3 +15,30 @@ class DagsterAssetSpecTestCase:
 class DagsterDecoratorTestCase:
     description: str
     expected_asset_keys: tuple[tuple[str, ...], ...]
+
+
+@dataclass(frozen=True)
+class DagsterCliInvocationTestCase:
+    description: str
+    command_stdout: str
+    command_stderr: str
+    command_exit_code: int
+    expected_success: bool
+    expected_stdout: str
+    expected_stderr: str
+
+
+@dataclass(frozen=True)
+class DagsterCliStreamTestCase:
+    description: str
+    command_stdout: str
+    command_exit_code: int
+    expected_asset_keys: tuple[tuple[str, ...], ...]
+
+
+@dataclass(frozen=True)
+class DagsterCliFailureTestCase:
+    description: str
+    command_stderr: str
+    command_exit_code: int
+    expected_error_fragment: str
