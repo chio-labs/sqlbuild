@@ -7,6 +7,7 @@ from enum import StrEnum
 
 class CliCommand(StrEnum):
     COMPILE = "compile"
+    DAG = "dag"
     PLAN = "plan"
     RUN = "run"
     BUILD = "build"

@@ -70,6 +70,12 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     add_vars_args(compile_parser)
     add_dbt_config_args(compile_parser)
 
+    dag_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DAG)
+    dag_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    dag_parser.add_argument("--json", action="store_true", default=False)
+    add_vars_args(dag_parser)
+    add_dbt_config_args(dag_parser)
+
     plan_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PLAN)
     plan_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     plan_parser.add_argument("--defer-to", default=None)
@@ -239,6 +245,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.build import run_build
     from sqlbuild.cli.commands.main.clone import run_clone
     from sqlbuild.cli.commands.main.compile import run_compile
+    from sqlbuild.cli.commands.main.dag import run_dag
     from sqlbuild.cli.commands.main.dbt import run_dbt_command
     from sqlbuild.cli.commands.main.debug import run_debug
     from sqlbuild.cli.commands.main.diff import run_diff
@@ -256,6 +263,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     handlers: CliEntrypointHandlers = CliEntrypointHandlers(
         run_compile=run_compile,
+        run_dag=run_dag,
         run_plan=run_plan,
         run_dbt_plan=lambda project_dir, args, no_color: run_dbt_command(
             command=DbtInteropCommand.PLAN,
@@ -355,6 +363,13 @@ def _main_with_dependencies(
                 args.manifest,
                 args.no_color,
                 CompileLineageMode(args.compile_lineage_mode),
+                args.vars,
+            )
+        if args.command == CliCommand.DAG:
+            return handlers.run_dag(
+                project_dir,
+                args.no_sql_validation,
+                args.json,
                 args.vars,
             )
         if args.command == CliCommand.PLAN:

@@ -143,6 +143,21 @@ COMPILE_DISPATCH_TEST_CASES: list[MainTestCase] = [
     ),
 ]
 
+DAG_DISPATCH_TEST_CASES: list[MainTestCase] = [
+    MainTestCase(
+        description="passes dag json and no sql validation flags to handler",
+        argv=["dag", "--json", "--no-sql-validation"],
+        expected_exit_code=3,
+        expected_no_sql_validation=True,
+    ),
+    MainTestCase(
+        description="passes sqlbuild vars to dag handler",
+        argv=["dag", "--vars", '{"schema":"analytics"}'],
+        expected_exit_code=3,
+        expected_vars={"schema": "analytics"},
+    ),
+]
+
 DBT_EXECUTION_DISPATCH_TEST_CASES: list[MainTestCase] = [
     MainTestCase(
         description="dispatches dbt run and preserves dbt args",
@@ -1209,6 +1224,41 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
             test_case.expected_manifest,
             False,
             test_case.expected_compile_lineage_mode,
+            {} if test_case.expected_vars is None else test_case.expected_vars,
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    DAG_DISPATCH_TEST_CASES,
+    ids=[case.description for case in DAG_DISPATCH_TEST_CASES],
+)
+def test_given_dag_command_arguments_when_running_then_dispatches_expected_handler(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[tuple[Path | None, bool, bool, dict[str, object]]] = []
+
+    def run_dag(
+        project_dir: Path | None,
+        no_sql_validation: bool,
+        json_output: bool,
+        cli_vars: dict[str, object],
+    ) -> int:
+        received_args.append((project_dir, no_sql_validation, json_output, cli_vars))
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_dag=run_dag),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [
+        (
+            test_case.expected_project_dir,
+            test_case.expected_no_sql_validation,
+            "--json" in test_case.argv,
             {} if test_case.expected_vars is None else test_case.expected_vars,
         )
     ]
