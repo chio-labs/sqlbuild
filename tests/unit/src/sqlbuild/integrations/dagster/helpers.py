@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 
@@ -57,3 +59,29 @@ def build_dagster_test_dag() -> Mapping[str, Any]:
             },
         ],
     }
+
+
+def write_fake_sqb_command(
+    *, root: Path, stdout: str = "", stderr: str = "", exit_code: int = 0
+) -> list[str]:
+    script_path: Path = root / "fake_sqb.py"
+    script_path.write_text(
+        "\n".join(
+            (
+                "from __future__ import annotations",
+                "import sys",
+                f"sys.stdout.write({stdout!r})",
+                f"sys.stderr.write({stderr!r})",
+                f"raise SystemExit({exit_code})",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return ["python", str(script_path)]
+
+
+def write_dagster_test_dag(*, root: Path) -> Path:
+    dag_path: Path = root / "sqlbuild_dag.json"
+    dag_path.write_text(json.dumps(build_dagster_test_dag()), encoding="utf-8")
+    return dag_path
