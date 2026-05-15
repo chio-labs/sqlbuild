@@ -89,6 +89,7 @@ class CliEntrypointHandlers:
         [Path | None, bool, str | None, bool, bool, bool, CompileLineageMode, dict[str, object]],
         int,
     ]
+    run_dag: Callable[[Path | None, bool, bool, dict[str, object]], int]
     run_plan: Callable[
         [
             Path | None,

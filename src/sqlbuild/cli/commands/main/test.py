@@ -133,7 +133,7 @@ def run_test(
 
     def on_test_progress(message: str) -> None:
         if message.startswith("Prepared "):
-            preflight_progress.complete(message)
+            preflight_progress.complete(message, blank_line_after=True)
             preflight_active[0] = False
             return
         if not preflight_active[0]:
