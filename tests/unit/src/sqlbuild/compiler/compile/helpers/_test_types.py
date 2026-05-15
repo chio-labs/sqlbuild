@@ -87,6 +87,13 @@ class BuildScenarioInputsTestCase:
 
 
 @dataclass(frozen=True)
+class BuildScenarioInputsErrorTestCase:
+    description: str
+    sql_body: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class ExtractSqlglotExpectedBranchesTestCase:
     description: str
     sql: str

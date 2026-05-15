@@ -4,7 +4,11 @@ from dataclasses import replace
 
 import pytest
 
-from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.compile.models.core import (
+    CompiledProject,
+    CompiledSqlScenario,
+    CompileSqlScenarioCte,
+)
 from sqlbuild.compiler.planner.helpers.scenario_relations import (
     build_scenario_execution_plan,
     build_scenario_fixture_plans,
@@ -153,6 +157,66 @@ def test_given_scenario_helpers_when_building_fixture_plans_then_fixtures_are_se
 
     result: tuple[ScenarioFixturePlan, ...] = build_scenario_fixture_plans(
         scenario=build_scenario_relation_test_scenario(),
+        graph_plan=test_case.graph_plan,
+        relation_plan=relation_plan,
+    )
+
+    assert {
+        f"{fixture.kind.value}:{fixture.logical_name}": fixture.sql for fixture in result
+    } == test_case.expected_fixture_sql
+    assert {
+        f"{fixture.kind.value}:{fixture.logical_name}": fixture.target.qualified_name
+        for fixture in result
+    } == test_case.expected_fixture_targets
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScenarioFixturePlanTestCase(
+            description="resolves project source refs in scenario fixture sql",
+            graph_plan=ScenarioGraphPlan(
+                key=build_scenario_relation_test_project().models[0].key,
+                name=SCENARIO_NAME,
+                target_model_names=("daily_revenue",),
+                model_names=("daily_revenue",),
+                source_fixture_names=("raw__orders",),
+            ),
+            expected_fixture_sql={
+                "source:raw__orders": "SELECT * FROM public.raw__orders WHERE order_id <= 10",
+            },
+            expected_fixture_targets={
+                "source:raw__orders": "scenario_schema.__sqb_51b385aebe20__source__raw__orders",
+            },
+        )
+    ],
+    ids=["resolves project source refs in scenario fixture sql"],
+)
+def test_given_project_source_ref_in_scenario_fixture_when_building_fixture_plan_then_resolves(
+    test_case: ScenarioFixturePlanTestCase,
+) -> None:
+    scenario: CompiledSqlScenario = replace(
+        build_scenario_relation_test_scenario(include_seed_fixture=False),
+        authored_ctes=(
+            CompileSqlScenarioCte(
+                name="__source__raw__orders",
+                sql_body='SELECT * FROM __source("raw__orders") WHERE order_id <= 10',
+            ),
+        ),
+        source_fixture_names=("raw__orders",),
+        ref_fixture_names=(),
+        dbt_ref_fixture_names=(),
+        seed_fixture_names=(),
+    )
+    relation_plan: ScenarioRelationPlan = build_scenario_relation_plan(
+        project=build_scenario_relation_test_project(),
+        graph_plan=test_case.graph_plan,
+        relation_map=build_scenario_relation_test_map(),
+        schema="scenario_schema",
+    )
+
+    result: tuple[ScenarioFixturePlan, ...] = build_scenario_fixture_plans(
+        scenario=scenario,
         graph_plan=test_case.graph_plan,
         relation_plan=relation_plan,
     )

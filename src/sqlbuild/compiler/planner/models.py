@@ -405,6 +405,7 @@ class ScenarioRelationPlan:
     relation_map: ScenarioRelationMap
     model_targets: dict[str, CompiledRelationTarget] = field(default_factory=dict)
     seed_targets: dict[str, CompiledRelationTarget] = field(default_factory=dict)
+    project_source_map: dict[str, SourceEntry] = field(default_factory=dict)
     source_map: dict[str, SourceEntry] = field(default_factory=dict)
     source_fixture_targets: dict[str, CompiledRelationTarget] = field(default_factory=dict)
     ref_fixture_targets: dict[str, CompiledRelationTarget] = field(default_factory=dict)
