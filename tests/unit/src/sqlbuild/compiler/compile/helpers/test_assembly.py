@@ -312,6 +312,56 @@ SELECT 1
         expected_test_modes=("udf",),
         expected_tested_macro_names=(("format_cents",),),
     ),
+    AssembleCompiledProjectTestCase(
+        description="assembles table function test scope from inferred table function deps",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
+            "functions/sql/customer_orders.sql": """
+FUNCTION (
+  arguments (p_customer_id INTEGER),
+  returns table (
+    customer_id INTEGER,
+    order_id INTEGER
+  )
+);
+
+SELECT p_customer_id AS customer_id, 1 AS order_id
+""".strip()
+            + "\n",
+            "tests/unit/test_customer_orders.sql": """
+TEST (mode: table_fn, name: "returns customer orders");
+
+WITH
+__table_fn_actual__ AS (
+  SELECT customer_id, order_id FROM __table_fn("customer_orders")(42)
+),
+__table_fn_expected__ AS (SELECT 42 AS customer_id, 1 AS order_id)
+SELECT 1
+""".strip()
+            + "\n",
+        },
+        expected_model_names=(),
+        expected_model_deps=(),
+        expected_model_target_names=(),
+        expected_model_target_schemas=(),
+        expected_source_names=(),
+        expected_seed_names=(),
+        expected_audit_names=(),
+        expected_audit_scope_deps=(),
+        expected_test_names=("returns customer orders",),
+        expected_test_scope_deps=(
+            (
+                CompiledObjectKey(
+                    resource_type=CompiledResourceType.FUNCTION, name="customer_orders"
+                ),
+            ),
+        ),
+        expected_test_expected_model_names=((),),
+        expected_model_macro_deps=(),
+        expected_test_modes=("table_fn",),
+        expected_tested_macro_names=(("customer_orders",),),
+    ),
 ]
 
 

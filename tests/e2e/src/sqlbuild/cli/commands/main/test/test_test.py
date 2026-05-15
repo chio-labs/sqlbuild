@@ -67,7 +67,7 @@ SQLGLOT_CHAIN_TEST_CASES: list[SqlglotChainSqlTestE2ETestCase] = [
         SqlTestE2ETestCase(
             description="test runs SQL unit tests and all pass",
             expected_exit_code=0,
-            expected_stdout_fragment="PASS=4",
+            expected_stdout_fragment="PASS=5",
             expected_stdout_fragments=(
                 "Execution  sqb test  (concurrency: 1)",
                 "Connecting to duckdb...",
@@ -76,6 +76,7 @@ SQLGLOT_CHAIN_TEST_CASES: list[SqlglotChainSqlTestE2ETestCase] = [
                 "check   expected fact_orders",
                 "check   expected macro calculates line total cents",
                 "check   expected udf detects completed orders",
+                "check   expected table_fn returns customer orders",
             ),
             expected_ordered_stdout_fragments=(
                 "Execution  sqb test  (concurrency: 1)",
@@ -83,7 +84,7 @@ SQLGLOT_CHAIN_TEST_CASES: list[SqlglotChainSqlTestE2ETestCase] = [
                 "Connected to duckdb. (<time>)",
                 "Inspecting warehouse state...",
                 "Generated plan. (<time>)",
-                "Test (4 selected, 4 models)",
+                "Test (5 selected, 5 models)",
                 "Connecting to duckdb...",
                 "Connected to duckdb. (<time>)",
                 "Preparing test functions...",

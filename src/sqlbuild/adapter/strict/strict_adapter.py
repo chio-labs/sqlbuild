@@ -133,7 +133,7 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def render_table_function_call(self, *, target: str, arguments_sql: str) -> str:
+    def render_table_function_call(self, *, target: str, call_suffix_sql: str) -> str:
         """Render a table function call for use as a FROM target."""
         ...
 

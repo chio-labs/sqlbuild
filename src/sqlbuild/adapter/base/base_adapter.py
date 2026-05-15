@@ -286,8 +286,8 @@ class BaseAdapter(StrictAdapter):
     def render_create_view_as(self, *, target: str, sql: str) -> tuple[str, ...]:
         return (f"CREATE OR REPLACE VIEW {target} AS {sql}",)
 
-    def render_table_function_call(self, *, target: str, arguments_sql: str) -> str:
-        return f"{target}({arguments_sql})"
+    def render_table_function_call(self, *, target: str, call_suffix_sql: str) -> str:
+        return f"{target}{call_suffix_sql}"
 
     def render_udf_call(self, *, target: str, call_suffix_sql: str) -> str:
         return f"{target}{call_suffix_sql}"
