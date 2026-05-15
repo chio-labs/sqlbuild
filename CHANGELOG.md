@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.12.0](https://github.com/chio-labs/sqlbuild/compare/v0.11.0...v0.12.0) (2026-05-15)
+
+
+### Features
+
+* add sqlglot cte parsing fallback ([a45c3ea](https://github.com/chio-labs/sqlbuild/commit/a45c3ea3b68ee184a1a6ce26f93b72f2fb2d4eff))
+* allow scenario fixtures to sample sources ([a348eb9](https://github.com/chio-labs/sqlbuild/commit/a348eb99f82456d6203274a7785f46670d4aef40))
+* allow scenario fixtures to sample sources ([cc363ca](https://github.com/chio-labs/sqlbuild/commit/cc363cad2bacdfc75b8e115682b574a226242866))
+
 ## [0.11.0](https://github.com/chio-labs/sqlbuild/compare/v0.10.0...v0.11.0) (2026-05-15)
 
 
