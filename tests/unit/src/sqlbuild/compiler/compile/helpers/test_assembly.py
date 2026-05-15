@@ -263,6 +263,55 @@ SELECT 1
         expected_test_modes=("macro",),
         expected_tested_macro_names=(("normalize_status",),),
     ),
+    AssembleCompiledProjectTestCase(
+        description="assembles udf test scope from models using inferred udf deps",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
+            "functions/sql/format_cents.sql": """
+FUNCTION (
+  arguments (amount_cents INTEGER),
+  returns VARCHAR,
+);
+
+'$' || CAST(amount_cents / 100 AS VARCHAR)
+""".strip()
+            + "\n",
+            "models/orders.sql": ('MODEL ();\n\nSELECT __udf("format_cents")(1250) AS formatted\n'),
+            "models/customers.sql": "MODEL ();\n\nSELECT 'active' AS status\n",
+            "tests/unit/test_format_cents.sql": """
+TEST (mode: udf, name: "formats cents");
+
+WITH
+input_values AS (SELECT 1250 AS amount_cents),
+__udf_actual__ AS (
+  SELECT __udf("format_cents")(amount_cents) AS formatted FROM input_values
+),
+__udf_expected__ AS (SELECT '$12.50' AS formatted)
+SELECT 1
+""".strip()
+            + "\n",
+        },
+        expected_model_names=("customers", "orders"),
+        expected_model_deps=(
+            (),
+            (CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name="format_cents"),),
+        ),
+        expected_model_target_names=("customers", "orders"),
+        expected_model_target_schemas=(None, None),
+        expected_source_names=(),
+        expected_seed_names=(),
+        expected_audit_names=(),
+        expected_audit_scope_deps=(),
+        expected_test_names=("formats cents",),
+        expected_test_scope_deps=(
+            (CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),),
+        ),
+        expected_test_expected_model_names=((),),
+        expected_model_macro_deps=((), ()),
+        expected_test_modes=("udf",),
+        expected_tested_macro_names=(("format_cents",),),
+    ),
 ]
 
 
