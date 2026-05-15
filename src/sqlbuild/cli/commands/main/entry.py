@@ -92,6 +92,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     build_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.BUILD)
     build_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     build_parser.add_argument("--defer-to", default=None)
+    build_parser.add_argument("--json", action="store_true", default=False)
     add_cursor_override_args(build_parser)
     add_execution_args(build_parser)
     add_select_args(build_parser)
@@ -101,6 +102,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     run_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.RUN)
     run_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     run_parser.add_argument("--defer-to", default=None)
+    run_parser.add_argument("--json", action="store_true", default=False)
     add_cursor_override_args(run_parser)
     add_execution_args(run_parser)
     add_select_args(run_parser)
@@ -109,6 +111,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
 
     test_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.TEST)
     test_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    test_parser.add_argument("--json", action="store_true", default=False)
     add_select_args(test_parser)
     add_vars_args(test_parser)
     add_dbt_config_args(test_parser)
@@ -116,11 +119,13 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     audit_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.AUDIT)
     audit_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     audit_parser.add_argument("--defer-to", default=None)
+    audit_parser.add_argument("--json", action="store_true", default=False)
     add_select_args(audit_parser)
     add_vars_args(audit_parser)
     add_dbt_config_args(audit_parser)
 
     seed_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.SEED)
+    seed_parser.add_argument("--json", action="store_true", default=False)
     add_select_args(seed_parser)
     add_vars_args(seed_parser)
 
@@ -204,6 +209,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     scenario_test_parser.add_argument("--retain", dest="scenario_retain", action="store_true")
     scenario_test_parser.add_argument("--local", dest="scenario_local", action="store_true")
     scenario_test_parser.add_argument("--strict", dest="scenario_strict", action="store_true")
+    scenario_test_parser.add_argument("--json", action="store_true", default=False)
     scenario_snapshot_group: argparse._MutuallyExclusiveGroup = (
         scenario_test_parser.add_mutually_exclusive_group()
     )
@@ -429,6 +435,7 @@ def _main_with_dependencies(
                 args.verbose,
                 args.debug,
                 args.vars,
+                args.json,
             )
         if args.command == CliCommand.RUN:
             cursor_overrides = CursorOverrides(
@@ -451,6 +458,7 @@ def _main_with_dependencies(
                 args.verbose,
                 args.debug,
                 args.vars,
+                args.json,
             )
         if args.command == CliCommand.TEST:
             return handlers.run_test(
@@ -460,6 +468,7 @@ def _main_with_dependencies(
                 select,
                 tuple(args.exclude),
                 args.vars,
+                args.json,
             )
         if args.command == CliCommand.AUDIT:
             return handlers.run_audit(
@@ -470,6 +479,7 @@ def _main_with_dependencies(
                 select,
                 tuple(args.exclude),
                 args.vars,
+                args.json,
             )
         if args.command == CliCommand.SEED:
             return handlers.run_seed(
@@ -478,6 +488,7 @@ def _main_with_dependencies(
                 select,
                 tuple(args.exclude),
                 args.vars,
+                args.json,
             )
         if args.command == CliCommand.LINEAGE:
             return handlers.run_lineage(
@@ -596,6 +607,7 @@ def _main_with_dependencies(
                     args.scenario_max_snapshot_total_rows,
                     args.scenario_max_snapshot_bytes,
                     args.scenario_max_snapshot_total_bytes,
+                    args.json,
                 )
             if args.scenario_command == "capture":
                 return handlers.run_scenario_capture(

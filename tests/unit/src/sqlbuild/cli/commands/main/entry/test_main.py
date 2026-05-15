@@ -70,6 +70,45 @@ ERROR_RENDERING_TEST_CASES: list[MainErrorRenderingTestCase] = [
     ),
 ]
 
+EXECUTION_JSON_TEST_CASES: list[MainTestCase] = [
+    MainTestCase(
+        description="dispatches build json flag",
+        argv=["build", "--json"],
+        expected_exit_code=0,
+        expected_json=True,
+    ),
+    MainTestCase(
+        description="dispatches run json flag",
+        argv=["run", "--json"],
+        expected_exit_code=0,
+        expected_json=True,
+    ),
+    MainTestCase(
+        description="dispatches test json flag",
+        argv=["test", "--json"],
+        expected_exit_code=0,
+        expected_json=True,
+    ),
+    MainTestCase(
+        description="dispatches audit json flag",
+        argv=["audit", "--json"],
+        expected_exit_code=0,
+        expected_json=True,
+    ),
+    MainTestCase(
+        description="dispatches seed json flag",
+        argv=["seed", "--json"],
+        expected_exit_code=0,
+        expected_json=True,
+    ),
+    MainTestCase(
+        description="dispatches scenario test json flag",
+        argv=["scenario", "test", "daily", "--json"],
+        expected_exit_code=0,
+        expected_json=True,
+    ),
+]
+
 COMMAND_LOCAL_GLOBAL_FLAG_ERROR_TEST_CASES: list[MainTestCase] = [
     MainTestCase(
         description="returns parser error for command local debug",
@@ -580,6 +619,7 @@ def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispa
             int | None,
             int | None,
             int | None,
+            bool,
         ]
     ] = []
 
@@ -598,6 +638,7 @@ def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispa
         max_snapshot_total_rows: int | None,
         max_snapshot_bytes: int | None,
         max_snapshot_total_bytes: int | None,
+        json_output: bool,
     ) -> int:
         received_args.append(
             (
@@ -615,6 +656,7 @@ def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispa
                 max_snapshot_total_rows,
                 max_snapshot_bytes,
                 max_snapshot_total_bytes,
+                json_output,
             )
         )
         return test_case.expected_exit_code
@@ -641,8 +683,39 @@ def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispa
             None,
             None,
             None,
+            False,
         )
     ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    EXECUTION_JSON_TEST_CASES,
+    ids=[case.description for case in EXECUTION_JSON_TEST_CASES],
+)
+def test_given_execution_command_json_flag_when_running_then_dispatches_json_output(
+    test_case: MainTestCase,
+) -> None:
+    received_json_flags: list[bool] = []
+
+    def record_json_handler(*args: object) -> int:
+        received_json_flags.append(bool(args[-1]))
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(
+            run_build=record_json_handler,
+            run_run=record_json_handler,
+            run_test=record_json_handler,
+            run_audit=record_json_handler,
+            run_seed=record_json_handler,
+            run_scenario=record_json_handler,
+        ),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_json_flags == [test_case.expected_json]
 
 
 @pytest.mark.parametrize(
@@ -1315,6 +1388,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         verbose: bool = False,
         debug: bool = False,
         cli_vars: dict[str, object] | None = None,
+        json_output: bool = False,
     ) -> int:
         del project_dir
         del no_sql_validation
@@ -1325,6 +1399,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         del exclude
         del verbose
         del cli_vars
+        del json_output
         received_args.append((no_color, fail_fast, full_refresh, debug))
         return test_case.expected_exit_code
 
@@ -1375,6 +1450,7 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
         verbose: bool = False,
         debug: bool = False,
         cli_vars: dict[str, object] | None = None,
+        json_output: bool = False,
     ) -> int:
         del project_dir
         del no_sql_validation
@@ -1388,6 +1464,7 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
         del verbose
         del debug
         del cli_vars
+        del json_output
         received_args.append(full_refresh)
         return test_case.expected_exit_code
 

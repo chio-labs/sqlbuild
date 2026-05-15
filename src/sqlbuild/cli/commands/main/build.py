@@ -13,6 +13,7 @@ from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import (
     ConnectionProgressReporter,
 )
+from sqlbuild.cli.commands.main.shared.helpers.execution_json import format_build_execution_json
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
 )
@@ -50,6 +51,7 @@ def run_build(
     verbose: bool = False,
     debug: bool = False,
     cli_vars: dict[str, object] | None = None,
+    json_output: bool = False,
 ) -> int:
     """Execute the build command."""
 
@@ -71,7 +73,7 @@ def run_build(
         cli_vars=cli_vars,
     )
     use_color: bool = not no_color and supports_color()
-    progress_stream: TextIO = sys.stderr if debug else sys.stdout
+    progress_stream: TextIO = sys.stderr if debug or json_output else sys.stdout
     connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
         adapter_name=adapter_name,
         stream=progress_stream,
@@ -111,7 +113,7 @@ def run_build(
     )
 
     plan_output: PlanOutput = pipeline_result.plan_output
-    plan_stream: TextIO = sys.stderr if debug else sys.stdout
+    plan_stream: TextIO = sys.stderr if debug or json_output else sys.stdout
 
     plan_text: str = format_plan(plan_output, full_refresh=full_refresh, use_color=use_color)
     plan_stream.write("\n" + plan_text + "\n\n")
@@ -125,7 +127,7 @@ def run_build(
     )
 
     callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
-        plan=plan_output, use_color=use_color, verbose=verbose, debug=debug
+        plan=plan_output, use_color=use_color, verbose=verbose, debug=debug or json_output
     )
     effective_concurrency: int = (
         concurrency if concurrency is not None else pipeline_result.project.settings.concurrency
@@ -165,5 +167,8 @@ def run_build(
     footer: str = format_build_footer(result=result, elapsed=callbacks.elapsed, use_color=use_color)
     progress_stream.write("\n" + footer + "\n")
     progress_stream.flush()
+    if json_output:
+        sys.stdout.write(format_build_execution_json(result=result, plan=plan_output))
+        sys.stdout.flush()
 
     return 0 if result.status == BuildStatus.SUCCESS else 1

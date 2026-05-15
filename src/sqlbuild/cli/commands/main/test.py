@@ -15,6 +15,7 @@ from sqlbuild.cli.commands.main.helpers.sql_test_progress import (
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
+from sqlbuild.cli.commands.main.shared.helpers.execution_json import format_test_execution_json
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
 )
@@ -44,6 +45,7 @@ def run_test(
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     cli_vars: dict[str, object] | None = None,
+    json_output: bool = False,
 ) -> int:
     """Execute the test command."""
 
@@ -64,7 +66,7 @@ def run_test(
         cli_vars=cli_vars,
     )
     use_color: bool = not no_color and supports_color()
-    progress_stream: TextIO = sys.stdout
+    progress_stream: TextIO = sys.stderr if json_output else sys.stdout
     execution_header: str = format_build_header(command="sqb test", target=None, concurrency=1)
     execution_label: str = blue_bold("Execution") if use_color else "Execution"
     header_detail: str = dim(execution_header) if use_color else execution_header
@@ -113,8 +115,8 @@ def run_test(
         use_color=use_color,
         name_width=resolve_test_name_width(pipeline_result.plan_output.test_entries),
     )
-    sys.stdout.write(f"\n{styled_header}\n\n")
-    sys.stdout.flush()
+    progress_stream.write(f"\n{styled_header}\n\n")
+    progress_stream.flush()
     execution_connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
         adapter_name=resolve_effective_adapter_name(
             project_config=discovered_inputs.project_config,
@@ -165,8 +167,11 @@ def run_test(
 
     pass_count: int = sum(1 for r in results if r.outcome == SqlTestOutcome.PASS)
     fail_count: int = len(results) - pass_count
-    sys.stdout.write(f"\nPASS={pass_count}  FAIL={fail_count}  TOTAL={len(results)}\n")
-    sys.stdout.flush()
+    progress_stream.write(f"\nPASS={pass_count}  FAIL={fail_count}  TOTAL={len(results)}\n")
+    progress_stream.flush()
+    if json_output:
+        sys.stdout.write(format_test_execution_json(results=results))
+        sys.stdout.flush()
 
     return 0 if fail_count == 0 else 1
 

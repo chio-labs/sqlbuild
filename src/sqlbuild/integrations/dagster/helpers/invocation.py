@@ -100,13 +100,33 @@ class SqlBuildCliInvocation:
         return json.loads(path.read_text(encoding="utf-8"))
 
     def stream(self) -> Iterator[Any]:
-        """Wait for the process, log output, and yield a coarse Dagster result."""
+        """Wait for the process, log output, and yield Dagster events."""
 
+        original_raise_on_error: bool = self.raise_on_error
+        self.raise_on_error = False
         self.wait()
+        self.raise_on_error = original_raise_on_error
         _log_invocation(context=self.context, invocation=self)
         dg: Any = load_dagster()
+        if self.dag is not None:
+            execution_payload: Mapping[str, Any] | None = _load_execution_payload(self.stdout)
+            if execution_payload is not None:
+                yield from _build_results_from_execution_payload(
+                    dg=dg,
+                    dag=self.dag,
+                    payload=execution_payload,
+                    command=self.command,
+                    context=self.context,
+                )
+                error: Exception | None = self.get_error()
+                if error is not None and self.raise_on_error:
+                    raise error
+                return
         if self.dag is None:
             yield dg.MaterializeResult(metadata={"command": " ".join(self.command)})
+            error = self.get_error()
+            if error is not None and self.raise_on_error:
+                raise error
             return
         yield from _build_results_for_selected_assets(
             dg=dg,
@@ -114,6 +134,9 @@ class SqlBuildCliInvocation:
             command=self.command,
             context=self.context,
         )
+        error = self.get_error()
+        if error is not None and self.raise_on_error:
+            raise error
 
 
 def start_sqlbuild_cli_invocation(
@@ -130,8 +153,14 @@ def start_sqlbuild_cli_invocation(
     selection: tuple[str, ...]
     selector_file: Path | None
     resolved_args: tuple[str, ...]
-    resolved_args, selection, selector_file = _with_selected_asset_args(
+    selected_args: tuple[str, ...]
+    selected_args, selection, selector_file = _with_selected_asset_args(
         args=tuple(args),
+        context=context,
+        dag=dag,
+    )
+    resolved_args: tuple[str, ...] = _with_json_output_args(
+        args=selected_args,
         context=context,
         dag=dag,
     )
@@ -217,6 +246,18 @@ def _with_selected_asset_args(
     return (*args, "--select-file", str(selector_file)), tuple(selectors), selector_file
 
 
+def _with_json_output_args(
+    *, args: tuple[str, ...], context: Any, dag: Mapping[str, Any] | None
+) -> tuple[str, ...]:
+    if dag is None or context is None or not args or "--json" in args:
+        return args
+    if args[0] in {"build", "run", "test", "audit", "seed"}:
+        return (*args, "--json")
+    if len(args) >= 2 and args[0] == "scenario" and args[1] == "test":
+        return (*args, "--json")
+    return args
+
+
 def _write_selector_file(selectors: tuple[str, ...]) -> Path:
     handle: IO[str] = tempfile.NamedTemporaryFile(
         mode="w",
@@ -255,6 +296,193 @@ def _build_results_for_selected_assets(
         for node in nodes
         if str(node.get("kind")) in {"source", "seed", "model", "function"}
     )
+
+
+def _load_execution_payload(stdout: str) -> Mapping[str, Any] | None:
+    stripped: str = stdout.strip()
+    if not stripped:
+        return None
+    try:
+        payload: Any = json.loads(stripped)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, Mapping):
+        return None
+    if payload.get("version") != 1:
+        return None
+    return payload
+
+
+def _build_results_from_execution_payload(
+    *,
+    dg: Any,
+    dag: Mapping[str, Any],
+    payload: Mapping[str, Any],
+    command: tuple[str, ...],
+    context: Any,
+) -> tuple[Any, ...]:
+    selected_paths: set[tuple[str, ...]] = _selected_asset_paths(context=context)
+    nodes_by_name: dict[tuple[str, str], Mapping[str, Any]] = {
+        (str(node.get("kind")), str(node.get("name"))): node for node in dag.get("nodes", ())
+    }
+    nodes_by_id: dict[str, Mapping[str, Any]] = {
+        str(node.get("id")): node for node in dag.get("nodes", ())
+    }
+    asset_results_by_id: dict[str, Mapping[str, Any]] = {}
+    payload_asset: Mapping[str, Any]
+    for payload_asset in payload.get("assets", ()):  # type: ignore[assignment]
+        if str(payload_asset.get("status")) not in {"success", "skipped"}:
+            continue
+        node: Mapping[str, Any] | None = nodes_by_name.get(
+            (str(payload_asset.get("kind")), str(payload_asset.get("name")))
+        )
+        if node is None:
+            continue
+        asset_results_by_id[str(node.get("id"))] = payload_asset
+    results: list[Any] = []
+    for node in _sort_nodes_topologically(dag=dag):
+        node_id: str = str(node.get("id"))
+        execution_asset: Mapping[str, Any] | None = asset_results_by_id.get(node_id)
+        if execution_asset is None and str(node.get("kind")) != "source":
+            continue
+        asset_key: Any = dg.AssetKey([str(part) for part in node["asset_key"]])
+        if selected_paths and tuple(asset_key.path) not in selected_paths:
+            continue
+        metadata: Mapping[str, Any] = (
+            _metadata_from_mapping(execution_asset)
+            if execution_asset is not None
+            else {"kind": "source", "name": node.get("name"), "status": "observed"}
+        )
+        results.append(
+            dg.MaterializeResult(
+                asset_key=asset_key,
+                metadata={
+                    "command": " ".join(command),
+                    "sqlbuild_id": node.get("id"),
+                    **metadata,
+                },
+            )
+        )
+    check: Mapping[str, Any]
+    seen_check_outputs: set[tuple[tuple[str, ...], str]] = set()
+    for check in payload.get("checks", ()):  # type: ignore[assignment]
+        check_results: tuple[Any, ...] = _build_check_results_from_execution_check(
+            dg=dg,
+            dag=dag,
+            nodes_by_id=nodes_by_id,
+            nodes_by_name=nodes_by_name,
+            check=check,
+            selected_paths=selected_paths,
+            seen_check_outputs=seen_check_outputs,
+        )
+        results.extend(check_results)
+    return tuple(results)
+
+
+def _build_check_results_from_execution_check(
+    *,
+    dg: Any,
+    dag: Mapping[str, Any],
+    nodes_by_id: Mapping[str, Mapping[str, Any]],
+    nodes_by_name: Mapping[tuple[str, str], Mapping[str, Any]],
+    check: Mapping[str, Any],
+    selected_paths: set[tuple[str, ...]],
+    seen_check_outputs: set[tuple[tuple[str, ...], str]],
+) -> tuple[Any, ...]:
+    dag_check: Mapping[str, Any] | None = _dag_check_for_execution_check(dag=dag, check=check)
+    asset_ids: tuple[str, ...]
+    check_name: str
+    if dag_check is not None:
+        asset_ids = tuple(str(asset_id) for asset_id in dag_check.get("checked_asset_ids", ()))
+        check_name = _dagster_check_name(dag_check)
+    else:
+        asset_ids = _asset_ids_for_execution_check(check=check, nodes_by_name=nodes_by_name)
+        check_name = _dagster_check_name(check)
+    results: list[Any] = []
+    asset_id: str
+    for asset_id in asset_ids:
+        node: Mapping[str, Any] | None = nodes_by_id.get(asset_id)
+        if node is None:
+            continue
+        asset_key: Any = dg.AssetKey([str(part) for part in node["asset_key"]])
+        if selected_paths and tuple(asset_key.path) not in selected_paths:
+            continue
+        output_key: tuple[tuple[str, ...], str] = (tuple(asset_key.path), check_name)
+        if output_key in seen_check_outputs:
+            continue
+        seen_check_outputs.add(output_key)
+        results.append(
+            dg.AssetCheckResult(
+                passed=bool(check.get("passed")),
+                asset_key=asset_key,
+                check_name=check_name,
+                metadata=_metadata_from_mapping(check),
+                severity=_dagster_check_severity(dg=dg, check=check),
+            )
+        )
+    return tuple(results)
+
+
+def _selected_asset_paths(*, context: Any) -> set[tuple[str, ...]]:
+    selected_keys: object = (
+        getattr(context, "selected_asset_keys", None) if context is not None else None
+    )
+    if selected_keys is None:
+        return set()
+    return {tuple(key.path) for key in selected_keys}
+
+
+def _dag_check_for_execution_check(
+    *, dag: Mapping[str, Any], check: Mapping[str, Any]
+) -> Mapping[str, Any] | None:
+    check_id: object = check.get("check_id")
+    dag_check: Mapping[str, Any]
+    for dag_check in dag.get("checks", ()):  # type: ignore[assignment]
+        if dag_check.get("id") == check_id:
+            return dag_check
+    return None
+
+
+def _asset_ids_for_execution_check(
+    *, check: Mapping[str, Any], nodes_by_name: Mapping[tuple[str, str], Mapping[str, Any]]
+) -> tuple[str, ...]:
+    asset_name: object = check.get("asset_name")
+    if asset_name is None:
+        return ()
+    for kind in ("model", "source", "seed", "function"):
+        node: Mapping[str, Any] | None = nodes_by_name.get((kind, str(asset_name)))
+        if node is not None:
+            return (str(node.get("id")),)
+    return ()
+
+
+def _dagster_check_name(check: Mapping[str, Any]) -> str:
+    parts: list[str] = [str(check.get("kind", "check")), str(check.get("name", "check"))]
+    if check.get("attached_column_name") is not None:
+        parts.append(str(check["attached_column_name"]))
+    elif check.get("attached_target_name") is not None:
+        parts.append(str(check["attached_target_name"]))
+    return "__".join(_normalize_check_name(part) for part in parts if part)
+
+
+def _normalize_check_name(value: str) -> str:
+    normalized: str = "".join(char if char.isalnum() or char == "_" else "_" for char in value)
+    return normalized.strip("_") or "check"
+
+
+def _metadata_from_mapping(value: Mapping[str, Any]) -> Mapping[str, Any]:
+    return {
+        str(key): item
+        for key, item in value.items()
+        if item is not None
+        and key not in {"passed", "steps", "expected_results", "assertion_results"}
+    }
+
+
+def _dagster_check_severity(*, dg: Any, check: Mapping[str, Any]) -> Any:
+    if str(check.get("severity")) == "warn":
+        return dg.AssetCheckSeverity.WARN
+    return dg.AssetCheckSeverity.ERROR
 
 
 def _sort_nodes_topologically(*, dag: Mapping[str, Any]) -> list[Mapping[str, Any]]:

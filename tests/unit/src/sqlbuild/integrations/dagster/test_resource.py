@@ -10,6 +10,7 @@ from sqlbuild.integrations.dagster.helpers.invocation import SqlBuildCliInvocati
 from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterCliFailureTestCase,
     DagsterCliInvocationTestCase,
+    DagsterCliJsonStreamTestCase,
     DagsterCliSelectionTestCase,
     DagsterCliStreamTestCase,
 )
@@ -124,6 +125,67 @@ def test_given_sqlbuild_cli_resource_with_dag_when_streaming_then_yields_asset_r
 
     assert (
         tuple(tuple(result.asset_key.path) for result in results) == test_case.expected_asset_keys
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterCliJsonStreamTestCase(
+            description="stream yields execution json asset and check results",
+            command_stdout=(
+                '{"version": 1, "command": "build", "status": "success", '
+                '"summary": {}, '
+                '"assets": [{"kind": "model", "name": "orders", '
+                '"status": "success", "duration_ms": 12}], '
+                '"checks": [{"kind": "audit", "name": "not_null", '
+                '"check_id": "audit:not_null:model:orders:order_id", '
+                '"passed": true, "status": "pass", "severity": "warn", '
+                '"row_count": 0}]}'
+            ),
+            selected_asset_keys=(("analytics", "orders"),),
+            expected_asset_keys=(("analytics", "orders"),),
+            expected_check_names=("audit__not_null__order_id",),
+            expected_check_severities=("WARN",),
+        )
+    ],
+    ids=["stream yields execution json asset and check results"],
+)
+def test_given_execution_json_when_streaming_then_yields_structured_dagster_events(
+    test_case: DagsterCliJsonStreamTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    context: Any = type(
+        "SelectedAssetContext",
+        (),
+        {
+            "selected_asset_keys": {
+                dg.AssetKey(list(asset_key)) for asset_key in test_case.selected_asset_keys
+            }
+        },
+    )()
+    resource: SqlBuildCliResource = SqlBuildCliResource(
+        project_dir=str(project_dir),
+        sqb_command=write_fake_sqb_command(root=tmp_path, stdout=test_case.command_stdout),
+        dag_path=str(write_dagster_test_dag(root=tmp_path)),
+    )
+
+    results: list[Any] = list(resource.cli(["build"], context=context).stream())
+
+    materialize_results: list[Any] = [
+        result for result in results if isinstance(result, dg.MaterializeResult)
+    ]
+    check_results: list[Any] = [
+        result for result in results if isinstance(result, dg.AssetCheckResult)
+    ]
+    assert tuple(tuple(result.asset_key.path) for result in materialize_results) == (
+        test_case.expected_asset_keys
+    )
+    assert tuple(result.check_name for result in check_results) == test_case.expected_check_names
+    assert tuple(result.severity.value for result in check_results) == (
+        test_case.expected_check_severities
     )
 
 

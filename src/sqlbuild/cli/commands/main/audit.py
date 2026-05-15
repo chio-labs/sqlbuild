@@ -11,6 +11,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
+from sqlbuild.cli.commands.main.shared.helpers.execution_json import format_audit_execution_json
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
 )
@@ -37,6 +38,7 @@ def run_audit(
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     cli_vars: dict[str, object] | None = None,
+    json_output: bool = False,
 ) -> int:
     """Execute the audit command."""
 
@@ -57,7 +59,7 @@ def run_audit(
         cli_vars=cli_vars,
     )
     use_color: bool = not no_color and supports_color()
-    progress_stream: TextIO = sys.stdout
+    progress_stream: TextIO = sys.stderr if json_output else sys.stdout
     execution_header: str = format_build_header(command="sqb audit", target=None, concurrency=1)
     execution_label: str = blue_bold("Execution") if use_color else "Execution"
     header_detail: str = dim(execution_header) if use_color else execution_header
@@ -110,8 +112,8 @@ def run_audit(
         stream=progress_stream,
         use_color=use_color,
     )
-    sys.stdout.write(f"\n{styled_header}\n\n")
-    sys.stdout.flush()
+    progress_stream.write(f"\n{styled_header}\n\n")
+    progress_stream.flush()
     execution_connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
         adapter_name=resolve_effective_adapter_name(
             project_config=discovered_inputs.project_config,
@@ -139,10 +141,13 @@ def run_audit(
     pass_count: int = sum(1 for r in results if r.outcome == AuditOutcome.PASS)
     warn_count: int = sum(1 for r in results if r.outcome == AuditOutcome.WARN)
     fail_count: int = sum(1 for r in results if r.outcome == AuditOutcome.ERROR)
-    sys.stdout.write(
+    progress_stream.write(
         f"\nPASS={pass_count}  WARN={warn_count}  FAIL={fail_count}  TOTAL={len(results)}\n"
     )
-    sys.stdout.flush()
+    progress_stream.flush()
+    if json_output:
+        sys.stdout.write(format_audit_execution_json(results=results))
+        sys.stdout.flush()
 
     return 0 if fail_count == 0 else 1
 
