@@ -27,7 +27,10 @@ from sqlbuild.compiler.compile.models.sql_tests import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.helpers.resolve.refs import resolve_udf_references
+from sqlbuild.compiler.planner.helpers.resolve.refs import (
+    resolve_table_function_references,
+    resolve_udf_references,
+)
 from sqlbuild.compiler.planner.helpers.sqlglot_sql_test_assembly import (
     try_resolve_test_model_sql_with_sqlglot,
 )
@@ -274,6 +277,12 @@ def _plan_direct_logic_test(
     actual_sql: str = test.payload.actual_cte.sql_body
     if test.payload.mode == SqlTestMode.UDF:
         actual_sql = resolve_udf_references(
+            query_sql=actual_sql,
+            function_targets=function_targets,
+            adapter=adapter,
+        )
+    if test.payload.mode == SqlTestMode.TABLE_FN:
+        actual_sql = resolve_table_function_references(
             query_sql=actual_sql,
             function_targets=function_targets,
             adapter=adapter,

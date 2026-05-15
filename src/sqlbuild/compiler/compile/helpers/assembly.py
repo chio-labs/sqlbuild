@@ -331,10 +331,14 @@ def _assemble_compiled_sql_test(
                 tested_macro_names=test_input.payload.tested_resource_names,
                 model_inputs=model_inputs,
             )
-        else:
+        elif test_input.payload.mode == SqlTestMode.UDF:
             scope_deps = _udf_sql_test_scope_deps(
                 tested_udf_names=test_input.payload.tested_resource_names,
                 model_inputs=model_inputs,
+            )
+        else:
+            scope_deps = _function_sql_test_scope_deps(
+                tested_function_names=test_input.payload.tested_resource_names,
             )
         compiled_payload = CompiledDirectLogicSqlTestPayload(
             mode=test_input.payload.mode,
@@ -423,6 +427,15 @@ def _udf_sql_test_scope_deps(
             )
         )
     return tuple(scope_deps)
+
+
+def _function_sql_test_scope_deps(
+    *, tested_function_names: tuple[str, ...]
+) -> tuple[CompiledObjectKey, ...]:
+    return tuple(
+        CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name=function_name)
+        for function_name in tested_function_names
+    )
 
 
 def _extract_sql_test_assertion_ref_targets(

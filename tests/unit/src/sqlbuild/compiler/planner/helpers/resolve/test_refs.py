@@ -27,6 +27,7 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.resolve._test_types import
     RefResolutionTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers.resolve.helpers import (
+    BracketTableFunctionCallAdapter,
     BracketUdfCallAdapter,
     build_target,
 )
@@ -140,9 +141,19 @@ TABLE_FUNCTION_TEST_CASES: list[RefResolutionTestCase] = [
         expected_sql="SELECT * FROM analytics.customer_orders(42)",
     ),
     RefResolutionTestCase(
+        description="replaces table function marker with nested argument suffix",
+        query_sql='SELECT * FROM __table_fn("customer_orders")(COALESCE(42, 7))',
+        expected_sql="SELECT * FROM analytics.customer_orders(COALESCE(42, 7))",
+    ),
+    RefResolutionTestCase(
         description="leaves unknown table function marker unchanged",
         query_sql='SELECT * FROM __table_fn("missing")(42)',
         expected_sql='SELECT * FROM __table_fn("missing")(42)',
+    ),
+    RefResolutionTestCase(
+        description="leaves table function marker without call suffix unchanged",
+        query_sql='SELECT * FROM __table_fn("customer_orders")',
+        expected_sql='SELECT * FROM __table_fn("customer_orders")',
     ),
 ]
 
@@ -355,6 +366,29 @@ def test_given_custom_adapter_when_resolving_udf_marker_then_uses_adapter_render
         query_sql=test_case.query_sql,
         function_targets=_FUNCTION_TARGETS,
         adapter=BracketUdfCallAdapter(),
+    )
+
+    assert result == test_case.expected_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RefResolutionTestCase(
+            description="renders table function calls through adapter seam",
+            query_sql='SELECT * FROM __table_fn("customer_orders")(42)',
+            expected_sql="SELECT * FROM TABLE(analytics.customer_orders[42])",
+        )
+    ],
+    ids=["renders table function calls through adapter seam"],
+)
+def test_given_custom_adapter_when_resolving_table_function_marker_then_uses_adapter_rendering(
+    test_case: RefResolutionTestCase,
+) -> None:
+    result: str = resolve_table_function_references(
+        query_sql=test_case.query_sql,
+        function_targets=_FUNCTION_TARGETS,
+        adapter=BracketTableFunctionCallAdapter(),
     )
 
     assert result == test_case.expected_sql
