@@ -13,3 +13,7 @@ class DagsterDependencyError(DagsterIntegrationError):
 
 class DagsterDagInputError(DagsterIntegrationError):
     """Invalid SQLBuild DAG artifact input."""
+
+
+class DagsterProjectPrepareError(DagsterIntegrationError):
+    """SQLBuild project artifact preparation failed."""

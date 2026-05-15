@@ -29,6 +29,7 @@ class CliNamespace:
     hard_copy: bool = False
     json: bool = False
     manifest: bool = False
+    dag: str | None = None
     compile_lineage_mode: CompileLineageMode = CompileLineageMode.FAST
     start_cursor_ts: str | None = None
     end_cursor_ts: str | None = None
@@ -86,7 +87,17 @@ class CliEntrypointHandlers:
     """Injected command handlers for the CLI entrypoint."""
 
     run_compile: Callable[
-        [Path | None, bool, str | None, bool, bool, bool, CompileLineageMode, dict[str, object]],
+        [
+            Path | None,
+            bool,
+            str | None,
+            bool,
+            bool,
+            str | None,
+            bool,
+            CompileLineageMode,
+            dict[str, object],
+        ],
         int,
     ]
     run_dag: Callable[[Path | None, bool, bool, dict[str, object]], int]

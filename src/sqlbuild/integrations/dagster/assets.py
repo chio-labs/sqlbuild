@@ -9,6 +9,7 @@ from typing import Any
 from sqlbuild.integrations.dagster.helpers.assets import build_asset_specs, build_check_specs
 from sqlbuild.integrations.dagster.helpers.dag import load_sqlbuild_dag
 from sqlbuild.integrations.dagster.helpers.imports import load_dagster
+from sqlbuild.integrations.dagster.project import SqlBuildProject
 from sqlbuild.integrations.dagster.translator import SqlBuildDagsterTranslator
 from sqlbuild.integrations.dagster.types import SqlBuildDagInput
 
@@ -17,7 +18,8 @@ _DEFAULT_DAG_PATH: Path = Path("target/sqlbuild_dag.json")
 
 def sqlbuild_assets(
     *,
-    dag: SqlBuildDagInput = _DEFAULT_DAG_PATH,
+    dag: SqlBuildDagInput | None = None,
+    project: SqlBuildProject | None = None,
     translator: SqlBuildDagsterTranslator | None = None,
     name: str | None = None,
     required_resource_keys: set[str] | None = None,
@@ -25,7 +27,13 @@ def sqlbuild_assets(
     """Create a Dagster multi-asset definition from a SQLBuild DAG artifact."""
 
     dg: Any = load_dagster()
-    resolved_dag: Mapping[str, Any] = load_sqlbuild_dag(dag)
+    if dag is not None and project is not None:
+        msg: str = "sqlbuild_assets received both 'dag' and 'project'; pass only one"
+        raise ValueError(msg)
+    dag_input: SqlBuildDagInput = (
+        dag if dag is not None else project.dag_path if project is not None else _DEFAULT_DAG_PATH
+    )
+    resolved_dag: Mapping[str, Any] = load_sqlbuild_dag(dag_input)
     resolved_translator: SqlBuildDagsterTranslator = translator or SqlBuildDagsterTranslator()
     specs: tuple[Any, ...] = build_asset_specs(
         dag=resolved_dag,

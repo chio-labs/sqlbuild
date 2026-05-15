@@ -62,14 +62,27 @@ def build_dagster_test_dag() -> Mapping[str, Any]:
 
 
 def write_fake_sqb_command(
-    *, root: Path, stdout: str = "", stderr: str = "", exit_code: int = 0
+    *,
+    root: Path,
+    stdout: str = "",
+    stderr: str = "",
+    exit_code: int = 0,
+    expected_args: tuple[str, ...] | None = None,
 ) -> list[str]:
     script_path: Path = root / "fake_sqb.py"
     script_path.write_text(
         "\n".join(
             (
                 "from __future__ import annotations",
+                "from pathlib import Path",
                 "import sys",
+                f"expected_args = {expected_args!r}",
+                "if expected_args is not None and tuple(sys.argv[1:]) != expected_args:",
+                "    actual_args = tuple(sys.argv[1:])",
+                "    sys.stderr.write(f'expected args {expected_args!r}, got {actual_args!r}\\n')",
+                "    raise SystemExit(99)",
+                "if len(sys.argv) >= 4 and tuple(sys.argv[1:3]) == ('compile', '--dag'):",
+                f"    Path(sys.argv[3]).write_text({stdout!r}, encoding='utf-8')",
                 f"sys.stdout.write({stdout!r})",
                 f"sys.stderr.write({stderr!r})",
                 f"raise SystemExit({exit_code})",
@@ -82,6 +95,7 @@ def write_fake_sqb_command(
 
 
 def write_dagster_test_dag(*, root: Path) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
     dag_path: Path = root / "sqlbuild_dag.json"
     dag_path.write_text(json.dumps(build_dagster_test_dag()), encoding="utf-8")
     return dag_path

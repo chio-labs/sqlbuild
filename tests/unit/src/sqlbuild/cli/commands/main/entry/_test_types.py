@@ -20,6 +20,7 @@ class MainTestCase:
     expected_no_color: bool = False
     expected_debug: bool = False
     expected_manifest: bool = False
+    expected_dag: str | None = None
     expected_compile_lineage_mode: CompileLineageMode = CompileLineageMode.FAST
     expected_column_lineage_mode: ColumnLineageMode = ColumnLineageMode.RICH
     expected_scenario_selectors: tuple[str, ...] = ()
