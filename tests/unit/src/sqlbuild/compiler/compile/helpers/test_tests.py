@@ -230,6 +230,19 @@ MODEL_TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
         expected_expected_model_names=("orders",),
     ),
     ExtractSqlTestCtesTestCase(
+        description="extracts model test ctes with sqlglot fallback syntax",
+        sql="""
+        WITH
+        "__source__raw_orders" AS MATERIALIZED (SELECT 1 AS order_id),
+        "__expected__orders" AS (SELECT order_id FROM "__source__raw_orders")
+        SELECT 1
+        """.strip(),
+        expected_authored_cte_names=("__source__raw_orders",),
+        expected_mock_model_names=(),
+        expected_mock_source_names=("raw_orders",),
+        expected_expected_model_names=("orders",),
+    ),
+    ExtractSqlTestCtesTestCase(
         description="allows cast expressions with explicit aliases in expected ctes",
         sql="""
         WITH __source__raw_orders AS (SELECT 1 AS order_id),

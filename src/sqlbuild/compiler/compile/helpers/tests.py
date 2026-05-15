@@ -22,6 +22,7 @@ from sqlbuild.compiler.compile.constants import (
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.helpers.macros import find_macro_call_names
 from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
+from sqlbuild.compiler.compile.helpers.sqlglot_ctes import extract_top_level_ctes_with_sqlglot
 from sqlbuild.compiler.compile.helpers.sqlglot_tests import (
     extract_expected_branch_column_names_with_sqlglot,
 )
@@ -51,6 +52,26 @@ def extract_sql_test_ctes(
 ) -> CompileSqlTestCtes:
     """Extract top-level SQL-native test mock and expected CTEs."""
 
+    try:
+        ctes: tuple[CompileSqlTestCte, ...] = _extract_sql_test_ctes_with_scanner(
+            sql=sql,
+            file_label=file_label,
+        )
+    except CompileInputError as scanner_error:
+        cte_values: tuple[tuple[str, str], ...] | None = extract_top_level_ctes_with_sqlglot(
+            sql=sql,
+            file_label=file_label,
+            context_label="SQL test",
+        )
+        if cte_values is None:
+            raise scanner_error from None
+        ctes = tuple(CompileSqlTestCte(name=name, sql_body=body) for name, body in cte_values)
+    return _classify_sql_test_ctes(ctes=ctes, file_label=file_label, mode=mode)
+
+
+def _extract_sql_test_ctes_with_scanner(
+    *, sql: str, file_label: str
+) -> tuple[CompileSqlTestCte, ...]:
     index: int = _skip_ignorable(sql=sql, start=0)
     index = _consume_keyword(sql=sql, start=index, keyword="WITH", file_label=file_label)
     index = _skip_ignorable(sql=sql, start=index)
@@ -89,7 +110,7 @@ def extract_sql_test_ctes(
         break
 
     _validate_ceremonial_select(sql=sql, start=index, file_label=file_label)
-    return _classify_sql_test_ctes(ctes=tuple(ctes), file_label=file_label, mode=mode)
+    return tuple(ctes)
 
 
 def _classify_sql_test_ctes(
