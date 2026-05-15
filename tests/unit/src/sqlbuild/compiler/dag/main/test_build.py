@@ -30,7 +30,7 @@ from tests.unit.src.sqlbuild.compiler.dag.main.helpers import build_dag_artifact
                 ("source:raw_orders", "model:orders"),
             ),
             expected_check_ids=(
-                "audit:orders_audit",
+                "audit:orders_audit:model:orders:order_id",
                 "sql_scenario:orders_scenario",
                 "sql_test:orders_test",
             ),
