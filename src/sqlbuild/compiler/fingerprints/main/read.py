@@ -8,6 +8,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+from sqlbuild.compiler.fingerprints.exceptions import FingerprintInputError
 from sqlbuild.compiler.fingerprints.main.shared.helpers.sql import (
     build_qualified_table_name,
     build_read_all_sql,
@@ -75,7 +76,7 @@ def _row_to_fingerprint(row: tuple[Any, ...], *, qualified_name: str) -> Fingerp
             "utf-8"
         )
     except (binascii.Error, UnicodeDecodeError) as error:
-        raise ValueError(
+        raise FingerprintInputError(
             f"Invalid fingerprint query SQL storage for '{model_name}' in {qualified_name}: "
             "expected base64-encoded UTF-8. This can happen after upgrading from an older "
             f"sqlbuild version; delete or rebuild {qualified_name} to regenerate fingerprints."

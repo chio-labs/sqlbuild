@@ -275,6 +275,8 @@ def build_scenario_execution_plan(
         scenario=scenario,
         graph_plan=graph_plan,
         relation_plan=relation_plan,
+        sqlglot_enabled=sqlglot_enabled,
+        sqlglot_dialect=sqlglot_dialect,
     )
     seed_entries: tuple[SeedPlanEntry, ...] = build_scenario_seed_entries(
         project=project,
@@ -409,6 +411,8 @@ def build_scenario_fixture_plans(
     scenario: CompiledSqlScenario,
     graph_plan: ScenarioGraphPlan,
     relation_plan: ScenarioRelationPlan,
+    sqlglot_enabled: bool = True,
+    sqlglot_dialect: str | None = None,
 ) -> tuple[ScenarioFixturePlan, ...]:
     """Build self-contained fixture SQL plans, including shared helper CTEs."""
 
@@ -419,6 +423,8 @@ def build_scenario_fixture_plans(
             sql_body=_resolve_project_source_refs(
                 sql=helper_cte.sql_body,
                 source_map=relation_plan.project_source_map,
+                sqlglot_enabled=sqlglot_enabled,
+                sqlglot_dialect=sqlglot_dialect,
             ),
         )
         for helper_cte in helper_ctes
@@ -456,6 +462,8 @@ def build_scenario_fixture_plans(
                     sql=_resolve_project_source_refs(
                         sql=_required_fixture_sql(source_ctes, source_name, kind="source"),
                         source_map=relation_plan.project_source_map,
+                        sqlglot_enabled=sqlglot_enabled,
+                        sqlglot_dialect=sqlglot_dialect,
                     ),
                     helper_ctes=resolved_helper_ctes,
                 ),
@@ -477,6 +485,8 @@ def build_scenario_fixture_plans(
                     sql=_resolve_project_source_refs(
                         sql=_required_fixture_sql(ref_ctes, ref_name, kind="ref"),
                         source_map=relation_plan.project_source_map,
+                        sqlglot_enabled=sqlglot_enabled,
+                        sqlglot_dialect=sqlglot_dialect,
                     ),
                     helper_ctes=resolved_helper_ctes,
                 ),
@@ -498,6 +508,8 @@ def build_scenario_fixture_plans(
                     sql=_resolve_project_source_refs(
                         sql=_required_fixture_sql(seed_ctes, seed_name, kind="seed"),
                         source_map=relation_plan.project_source_map,
+                        sqlglot_enabled=sqlglot_enabled,
+                        sqlglot_dialect=sqlglot_dialect,
                     ),
                     helper_ctes=resolved_helper_ctes,
                 ),
@@ -519,6 +531,8 @@ def build_scenario_fixture_plans(
                     sql=_resolve_project_source_refs(
                         sql=_required_fixture_sql(dbt_ref_ctes, dbt_ref_name, kind="dbt_ref"),
                         source_map=relation_plan.project_source_map,
+                        sqlglot_enabled=sqlglot_enabled,
+                        sqlglot_dialect=sqlglot_dialect,
                     ),
                     helper_ctes=resolved_helper_ctes,
                 ),
@@ -687,7 +701,22 @@ def _wrap_sql_with_helpers(*, sql: str, helper_ctes: tuple[CompileSqlScenarioCte
     return f"WITH {', '.join(helper_parts)} {sql}"
 
 
-def _resolve_project_source_refs(*, sql: str, source_map: dict[str, SourceEntry]) -> str:
+def _resolve_project_source_refs(
+    *,
+    sql: str,
+    source_map: dict[str, SourceEntry],
+    sqlglot_enabled: bool,
+    sqlglot_dialect: str | None,
+) -> str:
+    if sqlglot_enabled:
+        sqlglot_result: str | None = _try_resolve_project_source_refs_with_sqlglot(
+            sql=sql,
+            source_map=source_map,
+            sqlglot_dialect=sqlglot_dialect,
+        )
+        if sqlglot_result is not None:
+            return sqlglot_result
+
     def _replace_source(match: re.Match[str]) -> str:
         source: SourceEntry | None = source_map.get(match.group("name"))
         if source is None:
@@ -695,6 +724,79 @@ def _resolve_project_source_refs(*, sql: str, source_map: dict[str, SourceEntry]
         return render_source_relation(source)
 
     return _SOURCE_PATTERN.sub(_replace_source, sql)
+
+
+def _try_resolve_project_source_refs_with_sqlglot(
+    *, sql: str, source_map: dict[str, SourceEntry], sqlglot_dialect: str | None
+) -> str | None:
+    if SqlReferenceKind.SOURCE.function_name not in sql.lower():
+        return None
+    sqlglot_module: Any | None = import_sqlglot()
+    expressions_module: Any | None = import_sqlglot_expressions()
+    if sqlglot_module is None or expressions_module is None:
+        return None
+    try:
+        parsed: Any = (
+            sqlglot_module.parse_one(sql, read=sqlglot_dialect)
+            if sqlglot_dialect is not None
+            else sqlglot_module.parse_one(sql)
+        )
+    except Exception:
+        return None
+
+    table_type: type[Any] = expressions_module.Table
+    anonymous_type: type[Any] = expressions_module.Anonymous
+
+    for table in parsed.find_all(table_type):
+        source: SourceEntry | None = _source_for_sqlglot_table(
+            table=table,
+            source_map=source_map,
+            table_type=table_type,
+            anonymous_type=anonymous_type,
+        )
+        if source is not None and source.expression is not None:
+            return None
+
+    def _replace_source_table(table: Any) -> Any:
+        source: SourceEntry | None = _source_for_sqlglot_table(
+            table=table,
+            source_map=source_map,
+            table_type=table_type,
+            anonymous_type=anonymous_type,
+        )
+        if source is None:
+            return table
+        replacement: Any = expressions_module.to_table(render_source_relation(source))
+        alias: Any | None = table.args.get("alias")
+        if alias is not None:
+            replacement.set("alias", alias)
+        return replacement
+
+    return parsed.transform(_replace_source_table).sql(pretty=False)
+
+
+def _source_for_sqlglot_table(
+    *,
+    table: Any,
+    source_map: dict[str, SourceEntry],
+    table_type: type[Any],
+    anonymous_type: type[Any],
+) -> SourceEntry | None:
+    if not isinstance(table, table_type):
+        return None
+    anonymous: Any = table.this
+    if not isinstance(anonymous, anonymous_type):
+        return None
+    function_name: str = str(anonymous.this).lower()
+    if function_name != SqlReferenceKind.SOURCE.function_name:
+        return None
+    expressions: list[Any] = list(anonymous.expressions)
+    if len(expressions) != 1:
+        return None
+    argument: Any = expressions[0]
+    if not hasattr(argument, "name"):
+        return None
+    return source_map.get(str(argument.name))
 
 
 def _required_fixture_sql(fixture_sql: dict[str, str], logical_name: str, *, kind: str) -> str:

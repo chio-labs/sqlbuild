@@ -11,6 +11,7 @@ from sqlbuild.shared.constants import (
     SCENARIO_HASH_PREFIX_LENGTH,
     SCENARIO_SHORTENED_LOGICAL_HASH_LENGTH,
 )
+from sqlbuild.shared.exceptions.errors import SharedInputError
 from sqlbuild.shared.models import ParsedScenarioArtifactName
 
 _SCENARIO_ARTIFACT_NAME_RE: re.Pattern[str] = re.compile(
@@ -65,7 +66,7 @@ def fit_scenario_artifact_logical_name(
 
     max_logical_length: int = identifier_limit - len(fixed_prefix)
     if max_logical_length < 1:
-        raise ValueError(
+        raise SharedInputError(
             f"Scenario artifact prefix '{fixed_prefix}' does not fit within identifier "
             f"limit {identifier_limit}"
         )
@@ -74,7 +75,7 @@ def fit_scenario_artifact_logical_name(
 
     suffix_length: int = SCENARIO_SHORTENED_LOGICAL_HASH_LENGTH + 1
     if max_logical_length <= suffix_length:
-        raise ValueError(
+        raise SharedInputError(
             f"Scenario artifact name for '{logical_name}' cannot fit within identifier "
             f"limit {identifier_limit}"
         )

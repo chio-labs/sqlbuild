@@ -13,6 +13,7 @@ from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import FunctionPlanEntry
 from sqlbuild.executor.build.models import FunctionExecutionResult
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
 
 
@@ -39,11 +40,11 @@ def execute_function(
             function_entry.language == FunctionLanguage.PYTHON
             and not adapter.supports_python_functions()
         ):
-            raise NotImplementedError(
+            raise ExecutorInputError(
                 f"Adapter '{type(adapter).__name__}' does not support Python UDFs"
             )
         if function_entry.return_columns and not adapter.supports_table_functions():
-            raise NotImplementedError(
+            raise ExecutorInputError(
                 f"Adapter '{type(adapter).__name__}' does not support SQL table functions"
             )
         adapter.ensure_schema(

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.compiler.discovery.exceptions import ModelSqlParseError
+from sqlbuild.compiler.discovery.exceptions import ModelHeaderSyntaxError, ModelSqlParseError
 from sqlbuild.compiler.discovery.helpers.constants import MODEL_HEADER_PATTERN
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot
 from sqlbuild.shared.types import SqlReferenceKind
@@ -380,7 +380,7 @@ def _parse_model_header(*, header: str, file_path: Path) -> dict[str, object]:
         return parser.parse()
     except ModelSqlParseError:
         raise
-    except ValueError as error:
+    except ModelHeaderSyntaxError as error:
         raise ModelSqlParseError(
             f"MODEL(...) in '{file_path}' contains invalid SQLBuild header syntax: {error}"
         ) from error
@@ -405,11 +405,11 @@ class _ModelHeaderParser:
                 continue
             key: str = self._consume_key()
             if self._match_symbol(":"):
-                raise ValueError(
+                raise ModelHeaderSyntaxError(
                     f"unexpected ':' after key '{key}'; use SQLBuild syntax '{key} value'"
                 )
             if self._is_at_end_symbol(end_symbol) or self._peek().kind == _END_TOKEN:
-                raise ValueError(
+                raise ModelHeaderSyntaxError(
                     f"unexpected token '{key}' without a value; quote values with spaces"
                 )
             values[key] = self._parse_value()
@@ -435,7 +435,7 @@ class _ModelHeaderParser:
             return self._parse_list()
         if self._match_symbol("("):
             return self._parse_map(end_symbol=")")
-        raise ValueError(f"expected value at position {token.position}")
+        raise ModelHeaderSyntaxError(f"expected value at position {token.position}")
 
     def _parse_list(self) -> list[object]:
         values: list[object] = []
@@ -450,7 +450,7 @@ class _ModelHeaderParser:
     def _parse_relation_call(self, name: str) -> str:
         token: _ModelHeaderToken = self._peek()
         if token.kind != _STRING_TOKEN:
-            raise ValueError(f"{name}(...) requires a double-quoted relation name")
+            raise ModelHeaderSyntaxError(f"{name}(...) requires a double-quoted relation name")
         self._advance()
         relation_name: str = token.value.replace('"', '\\"')
         self._consume_symbol(")")
@@ -459,7 +459,7 @@ class _ModelHeaderParser:
     def _consume_key(self) -> str:
         token: _ModelHeaderToken = self._peek()
         if token.kind != _WORD_TOKEN:
-            raise ValueError(f"expected key at position {token.position}")
+            raise ModelHeaderSyntaxError(f"expected key at position {token.position}")
         self._advance()
         return token.value
 
@@ -480,12 +480,14 @@ class _ModelHeaderParser:
         if self._match_symbol(symbol):
             return
         token: _ModelHeaderToken = self._peek()
-        raise ValueError(f"expected '{symbol}' at position {token.position}")
+        raise ModelHeaderSyntaxError(f"expected '{symbol}' at position {token.position}")
 
     def _expect_end(self) -> None:
         token: _ModelHeaderToken = self._peek()
         if token.kind != _END_TOKEN:
-            raise ValueError(f"unexpected token '{token.value}' at position {token.position}")
+            raise ModelHeaderSyntaxError(
+                f"unexpected token '{token.value}' at position {token.position}"
+            )
 
     def _peek(self) -> _ModelHeaderToken:
         return self._tokens[self._index]
@@ -526,14 +528,14 @@ def _tokenize_model_header(header: str) -> list[_ModelHeaderToken]:
             if next_character.isspace() or next_character in _SYMBOLS or next_character == ":":
                 break
             if next_character in _QUOTE_NAMES:
-                raise ValueError(
+                raise ModelHeaderSyntaxError(
                     f"unexpected {_QUOTE_NAMES[next_character]} quote inside bare value "
                     f"at position {next_index}; quote the whole value"
                 )
             next_index += 1
         value = header[index:next_index]
         if not value:
-            raise ValueError(f"unexpected character '{character}' at position {index}")
+            raise ModelHeaderSyntaxError(f"unexpected character '{character}' at position {index}")
         tokens.append(_ModelHeaderToken(kind=_WORD_TOKEN, value=value, position=index))
         index = next_index
     tokens.append(_ModelHeaderToken(kind=_END_TOKEN, value="", position=len(header)))
@@ -549,7 +551,7 @@ def _read_quoted_string(*, header: str, start: int) -> tuple[str, int]:
         character: str = header[index]
         if character == "\\":
             if index + 1 >= len(header):
-                raise ValueError(f"unterminated escape at position {index}")
+                raise ModelHeaderSyntaxError(f"unterminated escape at position {index}")
             value_parts.append(header[index + 1])
             index += 2
             continue
@@ -557,7 +559,7 @@ def _read_quoted_string(*, header: str, start: int) -> tuple[str, int]:
             return "".join(value_parts), index + 1
         value_parts.append(character)
         index += 1
-    raise ValueError(f"unterminated {quote_name}-quoted string at position {start}")
+    raise ModelHeaderSyntaxError(f"unterminated {quote_name}-quoted string at position {start}")
 
 
 def _parse_word_value(value: str) -> object:

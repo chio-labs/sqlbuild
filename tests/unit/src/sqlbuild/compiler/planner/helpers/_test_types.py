@@ -342,6 +342,9 @@ class ScenarioFixturePlanTestCase:
     graph_plan: ScenarioGraphPlan
     expected_fixture_sql: dict[str, str]
     expected_fixture_targets: dict[str, str]
+    fixture_sql_body: str | None = None
+    sqlglot_enabled: bool = True
+    sqlglot_dialect: str | None = None
 
 
 @dataclass(frozen=True)

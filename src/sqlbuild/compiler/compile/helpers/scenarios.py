@@ -12,6 +12,7 @@ from sqlbuild.compiler.compile.constants import (
     SOURCE_TEST_CTE_PREFIX,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.helpers.sqlglot_ctes import extract_top_level_ctes_with_sqlglot
 from sqlbuild.compiler.compile.helpers.tests import (
     _consume_keyword,
     _read_identifier,
@@ -32,6 +33,26 @@ _CONTEXT: str = "SQL scenario"
 def extract_sql_scenario_ctes(*, sql: str, file_label: str) -> CompileSqlScenarioCtes:
     """Extract top-level SQL-native scenario fixture, expected, and assertion CTEs."""
 
+    try:
+        ctes: tuple[CompileSqlScenarioCte, ...] = _extract_sql_scenario_ctes_with_scanner(
+            sql=sql,
+            file_label=file_label,
+        )
+    except CompileInputError as scanner_error:
+        cte_values: tuple[tuple[str, str], ...] | None = extract_top_level_ctes_with_sqlglot(
+            sql=sql,
+            file_label=file_label,
+            context_label="SQL scenario",
+        )
+        if cte_values is None:
+            raise scanner_error from None
+        ctes = tuple(CompileSqlScenarioCte(name=name, sql_body=body) for name, body in cte_values)
+    return _classify_sql_scenario_ctes(ctes=ctes, file_label=file_label)
+
+
+def _extract_sql_scenario_ctes_with_scanner(
+    *, sql: str, file_label: str
+) -> tuple[CompileSqlScenarioCte, ...]:
     index: int = _skip_ignorable(sql=sql, start=0)
     index = _consume_keyword(sql=sql, start=index, keyword="WITH", file_label=file_label)
     index = _skip_ignorable(sql=sql, start=index)
@@ -74,7 +95,7 @@ def extract_sql_scenario_ctes(*, sql: str, file_label: str) -> CompileSqlScenari
         break
 
     _validate_ceremonial_select(sql=sql, start=index, file_label=file_label)
-    return _classify_sql_scenario_ctes(ctes=tuple(ctes), file_label=file_label)
+    return tuple(ctes)
 
 
 def _classify_sql_scenario_ctes(
