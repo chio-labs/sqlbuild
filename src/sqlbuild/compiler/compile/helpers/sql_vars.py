@@ -8,20 +8,20 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.helpers.macros import expand_sql_macros
-from sqlbuild.compiler.compile.helpers.sql_scanning import (
-    is_identifier_character as _is_identifier_continue,
-)
-from sqlbuild.compiler.compile.helpers.sql_scanning import (
-    is_identifier_start as _is_identifier_start,
-)
-from sqlbuild.compiler.compile.helpers.sql_scanning import (
-    skip_block_comment,
-    skip_line_comment,
-    skip_quoted_text,
-)
 from sqlbuild.compiler.compile.models.core import (
     LoadedMacro,
     MacroContext,
+)
+from sqlbuild.compiler.shared.helpers.sql_scanning import (
+    is_identifier_character as _is_identifier_continue,
+)
+from sqlbuild.compiler.shared.helpers.sql_scanning import (
+    is_identifier_start as _is_identifier_start,
+)
+from sqlbuild.compiler.shared.helpers.sql_scanning import (
+    skip_block_comment,
+    skip_line_comment,
+    skip_quoted_text,
 )
 from sqlbuild.shared.helpers.project_var_values import render_project_var_text
 

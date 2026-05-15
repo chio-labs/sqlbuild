@@ -13,6 +13,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledSeed,
 )
 from sqlbuild.compiler.planner.models import CursorBounds
+from sqlbuild.compiler.shared.helpers.sql_scanning import find_matching_paren
 from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
 from sqlbuild.shared.helpers.sql_reference_patterns import (
     quoted_reference_call_pattern,
@@ -99,18 +100,54 @@ def resolve_dbt_ref_references(
 
 
 def resolve_udf_references(
-    *, query_sql: str, function_targets: dict[str, CompiledRelationTarget]
+    *,
+    query_sql: str,
+    function_targets: dict[str, CompiledRelationTarget],
+    adapter: BaseAdapter,
 ) -> str:
-    """Replace all __udf() calls with qualified function names."""
+    """Replace __udf() calls with adapter-specific scalar UDF calls."""
 
-    def _replace_udf(match: re.Match[str]) -> str:
+    parts: list[str] = []
+    last_index: int = 0
+    match: re.Match[str]
+    for match in _UDF_PATTERN.finditer(query_sql):
+        parts.append(query_sql[last_index : match.start()])
         function_name: str = match.group(1)
         target: CompiledRelationTarget | None = function_targets.get(function_name)
         if target is None or target.qualified_name is None:
-            return match.group(0)
-        return target.qualified_name
+            parts.append(match.group(0))
+            last_index = match.end()
+            continue
 
-    return _UDF_PATTERN.sub(_replace_udf, query_sql)
+        call_suffix_start: int = _skip_whitespace(sql=query_sql, start=match.end())
+        if call_suffix_start >= len(query_sql) or query_sql[call_suffix_start] != "(":
+            parts.append(match.group(0))
+            last_index = match.end()
+            continue
+
+        call_suffix_end: int = find_matching_paren(
+            sql=query_sql,
+            open_paren_index=call_suffix_start,
+            context="SQL UDF call",
+        )
+        call_suffix_sql: str = query_sql[call_suffix_start : call_suffix_end + 1]
+        parts.append(
+            adapter.render_udf_call(
+                target=target.qualified_name,
+                call_suffix_sql=call_suffix_sql,
+            )
+        )
+        last_index = call_suffix_end + 1
+
+    parts.append(query_sql[last_index:])
+    return "".join(parts)
+
+
+def _skip_whitespace(*, sql: str, start: int) -> int:
+    index: int = start
+    while index < len(sql) and sql[index].isspace():
+        index += 1
+    return index
 
 
 def resolve_table_function_references(

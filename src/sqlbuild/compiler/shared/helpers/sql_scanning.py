@@ -1,4 +1,4 @@
-"""Shared SQL character-level scanning primitives for compile helpers."""
+"""Shared SQL character-level scanning primitives for compiler helpers."""
 
 from __future__ import annotations
 

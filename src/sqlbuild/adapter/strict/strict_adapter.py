@@ -138,6 +138,11 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_udf_call(self, *, target: str, call_suffix_sql: str) -> str:
+        """Render a scalar UDF call for use in an expression."""
+        ...
+
+    @abstractmethod
     def render_create_function(
         self,
         *,
