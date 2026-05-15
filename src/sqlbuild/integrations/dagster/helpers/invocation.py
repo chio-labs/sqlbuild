@@ -255,8 +255,16 @@ def _with_selected_scenario_args(
     if _has_explicit_scenario_selector(args=args):
         return args, (), None
     selected_paths: set[tuple[str, ...]] = _selected_asset_paths(context=context)
+    selected_check_keys: set[tuple[tuple[str, ...], str]] = _selected_asset_check_keys(
+        context=context
+    )
     if not selected_paths:
+        selected_paths = {asset_key for asset_key, _check_name in selected_check_keys}
+    if not selected_paths and not selected_check_keys:
         return args, (), None
+    nodes_by_id: dict[str, Mapping[str, Any]] = {
+        str(node.get("id")): node for node in dag.get("nodes", ())
+    }
     selected_asset_ids: set[str] = {
         str(node.get("id"))
         for node in dag.get("nodes", ())
@@ -269,6 +277,14 @@ def _with_selected_scenario_args(
             continue
         if not selected_asset_ids.intersection(
             str(id_) for id_ in check.get("checked_asset_ids", ())
+        ):
+            continue
+        check_name: str = _dagster_check_name(check)
+        if selected_check_keys and not _scenario_check_is_selected(
+            check=check,
+            check_name=check_name,
+            nodes_by_id=nodes_by_id,
+            selected_check_keys=selected_check_keys,
         ):
             continue
         selector: object = check.get("name")
@@ -299,6 +315,23 @@ def _has_explicit_scenario_selector(*, args: tuple[str, ...]) -> bool:
         if arg.startswith("-"):
             continue
         return True
+    return False
+
+
+def _scenario_check_is_selected(
+    *,
+    check: Mapping[str, Any],
+    check_name: str,
+    nodes_by_id: Mapping[str, Mapping[str, Any]],
+    selected_check_keys: set[tuple[tuple[str, ...], str]],
+) -> bool:
+    for asset_id in check.get("checked_asset_ids", ()):
+        node: Mapping[str, Any] | None = nodes_by_id.get(str(asset_id))
+        if node is None:
+            continue
+        asset_path: tuple[str, ...] = tuple(str(part) for part in node.get("asset_key", ()))
+        if (asset_path, check_name) in selected_check_keys:
+            return True
     return False
 
 
@@ -432,6 +465,8 @@ def _build_results_from_execution_payload(
             seen_check_outputs=seen_check_outputs,
         )
         results.extend(check_results)
+    if _asset_check_only_context(context=context):
+        return tuple(result for result in results if isinstance(result, dg.AssetCheckResult))
     return tuple(results)
 
 
@@ -486,6 +521,31 @@ def _selected_asset_paths(*, context: Any) -> set[tuple[str, ...]]:
     if selected_keys is None:
         return set()
     return {tuple(key.path) for key in selected_keys}
+
+
+def _selected_asset_check_keys(*, context: Any) -> set[tuple[tuple[str, ...], str]]:
+    selected_keys: object = (
+        getattr(context, "selected_asset_check_keys", None) if context is not None else None
+    )
+    if selected_keys is None:
+        return set()
+    check_keys: set[tuple[tuple[str, ...], str]] = set()
+    for key in selected_keys:
+        asset_key: object = getattr(key, "asset_key", None)
+        check_name: object = getattr(key, "name", None)
+        if asset_key is None or check_name is None:
+            continue
+        path: object = getattr(asset_key, "path", None)
+        if path is None:
+            continue
+        check_keys.add((tuple(str(part) for part in path), str(check_name)))
+    return check_keys
+
+
+def _asset_check_only_context(*, context: Any) -> bool:
+    return bool(_selected_asset_check_keys(context=context)) and not bool(
+        _selected_asset_paths(context=context)
+    )
 
 
 def _dag_check_for_execution_check(

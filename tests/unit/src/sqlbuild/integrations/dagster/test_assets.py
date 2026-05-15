@@ -5,11 +5,20 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.integrations.dagster import SqlBuildDagsterTranslator, sqlbuild_assets
-from sqlbuild.integrations.dagster.helpers.assets import build_asset_specs, build_check_specs
+from sqlbuild.integrations.dagster import (
+    SqlBuildDagsterTranslator,
+    sqlbuild_assets,
+    sqlbuild_scenario_checks,
+)
+from sqlbuild.integrations.dagster.helpers.assets import (
+    build_asset_specs,
+    build_check_specs,
+    build_scenario_check_specs,
+)
 from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterAssetSpecTestCase,
     DagsterDecoratorTestCase,
+    DagsterScenarioCheckDecoratorTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dagster.helpers import build_dagster_test_dag
 
@@ -98,3 +107,55 @@ def test_given_sqlbuild_assets_decorator_when_applied_then_returns_assets_defini
     assert tuple(sorted(tuple(key.path) for key in assets_def.keys)) == tuple(
         sorted(test_case.expected_asset_keys)
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterScenarioCheckDecoratorTestCase(
+            description="decorates user function as scenario-only asset checks definition",
+            expected_check_names=("scenario__orders_minimal", "scenario__customers_minimal"),
+            unexpected_check_names=("audit__not_null__order_id", "audit__freshness__loaded_at"),
+        )
+    ],
+    ids=["decorates user function as scenario-only asset checks definition"],
+)
+def test_given_sqlbuild_scenario_checks_decorator_when_applied_then_returns_check_definition(
+    test_case: DagsterScenarioCheckDecoratorTestCase,
+) -> None:
+    @sqlbuild_scenario_checks(dag=build_dagster_test_dag())
+    def checks_def() -> dg.AssetCheckResult:
+        return dg.AssetCheckResult(
+            passed=True,
+            asset_key=dg.AssetKey(["analytics", "orders"]),
+            check_name="scenario__orders_minimal",
+        )
+
+    check_names: tuple[str, ...] = tuple(spec.name for spec in checks_def.check_specs)
+
+    assert check_names == test_case.expected_check_names
+    assert not set(test_case.unexpected_check_names).intersection(check_names)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterScenarioCheckDecoratorTestCase(
+            description="builds scenario-only check specs",
+            expected_check_names=("scenario__orders_minimal", "scenario__customers_minimal"),
+            unexpected_check_names=("audit__not_null__order_id", "audit__freshness__loaded_at"),
+        )
+    ],
+    ids=["builds scenario-only check specs"],
+)
+def test_given_sqlbuild_dag_when_building_scenario_check_specs_then_filters_non_scenarios(
+    test_case: DagsterScenarioCheckDecoratorTestCase,
+) -> None:
+    check_specs: tuple[Any, ...] = build_scenario_check_specs(
+        dag=build_dagster_test_dag(),
+        translator=SqlBuildDagsterTranslator(),
+    )
+    check_names: tuple[str, ...] = tuple(spec.name for spec in check_specs)
+
+    assert check_names == test_case.expected_check_names
+    assert not set(test_case.unexpected_check_names).intersection(check_names)
