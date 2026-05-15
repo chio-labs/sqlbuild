@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.11.0](https://github.com/chio-labs/sqlbuild/compare/v0.10.0...v0.11.0) (2026-05-15)
+
+
+### Features
+
+* add macro SQL test mode ([6498527](https://github.com/chio-labs/sqlbuild/commit/64985278ed1fb46d6af50d15e24f09eea8e2d544))
+* add macro SQL test mode ([1e6c6c6](https://github.com/chio-labs/sqlbuild/commit/1e6c6c6904c1b304d5c39c11d1464c6103f5a075))
+* add table function SQL tests ([3b07fc6](https://github.com/chio-labs/sqlbuild/commit/3b07fc6fb61e3aae995c3cf7b6821600b1ec5b4d))
+* add table function SQL tests ([8e8c1e4](https://github.com/chio-labs/sqlbuild/commit/8e8c1e4cbe28be4703dd51cd5bb938fab6e55b8a))
+* add UDF SQL test mode ([150b552](https://github.com/chio-labs/sqlbuild/commit/150b55225caab527a227f5568645b8e8a8437d2f))
+* add UDF SQL test mode ([5738a42](https://github.com/chio-labs/sqlbuild/commit/5738a42c16d0041dffdb7c7ff5dedc16268d74e3))
+
 ## [0.10.0](https://github.com/chio-labs/sqlbuild/compare/v0.9.0...v0.10.0) (2026-05-14)
 
 
