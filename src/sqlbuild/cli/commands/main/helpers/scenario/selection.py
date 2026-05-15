@@ -5,7 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
-from sqlbuild.compiler.compile.models import CompiledProject, CompiledSqlScenario
+from sqlbuild.compiler.compile.models.core import (
+    CompiledProject,
+    CompiledSqlScenario,
+)
 from sqlbuild.shared.constants import (
     SCENARIO_CLI_NONE_DISCOVERED,
     SCENARIO_CLI_UNKNOWN_SELECTOR,

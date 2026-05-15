@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models import CompiledModel
+from sqlbuild.compiler.compile.models.core import CompiledModel
 from sqlbuild.compiler.manifest.constants import CHECKSUM_HASH_NAME, RESOURCE_TYPE_MODEL
 from sqlbuild.compiler.manifest.helpers.shared import (
     build_columns_dict,

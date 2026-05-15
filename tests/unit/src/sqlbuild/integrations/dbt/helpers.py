@@ -5,7 +5,7 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.helpers.assembly import assemble_compiled_project
 from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
-from sqlbuild.compiler.compile.models import (
+from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationTarget,

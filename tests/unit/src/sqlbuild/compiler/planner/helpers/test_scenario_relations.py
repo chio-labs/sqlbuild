@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.planner.helpers.scenario_relations import (
     build_scenario_execution_plan,
     build_scenario_fixture_plans,

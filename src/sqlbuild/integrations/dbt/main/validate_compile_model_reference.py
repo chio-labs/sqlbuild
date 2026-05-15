@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models import CompileSqlReference
+from sqlbuild.compiler.compile.models.core import CompileSqlReference
 from sqlbuild.integrations.dbt.helpers.compile_refs import validate_compile_dbt_model_reference
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 

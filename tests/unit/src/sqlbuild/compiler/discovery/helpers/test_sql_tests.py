@@ -116,7 +116,7 @@ ERROR_TEST_CASES: list[ParseSqlTestFileErrorTestCase] = [
 
         SELECT 1
         """,
-        expected_error_fragment="only supports `name` right now; unsupported keys: chain",
+        expected_error_fragment="only supports `name` and `mode`; unsupported keys: chain",
     ),
     ParseSqlTestFileErrorTestCase(
         description="raises when the test name is blank",

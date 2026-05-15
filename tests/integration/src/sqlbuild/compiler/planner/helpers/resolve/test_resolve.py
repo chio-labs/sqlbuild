@@ -7,7 +7,10 @@ from typing import Any
 import pytest
 
 from sqlbuild.adapter.shared.models import ColumnInfo
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import (
+    CompiledModel,
+    CompiledRelationTarget,
+)
 from sqlbuild.compiler.planner.models import ModelCursorSnapshot, WarehouseSnapshot
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 from tests.integration.src.sqlbuild.compiler.planner.helpers.resolve._test_types import (

@@ -5,7 +5,10 @@ from __future__ import annotations
 import logging
 
 from sqlbuild.adapter.shared.models import ColumnInfo
-from sqlbuild.compiler.compile.models import CompiledModel, InferredColumn
+from sqlbuild.compiler.compile.models.core import (
+    CompiledModel,
+    InferredColumn,
+)
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.helpers.changes.config import (
     get_config_dict,

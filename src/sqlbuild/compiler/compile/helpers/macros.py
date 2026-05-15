@@ -24,7 +24,10 @@ from sqlbuild.compiler.compile.helpers.sql_scanning import (
 from sqlbuild.compiler.compile.helpers.sql_scanning import (
     is_identifier_start as _is_identifier_start,
 )
-from sqlbuild.compiler.compile.models import LoadedMacro, MacroContext
+from sqlbuild.compiler.compile.models.core import (
+    LoadedMacro,
+    MacroContext,
+)
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile
 
 _CONTEXT: str = "Macro expansion"

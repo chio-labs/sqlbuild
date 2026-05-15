@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
 from sqlbuild.adapter.shared.types import FunctionNullabilityRule
-from sqlbuild.compiler.compile.models import InferredColumn
+from sqlbuild.compiler.compile.models.core import InferredColumn
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.shared.helpers.sql_reference_patterns import (
     quoted_reference_call_pattern,

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.models.core import (
+    CompiledModel,
+    CompiledProject,
+)
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage.helpers.columns import (
     _build_schema_mapping,

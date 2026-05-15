@@ -11,7 +11,7 @@ import pytest
 
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
-from sqlbuild.compiler.compile.models import CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.diagnostics.main.configure import configure_diagnostics

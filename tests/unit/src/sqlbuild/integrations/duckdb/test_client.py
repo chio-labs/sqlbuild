@@ -4,7 +4,10 @@ import pytest
 
 from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
 from sqlbuild.adapter.shared.types import CursorKind, FunctionNullabilityRule
-from sqlbuild.compiler.compile.models import FunctionArgument, FunctionReturnColumn
+from sqlbuild.compiler.compile.models.core import (
+    FunctionArgument,
+    FunctionReturnColumn,
+)
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.unit.src.sqlbuild.integrations.duckdb._test_types import (

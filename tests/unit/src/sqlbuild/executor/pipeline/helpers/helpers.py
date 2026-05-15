@@ -6,7 +6,11 @@ from collections.abc import Callable
 from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject, CompiledSqlScenario
+from sqlbuild.compiler.compile.models.core import (
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledSqlScenario,
+)
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredSqlScenarioFile
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult

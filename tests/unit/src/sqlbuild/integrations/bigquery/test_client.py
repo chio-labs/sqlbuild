@@ -16,7 +16,10 @@ from sqlbuild.adapter.shared.models import (
     SchemaDiffResult,
 )
 from sqlbuild.adapter.shared.types import CursorKind, FunctionNullabilityRule
-from sqlbuild.compiler.compile.models import FunctionArgument, FunctionReturnColumn
+from sqlbuild.compiler.compile.models.core import (
+    FunctionArgument,
+    FunctionReturnColumn,
+)
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.integrations.bigquery.client import BigQueryAdapter, _BigQueryConnection

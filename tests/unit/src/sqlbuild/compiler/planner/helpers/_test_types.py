@@ -5,7 +5,10 @@ from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditRunScope,
 )
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompileSqlReference
+from sqlbuild.compiler.compile.models.core import (
+    CompiledObjectKey,
+    CompileSqlReference,
+)
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.compiler.planner.models import (
     MissingUpstream,

@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 
 from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile.models import (
+from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompileSqlReference,
     InferredColumn,

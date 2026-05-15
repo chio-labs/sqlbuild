@@ -3,7 +3,10 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapter.shared.types import BuiltinAdapter
-from sqlbuild.compiler.compile.models import CompiledProject, CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import (
+    CompiledProject,
+    CompiledRelationTarget,
+)
 from sqlbuild.compiler.pipeline.helpers.target_validation import validate_project_targets
 from tests.unit.src.sqlbuild.compiler.pipeline.helpers.target_validation._test_types import (
     ValidateProjectTargetsTestCase,

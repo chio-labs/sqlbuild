@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.models.core import (
+    CompiledModel,
+    CompiledProject,
+)
 from sqlbuild.integrations.dbt.helpers.graph import (
     dbt_model_graph_key,
     expand_combined_downstream,

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledAudit, CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import (
+    CompiledAudit,
+    CompiledRelationTarget,
+)
 from sqlbuild.compiler.planner.helpers.audit_entry import plan_audit
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.spec.models.source import SourceEntry

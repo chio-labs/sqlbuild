@@ -21,7 +21,10 @@ from sqlbuild.compiler.compile.helpers.tests import (
     _try_consume_keyword,
     _validate_ceremonial_select,
 )
-from sqlbuild.compiler.compile.models import CompileSqlScenarioCte, CompileSqlScenarioCtes
+from sqlbuild.compiler.compile.models.core import (
+    CompileSqlScenarioCte,
+    CompileSqlScenarioCtes,
+)
 
 _CONTEXT: str = "SQL scenario"
 

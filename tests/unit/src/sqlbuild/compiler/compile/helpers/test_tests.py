@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.compile.helpers.tests import CompileSqlTestCtes, extract_sql_test_ctes
-from sqlbuild.compiler.compile.models import (
+from sqlbuild.compiler.compile.models.sql_tests import (
     CompileDirectLogicSqlTestCtes,
     CompileModelSqlTestCtes,
 )

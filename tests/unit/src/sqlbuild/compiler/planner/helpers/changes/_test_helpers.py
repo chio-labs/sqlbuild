@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo
-from sqlbuild.compiler.compile.models import (
+from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledRelationTarget,
