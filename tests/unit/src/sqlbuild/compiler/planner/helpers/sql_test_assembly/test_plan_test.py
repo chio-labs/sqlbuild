@@ -5,8 +5,10 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile.models.core import (
+    CompiledFunction,
     CompiledObjectKey,
     CompiledProject,
+    CompiledRelationTarget,
 )
 from sqlbuild.compiler.compile.models.sql_tests import (
     CompiledDirectLogicSqlTestPayload,
@@ -530,6 +532,110 @@ def test_given_macro_sql_test_when_planning_then_compares_actual_to_expected_dir
     assert warnings == ()
     assert len(entry.chain) == 1
     assert entry.chain[0].model_name == "macro normalizes status"
+    assert test_case.expected_actual_fragment in entry.chain[0].resolved_sql
+    assert entry.chain[0].expected_cte_sql is not None
+    assert test_case.expected_expected_fragment in entry.chain[0].expected_cte_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PlanMacroTestCase(
+            description="plans udf test as one direct comparison chain step with resolved udf call",
+            helper_ctes={"input_values": "SELECT 1250 AS amount_cents"},
+            actual_sql='SELECT __udf("format_cents")(amount_cents) AS formatted FROM input_values',
+            expected_sql="SELECT '$12.50' AS formatted",
+            expected_actual_fragment="main.format_cents(amount_cents) AS formatted",
+            expected_expected_fragment="SELECT '$12.50' AS formatted",
+        )
+    ],
+    ids=["plans udf test as one direct comparison chain step with resolved udf call"],
+)
+def test_given_udf_sql_test_when_planning_then_compares_resolved_actual_to_expected_directly(
+    test_case: PlanMacroTestCase,
+) -> None:
+    test_file: DiscoveredSqlTestFile = DiscoveredSqlTestFile(
+        file_path=Path("tests/unit/test_udf.sql"),
+        relative_path=Path("tests/unit/test_udf.sql"),
+        contents="",
+        blocks=(),
+    )
+    test_block: DiscoveredSqlTestBlock = DiscoveredSqlTestBlock(
+        test_index=1,
+        header_values={"mode": "udf", "name": "formats cents"},
+        sql_body="",
+        name="formats cents",
+        mode=SqlTestMode.UDF,
+    )
+    helper_ctes: tuple[CompileSqlTestCte, ...] = tuple(
+        CompileSqlTestCte(name=name, sql_body=sql) for name, sql in test_case.helper_ctes.items()
+    )
+    sql_test: CompiledSqlTest = CompiledSqlTest(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.SQL_TEST,
+            name="formats cents",
+        ),
+        scope_deps=(CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),),
+        name="formats cents",
+        test_file=test_file,
+        test_block=test_block,
+        sql_body="",
+        mode=SqlTestMode.UDF,
+        payload=CompiledDirectLogicSqlTestPayload(
+            mode=SqlTestMode.UDF,
+            helper_ctes=helper_ctes,
+            actual_cte=CompileSqlTestCte(
+                name="__udf_actual__",
+                sql_body=test_case.actual_sql,
+            ),
+            expected_cte=CompileSqlTestCte(
+                name="__udf_expected__",
+                sql_body=test_case.expected_sql,
+            ),
+            tested_resource_names=("format_cents",),
+        ),
+    )
+
+    entry, warnings = plan_test(
+        test=sql_test,
+        adapter=DuckDbAdapter(),
+        project=CompiledProject(
+            run_id="test_run",
+            effective_environment_name=None,
+            effective_connection={},
+            effective_vars={},
+            functions=(
+                CompiledFunction(
+                    key=CompiledObjectKey(
+                        resource_type=CompiledResourceType.FUNCTION,
+                        name="format_cents",
+                    ),
+                    deps=(),
+                    name="format_cents",
+                    relative_path=Path("functions/sql/format_cents.sql"),
+                    arguments=(),
+                    returns="VARCHAR",
+                    body_sql="",
+                    target=CompiledRelationTarget(
+                        database=None,
+                        schema="main",
+                        name="format_cents",
+                        qualified_name="main.format_cents",
+                    ),
+                    fingerprint_target=CompiledRelationTarget(
+                        database=None,
+                        schema="main",
+                        name="format_cents__fingerprint",
+                        qualified_name="main.format_cents__fingerprint",
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    assert warnings == ()
+    assert len(entry.chain) == 1
+    assert entry.chain[0].model_name == "udf formats cents"
     assert test_case.expected_actual_fragment in entry.chain[0].resolved_sql
     assert entry.chain[0].expected_cte_sql is not None
     assert test_case.expected_expected_fragment in entry.chain[0].expected_cte_sql

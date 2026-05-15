@@ -25,7 +25,7 @@ from sqlbuild.compiler.compile.models.sql_tests import (
     CompiledSqlTest,
     CompileSqlTestCte,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.resolve.refs import resolve_udf_references
 from sqlbuild.compiler.planner.helpers.sqlglot_sql_test_assembly import (
@@ -64,7 +64,18 @@ def plan_test(
     """Build a test plan entry with chained resolution."""
 
     if isinstance(test.payload, CompiledDirectLogicSqlTestPayload):
-        return _plan_macro_test(test=test, sqlglot_enabled=sqlglot_enabled), ()
+        function_targets: dict[str, CompiledRelationTarget] = {
+            function.name: function.target for function in project.functions
+        }
+        return (
+            _plan_direct_logic_test(
+                test=test,
+                function_targets=function_targets,
+                adapter=adapter,
+                sqlglot_enabled=sqlglot_enabled,
+            ),
+            (),
+        )
 
     model_payload: CompiledModelSqlTestPayload = test.payload
 
@@ -249,19 +260,33 @@ def plan_test(
     return entry, tuple(warnings)
 
 
-def _plan_macro_test(*, test: CompiledSqlTest, sqlglot_enabled: bool) -> SqlTestPlanEntry:
+def _plan_direct_logic_test(
+    *,
+    test: CompiledSqlTest,
+    function_targets: dict[str, CompiledRelationTarget],
+    adapter: BaseAdapter,
+    sqlglot_enabled: bool,
+) -> SqlTestPlanEntry:
     if not isinstance(test.payload, CompiledDirectLogicSqlTestPayload):
         raise PlannerInputError(f"test '{test.name}' is not a direct-logic SQL test")
     helper_ctes: tuple[CompileSqlTestCte, ...] = test.payload.helper_ctes
     helper_with: str = _build_helper_with_clause(helper_ctes)
+    actual_sql: str = test.payload.actual_cte.sql_body
+    if test.payload.mode == SqlTestMode.UDF:
+        actual_sql = resolve_udf_references(
+            query_sql=actual_sql,
+            function_targets=function_targets,
+            adapter=adapter,
+        )
+    label: str = test.payload.mode.value
     return SqlTestPlanEntry(
         key=test.key,
         name=test.name,
         chain=(
             ChainStep(
-                model_name=f"macro {test.name}",
+                model_name=f"{label} {test.name}",
                 resolved_sql=_wrap_direct_logic_sql(
-                    sql=test.payload.actual_cte.sql_body,
+                    sql=actual_sql,
                     helper_with=helper_with,
                 ),
                 expected_cte_sql=_wrap_direct_logic_sql(
