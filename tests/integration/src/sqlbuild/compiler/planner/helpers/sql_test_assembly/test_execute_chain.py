@@ -224,7 +224,7 @@ def test_given_chain_when_executing_resolved_sql_then_produces_expected_rows(
     compiled_test, project = build_test_and_project(test_case)
 
     entry: SqlTestPlanEntry
-    entry, _ = plan_test(test=compiled_test, project=project)
+    entry, _ = plan_test(test=compiled_test, project=project, adapter=DuckDbAdapter())
 
     assert len(entry.chain) == test_case.expected_chain_length
 
@@ -301,6 +301,7 @@ def test_given_macro_test_plan_when_executing_then_it_passes_direct_comparison(
 
     entry, warnings = plan_test(
         test=sql_test,
+        adapter=DuckDbAdapter(),
         project=CompiledProject(
             run_id="test_run",
             effective_environment_name=None,
@@ -359,7 +360,12 @@ def test_given_sqlglot_enabled_when_planning_chain_then_step_sql_remains_executa
     compiled_test, project = build_test_and_project(test_case)
 
     entry: SqlTestPlanEntry
-    entry, _ = plan_test(test=compiled_test, project=project, sqlglot_enabled=True)
+    entry, _ = plan_test(
+        test=compiled_test,
+        project=project,
+        adapter=DuckDbAdapter(),
+        sqlglot_enabled=True,
+    )
 
     assert len(entry.chain) == test_case.expected_chain_length
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.constants import (
     ASSERT_TEST_CTE_PREFIX,
     DBT_REF_TEST_CTE_PREFIX,
@@ -57,6 +58,7 @@ def plan_test(
     *,
     test: CompiledSqlTest,
     project: CompiledProject,
+    adapter: BaseAdapter,
     sqlglot_enabled: bool = False,
 ) -> tuple[SqlTestPlanEntry, tuple[PlanWarning, ...]]:
     """Build a test plan entry with chained resolution."""
@@ -125,6 +127,7 @@ def plan_test(
             resolved_chain=resolved,
             reachable_mocks=reachable_mocks,
             function_targets=function_targets,
+            adapter=adapter,
         )
         resolved_value: str = f"({step_sql})"
         if sqlglot_enabled:
@@ -183,6 +186,7 @@ def plan_test(
                     mock_dbt_refs=mock_dbt_refs,
                     helper_ctes=helper_ctes,
                     function_targets=function_targets,
+                    adapter=adapter,
                 ),
             )
         )
@@ -297,6 +301,7 @@ def _resolve_assertion_sql(
     mock_dbt_refs: dict[str, str],
     helper_ctes: tuple[CompileSqlTestCte, ...],
     function_targets: dict[str, CompiledRelationTarget],
+    adapter: BaseAdapter,
 ) -> str:
     reachable_mocks: set[str] = set()
     assertion_resolved_chain: dict[str, str] = {
@@ -312,6 +317,7 @@ def _resolve_assertion_sql(
         resolved_chain=assertion_resolved_chain,
         reachable_mocks=reachable_mocks,
         function_targets=function_targets,
+        adapter=adapter,
     )
 
 
@@ -357,6 +363,7 @@ def _resolve_test_model_sql(
     resolved_chain: dict[str, str],
     reachable_mocks: set[str],
     function_targets: dict[str, CompiledRelationTarget],
+    adapter: BaseAdapter,
 ) -> str:
     """Replace refs and sources in model SQL with mocks or chain outputs."""
 
@@ -414,7 +421,11 @@ def _resolve_test_model_sql(
     result = _SOURCE_PATTERN.sub(_replace_source, result)
     result = _SEED_PATTERN.sub(_replace_seed, result)
     result = _DBT_REF_PATTERN.sub(_replace_dbt_ref, result)
-    result = resolve_udf_references(query_sql=result, function_targets=function_targets)
+    result = resolve_udf_references(
+        query_sql=result,
+        function_targets=function_targets,
+        adapter=adapter,
+    )
     return result
 
 

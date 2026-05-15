@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
+from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 
 
 def build_target(qualified: str | None, name: str) -> CompiledRelationTarget:
     """Build a minimal target for deferred tests."""
 
     return CompiledRelationTarget(database=None, schema=None, name=name, qualified_name=qualified)
+
+
+class BracketUdfCallAdapter(DuckDbAdapter):
+    def render_udf_call(self, *, target: str, call_suffix_sql: str) -> str:
+        arguments_sql: str = call_suffix_sql.removeprefix("(").removesuffix(")")
+        return f"{target}[{arguments_sql}]"
