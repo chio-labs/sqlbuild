@@ -19,6 +19,13 @@ def build_dagster_test_dag() -> Mapping[str, Any]:
                 "path": "sources/raw.yml",
             },
             {
+                "id": "seed:waffle_types",
+                "kind": "seed",
+                "name": "waffle_types",
+                "asset_key": ["analytics", "waffle_types"],
+                "path": "seeds/waffle_types.csv",
+            },
+            {
                 "id": "function:normalize_email",
                 "kind": "function",
                 "name": "normalize_email",
@@ -34,6 +41,7 @@ def build_dagster_test_dag() -> Mapping[str, Any]:
                 "path": "models/orders.sql",
                 "description": "Clean orders",
                 "tags": ["daily"],
+                "materialization_type": "table",
             },
             {
                 "id": "model:customers",
@@ -41,6 +49,7 @@ def build_dagster_test_dag() -> Mapping[str, Any]:
                 "name": "customers",
                 "asset_key": ["analytics", "customers"],
                 "path": "models/customers.sql",
+                "materialization_type": "view",
             },
         ],
         "edges": [
