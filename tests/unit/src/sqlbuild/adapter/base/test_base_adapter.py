@@ -5,6 +5,7 @@ from typing import ClassVar
 import pytest
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.exceptions import AdapterUserError
 from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.models.core import FunctionArgument
 from sqlbuild.compiler.compile.types import FunctionLanguage
@@ -59,7 +60,7 @@ def test_given_python_function_when_rendering_with_base_adapter_then_raises_clea
 ) -> None:
     adapter: BaseAdapter = ConcreteBaseAdapter()
 
-    with pytest.raises(NotImplementedError) as exc_info:
+    with pytest.raises(AdapterUserError) as exc_info:
         adapter.render_create_function(
             target="main.is_positive_int",
             arguments=(FunctionArgument(name="a_string", type="VARCHAR"),),

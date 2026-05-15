@@ -113,6 +113,21 @@ TEST_CASES: list[ExtractSqlScenarioCtesTestCase] = [
         expected_expected_model_names=("dim_countries",),
         expected_assertion_names=(),
     ),
+    ExtractSqlScenarioCtesTestCase(
+        description="extracts scenario ctes with sqlglot fallback syntax",
+        sql="""
+        WITH
+        "__source__raw__orders" AS MATERIALIZED (SELECT 1 AS order_id),
+        "__expected__daily_revenue" AS (SELECT order_id FROM "__source__raw__orders")
+        SELECT 1
+        """.strip(),
+        expected_authored_cte_names=("__source__raw__orders",),
+        expected_source_fixture_names=("raw__orders",),
+        expected_ref_fixture_names=(),
+        expected_seed_fixture_names=(),
+        expected_expected_model_names=("daily_revenue",),
+        expected_assertion_names=(),
+    ),
 ]
 
 

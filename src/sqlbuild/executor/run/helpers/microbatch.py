@@ -43,6 +43,7 @@ from sqlbuild.executor.run.helpers.incremental import (
 from sqlbuild.executor.run.helpers.results import build_failed_result
 from sqlbuild.executor.run.helpers.type_enforcement import enforce_types_staged
 from sqlbuild.executor.run.models import BatchWindow, ModelExecutionResult
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context, log_debug_event
 from sqlbuild.shared.helpers.naming import (
@@ -626,7 +627,7 @@ def _validate_cursor_output_columns(
     delta_names: frozenset[str] = frozenset(column.name.lower() for column in delta_columns)
     if cursor_column.lower() in delta_names:
         return
-    raise ValueError(
+    raise ExecutorInputError(
         f"microbatch cursor column '{cursor_column}' is not produced by model output; "
         "use cursor_inputs for upstream cursor columns and set cursor to the target output "
         "cursor column"

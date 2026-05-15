@@ -8,6 +8,7 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.models.sql_tests import CompiledSqlTest
 from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 
 
 def build_upstream_deps(
@@ -135,7 +136,7 @@ def topologically_order_keys(
             )
         )
         cycle_names: str = ", ".join(f"{k.resource_type}:{k.name}" for k in cycle_keys)
-        raise ValueError(f"Dependency cycle detected involving: {cycle_names}")
+        raise PlannerInputError(f"Dependency cycle detected involving: {cycle_names}")
 
     return tuple(ordered)
 
@@ -190,7 +191,7 @@ def find_path_keys(
 
     reachable_from_start: frozenset[CompiledObjectKey] = expand_downstream(start, downstream)
     if end not in reachable_from_start:
-        raise ValueError(
+        raise PlannerInputError(
             f"'{end.resource_type}:{end.name}' is not downstream of "
             f"'{start.resource_type}:{start.name}'"
         )

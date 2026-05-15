@@ -9,6 +9,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlbuild.adapter.shared.models import QueryResult
+from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 
 
 def render_query_result(result: QueryResult, *, output_format: str, limit: int | None) -> str:
@@ -24,7 +25,7 @@ def render_query_result(result: QueryResult, *, output_format: str, limit: int |
         return render_json_query_result(result)
     if output_format == "csv":
         return render_csv_query_result(result)
-    raise ValueError(f"unsupported query output format '{output_format}'")
+    raise CliUserError(f"unsupported query output format '{output_format}'")
 
 
 def render_long_query_result(result: QueryResult, *, limit: int | None) -> str:

@@ -170,27 +170,72 @@ def test_given_scenario_helpers_when_building_fixture_plans_then_fixtures_are_se
     } == test_case.expected_fixture_targets
 
 
+PROJECT_SOURCE_REF_FIXTURE_TEST_CASES: list[ScenarioFixturePlanTestCase] = [
+    ScenarioFixturePlanTestCase(
+        description="resolves project source refs in scenario fixture sql",
+        graph_plan=ScenarioGraphPlan(
+            key=build_scenario_relation_test_project().models[0].key,
+            name=SCENARIO_NAME,
+            target_model_names=("daily_revenue",),
+            model_names=("daily_revenue",),
+            source_fixture_names=("raw__orders",),
+        ),
+        expected_fixture_sql={
+            "source:raw__orders": "SELECT * FROM public.raw__orders WHERE order_id <= 10",
+        },
+        expected_fixture_targets={
+            "source:raw__orders": "scenario_schema.__sqb_51b385aebe20__source__raw__orders",
+        },
+        fixture_sql_body='SELECT * FROM __source("raw__orders") WHERE order_id <= 10',
+    ),
+    ScenarioFixturePlanTestCase(
+        description="resolves project source refs with sqlglot without changing literals",
+        graph_plan=ScenarioGraphPlan(
+            key=build_scenario_relation_test_project().models[0].key,
+            name=SCENARIO_NAME,
+            target_model_names=("daily_revenue",),
+            model_names=("daily_revenue",),
+            source_fixture_names=("raw__orders",),
+        ),
+        expected_fixture_sql={
+            "source:raw__orders": (
+                "SELECT '__source(\"raw__orders\")' AS marker_text "
+                'FROM public.raw__orders AS o /* __source("raw__orders") */'
+            ),
+        },
+        expected_fixture_targets={
+            "source:raw__orders": "scenario_schema.__sqb_51b385aebe20__source__raw__orders",
+        },
+        fixture_sql_body=(
+            "SELECT '__source(\"raw__orders\")' AS marker_text "
+            'FROM __source("raw__orders") o -- __source("raw__orders")'
+        ),
+    ),
+    ScenarioFixturePlanTestCase(
+        description="falls back to regex source resolution when sqlglot is disabled",
+        graph_plan=ScenarioGraphPlan(
+            key=build_scenario_relation_test_project().models[0].key,
+            name=SCENARIO_NAME,
+            target_model_names=("daily_revenue",),
+            model_names=("daily_revenue",),
+            source_fixture_names=("raw__orders",),
+        ),
+        expected_fixture_sql={
+            "source:raw__orders": "SELECT * FROM public.raw__orders WHERE order_id <= 10",
+        },
+        expected_fixture_targets={
+            "source:raw__orders": "scenario_schema.__sqb_51b385aebe20__source__raw__orders",
+        },
+        fixture_sql_body='SELECT * FROM __source("raw__orders") WHERE order_id <= 10',
+        sqlglot_enabled=False,
+    ),
+]
+
+
 @pytest.mark.parametrize(
     "test_case",
-    [
-        ScenarioFixturePlanTestCase(
-            description="resolves project source refs in scenario fixture sql",
-            graph_plan=ScenarioGraphPlan(
-                key=build_scenario_relation_test_project().models[0].key,
-                name=SCENARIO_NAME,
-                target_model_names=("daily_revenue",),
-                model_names=("daily_revenue",),
-                source_fixture_names=("raw__orders",),
-            ),
-            expected_fixture_sql={
-                "source:raw__orders": "SELECT * FROM public.raw__orders WHERE order_id <= 10",
-            },
-            expected_fixture_targets={
-                "source:raw__orders": "scenario_schema.__sqb_51b385aebe20__source__raw__orders",
-            },
-        )
-    ],
-    ids=["resolves project source refs in scenario fixture sql"],
+    PROJECT_SOURCE_REF_FIXTURE_TEST_CASES,
+    ids=[case.description for case in PROJECT_SOURCE_REF_FIXTURE_TEST_CASES],
 )
 def test_given_project_source_ref_in_scenario_fixture_when_building_fixture_plan_then_resolves(
     test_case: ScenarioFixturePlanTestCase,
@@ -200,7 +245,7 @@ def test_given_project_source_ref_in_scenario_fixture_when_building_fixture_plan
         authored_ctes=(
             CompileSqlScenarioCte(
                 name="__source__raw__orders",
-                sql_body='SELECT * FROM __source("raw__orders") WHERE order_id <= 10',
+                sql_body=test_case.fixture_sql_body or "SELECT 1",
             ),
         ),
         source_fixture_names=("raw__orders",),
@@ -219,6 +264,8 @@ def test_given_project_source_ref_in_scenario_fixture_when_building_fixture_plan
         scenario=scenario,
         graph_plan=test_case.graph_plan,
         relation_plan=relation_plan,
+        sqlglot_enabled=test_case.sqlglot_enabled,
+        sqlglot_dialect=test_case.sqlglot_dialect,
     )
 
     assert {

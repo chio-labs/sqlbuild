@@ -31,7 +31,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 "table function",
                 "First run (13)",
             ),
-            expected_test_fragment="PASS=3  FAIL=0  TOTAL=3",
+            expected_test_fragment="PASS=5  FAIL=0  TOTAL=5",
             expected_audit_fragment="PASS=28  WARN=0  FAIL=0  TOTAL=28",
             expected_run_fragment="Completed successfully.",
             expected_rerun_reasons={

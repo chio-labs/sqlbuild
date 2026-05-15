@@ -175,7 +175,7 @@ def _evaluate_macro_call(
     if override_value is not None:
         return override_value, closing_paren_index + 1
     if loaded_macro is None:
-        raise AssertionError("loaded macro is unexpectedly missing after validation")
+        raise CompileInputError("loaded macro is unexpectedly missing after validation")
     args_source: str = sql[opening_paren_index + 1 : closing_paren_index]
     args: tuple[object, ...]
     kwargs: dict[str, object]

@@ -419,7 +419,7 @@ class DatabricksAdapter(BaseAdapter):
     ) -> tuple[str, ...]:
         if language == FunctionLanguage.PYTHON:
             if return_columns:
-                raise ValueError("Databricks table functions must use SQL language")
+                raise AdapterUserError("Databricks table functions must use SQL language")
             del runtime_version
             return self._render_create_python_function(
                 target=target,
@@ -570,7 +570,7 @@ class DatabricksAdapter(BaseAdapter):
         return (f"ALTER TABLE {source} RENAME TO {target}",)
 
     def render_swap(self, *, left: str, right: str) -> tuple[str, ...]:
-        raise NotImplementedError("Databricks does not support atomic table swap")
+        raise AdapterUserError("Databricks does not support atomic table swap")
 
     def render_clone(
         self,
@@ -1079,7 +1079,7 @@ class DatabricksAdapter(BaseAdapter):
         )
         row: tuple[Any, ...] | None = self.execute(connection, diff_sql).fetchone()
         if row is None:
-            raise ValueError("Databricks row diff query returned no result")
+            raise AdapterUserError("Databricks row diff query returned no result")
         column_results: tuple[RowDiffColumnResult, ...] = tuple(
             RowDiffColumnResult(
                 name=col,
@@ -1118,7 +1118,7 @@ class DatabricksAdapter(BaseAdapter):
             query += f" WHERE {cursor_filter}"
         result: tuple[Any, ...] | None = self.execute(connection, query).fetchone()
         if result is None:
-            raise ValueError("Databricks count query returned no result")
+            raise AdapterUserError("Databricks count query returned no result")
         return self._to_int(result[0])
 
     def sample_unequal_rows(
@@ -1269,7 +1269,7 @@ class DatabricksAdapter(BaseAdapter):
         elif side == "right":
             side_condition = f"__right.{keys[0]} IS NOT NULL AND __left.{keys[0]} IS NULL"
         else:
-            raise ValueError("sample_side_only_rows side must be 'left' or 'right'")
+            raise AdapterUserError("sample_side_only_rows side must be 'left' or 'right'")
         sample_sql: str = (
             f"WITH __left AS ({left_cte}), __right AS ({right_cte}) "
             f"SELECT {key_select_sql} "
@@ -1359,14 +1359,16 @@ class DatabricksAdapter(BaseAdapter):
         keys: tuple[str, ...],
     ) -> None:
         if not keys:
-            raise ValueError("row diff requires at least one unique_key column")
+            raise AdapterUserError("row diff requires at least one unique_key column")
         null_condition: str = " OR ".join(f"{key} IS NULL" for key in keys)
         null_count_sql: str = (
             f"SELECT COUNT(*) FROM ({relation_sql}) AS __key_check WHERE {null_condition}"
         )
         null_row: tuple[Any, ...] = self.execute(connection, null_count_sql).fetchone()
         if int(null_row[0]) > 0:
-            raise ValueError(f"row diff {relation_label} relation contains null unique_key values")
+            raise AdapterUserError(
+                f"row diff {relation_label} relation contains null unique_key values"
+            )
 
         key_list: str = ", ".join(keys)
         duplicate_count_sql: str = (
@@ -1377,7 +1379,7 @@ class DatabricksAdapter(BaseAdapter):
         )
         duplicate_row: tuple[Any, ...] = self.execute(connection, duplicate_count_sql).fetchone()
         if int(duplicate_row[0]) > 0:
-            raise ValueError(
+            raise AdapterUserError(
                 f"row diff {relation_label} relation contains duplicate unique_key values"
             )
 
@@ -1405,13 +1407,17 @@ class DatabricksAdapter(BaseAdapter):
 
     def validate_row_diff_tolerance(self, *, column: str, tolerance: RowDiffTolerance) -> None:
         if tolerance.absolute is None and tolerance.relative is None:
-            raise ValueError(
+            raise AdapterUserError(
                 f"row diff tolerance for column '{column}' must set absolute or relative"
             )
         if tolerance.absolute is not None and tolerance.absolute < Decimal("0"):
-            raise ValueError(f"row diff absolute tolerance for column '{column}' must be >= 0")
+            raise AdapterUserError(
+                f"row diff absolute tolerance for column '{column}' must be >= 0"
+            )
         if tolerance.relative is not None and tolerance.relative < Decimal("0"):
-            raise ValueError(f"row diff relative tolerance for column '{column}' must be >= 0")
+            raise AdapterUserError(
+                f"row diff relative tolerance for column '{column}' must be >= 0"
+            )
 
     def schema_exists(
         self,

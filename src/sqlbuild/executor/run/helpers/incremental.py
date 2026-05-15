@@ -22,6 +22,7 @@ from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.results import build_failed_result
 from sqlbuild.executor.run.helpers.type_enforcement import enforce_types_staged
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
 from sqlbuild.shared.helpers.naming import (
@@ -88,7 +89,7 @@ def execute_incremental_entry(
     try:
         if runtime_owned_cursor_bounds:
             if entry.cursor_column is None:
-                raise ValueError("runtime-owned cursor resolution requires cursor_column")
+                raise ExecutorInputError("runtime-owned cursor resolution requires cursor_column")
             runtime_cursor_bounds = resolve_runtime_cursor_bounds(
                 adapter=adapter,
                 connection=connection,
@@ -100,7 +101,9 @@ def execute_incremental_entry(
                 cursor_input_relations=entry.cursor_input_relations,
             )
             if runtime_cursor_bounds is None:
-                raise ValueError(f"runtime cursor bounds could not be resolved for '{entry.name}'")
+                raise ExecutorInputError(
+                    f"runtime cursor bounds could not be resolved for '{entry.name}'"
+                )
             resolved_sql = substitute_cursor_sentinels(
                 sql=entry.resolved_sql, bounds=runtime_cursor_bounds
             )
@@ -382,7 +385,7 @@ def _apply_schema_change(
             diff_parts.append(f"removed columns: {', '.join(removed)}")
         if type_changed:
             diff_parts.append(f"type changes: {', '.join(c.name for c in type_changed)}")
-        raise ValueError(
+        raise ExecutorInputError(
             f"schema change detected and on_schema_change is set to fail: {'; '.join(diff_parts)}"
         )
 
@@ -412,7 +415,7 @@ def _apply_schema_change(
                 statement_recorder=statement_recorder,
             )
         if type_changed:
-            raise ValueError(
+            raise ExecutorInputError(
                 f"append_new_columns does not support type changes: "
                 f"{', '.join(c.name for c in type_changed)}"
             )
@@ -487,7 +490,7 @@ def _execute_dml(
         cursor_column: str | None = entry.cursor_column
         if cursor_column is not None:
             if cursor_start is None or cursor_end is None:
-                raise ValueError(
+                raise ExecutorInputError(
                     f"cursor-based delete_insert for '{entry.name}' requires both "
                     f"cursor_start and cursor_end but got "
                     f"cursor_start={cursor_start}, cursor_end={cursor_end}"
@@ -525,4 +528,4 @@ def _execute_dml(
         )
         return
 
-    raise ValueError(f"unsupported incremental strategy: {strategy}")
+    raise ExecutorInputError(f"unsupported incremental strategy: {strategy}")
