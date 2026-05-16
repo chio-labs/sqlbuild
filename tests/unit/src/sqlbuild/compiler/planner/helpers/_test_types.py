@@ -67,6 +67,8 @@ class SourceCursorInputColumnsTestCase:
     source_columns: dict[str, tuple[str, ...]]
     expected_valid: bool
     expected_error_fragment: str | None = None
+    upstream_contract: str | None = None
+    upstream_declared_columns: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

@@ -15,6 +15,7 @@ class LoadProjectConfigTestCase:
     expected_materialized: str
     expected_row_diff_exclude_columns: tuple[str, ...]
     expected_row_diff_tolerances: dict[str, object]
+    expected_contract: str | None
     expected_path_default_schema: str
     expected_vars: dict[str, str]
     expected_dev_connection: dict[str, object]
@@ -213,6 +214,7 @@ class ParseSourcesYamlTestCase:
     expected_source_names: tuple[str, ...]
     expected_column_names: tuple[tuple[str, ...], ...]
     expected_type_enforcement_values: tuple[bool | None, ...]
+    expected_contract_values: tuple[str | None, ...]
     expected_expressions: tuple[str | None, ...]
     expected_source_audit_names: tuple[tuple[str, ...], ...] = ()
     expected_column_audit_names: tuple[tuple[tuple[str, ...], ...], ...] = ()

@@ -61,6 +61,15 @@ def _parse_source_entry(*, entry: dict[str, object], file_path: Path) -> SourceE
         error_class=SourceParseError,
     )
     type_enforcement: bool | None = raw_type_enforcement
+    contract: str | None = optional_non_empty_string(
+        entry=entry,
+        key="contract",
+        file_path=file_path,
+        label="source",
+        error_class=SourceParseError,
+    )
+    if contract is not None and contract not in {"enforced", "none"}:
+        raise SourceParseError(f"{file_path} source 'contract' must be one of: enforced, none")
     expression: str | None = optional_non_empty_string(
         entry=entry,
         key="expression",
@@ -109,6 +118,7 @@ def _parse_source_entry(*, entry: dict[str, object], file_path: Path) -> SourceE
             error_class=SourceParseError,
         ),
         type_enforcement=type_enforcement,
+        contract=contract,
         meta=optional_mapping(
             entry=entry,
             key="meta",

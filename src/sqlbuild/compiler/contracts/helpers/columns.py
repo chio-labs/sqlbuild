@@ -18,6 +18,8 @@ _MISSING_COLUMN_CODE: str = "K001"
 _TYPE_MISMATCH_CODE: str = "K002"
 _UNKNOWN_TYPE_CODE: str = "K003"
 _NULLABILITY_MISMATCH_CODE: str = "K004"
+_EXTRA_COLUMN_CODE: str = "K005"
+_MISSING_DECLARATIONS_CODE: str = "K006"
 
 
 def validate_model_column_contracts(
@@ -27,7 +29,10 @@ def validate_model_column_contracts(
 ) -> tuple[CompilerDiagnostic, ...]:
     """Validate one compiled model's declared column contract."""
 
+    contract_enforced: bool = model.config.values.get("contract") == "enforced"
     if model.schema_entry is None or not model.schema_entry.columns:
+        if contract_enforced:
+            return (_missing_declarations_diagnostic(model),)
         return ()
     if model.inferred_columns is None:
         return ()
@@ -36,6 +41,8 @@ def validate_model_column_contracts(
         column.name: column for column in model.inferred_columns
     }
     diagnostics: list[CompilerDiagnostic] = []
+    if contract_enforced:
+        diagnostics.extend(_extra_column_diagnostics(model=model))
     declared_column: SchemaColumn
     for declared_column in model.schema_entry.columns:
         inferred_column: InferredColumn | None = inferred_by_name.get(declared_column.name)
@@ -57,6 +64,49 @@ def validate_model_column_contracts(
                 declared_column=declared_column,
                 inferred_column=inferred_column,
                 dialect=dialect,
+                contract_enforced=contract_enforced,
+            )
+        )
+    return tuple(diagnostics)
+
+
+def _missing_declarations_diagnostic(model: CompiledModel) -> CompilerDiagnostic:
+    return CompilerDiagnostic(
+        phase=DiagnosticPhase.CONTRACT,
+        severity=DiagnosticSeverity.ERROR,
+        code=_MISSING_DECLARATIONS_CODE,
+        message=f"model '{model.name}' has contract enforced but declares no columns",
+        resource_type=CompiledResourceType.MODEL,
+        resource_name=model.name,
+        path=model.relative_path,
+        help="add MODEL(columns (...)) or set contract none for this model",
+    )
+
+
+def _extra_column_diagnostics(model: CompiledModel) -> tuple[CompilerDiagnostic, ...]:
+    if model.schema_entry is None or model.inferred_columns is None:
+        return ()
+    declared_names: set[str] = {column.name for column in model.schema_entry.columns}
+    diagnostics: list[CompilerDiagnostic] = []
+    inferred_column: InferredColumn
+    for inferred_column in model.inferred_columns:
+        if inferred_column.name in declared_names:
+            continue
+        diagnostics.append(
+            CompilerDiagnostic(
+                phase=DiagnosticPhase.CONTRACT,
+                severity=DiagnosticSeverity.ERROR,
+                code=_EXTRA_COLUMN_CODE,
+                message=(
+                    f"column '{inferred_column.name}' is not declared in enforced contract "
+                    f"for model '{model.name}'"
+                ),
+                resource_type=CompiledResourceType.MODEL,
+                resource_name=model.name,
+                column_name=inferred_column.name,
+                path=model.relative_path,
+                location=model.output_column_locations.get(inferred_column.name),
+                help="add the column to MODEL(columns) or remove it from the SELECT list",
             )
         )
     return tuple(diagnostics)
@@ -120,6 +170,7 @@ def _type_diagnostics(
     declared_column: SchemaColumn,
     inferred_column: InferredColumn,
     dialect: TypeDialect | str | None,
+    contract_enforced: bool,
 ) -> tuple[CompilerDiagnostic, ...]:
     assert declared_column.type is not None
     type_enforcement: bool = model.schema_entry is not None and bool(
@@ -157,7 +208,9 @@ def _type_diagnostics(
     return (
         CompilerDiagnostic(
             phase=DiagnosticPhase.CONTRACT,
-            severity=DiagnosticSeverity.ERROR if type_enforcement else DiagnosticSeverity.WARNING,
+            severity=DiagnosticSeverity.ERROR
+            if type_enforcement or contract_enforced
+            else DiagnosticSeverity.WARNING,
             code=_TYPE_MISMATCH_CODE,
             message=(
                 f"column '{declared_column.name}' inferred as {inferred_column.type} "

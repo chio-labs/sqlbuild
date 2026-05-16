@@ -17,6 +17,7 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.run.helpers.contracts import validate_runtime_contract
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.results import build_failed_result
@@ -134,6 +135,24 @@ def execute_snapshot_entry(
             entry=entry,
             phase=ExecutionPhase.STAGING,
             error=str(exc),
+            staging_relation=delta_qualified,
+            warnings=warnings,
+            audit_results=audit_results,
+            statement_recorder=statement_recorder,
+        )
+
+    try:
+        with diagnostics_context(sqlbuild_phase="contract", sqlbuild_action_name="validate_delta"):
+            validate_runtime_contract(
+                entry=entry,
+                actual_columns=delta_columns,
+                dialect=adapter.sqlglot_dialect_name,
+            )
+    except Exception as exc:
+        return build_failed_result(
+            entry=entry,
+            phase=ExecutionPhase.CONTRACT,
+            error=exc,
             staging_relation=delta_qualified,
             warnings=warnings,
             audit_results=audit_results,

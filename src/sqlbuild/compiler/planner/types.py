@@ -33,6 +33,11 @@ class OnSchemaChange(StrEnum):
     SYNC_ALL_COLUMNS = "sync_all_columns"
 
 
+class ContractPolicy(StrEnum):
+    NONE = "none"
+    ENFORCED = "enforced"
+
+
 class SchemaChangeKind(StrEnum):
     COLUMN_ADDED = "column_added"
     COLUMN_REMOVED = "column_removed"

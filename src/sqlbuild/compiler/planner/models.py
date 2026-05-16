@@ -257,6 +257,8 @@ class ModelPlanEntry:
     on_schema_change: OnSchemaChange | None = None
     type_enforcement: bool = False
     declared_columns: tuple[ColumnInfo, ...] = field(default_factory=tuple)
+    contract_enforced: bool = False
+    contract_columns: tuple[ColumnInfo, ...] = field(default_factory=tuple)
     pre_hook: object = None
     post_hook: object = None
     previous_query_sql: str | None = None

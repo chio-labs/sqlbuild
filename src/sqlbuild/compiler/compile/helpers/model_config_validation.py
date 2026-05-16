@@ -8,6 +8,7 @@ from decimal import Decimal, InvalidOperation
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models.core import CompileModelConfig
 from sqlbuild.compiler.planner.types import (
+    ContractPolicy,
     CursorGrain,
     CursorType,
     HistoricalInput,
@@ -24,6 +25,7 @@ _VALID_STRATEGIES: frozenset[str] = frozenset(s.value for s in IncrementalStrate
 _VALID_CURSOR_TYPES: frozenset[str] = frozenset(ct.value for ct in CursorType)
 _VALID_CURSOR_GRAINS: frozenset[str] = frozenset(cg.value for cg in CursorGrain)
 _VALID_INCREMENTAL_MODES: frozenset[str] = frozenset(m.value for m in IncrementalMode)
+_VALID_CONTRACT_POLICIES: frozenset[str] = frozenset(p.value for p in ContractPolicy)
 _VALID_SNAPSHOT_STRATEGIES: frozenset[str] = frozenset(s.value for s in SnapshotStrategy)
 _VALID_HISTORICAL_INPUTS: frozenset[str] = frozenset(h.value for h in HistoricalInput)
 _VALID_INITIAL_VALID_FROM: frozenset[str] = frozenset(v.value for v in InitialValidFrom)
@@ -178,6 +180,22 @@ def validate_incremental_config(
     if strategy == IncrementalStrategy.MERGE and not has_unique_key:
         raise CompileInputError(f"model '{model_name}': merge strategy requires unique_key")
 
+    declared_column_names: frozenset[str] | None = _contract_declared_column_names(config)
+    if declared_column_names is not None:
+        if cursor is not None:
+            _validate_declared_config_column(
+                column_name=cursor,
+                config_key="cursor",
+                declared_column_names=declared_column_names,
+                model_name=model_name,
+            )
+        _validate_declared_config_columns(
+            column_names=_string_sequence(unique_key),
+            config_key="unique_key",
+            declared_column_names=declared_column_names,
+            model_name=model_name,
+        )
+
     if lookback is not None and cursor is None:
         raise CompileInputError(
             f"model '{model_name}': lookback is only valid with cursor-based incremental"
@@ -196,6 +214,26 @@ def validate_incremental_config(
         raise CompileInputError(
             f"model '{model_name}': batch_concurrency is not supported; "
             f"microbatch processes batches serially"
+        )
+
+
+def validate_contract_config(
+    *,
+    config: CompileModelConfig,
+    model_name: str,
+) -> None:
+    """Validate model contract config values after layering."""
+
+    raw_contract: object | None = config.values.get("contract")
+    if raw_contract is None:
+        return
+    if not isinstance(raw_contract, str):
+        raise CompileInputError(f"model '{model_name}': contract must be a string")
+    contract: str = raw_contract
+    if contract not in _VALID_CONTRACT_POLICIES:
+        raise CompileInputError(
+            f"model '{model_name}': unknown contract '{contract}'; valid values: "
+            f"{', '.join(sorted(_VALID_CONTRACT_POLICIES))}"
         )
 
 
@@ -339,11 +377,51 @@ def validate_snapshot_config(
                 f"'{snapshot_schema_change}'; valid values: "
                 f"{', '.join(sorted(_VALID_SNAPSHOT_SCHEMA_CHANGE_POLICIES))}"
             )
+        if (
+            config.values.get("contract") == ContractPolicy.ENFORCED.value
+            and snapshot_schema_change == SnapshotSchemaChangePolicy.APPEND_NEW_COLUMNS
+        ):
+            raise CompileInputError(
+                f"model '{model_name}': snapshot_schema_change=append_new_columns "
+                "is not valid with contract enforced; add new columns to the contract "
+                "or set contract none",
+                code="K012",
+            )
 
     if valid_from_column is not None and valid_to_column is not None:
         if valid_from_column.lower() == valid_to_column.lower():
             raise CompileInputError(
                 f"model '{model_name}': valid_from_column and valid_to_column must differ"
+            )
+
+    declared_column_names: frozenset[str] | None = _contract_declared_column_names(config)
+    if declared_column_names is not None:
+        _validate_declared_config_columns(
+            column_names=_string_sequence(unique_key),
+            config_key="unique_key",
+            declared_column_names=declared_column_names,
+            model_name=model_name,
+        )
+        if updated_at is not None:
+            _validate_declared_config_column(
+                column_name=updated_at,
+                config_key="updated_at",
+                declared_column_names=declared_column_names,
+                model_name=model_name,
+            )
+        if observed_at is not None:
+            _validate_declared_config_column(
+                column_name=observed_at,
+                config_key="observed_at",
+                declared_column_names=declared_column_names,
+                model_name=model_name,
+            )
+        if check_columns != ["*"]:
+            _validate_declared_config_columns(
+                column_names=_string_sequence(check_columns),
+                config_key="check_columns",
+                declared_column_names=declared_column_names,
+                model_name=model_name,
             )
 
 
@@ -430,6 +508,55 @@ def _str(config: CompileModelConfig, key: str) -> str | None:
 
 def _has_config_value(value: object | None) -> bool:
     return value is not None and value != () and value != []
+
+
+def _contract_declared_column_names(config: CompileModelConfig) -> frozenset[str] | None:
+    if config.values.get("contract") != ContractPolicy.ENFORCED:
+        return None
+    raw_columns: object | None = config.values.get("columns")
+    if not isinstance(raw_columns, dict):
+        return frozenset()
+    return frozenset(name for name in raw_columns if isinstance(name, str))
+
+
+def _string_sequence(value: object | None) -> tuple[str, ...]:
+    if isinstance(value, str):
+        return (value,)
+    if isinstance(value, list):
+        return tuple(item for item in value if isinstance(item, str))
+    return ()
+
+
+def _validate_declared_config_columns(
+    *,
+    column_names: tuple[str, ...],
+    config_key: str,
+    declared_column_names: frozenset[str],
+    model_name: str,
+) -> None:
+    column_name: str
+    for column_name in column_names:
+        _validate_declared_config_column(
+            column_name=column_name,
+            config_key=config_key,
+            declared_column_names=declared_column_names,
+            model_name=model_name,
+        )
+
+
+def _validate_declared_config_column(
+    *,
+    column_name: str,
+    config_key: str,
+    declared_column_names: frozenset[str],
+    model_name: str,
+) -> None:
+    if column_name in declared_column_names:
+        return
+    raise CompileInputError(
+        f"model '{model_name}': {config_key} references column '{column_name}' "
+        "not declared in enforced contract"
+    )
 
 
 def _validate_timestamp_cursor_start(*, cursor_start: object, model_name: str) -> None:

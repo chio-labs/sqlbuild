@@ -364,6 +364,7 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
         materialized=_optional_str(payload=mapping, key="materialized"),
         database=_optional_str(payload=mapping, key="database"),
         schema=_optional_str(payload=mapping, key="schema"),
+        contract=_optional_contract_policy(mapping=mapping, key="contract"),
         incremental_strategy=_optional_str(payload=mapping, key="incremental_strategy"),
         incremental_mode=_optional_str(payload=mapping, key="incremental_mode"),
         append_cursor_inclusive=_optional_templated_bool(
@@ -765,6 +766,17 @@ def _optional_snapshot_schema_change_policy(
     if value not in _SNAPSHOT_SCHEMA_CHANGE_POLICIES:
         valid_values: str = ", ".join(sorted(_SNAPSHOT_SCHEMA_CHANGE_POLICIES))
         raise ProjectConfigError(f"Expected '{key}' to be one of: {valid_values}")
+    return value
+
+
+def _optional_contract_policy(*, mapping: dict[str, object], key: str) -> str | None:
+    value: object | None = mapping.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ProjectConfigError(f"Expected '{key}' to be a string when provided")
+    if value not in {"enforced", "none"}:
+        raise ProjectConfigError("Expected 'contract' to be one of: enforced, none")
     return value
 
 

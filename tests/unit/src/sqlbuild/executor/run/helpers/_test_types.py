@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sqlbuild.adapter.shared.models import LifeCycleEvent
+from sqlbuild.adapter.shared.models import ColumnInfo, LifeCycleEvent
 
 
 @dataclass(frozen=True)
@@ -50,3 +50,22 @@ class SnapshotLifecycleTestCase:
     expected_hook_events: tuple[str, ...]
     expected_model_name: str
     expected_target_name: str
+
+
+@dataclass(frozen=True)
+class SnapshotRuntimeContractErrorTestCase:
+    description: str
+    contract_columns: tuple[ColumnInfo, ...]
+    run_id: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class RuntimeContractValidationTestCase:
+    description: str
+    contract_enforced: bool
+    contract_columns: tuple[ColumnInfo, ...]
+    actual_columns: tuple[ColumnInfo, ...]
+    expected_valid: bool
+    expected_error_fragment: str | None = None
+    expected_error_code: str | None = None
