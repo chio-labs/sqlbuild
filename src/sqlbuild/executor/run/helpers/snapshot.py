@@ -104,7 +104,12 @@ def execute_snapshot_entry(
                 schema=target_schema,
                 name=delta_table,
             )
-            _validate_delta_columns(entry=entry, delta_columns=delta_columns)
+            check_columns: tuple[str, ...] = _expanded_check_columns(
+                entry=entry, delta_columns=delta_columns
+            )
+            _validate_delta_columns(
+                entry=entry, delta_columns=delta_columns, check_columns=check_columns
+            )
             _validate_unique_snapshot_keys(
                 adapter=adapter,
                 connection=connection,
@@ -171,6 +176,7 @@ def execute_snapshot_entry(
                     target_qualified=target_qualified,
                     delta_qualified=delta_qualified,
                     delta_columns=delta_columns,
+                    check_columns=check_columns,
                     statement_recorder=statement_recorder,
                 )
             else:
@@ -181,6 +187,7 @@ def execute_snapshot_entry(
                     target_qualified=target_qualified,
                     delta_qualified=delta_qualified,
                     delta_columns=delta_columns,
+                    check_columns=check_columns,
                     statement_recorder=statement_recorder,
                 )
     except Exception as exc:
@@ -327,7 +334,10 @@ def _validate_supported_snapshot(entry: ModelPlanEntry) -> None:
 
 
 def _validate_delta_columns(
-    *, entry: ModelPlanEntry, delta_columns: tuple[ColumnInfo, ...]
+    *,
+    entry: ModelPlanEntry,
+    delta_columns: tuple[ColumnInfo, ...],
+    check_columns: tuple[str, ...],
 ) -> None:
     column_names: frozenset[str] = frozenset(column.name.lower() for column in delta_columns)
     required_columns: tuple[str, ...]
@@ -336,7 +346,7 @@ def _validate_delta_columns(
         if entry.observed_at_column is not None:
             required_columns = (*required_columns, entry.observed_at_column)
     elif entry.snapshot_strategy == SnapshotStrategy.CHECK:
-        required_columns = (*entry.unique_key, *entry.check_columns)
+        required_columns = (*entry.unique_key, *check_columns)
         if entry.observed_at_column is not None:
             required_columns = (*required_columns, entry.observed_at_column)
     else:
@@ -404,6 +414,7 @@ def _create_initial_snapshot_target(
     target_qualified: str,
     delta_qualified: str,
     delta_columns: tuple[ColumnInfo, ...],
+    check_columns: tuple[str, ...],
     statement_recorder: StatementRecorder,
 ) -> None:
     valid_from_column: str = _valid_from_column(entry)
@@ -444,7 +455,7 @@ def _create_initial_snapshot_target(
             target=target_qualified,
             source=delta_qualified,
             unique_key=entry.unique_key,
-            check_columns=entry.check_columns,
+            check_columns=check_columns,
             observed_at_column=entry.observed_at_column,
             valid_from_column=valid_from_column,
             valid_to_column=valid_to_column,
@@ -476,6 +487,7 @@ def _apply_snapshot_changes(
     target_qualified: str,
     delta_qualified: str,
     delta_columns: tuple[ColumnInfo, ...],
+    check_columns: tuple[str, ...],
     statement_recorder: StatementRecorder,
 ) -> None:
     if entry.snapshot_strategy == SnapshotStrategy.TIMESTAMP:
@@ -497,6 +509,7 @@ def _apply_snapshot_changes(
             target_qualified=target_qualified,
             delta_qualified=delta_qualified,
             delta_columns=delta_columns,
+            check_columns=check_columns,
             statement_recorder=statement_recorder,
         )
         return
@@ -574,6 +587,7 @@ def _apply_check_snapshot_changes(
     target_qualified: str,
     delta_qualified: str,
     delta_columns: tuple[ColumnInfo, ...],
+    check_columns: tuple[str, ...],
     statement_recorder: StatementRecorder,
 ) -> None:
     valid_from_column: str = _valid_from_column(entry)
@@ -584,7 +598,7 @@ def _apply_check_snapshot_changes(
             target=target_qualified,
             source=delta_qualified,
             unique_key=entry.unique_key,
-            check_columns=entry.check_columns,
+            check_columns=check_columns,
             observed_at_column=entry.observed_at_column,
             valid_from_column=valid_from_column,
             valid_to_column=valid_to_column,
@@ -596,7 +610,7 @@ def _apply_check_snapshot_changes(
             target=target_qualified,
             source=delta_qualified,
             unique_key=entry.unique_key,
-            check_columns=entry.check_columns,
+            check_columns=check_columns,
             updated_at_column=entry.updated_at_column,
             observed_at_column=entry.observed_at_column,
             valid_from_column=valid_from_column,
@@ -610,6 +624,30 @@ def _apply_check_snapshot_changes(
         statement: str
         for statement in statements:
             adapter.execute(connection, statement)
+
+
+def _expanded_check_columns(
+    *, entry: ModelPlanEntry, delta_columns: tuple[ColumnInfo, ...]
+) -> tuple[str, ...]:
+    if entry.snapshot_strategy != SnapshotStrategy.CHECK or entry.check_columns != ("*",):
+        return entry.check_columns
+
+    excluded_names: set[str] = {column.lower() for column in entry.unique_key}
+    excluded_names.add(_valid_from_column(entry).lower())
+    excluded_names.add(_valid_to_column(entry).lower())
+    if entry.observed_at_column is not None:
+        excluded_names.add(entry.observed_at_column.lower())
+    if entry.updated_at_column is not None:
+        excluded_names.add(entry.updated_at_column.lower())
+
+    expanded_columns: tuple[str, ...] = tuple(
+        column.name for column in delta_columns if column.name.lower() not in excluded_names
+    )
+    if not expanded_columns:
+        raise ExecutorInputError(
+            f"snapshot model '{entry.name}' check_columns [*] did not match any data columns"
+        )
+    return expanded_columns
 
 
 def _require_updated_at(entry: ModelPlanEntry) -> str:

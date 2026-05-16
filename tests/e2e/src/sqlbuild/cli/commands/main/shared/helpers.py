@@ -305,7 +305,7 @@ def build_real_warehouse_existing_snapshot_project_files(*, project_toml: str) -
             "  materialized snapshot,\n"
             "  unique_key [customer_id],\n"
             "  snapshot_strategy check,\n"
-            "  check_columns [status]\n"
+            "  check_columns [*]\n"
             ");\n\n"
             "SELECT customer_id, status\n"
             'FROM __ref("current_check_customers")\n'
@@ -346,7 +346,7 @@ def build_real_warehouse_existing_snapshot_project_files(*, project_toml: str) -
             "  materialized snapshot,\n"
             "  unique_key [customer_id],\n"
             "  snapshot_strategy check,\n"
-            "  check_columns [status],\n"
+            "  check_columns [*],\n"
             "  observed_at observed_at,\n"
             "  historical_input snapshot,\n"
             "  invalidate_hard_deletes true\n"
