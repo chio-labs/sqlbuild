@@ -253,12 +253,6 @@ def _validate_supported_snapshot(entry: ModelPlanEntry) -> None:
         raise ExecutorInputError(
             "snapshot execution currently supports snapshot_strategy=timestamp or check"
         )
-    if (
-        entry.observed_at_column is not None
-        and entry.snapshot_strategy == SnapshotStrategy.TIMESTAMP
-        and entry.historical_input == HistoricalInput.CHANGES
-    ):
-        raise ExecutorInputError("snapshot execution does not support historical changes yet")
     if entry.observed_at_column is not None and entry.invalidate_hard_deletes:
         raise ExecutorInputError("snapshot execution does not support historical hard deletes yet")
     if entry.snapshot_strategy == SnapshotStrategy.TIMESTAMP and entry.updated_at_column is None:
@@ -316,7 +310,13 @@ def _validate_unique_snapshot_keys(
     delta_qualified: str,
 ) -> None:
     identity_columns: tuple[str, ...] = entry.unique_key
-    if entry.observed_at_column is not None:
+    if (
+        entry.snapshot_strategy == SnapshotStrategy.TIMESTAMP
+        and entry.observed_at_column is not None
+        and entry.historical_input == HistoricalInput.CHANGES
+    ):
+        identity_columns = (*identity_columns, _require_updated_at(entry))
+    elif entry.observed_at_column is not None:
         identity_columns = (*identity_columns, entry.observed_at_column)
     key_list: str = ", ".join(identity_columns)
     duplicate_sql: str = (
@@ -351,8 +351,20 @@ def _create_initial_snapshot_target(
     ):
         updated_at_column: str = _require_updated_at(entry)
         output_columns: tuple[str, ...] = tuple(column.name for column in delta_columns)
-        statements: tuple[str, ...] = (
-            adapter.render_create_initial_historical_timestamp_snapshot_target(
+        if entry.historical_input == HistoricalInput.CHANGES:
+            statements: tuple[str, ...] = (
+                adapter.render_create_initial_historical_timestamp_changes_target(
+                    target=target_qualified,
+                    source=delta_qualified,
+                    unique_key=entry.unique_key,
+                    updated_at_column=updated_at_column,
+                    valid_from_column=valid_from_column,
+                    valid_to_column=valid_to_column,
+                    output_columns=output_columns,
+                )
+            )
+        else:
+            statements = adapter.render_create_initial_historical_timestamp_snapshot_target(
                 target=target_qualified,
                 source=delta_qualified,
                 unique_key=entry.unique_key,
@@ -362,7 +374,6 @@ def _create_initial_snapshot_target(
                 valid_to_column=valid_to_column,
                 output_columns=output_columns,
             )
-        )
     elif entry.snapshot_strategy == SnapshotStrategy.CHECK and entry.observed_at_column is not None:
         output_columns: tuple[str, ...] = tuple(column.name for column in delta_columns)
         statements = adapter.render_create_initial_historical_check_snapshot_target(
@@ -442,16 +453,28 @@ def _apply_timestamp_snapshot_changes(
     valid_to_column: str = _valid_to_column(entry)
     output_columns: tuple[str, ...] = tuple(column.name for column in delta_columns)
     if entry.observed_at_column is not None:
-        statements: tuple[str, ...] = adapter.render_apply_historical_timestamp_snapshot_changes(
-            target=target_qualified,
-            source=delta_qualified,
-            unique_key=entry.unique_key,
-            updated_at_column=updated_at_column,
-            observed_at_column=entry.observed_at_column,
-            valid_from_column=valid_from_column,
-            valid_to_column=valid_to_column,
-            output_columns=output_columns,
-        )
+        statements: tuple[str, ...]
+        if entry.historical_input == HistoricalInput.CHANGES:
+            statements = adapter.render_apply_historical_timestamp_changes(
+                target=target_qualified,
+                source=delta_qualified,
+                unique_key=entry.unique_key,
+                updated_at_column=updated_at_column,
+                valid_from_column=valid_from_column,
+                valid_to_column=valid_to_column,
+                output_columns=output_columns,
+            )
+        else:
+            statements = adapter.render_apply_historical_timestamp_snapshot_changes(
+                target=target_qualified,
+                source=delta_qualified,
+                unique_key=entry.unique_key,
+                updated_at_column=updated_at_column,
+                observed_at_column=entry.observed_at_column,
+                valid_from_column=valid_from_column,
+                valid_to_column=valid_to_column,
+                output_columns=output_columns,
+            )
         statement_recorder.record_many(statements)
         with adapter.transaction(connection):
             statement: str
