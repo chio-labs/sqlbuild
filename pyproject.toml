@@ -34,6 +34,9 @@ dagster = [
   "dagster>=1.13.0",
   "dagster-webserver>=1.13.0",
 ]
+postgres = [
+  "psycopg[binary]>=3.2.0",
+]
 
 [project.scripts]
 sqb = "sqlbuild.cli.commands.main.entry:main"
@@ -73,6 +76,7 @@ markers = [
   "snowflake: tests that require a live Snowflake warehouse",
   "bigquery: tests that require a live BigQuery warehouse",
   "databricks: tests that require a live Databricks warehouse",
+  "postgres: tests that require a live PostgreSQL database",
 ]
 
 [tool.ruff]
@@ -81,6 +85,10 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["B", "E", "F", "I", "UP"]
+
+[tool.ty.rules]
+unresolved-import = "ignore"
+unresolved-attribute = "ignore"
 
 [tool.uv]
 package = true

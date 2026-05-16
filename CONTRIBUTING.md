@@ -9,7 +9,7 @@ SQLBuild requires Python 3.12 or newer.
 Install dependencies with:
 
 ```bash
-uv sync
+uv sync --python 3.12 --all-extras
 ```
 
 ## Development Workflow
