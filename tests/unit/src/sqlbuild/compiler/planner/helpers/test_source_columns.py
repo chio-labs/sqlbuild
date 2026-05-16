@@ -21,6 +21,8 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     SourceCursorInputColumnsTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
+    build_cursor_input_contract_models,
+    build_cursor_input_contract_sources,
     build_source_cursor_input_model,
     build_test_project_with_source_entry,
 )
@@ -130,6 +132,102 @@ CURSOR_INPUT_TEST_CASES: list[SourceCursorInputColumnsTestCase] = [
         source_columns={"stg_orders": ("order_id", "event_time")},
         expected_valid=True,
     ),
+    SourceCursorInputColumnsTestCase(
+        description="passes when enforced model contract declares cursor input column",
+        reference_kind=SqlReferenceKind.REF,
+        reference_name="stg_orders",
+        cursor_column="event_time",
+        cursor_inputs={"stg_orders": "loaded_at"},
+        source_columns={},
+        upstream_contract="enforced",
+        upstream_declared_columns=("order_id", "loaded_at"),
+        expected_valid=True,
+    ),
+    SourceCursorInputColumnsTestCase(
+        description="skips non-enforced model contract cursor input validation",
+        reference_kind=SqlReferenceKind.REF,
+        reference_name="stg_orders",
+        cursor_column="event_time",
+        cursor_inputs={"stg_orders": "missing_loaded_at"},
+        source_columns={},
+        upstream_contract="none",
+        upstream_declared_columns=("order_id",),
+        expected_valid=True,
+    ),
+    SourceCursorInputColumnsTestCase(
+        description="passes when enforced source contract declares cursor input column",
+        reference_kind=SqlReferenceKind.SOURCE,
+        reference_name="raw_orders",
+        cursor_column="event_time",
+        cursor_inputs={"raw_orders": "loaded_at"},
+        source_columns={},
+        upstream_contract="enforced",
+        upstream_declared_columns=("order_id", "loaded_at"),
+        expected_valid=True,
+    ),
+    SourceCursorInputColumnsTestCase(
+        description="skips non-enforced source contract cursor input validation",
+        reference_kind=SqlReferenceKind.SOURCE,
+        reference_name="raw_orders",
+        cursor_column="event_time",
+        cursor_inputs={"raw_orders": "missing_loaded_at"},
+        source_columns={},
+        upstream_contract="none",
+        upstream_declared_columns=("order_id",),
+        expected_valid=True,
+    ),
+]
+
+CURSOR_INPUT_ERROR_TEST_CASES: list[SourceCursorInputColumnsTestCase] = [
+    SourceCursorInputColumnsTestCase(
+        description="raises when source cursor input column is missing",
+        reference_kind=SqlReferenceKind.SOURCE,
+        reference_name="raw_orders",
+        cursor_column="event_time",
+        cursor_inputs={"raw_orders": "missing_loaded_at"},
+        source_columns={"raw_orders": ("order_id", "event_time")},
+        expected_valid=False,
+        expected_error_fragment=(
+            "model 'test_model': cursor_inputs references source 'raw_orders' column "
+            "'missing_loaded_at'"
+        ),
+    ),
+    SourceCursorInputColumnsTestCase(
+        description="raises when enforced model contract omits cursor input column",
+        reference_kind=SqlReferenceKind.REF,
+        reference_name="stg_orders",
+        cursor_column="event_time",
+        cursor_inputs={"stg_orders": "missing_loaded_at"},
+        source_columns={},
+        upstream_contract="enforced",
+        upstream_declared_columns=("order_id", "event_time"),
+        expected_valid=False,
+        expected_error_fragment="model contract does not expose the column",
+    ),
+    SourceCursorInputColumnsTestCase(
+        description="raises when enforced source contract omits cursor input column",
+        reference_kind=SqlReferenceKind.SOURCE,
+        reference_name="raw_orders",
+        cursor_column="event_time",
+        cursor_inputs={"raw_orders": "missing_loaded_at"},
+        source_columns={},
+        upstream_contract="enforced",
+        upstream_declared_columns=("order_id", "event_time"),
+        expected_valid=False,
+        expected_error_fragment="source contract does not expose the column",
+    ),
+    SourceCursorInputColumnsTestCase(
+        description="raises when enforced source contract omits physical extra column",
+        reference_kind=SqlReferenceKind.SOURCE,
+        reference_name="raw_orders",
+        cursor_column="event_time",
+        cursor_inputs={"raw_orders": "extra_loaded_at"},
+        source_columns={"raw_orders": ("order_id", "extra_loaded_at")},
+        upstream_contract="enforced",
+        upstream_declared_columns=("order_id",),
+        expected_valid=False,
+        expected_error_fragment="source contract does not expose the column",
+    ),
 ]
 
 
@@ -167,6 +265,8 @@ def test_given_valid_cursor_input_source_columns_when_validating_then_passes(
     validate_source_cursor_input_columns(
         model=model,
         cursor_column=test_case.cursor_column,
+        models_by_name=build_cursor_input_contract_models(test_case),
+        source_map=build_cursor_input_contract_sources(test_case),
         source_warehouse_columns=source_warehouse_columns,
     )
 
@@ -175,22 +275,8 @@ def test_given_valid_cursor_input_source_columns_when_validating_then_passes(
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        SourceCursorInputColumnsTestCase(
-            description="raises when source cursor input column is missing",
-            reference_kind=SqlReferenceKind.SOURCE,
-            reference_name="raw_orders",
-            cursor_column="event_time",
-            cursor_inputs={"raw_orders": "missing_loaded_at"},
-            source_columns={"raw_orders": ("order_id", "event_time")},
-            expected_valid=False,
-            expected_error_fragment=(
-                "model 'test_model': cursor_inputs references source 'raw_orders' column "
-                "'missing_loaded_at'"
-            ),
-        ),
-    ],
-    ids=["raises when source cursor input column is missing"],
+    CURSOR_INPUT_ERROR_TEST_CASES,
+    ids=[case.description for case in CURSOR_INPUT_ERROR_TEST_CASES],
 )
 def test_given_missing_cursor_input_source_column_when_validating_then_raises_clear_error(
     test_case: SourceCursorInputColumnsTestCase,
@@ -206,6 +292,8 @@ def test_given_missing_cursor_input_source_column_when_validating_then_raises_cl
         validate_source_cursor_input_columns(
             model=model,
             cursor_column=test_case.cursor_column,
+            models_by_name=build_cursor_input_contract_models(test_case),
+            source_map=build_cursor_input_contract_sources(test_case),
             source_warehouse_columns=source_warehouse_columns,
         )
 

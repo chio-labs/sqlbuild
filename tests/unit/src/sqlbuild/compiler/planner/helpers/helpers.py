@@ -59,8 +59,8 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import BackfillAction
 from sqlbuild.compiler.shared.helpers.hashing import compute_query_hash
 from sqlbuild.shared.types import SqlReferenceKind
-from sqlbuild.spec.models.schema import SchemaSeedEntry
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry, SchemaSeedEntry
+from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     BuildModelWarningsTestCase,
     IncrementalStrategyErrorTestCase,
@@ -597,6 +597,60 @@ def build_source_cursor_input_model(
             qualified_name="staging.test_model",
         ),
     )
+
+
+def build_cursor_input_contract_models(
+    test_case: SourceCursorInputColumnsTestCase,
+) -> dict[str, CompiledModel]:
+    if test_case.reference_kind != SqlReferenceKind.REF:
+        return {}
+    if test_case.upstream_contract is None:
+        return {}
+    return {
+        test_case.reference_name: CompiledModel(
+            key=CompiledObjectKey(
+                resource_type=CompiledResourceType.MODEL,
+                name=test_case.reference_name,
+            ),
+            deps=(),
+            name=test_case.reference_name,
+            relative_path=Path(f"models/{test_case.reference_name}.sql"),
+            query_sql="SELECT 1",
+            config=CompileModelConfig(values={"contract": test_case.upstream_contract}),
+            target=CompiledRelationTarget(
+                database=None,
+                schema="staging",
+                name=test_case.reference_name,
+                qualified_name=f"staging.{test_case.reference_name}",
+            ),
+            schema_entry=SchemaModelEntry(
+                name=test_case.reference_name,
+                columns=tuple(
+                    SchemaColumn(name=column_name)
+                    for column_name in test_case.upstream_declared_columns
+                ),
+            ),
+        )
+    }
+
+
+def build_cursor_input_contract_sources(
+    test_case: SourceCursorInputColumnsTestCase,
+) -> dict[str, SourceEntry]:
+    if test_case.reference_kind != SqlReferenceKind.SOURCE:
+        return {}
+    if test_case.upstream_contract is None:
+        return {}
+    return {
+        test_case.reference_name: SourceEntry(
+            name=test_case.reference_name,
+            contract=test_case.upstream_contract,
+            columns=tuple(
+                SourceColumnEntry(name=column_name)
+                for column_name in test_case.upstream_declared_columns
+            ),
+        )
+    }
 
 
 def _resolve_dep_key(
