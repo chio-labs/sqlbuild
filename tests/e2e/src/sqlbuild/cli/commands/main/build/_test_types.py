@@ -114,6 +114,21 @@ class SnapshotHistoricalCheckBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class SnapshotHistoricalTimestampBuildE2ETestCase:
+    """Test case for historical timestamp snapshot build behavior across CLI reruns."""
+
+    description: str
+    repo_files: dict[str, str]
+    initial_seed_sql: str
+    mutation_sql: tuple[str, ...]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_query: str
+    expected_initial_rows: tuple[tuple[object, ...], ...]
+    expected_changed_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class SnapshotCheckFailureBuildE2ETestCase:
     """Test case for check snapshot build failures through the CLI."""
 
