@@ -6,6 +6,7 @@ import pytest
 
 from sqlbuild.cli.commands.main.helpers.plan.formatter import format_plan
 from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import CascadeResult, ModelPlanEntry, PlanOutput, PlanWarning
 from sqlbuild.compiler.planner.types import BackfillAction, PlanAction, PlanReason, WarningSeverity
@@ -13,9 +14,11 @@ from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     BuildExecutionPlanTestCase,
     FormatPlanIntegrationTestCase,
+    SourceCursorInputPlanErrorTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.planner.main.helpers import (
     build_project_from_format_test_case,
+    build_project_from_source_cursor_input_test_case,
     build_project_from_test_case,
     write_previous_function_fingerprints,
 )
@@ -185,6 +188,49 @@ def test_given_project_when_building_plan_then_produces_expected_output(
     expected_progress_fragment: str
     for expected_progress_fragment in test_case.expected_progress_fragments:
         assert expected_progress_fragment in progress_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SourceCursorInputPlanErrorTestCase(
+            description="source cursor input column missing from warehouse metadata",
+            setup_sql=(
+                "CREATE SCHEMA raw",
+                "CREATE TABLE raw.orders (order_id INTEGER, event_time TIMESTAMP)",
+            ),
+            model_name="orders_incremental",
+            source_name="raw_orders",
+            source_schema="raw",
+            source_table="orders",
+            cursor_column="event_time",
+            cursor_input_column="loaded_at",
+            expected_error_fragment=(
+                "model 'orders_incremental': cursor_inputs references source 'raw_orders' "
+                "column 'loaded_at'"
+            ),
+        )
+    ],
+    ids=["source cursor input column missing from warehouse metadata"],
+)
+def test_given_missing_source_cursor_input_column_when_building_plan_then_raises_planner_error(
+    test_case: SourceCursorInputPlanErrorTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    sql: str
+    for sql in test_case.setup_sql:
+        connection.execute(sql)
+
+    project: Any = build_project_from_source_cursor_input_test_case(test_case)
+
+    with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment):
+        build_execution_plan(
+            project=project,
+            adapter=adapter,
+            connection=connection,
+            full_refresh=False,
+        )
 
 
 CURSOR_TYPE_MISMATCH_TEST_CASES: list[BuildExecutionPlanTestCase] = [
