@@ -212,6 +212,7 @@ def plan_model(
     initial_valid_from: str | None = _get_config_str(model, "initial_valid_from")
     invalidate_hard_deletes: bool = _get_config_bool(model, "invalidate_hard_deletes")
     snapshot_full_refresh: str | None = _get_config_str(model, "snapshot_full_refresh")
+    snapshot_schema_change: str | None = _get_config_str(model, "snapshot_schema_change")
 
     microbatch_range: CursorBounds | None = _compute_microbatch_range(
         model=model,
@@ -288,6 +289,7 @@ def plan_model(
         initial_valid_from=initial_valid_from,
         invalidate_hard_deletes=invalidate_hard_deletes,
         snapshot_full_refresh=snapshot_full_refresh,
+        snapshot_schema_change=snapshot_schema_change,
         on_schema_change=on_schema_change,
         type_enforcement=type_enforcement,
         declared_columns=declared_columns,

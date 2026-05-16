@@ -53,6 +53,7 @@ from sqlbuild.executor.testing.main.execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context, log_debug_event
+from sqlbuild.spec.models.project import SnapshotsConfig
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 
@@ -71,6 +72,8 @@ class BuildScheduler:
         promotion_mode: TablePromotionMode,
         run_id: str,
         query_change_tracking: bool,
+        snapshots: SnapshotsConfig,
+        allow_snapshot_schema_change: bool,
         run_audits: bool,
         run_tests: bool,
         fail_fast: bool,
@@ -91,6 +94,8 @@ class BuildScheduler:
         self._promotion_mode: TablePromotionMode = promotion_mode
         self._run_id: str = run_id
         self._query_change_tracking: bool = query_change_tracking
+        self._snapshots: SnapshotsConfig = snapshots
+        self._allow_snapshot_schema_change: bool = allow_snapshot_schema_change
         self._run_audits: bool = run_audits
         self._run_tests: bool = run_tests
         self._fail_fast: bool = fail_fast
@@ -479,6 +484,8 @@ class BuildScheduler:
                 promotion_mode=self._promotion_mode,
                 run_id=self._run_id,
                 query_change_tracking=self._query_change_tracking,
+                snapshots=self._snapshots,
+                allow_snapshot_schema_change=self._allow_snapshot_schema_change,
                 custom_materializations=self._custom_materializations,
                 environment=self._environment,
                 effective_vars=self._effective_vars,
@@ -620,6 +627,8 @@ def _dispatch_model(
     promotion_mode: TablePromotionMode,
     run_id: str,
     query_change_tracking: bool,
+    snapshots: SnapshotsConfig,
+    allow_snapshot_schema_change: bool,
     custom_materializations: dict[str, Callable[..., MaterializationResult]] | None = None,
     environment: str = "",
     effective_vars: dict[str, object] | None = None,
@@ -726,6 +735,8 @@ def _dispatch_model(
             model_audits=model_audits,
             run_id=run_id,
             query_change_tracking=query_change_tracking,
+            snapshots=snapshots,
+            allow_snapshot_schema_change=allow_snapshot_schema_change,
         )
     return execute_table_entry(
         entry=entry,

@@ -92,6 +92,8 @@ class SnapshotsConfig:
 
     current_state_full_refresh: str = "deny"
     historical_full_refresh: str = "require_confirmation"
+    schema_change: str = "append_new_columns"
+    wildcard_check_schema_change: str = "require_confirmation"
 
 
 @dataclass(frozen=True)

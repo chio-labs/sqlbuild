@@ -253,6 +253,7 @@ class ModelPlanEntry:
     initial_valid_from: str | None = None
     invalidate_hard_deletes: bool = False
     snapshot_full_refresh: str | None = None
+    snapshot_schema_change: str | None = None
     on_schema_change: OnSchemaChange | None = None
     type_enforcement: bool = False
     declared_columns: tuple[ColumnInfo, ...] = field(default_factory=tuple)

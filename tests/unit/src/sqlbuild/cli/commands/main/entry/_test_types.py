@@ -18,6 +18,7 @@ class MainTestCase:
     expected_no_sql_validation: bool = False
     expected_full_refresh: bool = False
     expected_allow_snapshot_full_refresh: bool = False
+    expected_allow_snapshot_schema_change: bool = False
     expected_no_color: bool = False
     expected_debug: bool = False
     expected_json: bool = False

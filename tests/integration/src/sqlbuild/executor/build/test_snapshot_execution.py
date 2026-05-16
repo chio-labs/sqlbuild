@@ -24,6 +24,7 @@ from tests.integration.src.sqlbuild.executor.build._test_types import (
     SnapshotHardDeleteExecutionTestCase,
     SnapshotHistoricalCheckExecutionTestCase,
     SnapshotHistoricalTimestampExecutionTestCase,
+    SnapshotSchemaChangeExecutionTestCase,
     SnapshotTimestampExecutionTestCase,
     SnapshotTimestampFailureTestCase,
 )
@@ -2167,6 +2168,309 @@ def test_given_current_state_snapshot_when_source_row_disappears_then_hard_delet
     assert deleted_result.status == BuildStatus.SUCCESS
     assert rows_after_initial == test_case.expected_initial_rows
     assert rows_after_deleted == test_case.expected_deleted_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnapshotSchemaChangeExecutionTestCase(
+            description="timestamp snapshot appends new source column",
+            initial_project_files={
+                "sqlbuild_project.toml": _PROJECT_YML,
+                "sources/raw.yml": (
+                    "sources:\n  - name: raw_customers\n    schema: main\n"
+                    "    table: raw_customers\n"
+                ),
+                "models/customer_snapshot.sql": (
+                    "MODEL (\n"
+                    "  materialized snapshot,\n"
+                    "  unique_key [customer_id],\n"
+                    "  snapshot_strategy timestamp,\n"
+                    "  updated_at updated_at\n"
+                    ");\n\n"
+                    'SELECT customer_id, status, updated_at FROM __source("raw_customers")'
+                ),
+            },
+            changed_project_files={
+                "sqlbuild_project.toml": _PROJECT_YML,
+                "sources/raw.yml": (
+                    "sources:\n  - name: raw_customers\n    schema: main\n"
+                    "    table: raw_customers\n"
+                ),
+                "models/customer_snapshot.sql": (
+                    "MODEL (\n"
+                    "  materialized snapshot,\n"
+                    "  unique_key [customer_id],\n"
+                    "  snapshot_strategy timestamp,\n"
+                    "  updated_at updated_at\n"
+                    ");\n\n"
+                    'SELECT customer_id, status, plan, updated_at FROM __source("raw_customers")'
+                ),
+            },
+            initial_setup_sql=(
+                "CREATE TABLE main.raw_customers AS SELECT 1 AS customer_id, "
+                "'active' AS status, TIMESTAMP '2024-01-01' AS updated_at",
+            ),
+            changed_setup_sql=(
+                "CREATE OR REPLACE TABLE main.raw_customers AS SELECT 1 AS customer_id, "
+                "'active' AS status, 'pro' AS plan, TIMESTAMP '2024-01-02' AS updated_at",
+            ),
+            expected_status=BuildStatus.SUCCESS,
+            expected_query=(
+                "SELECT customer_id, status, plan, CAST(valid_from AS VARCHAR), "
+                "CAST(valid_to AS VARCHAR) FROM main.customer_snapshot ORDER BY valid_from"
+            ),
+            expected_rows=(
+                (1, "active", None, "2024-01-01 00:00:00", "2024-01-02 00:00:00"),
+                (1, "active", "pro", "2024-01-02 00:00:00", None),
+            ),
+        )
+    ],
+    ids=["timestamp snapshot appends new source column"],
+)
+def test_given_snapshot_source_adds_column_when_building_then_appends_target_column(
+    test_case: SnapshotSchemaChangeExecutionTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    write_repo_files(tmp_path, test_case.initial_project_files)
+
+    initial_result: BuildExecutionResult = run_build_for_project(
+        test_case=BuildExecutionTestCase(
+            description="initial snapshot before schema change",
+            project_files=test_case.initial_project_files,
+            setup_sql=test_case.initial_setup_sql,
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=1,
+            expected_model_statuses=(("customer_snapshot", ExecutionStatus.SUCCESS),),
+        ),
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+    write_repo_files(tmp_path, test_case.changed_project_files)
+    for sql in test_case.changed_setup_sql:
+        connection.execute(sql)
+
+    changed_result: BuildExecutionResult = run_build_for_project(
+        test_case=BuildExecutionTestCase(
+            description="snapshot appends new source column",
+            project_files=test_case.changed_project_files,
+            expected_status=test_case.expected_status,
+            expected_success_count=1,
+            expected_model_statuses=(("customer_snapshot", ExecutionStatus.SUCCESS),),
+        ),
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+    rows: tuple[tuple[object, ...], ...] = tuple(
+        tuple(row) for row in connection.execute(test_case.expected_query).fetchall()
+    )
+
+    assert initial_result.status == BuildStatus.SUCCESS
+    assert changed_result.status == test_case.expected_status
+    assert rows == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnapshotSchemaChangeExecutionTestCase(
+            description="wildcard check snapshot requires schema-change confirmation",
+            initial_project_files={
+                "sqlbuild_project.toml": _PROJECT_YML,
+                "sources/raw.yml": (
+                    "sources:\n  - name: raw_customers\n    schema: main\n"
+                    "    table: raw_customers\n"
+                ),
+                "models/customer_snapshot.sql": (
+                    "MODEL (\n"
+                    "  materialized snapshot,\n"
+                    "  unique_key [customer_id],\n"
+                    "  snapshot_strategy check,\n"
+                    "  check_columns [*]\n"
+                    ");\n\n"
+                    'SELECT customer_id, status FROM __source("raw_customers")'
+                ),
+            },
+            changed_project_files={
+                "sqlbuild_project.toml": _PROJECT_YML,
+                "sources/raw.yml": (
+                    "sources:\n  - name: raw_customers\n    schema: main\n"
+                    "    table: raw_customers\n"
+                ),
+                "models/customer_snapshot.sql": (
+                    "MODEL (\n"
+                    "  materialized snapshot,\n"
+                    "  unique_key [customer_id],\n"
+                    "  snapshot_strategy check,\n"
+                    "  check_columns [*]\n"
+                    ");\n\n"
+                    'SELECT customer_id, status, plan FROM __source("raw_customers")'
+                ),
+            },
+            initial_setup_sql=(
+                "CREATE TABLE main.raw_customers AS SELECT 1 AS customer_id, 'active' AS status",
+            ),
+            changed_setup_sql=(
+                "CREATE OR REPLACE TABLE main.raw_customers AS "
+                "SELECT 1 AS customer_id, 'active' AS status, 'pro' AS plan",
+            ),
+            expected_status=BuildStatus.FAILED,
+            expected_error_fragment="check_columns [*] detected new data columns",
+        )
+    ],
+    ids=["wildcard check snapshot requires schema-change confirmation"],
+)
+def test_given_wildcard_check_snapshot_source_adds_column_when_building_then_requires_confirmation(
+    test_case: SnapshotSchemaChangeExecutionTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    write_repo_files(tmp_path, test_case.initial_project_files)
+    initial_result: BuildExecutionResult = run_build_for_project(
+        test_case=BuildExecutionTestCase(
+            description="initial wildcard check snapshot before schema change",
+            project_files=test_case.initial_project_files,
+            setup_sql=test_case.initial_setup_sql,
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=1,
+            expected_model_statuses=(("customer_snapshot", ExecutionStatus.SUCCESS),),
+        ),
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+    write_repo_files(tmp_path, test_case.changed_project_files)
+    for sql in test_case.changed_setup_sql:
+        connection.execute(sql)
+
+    changed_result: BuildExecutionResult = run_build_for_project(
+        test_case=BuildExecutionTestCase(
+            description="wildcard check snapshot source adds column",
+            project_files=test_case.changed_project_files,
+            expected_status=test_case.expected_status,
+            expected_failure_count=1,
+            expected_model_statuses=(("customer_snapshot", ExecutionStatus.FAILED),),
+            allow_snapshot_schema_change=test_case.allow_snapshot_schema_change,
+        ),
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+
+    assert initial_result.status == BuildStatus.SUCCESS
+    assert changed_result.status == test_case.expected_status
+    assert test_case.expected_error_fragment in (
+        changed_result.model_results[0].error_message or ""
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnapshotSchemaChangeExecutionTestCase(
+            description="confirmed wildcard check snapshot appends new source column",
+            initial_project_files={
+                "sqlbuild_project.toml": _PROJECT_YML,
+                "sources/raw.yml": (
+                    "sources:\n  - name: raw_customers\n    schema: main\n"
+                    "    table: raw_customers\n"
+                ),
+                "models/customer_snapshot.sql": (
+                    "MODEL (\n"
+                    "  materialized snapshot,\n"
+                    "  unique_key [customer_id],\n"
+                    "  snapshot_strategy check,\n"
+                    "  check_columns [*]\n"
+                    ");\n\n"
+                    'SELECT customer_id, status FROM __source("raw_customers")'
+                ),
+            },
+            changed_project_files={
+                "sqlbuild_project.toml": _PROJECT_YML,
+                "sources/raw.yml": (
+                    "sources:\n  - name: raw_customers\n    schema: main\n"
+                    "    table: raw_customers\n"
+                ),
+                "models/customer_snapshot.sql": (
+                    "MODEL (\n"
+                    "  materialized snapshot,\n"
+                    "  unique_key [customer_id],\n"
+                    "  snapshot_strategy check,\n"
+                    "  check_columns [*]\n"
+                    ");\n\n"
+                    'SELECT customer_id, status, plan FROM __source("raw_customers")'
+                ),
+            },
+            initial_setup_sql=(
+                "CREATE TABLE main.raw_customers AS SELECT 1 AS customer_id, 'active' AS status",
+            ),
+            changed_setup_sql=(
+                "CREATE OR REPLACE TABLE main.raw_customers AS "
+                "SELECT 1 AS customer_id, 'active' AS status, 'pro' AS plan",
+            ),
+            expected_status=BuildStatus.SUCCESS,
+            allow_snapshot_schema_change=True,
+            expected_query=(
+                "SELECT customer_id, status, plan, valid_to IS NULL "
+                "FROM main.customer_snapshot ORDER BY valid_from"
+            ),
+            expected_rows=((1, "active", None, False), (1, "active", "pro", True)),
+        )
+    ],
+    ids=["confirmed wildcard check snapshot appends new source column"],
+)
+def test_given_confirmed_wildcard_schema_change_when_building_then_appends_target_column(
+    test_case: SnapshotSchemaChangeExecutionTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    write_repo_files(tmp_path, test_case.initial_project_files)
+    initial_result: BuildExecutionResult = run_build_for_project(
+        test_case=BuildExecutionTestCase(
+            description="initial wildcard check snapshot before confirmed schema change",
+            project_files=test_case.initial_project_files,
+            setup_sql=test_case.initial_setup_sql,
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=1,
+            expected_model_statuses=(("customer_snapshot", ExecutionStatus.SUCCESS),),
+        ),
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+    write_repo_files(tmp_path, test_case.changed_project_files)
+    for sql in test_case.changed_setup_sql:
+        connection.execute(sql)
+
+    changed_result: BuildExecutionResult = run_build_for_project(
+        test_case=BuildExecutionTestCase(
+            description="confirmed wildcard check snapshot source adds column",
+            project_files=test_case.changed_project_files,
+            expected_status=test_case.expected_status,
+            expected_success_count=1,
+            expected_model_statuses=(("customer_snapshot", ExecutionStatus.SUCCESS),),
+            allow_snapshot_schema_change=test_case.allow_snapshot_schema_change,
+        ),
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+    rows: tuple[tuple[object, ...], ...] = tuple(
+        tuple(row) for row in connection.execute(test_case.expected_query).fetchall()
+    )
+
+    assert initial_result.status == BuildStatus.SUCCESS
+    assert changed_result.status == test_case.expected_status
+    assert rows == test_case.expected_rows
 
 
 @pytest.mark.parametrize(
