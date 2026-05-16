@@ -78,3 +78,12 @@ class DatabricksSnapshotE2ETestCase:
     expected_historical_timestamp_rows: tuple[tuple[object, ...], ...]
     expected_historical_check_rows: tuple[tuple[object, ...], ...]
     expected_failure_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DatabricksSnapshotApplyE2ETestCase:
+    description: str
+    expected_current_check_rows: tuple[tuple[object, ...], ...]
+    expected_current_delete_rows: tuple[tuple[object, ...], ...]
+    expected_historical_timestamp_rows: tuple[tuple[object, ...], ...]
+    expected_historical_check_rows: tuple[tuple[object, ...], ...]

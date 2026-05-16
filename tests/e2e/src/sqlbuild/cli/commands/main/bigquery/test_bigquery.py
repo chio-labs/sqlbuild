@@ -14,9 +14,11 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery._test_types import (
     BigQueryModelBuildE2ETestCase,
     BigQueryScenarioLocalReplayE2ETestCase,
     BigQueryScenarioRemoteE2ETestCase,
+    BigQuerySnapshotApplyE2ETestCase,
     BigQuerySnapshotE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.bigquery.helpers import (
+    assert_bigquery_snapshot_apply_rows,
     assert_bigquery_snapshot_matrix_rows,
     assert_current_bigquery_snapshot_rows,
     bigquery_relation_row_count,
@@ -39,7 +41,12 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     maybe_corrupt_scenario_snapshot_dialect,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    build_current_check_customers_model_sql,
     build_current_customers_model_sql,
+    build_current_delete_customers_model_sql,
+    build_historical_check_daily_model_sql,
+    build_historical_timestamp_extracts_model_sql,
+    build_real_warehouse_existing_snapshot_project_files,
     build_real_warehouse_snapshot_project_files,
     prepare_inline_project,
     run_sqb,
@@ -479,6 +486,88 @@ def test_given_snapshot_project_when_building_on_bigquery_then_scd2_history_is_v
         assert_current_bigquery_snapshot_rows(
             dataset_name=dataset_name,
             expected_rows=test_case.expected_current_rows_after_recovery,
+        )
+    finally:
+        cleanup_bigquery_dataset(dataset_name=dataset_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQuerySnapshotApplyE2ETestCase(
+            description="applies existing-target snapshot changes on bigquery",
+            expected_current_check_rows=(
+                ("1", "active", "False"),
+                ("1", "paused", "True"),
+                ("2", "active", "True"),
+            ),
+            expected_current_delete_rows=(
+                ("1", "basic", "False"),
+                ("1", "pro", "True"),
+                ("2", "trial", "False"),
+            ),
+            expected_historical_timestamp_rows=(
+                ("1", "basic", "2026-01-01", "2026-01-03"),
+                ("1", "pro", "2026-01-03", None),
+                ("2", "trial", "2026-01-01", "2026-01-04"),
+            ),
+            expected_historical_check_rows=(
+                ("1", "active", "2026-01-01", "2026-01-03"),
+                ("1", "paused", "2026-01-03", None),
+                ("2", "active", "2026-01-01", "2026-01-02"),
+                ("2", "active", "2026-01-03", None),
+            ),
+        )
+    ],
+    ids=["applies existing-target snapshot changes on bigquery"],
+)
+def test_given_existing_snapshot_targets_when_building_on_bigquery_then_apply_sql_succeeds(
+    tmp_path: Path,
+    test_case: BigQuerySnapshotApplyE2ETestCase,
+) -> None:
+    dataset_name: str = build_unique_dataset_name(prefix="sqlbuild_snapshot_apply")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="bigquery_snapshot_apply_project",
+        repo_files=build_real_warehouse_existing_snapshot_project_files(
+            project_toml=build_bigquery_project_toml(
+                project_name="bigquery_snapshot_apply_project",
+                dataset_name=dataset_name,
+            ),
+        ),
+    )
+
+    try:
+        initial_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "build", "--concurrency", "4"),
+            project_dir=project_dir,
+        )
+        assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
+
+        (project_dir / "models" / "current_check_customers.sql").write_text(
+            build_current_check_customers_model_sql(changed=True), encoding="utf-8"
+        )
+        (project_dir / "models" / "current_delete_customers.sql").write_text(
+            build_current_delete_customers_model_sql(changed=True), encoding="utf-8"
+        )
+        (project_dir / "models" / "historical_timestamp_extracts.sql").write_text(
+            build_historical_timestamp_extracts_model_sql(changed=True), encoding="utf-8"
+        )
+        (project_dir / "models" / "historical_check_daily.sql").write_text(
+            build_historical_check_daily_model_sql(changed=True), encoding="utf-8"
+        )
+
+        apply_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "build", "--concurrency", "4"),
+            project_dir=project_dir,
+        )
+        assert apply_result.returncode == 0, apply_result.stdout + apply_result.stderr
+        assert_bigquery_snapshot_apply_rows(
+            dataset_name=dataset_name,
+            expected_current_check_rows=test_case.expected_current_check_rows,
+            expected_current_delete_rows=test_case.expected_current_delete_rows,
+            expected_historical_timestamp_rows=test_case.expected_historical_timestamp_rows,
+            expected_historical_check_rows=test_case.expected_historical_check_rows,
         )
     finally:
         cleanup_bigquery_dataset(dataset_name=dataset_name)

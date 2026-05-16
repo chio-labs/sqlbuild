@@ -292,6 +292,148 @@ def build_current_customers_model_sql(*, plan: str, updated_at: str = "2026-01-0
     )
 
 
+def build_real_warehouse_existing_snapshot_project_files(*, project_toml: str) -> dict[str, str]:
+    """Build a live project that forces existing-target snapshot DML paths."""
+
+    return {
+        "sqlbuild_project.toml": project_toml,
+        "models/current_check_customers.sql": build_current_check_customers_model_sql(
+            changed=False
+        ),
+        "models/current_check_snapshot.sql": (
+            "MODEL (\n"
+            "  materialized snapshot,\n"
+            "  unique_key [customer_id],\n"
+            "  snapshot_strategy check,\n"
+            "  check_columns [status]\n"
+            ");\n\n"
+            "SELECT customer_id, status\n"
+            'FROM __ref("current_check_customers")\n'
+        ),
+        "models/current_delete_customers.sql": build_current_delete_customers_model_sql(
+            changed=False
+        ),
+        "models/current_delete_snapshot.sql": (
+            "MODEL (\n"
+            "  materialized snapshot,\n"
+            "  unique_key [customer_id],\n"
+            "  snapshot_strategy timestamp,\n"
+            "  updated_at updated_at,\n"
+            "  invalidate_hard_deletes true\n"
+            ");\n\n"
+            "SELECT customer_id, plan, updated_at\n"
+            'FROM __ref("current_delete_customers")\n'
+        ),
+        "models/historical_timestamp_extracts.sql": build_historical_timestamp_extracts_model_sql(
+            changed=False
+        ),
+        "models/historical_timestamp_snapshot.sql": (
+            "MODEL (\n"
+            "  materialized snapshot,\n"
+            "  unique_key [customer_id],\n"
+            "  snapshot_strategy timestamp,\n"
+            "  updated_at updated_at,\n"
+            "  observed_at observed_at,\n"
+            "  historical_input snapshot,\n"
+            "  invalidate_hard_deletes true\n"
+            ");\n\n"
+            "SELECT customer_id, plan, updated_at, observed_at\n"
+            'FROM __ref("historical_timestamp_extracts")\n'
+        ),
+        "models/historical_check_daily.sql": build_historical_check_daily_model_sql(changed=False),
+        "models/historical_check_snapshot.sql": (
+            "MODEL (\n"
+            "  materialized snapshot,\n"
+            "  unique_key [customer_id],\n"
+            "  snapshot_strategy check,\n"
+            "  check_columns [status],\n"
+            "  observed_at observed_at,\n"
+            "  historical_input snapshot,\n"
+            "  invalidate_hard_deletes true\n"
+            ");\n\n"
+            "SELECT customer_id, status, observed_at\n"
+            'FROM __ref("historical_check_daily")\n'
+        ),
+    }
+
+
+def build_current_check_customers_model_sql(*, changed: bool) -> str:
+    """Build mutable current-check source model for live snapshot apply tests."""
+
+    if changed:
+        return (
+            "MODEL (materialized table);\n\n"
+            "SELECT 1 AS customer_id, 'paused' AS status\n"
+            "UNION ALL SELECT 2 AS customer_id, 'active' AS status\n"
+        )
+    return (
+        "MODEL (materialized table);\n\n"
+        "SELECT 1 AS customer_id, 'active' AS status\n"
+        "UNION ALL SELECT 2 AS customer_id, 'active' AS status\n"
+    )
+
+
+def build_current_delete_customers_model_sql(*, changed: bool) -> str:
+    """Build mutable current timestamp source model for hard-delete apply tests."""
+
+    if changed:
+        return (
+            "MODEL (materialized table);\n\n"
+            "SELECT 1 AS customer_id, 'pro' AS plan, "
+            "CAST('2026-01-03 00:00:00' AS TIMESTAMP) AS updated_at\n"
+        )
+    return (
+        "MODEL (materialized table);\n\n"
+        "SELECT 1 AS customer_id, 'basic' AS plan, "
+        "CAST('2026-01-01 00:00:00' AS TIMESTAMP) AS updated_at\n"
+        "UNION ALL SELECT 2 AS customer_id, 'trial' AS plan, "
+        "CAST('2026-01-01 00:00:00' AS TIMESTAMP) AS updated_at\n"
+    )
+
+
+def build_historical_timestamp_extracts_model_sql(*, changed: bool) -> str:
+    """Build mutable historical timestamp source model for live apply tests."""
+
+    sql: str = (
+        "MODEL (materialized table);\n\n"
+        "SELECT 1 AS customer_id, 'basic' AS plan, "
+        "CAST('2026-01-01 00:00:00' AS TIMESTAMP) AS updated_at, "
+        "CAST('2026-01-02 00:00:00' AS TIMESTAMP) AS observed_at\n"
+        "UNION ALL SELECT 2 AS customer_id, 'trial' AS plan, "
+        "CAST('2026-01-01 00:00:00' AS TIMESTAMP) AS updated_at, "
+        "CAST('2026-01-02 00:00:00' AS TIMESTAMP) AS observed_at\n"
+    )
+    if changed:
+        sql += (
+            "UNION ALL SELECT 1 AS customer_id, 'pro' AS plan, "
+            "CAST('2026-01-03 00:00:00' AS TIMESTAMP) AS updated_at, "
+            "CAST('2026-01-04 00:00:00' AS TIMESTAMP) AS observed_at\n"
+        )
+    return sql
+
+
+def build_historical_check_daily_model_sql(*, changed: bool) -> str:
+    """Build mutable historical check source model for live apply tests."""
+
+    sql: str = (
+        "MODEL (materialized table);\n\n"
+        "SELECT 1 AS customer_id, 'active' AS status, "
+        "CAST('2026-01-01 00:00:00' AS TIMESTAMP) AS observed_at\n"
+        "UNION ALL SELECT 2 AS customer_id, 'active' AS status, "
+        "CAST('2026-01-01 00:00:00' AS TIMESTAMP) AS observed_at\n"
+        "UNION ALL SELECT 1 AS customer_id, 'active' AS status, "
+        "CAST('2026-01-02 00:00:00' AS TIMESTAMP) AS observed_at\n"
+    )
+    if changed:
+        sql += (
+            "UNION ALL SELECT 1 AS customer_id, 'paused' AS status, "
+            "CAST('2026-01-03 00:00:00' AS TIMESTAMP) AS observed_at\n"
+            "UNION ALL SELECT 2 AS customer_id, 'active' AS status, "
+            "CAST('2026-01-03 00:00:00' AS TIMESTAMP) AS observed_at\n"
+        )
+    return sql
+
+
 def stringify_warehouse_rows(
     rows: tuple[tuple[object, ...], ...],
 ) -> tuple[tuple[object, ...], ...]:

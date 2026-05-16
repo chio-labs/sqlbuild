@@ -12,7 +12,12 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     maybe_corrupt_scenario_snapshot_dialect,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    build_current_check_customers_model_sql,
     build_current_customers_model_sql,
+    build_current_delete_customers_model_sql,
+    build_historical_check_daily_model_sql,
+    build_historical_timestamp_extracts_model_sql,
+    build_real_warehouse_existing_snapshot_project_files,
     build_real_warehouse_snapshot_project_files,
     prepare_inline_project,
     run_sqb,
@@ -24,10 +29,12 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake._test_types import (
     SnowflakeDiffE2ETestCase,
     SnowflakeScenarioLocalReplayE2ETestCase,
     SnowflakeScenarioRemoteE2ETestCase,
+    SnowflakeSnapshotApplyE2ETestCase,
     SnowflakeSnapshotE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.snowflake.helpers import (
     assert_current_snowflake_snapshot_rows,
+    assert_snowflake_snapshot_apply_rows,
     assert_snowflake_snapshot_matrix_rows,
     build_snowflake_project_toml,
     cleanup_snowflake_schema,
@@ -195,6 +202,89 @@ def test_given_snowflake_local_config_when_running_query_then_outputs_expected_r
         for fragment in test_case.expected_stdout_fragments:
             assert fragment in result.stdout
         assert test_case.expected_schema_fragment in result.stdout
+    finally:
+        cleanup_snowflake_schema(schema_name=schema_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeSnapshotApplyE2ETestCase(
+            description="applies existing-target snapshot changes on snowflake",
+            expected_current_check_rows=(
+                ("1", "active", "False"),
+                ("1", "paused", "True"),
+                ("2", "active", "True"),
+            ),
+            expected_current_delete_rows=(
+                ("1", "basic", "False"),
+                ("1", "pro", "True"),
+                ("2", "trial", "False"),
+            ),
+            expected_historical_timestamp_rows=(
+                ("1", "basic", "2026-01-01", "2026-01-03"),
+                ("1", "pro", "2026-01-03", None),
+                ("2", "trial", "2026-01-01", "2026-01-04"),
+            ),
+            expected_historical_check_rows=(
+                ("1", "active", "2026-01-01", "2026-01-03"),
+                ("1", "paused", "2026-01-03", None),
+                ("2", "active", "2026-01-01", "2026-01-02"),
+                ("2", "active", "2026-01-03", None),
+            ),
+        )
+    ],
+    ids=["applies existing-target snapshot changes on snowflake"],
+)
+def test_given_existing_snapshot_targets_when_building_on_snowflake_then_apply_sql_succeeds(
+    tmp_path: Path,
+    test_case: SnowflakeSnapshotApplyE2ETestCase,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_snapshot_apply")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="snowflake_snapshot_apply_project",
+        repo_files=build_real_warehouse_existing_snapshot_project_files(
+            project_toml=build_snowflake_project_toml(
+                project_name="snowflake_snapshot_apply_project",
+                schema_name=schema_name,
+            ),
+        ),
+    )
+    ensure_query_schema_ready(schema_name=schema_name)
+
+    try:
+        initial_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "build", "--concurrency", "4"),
+            project_dir=project_dir,
+        )
+        assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
+
+        (project_dir / "models" / "current_check_customers.sql").write_text(
+            build_current_check_customers_model_sql(changed=True), encoding="utf-8"
+        )
+        (project_dir / "models" / "current_delete_customers.sql").write_text(
+            build_current_delete_customers_model_sql(changed=True), encoding="utf-8"
+        )
+        (project_dir / "models" / "historical_timestamp_extracts.sql").write_text(
+            build_historical_timestamp_extracts_model_sql(changed=True), encoding="utf-8"
+        )
+        (project_dir / "models" / "historical_check_daily.sql").write_text(
+            build_historical_check_daily_model_sql(changed=True), encoding="utf-8"
+        )
+
+        apply_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "build", "--concurrency", "4"),
+            project_dir=project_dir,
+        )
+        assert apply_result.returncode == 0, apply_result.stdout + apply_result.stderr
+        assert_snowflake_snapshot_apply_rows(
+            schema_name=schema_name,
+            expected_current_check_rows=test_case.expected_current_check_rows,
+            expected_current_delete_rows=test_case.expected_current_delete_rows,
+            expected_historical_timestamp_rows=test_case.expected_historical_timestamp_rows,
+            expected_historical_check_rows=test_case.expected_historical_check_rows,
+        )
     finally:
         cleanup_snowflake_schema(schema_name=schema_name)
 

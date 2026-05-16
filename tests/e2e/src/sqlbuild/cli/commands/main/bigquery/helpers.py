@@ -308,6 +308,55 @@ def assert_bigquery_snapshot_matrix_rows(
     )
 
 
+def assert_bigquery_snapshot_apply_rows(
+    *,
+    dataset_name: str,
+    expected_current_check_rows: tuple[tuple[object, ...], ...],
+    expected_current_delete_rows: tuple[tuple[object, ...], ...],
+    expected_historical_timestamp_rows: tuple[tuple[object, ...], ...],
+    expected_historical_check_rows: tuple[tuple[object, ...], ...],
+) -> None:
+    """Assert existing-target snapshot apply rows for BigQuery."""
+
+    current_check_rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
+        dataset_name=dataset_name,
+        sql=(
+            "SELECT customer_id, status, valid_to IS NULL "
+            f"FROM {relation_name(dataset_name=dataset_name, name='current_check_snapshot')} "
+            "ORDER BY customer_id, status, valid_to IS NULL"
+        ),
+    )
+    current_delete_rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
+        dataset_name=dataset_name,
+        sql=(
+            "SELECT customer_id, plan, valid_to IS NULL "
+            f"FROM {relation_name(dataset_name=dataset_name, name='current_delete_snapshot')} "
+            "ORDER BY customer_id, plan, valid_to IS NULL"
+        ),
+    )
+    historical_timestamp_rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
+        dataset_name=dataset_name,
+        sql=(
+            "SELECT customer_id, plan, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
+            "FROM "
+            f"{relation_name(dataset_name=dataset_name, name='historical_timestamp_snapshot')} "
+            "ORDER BY customer_id, valid_from"
+        ),
+    )
+    historical_check_rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
+        dataset_name=dataset_name,
+        sql=(
+            "SELECT customer_id, status, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
+            f"FROM {relation_name(dataset_name=dataset_name, name='historical_check_snapshot')} "
+            "ORDER BY customer_id, valid_from"
+        ),
+    )
+    assert stringify_warehouse_rows(current_check_rows) == expected_current_check_rows
+    assert stringify_warehouse_rows(current_delete_rows) == expected_current_delete_rows
+    assert stringify_warehouse_rows(historical_timestamp_rows) == expected_historical_timestamp_rows
+    assert stringify_warehouse_rows(historical_check_rows) == expected_historical_check_rows
+
+
 def write_local_environment_override(*, project_dir: Path, environment: str) -> None:
     """Write a local environment override for BigQuery CLI e2e commands."""
 
