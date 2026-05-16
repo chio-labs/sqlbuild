@@ -10,6 +10,7 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     SnapshotCheckBuildE2ETestCase,
     SnapshotCheckFailureBuildE2ETestCase,
+    SnapshotFullRefreshFailureBuildE2ETestCase,
     SnapshotTimestampBuildE2ETestCase,
     SnapshotTimestampFailureBuildE2ETestCase,
 )
@@ -583,6 +584,148 @@ def test_given_missing_check_snapshot_output_column_when_building_then_cli_repor
     connection.close()
 
     result: object = run_sqb(command=test_case.command, project_dir=project_dir)
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    output: str = result.stdout + result.stderr
+    fragment: str
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in output
+
+
+SNAPSHOT_FULL_REFRESH_FAILURE_TEST_CASES: list[SnapshotFullRefreshFailureBuildE2ETestCase] = [
+    SnapshotFullRefreshFailureBuildE2ETestCase(
+        description="current-state snapshot full refresh is denied by default through CLI",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                    name = "snapshot_full_refresh_project"
+                    adapter = "duckdb"
+
+                    [connection]
+                    database = "snapshot_full_refresh.duckdb"
+                    """
+            ).strip()
+            + "\n",
+            "sources/raw.yml": dedent(
+                """
+                    sources:
+                      - name: raw_customers
+                        schema: main
+                        table: raw_customers
+                    """
+            ).strip()
+            + "\n",
+            "models/customer_snapshot.sql": dedent(
+                """
+                    MODEL (
+                      materialized snapshot,
+                      unique_key [customer_id],
+                      snapshot_strategy timestamp,
+                      updated_at updated_at
+                    );
+
+                    SELECT customer_id, plan, updated_at
+                    FROM __source("raw_customers")
+                    """
+            ).strip()
+            + "\n",
+        },
+        initial_seed_sql=dedent(
+            """
+                CREATE TABLE main.raw_customers AS
+                SELECT 1 AS customer_id, 'basic' AS plan,
+                  TIMESTAMP '2024-01-01 00:00:00' AS updated_at
+                """
+        ).strip(),
+        initial_command=("--no-color", "build"),
+        full_refresh_command=("--no-color", "build", "--full-refresh"),
+        expected_exit_code=1,
+        expected_output_fragments=(
+            "full refresh is denied for snapshot model 'customer_snapshot'",
+            "snapshot_full_refresh policy",
+        ),
+    ),
+    SnapshotFullRefreshFailureBuildE2ETestCase(
+        description="current-state snapshot full refresh is denied by default through run CLI",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                    name = "snapshot_full_refresh_project"
+                    adapter = "duckdb"
+
+                    [connection]
+                    database = "snapshot_full_refresh.duckdb"
+                    """
+            ).strip()
+            + "\n",
+            "sources/raw.yml": dedent(
+                """
+                    sources:
+                      - name: raw_customers
+                        schema: main
+                        table: raw_customers
+                    """
+            ).strip()
+            + "\n",
+            "models/customer_snapshot.sql": dedent(
+                """
+                    MODEL (
+                      materialized snapshot,
+                      unique_key [customer_id],
+                      snapshot_strategy timestamp,
+                      updated_at updated_at
+                    );
+
+                    SELECT customer_id, plan, updated_at
+                    FROM __source("raw_customers")
+                    """
+            ).strip()
+            + "\n",
+        },
+        initial_seed_sql=dedent(
+            """
+                CREATE TABLE main.raw_customers AS
+                SELECT 1 AS customer_id, 'basic' AS plan,
+                  TIMESTAMP '2024-01-01 00:00:00' AS updated_at
+                """
+        ).strip(),
+        initial_command=("--no-color", "build"),
+        full_refresh_command=("--no-color", "run", "--full-refresh"),
+        expected_exit_code=1,
+        expected_output_fragments=(
+            "full refresh is denied for snapshot model 'customer_snapshot'",
+            "snapshot_full_refresh policy",
+        ),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SNAPSHOT_FULL_REFRESH_FAILURE_TEST_CASES,
+    ids=[case.description for case in SNAPSHOT_FULL_REFRESH_FAILURE_TEST_CASES],
+)
+def test_given_snapshot_full_refresh_default_deny_when_building_then_cli_reports_failure(
+    test_case: SnapshotFullRefreshFailureBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="snapshot_full_refresh_project",
+        repo_files=test_case.repo_files,
+    )
+    db_path: Path = project_dir / "snapshot_full_refresh.duckdb"
+
+    import duckdb
+
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(str(db_path))
+    connection.execute(test_case.initial_seed_sql)
+    connection.close()
+
+    initial_result: object = run_sqb(command=test_case.initial_command, project_dir=project_dir)
+    assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
+
+    result: object = run_sqb(command=test_case.full_refresh_command, project_dir=project_dir)
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
     output: str = result.stdout + result.stderr

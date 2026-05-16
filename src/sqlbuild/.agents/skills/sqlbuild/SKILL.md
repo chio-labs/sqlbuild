@@ -7,6 +7,7 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `index`
 - `quickstart`
 - `concepts/dbt-interop`
+- `concepts/comparison-with-sqlmesh`
 - `concepts/project-configuration`
 - `concepts/adapters`
 - `concepts/adapters/duckdb`
@@ -26,6 +27,8 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/selectors`
 - `concepts/column-lineage`
 - `concepts/environment-diffs`
+- `integrations/dagster`
+- `integrations/dagster-reference`
 - `cli/compile`
 - `cli/plan`
 - `cli/build`
@@ -36,11 +39,13 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `cli/clone`
 - `cli/diff`
 - `cli/lineage`
+- `cli/dag`
 - `cli/debug`
 - `cli/janitor`
 - `cli/query`
 - `cli/scenario`
 - `cli/dbt`
+- `cli/skills`
 - `cli/clean`
 - `cli/init`
 - `cli/playground`
@@ -74,10 +79,10 @@ Validate SQL at compile time, block bad data before promotion, and run full E2E 
 TEST();
 
 WITH
-__source__raw_orders AS (
+__source__raw__orders AS (
   @mock_orders()
 ),
-__source__raw_payments AS (
+__source__raw__payments AS (
   SELECT 1 AS payment_id, 1 AS order_id, 1500 AS amount_cents, 'credit_card' AS method
 ),
 __expected__fact_orders AS (
@@ -354,9 +359,9 @@ sqb compile
 #### Model DAG
 
 ```
-raw_customers ──> stg_customers ──> dim_customers
-raw_orders ────> stg_orders ────> fact_orders ──> customer_status_snapshot
-raw_payments ──> stg_payments ──>  │              order_status_index
+raw__customers ──> stg_customers ──> dim_customers
+raw__orders ────> stg_orders ────> fact_orders ──> customer_status_snapshot
+raw__payments ──> stg_payments ──>  │              order_status_index
                                    │              hourly_order_activity ──> daily_activity_rollup
                                    │                                       hourly_activity_with_daily_context
                                    └──> daily_revenue
@@ -388,8 +393,8 @@ waffle-shop/
     lookups.yml                 # seed declarations
   functions/
     sql/
-      is_completed_order.sql    # scalar SQL UDF
-      customer_orders.sql       # table function
+      udf__is_completed_order.sql    # scalar SQL UDF
+      table_fn__customer_orders.sql  # table function
   models/
     staging/
       stg_customers.sql         # view (audits declared in MODEL() header)
@@ -411,9 +416,10 @@ waffle-shop/
       expression_is_true.sql    # custom generic audit
   tests/
     unit/
-      test_stg_orders.sql         # SQL unit test
-      test_fact_orders.sql        # multi-model unit test
-      test_daily_revenue_chain.sql # chain test across multiple models
+      test_stg_orders.sql              # model unit test
+      test_fact_orders.sql             # multi-model unit test
+      test_daily_revenue_chain.sql     # chain test across multiple models
+      test_line_total_cents_macro.sql  # macro test
     scenarios/
       daily_revenue_minimal.sql   # E2E scenario test
       daily_revenue_multi_order.sql # E2E scenario test
@@ -632,6 +638,71 @@ This runs `dbt debug` (verifying dbt project config and warehouse connection) fo
 - Both projects must target the same warehouse and schema/database context
 
 SQLBuild runs `dbt compile` automatically as part of `sqb dbt plan/run/build/test` to produce the manifest. You do not need to compile the dbt project manually.
+
+## Feature Comparison
+
+Source: `concepts/comparison-with-sqlmesh.mdx`
+
+Feature comparison between SQLBuild, dbt, and SQLMesh.
+
+SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common ground but differ in design philosophy and feature focus.
+
+### Feature comparison
+
+| Feature | SQLBuild | dbt | SQLMesh |
+|---------|----------|-----|---------|
+| **Testing** | | | |
+| Unit tests with model chaining | Chain across multiple models | YAML-stub, single model | CTE-based, single model |
+| E2E scenario tests | Fixture worlds with real graph execution | No | No |
+| Local E2E replay | Capture from warehouse, replay in DuckDB | No | No |
+| Macro / UDF / table function tests | `TEST(mode: macro/udf/table_fn)` | No | No |
+| Zero-row assertions | `__assert__` CTEs in tests and scenarios | No | No |
+| **Audits** | | | |
+| Built-in audits | not_null, unique, accepted_values, relationships | not_null, unique, accepted_values, relationships | Extensive (statistical, string pattern, etc.) |
+| Blocking audits | Block promotion from staging table | Tests run after materialization | Block during plan (production untouched); during run, data already written |
+| Delta/interval-scoped audits | Per-microbatch audit cycle before DML | No | Audit query filtered to processed intervals for time-range models |
+| **Compilation** | | | |
+| SQL validation | SQLGlot-based, offline | dbt Fusion (proprietary license) | SQLGlot-based |
+| Column-level lineage | Compile-time, fast and rich modes | Post-hoc via docs | Compile-time |
+| Column contract validation | Infer columns, check types offline | YAML schema contracts at runtime | Schema contracts via plan |
+| SQL transpilation | For local E2E replay into DuckDB | No | For cross-dialect model execution |
+| Python macros | `@macro()` syntax | No (Jinja only) | SQLMesh macro syntax |
+| Jinja support | No (Python macros instead) | Yes (core templating) | Yes |
+| **Incremental** | | | |
+| Incremental strategies | append, delete_insert, merge | append, delete+insert, merge | time-range, unique-key, partition, SCD Type 2, append |
+| Microbatch execution | Configurable batch sizes with per-batch audits | Microbatch (recent addition) | Batch size support |
+| Stateful interval tracking | No - cursor-based (no external state) | No | Yes - tracks which intervals ran |
+| SCD Type 2 models | Coming soon | Snapshots (limited) | Built-in |
+| **Environments** | | | |
+| Virtual environments | No | No | Pointer swaps, no compute cost |
+| Environment diffs | Full row-level data comparison | No | Table diff |
+| Zero-copy cloning | `sqb clone` | No | No |
+| **Models** | | | |
+| SQL models | `MODEL()` header with inline config | Jinja-templated SQL + YAML sidecar | `MODEL` DDL |
+| Python models | Coming soon | Limited (remote only) | Pandas, PySpark, Snowpark, BigFrames |
+| Custom materializations | Python with full framework hooks | Jinja-based | Python-based custom model kinds |
+| **dbt** | | | |
+| dbt interop | Run alongside dbt - reads manifest, no migration | N/A | Jinja compatibility layer plus own macro system |
+| **Other** | | | |
+| Reference syntax | `__ref()` - parses as valid SQL | `{{ ref() }}` - Jinja template | `model_name` with dependency tracking |
+| Adapters | DuckDB, Snowflake, BigQuery, Databricks | 30+ (community adapters) | DuckDB, Snowflake, BigQuery, Databricks, Spark, Redshift, Postgres, Trino, MySQL |
+| State requirements | Stateless by default | manifest.json + target/ | Requires state store (local database or PostgreSQL for production) |
+| Playground | `sqb playground` | Clone example repo | Example project |
+| AI agent skills | `sqb skills update` | No | No |
+
+### Where each tool fits
+
+| Tool | Best for |
+|------|----------|
+| **SQLBuild** | Test-first SQL pipelines. Chained unit tests, local E2E scenario replay in DuckDB, pre-promotion audit gating, offline compile-time validation, and stateless operation. |
+| **dbt** | The most widely adopted SQL transformation framework with the largest adapter and community ecosystem. |
+| **SQLMesh** | State-managed pipelines with virtual environments, interval tracking, and cross-dialect transpilation. |
+
+### Not yet in SQLBuild
+
+- **SCD Type 2 models** - slowly changing dimension support (in active development)
+- **Python models** - Pandas, PySpark, Snowpark, BigFrames (in active development)
+- **First-party partition state tracking** - opt-in stateful partition tracking (currently possible via custom materializations, first-party support coming soon)
 
 ## Project Configuration
 
@@ -925,6 +996,21 @@ target = "dev"
 | `target` | dbt target name override (optional) |
 
 Paths can be absolute or relative to the SQLBuild project root. See [dbt Interop](/concepts/dbt-interop) for setup and usage details.
+
+### Skills
+
+Configuration for AI agent skill file installation:
+
+```toml
+[skills]
+targets = ["opencode", "claude"]
+```
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `targets` | all targets | Which agent targets to install skill files for: `opencode`, `claude`, `agents` |
+
+See [skills CLI reference](/cli/skills) for usage details.
 
 ### sqlbuild_local.toml
 
@@ -1293,12 +1379,12 @@ Define source data inline as a SQL expression. No external tables or setup scrip
 
 ```yaml
 sources:
-  - name: raw_customers
+  - name: raw__customers
     expression: |
       SELECT * FROM (VALUES
         (1, 'Leslie', 'Knope', 'leslie@pawnee.gov', TIMESTAMP '2026-01-15 09:00:00'),
         (2, 'Ron', 'Swanson', 'ron@pawnee.gov', TIMESTAMP '2026-02-01 08:00:00')
-      ) AS raw_customers(id, first_name, last_name, email, created_at)
+      ) AS raw__customers(id, first_name, last_name, email, created_at)
 ```
 
 Expression sources are resolved at compile time. They're the escape hatch for anything the framework doesn't natively model: external tables, warehouse-specific syntax, function calls, or any other relation type that doesn't fit a standard table reference.
@@ -1329,7 +1415,7 @@ Type enforcement is implicit for sources, the same as for models. If any column 
 
 ```yaml
 sources:
-  - name: raw_customers
+  - name: raw__customers
     expression: |
       SELECT 1 AS id, 'Leslie' AS first_name, 'Knope' AS last_name
     columns:
@@ -1527,7 +1613,7 @@ MODEL (
 );
 
 SELECT id AS order_id, customer_id, status
-FROM __source("raw_orders")
+FROM __source("raw__orders")
 ```
 
 #### table
@@ -1632,7 +1718,7 @@ SELECT
   o.customer_id,
   w.waffle_name,
   w.price_cents * o.quantity AS line_total_cents,
-  __udf("is_completed_order")(o.status) AS is_completed
+  __udf("udf__is_completed_order")(o.status) AS is_completed
 FROM __ref("stg_orders") o
 LEFT JOIN __seed("waffle_types") w ON o.waffle_type_id = w.waffle_type_id
 ```
@@ -1669,7 +1755,7 @@ SELECT
   id AS order_id,
   customer_id,
   status
-FROM __source("raw_orders")
+FROM __source("raw__orders")
 ```
 
 #### Column-level audits
@@ -1830,7 +1916,7 @@ How SQLBuild processes variables, context, and dynamic content in SQL and config
 SQLBuild uses two syntax layers for dynamic content:
 
 - **`@` syntax** is for any executable SQL - model queries, hooks, tests, audits, and inline source expressions
-- **`${...}` syntax** is for config values - TOML/YAML project config, MODEL() header fields (excluding hooks), and source/seed YAML declarations
+- **`${...}` syntax** is for config values - project TOML config, MODEL() header fields (excluding hooks), and source/seed YAML declarations
 
 The rule is simple: if it's any SQL that will be executed, it uses `@`. If it's a config value, it uses `${...}`. These layers never mix.
 
@@ -2044,7 +2130,7 @@ def mock_orders(count=1):
 TEST();
 
 WITH
-__source__raw_orders AS (
+__source__raw__orders AS (
   @mock_orders(3)
 ),
 __expected__stg_orders AS (
@@ -2185,7 +2271,7 @@ Scalar UDFs return a single value per row. They can be written in SQL or Python.
 Place SQL function files under `functions/sql/`. Each file has a `FUNCTION()` header declaring arguments and return type, followed by a SQL expression body:
 
 ```sql
--- functions/sql/is_completed_order.sql
+-- functions/sql/udf__is_completed_order.sql
 FUNCTION (
   arguments (order_status STRING),
   returns BOOLEAN,
@@ -2220,8 +2306,7 @@ Reference scalar UDFs in models with `__udf("name")`:
 ```sql
 SELECT
   order_id,
-  __udf("is_completed_order")(status) AS is_completed,
-  __udf("is_completed_order_py")(status) AS is_completed_py
+  __udf("udf__is_completed_order")(status) AS is_completed
 FROM __ref("stg_orders")
 ```
 
@@ -2232,7 +2317,7 @@ The function name is the file stem (filename without extension). `__udf()` resol
 Table functions return multiple rows and columns. They are written in SQL under `functions/sql/` with a `returns table(...)` declaration:
 
 ```sql
--- functions/sql/customer_orders.sql
+-- functions/sql/table_fn__customer_orders.sql
 FUNCTION (
   arguments (p_customer_id INTEGER),
   returns table (
@@ -2271,7 +2356,7 @@ The semantic reason: table functions are parameterized queries meant to be calle
 Table functions are called directly in SQL contexts that support table-valued functions:
 
 ```sql
-SELECT * FROM customer_orders(42)
+SELECT * FROM table_fn__customer_orders(42)
 ```
 
 ### References inside functions
@@ -2296,8 +2381,8 @@ Functions participate in fingerprint-based change detection. If a function's SQL
 ```
 functions/
   sql/
-    is_completed_order.sql        # scalar SQL UDF
-    customer_orders.sql           # table function (returns table)
+    udf__is_completed_order.sql        # scalar SQL UDF
+    table_fn__customer_orders.sql     # table function (returns table)
   python/
     is_completed_order_py.py      # scalar Python UDF
 ```
@@ -2687,7 +2772,7 @@ Sources support the same audit system as models. Audits attached to sources run 
 
 ```yaml
 sources:
-  - name: raw_orders
+  - name: raw__orders
     columns:
       - name: id
         audits:
@@ -2790,7 +2875,7 @@ A test file defines mock inputs and expected outputs using CTEs. SQLBuild substi
 TEST();
 
 WITH
-__source__raw_orders AS (
+__source__raw__orders AS (
   SELECT
     1 AS id,
     100 AS customer_id,
@@ -2812,7 +2897,7 @@ SELECT 1
 ```
 
 The test:
-1. Mocks the `raw_orders` source with the `__source__raw_orders` CTE
+1. Mocks the `raw__orders` source with the `__source__raw__orders` CTE
 2. Runs the real `stg_orders` model SQL with the mock substituted in
 3. Compares the output against `__expected__stg_orders`
 4. Passes if row counts match and there are zero mismatched rows
@@ -2842,11 +2927,11 @@ Tests can span multiple models in a single file. Mock your sources, define an ex
 TEST();
 
 WITH
-__source__raw_orders AS (
+__source__raw__orders AS (
   SELECT 1 AS id, 100 AS customer_id, 2 AS waffle_type_id, 3 AS quantity,
          '2026-04-01 10:00:00' AS ordered_at, 'completed' AS status
 ),
-__source__raw_payments AS (
+__source__raw__payments AS (
   SELECT 1 AS payment_id, 1 AS order_id, 1500 AS amount_cents,
          'credit_card' AS method, '2026-04-01 10:01:00' AS paid_at, 'success' AS status
 ),
@@ -2904,7 +2989,6 @@ __expected__fact_orders AS (
     CAST('2026-04-01 10:00:00' AS TIMESTAMP) AS ordered_at,
     'completed' AS order_status,
     TRUE AS is_completed_order,
-    TRUE AS is_completed_order_py,
     'card' AS payment_method,
     'success' AS payment_status,
     2850 AS payment_amount_cents
@@ -2922,15 +3006,15 @@ A single test can assert on multiple models. SQLBuild resolves and compares each
 TEST();
 
 WITH
-__source__raw_orders AS (
+__source__raw__orders AS (
   SELECT 1 AS id, 100 AS customer_id, 2 AS waffle_type_id, 3 AS quantity,
          '2026-04-01 10:00:00' AS ordered_at, 'completed' AS status
 ),
-__source__raw_payments AS (
+__source__raw__payments AS (
   SELECT 1 AS payment_id, 1 AS order_id, 1500 AS amount_cents,
          'credit_card' AS method, '2026-04-01 10:01:00' AS paid_at, 'success' AS status
 ),
-__source__raw_customers AS (
+__source__raw__customers AS (
   SELECT 100 AS id, 'Leslie' AS first_name, 'Knope' AS last_name,
          'leslie@pawnee.gov' AS email, '2026-01-15 09:00:00' AS created_at
 ),
@@ -2954,10 +3038,10 @@ Because unit tests are written in SQL, they support macro calls. This lets you w
 TEST();
 
 WITH
-__source__raw_orders AS (
+__source__raw__orders AS (
   @mock_orders()
 ),
-__source__raw_payments AS (
+__source__raw__payments AS (
   SELECT 1 AS payment_id, 1 AS order_id, 1500 AS amount_cents, 'credit_card' AS method
 ),
 __expected__fact_orders AS (
@@ -2980,7 +3064,7 @@ WITH
 __macro__country_filter AS (
   SELECT 'country_code = ''US'''
 ),
-__source__raw_orders AS (
+__source__raw__orders AS (
   SELECT 1 AS id, 100 AS customer_id, 'US' AS country_code, 'completed' AS status
 ),
 __expected__stg_orders AS (
@@ -3020,6 +3104,97 @@ Assertions can be mixed with `__expected__` CTEs in the same test, or used on th
 
 During `sqb test` and `sqb build`, assertion results appear as nested check rows alongside expected comparisons.
 
+### Test modes
+
+By default, `TEST()` runs in model mode - mocking sources/refs and comparing model outputs. Three additional modes let you test reusable logic directly without needing a model chain.
+
+#### Macro tests
+
+Test macro output by calling the macro in `__macro_actual__` and comparing against `__macro_expected__`:
+
+```sql
+TEST (mode: macro, name: "calculates line total cents");
+
+WITH
+input_values AS (
+  SELECT 950 AS price_cents, 3 AS quantity
+),
+__macro_actual__ AS (
+  SELECT @line_total_cents("price_cents", "quantity") AS line_total_cents
+  FROM input_values
+),
+__macro_expected__ AS (
+  SELECT 2850 AS line_total_cents
+)
+SELECT 1
+```
+
+Macros are compile-time code, so macro tests expand the macro at compile time and compare the results. During `sqb build`, macro tests run before any model that uses the tested macro.
+
+#### UDF tests
+
+Test scalar UDFs by calling them in `__udf_actual__` and comparing against `__udf_expected__`:
+
+```sql
+TEST (mode: udf, name: "detects completed orders");
+
+WITH
+input_values AS (
+  SELECT 'completed' AS order_status
+  UNION ALL
+  SELECT 'pending' AS order_status
+),
+__udf_actual__ AS (
+  SELECT
+    order_status,
+    __udf("udf__is_completed_order")(order_status) AS is_completed_order
+  FROM input_values
+),
+__udf_expected__ AS (
+  SELECT 'completed' AS order_status, TRUE AS is_completed_order
+  UNION ALL
+  SELECT 'pending' AS order_status, FALSE AS is_completed_order
+)
+SELECT 1
+```
+
+UDFs are warehouse objects, so the function is created before the test runs. During `sqb build`, UDF tests run after the function is created but before any model that uses it.
+
+#### Table function tests
+
+Test table functions by calling them in `__table_fn_actual__` and comparing against `__table_fn_expected__`:
+
+```sql
+TEST (mode: table_fn, name: "returns customer orders");
+
+WITH
+__table_fn_actual__ AS (
+  SELECT order_id, order_status, is_completed_order
+  FROM __table_fn("table_fn__customer_orders")(1)
+),
+__table_fn_expected__ AS (
+  SELECT 1 AS order_id, 'completed' AS order_status, TRUE AS is_completed_order
+  UNION ALL
+  SELECT 2 AS order_id, 'completed' AS order_status, TRUE AS is_completed_order
+)
+SELECT 1
+```
+
+Table function tests run after the function is created. Since table functions are terminal (models cannot depend on them), these tests validate the function independently.
+
+#### Mode rules
+
+Each mode has strict CTE validation:
+
+| Mode | Actual CTE | Expected CTE | Allowed |
+|------|-----------|--------------|---------|
+| `model` (default) | existing model-chain syntax | `__expected__<model>` | `__source__`, `__ref__`, `__seed__`, `__assert__`, `__macro__` |
+| `macro` | `__macro_actual__` | `__macro_expected__` | Helper CTEs, `@macro()` calls in actual |
+| `udf` | `__udf_actual__` | `__udf_expected__` | Helper CTEs, `__udf()` calls in actual |
+| `table_fn` | `__table_fn_actual__` | `__table_fn_expected__` | Helper CTEs, `__table_fn()` calls in actual |
+
+CTE prefixes from other modes are not allowed. For example, `__source__` in a macro test or `__macro_actual__` in a model test will produce a clear error pointing you to the right mode. Expected CTEs must not call macros, UDFs, or table functions - they should be independent, inspectable expected data.
+
 ### Multiple tests per file
 
 A single test file can contain multiple `TEST()` blocks. Each block must have a unique `name`:
@@ -3028,7 +3203,7 @@ A single test file can contain multiple `TEST()` blocks. Each block must have a 
 TEST (name: "completed orders only");
 
 WITH
-__source__raw_orders AS (
+__source__raw__orders AS (
   SELECT 1 AS id, 100 AS customer_id, 'completed' AS status
 ),
 __expected__stg_orders AS (
@@ -3039,7 +3214,7 @@ SELECT 1
 TEST (name: "cancelled orders excluded");
 
 WITH
-__source__raw_orders AS (
+__source__raw__orders AS (
   SELECT 1 AS id, 100 AS customer_id, 'cancelled' AS status
 ),
 __expected__stg_orders AS (
@@ -3057,9 +3232,12 @@ Place unit test files under `tests/unit/` in your project directory. SQLBuild di
 ```
 tests/
   unit/
-    test_stg_orders.sql
-    test_fact_orders.sql
-    test_daily_revenue_chain.sql
+    test_stg_orders.sql              # model test
+    test_fact_orders.sql              # model test with assertion
+    test_daily_revenue_chain.sql      # chain test across multiple models
+    test_line_total_cents_macro.sql   # macro test
+    test_is_completed_order_udf.sql   # UDF test
+    test_customer_orders_table_fn.sql # table function test
   scenarios/
     ...
 ```
@@ -3410,7 +3588,7 @@ Any name containing `/` is treated as a path selector. `path:marts`, `/marts`, a
 
 ```bash
 sqb build --select seed:waffle_types
-sqb build --select source:raw_orders
+sqb build --select source:raw__orders
 ```
 
 ### Graph expansion
@@ -3510,7 +3688,7 @@ Trace individual columns through your SQL pipeline - understand where data comes
 
 ### Why column lineage matters
 
-**Impact analysis** - Before changing a source column, see exactly which downstream models and columns are affected. A rename or type change in `raw_orders.id` can be traced through every model that consumes it, even indirectly.
+**Impact analysis** - Before changing a source column, see exactly which downstream models and columns are affected. A rename or type change in `raw__orders.id` can be traced through every model that consumes it, even indirectly.
 
 **Debugging data issues** - When a column has unexpected values, trace it upstream to find where the data originates and what transformations it passes through. Instead of reading SQL files and mentally joining dependencies, ask SQLBuild to show the path.
 
@@ -3754,6 +3932,385 @@ sqb diff prod:dev --full --select tag:acceptance
 ### Exit codes
 
 `sqb diff` returns exit code `0` when all selected models have no differences, and `1` when any model has schema or row differences. This makes it usable in CI pipelines as a validation gate.
+
+## Overview
+
+Source: `integrations/dagster.mdx`
+
+Orchestrate SQLBuild pipelines with Dagster scheduling, retries, and asset UI.
+
+SQLBuild includes a Dagster integration that maps your project's models, sources, seeds, functions, tests, audits, and scenarios into Dagster assets and asset checks. SQLBuild handles the SQL transformation layer. Dagster handles scheduling, retries, alerting, and the asset-centric UI.
+
+### Try it
+
+```bash
+sqb playground dagster my-dagster-project
+cd my-dagster-project
+uv add 'sqlbuild[dagster]'
+DAGSTER_IS_DEV_CLI=1 uv run dagster dev -f dagster/definitions.py
+```
+
+This creates the waffle shop project with a `dagster/definitions.py` that includes asset definitions, scenario checks, and a configured resource. Open the Dagster UI, materialize the assets, then run the scenario checks.
+
+### Install
+
+```bash
+uv add 'sqlbuild[dagster]'
+# or
+pip install 'sqlbuild[dagster]'
+```
+
+This installs `dagster` and `dagster-webserver` alongside SQLBuild.
+
+### How it works
+
+1. `sqb compile --dag` generates a static `sqlbuild_dag.json` artifact with your project's full graph (nodes, edges, checks)
+2. `@sqlbuild_assets()` reads the artifact and creates one Dagster `AssetSpec` per source, seed, model, and function, with dependency edges preserved
+3. `SqlBuildCliResource` shells out to `sqb build`, `sqb test`, `sqb scenario test`, etc. as subprocesses
+4. Execution results (materializations, audit pass/fail, scenario outcomes) are parsed from structured JSON and emitted as Dagster `MaterializeResult` and `AssetCheckResult` events
+
+SQLBuild tests and audits become Dagster asset checks. Scenarios become asset checks attached to the models they exercise.
+
+### Quickstart
+
+#### 1. Generate the DAG artifact
+
+```bash
+sqb compile --dag
+```
+
+This writes `target/sqlbuild_dag.json`. The artifact is static and can be committed to version control or generated in CI.
+
+#### 2. Define assets and resource
+
+```python
+# definitions.py
+from sqlbuild.integrations.dagster import (
+    SqlBuildCliResource,
+    SqlBuildProject,
+    sqlbuild_assets,
+)
+import dagster as dg
+
+project = SqlBuildProject(project_dir=".")
+
+@sqlbuild_assets(project=project)
+def my_sqlbuild_assets(context: dg.AssetExecutionContext, sqb: SqlBuildCliResource):
+    yield from sqb.cli(["build"], context=context).stream()
+
+defs = dg.Definitions(
+    assets=[my_sqlbuild_assets],
+    resources={"sqb": SqlBuildCliResource(project)},
+)
+```
+
+#### 3. Launch
+
+```bash
+dagster dev -f definitions.py
+```
+
+Dagster discovers every SQLBuild model as an asset. Selecting a subset of assets in the Dagster UI automatically scopes the `sqb build` invocation to those models via `--select`.
+
+### Asset selection
+
+When you select a subset of assets in the Dagster UI, the integration automatically:
+
+1. Maps selected Dagster asset keys back to SQLBuild model names using the DAG artifact
+2. Writes the selectors to a temporary file
+3. Passes `--select-file` to the `sqb` CLI so only the selected models are built
+
+This means Dagster's asset subsetting works naturally with SQLBuild's selector system.
+
+### Checks
+
+SQLBuild tests, audits, and scenarios are registered as Dagster asset checks:
+
+- **Unit tests** become checks attached to the models they test
+- **Audits** become checks attached to the model or source they audit, with severity mapped to `AssetCheckSeverity.ERROR` or `AssetCheckSeverity.WARN`
+- **Scenarios** become checks attached to the models they exercise
+
+Check results are emitted with pass/fail status and metadata from the execution JSON.
+
+### Scenarios as checks
+
+Scenarios can be included as asset checks alongside tests and audits (the default), or run separately:
+
+```python
+from sqlbuild.integrations.dagster import sqlbuild_assets, sqlbuild_scenario_checks
+
+# Include scenario checks with other assets (default)
+@sqlbuild_assets(project=project, include_scenario_checks=True)
+def my_assets(context, sqb):
+    yield from sqb.cli(["build"], context=context).stream()
+
+# Or run scenarios separately
+@sqlbuild_scenario_checks(project=project)
+def my_scenario_checks(context, sqb):
+    yield from sqb.cli(["scenario", "test"], context=context).stream()
+```
+
+### Project preparation
+
+`SqlBuildProject.prepare()` regenerates the DAG artifact by running `sqb compile --dag`. Use `prepare_if_dev()` to only regenerate during local development:
+
+```python
+project = SqlBuildProject(project_dir=".")
+project.prepare_if_dev()  # only runs when DAGSTER_IS_DEV_CLI is set
+```
+
+This keeps the Dagster UI in sync with your latest model changes during development without regenerating in production.
+
+### Translator
+
+Customise how SQLBuild nodes map to Dagster assets by subclassing `SqlBuildDagsterTranslator`:
+
+```python
+from sqlbuild.integrations.dagster import SqlBuildDagsterTranslator
+import dagster as dg
+
+class MyTranslator(SqlBuildDagsterTranslator):
+    def get_asset_key(self, node):
+        # Prefix all asset keys with the project name
+        return dg.AssetKey(["my_project", *node["asset_key"]])
+
+    def get_group_name(self, node):
+        # Group by materialization type instead of kind
+        return node.get("materialization_type", "other")
+
+@sqlbuild_assets(project=project, translator=MyTranslator())
+def my_assets(context, sqb):
+    yield from sqb.cli(["build"], context=context).stream()
+```
+
+See the [API reference](/integrations/dagster-reference) for all translator methods.
+
+## API Reference
+
+Source: `integrations/dagster-reference.mdx`
+
+Dagster integration classes, decorators, and translator hooks.
+
+### SqlBuildProject
+
+Project metadata and DAG artifact preparation.
+
+```python
+from sqlbuild.integrations.dagster import SqlBuildProject
+
+project = SqlBuildProject(
+    project_dir=".",
+    target_path="target",
+    dag_filename="sqlbuild_dag.json",
+    sqb_command=("sqb",),
+    prepare_project_cli_args=("compile", "--dag"),
+)
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `project_dir` | (required) | Path to the SQLBuild project root |
+| `target_path` | `"target"` | Relative path to the target directory |
+| `dag_filename` | `"sqlbuild_dag.json"` | DAG artifact filename |
+| `sqb_command` | `("sqb",)` | Command to invoke SQLBuild CLI |
+| `prepare_project_cli_args` | `("compile", "--dag")` | CLI args used by `prepare()` to generate the DAG |
+
+#### Methods
+
+| Method | Description |
+|--------|-------------|
+| `dag_path` | Property. Returns the full path to the DAG artifact (`project_dir / target_path / dag_filename`). |
+| `prepare()` | Runs `sqb compile --dag <dag_path>` to generate the DAG artifact. Raises `DagsterProjectPrepareError` on failure. |
+| `prepare_if_dev()` | Calls `prepare()` only when the `DAGSTER_IS_DEV_CLI` environment variable is set. |
+
+### SqlBuildCliResource
+
+Dagster `ConfigurableResource` that shells out to the SQLBuild CLI.
+
+```python
+from sqlbuild.integrations.dagster import SqlBuildCliResource, SqlBuildProject
+
+# From a project
+resource = SqlBuildCliResource(SqlBuildProject(project_dir="."))
+
+# Or with explicit paths
+resource = SqlBuildCliResource(
+    project_dir=".",
+    sqb_command=["sqb"],
+    dag_path="target/sqlbuild_dag.json",
+)
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `project_dir` | `"."` | Path to the SQLBuild project root, or a `SqlBuildProject` instance |
+| `sqb_command` | `["sqb"]` | Command to invoke SQLBuild CLI |
+| `dag_path` | `None` | Path to the DAG artifact. When set, enables asset selection bridging and structured event emission. |
+
+#### cli()
+
+Create a CLI invocation for the provided command arguments.
+
+```python
+invocation = resource.cli(
+    ["build"],
+    context=context,        # Dagster execution context (optional)
+    raise_on_error=True,    # raise Failure on non-zero exit (default)
+)
+```
+
+Returns a `SqlBuildCliInvocation`.
+
+### SqlBuildCliInvocation
+
+A running or completed SQLBuild CLI subprocess.
+
+#### Methods
+
+| Method | Description |
+|--------|-------------|
+| `wait()` | Wait for the process to complete. Streams stdout/stderr in real time. Returns `self`. |
+| `stream()` | Wait for the process, then yield Dagster `MaterializeResult` and `AssetCheckResult` events parsed from execution JSON. |
+| `is_successful()` | Returns `True` if exit code is 0. |
+| `get_error()` | Returns a Dagster `Failure` if the process failed, `None` otherwise. |
+| `get_artifact(name)` | Read a JSON artifact from the project's `target/` directory. |
+
+#### Properties
+
+| Property | Description |
+|----------|-------------|
+| `stdout` | Captured stdout after `wait()` or `stream()`. |
+| `stderr` | Captured stderr after `wait()` or `stream()`. |
+| `returncode` | Process exit code after completion. |
+| `execution_payload` | Parsed execution JSON, if available. |
+
+#### stream() behavior
+
+`stream()` is the primary way to emit Dagster events from a SQLBuild execution:
+
+1. Waits for the subprocess to complete while streaming output to stdout/stderr
+2. Reads the structured execution JSON (from `--json-output` tempfile)
+3. Maps each completed asset to a `MaterializeResult` with metadata (status, duration, row counts)
+4. Maps each check result to an `AssetCheckResult` with pass/fail, severity, and check metadata
+5. If the DAG artifact is available, results are matched to the correct Dagster asset keys
+6. Raises `Failure` if the process exited non-zero and `raise_on_error` is set
+
+### sqlbuild_assets
+
+Decorator that creates a Dagster multi-asset definition from a SQLBuild DAG artifact.
+
+```python
+from sqlbuild.integrations.dagster import sqlbuild_assets
+
+@sqlbuild_assets(
+    project=project,                    # or dag=path_or_dict
+    translator=MyTranslator(),          # optional
+    name="my_sqlbuild_assets",          # optional
+    include_scenario_checks=True,       # default: True
+    required_resource_keys={"sqb"},     # optional
+)
+def my_assets(context, sqb):
+    yield from sqb.cli(["build"], context=context).stream()
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `project` | `None` | `SqlBuildProject` instance. Mutually exclusive with `dag`. |
+| `dag` | `None` | DAG artifact as a path, string, or pre-loaded dict. Mutually exclusive with `project`. |
+| `translator` | `SqlBuildDagsterTranslator()` | Translator for asset keys, groups, tags, and metadata. |
+| `name` | `None` | Override the Dagster multi-asset name. |
+| `include_scenario_checks` | `True` | Whether to include scenario checks alongside test and audit checks. |
+| `required_resource_keys` | `None` | Additional Dagster resource keys to require. |
+
+If neither `project` nor `dag` is provided, the decorator looks for `target/sqlbuild_dag.json` in the current directory.
+
+### sqlbuild_scenario_checks
+
+Decorator that creates a Dagster multi-asset-check definition for SQLBuild scenarios only. Useful when you want to run scenarios separately from the main build.
+
+```python
+from sqlbuild.integrations.dagster import sqlbuild_scenario_checks
+
+@sqlbuild_scenario_checks(project=project)
+def my_scenario_checks(context, sqb):
+    yield from sqb.cli(["scenario", "test"], context=context).stream()
+```
+
+Parameters are the same as `sqlbuild_assets` except there is no `include_scenario_checks` flag.
+
+### SqlBuildDagsterTranslator
+
+Customise how SQLBuild DAG nodes map to Dagster asset metadata. Subclass and override any method.
+
+#### Methods
+
+| Method | Arguments | Returns | Default behavior |
+|--------|-----------|---------|------------------|
+| `get_asset_key` | `node` | `AssetKey` | `AssetKey(node["asset_key"])` |
+| `get_group_name` | `node` | `str \| None` | Node kind (e.g. `"model"`, `"source"`) |
+| `get_tags` | `node` | `dict[str, str]` | `sqlbuild/kind` tag plus any model tags |
+| `get_metadata` | `node` | `dict[str, Any]` | `sqlbuild_id`, `sqlbuild_name`, `sqlbuild_kind`, path, target, description, columns |
+| `get_description` | `node` | `str \| None` | Node description if present |
+| `get_check_name` | `check` | `str` | `"{kind}__{name}"` with optional column/target suffix |
+| `get_check_metadata` | `check` | `dict[str, Any]` | Check ID, kind, name, and selector |
+
+#### Node structure
+
+Each `node` dict passed to translator methods contains:
+
+```json
+{
+  "id": "model:fact_orders",
+  "kind": "model",
+  "name": "fact_orders",
+  "asset_key": ["dev", "fact_orders"],
+  "target": {
+    "database": null,
+    "schema": "dev",
+    "name": "fact_orders",
+    "qualified_name": "dev.fact_orders"
+  },
+  "path": "models/marts/fact_orders.sql",
+  "description": "Order fact table with waffle and payment details.",
+  "tags": ["marts"],
+  "columns": [
+    {"name": "order_id", "type": "INTEGER"}
+  ],
+  "materialization_type": "table"
+}
+```
+
+#### Check structure
+
+Each `check` dict passed to check translator methods contains:
+
+```json
+{
+  "id": "audit:not_null:model:fact_orders:order_id",
+  "kind": "audit",
+  "name": "not_null",
+  "checked_asset_ids": ["model:fact_orders"],
+  "path": "audits/generic/not_null.sql",
+  "severity": "error",
+  "attached_target_name": "fact_orders",
+  "attached_column_name": "order_id"
+}
+```
+
+Scenario checks include additional fields:
+
+```json
+{
+  "id": "scenario:daily_revenue_minimal",
+  "kind": "scenario",
+  "name": "daily_revenue_minimal",
+  "checked_asset_ids": ["model:daily_revenue"],
+  "path": "tests/scenarios/revenue/daily_revenue_minimal.sql",
+  "assertion_names": ["no_negative_revenue"],
+  "expected_model_names": ["daily_revenue"],
+  "fixture_refs": ["stg_orders", "stg_payments"]
+}
+```
 
 ## compile
 
@@ -4338,12 +4895,11 @@ sqb --project-dir examples/waffle_shop lineage fact_orders --direction both
 Lineage  model  fact_orders  models/marts/fact_orders.sql  both
 upstream
 ├── model  stg_orders  models/staging/stg_orders.sql
-│   └── source  raw_orders  sources/raw.yml
+│   └── source  raw__orders  sources/raw.yml
 ├── model  stg_payments  models/staging/stg_payments.sql
-│   └── source  raw_payments  sources/raw.yml
+│   └── source  raw__payments  sources/raw.yml
 ├── seed  waffle_types  seeds/waffle_types.csv
-├── function  is_completed_order  functions/sql/is_completed_order.sql
-└── function  is_completed_order_py  functions/python/is_completed_order_py.py
+└── function  udf__is_completed_order  functions/sql/udf__is_completed_order.sql
 downstream
 ├── model  customer_status_snapshot  models/intermediate/customer_status_snapshot.sql
 ├── model  hourly_order_activity  models/marts/hourly_order_activity.sql
@@ -4365,8 +4921,8 @@ sqb --project-dir examples/waffle_shop lineage fact_orders --format list
 ```
 
 ```
-source:raw_orders    -> model:stg_orders
-source:raw_payments  -> model:stg_payments
+source:raw__orders    -> model:stg_orders
+source:raw__payments  -> model:stg_payments
 model:stg_orders     -> model:fact_orders
 model:stg_payments   -> model:fact_orders
 seed:waffle_types    -> model:fact_orders
@@ -4391,14 +4947,14 @@ sqb --project-dir examples/waffle_shop lineage fact_orders --format json
       "qualified_name": "dev.fact_orders"
     },
     {
-      "id": "source:raw_orders",
-      "name": "raw_orders",
+      "id": "source:raw__orders",
+      "name": "raw__orders",
       "resource_type": "source",
       "relative_path": "sources/raw.yml"
     }
   ],
   "edges": [
-    {"from": "source:raw_orders", "to": "model:stg_orders"},
+    {"from": "source:raw__orders", "to": "model:stg_orders"},
     {"from": "model:stg_orders", "to": "model:fact_orders"}
   ],
   "focus": ["model:fact_orders"],
@@ -4430,7 +4986,7 @@ sqb --project-dir examples/waffle_shop lineage fact_orders.total_cents
 Column trace  fact_orders.total_cents  upstream
 
   <- stg_payments.amount_cents (expression)
-       <- raw_payments.amount_cents (direct)
+       <- raw__payments.amount_cents (direct)
 ```
 
 #### List
@@ -4443,7 +4999,7 @@ sqb lineage fact_orders.total_cents --format list
 Column dependencies
 
 stg_payments.amount_cents -> fact_orders.total_cents  expression
-raw_payments.amount_cents -> stg_payments.amount_cents  direct
+raw__payments.amount_cents -> stg_payments.amount_cents  direct
 ```
 
 #### JSON
@@ -4532,6 +5088,167 @@ sqb lineage fact_orders --depth 2
 
 # Only direct column dependencies
 sqb lineage fact_orders.total_cents --depth 1
+```
+
+## dag
+
+Source: `cli/dag.mdx`
+
+Generate the static DAG artifact for Dagster and other integrations.
+
+## sqb dag
+
+Compiles the project and outputs the static DAG artifact. The artifact contains every node (source, seed, model, function), dependency edge, and check (test, audit, scenario) in your project as structured JSON. It is the bridge between SQLBuild and external orchestrators like Dagster.
+
+### Usage
+
+```bash
+sqb --project-dir <path> dag [flags]
+```
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Print the full DAG artifact as JSON to stdout |
+| `--no-sql-validation` | Skip compile-time SQL syntax validation |
+| `--vars` | JSON object of project variable overrides |
+
+Without `--json`, the command prints a summary:
+
+```
+DAG ready (24 nodes, 18 edges, 15 checks)
+```
+
+### Generating via compile
+
+You can also generate the DAG artifact as part of a compile:
+
+```bash
+# Write to default location (target/sqlbuild_dag.json)
+sqb compile --dag
+
+# Write to a specific path
+sqb compile --dag target/my_dag.json
+```
+
+This is useful when you want to compile and generate the DAG in one step. The `SqlBuildProject.prepare()` method in the Dagster integration uses this path.
+
+### Output format
+
+The JSON artifact has this structure:
+
+```json
+{
+  "version": 1,
+  "project_name": "waffle_shop",
+  "nodes": [...],
+  "edges": [...],
+  "checks": [...]
+}
+```
+
+#### Nodes
+
+Each node represents a source, seed, model, or function:
+
+```json
+{
+  "id": "model:fact_orders",
+  "kind": "model",
+  "name": "fact_orders",
+  "asset_key": ["dev", "fact_orders"],
+  "target": {
+    "database": null,
+    "schema": "dev",
+    "name": "fact_orders",
+    "qualified_name": "dev.fact_orders"
+  },
+  "path": "models/marts/fact_orders.sql",
+  "description": "Order fact table with waffle and payment details.",
+  "tags": ["marts"],
+  "columns": [
+    {"name": "order_id", "type": "INTEGER"},
+    {"name": "customer_id"}
+  ],
+  "materialization_type": "table"
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `id` | Unique identifier (`{kind}:{name}`) |
+| `kind` | `source`, `seed`, `model`, or `function` |
+| `name` | Resource name |
+| `asset_key` | Tuple used as the Dagster asset key (typically `[schema, name]` or `[database, schema, name]`) |
+| `target` | Warehouse identity (database, schema, name, qualified_name) |
+| `path` | Relative file path in the project |
+| `description` | Model or source description, if declared |
+| `tags` | Model tags |
+| `columns` | Column metadata (name, type, nullable, description) |
+| `materialization_type` | For models: `view`, `table`, `incremental`, or custom name |
+| `language` | For functions: `sql` or `python` |
+| `return_kind` | For functions: `scalar` or `table` |
+| `arguments` | For functions: argument name and type pairs |
+
+#### Edges
+
+Each edge is a dependency between two nodes:
+
+```json
+{
+  "from_id": "model:stg_orders",
+  "to_id": "model:fact_orders"
+}
+```
+
+#### Checks
+
+Each check represents a test, audit, or scenario:
+
+```json
+{
+  "id": "audit:not_null:model:fact_orders:order_id",
+  "kind": "audit",
+  "name": "not_null",
+  "checked_asset_ids": ["model:fact_orders"],
+  "path": "audits/generic/not_null.sql",
+  "severity": "error",
+  "attached_target_name": "fact_orders",
+  "attached_column_name": "order_id"
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `id` | Unique check identifier |
+| `kind` | `sql_test`, `audit`, or `scenario` |
+| `name` | Check name |
+| `checked_asset_ids` | Node IDs this check is attached to |
+| `path` | Relative file path |
+| `severity` | For audits: `error` or `warn` |
+| `mode` | For tests: `model`, `macro`, `udf`, or `table_fn` |
+| `assertion_names` | For scenarios: names of `__assert__` CTEs |
+| `expected_model_names` | For scenarios: names of `__expected__` models |
+| `fixture_refs` | For scenarios: names of fixture sources, refs, and seeds |
+
+### Examples
+
+```bash
+# Summary output
+sqb dag
+
+# Full JSON to stdout
+sqb dag --json
+
+# Generate as part of compile
+sqb compile --dag
+
+# Generate to a specific path
+sqb compile --dag target/sqlbuild_dag.json
+
+# Pipe to jq for inspection
+sqb dag --json | jq '.nodes | length'
 ```
 
 ## debug
@@ -5006,6 +5723,87 @@ target_path = "../dbt_project/target"
 
 See [Project Configuration](/concepts/project-configuration) for details.
 
+## skills
+
+Source: `cli/skills.mdx`
+
+Install SQLBuild skill files for AI coding agents.
+
+## sqb skills
+
+Install or update SQLBuild skill files so AI coding agents (Claude Code, OpenCode, Cursor, etc.) understand your project's framework, syntax, and conventions.
+
+### sqb skills update
+
+Write the packaged SQLBuild skill file to agent-specific locations in your project.
+
+```bash
+sqb skills update [flags]
+```
+
+#### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--target` | Specify agent targets to install for. Can be passed multiple times. |
+| `--global` | Install to global agent config directories instead of project-local |
+| `--force` | Overwrite existing skill files even if they were not generated by SQLBuild |
+
+#### Targets
+
+Three agent targets are supported:
+
+| Target | Local path | Global path |
+|--------|-----------|-------------|
+| `opencode` | `.opencode/skills/sqlbuild/SKILL.md` | `~/.config/opencode/skills/sqlbuild/SKILL.md` |
+| `claude` | `.claude/skills/sqlbuild/SKILL.md` | `~/.claude/skills/sqlbuild/SKILL.md` |
+| `agents` | `.agents/skills/sqlbuild/SKILL.md` | `~/.agents/skills/sqlbuild/SKILL.md` |
+
+By default, all three targets are installed. Use `--target` to install specific ones:
+
+```bash
+# Install for all targets (default)
+sqb skills update
+
+# Install for Claude Code only
+sqb skills update --target claude
+
+# Install for OpenCode and Claude
+sqb skills update --target opencode --target claude
+
+# Install globally
+sqb skills update --global
+```
+
+#### Overwrite behavior
+
+Generated skill files include a marker comment. `sqb skills update` will:
+
+- Overwrite files it previously generated (safe to rerun)
+- Refuse to overwrite files that were manually created or edited (no marker)
+- Overwrite any file when `--force` is passed
+
+#### Configuration
+
+Default targets can be set in `sqlbuild_project.toml` so the team shares the same agent config:
+
+```toml
+[skills]
+targets = ["opencode", "claude"]
+```
+
+CLI `--target` flags override the TOML config.
+
+#### Playground
+
+The playground command automatically runs `sqb skills update` after creating the project, so AI agents are ready to use immediately:
+
+```bash
+sqb playground waffle-shop
+cd waffle-shop
+# Agent skill files are already installed
+```
+
 ## clean
 
 Source: `cli/clean.mdx`
@@ -5055,10 +5853,17 @@ Creates a self-contained waffle shop project with DuckDB. No warehouse credentia
 ### Usage
 
 ```bash
-sqb playground [path]
+sqb playground [template] [path]
 ```
 
 If `path` is omitted, the project is created at `sqlbuild-playground` in the current directory.
+
+### Templates
+
+| Template | Description |
+|----------|-------------|
+| `waffle_shop` | Default. DuckDB-backed project with models, tests, scenarios, and macros. |
+| `dagster` | Waffle shop project plus a `dagster/` directory with a ready-to-run `definitions.py`. |
 
 ### What it creates
 
@@ -5069,16 +5874,28 @@ A complete DuckDB-backed project with:
 - Seeds, SQL functions, and a custom materialization
 - Built-in and custom audits
 - SQL unit tests including chain tests
+- E2E scenario tests
 - Python macros
+- AI agent skill files (auto-installed for OpenCode, Claude Code, and other agents)
 
-### Example
+The `dagster` template adds:
+
+- `dagster/definitions.py` - Dagster definitions with `sqlbuild_assets`, `sqlbuild_scenario_checks`, and `SqlBuildCliResource`
+- `dagster/README.md` - Setup instructions
+
+### Examples
 
 ```bash
+# Default waffle shop
 sqb playground my-project
 cd my-project
-sqb compile
 sqb build
-sqb test
+
+# With Dagster integration
+sqb playground dagster my-dagster-project
+cd my-dagster-project
+uv add 'sqlbuild[dagster]'
+DAGSTER_IS_DEV_CLI=1 uv run dagster dev -f dagster/definitions.py
 ```
 
 ### Notes
@@ -5086,3 +5903,4 @@ sqb test
 - The target directory must not already exist
 - DuckDB is included as a core dependency - no extra installation needed
 - The local DuckDB database file is created on the first build
+- The Dagster template uses `prepare_if_dev()` to auto-generate the DAG artifact when Dagster starts in dev mode

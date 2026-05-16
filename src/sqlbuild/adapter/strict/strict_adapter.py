@@ -337,6 +337,11 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_current_timestamp(self) -> str:
+        """Render the warehouse current timestamp expression."""
+        ...
+
+    @abstractmethod
     def validate_row_diff_keys(
         self,
         connection: Any,

@@ -39,6 +39,7 @@ class CliNamespace:
     no_color: bool = False
     fail_fast: bool = False
     full_refresh: bool = False
+    allow_snapshot_full_refresh: bool = False
     concurrency: int | None = None
     verbose: bool = False
     debug: bool = False
@@ -134,6 +135,7 @@ class CliEntrypointHandlers:
             bool,
             bool,
             bool,
+            bool,
             int | None,
             tuple[str, ...],
             tuple[str, ...],
@@ -151,6 +153,7 @@ class CliEntrypointHandlers:
             bool,
             str | None,
             CursorOverrides | None,
+            bool,
             bool,
             bool,
             bool,
