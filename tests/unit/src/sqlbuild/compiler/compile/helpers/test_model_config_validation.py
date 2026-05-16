@@ -430,6 +430,15 @@ SNAPSHOT_VALID_TEST_CASES: list[SnapshotConfigValidTestCase] = [
         },
     ),
     SnapshotConfigValidTestCase(
+        description="valid current-state check snapshot with wildcard check columns",
+        config_values={
+            "materialized": "snapshot",
+            "unique_key": ["id"],
+            "snapshot_strategy": "check",
+            "check_columns": ["*"],
+        },
+    ),
+    SnapshotConfigValidTestCase(
         description="valid historical check snapshot defaults to snapshot input",
         config_values={
             "materialized": "snapshot",
@@ -530,6 +539,16 @@ SNAPSHOT_ERROR_TEST_CASES: list[SnapshotConfigErrorTestCase] = [
             "snapshot_strategy": "check",
         },
         expected_error_fragment="requires check_columns",
+    ),
+    SnapshotConfigErrorTestCase(
+        description="check snapshot rejects mixed wildcard and explicit check columns",
+        config_values={
+            "materialized": "snapshot",
+            "unique_key": ["id"],
+            "snapshot_strategy": "check",
+            "check_columns": ["*", "plan"],
+        },
+        expected_error_fragment="cannot be combined with explicit columns",
     ),
     SnapshotConfigErrorTestCase(
         description="historical_input without observed_at raises",

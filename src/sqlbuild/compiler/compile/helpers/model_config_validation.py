@@ -266,6 +266,15 @@ def validate_snapshot_config(
         raise CompileInputError(
             f"model '{model_name}': snapshot_strategy=check requires check_columns"
         )
+    if (
+        strategy == SnapshotStrategy.CHECK
+        and isinstance(check_columns, list)
+        and "*" in check_columns
+        and len(check_columns) != 1
+    ):
+        raise CompileInputError(
+            f"model '{model_name}': check_columns [*] cannot be combined with explicit columns"
+        )
 
     if historical_input is not None and observed_at is None:
         raise CompileInputError(f"model '{model_name}': historical_input requires observed_at")

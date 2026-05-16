@@ -2218,6 +2218,134 @@ SNAPSHOT_CHECK_TEST_CASES: list[SnapshotCheckBuildE2ETestCase] = [
         expected_initial_rows=((1, "basic", "active", True), (2, "pro", "active", True)),
         expected_changed_rows=((1, "basic", "active", True), (2, "pro", "active", False)),
     ),
+    SnapshotCheckBuildE2ETestCase(
+        description="current-state check snapshot expands wildcard check columns",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "check_snapshot_project"
+                adapter = "duckdb"
+
+                [connection]
+                database = "check_snapshot.duckdb"
+                """
+            ).strip()
+            + "\n",
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_customers
+                    schema: main
+                    table: raw_customers
+                """
+            ).strip()
+            + "\n",
+            "models/customer_snapshot.sql": dedent(
+                """
+                MODEL (
+                  materialized snapshot,
+                  unique_key [customer_id],
+                  snapshot_strategy check,
+                  check_columns [*]
+                );
+
+                SELECT customer_id, plan, status
+                FROM __source("raw_customers")
+                """
+            ).strip()
+            + "\n",
+        },
+        initial_seed_sql=dedent(
+            """
+            CREATE TABLE main.raw_customers AS
+            SELECT 1 AS customer_id, 'basic' AS plan, 'active' AS status
+            """
+        ).strip(),
+        mutation_sql=(
+            dedent(
+                """
+                CREATE OR REPLACE TABLE main.raw_customers AS
+                SELECT 1 AS customer_id, 'pro' AS plan, 'active' AS status
+                """
+            ).strip(),
+        ),
+        command=("--no-color", "build"),
+        expected_exit_code=0,
+        expected_query=(
+            "SELECT customer_id, plan, status, valid_to IS NULL "
+            "FROM main.customer_snapshot ORDER BY customer_id, valid_from"
+        ),
+        expected_initial_rows=((1, "basic", "active", True),),
+        expected_changed_rows=(
+            (1, "basic", "active", False),
+            (1, "pro", "active", True),
+        ),
+    ),
+    SnapshotCheckBuildE2ETestCase(
+        description="current-state check snapshot wildcard excludes custom validity columns",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "check_snapshot_project"
+                adapter = "duckdb"
+
+                [connection]
+                database = "check_snapshot.duckdb"
+                """
+            ).strip()
+            + "\n",
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_customers
+                    schema: main
+                    table: raw_customers
+                """
+            ).strip()
+            + "\n",
+            "models/customer_snapshot.sql": dedent(
+                """
+                MODEL (
+                  materialized snapshot,
+                  unique_key [customer_id],
+                  snapshot_strategy check,
+                  check_columns [*],
+                  valid_from_column effective_from,
+                  valid_to_column effective_to
+                );
+
+                SELECT customer_id, plan, status
+                FROM __source("raw_customers")
+                """
+            ).strip()
+            + "\n",
+        },
+        initial_seed_sql=dedent(
+            """
+            CREATE TABLE main.raw_customers AS
+            SELECT 1 AS customer_id, 'basic' AS plan, 'active' AS status
+            """
+        ).strip(),
+        mutation_sql=(
+            dedent(
+                """
+                CREATE OR REPLACE TABLE main.raw_customers AS
+                SELECT 1 AS customer_id, 'basic' AS plan, 'paused' AS status
+                """
+            ).strip(),
+        ),
+        command=("--no-color", "build"),
+        expected_exit_code=0,
+        expected_query=(
+            "SELECT customer_id, plan, status, effective_to IS NULL "
+            "FROM main.customer_snapshot ORDER BY customer_id, effective_from"
+        ),
+        expected_initial_rows=((1, "basic", "active", True),),
+        expected_changed_rows=(
+            (1, "basic", "active", False),
+            (1, "basic", "paused", True),
+        ),
+    ),
 ]
 
 
@@ -2969,6 +3097,82 @@ SNAPSHOT_HISTORICAL_CHECK_BUILD_E2E_TEST_CASES: list[SnapshotHistoricalCheckBuil
             (2, "team", "2024-01-03 00:00:00", None),
         ),
     ),
+    SnapshotHistoricalCheckBuildE2ETestCase(
+        description="historical check snapshot expands wildcard check columns",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                    name = "historical_check_snapshot_project"
+                    adapter = "duckdb"
+
+                    [connection]
+                    database = "historical_check_snapshot.duckdb"
+                    """
+            ).strip()
+            + "\n",
+            "sources/raw.yml": dedent(
+                """
+                    sources:
+                      - name: raw_customer_daily
+                        schema: main
+                        table: raw_customer_daily
+                    """
+            ).strip()
+            + "\n",
+            "models/customer_snapshot.sql": dedent(
+                """
+                    MODEL (
+                      materialized snapshot,
+                      unique_key [customer_id],
+                      snapshot_strategy check,
+                      check_columns [*],
+                      observed_at observed_at
+                    );
+
+                    SELECT customer_id, plan, status, observed_at
+                    FROM __source("raw_customer_daily")
+                    """
+            ).strip()
+            + "\n",
+        },
+        initial_seed_sql=dedent(
+            """
+                CREATE TABLE main.raw_customer_daily AS
+                SELECT 1 AS customer_id, 'basic' AS plan, 'active' AS status,
+                  TIMESTAMP '2024-01-01' AS observed_at
+                UNION ALL SELECT 1, 'pro', 'active', TIMESTAMP '2024-01-02'
+                UNION ALL SELECT 1, 'pro', 'active', TIMESTAMP '2024-01-03'
+                """
+        ).strip(),
+        mutation_sql=(
+            dedent(
+                """
+                    CREATE OR REPLACE TABLE main.raw_customer_daily AS
+                    SELECT 1 AS customer_id, 'basic' AS plan, 'active' AS status,
+                      TIMESTAMP '2024-01-01' AS observed_at
+                    UNION ALL SELECT 1, 'pro', 'active', TIMESTAMP '2024-01-02'
+                    UNION ALL SELECT 1, 'pro', 'active', TIMESTAMP '2024-01-03'
+                    UNION ALL SELECT 1, 'pro', 'paused', TIMESTAMP '2024-01-04'
+                    """
+            ).strip(),
+        ),
+        command=("--no-color", "build"),
+        expected_exit_code=0,
+        expected_query=(
+            "SELECT customer_id, plan, status, CAST(valid_from AS VARCHAR), "
+            "CAST(valid_to AS VARCHAR) FROM main.customer_snapshot "
+            "ORDER BY customer_id, valid_from"
+        ),
+        expected_initial_rows=(
+            (1, "basic", "active", "2024-01-01 00:00:00", "2024-01-02 00:00:00"),
+            (1, "pro", "active", "2024-01-02 00:00:00", None),
+        ),
+        expected_changed_rows=(
+            (1, "basic", "active", "2024-01-01 00:00:00", "2024-01-02 00:00:00"),
+            (1, "pro", "active", "2024-01-02 00:00:00", "2024-01-04 00:00:00"),
+            (1, "pro", "paused", "2024-01-04 00:00:00", None),
+        ),
+    ),
 ]
 
 
@@ -3361,33 +3565,31 @@ def test_given_historical_timestamp_changes_project_when_rerunning_build_then_tr
     assert rows_after_changed == test_case.expected_changed_rows
 
 
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        SnapshotCheckFailureBuildE2ETestCase(
-            description="missing check snapshot output column fails build through CLI",
-            repo_files={
-                "sqlbuild_project.toml": dedent(
-                    """
+SNAPSHOT_CHECK_FAILURE_BUILD_E2E_TEST_CASES: list[SnapshotCheckFailureBuildE2ETestCase] = [
+    SnapshotCheckFailureBuildE2ETestCase(
+        description="missing check snapshot output column fails build through CLI",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
                     name = "check_snapshot_failure_project"
                     adapter = "duckdb"
 
                     [connection]
                     database = "check_snapshot_failure.duckdb"
                     """
-                ).strip()
-                + "\n",
-                "sources/raw.yml": dedent(
-                    """
+            ).strip()
+            + "\n",
+            "sources/raw.yml": dedent(
+                """
                     sources:
                       - name: raw_customers
                         schema: main
                         table: raw_customers
                     """
-                ).strip()
-                + "\n",
-                "models/customer_snapshot.sql": dedent(
-                    """
+            ).strip()
+            + "\n",
+            "models/customer_snapshot.sql": dedent(
+                """
                     MODEL (
                       materialized snapshot,
                       unique_key [customer_id],
@@ -3398,24 +3600,79 @@ def test_given_historical_timestamp_changes_project_when_rerunning_build_then_tr
                     SELECT customer_id, plan
                     FROM __source("raw_customers")
                     """
-                ).strip()
-                + "\n",
-            },
-            initial_seed_sql=dedent(
-                """
+            ).strip()
+            + "\n",
+        },
+        initial_seed_sql=dedent(
+            """
                 CREATE TABLE main.raw_customers AS
                 SELECT 1 AS customer_id, 'basic' AS plan, 'active' AS status
                 """
-            ).strip(),
-            command=("--no-color", "build"),
-            expected_exit_code=1,
-            expected_output_fragments=(
-                "customer_snapshot",
-                "query output is missing required columns: status",
-            ),
-        )
-    ],
-    ids=["missing check snapshot output column fails build through CLI"],
+        ).strip(),
+        command=("--no-color", "build"),
+        expected_exit_code=1,
+        expected_output_fragments=(
+            "customer_snapshot",
+            "query output is missing required columns: status",
+        ),
+    ),
+    SnapshotCheckFailureBuildE2ETestCase(
+        description="wildcard check snapshot without data columns fails build through CLI",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                    name = "check_snapshot_failure_project"
+                    adapter = "duckdb"
+
+                    [connection]
+                    database = "check_snapshot_failure.duckdb"
+                    """
+            ).strip()
+            + "\n",
+            "sources/raw.yml": dedent(
+                """
+                    sources:
+                      - name: raw_customers
+                        schema: main
+                        table: raw_customers
+                    """
+            ).strip()
+            + "\n",
+            "models/customer_snapshot.sql": dedent(
+                """
+                    MODEL (
+                      materialized snapshot,
+                      unique_key [customer_id],
+                      snapshot_strategy check,
+                      check_columns [*]
+                    );
+
+                    SELECT customer_id
+                    FROM __source("raw_customers")
+                    """
+            ).strip()
+            + "\n",
+        },
+        initial_seed_sql=dedent(
+            """
+                CREATE TABLE main.raw_customers AS
+                SELECT 1 AS customer_id
+                """
+        ).strip(),
+        command=("--no-color", "build"),
+        expected_exit_code=1,
+        expected_output_fragments=(
+            "customer_snapshot",
+            "check_columns [*] did not match any data columns",
+        ),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SNAPSHOT_CHECK_FAILURE_BUILD_E2E_TEST_CASES,
+    ids=[case.description for case in SNAPSHOT_CHECK_FAILURE_BUILD_E2E_TEST_CASES],
 )
 def test_given_missing_check_snapshot_output_column_when_building_then_cli_reports_failure(
     test_case: SnapshotCheckFailureBuildE2ETestCase,
