@@ -12,6 +12,7 @@ from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorBounds, Model
 from sqlbuild.compiler.planner.types import IncrementalStrategy, OnSchemaChange
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.run.helpers.contracts import validate_runtime_contract
 from sqlbuild.executor.run.helpers.cursor_bounds import (
     has_model_backed_cursor_inputs,
     resolve_runtime_cursor_bounds,
@@ -197,6 +198,30 @@ def execute_incremental_entry(
                 audit_results=audit_results,
                 statement_recorder=statement_recorder,
             )
+
+    try:
+        with diagnostics_context(sqlbuild_phase="contract", sqlbuild_action_name="validate_delta"):
+            delta_columns = adapter.get_columns(
+                connection,
+                database=target_database,
+                schema=target_schema,
+                name=delta_table,
+            )
+            validate_runtime_contract(
+                entry=entry,
+                actual_columns=delta_columns,
+                dialect=adapter.sqlglot_dialect_name,
+            )
+    except Exception as exc:
+        return build_failed_result(
+            entry=entry,
+            phase=ExecutionPhase.CONTRACT,
+            error=str(exc),
+            staging_relation=delta_qualified,
+            warnings=warnings,
+            audit_results=audit_results,
+            statement_recorder=statement_recorder,
+        )
 
     delta_overrides: dict[str, str] = {entry.name: delta_qualified}
     delta_audit_error: bool = False

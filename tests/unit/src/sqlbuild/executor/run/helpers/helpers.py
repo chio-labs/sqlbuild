@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Any
 
+from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledRelationTarget,
@@ -35,10 +36,32 @@ def build_result_model_plan_entry() -> ModelPlanEntry:
     )
 
 
+def build_contract_model_plan_entry(
+    *, contract_enforced: bool, contract_columns: tuple[ColumnInfo, ...]
+) -> ModelPlanEntry:
+    entry: ModelPlanEntry = build_result_model_plan_entry()
+    return ModelPlanEntry(
+        key=entry.key,
+        name=entry.name,
+        relative_path=entry.relative_path,
+        materialization_type=entry.materialization_type,
+        action=entry.action,
+        reason=entry.reason,
+        target=entry.target,
+        fingerprint_query_sql=entry.fingerprint_query_sql,
+        resolved_sql=entry.resolved_sql,
+        logical_ddl=entry.logical_ddl,
+        contract_enforced=contract_enforced,
+        contract_columns=contract_columns,
+    )
+
+
 def build_snapshot_execution_plan_entry(
     *,
     pre_hook: object = None,
     post_hook: object = None,
+    contract_enforced: bool = False,
+    contract_columns: tuple[ColumnInfo, ...] = (),
 ) -> ModelPlanEntry:
     return ModelPlanEntry(
         key=CompiledObjectKey(
@@ -65,6 +88,8 @@ def build_snapshot_execution_plan_entry(
         unique_key=("customer_id",),
         snapshot_strategy="timestamp",
         updated_at_column="updated_at",
+        contract_enforced=contract_enforced,
+        contract_columns=contract_columns,
         pre_hook=pre_hook,
         post_hook=post_hook,
     )

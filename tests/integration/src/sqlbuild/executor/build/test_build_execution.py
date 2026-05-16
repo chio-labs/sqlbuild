@@ -505,6 +505,93 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         expected_missing_relations=("main.stg_orders", "main.orders"),
     ),
     BuildExecutionTestCase(
+        description="table runtime contract failure blocks promotion",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "models/orders.sql": (
+                "MODEL (\n"
+                "  materialized table,\n"
+                "  contract enforced,\n"
+                "  columns (id (type INTEGER)),\n"
+                ");\n\n"
+                "SELECT * FROM raw_orders"
+            ),
+        },
+        setup_sql=("CREATE TABLE raw_orders AS SELECT 1 AS id, 'extra' AS status",),
+        expected_status=BuildStatus.FAILED,
+        expected_failure_count=1,
+        expected_model_statuses=(("orders", ExecutionStatus.FAILED),),
+        expected_model_error_fragments=(("orders", "runtime contract has extra columns: status"),),
+        expected_missing_relations=("main.orders",),
+    ),
+    BuildExecutionTestCase(
+        description="snapshot runtime contract failure blocks target creation",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "models/customer_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  contract enforced,\n"
+                "  columns (\n"
+                "    customer_id (type INTEGER),\n"
+                "    updated_at (type TIMESTAMP),\n"
+                "  ),\n"
+                "  unique_key [customer_id],\n"
+                "  snapshot_strategy timestamp,\n"
+                "  updated_at updated_at,\n"
+                ");\n\n"
+                "SELECT * FROM raw_customers"
+            ),
+        },
+        setup_sql=(
+            "CREATE TABLE raw_customers AS "
+            "SELECT 1 AS customer_id, TIMESTAMP '2024-01-01' AS updated_at, 'pro' AS plan",
+        ),
+        expected_status=BuildStatus.FAILED,
+        expected_failure_count=1,
+        expected_model_statuses=(("customer_snapshot", ExecutionStatus.FAILED),),
+        expected_model_error_fragments=(
+            ("customer_snapshot", "runtime contract has extra columns: plan"),
+        ),
+        expected_missing_relations=("main.customer_snapshot",),
+    ),
+    BuildExecutionTestCase(
+        description="incremental runtime contract failure blocks dml",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "models/orders.sql": (
+                "MODEL (\n"
+                "  materialized incremental,\n"
+                "  contract enforced,\n"
+                "  columns (\n"
+                "    id (type INTEGER),\n"
+                "    updated_at (type TIMESTAMP),\n"
+                "  ),\n"
+                "  incremental_strategy delete_insert,\n"
+                "  cursor updated_at,\n"
+                "  cursor_type timestamp,\n"
+                "  cursor_grain second,\n"
+                ");\n\n"
+                "SELECT * FROM raw_orders"
+            ),
+        },
+        setup_sql=(
+            "CREATE TABLE main.orders AS SELECT 1 AS id, TIMESTAMP '2024-01-01' AS updated_at",
+            "CREATE TABLE raw_orders AS "
+            "SELECT 2 AS id, TIMESTAMP '2024-01-02' AS updated_at, 'extra' AS status",
+        ),
+        expected_status=BuildStatus.FAILED,
+        expected_failure_count=1,
+        expected_model_statuses=(("orders", ExecutionStatus.FAILED),),
+        expected_model_error_fragments=(("orders", "runtime contract has extra columns: status"),),
+        expected_query_results=(
+            (
+                "SELECT id, CAST(updated_at AS VARCHAR) FROM main.orders",
+                ((1, "2024-01-01 00:00:00"),),
+            ),
+        ),
+    ),
+    BuildExecutionTestCase(
         description="duckdb python udf with explicit schema fails clearly",
         project_files={
             "sqlbuild_project.toml": _PROJECT_YML,

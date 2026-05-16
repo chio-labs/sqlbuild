@@ -81,6 +81,13 @@ def verify_model_statuses(
     for expected_name, expected_status in test_case.expected_model_statuses:
         assert actual_statuses.get(expected_name) == expected_status
 
+    actual_errors: dict[str, str] = {
+        r.model_name: r.error_message or "" for r in result.model_results
+    }
+    expected_fragment: str
+    for expected_name, expected_fragment in test_case.expected_model_error_fragments:
+        assert expected_fragment in actual_errors.get(expected_name, "")
+
 
 def verify_function_statuses(
     *,
