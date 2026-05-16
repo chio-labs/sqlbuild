@@ -19,15 +19,12 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     run_sqb,
 )
 
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        SnapshotTimestampBuildE2ETestCase(
-            description="current-state timestamp snapshot tracks history across CLI builds",
-            repo_files={
-                "sqlbuild_project.toml": dedent(
-                    """
+SNAPSHOT_TIMESTAMP_TEST_CASES: list[SnapshotTimestampBuildE2ETestCase] = [
+    SnapshotTimestampBuildE2ETestCase(
+        description="current-state timestamp snapshot tracks history across CLI builds",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
                     name = "snapshot_project"
                     adapter = "duckdb"
 
@@ -37,19 +34,19 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                     [defaults]
                     materialized = "table"
                     """
-                ).strip()
-                + "\n",
-                "sources/raw.yml": dedent(
-                    """
+            ).strip()
+            + "\n",
+            "sources/raw.yml": dedent(
+                """
                     sources:
                       - name: raw_customers
                         schema: main
                         table: raw_customers
                     """
-                ).strip()
-                + "\n",
-                "models/customer_snapshot.sql": dedent(
-                    """
+            ).strip()
+            + "\n",
+            "models/customer_snapshot.sql": dedent(
+                """
                     MODEL (
                       materialized snapshot,
                       unique_key [customer_id],
@@ -62,11 +59,11 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                     SELECT customer_id, plan, updated_at
                     FROM __source("raw_customers")
                     """
-                ).strip()
-                + "\n",
-            },
-            initial_seed_sql=dedent(
-                """
+            ).strip()
+            + "\n",
+        },
+        initial_seed_sql=dedent(
+            """
                 CREATE TABLE main.raw_customers (
                   customer_id INTEGER,
                   plan VARCHAR,
@@ -76,10 +73,10 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 INSERT INTO main.raw_customers VALUES
                   (1, 'basic', '2024-01-01 00:00:00');
                 """
-            ).strip(),
-            mutation_sql=(
-                dedent(
-                    """
+        ).strip(),
+        mutation_sql=(
+            dedent(
+                """
                     CREATE OR REPLACE TABLE main.raw_customers AS
                     SELECT 1 AS customer_id, 'pro' AS plan,
                       TIMESTAMP '2024-01-03 00:00:00' AS updated_at
@@ -87,24 +84,235 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                     SELECT 2 AS customer_id, 'basic' AS plan,
                       TIMESTAMP '2024-01-02 00:00:00' AS updated_at
                     """
-                ).strip(),
-            ),
-            command=("--no-color", "build"),
-            expected_exit_code=0,
-            expected_query=(
-                "SELECT customer_id, plan, CAST(effective_from AS VARCHAR), "
-                "CAST(effective_to AS VARCHAR) FROM main.customer_snapshot "
-                "ORDER BY customer_id, effective_from"
-            ),
-            expected_initial_rows=((1, "basic", "2024-01-01 00:00:00", None),),
-            expected_changed_rows=(
-                (1, "basic", "2024-01-01 00:00:00", "2024-01-03 00:00:00"),
-                (1, "pro", "2024-01-03 00:00:00", None),
-                (2, "basic", "2024-01-02 00:00:00", None),
-            ),
-        )
-    ],
-    ids=["current-state timestamp snapshot tracks history across CLI builds"],
+            ).strip(),
+        ),
+        command=("--no-color", "build"),
+        expected_exit_code=0,
+        expected_query=(
+            "SELECT customer_id, plan, CAST(effective_from AS VARCHAR), "
+            "CAST(effective_to AS VARCHAR) FROM main.customer_snapshot "
+            "ORDER BY customer_id, effective_from"
+        ),
+        expected_initial_rows=((1, "basic", "2024-01-01 00:00:00", None),),
+        expected_changed_rows=(
+            (1, "basic", "2024-01-01 00:00:00", "2024-01-03 00:00:00"),
+            (1, "pro", "2024-01-03 00:00:00", None),
+            (2, "basic", "2024-01-02 00:00:00", None),
+        ),
+    ),
+    SnapshotTimestampBuildE2ETestCase(
+        description="current-state timestamp snapshot invalidates hard deletes through CLI",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                    name = "snapshot_project"
+                    adapter = "duckdb"
+
+                    [connection]
+                    database = "snapshot.duckdb"
+                    """
+            ).strip()
+            + "\n",
+            "sources/raw.yml": dedent(
+                """
+                    sources:
+                      - name: raw_customers
+                        schema: main
+                        table: raw_customers
+                    """
+            ).strip()
+            + "\n",
+            "models/customer_snapshot.sql": dedent(
+                """
+                    MODEL (
+                      materialized snapshot,
+                      unique_key [customer_id],
+                      snapshot_strategy timestamp,
+                      updated_at updated_at,
+                      invalidate_hard_deletes true
+                    );
+
+                    SELECT customer_id, plan, updated_at
+                    FROM __source("raw_customers")
+                    """
+            ).strip()
+            + "\n",
+        },
+        initial_seed_sql=dedent(
+            """
+                CREATE TABLE main.raw_customers AS
+                SELECT 1 AS customer_id, 'basic' AS plan,
+                  TIMESTAMP '2024-01-01 00:00:00' AS updated_at
+                UNION ALL
+                SELECT 2 AS customer_id, 'pro' AS plan,
+                  TIMESTAMP '2024-01-02 00:00:00' AS updated_at
+                """
+        ).strip(),
+        mutation_sql=(
+            dedent(
+                """
+                    CREATE OR REPLACE TABLE main.raw_customers AS
+                    SELECT 1 AS customer_id, 'basic' AS plan,
+                      TIMESTAMP '2024-01-01 00:00:00' AS updated_at
+                    """
+            ).strip(),
+        ),
+        command=("--no-color", "build"),
+        expected_exit_code=0,
+        expected_query=(
+            "SELECT customer_id, plan, valid_to IS NULL FROM main.customer_snapshot "
+            "ORDER BY customer_id"
+        ),
+        expected_initial_rows=((1, "basic", True), (2, "pro", True)),
+        expected_changed_rows=((1, "basic", True), (2, "pro", False)),
+    ),
+]
+
+SNAPSHOT_CHECK_TEST_CASES: list[SnapshotCheckBuildE2ETestCase] = [
+    SnapshotCheckBuildE2ETestCase(
+        description="current-state check snapshot tracks checked changes across CLI builds",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "check_snapshot_project"
+                adapter = "duckdb"
+
+                [connection]
+                database = "check_snapshot.duckdb"
+                """
+            ).strip()
+            + "\n",
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_customers
+                    schema: main
+                    table: raw_customers
+                """
+            ).strip()
+            + "\n",
+            "models/customer_snapshot.sql": dedent(
+                """
+                MODEL (
+                  materialized snapshot,
+                  unique_key [customer_id],
+                  snapshot_strategy check,
+                  check_columns [status],
+                  valid_from_column effective_from,
+                  valid_to_column effective_to
+                );
+
+                SELECT customer_id, plan, status
+                FROM __source("raw_customers")
+                """
+            ).strip()
+            + "\n",
+        },
+        initial_seed_sql=dedent(
+            """
+            CREATE TABLE main.raw_customers (
+              customer_id INTEGER,
+              plan VARCHAR,
+              status VARCHAR
+            );
+
+            INSERT INTO main.raw_customers VALUES
+              (1, 'basic', 'active');
+            """
+        ).strip(),
+        mutation_sql=(
+            dedent(
+                """
+                CREATE OR REPLACE TABLE main.raw_customers AS
+                SELECT 1 AS customer_id, 'pro' AS plan, 'paused' AS status
+                UNION ALL
+                SELECT 2 AS customer_id, 'basic' AS plan, 'active' AS status
+                """
+            ).strip(),
+        ),
+        command=("--no-color", "build"),
+        expected_exit_code=0,
+        expected_query=(
+            "SELECT customer_id, plan, status, effective_to IS NULL "
+            "FROM main.customer_snapshot ORDER BY customer_id, effective_to IS NULL, plan"
+        ),
+        expected_initial_rows=((1, "basic", "active", True),),
+        expected_changed_rows=(
+            (1, "basic", "active", False),
+            (1, "pro", "paused", True),
+            (2, "basic", "active", True),
+        ),
+    ),
+    SnapshotCheckBuildE2ETestCase(
+        description="current-state check snapshot invalidates hard deletes through CLI",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "check_snapshot_project"
+                adapter = "duckdb"
+
+                [connection]
+                database = "check_snapshot.duckdb"
+                """
+            ).strip()
+            + "\n",
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_customers
+                    schema: main
+                    table: raw_customers
+                """
+            ).strip()
+            + "\n",
+            "models/customer_snapshot.sql": dedent(
+                """
+                MODEL (
+                  materialized snapshot,
+                  unique_key [customer_id],
+                  snapshot_strategy check,
+                  check_columns [status],
+                  invalidate_hard_deletes true
+                );
+
+                SELECT customer_id, plan, status
+                FROM __source("raw_customers")
+                """
+            ).strip()
+            + "\n",
+        },
+        initial_seed_sql=dedent(
+            """
+            CREATE TABLE main.raw_customers AS
+            SELECT 1 AS customer_id, 'basic' AS plan, 'active' AS status
+            UNION ALL
+            SELECT 2 AS customer_id, 'pro' AS plan, 'active' AS status
+            """
+        ).strip(),
+        mutation_sql=(
+            dedent(
+                """
+                CREATE OR REPLACE TABLE main.raw_customers AS
+                SELECT 1 AS customer_id, 'basic' AS plan, 'active' AS status
+                """
+            ).strip(),
+        ),
+        command=("--no-color", "build"),
+        expected_exit_code=0,
+        expected_query=(
+            "SELECT customer_id, plan, status, valid_to IS NULL "
+            "FROM main.customer_snapshot ORDER BY customer_id"
+        ),
+        expected_initial_rows=((1, "basic", "active", True), (2, "pro", "active", True)),
+        expected_changed_rows=((1, "basic", "active", True), (2, "pro", "active", False)),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SNAPSHOT_TIMESTAMP_TEST_CASES,
+    ids=[case.description for case in SNAPSHOT_TIMESTAMP_TEST_CASES],
 )
 def test_given_timestamp_snapshot_project_when_rerunning_build_then_tracks_history(
     test_case: SnapshotTimestampBuildE2ETestCase,
@@ -246,83 +454,8 @@ def test_given_duplicate_timestamp_snapshot_source_when_building_then_cli_report
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        SnapshotCheckBuildE2ETestCase(
-            description="current-state check snapshot tracks checked changes across CLI builds",
-            repo_files={
-                "sqlbuild_project.toml": dedent(
-                    """
-                    name = "check_snapshot_project"
-                    adapter = "duckdb"
-
-                    [connection]
-                    database = "check_snapshot.duckdb"
-                    """
-                ).strip()
-                + "\n",
-                "sources/raw.yml": dedent(
-                    """
-                    sources:
-                      - name: raw_customers
-                        schema: main
-                        table: raw_customers
-                    """
-                ).strip()
-                + "\n",
-                "models/customer_snapshot.sql": dedent(
-                    """
-                    MODEL (
-                      materialized snapshot,
-                      unique_key [customer_id],
-                      snapshot_strategy check,
-                      check_columns [status],
-                      valid_from_column effective_from,
-                      valid_to_column effective_to
-                    );
-
-                    SELECT customer_id, plan, status
-                    FROM __source("raw_customers")
-                    """
-                ).strip()
-                + "\n",
-            },
-            initial_seed_sql=dedent(
-                """
-                CREATE TABLE main.raw_customers (
-                  customer_id INTEGER,
-                  plan VARCHAR,
-                  status VARCHAR
-                );
-
-                INSERT INTO main.raw_customers VALUES
-                  (1, 'basic', 'active');
-                """
-            ).strip(),
-            mutation_sql=(
-                dedent(
-                    """
-                    CREATE OR REPLACE TABLE main.raw_customers AS
-                    SELECT 1 AS customer_id, 'pro' AS plan, 'paused' AS status
-                    UNION ALL
-                    SELECT 2 AS customer_id, 'basic' AS plan, 'active' AS status
-                    """
-                ).strip(),
-            ),
-            command=("--no-color", "build"),
-            expected_exit_code=0,
-            expected_query=(
-                "SELECT customer_id, plan, status, effective_to IS NULL "
-                "FROM main.customer_snapshot ORDER BY customer_id, effective_to IS NULL, plan"
-            ),
-            expected_initial_rows=((1, "basic", "active", True),),
-            expected_changed_rows=(
-                (1, "basic", "active", False),
-                (1, "pro", "paused", True),
-                (2, "basic", "active", True),
-            ),
-        )
-    ],
-    ids=["current-state check snapshot tracks checked changes across CLI builds"],
+    SNAPSHOT_CHECK_TEST_CASES,
+    ids=[case.description for case in SNAPSHOT_CHECK_TEST_CASES],
 )
 def test_given_check_snapshot_project_when_rerunning_build_then_tracks_checked_changes(
     test_case: SnapshotCheckBuildE2ETestCase,

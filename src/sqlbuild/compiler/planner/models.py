@@ -250,6 +250,7 @@ class ModelPlanEntry:
     valid_from_column: str | None = None
     valid_to_column: str | None = None
     initial_valid_from: str | None = None
+    invalidate_hard_deletes: bool = False
     on_schema_change: OnSchemaChange | None = None
     type_enforcement: bool = False
     declared_columns: tuple[ColumnInfo, ...] = field(default_factory=tuple)
