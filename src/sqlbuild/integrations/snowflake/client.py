@@ -1669,6 +1669,68 @@ class SnowflakeAdapter(BaseAdapter):
             f"{column} IS DISTINCT FROM __prev_{column}" for column in check_columns
         )
         output_select_sql: str = ", ".join(column for column in output_columns)
+        if invalidate_hard_deletes:
+            hard_delete_join_condition: str = cls._snapshot_key_condition(
+                left_alias="__hard_delete_candidates",
+                right_alias="__changes",
+                unique_key=unique_key,
+            )
+            hard_delete_key_sql: str = ", ".join(f"__changes.{column}" for column in unique_key)
+            hard_delete_group_sql: str = ", ".join(
+                [
+                    *(f"__changes.{column}" for column in unique_key),
+                    f"__changes.{observed_at_column}",
+                ]
+            )
+            present_condition: str = cls._snapshot_key_condition(
+                left_alias="__present", right_alias="__changes", unique_key=unique_key
+            )
+            return (
+                "WITH __ordered AS ("
+                "SELECT __source.*, "
+                f"(SELECT MAX(__groups.__observed_at) FROM ("
+                f"SELECT DISTINCT {observed_at_column} AS __observed_at FROM {source}"
+                ") AS __groups "
+                f"WHERE __groups.__observed_at < __source.{observed_at_column}"
+                ") AS __prev_group_observed_at, "
+                f"LAG({observed_at_column}) OVER ("
+                f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
+                f") AS __prev_observed_at{previous_columns_sql} FROM {source} AS __source"
+                "), __changes AS ("
+                "SELECT * FROM __ordered WHERE __prev_observed_at IS NULL "
+                f"OR ({change_condition}) "
+                "OR __prev_observed_at IS DISTINCT FROM __prev_group_observed_at"
+                "), __observed_groups AS ("
+                f"SELECT DISTINCT {observed_at_column} AS __observed_at FROM {source}"
+                "), __hard_delete_candidates AS ("
+                f"SELECT {hard_delete_key_sql}, __changes.{observed_at_column}, "
+                "MIN(__observed_groups.__observed_at) AS __hard_deleted_at "
+                "FROM __changes "
+                "JOIN __observed_groups "
+                f"ON __observed_groups.__observed_at > __changes.{observed_at_column} "
+                f"LEFT JOIN {source} AS __present "
+                f"ON __present.{observed_at_column} = __observed_groups.__observed_at "
+                f"AND {present_condition} "
+                f"WHERE __present.{unique_key[0]} IS NULL "
+                f"GROUP BY {hard_delete_group_sql}"
+                "), __versions AS ("
+                f"SELECT __changes.*, LEAD(__changes.{observed_at_column}) OVER ("
+                f"PARTITION BY {', '.join(f'__changes.{column}' for column in unique_key)} "
+                f"ORDER BY __changes.{observed_at_column}"
+                ") AS __next_change_at, __hard_delete_candidates.__hard_deleted_at "
+                "FROM __changes LEFT JOIN __hard_delete_candidates "
+                f"ON {hard_delete_join_condition} "
+                f"AND __hard_delete_candidates.{observed_at_column} = "
+                f"__changes.{observed_at_column}"
+                ") "
+                f"SELECT {output_select_sql}, {observed_at_column} AS {valid_from_column}, "
+                "CASE "
+                "WHEN __next_change_at IS NULL THEN __hard_deleted_at "
+                "WHEN __hard_deleted_at IS NULL THEN __next_change_at "
+                "WHEN __hard_deleted_at < __next_change_at THEN __hard_deleted_at "
+                f"ELSE __next_change_at END AS {valid_to_column} "
+                "FROM __versions"
+            )
         return (
             "WITH __ordered AS ("
             f"SELECT *, LAG({observed_at_column}) OVER ("
@@ -1698,6 +1760,61 @@ class SnowflakeAdapter(BaseAdapter):
     ) -> str:
         partition_sql: str = ", ".join(unique_key)
         output_select_sql: str = ", ".join(column for column in output_columns)
+        if invalidate_hard_deletes:
+            hard_delete_join_condition: str = cls._snapshot_key_condition(
+                left_alias="__hard_delete_candidates",
+                right_alias="__changes",
+                unique_key=unique_key,
+            )
+            hard_delete_key_sql: str = ", ".join(f"__changes.{column}" for column in unique_key)
+            hard_delete_group_sql: str = ", ".join(
+                [
+                    *(f"__changes.{column}" for column in unique_key),
+                    f"__changes.{observed_at_column}",
+                ]
+            )
+            present_condition: str = cls._snapshot_key_condition(
+                left_alias="__present", right_alias="__changes", unique_key=unique_key
+            )
+            return (
+                "WITH __ordered AS ("
+                f"SELECT *, LAG({updated_at_column}) OVER ("
+                f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
+                f") AS __prev_updated_at FROM {source}"
+                "), __changes AS ("
+                f"SELECT * FROM __ordered WHERE __prev_updated_at IS NULL "
+                f"OR {updated_at_column} IS DISTINCT FROM __prev_updated_at"
+                "), __observed_groups AS ("
+                f"SELECT DISTINCT {observed_at_column} AS __observed_at FROM {source}"
+                "), __hard_delete_candidates AS ("
+                f"SELECT {hard_delete_key_sql}, __changes.{observed_at_column}, "
+                "MIN(__observed_groups.__observed_at) AS __hard_deleted_at "
+                "FROM __changes "
+                "JOIN __observed_groups "
+                f"ON __observed_groups.__observed_at > __changes.{observed_at_column} "
+                f"LEFT JOIN {source} AS __present "
+                f"ON __present.{observed_at_column} = __observed_groups.__observed_at "
+                f"AND {present_condition} "
+                f"WHERE __present.{unique_key[0]} IS NULL "
+                f"GROUP BY {hard_delete_group_sql}"
+                "), __versions AS ("
+                f"SELECT __changes.*, LEAD(__changes.{updated_at_column}) OVER ("
+                f"PARTITION BY {', '.join(f'__changes.{column}' for column in unique_key)} "
+                f"ORDER BY __changes.{updated_at_column}"
+                ") AS __next_change_at, __hard_delete_candidates.__hard_deleted_at "
+                "FROM __changes LEFT JOIN __hard_delete_candidates "
+                f"ON {hard_delete_join_condition} "
+                f"AND __hard_delete_candidates.{observed_at_column} = "
+                f"__changes.{observed_at_column}"
+                ") "
+                f"SELECT {output_select_sql}, {updated_at_column} AS {valid_from_column}, "
+                "CASE "
+                "WHEN __next_change_at IS NULL THEN __hard_deleted_at "
+                "WHEN __hard_deleted_at IS NULL THEN __next_change_at "
+                "WHEN __hard_deleted_at < __next_change_at THEN __hard_deleted_at "
+                f"ELSE __next_change_at END AS {valid_to_column} "
+                "FROM __versions"
+            )
         return (
             "WITH __ordered AS ("
             f"SELECT *, LAG({updated_at_column}) OVER ("
@@ -1731,6 +1848,39 @@ class SnowflakeAdapter(BaseAdapter):
             left_alias="__delta_changes", right_alias="__latest", unique_key=unique_key
         )
         first_key: str = unique_key[0]
+        if invalidate_hard_deletes:
+            latest_join_condition: str = cls._snapshot_key_condition(
+                left_alias="__delta_changes", right_alias="__latest", unique_key=unique_key
+            )
+            hard_deleted_at_sql: str = cls._historical_hard_deleted_at_sql(
+                source=source,
+                unique_key=unique_key,
+                observed_at_column=observed_at_column,
+                row_alias="__target",
+            )
+            return (
+                "__ordered AS ("
+                f"SELECT *, LAG({updated_at_column}) OVER ("
+                f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
+                f") AS __prev_updated_at FROM {source}"
+                "), __delta_changes AS ("
+                f"SELECT * FROM __ordered WHERE __prev_updated_at IS NULL "
+                f"OR {updated_at_column} IS DISTINCT FROM __prev_updated_at"
+                "), __latest AS ("
+                f"SELECT * FROM {target} QUALIFY ROW_NUMBER() OVER ("
+                f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
+                ") = 1"
+                "), __new_changes AS ("
+                "SELECT __delta_changes.* FROM __delta_changes "
+                f"LEFT JOIN __latest ON {latest_join_condition} "
+                f"WHERE __latest.{first_key} IS NULL "
+                f"OR __delta_changes.{updated_at_column} > __latest.{valid_from_column}"
+                "), __hard_deletes AS ("
+                f"SELECT {', '.join(f'__target.{column}' for column in unique_key)}, "
+                f"{hard_deleted_at_sql} AS __close_at FROM {target} AS __target "
+                f"WHERE __target.{valid_to_column} IS NULL"
+                ")"
+            )
         return (
             "__ordered AS ("
             f"SELECT *, LAG({updated_at_column}) OVER ("
@@ -1835,6 +1985,43 @@ class SnowflakeAdapter(BaseAdapter):
             "SELECT * FROM __ordered WHERE __prev_observed_at IS NULL "
             f"OR ({delta_change_condition})"
         )
+        if invalidate_hard_deletes:
+            latest_join_condition: str = cls._snapshot_key_condition(
+                left_alias="__delta_changes", right_alias="__latest", unique_key=unique_key
+            )
+            latest_change_condition: str = " OR ".join(
+                f"__delta_changes.{column} IS DISTINCT FROM __latest.{column}"
+                for column in check_columns
+            )
+            hard_deleted_at_sql: str = cls._historical_hard_deleted_at_sql(
+                source=source,
+                unique_key=unique_key,
+                observed_at_column=observed_at_column,
+                row_alias="__target",
+            )
+            return (
+                "__ordered AS ("
+                f"SELECT *, LAG({observed_at_column}) OVER ("
+                f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
+                f") AS __prev_observed_at{previous_columns_sql} FROM {source}"
+                "), __delta_changes AS ("
+                f"{changed_or_first_sql}"
+                "), __latest AS ("
+                f"SELECT * FROM {target} QUALIFY ROW_NUMBER() OVER ("
+                f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
+                ") = 1"
+                "), __new_changes AS ("
+                "SELECT __delta_changes.* FROM __delta_changes "
+                f"LEFT JOIN __latest ON {latest_join_condition} "
+                f"WHERE __latest.{first_key} IS NULL "
+                f"OR (__delta_changes.{observed_at_column} > __latest.{valid_from_column} "
+                f"AND ({latest_change_condition}))"
+                "), __hard_deletes AS ("
+                f"SELECT {', '.join(f'__target.{column}' for column in unique_key)}, "
+                f"{hard_deleted_at_sql} AS __close_at FROM {target} AS __target "
+                f"WHERE __target.{valid_to_column} IS NULL"
+                ")"
+            )
         return (
             "__ordered AS ("
             f"SELECT *, LAG({observed_at_column}) OVER ("
@@ -1865,6 +2052,25 @@ class SnowflakeAdapter(BaseAdapter):
         )
 
     @classmethod
+    def _historical_hard_deleted_at_sql(
+        cls, *, source: str, unique_key: tuple[str, ...], observed_at_column: str, row_alias: str
+    ) -> str:
+        present_condition: str = cls._snapshot_key_condition(
+            left_alias="__present", right_alias=row_alias, unique_key=unique_key
+        )
+        return (
+            "(SELECT MIN(__observed_groups.__observed_at) "
+            f"FROM (SELECT DISTINCT {observed_at_column} AS __observed_at FROM {source}) "
+            "AS __observed_groups "
+            f"WHERE __observed_groups.__observed_at > {row_alias}.{observed_at_column} "
+            "AND NOT EXISTS ("
+            f"SELECT 1 FROM {source} AS __present "
+            f"WHERE __present.{observed_at_column} = __observed_groups.__observed_at "
+            f"AND {present_condition}"
+            "))"
+        )
+
+    @classmethod
     def _historical_snapshot_combined_close_sql(
         cls,
         *,
@@ -1881,7 +2087,10 @@ class SnowflakeAdapter(BaseAdapter):
         candidate_key_sql: str = ", ".join(unique_key)
         return (
             f"WITH {new_changes_sql}, __close_candidates AS ("
-            f"SELECT {candidate_key_sql}, {change_time_column} AS __close_at FROM __new_changes"
+            f"SELECT {candidate_key_sql}, {change_time_column} AS __close_at FROM __new_changes "
+            "UNION ALL "
+            f"SELECT {candidate_key_sql}, __close_at FROM __hard_deletes "
+            "WHERE __close_at IS NOT NULL"
             ") "
             f"UPDATE {target} AS __target "
             f"SET {valid_to_column} = (SELECT MIN(__close_candidates.__close_at) "

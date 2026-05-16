@@ -77,3 +77,13 @@ class BigQueryScenarioRemoteE2ETestCase:
     expected_stdout_fragments: tuple[str, ...]
     expected_retained_suffix_counts: dict[str, int]
     expected_row_counts_by_suffix: dict[str, int]
+
+
+@dataclass(frozen=True)
+class BigQuerySnapshotE2ETestCase:
+    description: str
+    expected_current_rows_after_initial_build: tuple[tuple[object, ...], ...]
+    expected_current_rows_after_recovery: tuple[tuple[object, ...], ...]
+    expected_historical_timestamp_rows: tuple[tuple[object, ...], ...]
+    expected_historical_check_rows: tuple[tuple[object, ...], ...]
+    expected_failure_fragments: tuple[str, ...]

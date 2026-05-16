@@ -10,7 +10,10 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.integrations.databricks.client import DatabricksAdapter
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_waffle_shop
+from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    prepare_waffle_shop,
+    stringify_warehouse_rows,
+)
 from tests.integration.src.sqlbuild.integrations.databricks.helpers import (
     build_databricks_connection_config,
     build_unique_schema_name,
@@ -265,4 +268,64 @@ def write_local_environment_override(
     (project_dir / "sqlbuild_local.toml").write_text(
         build_databricks_local_config(environment=environment, schema_name=schema_name),
         encoding="utf-8",
+    )
+
+
+def assert_current_databricks_snapshot_rows(
+    *, schema_name: str, expected_rows: tuple[tuple[object, ...], ...]
+) -> None:
+    """Assert current snapshot rows for Databricks real-warehouse e2e tests."""
+
+    rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+        schema_name=schema_name,
+        sql=(
+            "SELECT customer_id, region_id, plan, CAST(effective_from AS DATE), "
+            "CAST(effective_to AS DATE) "
+            f"FROM {relation_name(schema_name=schema_name, name='current_customer_snapshot')} "
+            "ORDER BY customer_id, region_id, effective_from"
+        ),
+    )
+    assert stringify_warehouse_rows(rows) == expected_rows
+
+
+def assert_databricks_snapshot_matrix_rows(
+    *,
+    schema_name: str,
+    expected_current_rows: tuple[tuple[object, ...], ...],
+    expected_historical_timestamp_rows: tuple[tuple[object, ...], ...],
+    expected_historical_check_rows: tuple[tuple[object, ...], ...],
+) -> None:
+    """Assert all compact snapshot matrix rows for Databricks."""
+
+    assert_current_databricks_snapshot_rows(
+        schema_name=schema_name,
+        expected_rows=expected_current_rows,
+    )
+    historical_timestamp_rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+        schema_name=schema_name,
+        sql=(
+            "SELECT customer_id, plan, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
+            f"FROM {relation_name(schema_name=schema_name, name='historical_customer_snapshot')} "
+            "ORDER BY customer_id, valid_from"
+        ),
+    )
+    historical_check_rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+        schema_name=schema_name,
+        sql=(
+            "SELECT customer_id, status, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
+            f"FROM {relation_name(schema_name=schema_name, name='historical_membership_snapshot')} "
+            "ORDER BY customer_id, valid_from"
+        ),
+    )
+    actual_historical_timestamp_rows: tuple[tuple[object, ...], ...] = stringify_warehouse_rows(
+        historical_timestamp_rows
+    )
+    actual_historical_check_rows: tuple[tuple[object, ...], ...] = stringify_warehouse_rows(
+        historical_check_rows
+    )
+    assert actual_historical_timestamp_rows == expected_historical_timestamp_rows, (
+        actual_historical_timestamp_rows
+    )
+    assert actual_historical_check_rows == expected_historical_check_rows, (
+        actual_historical_check_rows
     )

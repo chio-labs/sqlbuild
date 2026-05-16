@@ -200,3 +200,101 @@ def assert_snapshot_scd2_invariants(
     assert duplicate_valid_from_rows == [(0,)]
     assert invalid_interval_rows == [(0,)]
     assert overlapping_rows == [(0,)]
+
+
+def build_real_warehouse_snapshot_project_files(*, project_toml: str) -> dict[str, str]:
+    """Build a compact real-warehouse project covering snapshot execution paths."""
+
+    return {
+        "sqlbuild_project.toml": project_toml,
+        "models/current_customers.sql": build_current_customers_model_sql(plan="basic"),
+        "models/current_customer_snapshot.sql": (
+            "MODEL (\n"
+            "  materialized snapshot,\n"
+            "  unique_key [customer_id, region_id],\n"
+            "  snapshot_strategy timestamp,\n"
+            "  updated_at updated_at,\n"
+            "  valid_from_column effective_from,\n"
+            "  valid_to_column effective_to,\n"
+            "  audits [\n"
+            "    expression_is_true (\n"
+            '      name "plan is allowed",\n'
+            "      expression \"plan <> 'blocked'\",\n"
+            "    ),\n"
+            "  ],\n"
+            ");\n\n"
+            "SELECT customer_id, region_id, plan, updated_at\n"
+            'FROM __ref("current_customers")\n'
+        ),
+        "models/historical_customer_extracts.sql": (
+            "MODEL (materialized table);\n\n"
+            "SELECT 1 AS customer_id, 'basic' AS plan, "
+            "CAST('2026-01-01 00:00:00' AS TIMESTAMP) AS updated_at, "
+            "CAST('2026-01-02 00:00:00' AS TIMESTAMP) AS observed_at\n"
+            "UNION ALL SELECT 1 AS customer_id, 'pro' AS plan, "
+            "CAST('2026-01-03 00:00:00' AS TIMESTAMP) AS updated_at, "
+            "CAST('2026-01-04 00:00:00' AS TIMESTAMP) AS observed_at\n"
+            "UNION ALL SELECT 2 AS customer_id, 'trial' AS plan, "
+            "CAST('2026-01-02 00:00:00' AS TIMESTAMP) AS updated_at, "
+            "CAST('2026-01-04 00:00:00' AS TIMESTAMP) AS observed_at\n"
+        ),
+        "models/historical_customer_snapshot.sql": (
+            "MODEL (\n"
+            "  materialized snapshot,\n"
+            "  unique_key [customer_id],\n"
+            "  snapshot_strategy timestamp,\n"
+            "  updated_at updated_at,\n"
+            "  observed_at observed_at,\n"
+            "  historical_input snapshot\n"
+            ");\n\n"
+            "SELECT customer_id, plan, updated_at, observed_at\n"
+            'FROM __ref("historical_customer_extracts")\n'
+        ),
+        "models/historical_membership_daily.sql": (
+            "MODEL (materialized table);\n\n"
+            "SELECT 1 AS customer_id, 'active' AS status, "
+            "CAST('2026-01-01 00:00:00' AS TIMESTAMP) AS observed_at\n"
+            "UNION ALL SELECT 2 AS customer_id, 'active' AS status, "
+            "CAST('2026-01-01 00:00:00' AS TIMESTAMP) AS observed_at\n"
+            "UNION ALL SELECT 1 AS customer_id, 'active' AS status, "
+            "CAST('2026-01-02 00:00:00' AS TIMESTAMP) AS observed_at\n"
+            "UNION ALL SELECT 1 AS customer_id, 'paused' AS status, "
+            "CAST('2026-01-03 00:00:00' AS TIMESTAMP) AS observed_at\n"
+            "UNION ALL SELECT 2 AS customer_id, 'active' AS status, "
+            "CAST('2026-01-03 00:00:00' AS TIMESTAMP) AS observed_at\n"
+        ),
+        "models/historical_membership_snapshot.sql": (
+            "MODEL (\n"
+            "  materialized snapshot,\n"
+            "  unique_key [customer_id],\n"
+            "  snapshot_strategy check,\n"
+            "  check_columns [status],\n"
+            "  observed_at observed_at,\n"
+            "  historical_input snapshot,\n"
+            "  invalidate_hard_deletes true\n"
+            ");\n\n"
+            "SELECT customer_id, status, observed_at\n"
+            'FROM __ref("historical_membership_daily")\n'
+        ),
+        "audits/generic/expression_is_true.sql": (
+            'AUDIT ();\n\nSELECT * FROM __ref("@model") WHERE NOT (@expression)\n'
+        ),
+    }
+
+
+def build_current_customers_model_sql(*, plan: str, updated_at: str = "2026-01-01 00:00:00") -> str:
+    """Build the mutable current-state model for real-warehouse snapshot tests."""
+
+    return (
+        "MODEL (materialized table);\n\n"
+        "SELECT 1 AS customer_id, 10 AS region_id, "
+        f"'{plan}' AS plan, CAST('{updated_at}' AS TIMESTAMP) AS updated_at\n"
+    )
+
+
+def stringify_warehouse_rows(
+    rows: tuple[tuple[object, ...], ...],
+) -> tuple[tuple[object, ...], ...]:
+    """Normalize warehouse driver scalar differences for stable e2e assertions."""
+
+    return tuple(tuple(None if value is None else str(value) for value in row) for row in rows)
