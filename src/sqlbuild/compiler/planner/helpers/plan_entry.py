@@ -202,6 +202,11 @@ def plan_model(
     incremental_strategy: str | None = _get_config_str(model, "incremental_strategy")
     incremental_mode: str | None = _get_config_str(model, "incremental_mode")
     batch_size: str | None = _get_config_str(model, "batch_size")
+    snapshot_strategy: str | None = _get_config_str(model, "snapshot_strategy")
+    updated_at_column: str | None = _get_config_str(model, "updated_at")
+    observed_at_column: str | None = _get_config_str(model, "observed_at")
+    valid_from_column: str | None = _get_config_str(model, "valid_from_column")
+    valid_to_column: str | None = _get_config_str(model, "valid_to_column")
 
     microbatch_range: CursorBounds | None = _compute_microbatch_range(
         model=model,
@@ -268,6 +273,11 @@ def plan_model(
         batch_size=batch_size,
         microbatch_range=microbatch_range,
         unique_key=unique_key,
+        snapshot_strategy=snapshot_strategy,
+        updated_at_column=updated_at_column,
+        observed_at_column=observed_at_column,
+        valid_from_column=valid_from_column,
+        valid_to_column=valid_to_column,
         on_schema_change=on_schema_change,
         type_enforcement=type_enforcement,
         declared_columns=declared_columns,
