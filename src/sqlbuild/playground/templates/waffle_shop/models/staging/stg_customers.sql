@@ -14,4 +14,4 @@ SELECT
   last_name,
   email,
   created_at
-FROM __source("raw_customers")
+FROM __source("raw__customers")

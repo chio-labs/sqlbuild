@@ -5,7 +5,7 @@ MODEL (
   columns (
     payment_id (audits [not_null, unique]),
     order_id (
-      audits [not_null, relationships (to __source("raw_orders"), field id)],
+      audits [not_null, relationships (to __source("raw__orders"), field id)],
     ),
   ),
 );
@@ -17,4 +17,4 @@ SELECT
   payment_method,
   paid_at,
   status AS payment_status
-FROM __source("raw_payments")
+FROM __source("raw__payments")

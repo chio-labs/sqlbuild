@@ -19,6 +19,7 @@ from sqlbuild.cli.commands.main.helpers.entry.errors import (
 )
 from sqlbuild.cli.commands.main.helpers.entry.models import CliEntrypointHandlers, CliNamespace
 from sqlbuild.cli.commands.main.helpers.lineage.constants import COLUMN_LINEAGE_MODE_VALUES
+from sqlbuild.cli.commands.main.helpers.playground.constants import PLAYGROUND_TEMPLATE_VALUES
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.parsers import (
     add_cursor_override_args,
@@ -206,6 +207,12 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
         nargs="?",
         default="sqlbuild-playground",
         metavar="path",
+    )
+    playground_parser.add_argument(
+        "--template",
+        dest="playground_template",
+        choices=PLAYGROUND_TEMPLATE_VALUES,
+        default="waffle_shop",
     )
     scenario_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.SCENARIO)
     scenario_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
@@ -572,7 +579,9 @@ def _main_with_dependencies(
                 args.retention_days,
             )
         if args.command == CliCommand.PLAYGROUND:
-            return handlers.run_playground(project_dir, args.playground_path)
+            return handlers.run_playground(
+                project_dir, args.playground_path, args.playground_template
+            )
         if args.command == CliCommand.SKILLS:
             if args.skills_command == "update":
                 return handlers.run_skills_update(

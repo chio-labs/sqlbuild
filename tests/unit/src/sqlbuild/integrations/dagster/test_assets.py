@@ -54,6 +54,7 @@ dg: Any = pytest.importorskip("dagster")
                 (("analytics", "customers"), frozenset({"sqlbuild", "view"})),
                 (("analytics", "orders"), frozenset({"sqlbuild", "table"})),
             ),
+            expected_group_names=("dagster_project",),
         )
     ],
     ids=["builds materializable specs and check specs from dag artifact"],
@@ -80,6 +81,7 @@ def test_given_sqlbuild_dag_when_building_specs_then_maps_assets_deps_and_checks
     assert {tuple(spec.key.path): frozenset(spec.kinds) for spec in asset_specs} == dict(
         test_case.expected_kinds_by_asset_key
     )
+    assert tuple(sorted({spec.group_name for spec in asset_specs})) == test_case.expected_group_names
 
 
 @pytest.mark.parametrize(
