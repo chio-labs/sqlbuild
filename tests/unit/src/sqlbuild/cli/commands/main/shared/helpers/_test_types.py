@@ -4,6 +4,8 @@ from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.spec.models.project import SnapshotsConfig
 
 
 @dataclass(frozen=True)
@@ -46,6 +48,15 @@ class BuildFooterTestCase:
 class BuildProgressFailureOutputTestCase:
     description: str
     node_result: object
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class BuildProgressModelOutputTestCase:
+    description: str
+    node_result: ModelExecutionResult
+    plan_output: PlanOutput
     expected_fragments: tuple[str, ...]
     unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
 
@@ -129,3 +140,16 @@ class ResolveConnectionConfigWarningTestCase:
     adapter_name: str
     expected_connection: dict[str, object]
     expected_warning: str
+
+
+@dataclass(frozen=True)
+class SnapshotFullRefreshPolicyTestCase:
+    description: str
+    plan_output: PlanOutput
+    snapshots_config: SnapshotsConfig
+    allow_snapshot_full_refresh: bool
+    expected_error_fragment: str | None = None
+    expected_help_fragment: str = ""
+    expected_output: str = ""
+    input_text: str = ""
+    input_is_tty: bool = False

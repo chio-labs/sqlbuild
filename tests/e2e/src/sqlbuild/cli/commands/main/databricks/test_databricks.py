@@ -13,10 +13,16 @@ from tests.e2e.src.sqlbuild.cli.commands.main.databricks._test_types import (
     DatabricksErrorE2ETestCase,
     DatabricksScenarioLocalReplayE2ETestCase,
     DatabricksScenarioRemoteE2ETestCase,
+    DatabricksSnapshotApplyE2ETestCase,
+    DatabricksSnapshotE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.databricks.helpers import (
+    assert_current_databricks_snapshot_rows,
+    assert_databricks_snapshot_apply_rows,
+    assert_databricks_snapshot_matrix_rows,
     build_databricks_project_toml,
     cleanup_databricks_schema,
+    databricks_e2e_timing,
     databricks_relation_row_count,
     ensure_databricks_schema_ready,
     execute_databricks_sql,
@@ -35,6 +41,13 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     maybe_corrupt_scenario_snapshot_dialect,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    build_current_check_customers_model_sql,
+    build_current_customers_model_sql,
+    build_current_delete_customers_model_sql,
+    build_historical_check_daily_model_sql,
+    build_historical_timestamp_extracts_model_sql,
+    build_real_warehouse_existing_snapshot_project_files,
+    build_real_warehouse_snapshot_project_files,
     prepare_inline_project,
     run_sqb,
 )
@@ -206,6 +219,91 @@ def test_given_databricks_local_config_when_running_query_then_outputs_expected_
 
 @pytest.mark.parametrize(
     "test_case",
+    [
+        DatabricksSnapshotApplyE2ETestCase(
+            description="applies existing-target snapshot changes on databricks",
+            expected_current_check_rows=(
+                ("1", "active", "False"),
+                ("1", "paused", "True"),
+                ("2", "active", "True"),
+            ),
+            expected_current_delete_rows=(
+                ("1", "basic", "False"),
+                ("1", "pro", "True"),
+                ("2", "trial", "False"),
+            ),
+            expected_historical_timestamp_rows=(
+                ("1", "basic", "2026-01-01", "2026-01-03"),
+                ("1", "pro", "2026-01-03", None),
+                ("2", "trial", "2026-01-01", "2026-01-04"),
+            ),
+            expected_historical_check_rows=(
+                ("1", "active", "2026-01-01", "2026-01-03"),
+                ("1", "paused", "2026-01-03", None),
+                ("2", "active", "2026-01-01", "2026-01-02"),
+                ("2", "active", "2026-01-03", None),
+            ),
+        )
+    ],
+    ids=["applies existing-target snapshot changes on databricks"],
+)
+def test_given_existing_snapshot_targets_when_building_on_databricks_then_apply_sql_succeeds(
+    tmp_path: Path,
+    test_case: DatabricksSnapshotApplyE2ETestCase,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_snapshot_apply")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="databricks_snapshot_apply_project",
+        repo_files=build_real_warehouse_existing_snapshot_project_files(
+            project_toml=build_databricks_project_toml(
+                project_name="databricks_snapshot_apply_project",
+                schema_name=schema_name,
+            ),
+        ),
+    )
+    ensure_databricks_schema_ready(schema_name=schema_name)
+
+    try:
+        with databricks_e2e_timing("snapshot apply initial build"):
+            initial_result: subprocess.CompletedProcess[str] = run_sqb(
+                command=("--no-color", "build", "--concurrency", "4"),
+                project_dir=project_dir,
+            )
+        assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
+
+        (project_dir / "models" / "current_check_customers.sql").write_text(
+            build_current_check_customers_model_sql(changed=True), encoding="utf-8"
+        )
+        (project_dir / "models" / "current_delete_customers.sql").write_text(
+            build_current_delete_customers_model_sql(changed=True), encoding="utf-8"
+        )
+        (project_dir / "models" / "historical_timestamp_extracts.sql").write_text(
+            build_historical_timestamp_extracts_model_sql(changed=True), encoding="utf-8"
+        )
+        (project_dir / "models" / "historical_check_daily.sql").write_text(
+            build_historical_check_daily_model_sql(changed=True), encoding="utf-8"
+        )
+
+        with databricks_e2e_timing("snapshot apply update build"):
+            apply_result: subprocess.CompletedProcess[str] = run_sqb(
+                command=("--no-color", "build", "--concurrency", "4"),
+                project_dir=project_dir,
+            )
+        assert apply_result.returncode == 0, apply_result.stdout + apply_result.stderr
+        assert_databricks_snapshot_apply_rows(
+            schema_name=schema_name,
+            expected_current_check_rows=test_case.expected_current_check_rows,
+            expected_current_delete_rows=test_case.expected_current_delete_rows,
+            expected_historical_timestamp_rows=test_case.expected_historical_timestamp_rows,
+            expected_historical_check_rows=test_case.expected_historical_check_rows,
+        )
+    finally:
+        cleanup_databricks_schema(schema_name=schema_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
     DATABRICKS_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES,
     ids=[case.description for case in DATABRICKS_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES],
 )
@@ -262,6 +360,116 @@ def test_given_databricks_scenario_capture_when_replaying_locally_then_transpila
             scenario_name=test_case.scenario_name,
             local_rows_sql=test_case.local_rows_sql,
             expected_local_rows=test_case.expected_local_rows,
+        )
+    finally:
+        cleanup_databricks_schema(schema_name=schema_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksSnapshotE2ETestCase(
+            description="executes snapshot scd2 matrix on databricks",
+            expected_current_rows_after_initial_build=(("1", "10", "basic", "2026-01-01", None),),
+            expected_current_rows_after_recovery=(
+                ("1", "10", "basic", "2026-01-01", "2026-01-02"),
+                ("1", "10", "pro", "2026-01-02", None),
+            ),
+            expected_historical_timestamp_rows=(
+                ("1", "basic", "2026-01-01", "2026-01-03"),
+                ("1", "pro", "2026-01-03", None),
+                ("2", "trial", "2026-01-02", None),
+            ),
+            expected_historical_check_rows=(
+                ("1", "active", "2026-01-01", "2026-01-03"),
+                ("1", "paused", "2026-01-03", None),
+                ("2", "active", "2026-01-01", "2026-01-02"),
+                ("2", "active", "2026-01-03", None),
+            ),
+            expected_failure_fragments=(
+                "current_customer_snapshot",
+                "delta audit for 'current_customer_snapshot' failed before target update",
+            ),
+        )
+    ],
+    ids=["executes snapshot scd2 matrix on databricks"],
+)
+def test_given_snapshot_project_when_building_on_databricks_then_scd2_history_is_valid(
+    tmp_path: Path,
+    test_case: DatabricksSnapshotE2ETestCase,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_snapshot")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="databricks_snapshot_project",
+        repo_files=build_real_warehouse_snapshot_project_files(
+            project_toml=build_databricks_project_toml(
+                project_name="databricks_snapshot_project",
+                schema_name=schema_name,
+            ),
+        ),
+    )
+    ensure_databricks_schema_ready(schema_name=schema_name)
+
+    try:
+        with databricks_e2e_timing("snapshot initial build"):
+            initial_result: subprocess.CompletedProcess[str] = run_sqb(
+                command=("--no-color", "build", "--concurrency", "4"),
+                project_dir=project_dir,
+            )
+        assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
+        assert_databricks_snapshot_matrix_rows(
+            schema_name=schema_name,
+            expected_current_rows=test_case.expected_current_rows_after_initial_build,
+            expected_historical_timestamp_rows=test_case.expected_historical_timestamp_rows,
+            expected_historical_check_rows=test_case.expected_historical_check_rows,
+        )
+
+        (project_dir / "models" / "current_customers.sql").write_text(
+            build_current_customers_model_sql(plan="blocked", updated_at="2026-01-02 00:00:00"),
+            encoding="utf-8",
+        )
+        with databricks_e2e_timing("snapshot delta audit failure build"):
+            failure_result: subprocess.CompletedProcess[str] = run_sqb(
+                command=(
+                    "--no-color",
+                    "build",
+                    "--concurrency",
+                    "4",
+                    "--select",
+                    "+current_customer_snapshot",
+                ),
+                project_dir=project_dir,
+            )
+        assert failure_result.returncode == 1, failure_result.stdout + failure_result.stderr
+        fragment: str
+        for fragment in test_case.expected_failure_fragments:
+            assert fragment in failure_result.stdout + failure_result.stderr
+        assert_current_databricks_snapshot_rows(
+            schema_name=schema_name,
+            expected_rows=test_case.expected_current_rows_after_initial_build,
+        )
+
+        (project_dir / "models" / "current_customers.sql").write_text(
+            build_current_customers_model_sql(plan="pro", updated_at="2026-01-02 00:00:00"),
+            encoding="utf-8",
+        )
+        with databricks_e2e_timing("snapshot recovery build"):
+            recovery_result: subprocess.CompletedProcess[str] = run_sqb(
+                command=(
+                    "--no-color",
+                    "build",
+                    "--concurrency",
+                    "4",
+                    "--select",
+                    "+current_customer_snapshot",
+                ),
+                project_dir=project_dir,
+            )
+        assert recovery_result.returncode == 0, recovery_result.stdout + recovery_result.stderr
+        assert_current_databricks_snapshot_rows(
+            schema_name=schema_name,
+            expected_rows=test_case.expected_current_rows_after_recovery,
         )
     finally:
         cleanup_databricks_schema(schema_name=schema_name)
@@ -379,57 +587,61 @@ def test_given_waffle_shop_when_running_full_build_on_databricks_then_expected_v
 ) -> None:
     project_dir: Path
     schema_name: str
-    project_dir, schema_name = prepare_databricks_waffle_shop(tmp_path=tmp_path)
+    with databricks_e2e_timing("prepare waffle shop fixture"):
+        project_dir, schema_name = prepare_databricks_waffle_shop(tmp_path=tmp_path)
 
     try:
-        result: subprocess.CompletedProcess[str] = run_sqb(
-            command=test_case.command,
-            project_dir=project_dir,
-        )
+        with databricks_e2e_timing("sqb build"):
+            result: subprocess.CompletedProcess[str] = run_sqb(
+                command=test_case.command,
+                project_dir=project_dir,
+            )
 
         assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
         fragment: str
         for fragment in test_case.expected_stdout_fragments:
             assert fragment in result.stdout
-        rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
-            schema_name=schema_name,
-            sql=(
-                "SELECT COUNT(*) FROM "
-                f"{relation_name(schema_name=schema_name, name=test_case.expected_table_name)}"
-            ),
-        )
-        assert rows[0][0] == test_case.expected_row_count
-        fact_order_rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
-            schema_name=schema_name,
-            sql=(
-                "SELECT order_id, waffle_name, waffle_category, line_total_cents, "
-                "order_status, payment_status FROM "
-                f"{relation_name(schema_name=schema_name, name='fact_orders')} "
-                "WHERE order_id IN (1, 3, 10) ORDER BY order_id"
-            ),
-        )
-        assert fact_order_rows == test_case.expected_fact_order_rows
-        udf_rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
-            schema_name=schema_name,
-            sql=(
-                "SELECT order_id, is_completed_order, is_completed_order_py FROM "
-                f"{relation_name(schema_name=schema_name, name='fact_orders')} "
-                "WHERE order_id IN (1, 10) ORDER BY order_id"
-            ),
-        )
-        assert udf_rows == test_case.expected_udf_rows
-        daily_revenue_rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
-            schema_name=schema_name,
-            sql=(
-                "SELECT CAST(revenue_date AS STRING), order_count, waffles_sold, "
-                "total_revenue_cents FROM "
-                f"{relation_name(schema_name=schema_name, name='daily_revenue')} "
-                "ORDER BY revenue_date"
-            ),
-        )
-        assert daily_revenue_rows == test_case.expected_daily_revenue_rows
+        with databricks_e2e_timing("post-build verification queries"):
+            rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+                schema_name=schema_name,
+                sql=(
+                    "SELECT COUNT(*) FROM "
+                    f"{relation_name(schema_name=schema_name, name=test_case.expected_table_name)}"
+                ),
+            )
+            assert rows[0][0] == test_case.expected_row_count
+            fact_order_rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+                schema_name=schema_name,
+                sql=(
+                    "SELECT order_id, waffle_name, waffle_category, line_total_cents, "
+                    "order_status, payment_status FROM "
+                    f"{relation_name(schema_name=schema_name, name='fact_orders')} "
+                    "WHERE order_id IN (1, 3, 10) ORDER BY order_id"
+                ),
+            )
+            assert fact_order_rows == test_case.expected_fact_order_rows
+            udf_rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+                schema_name=schema_name,
+                sql=(
+                    "SELECT order_id, is_completed_order, is_completed_order_py FROM "
+                    f"{relation_name(schema_name=schema_name, name='fact_orders')} "
+                    "WHERE order_id IN (1, 10) ORDER BY order_id"
+                ),
+            )
+            assert udf_rows == test_case.expected_udf_rows
+            daily_revenue_rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+                schema_name=schema_name,
+                sql=(
+                    "SELECT CAST(revenue_date AS STRING), order_count, waffles_sold, "
+                    "total_revenue_cents FROM "
+                    f"{relation_name(schema_name=schema_name, name='daily_revenue')} "
+                    "ORDER BY revenue_date"
+                ),
+            )
+            assert daily_revenue_rows == test_case.expected_daily_revenue_rows
     finally:
-        cleanup_databricks_schema(schema_name=schema_name)
+        with databricks_e2e_timing("cleanup schema"):
+            cleanup_databricks_schema(schema_name=schema_name)
 
 
 DATABRICKS_DIFF_E2E_TEST_CASES: list[DatabricksDiffE2ETestCase] = [

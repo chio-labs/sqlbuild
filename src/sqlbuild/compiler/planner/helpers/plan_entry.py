@@ -23,6 +23,7 @@ from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
 )
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.changes.detect import detect_model_changes
 from sqlbuild.compiler.planner.helpers.cursor_type_check import (
     check_cursor_type_consistency,
@@ -172,6 +173,11 @@ def plan_model(
             source_map=source_map,
             cursor_column=cursor_column,
         )
+    validate_source_cursor_input_columns(
+        model=model,
+        cursor_column=cursor_column,
+        source_warehouse_columns=source_warehouse_columns,
+    )
     runtime_owned_cursor_bounds: bool = _has_model_backed_cursor_inputs(cursor_input_relations)
     cursor_bounds: CursorBounds | None = _compute_plan_cursor_bounds(
         model=model,
@@ -196,6 +202,17 @@ def plan_model(
     incremental_strategy: str | None = _get_config_str(model, "incremental_strategy")
     incremental_mode: str | None = _get_config_str(model, "incremental_mode")
     batch_size: str | None = _get_config_str(model, "batch_size")
+    snapshot_strategy: str | None = _get_config_str(model, "snapshot_strategy")
+    updated_at_column: str | None = _get_config_str(model, "updated_at")
+    check_columns: tuple[str, ...] = _get_check_columns(model)
+    observed_at_column: str | None = _get_config_str(model, "observed_at")
+    historical_input: str | None = _get_config_str(model, "historical_input")
+    valid_from_column: str | None = _get_config_str(model, "valid_from_column")
+    valid_to_column: str | None = _get_config_str(model, "valid_to_column")
+    initial_valid_from: str | None = _get_config_str(model, "initial_valid_from")
+    invalidate_hard_deletes: bool = _get_config_bool(model, "invalidate_hard_deletes")
+    snapshot_full_refresh: str | None = _get_config_str(model, "snapshot_full_refresh")
+    snapshot_schema_change: str | None = _get_config_str(model, "snapshot_schema_change")
 
     microbatch_range: CursorBounds | None = _compute_microbatch_range(
         model=model,
@@ -262,6 +279,17 @@ def plan_model(
         batch_size=batch_size,
         microbatch_range=microbatch_range,
         unique_key=unique_key,
+        snapshot_strategy=snapshot_strategy,
+        updated_at_column=updated_at_column,
+        check_columns=check_columns,
+        observed_at_column=observed_at_column,
+        historical_input=historical_input,
+        valid_from_column=valid_from_column,
+        valid_to_column=valid_to_column,
+        initial_valid_from=initial_valid_from,
+        invalidate_hard_deletes=invalidate_hard_deletes,
+        snapshot_full_refresh=snapshot_full_refresh,
+        snapshot_schema_change=snapshot_schema_change,
         on_schema_change=on_schema_change,
         type_enforcement=type_enforcement,
         declared_columns=declared_columns,
@@ -497,6 +525,17 @@ def _get_unique_key(model: CompiledModel) -> tuple[str, ...]:
     return ()
 
 
+def _get_check_columns(model: CompiledModel) -> tuple[str, ...]:
+    """Extract check_columns from model config as a normalized tuple."""
+
+    raw: object | None = model.config.values.get("check_columns")
+    if isinstance(raw, str):
+        return (raw,)
+    if isinstance(raw, list):
+        return tuple(column for column in raw if isinstance(column, str))
+    return ()
+
+
 def _compute_microbatch_range(
     *,
     model: CompiledModel,
@@ -704,6 +743,41 @@ def _build_cursor_input_relations(
     return tuple(relations)
 
 
+def validate_source_cursor_input_columns(
+    *,
+    model: CompiledModel,
+    cursor_column: str | None,
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
+) -> None:
+    """Validate cursor input columns for source references when source columns are known."""
+
+    materialized: str | None = _get_config_str(model, "materialized")
+    if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
+        return
+
+    cursor_inputs: dict[str, str] = _get_cursor_inputs(model=model, cursor_column=cursor_column)
+    ref: CompileSqlReference
+    for ref in model.references:
+        if ref.ref_kind != SqlReferenceKind.SOURCE:
+            continue
+        input_cursor_column: str | None = cursor_inputs.get(ref.ref_name)
+        if input_cursor_column is None:
+            continue
+        known_columns: tuple[ColumnInfo, ...] | None = source_warehouse_columns.get(ref.ref_name)
+        if known_columns is None:
+            continue
+        known_column_names: frozenset[str] = frozenset(col.name.lower() for col in known_columns)
+        if input_cursor_column.lower() in known_column_names:
+            continue
+        known_display: str = ", ".join(col.name for col in known_columns) or "none"
+        raise PlannerInputError(
+            f"model '{model.name}': cursor_inputs references source '{ref.ref_name}' "
+            f"column '{input_cursor_column}', but that source does not expose the column. "
+            f"Known source columns: {known_display}",
+            code="S302",
+        )
+
+
 def _has_model_backed_cursor_inputs(
     cursor_input_relations: tuple[CursorInputRelation, ...],
 ) -> bool:
@@ -790,6 +864,13 @@ def _get_config_str(model: CompiledModel, key: str) -> str | None:
 
     raw: object | None = model.config.values.get(key)
     return raw if isinstance(raw, str) else None
+
+
+def _get_config_bool(model: CompiledModel, key: str) -> bool:
+    """Extract a boolean config value from model config."""
+
+    raw: object | None = model.config.values.get(key)
+    return raw if isinstance(raw, bool) else False
 
 
 def _get_cursor_start(model: CompiledModel) -> str | None:

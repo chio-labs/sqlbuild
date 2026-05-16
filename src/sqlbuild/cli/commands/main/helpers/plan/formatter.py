@@ -18,7 +18,6 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
     IncrementalMode,
-    MaterializationType,
     PlanAction,
     PlanReason,
     SchemaChangeKind,
@@ -35,6 +34,7 @@ from sqlbuild.shared.helpers.colors import (
     yellow_bold,
 )
 from sqlbuild.shared.helpers.display import DisplayOptions, append_overflow_line, visible_entries
+from sqlbuild.shared.helpers.materialization_labels import model_materialization_label
 
 _REASON_GROUP_ORDER: tuple[PlanReason, ...] = (
     PlanReason.QUERY_CHANGED,
@@ -201,7 +201,7 @@ def _format_full_refresh(
     counts: Counter[str] = Counter()
     entry: ModelPlanEntry
     for entry in active:
-        label: str = _materialization_label(entry)
+        label: str = model_materialization_label(entry)
         counts[label] += 1
 
     lines.append(section_header_style(f"Full refresh ({len(active)})"))
@@ -285,7 +285,7 @@ def _format_routine_models_section(
         lines.append(
             _format_name_value_line(
                 entry.name,
-                _materialization_label(entry),
+                model_materialization_label(entry),
                 name_column_width=name_column_width,
             )
         )
@@ -298,35 +298,6 @@ def _format_routine_models_section(
     )
 
 
-def _materialization_label(entry: ModelPlanEntry) -> str:
-    """Build the display label for a model's materialization in aggregate counts."""
-
-    if entry.materialization_type == MaterializationType.VIEW:
-        return MaterializationType.VIEW.value
-    if entry.materialization_type == MaterializationType.TABLE:
-        return MaterializationType.TABLE.value
-    if entry.materialization_type == MaterializationType.INCREMENTAL:
-        return _incremental_label(entry)
-    if entry.materialization_type == MaterializationType.CUSTOM:
-        custom_name: str = entry.custom_materialization_name or MaterializationType.CUSTOM.value
-        return f"{custom_name} (custom)"
-    return entry.materialization_type.value
-
-
-def _incremental_label(entry: ModelPlanEntry) -> str:
-    """Build the display label for an incremental model."""
-
-    strategy: str = entry.incremental_strategy or MaterializationType.INCREMENTAL.value
-    parts: list[str] = []
-    if entry.cursor_type is not None:
-        parts.append(entry.cursor_type)
-    if entry.incremental_mode == IncrementalMode.MICROBATCH:
-        parts.append("microbatch")
-    if parts:
-        return f"{strategy} ({', '.join(parts)})"
-    return strategy
-
-
 def _format_detail_entry(
     lines: list[str],
     entry: ModelPlanEntry,
@@ -337,7 +308,7 @@ def _format_detail_entry(
     """Format a per-model entry with action text and detail lines."""
 
     if reason == PlanReason.FIRST_RUN:
-        mat_label: str = _materialization_label(entry)
+        mat_label: str = model_materialization_label(entry)
         lines.append(
             _format_name_value_line(entry.name, mat_label, name_column_width=name_column_width)
         )

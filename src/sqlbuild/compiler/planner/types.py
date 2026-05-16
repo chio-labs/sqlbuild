@@ -55,6 +55,7 @@ class PlanAction(StrEnum):
     INCREMENTAL_APPEND = "incremental_append"
     INCREMENTAL_DELETE_INSERT = "incremental_delete_insert"
     INCREMENTAL_MERGE = "incremental_merge"
+    SNAPSHOT = "snapshot"
     LOAD_SEED = "load_seed"
     SKIP = "skip"
     CUSTOM = "custom"
@@ -82,6 +83,34 @@ class IncrementalMode(StrEnum):
     MICROBATCH = "microbatch"
 
 
+class SnapshotStrategy(StrEnum):
+    TIMESTAMP = "timestamp"
+    CHECK = "check"
+
+
+class HistoricalInput(StrEnum):
+    SNAPSHOT = "snapshot"
+    CHANGES = "changes"
+
+
+class InitialValidFrom(StrEnum):
+    UPDATED_AT = "updated_at"
+    OBSERVED_AT = "observed_at"
+    EXECUTION_TIME = "execution_time"
+
+
+class SnapshotFullRefreshPolicy(StrEnum):
+    DENY = "deny"
+    REQUIRE_CONFIRMATION = "require_confirmation"
+    ALLOW = "allow"
+
+
+class SnapshotSchemaChangePolicy(StrEnum):
+    DENY = "deny"
+    REQUIRE_CONFIRMATION = "require_confirmation"
+    APPEND_NEW_COLUMNS = "append_new_columns"
+
+
 class CursorType(StrEnum):
     TIMESTAMP = "timestamp"
     INTEGER = "integer"
@@ -100,6 +129,7 @@ class MaterializationType(StrEnum):
     VIEW = "view"
     TABLE = "table"
     INCREMENTAL = "incremental"
+    SNAPSHOT = "snapshot"
     SEED = "seed"
     CUSTOM = "custom"
 

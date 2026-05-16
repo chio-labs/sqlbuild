@@ -243,6 +243,17 @@ class ModelPlanEntry:
     batch_size: str | None = None
     microbatch_range: CursorBounds | None = None
     unique_key: tuple[str, ...] = field(default_factory=tuple)
+    snapshot_strategy: str | None = None
+    updated_at_column: str | None = None
+    check_columns: tuple[str, ...] = field(default_factory=tuple)
+    observed_at_column: str | None = None
+    historical_input: str | None = None
+    valid_from_column: str | None = None
+    valid_to_column: str | None = None
+    initial_valid_from: str | None = None
+    invalidate_hard_deletes: bool = False
+    snapshot_full_refresh: str | None = None
+    snapshot_schema_change: str | None = None
     on_schema_change: OnSchemaChange | None = None
     type_enforcement: bool = False
     declared_columns: tuple[ColumnInfo, ...] = field(default_factory=tuple)

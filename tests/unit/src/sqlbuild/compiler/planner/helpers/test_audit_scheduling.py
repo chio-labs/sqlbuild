@@ -226,6 +226,12 @@ EFFECTIVE_RUN_SCOPE_TEST_CASES: list[ResolveEffectiveRunScopeTestCase] = [
         expected_effective_run_scope=AuditRunScope.DELTA_AND_FINAL,
     ),
     ResolveEffectiveRunScopeTestCase(
+        description="delta_and_final on snapshot model stays delta_and_final",
+        requested_run_scope=AuditRunScope.DELTA_AND_FINAL,
+        attached_model_materialization=MaterializationType.SNAPSHOT,
+        expected_effective_run_scope=AuditRunScope.DELTA_AND_FINAL,
+    ),
+    ResolveEffectiveRunScopeTestCase(
         description="delta_and_final on table model degrades to final",
         requested_run_scope=AuditRunScope.DELTA_AND_FINAL,
         attached_model_materialization=MaterializationType.TABLE,

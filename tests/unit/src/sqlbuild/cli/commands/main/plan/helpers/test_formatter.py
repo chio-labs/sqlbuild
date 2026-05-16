@@ -98,6 +98,47 @@ TEST_CASES: list[FormatPlanTestCase] = [
         ),
     ),
     FormatPlanTestCase(
+        description="snapshot models show strategy and historical shape labels",
+        plan_output=build_plan_output(
+            model_entries=(
+                build_model_entry(
+                    name="customer_current_snapshot",
+                    action=PlanAction.SNAPSHOT,
+                    reason=PlanReason.FIRST_RUN,
+                    materialization_type=MaterializationType.SNAPSHOT,
+                    snapshot_strategy="timestamp",
+                ),
+                build_model_entry(
+                    name="customer_daily_snapshot",
+                    action=PlanAction.SNAPSHOT,
+                    reason=PlanReason.FIRST_RUN,
+                    materialization_type=MaterializationType.SNAPSHOT,
+                    snapshot_strategy="check",
+                    observed_at_column="observed_at",
+                    historical_input="snapshot",
+                ),
+                build_model_entry(
+                    name="customer_changes_snapshot",
+                    action=PlanAction.SNAPSHOT,
+                    reason=PlanReason.FIRST_RUN,
+                    materialization_type=MaterializationType.SNAPSHOT,
+                    snapshot_strategy="timestamp",
+                    observed_at_column="loaded_at",
+                    historical_input="changes",
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "First run (3)",
+            "customer_current_snapshot",
+            "snapshot (timestamp)",
+            "customer_daily_snapshot",
+            "snapshot (check, historical snapshot)",
+            "customer_changes_snapshot",
+            "snapshot (timestamp, historical changes)",
+        ),
+    ),
+    FormatPlanTestCase(
         description="query changed shows action policy cursor and mode",
         plan_output=build_plan_output(
             model_entries=(

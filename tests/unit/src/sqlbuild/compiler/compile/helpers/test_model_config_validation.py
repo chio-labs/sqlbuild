@@ -10,6 +10,7 @@ from sqlbuild.compiler.compile.helpers.model_config_validation import (
     validate_incremental_config,
     validate_non_incremental_config,
     validate_placeholder_config,
+    validate_snapshot_config,
 )
 from sqlbuild.compiler.compile.models.core import CompileModelConfig
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
@@ -21,6 +22,8 @@ from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     NonIncrementalConfigValidTestCase,
     PlaceholderConfigErrorTestCase,
     PlaceholderConfigValidTestCase,
+    SnapshotConfigErrorTestCase,
+    SnapshotConfigValidTestCase,
 )
 
 VALID_TEST_CASES: list[IncrementalConfigValidTestCase] = [
@@ -407,6 +410,245 @@ def test_given_non_incremental_config_with_incremental_keys_when_validating_then
         )
 
 
+SNAPSHOT_VALID_TEST_CASES: list[SnapshotConfigValidTestCase] = [
+    SnapshotConfigValidTestCase(
+        description="valid current-state timestamp snapshot",
+        config_values={
+            "materialized": "snapshot",
+            "unique_key": ["id"],
+            "snapshot_strategy": "timestamp",
+            "updated_at": "updated_at",
+        },
+    ),
+    SnapshotConfigValidTestCase(
+        description="valid current-state check snapshot",
+        config_values={
+            "materialized": "snapshot",
+            "unique_key": ["id"],
+            "snapshot_strategy": "check",
+            "check_columns": ["plan", "status"],
+        },
+    ),
+    SnapshotConfigValidTestCase(
+        description="valid current-state check snapshot with wildcard check columns",
+        config_values={
+            "materialized": "snapshot",
+            "unique_key": ["id"],
+            "snapshot_strategy": "check",
+            "check_columns": ["*"],
+        },
+    ),
+    SnapshotConfigValidTestCase(
+        description="valid historical check snapshot defaults to snapshot input",
+        config_values={
+            "materialized": "snapshot",
+            "unique_key": ["id"],
+            "snapshot_strategy": "check",
+            "check_columns": ["plan"],
+            "observed_at": "snapshot_date",
+        },
+    ),
+    SnapshotConfigValidTestCase(
+        description="valid historical timestamp snapshot input",
+        config_values={
+            "materialized": "snapshot",
+            "unique_key": ["id"],
+            "snapshot_strategy": "timestamp",
+            "updated_at": "updated_at",
+            "observed_at": "snapshot_date",
+            "historical_input": "snapshot",
+            "invalidate_hard_deletes": True,
+        },
+    ),
+    SnapshotConfigValidTestCase(
+        description="valid historical timestamp changes input",
+        config_values={
+            "materialized": "snapshot",
+            "unique_key": ["id"],
+            "snapshot_strategy": "timestamp",
+            "updated_at": "updated_at",
+            "observed_at": "loaded_at",
+            "historical_input": "changes",
+        },
+    ),
+    SnapshotConfigValidTestCase(
+        description="valid snapshot with custom validity names and policy",
+        config_values={
+            "materialized": "snapshot",
+            "unique_key": ["id"],
+            "snapshot_strategy": "timestamp",
+            "updated_at": "updated_at",
+            "valid_from_column": "effective_from",
+            "valid_to_column": "effective_to",
+            "initial_valid_from": "updated_at",
+            "snapshot_full_refresh": "require_confirmation",
+            "snapshot_schema_change": "append_new_columns",
+        },
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SNAPSHOT_VALID_TEST_CASES,
+    ids=[case.description for case in SNAPSHOT_VALID_TEST_CASES],
+)
+def test_given_valid_snapshot_config_when_validating_then_passes(
+    test_case: SnapshotConfigValidTestCase,
+) -> None:
+    config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
+
+    validate_snapshot_config(config=config, model_name="test_model")
+
+    assert test_case.expected_valid is True
+
+
+SNAPSHOT_ERROR_TEST_CASES: list[SnapshotConfigErrorTestCase] = [
+    SnapshotConfigErrorTestCase(
+        description="unknown snapshot schema change policy raises",
+        config_values={
+            "materialized": "snapshot",
+            "unique_key": ["id"],
+            "snapshot_strategy": "timestamp",
+            "updated_at": "updated_at",
+            "snapshot_schema_change": "sync_all_columns",
+        },
+        expected_error_fragment="unknown snapshot_schema_change",
+    ),
+    SnapshotConfigErrorTestCase(
+        description="snapshot without unique key raises",
+        config_values={"materialized": "snapshot", "snapshot_strategy": "timestamp"},
+        expected_error_fragment="requires unique_key",
+    ),
+    SnapshotConfigErrorTestCase(
+        description="snapshot without strategy raises",
+        config_values={"materialized": "snapshot", "unique_key": ["id"]},
+        expected_error_fragment="requires snapshot_strategy",
+    ),
+    SnapshotConfigErrorTestCase(
+        description="unknown snapshot strategy raises",
+        config_values={
+            "materialized": "snapshot",
+            "unique_key": ["id"],
+            "snapshot_strategy": "event_time",
+        },
+        expected_error_fragment="unknown snapshot_strategy",
+    ),
+    SnapshotConfigErrorTestCase(
+        description="timestamp snapshot without updated_at raises",
+        config_values={
+            "materialized": "snapshot",
+            "unique_key": ["id"],
+            "snapshot_strategy": "timestamp",
+        },
+        expected_error_fragment="requires updated_at",
+    ),
+    SnapshotConfigErrorTestCase(
+        description="check snapshot without check columns raises",
+        config_values={
+            "materialized": "snapshot",
+            "unique_key": ["id"],
+            "snapshot_strategy": "check",
+        },
+        expected_error_fragment="requires check_columns",
+    ),
+    SnapshotConfigErrorTestCase(
+        description="check snapshot rejects mixed wildcard and explicit check columns",
+        config_values={
+            "materialized": "snapshot",
+            "unique_key": ["id"],
+            "snapshot_strategy": "check",
+            "check_columns": ["*", "plan"],
+        },
+        expected_error_fragment="cannot be combined with explicit columns",
+    ),
+    SnapshotConfigErrorTestCase(
+        description="historical_input without observed_at raises",
+        config_values={
+            "materialized": "snapshot",
+            "unique_key": ["id"],
+            "snapshot_strategy": "timestamp",
+            "updated_at": "updated_at",
+            "historical_input": "snapshot",
+        },
+        expected_error_fragment="historical_input requires observed_at",
+    ),
+    SnapshotConfigErrorTestCase(
+        description="timestamp observed snapshot without historical input raises",
+        config_values={
+            "materialized": "snapshot",
+            "unique_key": ["id"],
+            "snapshot_strategy": "timestamp",
+            "updated_at": "updated_at",
+            "observed_at": "snapshot_date",
+        },
+        expected_error_fragment="require historical_input snapshot or changes",
+    ),
+    SnapshotConfigErrorTestCase(
+        description="check snapshot rejects changes input",
+        config_values={
+            "materialized": "snapshot",
+            "unique_key": ["id"],
+            "snapshot_strategy": "check",
+            "check_columns": ["plan"],
+            "observed_at": "snapshot_date",
+            "historical_input": "changes",
+        },
+        expected_error_fragment="historical_input=changes is not valid",
+    ),
+    SnapshotConfigErrorTestCase(
+        description="hard deletes reject changes input",
+        config_values={
+            "materialized": "snapshot",
+            "unique_key": ["id"],
+            "snapshot_strategy": "timestamp",
+            "updated_at": "updated_at",
+            "observed_at": "loaded_at",
+            "historical_input": "changes",
+            "invalidate_hard_deletes": True,
+        },
+        expected_error_fragment="invalidate_hard_deletes is not valid",
+    ),
+    SnapshotConfigErrorTestCase(
+        description="incremental key on snapshot raises",
+        config_values={
+            "materialized": "snapshot",
+            "unique_key": ["id"],
+            "snapshot_strategy": "timestamp",
+            "updated_at": "updated_at",
+            "cursor": "updated_at",
+        },
+        expected_error_fragment="cursor is not allowed on snapshot models",
+    ),
+    SnapshotConfigErrorTestCase(
+        description="matching validity column names raise",
+        config_values={
+            "materialized": "snapshot",
+            "unique_key": ["id"],
+            "snapshot_strategy": "timestamp",
+            "updated_at": "updated_at",
+            "valid_from_column": "valid_at",
+            "valid_to_column": "VALID_AT",
+        },
+        expected_error_fragment="valid_from_column and valid_to_column must differ",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SNAPSHOT_ERROR_TEST_CASES,
+    ids=[case.description for case in SNAPSHOT_ERROR_TEST_CASES],
+)
+def test_given_invalid_snapshot_config_when_validating_then_raises(
+    test_case: SnapshotConfigErrorTestCase,
+) -> None:
+    config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
+
+    with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
+        validate_snapshot_config(config=config, model_name="test_model")
+
+
 CUSTOM_MATERIALIZATION_VALID_TEST_CASES: list[CustomMaterializationConfigValidTestCase] = [
     CustomMaterializationConfigValidTestCase(
         description="valid custom materialization with config passthrough",
@@ -426,6 +668,16 @@ CUSTOM_MATERIALIZATION_VALID_TEST_CASES: list[CustomMaterializationConfigValidTe
     CustomMaterializationConfigValidTestCase(
         description="built-in incremental materialization skips custom validation",
         config_values={"materialized": "incremental", "incremental_strategy": "append"},
+        custom_materialization_names=frozenset(),
+    ),
+    CustomMaterializationConfigValidTestCase(
+        description="built-in snapshot materialization skips custom validation",
+        config_values={
+            "materialized": "snapshot",
+            "snapshot_strategy": "timestamp",
+            "unique_key": ["id"],
+            "updated_at": "updated_at",
+        },
         custom_materialization_names=frozenset(),
     ),
 ]

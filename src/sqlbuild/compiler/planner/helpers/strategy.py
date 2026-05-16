@@ -52,6 +52,9 @@ def resolve_model_plan_action(
     if materialization == MaterializationType.VIEW:
         return PlanAction.CREATE_VIEW, _view_reason(change_result, full_refresh)
 
+    if materialization == MaterializationType.SNAPSHOT:
+        return PlanAction.SNAPSHOT, _snapshot_reason(change_result, full_refresh)
+
     if full_refresh:
         return PlanAction.CREATE_TABLE, PlanReason.FULL_REFRESH
 
@@ -283,6 +286,20 @@ def _view_reason(change_result: ChangeDetectionResult, full_refresh: bool) -> Pl
     if change_result.change_kind == ChangeKind.SCHEMA_CHANGED:
         return PlanReason.SCHEMA_CHANGED
     return PlanReason.NO_CHANGE
+
+
+def _snapshot_reason(change_result: ChangeDetectionResult, full_refresh: bool) -> PlanReason:
+    """Determine the reason for a snapshot materialization action."""
+
+    if full_refresh:
+        return PlanReason.FULL_REFRESH
+    if change_result.change_kind == ChangeKind.FIRST_RUN:
+        return PlanReason.FIRST_RUN
+    if change_result.change_kind == ChangeKind.QUERY_CHANGED:
+        return PlanReason.QUERY_CHANGED
+    if change_result.change_kind == ChangeKind.SCHEMA_CHANGED:
+        return PlanReason.SCHEMA_CHANGED
+    return PlanReason.NORMAL_INCREMENTAL
 
 
 def _backfill_reason(change_result: ChangeDetectionResult) -> PlanReason:

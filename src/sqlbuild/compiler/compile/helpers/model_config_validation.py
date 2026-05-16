@@ -10,22 +10,52 @@ from sqlbuild.compiler.compile.models.core import CompileModelConfig
 from sqlbuild.compiler.planner.types import (
     CursorGrain,
     CursorType,
+    HistoricalInput,
     IncrementalMode,
     IncrementalStrategy,
+    InitialValidFrom,
     MaterializationType,
+    SnapshotFullRefreshPolicy,
+    SnapshotSchemaChangePolicy,
+    SnapshotStrategy,
 )
 
 _VALID_STRATEGIES: frozenset[str] = frozenset(s.value for s in IncrementalStrategy)
 _VALID_CURSOR_TYPES: frozenset[str] = frozenset(ct.value for ct in CursorType)
 _VALID_CURSOR_GRAINS: frozenset[str] = frozenset(cg.value for cg in CursorGrain)
 _VALID_INCREMENTAL_MODES: frozenset[str] = frozenset(m.value for m in IncrementalMode)
+_VALID_SNAPSHOT_STRATEGIES: frozenset[str] = frozenset(s.value for s in SnapshotStrategy)
+_VALID_HISTORICAL_INPUTS: frozenset[str] = frozenset(h.value for h in HistoricalInput)
+_VALID_INITIAL_VALID_FROM: frozenset[str] = frozenset(v.value for v in InitialValidFrom)
+_VALID_SNAPSHOT_FULL_REFRESH_POLICIES: frozenset[str] = frozenset(
+    p.value for p in SnapshotFullRefreshPolicy
+)
+_VALID_SNAPSHOT_SCHEMA_CHANGE_POLICIES: frozenset[str] = frozenset(
+    p.value for p in SnapshotSchemaChangePolicy
+)
 _BUILTIN_MATERIALIZATION_TYPES: frozenset[str] = frozenset(
-    (MaterializationType.VIEW, MaterializationType.TABLE, MaterializationType.INCREMENTAL)
+    (
+        MaterializationType.VIEW,
+        MaterializationType.TABLE,
+        MaterializationType.INCREMENTAL,
+        MaterializationType.SNAPSHOT,
+    )
 )
 _INCREMENTAL_ONLY_KEYS: tuple[str, ...] = (
     "on_schema_change",
     "schema_change_backfill",
     "append_cursor_inclusive",
+)
+_SNAPSHOT_DISALLOWED_KEYS: tuple[str, ...] = (
+    "incremental_strategy",
+    "incremental_mode",
+    "append_cursor_inclusive",
+    "batch_size",
+    "cursor",
+    "cursor_type",
+    "cursor_grain",
+    "cursor_inputs",
+    "lookback",
 )
 _CUSTOM_MATERIALIZATION_DISALLOWED_KEYS: tuple[str, ...] = (
     "on_schema_change",
@@ -188,6 +218,135 @@ def validate_non_incremental_config(
             )
 
 
+def validate_snapshot_config(
+    *,
+    config: CompileModelConfig,
+    model_name: str,
+) -> None:
+    """Validate snapshot model config combinations after layering."""
+
+    materialized: str | None = _str(config, "materialized")
+    if materialized != MaterializationType.SNAPSHOT:
+        return
+
+    strategy: str | None = _str(config, "snapshot_strategy")
+    updated_at: str | None = _str(config, "updated_at")
+    observed_at: str | None = _str(config, "observed_at")
+    historical_input: str | None = _str(config, "historical_input")
+    initial_valid_from: str | None = _str(config, "initial_valid_from")
+    snapshot_full_refresh: str | None = _str(config, "snapshot_full_refresh")
+    snapshot_schema_change: str | None = _str(config, "snapshot_schema_change")
+    unique_key: object | None = config.values.get("unique_key")
+    check_columns: object | None = config.values.get("check_columns")
+    invalidate_hard_deletes: object | None = config.values.get("invalidate_hard_deletes")
+    valid_from_column: str | None = _str(config, "valid_from_column")
+    valid_to_column: str | None = _str(config, "valid_to_column")
+
+    key: str
+    for key in _SNAPSHOT_DISALLOWED_KEYS:
+        if config.values.get(key) is not None:
+            raise CompileInputError(
+                f"model '{model_name}': {key} is not allowed on snapshot models"
+            )
+
+    if not _has_config_value(unique_key):
+        raise CompileInputError(
+            f"model '{model_name}': snapshot materialization requires unique_key"
+        )
+    if strategy is None:
+        raise CompileInputError(
+            f"model '{model_name}': snapshot materialization requires snapshot_strategy"
+        )
+    if strategy not in _VALID_SNAPSHOT_STRATEGIES:
+        raise CompileInputError(
+            f"model '{model_name}': unknown snapshot_strategy '{strategy}'; "
+            f"valid values: {', '.join(sorted(_VALID_SNAPSHOT_STRATEGIES))}"
+        )
+
+    if strategy == SnapshotStrategy.TIMESTAMP and updated_at is None:
+        raise CompileInputError(
+            f"model '{model_name}': snapshot_strategy=timestamp requires updated_at"
+        )
+    if strategy == SnapshotStrategy.CHECK and not _has_config_value(check_columns):
+        raise CompileInputError(
+            f"model '{model_name}': snapshot_strategy=check requires check_columns"
+        )
+    if (
+        strategy == SnapshotStrategy.CHECK
+        and isinstance(check_columns, list)
+        and "*" in check_columns
+        and len(check_columns) != 1
+    ):
+        raise CompileInputError(
+            f"model '{model_name}': check_columns [*] cannot be combined with explicit columns"
+        )
+
+    if historical_input is not None and observed_at is None:
+        raise CompileInputError(f"model '{model_name}': historical_input requires observed_at")
+    if historical_input is not None and historical_input not in _VALID_HISTORICAL_INPUTS:
+        raise CompileInputError(
+            f"model '{model_name}': unknown historical_input '{historical_input}'; "
+            f"valid values: {', '.join(sorted(_VALID_HISTORICAL_INPUTS))}"
+        )
+    if (
+        observed_at is not None
+        and strategy == SnapshotStrategy.TIMESTAMP
+        and historical_input is None
+    ):
+        raise CompileInputError(
+            f"model '{model_name}': timestamp snapshots with observed_at require "
+            "historical_input snapshot or changes"
+        )
+    if strategy == SnapshotStrategy.CHECK and historical_input == HistoricalInput.CHANGES:
+        raise CompileInputError(
+            f"model '{model_name}': historical_input=changes is not valid with "
+            "snapshot_strategy=check"
+        )
+    if invalidate_hard_deletes is not None and not isinstance(invalidate_hard_deletes, bool):
+        raise CompileInputError(f"model '{model_name}': invalidate_hard_deletes must be a boolean")
+    if invalidate_hard_deletes is True and historical_input == HistoricalInput.CHANGES:
+        raise CompileInputError(
+            f"model '{model_name}': invalidate_hard_deletes is not valid with "
+            "historical_input=changes"
+        )
+
+    if initial_valid_from is not None and initial_valid_from not in _VALID_INITIAL_VALID_FROM:
+        raise CompileInputError(
+            f"model '{model_name}': unknown initial_valid_from '{initial_valid_from}'; "
+            f"valid values: {', '.join(sorted(_VALID_INITIAL_VALID_FROM))}"
+        )
+    if initial_valid_from == InitialValidFrom.UPDATED_AT and updated_at is None:
+        raise CompileInputError(
+            f"model '{model_name}': initial_valid_from=updated_at requires updated_at"
+        )
+    if initial_valid_from == InitialValidFrom.OBSERVED_AT and observed_at is None:
+        raise CompileInputError(
+            f"model '{model_name}': initial_valid_from=observed_at requires observed_at"
+        )
+
+    if snapshot_full_refresh is not None:
+        if snapshot_full_refresh not in _VALID_SNAPSHOT_FULL_REFRESH_POLICIES:
+            raise CompileInputError(
+                f"model '{model_name}': unknown snapshot_full_refresh "
+                f"'{snapshot_full_refresh}'; valid values: "
+                f"{', '.join(sorted(_VALID_SNAPSHOT_FULL_REFRESH_POLICIES))}"
+            )
+
+    if snapshot_schema_change is not None:
+        if snapshot_schema_change not in _VALID_SNAPSHOT_SCHEMA_CHANGE_POLICIES:
+            raise CompileInputError(
+                f"model '{model_name}': unknown snapshot_schema_change "
+                f"'{snapshot_schema_change}'; valid values: "
+                f"{', '.join(sorted(_VALID_SNAPSHOT_SCHEMA_CHANGE_POLICIES))}"
+            )
+
+    if valid_from_column is not None and valid_to_column is not None:
+        if valid_from_column.lower() == valid_to_column.lower():
+            raise CompileInputError(
+                f"model '{model_name}': valid_from_column and valid_to_column must differ"
+            )
+
+
 def validate_custom_materialization_config(
     *,
     config: CompileModelConfig,
@@ -267,6 +426,10 @@ def _str(config: CompileModelConfig, key: str) -> str | None:
 
     raw: object | None = config.values.get(key)
     return raw if isinstance(raw, str) else None
+
+
+def _has_config_value(value: object | None) -> bool:
+    return value is not None and value != () and value != []
 
 
 def _validate_timestamp_cursor_start(*, cursor_start: object, model_name: str) -> None:

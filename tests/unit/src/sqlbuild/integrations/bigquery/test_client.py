@@ -26,6 +26,7 @@ from sqlbuild.integrations.bigquery.client import BigQueryAdapter, _BigQueryConn
 from tests.unit.src.sqlbuild.integrations.bigquery._test_types import (
     BigQueryConnectErrorTestCase,
     BigQueryCountRowsTestCase,
+    BigQueryExecutionErrorTestCase,
     BigQueryExpressionInferenceProfileTestCase,
     BigQueryQueryTestCase,
     BigQueryRenderCloneTestCase,
@@ -42,6 +43,7 @@ from tests.unit.src.sqlbuild.integrations.bigquery._test_types import (
     BigQuerySchemaExistsTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.bigquery.helpers import (
+    FakeBigQueryBadRequest,
     FakeBigQueryClient,
     FakeBigQueryRows,
     build_count_rows_execute,
@@ -415,6 +417,36 @@ def test_given_missing_bigquery_project_when_connecting_then_raises_clear_error(
 
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
         adapter.connect(test_case.config)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryExecutionErrorTestCase(
+            description="includes BigQuery error details from failed jobs",
+            error_message="400 GET https://bigquery.googleapis.com/bigquery/v2/projects/demo",
+            error_details=[{"message": "Unrecognized name: missing_column at [1:8]"}],
+            expected_error_fragment="missing_column",
+        ),
+    ],
+    ids=["includes BigQuery error details from failed jobs"],
+)
+def test_given_bigquery_job_failure_when_executing_then_includes_error_details(
+    test_case: BigQueryExecutionErrorTestCase,
+) -> None:
+    connection: _BigQueryConnection = _BigQueryConnection(
+        client=FakeBigQueryClient(
+            query_error=FakeBigQueryBadRequest(
+                test_case.error_message,
+                errors=test_case.error_details,
+            )
+        ),
+        location="europe-west2",
+    )
+    adapter: BigQueryAdapter = BigQueryAdapter()
+
+    with pytest.raises(RuntimeError, match=test_case.expected_error_fragment):
+        adapter.execute(connection, "SELECT missing_column")
 
 
 @pytest.mark.parametrize(
