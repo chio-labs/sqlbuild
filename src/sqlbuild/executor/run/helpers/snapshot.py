@@ -9,7 +9,7 @@ from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
-from sqlbuild.compiler.planner.types import InitialValidFrom, SnapshotStrategy
+from sqlbuild.compiler.planner.types import SnapshotStrategy
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
@@ -266,12 +266,9 @@ def _validate_delta_columns(
         required_columns = (*entry.unique_key, *entry.check_columns)
     else:
         required_columns = entry.unique_key
-    if entry.initial_valid_from == InitialValidFrom.UPDATED_AT:
+    if entry.initial_valid_from == "updated_at":
         required_columns = (*required_columns, _require_updated_at(entry))
-    if (
-        entry.initial_valid_from == InitialValidFrom.OBSERVED_AT
-        and entry.observed_at_column is not None
-    ):
+    if entry.initial_valid_from == "observed_at" and entry.observed_at_column is not None:
         required_columns = (*required_columns, entry.observed_at_column)
     missing_columns: list[str] = [
         column for column in required_columns if column.lower() not in column_names
@@ -323,17 +320,20 @@ def _create_initial_snapshot_target(
 ) -> None:
     valid_from_column: str = _valid_from_column(entry)
     valid_to_column: str = _valid_to_column(entry)
-    valid_from_expr: str = _initial_valid_from_expr(entry)
-    sql: str = (
-        f"SELECT *, {valid_from_expr} AS {valid_from_column}, "
-        f"CAST(NULL AS TIMESTAMP) AS {valid_to_column} FROM {delta_qualified}"
-    )
-    adapter.create_table_as(
-        connection,
+    statements: tuple[str, ...] = adapter.render_create_initial_snapshot_target(
         target=target_qualified,
-        sql=sql,
-        statement_recorder=statement_recorder,
+        source=delta_qualified,
+        snapshot_strategy=entry.snapshot_strategy,
+        updated_at_column=entry.updated_at_column,
+        observed_at_column=entry.observed_at_column,
+        valid_from_column=valid_from_column,
+        valid_to_column=valid_to_column,
+        initial_valid_from=entry.initial_valid_from,
     )
+    statement_recorder.record_many(statements)
+    statement: str
+    for statement in statements:
+        adapter.execute(connection, statement)
 
 
 def _apply_snapshot_changes(
@@ -384,50 +384,19 @@ def _apply_timestamp_snapshot_changes(
     updated_at_column: str = _require_updated_at(entry)
     valid_from_column: str = _valid_from_column(entry)
     valid_to_column: str = _valid_to_column(entry)
-    initial_valid_from_expr: str = _initial_valid_from_expr(entry, source_alias="__source")
-    key_condition: str = " AND ".join(
-        f"__target.{column} = __source.{column}" for column in entry.unique_key
-    )
-    close_sql: str = (
-        f"UPDATE {target_qualified} AS __target "
-        f"SET {valid_to_column} = __source.{updated_at_column} "
-        f"FROM {delta_qualified} AS __source "
-        f"WHERE {key_condition} "
-        f"AND __target.{valid_to_column} IS NULL "
-        f"AND __source.{updated_at_column} > __target.{updated_at_column}"
-    )
     output_columns: tuple[str, ...] = tuple(column.name for column in delta_columns)
-    insert_columns: tuple[str, ...] = (*output_columns, valid_from_column, valid_to_column)
-    insert_column_sql: str = ", ".join(insert_columns)
-    output_select_sql: str = ", ".join(f"__source.{column}" for column in output_columns)
-    active_join_condition: str = " AND ".join(
-        f"__active.{column} = __source.{column}" for column in entry.unique_key
+    statements: tuple[str, ...] = adapter.render_apply_timestamp_snapshot_changes(
+        target=target_qualified,
+        source=delta_qualified,
+        unique_key=entry.unique_key,
+        updated_at_column=updated_at_column,
+        observed_at_column=entry.observed_at_column,
+        valid_from_column=valid_from_column,
+        valid_to_column=valid_to_column,
+        initial_valid_from=entry.initial_valid_from,
+        output_columns=output_columns,
+        invalidate_hard_deletes=entry.invalidate_hard_deletes,
     )
-    first_key: str = entry.unique_key[0]
-    version_valid_from_expr: str = (
-        f"CASE WHEN __active.{first_key} IS NULL THEN {initial_valid_from_expr} "
-        f"ELSE __source.{updated_at_column} END"
-    )
-    insert_sql: str = (
-        f"INSERT INTO {target_qualified} ({insert_column_sql}) "
-        f"SELECT {output_select_sql}, {version_valid_from_expr}, CAST(NULL AS TIMESTAMP) "
-        f"FROM {delta_qualified} AS __source "
-        f"LEFT JOIN {target_qualified} AS __active "
-        f"ON {active_join_condition} AND __active.{valid_to_column} IS NULL "
-        f"WHERE __active.{first_key} IS NULL "
-        f"OR __source.{updated_at_column} > __active.{updated_at_column}"
-    )
-    statements: tuple[str, ...] = (close_sql, insert_sql)
-    if entry.invalidate_hard_deletes:
-        statements = (
-            *statements,
-            _build_hard_delete_close_sql(
-                target_qualified=target_qualified,
-                delta_qualified=delta_qualified,
-                entry=entry,
-                valid_to_column=valid_to_column,
-            ),
-        )
     statement_recorder.record_many(statements)
     with adapter.transaction(connection):
         statement: str
@@ -447,56 +416,20 @@ def _apply_check_snapshot_changes(
 ) -> None:
     valid_from_column: str = _valid_from_column(entry)
     valid_to_column: str = _valid_to_column(entry)
-    initial_valid_from_expr: str = _initial_valid_from_expr(entry, source_alias="__source")
-    key_condition: str = " AND ".join(
-        f"__target.{column} = __source.{column}" for column in entry.unique_key
-    )
-    change_condition: str = " OR ".join(
-        f"__source.{column} IS DISTINCT FROM __target.{column}" for column in entry.check_columns
-    )
-    close_sql: str = (
-        f"UPDATE {target_qualified} AS __target "
-        f"SET {valid_to_column} = CURRENT_TIMESTAMP "
-        f"FROM {delta_qualified} AS __source "
-        f"WHERE {key_condition} "
-        f"AND __target.{valid_to_column} IS NULL "
-        f"AND ({change_condition})"
-    )
     output_columns: tuple[str, ...] = tuple(column.name for column in delta_columns)
-    insert_columns: tuple[str, ...] = (*output_columns, valid_from_column, valid_to_column)
-    insert_column_sql: str = ", ".join(insert_columns)
-    output_select_sql: str = ", ".join(f"__source.{column}" for column in output_columns)
-    active_join_condition: str = " AND ".join(
-        f"__active.{column} = __source.{column}" for column in entry.unique_key
+    statements: tuple[str, ...] = adapter.render_apply_check_snapshot_changes(
+        target=target_qualified,
+        source=delta_qualified,
+        unique_key=entry.unique_key,
+        check_columns=entry.check_columns,
+        updated_at_column=entry.updated_at_column,
+        observed_at_column=entry.observed_at_column,
+        valid_from_column=valid_from_column,
+        valid_to_column=valid_to_column,
+        initial_valid_from=entry.initial_valid_from,
+        output_columns=output_columns,
+        invalidate_hard_deletes=entry.invalidate_hard_deletes,
     )
-    active_change_condition: str = " OR ".join(
-        f"__source.{column} IS DISTINCT FROM __active.{column}" for column in entry.check_columns
-    )
-    first_key: str = entry.unique_key[0]
-    version_valid_from_expr: str = (
-        f"CASE WHEN __active.{first_key} IS NULL THEN {initial_valid_from_expr} "
-        "ELSE CURRENT_TIMESTAMP END"
-    )
-    insert_sql: str = (
-        f"INSERT INTO {target_qualified} ({insert_column_sql}) "
-        f"SELECT {output_select_sql}, {version_valid_from_expr}, CAST(NULL AS TIMESTAMP) "
-        f"FROM {delta_qualified} AS __source "
-        f"LEFT JOIN {target_qualified} AS __active "
-        f"ON {active_join_condition} AND __active.{valid_to_column} IS NULL "
-        f"WHERE __active.{first_key} IS NULL "
-        f"OR ({active_change_condition})"
-    )
-    statements: tuple[str, ...] = (close_sql, insert_sql)
-    if entry.invalidate_hard_deletes:
-        statements = (
-            *statements,
-            _build_hard_delete_close_sql(
-                target_qualified=target_qualified,
-                delta_qualified=delta_qualified,
-                entry=entry,
-                valid_to_column=valid_to_column,
-            ),
-        )
     statement_recorder.record_many(statements)
     with adapter.transaction(connection):
         statement: str
@@ -508,43 +441,6 @@ def _require_updated_at(entry: ModelPlanEntry) -> str:
     if entry.updated_at_column is None:
         raise ExecutorInputError("timestamp snapshot execution requires updated_at")
     return entry.updated_at_column
-
-
-def _build_hard_delete_close_sql(
-    *,
-    target_qualified: str,
-    delta_qualified: str,
-    entry: ModelPlanEntry,
-    valid_to_column: str,
-) -> str:
-    missing_key_condition: str = " AND ".join(
-        f"__source.{column} = __target.{column}" for column in entry.unique_key
-    )
-    first_key: str = entry.unique_key[0]
-    return (
-        f"UPDATE {target_qualified} AS __target "
-        f"SET {valid_to_column} = CURRENT_TIMESTAMP "
-        f"WHERE __target.{valid_to_column} IS NULL "
-        f"AND NOT EXISTS ("
-        f"SELECT 1 FROM {delta_qualified} AS __source "
-        f"WHERE {missing_key_condition} AND __source.{first_key} IS NOT NULL"
-        f")"
-    )
-
-
-def _initial_valid_from_expr(entry: ModelPlanEntry, *, source_alias: str | None = None) -> str:
-    prefix: str = f"{source_alias}." if source_alias is not None else ""
-    if entry.initial_valid_from == InitialValidFrom.EXECUTION_TIME:
-        return "CURRENT_TIMESTAMP"
-    if entry.initial_valid_from == InitialValidFrom.OBSERVED_AT:
-        if entry.observed_at_column is None:
-            raise ExecutorInputError("initial_valid_from=observed_at requires observed_at")
-        return f"{prefix}{entry.observed_at_column}"
-    if entry.initial_valid_from == InitialValidFrom.UPDATED_AT:
-        return f"{prefix}{_require_updated_at(entry)}"
-    if entry.snapshot_strategy == SnapshotStrategy.TIMESTAMP:
-        return f"{prefix}{_require_updated_at(entry)}"
-    return "CURRENT_TIMESTAMP"
 
 
 def _valid_from_column(entry: ModelPlanEntry) -> str:

@@ -33,3 +33,9 @@ class RuntimeCursorStartTestCase:
     cursor_start: str | None
     expected_start: str
     expected_end: str
+
+
+@dataclass(frozen=True)
+class SnapshotAdapterRenderingTestCase:
+    description: str
+    expected_rendered_marker: str

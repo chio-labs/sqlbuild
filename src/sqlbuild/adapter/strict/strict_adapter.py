@@ -284,6 +284,59 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_create_initial_snapshot_target(
+        self,
+        *,
+        target: str,
+        source: str,
+        snapshot_strategy: str | None,
+        updated_at_column: str | None,
+        observed_at_column: str | None,
+        valid_from_column: str,
+        valid_to_column: str,
+        initial_valid_from: str | None,
+    ) -> tuple[str, ...]:
+        """Render SQL statements that create the initial snapshot target."""
+        ...
+
+    @abstractmethod
+    def render_apply_timestamp_snapshot_changes(
+        self,
+        *,
+        target: str,
+        source: str,
+        unique_key: tuple[str, ...],
+        updated_at_column: str,
+        observed_at_column: str | None,
+        valid_from_column: str,
+        valid_to_column: str,
+        initial_valid_from: str | None,
+        output_columns: tuple[str, ...],
+        invalidate_hard_deletes: bool,
+    ) -> tuple[str, ...]:
+        """Render SQL statements that apply timestamp snapshot changes."""
+        ...
+
+    @abstractmethod
+    def render_apply_check_snapshot_changes(
+        self,
+        *,
+        target: str,
+        source: str,
+        unique_key: tuple[str, ...],
+        check_columns: tuple[str, ...],
+        updated_at_column: str | None,
+        observed_at_column: str | None,
+        valid_from_column: str,
+        valid_to_column: str,
+        initial_valid_from: str | None,
+        output_columns: tuple[str, ...],
+        invalidate_hard_deletes: bool,
+    ) -> tuple[str, ...]:
+        """Render SQL statements that apply check snapshot changes."""
+        ...
+
+    @abstractmethod
     def validate_row_diff_keys(
         self,
         connection: Any,
