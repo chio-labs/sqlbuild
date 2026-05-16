@@ -65,7 +65,7 @@ SELECT
   customer_id,
   ordered_at,
   status
-FROM __source("raw_orders")
+FROM __source("raw__orders")
 ```
 
 An incremental model with microbatch processing:
@@ -100,10 +100,10 @@ A chained unit test:
 TEST();
 
 WITH
-__source__raw_orders AS (
+__source__raw__orders AS (
   @mock_orders()
 ),
-__source__raw_payments AS (
+__source__raw__payments AS (
   SELECT 1 AS payment_id, 1 AS order_id, 1500 AS amount_cents, 'credit_card' AS method
 ),
 __expected__fact_orders AS (
@@ -125,10 +125,10 @@ SCENARIO (
 );
 
 WITH
-__source__raw_orders AS (
+__source__raw__orders AS (
   SELECT 1 AS order_id, DATE '2026-01-01' AS order_date, 100.00 AS amount
 ),
-__source__raw_refunds AS (
+__source__raw__refunds AS (
   SELECT 1 AS refund_id, 1 AS order_id, DATE '2026-01-01' AS refund_date, 25.00 AS amount
 ),
 __expected__daily_revenue AS (
