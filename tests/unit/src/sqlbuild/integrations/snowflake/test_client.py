@@ -257,14 +257,14 @@ def test_given_equivalent_types_when_diffing_schema_then_snowflake_ignores_alias
     "test_case",
     [
         SnowflakeQueryColumnNamesTestCase(
-            description="normalizes unquoted Snowflake query output columns to lowercase",
+            description="preserves Snowflake cursor output column names",
             cursor_description=(("ID",), ("FIRST_NAME",), ("CREATED_AT",)),
-            expected_columns=("id", "first_name", "created_at"),
+            expected_columns=("ID", "FIRST_NAME", "CREATED_AT"),
         ),
     ],
-    ids=["normalizes unquoted Snowflake query output columns to lowercase"],
+    ids=["preserves Snowflake cursor output column names"],
 )
-def test_given_snowflake_query_metadata_when_getting_column_names_then_normalizes_to_lowercase(
+def test_given_snowflake_query_metadata_when_getting_column_names_then_preserves_cursor_names(
     test_case: SnowflakeQueryColumnNamesTestCase,
 ) -> None:
     adapter: SnowflakeAdapter = SnowflakeAdapter()

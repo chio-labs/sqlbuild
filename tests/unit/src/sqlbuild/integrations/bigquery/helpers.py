@@ -122,6 +122,14 @@ class FakeBigQueryJob:
         return self._rows
 
 
+class FakeBigQueryFailingJob:
+    def __init__(self, error: Exception) -> None:
+        self.error: Exception = error
+
+    def result(self) -> FakeBigQueryRows:
+        raise self.error
+
+
 class FakeBigQueryClient:
     def __init__(
         self,
@@ -129,15 +137,19 @@ class FakeBigQueryClient:
         rows: FakeBigQueryRows | None = None,
         missing_dataset: bool = False,
         statement_type: str | None = "SELECT",
+        query_error: Exception | None = None,
     ) -> None:
         self.rows: FakeBigQueryRows = rows or FakeBigQueryRows(columns=(), rows=())
         self.missing_dataset: bool = missing_dataset
         self.statement_type: str | None = statement_type
+        self.query_error: Exception | None = query_error
         self.queries: list[tuple[str, str | None]] = []
         self.dataset_ids: list[str] = []
 
-    def query(self, sql: str, *, location: str | None) -> FakeBigQueryJob:
+    def query(self, sql: str, *, location: str | None) -> FakeBigQueryJob | FakeBigQueryFailingJob:
         self.queries.append((sql, location))
+        if self.query_error is not None:
+            return FakeBigQueryFailingJob(self.query_error)
         return FakeBigQueryJob(self.rows, statement_type=self.statement_type)
 
     def get_dataset(self, dataset_id: str) -> object:
@@ -149,3 +161,9 @@ class FakeBigQueryClient:
 
 class FakeGoogleNotFound(Exception):
     code: int = 404
+
+
+class FakeBigQueryBadRequest(Exception):
+    def __init__(self, message: str, *, errors: list[dict[str, object]]) -> None:
+        super().__init__(message)
+        self.errors: list[dict[str, object]] = errors

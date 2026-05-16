@@ -89,6 +89,14 @@ class BigQueryConnectErrorTestCase:
 
 
 @dataclass(frozen=True)
+class BigQueryExecutionErrorTestCase:
+    description: str
+    error_message: str
+    error_details: list[dict[str, object]]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class BigQueryRenderCursorBoundLiteralTestCase:
     description: str
     value: str
