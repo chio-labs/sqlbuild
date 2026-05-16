@@ -59,6 +59,32 @@ TEST_CASES: list[SourceResolutionTestCase] = [
         expected_sql="SELECT * FROM raw.public.orders",
     ),
     SourceResolutionTestCase(
+        description="allows enforced source contract with extra physical columns",
+        query_sql='SELECT * FROM __source("raw_orders")',
+        star_exclude_keyword="EXCLUDE",
+        source_map={
+            "raw_orders": SourceEntry(
+                name="raw_orders",
+                database="raw",
+                schema="public",
+                table="orders",
+                contract="enforced",
+                columns=(
+                    SourceColumnEntry(name="order_id", type="INTEGER"),
+                    SourceColumnEntry(name="status", type="VARCHAR"),
+                ),
+            ),
+        },
+        source_warehouse_columns={
+            "raw_orders": (
+                ColumnInfo(name="order_id", type="INT"),
+                ColumnInfo(name="status", type="VARCHAR"),
+                ColumnInfo(name="extra_physical_column", type="BOOLEAN"),
+            ),
+        },
+        expected_sql="SELECT * FROM raw.public.orders",
+    ),
+    SourceResolutionTestCase(
         description="wraps query expression source as subquery",
         query_sql='SELECT * FROM __source("raw_orders")',
         star_exclude_keyword="EXCLUDE",
@@ -318,6 +344,28 @@ ERROR_TEST_CASES: list[SourceResolutionErrorTestCase] = [
         },
         expected_error_fragment=(
             "source raw.public.partial declares columns not found in warehouse: missing_col"
+        ),
+    ),
+    SourceResolutionErrorTestCase(
+        description="raises when enforced source contract type mismatches warehouse",
+        query_sql='SELECT * FROM __source("raw_orders")',
+        star_exclude_keyword="EXCLUDE",
+        source_map={
+            "raw_orders": SourceEntry(
+                name="raw_orders",
+                database="raw",
+                schema="public",
+                table="orders",
+                contract="enforced",
+                columns=(SourceColumnEntry(name="order_id", type="INTEGER"),),
+            ),
+        },
+        source_warehouse_columns={
+            "raw_orders": (ColumnInfo(name="order_id", type="VARCHAR"),),
+        },
+        expected_error_fragment=(
+            "source raw.public.orders column 'order_id' has type VARCHAR "
+            "but contract declares INTEGER"
         ),
     ),
     SourceResolutionErrorTestCase(

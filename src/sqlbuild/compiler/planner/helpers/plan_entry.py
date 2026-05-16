@@ -52,6 +52,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
+    ContractPolicy,
     CursorType,
     IncrementalMode,
     IncrementalStrategy,
@@ -143,6 +144,8 @@ def plan_model(
 
     type_enforcement: bool = _get_type_enforcement(model)
     declared_columns: tuple[ColumnInfo, ...] = _get_declared_columns(model)
+    contract_enforced: bool = model.config.values.get("contract") == ContractPolicy.ENFORCED
+    contract_columns: tuple[ColumnInfo, ...] = _get_contract_columns(model)
     unique_key: tuple[str, ...] = _get_unique_key(model)
     warehouse_columns: tuple[ColumnInfo, ...] = snapshot.existing_columns.get(model.name, ())
 
@@ -176,6 +179,8 @@ def plan_model(
     validate_source_cursor_input_columns(
         model=model,
         cursor_column=cursor_column,
+        models_by_name=models_by_name,
+        source_map=source_map,
         source_warehouse_columns=source_warehouse_columns,
     )
     runtime_owned_cursor_bounds: bool = _has_model_backed_cursor_inputs(cursor_input_relations)
@@ -293,6 +298,8 @@ def plan_model(
         on_schema_change=on_schema_change,
         type_enforcement=type_enforcement,
         declared_columns=declared_columns,
+        contract_enforced=contract_enforced,
+        contract_columns=contract_columns,
         pre_hook=pre_hook,
         post_hook=post_hook,
         previous_query_sql=previous_query_sql,
@@ -512,6 +519,14 @@ def _get_declared_columns(model: CompiledModel) -> tuple[ColumnInfo, ...]:
         if col.type is not None:
             columns.append(ColumnInfo(name=col.name, type=col.type))
     return tuple(columns)
+
+
+def _get_contract_columns(model: CompiledModel) -> tuple[ColumnInfo, ...]:
+    if model.schema_entry is None:
+        return ()
+    return tuple(
+        ColumnInfo(name=col.name, type=col.type or "") for col in model.schema_entry.columns
+    )
 
 
 def _get_unique_key(model: CompiledModel) -> tuple[str, ...]:
@@ -747,22 +762,55 @@ def validate_source_cursor_input_columns(
     *,
     model: CompiledModel,
     cursor_column: str | None,
+    models_by_name: dict[str, CompiledModel] | None = None,
+    source_map: dict[str, SourceEntry] | None = None,
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
 ) -> None:
-    """Validate cursor input columns for source references when source columns are known."""
+    """Validate cursor input columns using contracts before source warehouse metadata."""
 
     materialized: str | None = _get_config_str(model, "materialized")
     if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
         return
 
     cursor_inputs: dict[str, str] = _get_cursor_inputs(model=model, cursor_column=cursor_column)
+    effective_models_by_name: dict[str, CompiledModel] = models_by_name or {}
+    effective_source_map: dict[str, SourceEntry] = source_map or {}
     ref: CompileSqlReference
     for ref in model.references:
-        if ref.ref_kind != SqlReferenceKind.SOURCE:
-            continue
         input_cursor_column: str | None = cursor_inputs.get(ref.ref_name)
         if input_cursor_column is None:
             continue
+        if ref.ref_kind == SqlReferenceKind.REF:
+            upstream_model: CompiledModel | None = effective_models_by_name.get(ref.ref_name)
+            if (
+                upstream_model is None
+                or upstream_model.config.values.get("contract") != ContractPolicy.ENFORCED
+            ):
+                continue
+            declared_names: tuple[str, ...] = _model_declared_column_names(upstream_model)
+            if input_cursor_column.lower() in {name.lower() for name in declared_names}:
+                continue
+            declared_display: str = ", ".join(declared_names) or "none"
+            raise PlannerInputError(
+                f"model '{model.name}': cursor_inputs references model '{ref.ref_name}' "
+                f"column '{input_cursor_column}', but that model contract does not expose "
+                f"the column. Declared contract columns: {declared_display}",
+                code="S302",
+            )
+        if ref.ref_kind != SqlReferenceKind.SOURCE:
+            continue
+        source_entry: SourceEntry | None = effective_source_map.get(ref.ref_name)
+        if source_entry is not None and source_entry.contract == ContractPolicy.ENFORCED:
+            declared_names = tuple(column.name for column in source_entry.columns)
+            if input_cursor_column.lower() in {name.lower() for name in declared_names}:
+                continue
+            declared_display = ", ".join(declared_names) or "none"
+            raise PlannerInputError(
+                f"model '{model.name}': cursor_inputs references source '{ref.ref_name}' "
+                f"column '{input_cursor_column}', but that source contract does not expose "
+                f"the column. Declared contract columns: {declared_display}",
+                code="S302",
+            )
         known_columns: tuple[ColumnInfo, ...] | None = source_warehouse_columns.get(ref.ref_name)
         if known_columns is None:
             continue
@@ -776,6 +824,12 @@ def validate_source_cursor_input_columns(
             f"Known source columns: {known_display}",
             code="S302",
         )
+
+
+def _model_declared_column_names(model: CompiledModel) -> tuple[str, ...]:
+    if model.schema_entry is None:
+        return ()
+    return tuple(column.name for column in model.schema_entry.columns)
 
 
 def _has_model_backed_cursor_inputs(

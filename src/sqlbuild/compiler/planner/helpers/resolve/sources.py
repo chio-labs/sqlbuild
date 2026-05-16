@@ -6,8 +6,10 @@ import re
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.adapter.shared.type_normalization import types_equal
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import CursorBounds
+from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.shared.helpers.sources import render_source_relation
 from sqlbuild.shared.helpers.sql_reference_patterns import quoted_reference_call_pattern
 from sqlbuild.shared.types import SqlReferenceKind
@@ -42,6 +44,20 @@ def resolve_source_references(
                 qualified_name=resolved_source,
                 declared_columns=source_entry.columns,
                 available_columns=warehouse_cols,
+                contract_enforced=source_entry.contract == ContractPolicy.ENFORCED,
+                dialect=adapter.sqlglot_dialect_name,
+            )
+        if (
+            source_entry.expression is not None
+            and warehouse_cols
+            and source_entry.contract == ContractPolicy.ENFORCED
+        ):
+            _validate_declared_columns(
+                qualified_name=f"source expression '{source_name}'",
+                declared_columns=source_entry.columns,
+                available_columns=warehouse_cols,
+                contract_enforced=source_entry.contract == ContractPolicy.ENFORCED,
+                dialect=adapter.sqlglot_dialect_name,
             )
         if source_entry.type_enforcement:
             if source_entry.expression is not None:
@@ -129,20 +145,39 @@ def _validate_declared_columns(
     qualified_name: str,
     declared_columns: tuple[SourceColumnEntry, ...],
     available_columns: tuple[ColumnInfo, ...],
+    contract_enforced: bool = False,
+    dialect: str | None = None,
 ) -> None:
-    """Ensure declared relation source columns exist in warehouse metadata."""
+    """Ensure declared source columns exist and enforced contracts match metadata."""
 
-    available_names: set[str] = {col.name for col in available_columns}
+    available_by_name: dict[str, ColumnInfo] = {col.name.lower(): col for col in available_columns}
     missing_names: tuple[str, ...] = tuple(
-        col.name for col in declared_columns if col.name not in available_names
+        col.name for col in declared_columns if col.name.lower() not in available_by_name
     )
-    if not missing_names:
+    if missing_names:
+        missing_columns: str = ", ".join(missing_names)
+        raise PlannerInputError(
+            f"source {qualified_name} declares columns not found in warehouse: {missing_columns}",
+            code="S401",
+        )
+
+    if not contract_enforced:
         return
-    missing_columns: str = ", ".join(missing_names)
-    raise PlannerInputError(
-        f"source {qualified_name} declares columns not found in warehouse: {missing_columns}",
-        code="S401",
-    )
+
+    declared_column: SourceColumnEntry
+    for declared_column in declared_columns:
+        if declared_column.type is None:
+            continue
+        available_column: ColumnInfo = available_by_name[declared_column.name.lower()]
+        if not available_column.type:
+            continue
+        if types_equal(left=available_column.type, right=declared_column.type, dialect=dialect):
+            continue
+        raise PlannerInputError(
+            f"source {qualified_name} column '{declared_column.name}' has type "
+            f"{available_column.type} but contract declares {declared_column.type}",
+            code="S404",
+        )
 
 
 def _build_expression_cast_subquery(

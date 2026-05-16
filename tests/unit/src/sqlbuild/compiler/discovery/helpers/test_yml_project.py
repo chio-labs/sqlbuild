@@ -212,6 +212,17 @@ amount = 1
         expected_error_fragment="Expected 'batch_size' to be a string or integer when provided",
     ),
     LoadProjectConfigErrorTestCase(
+        description="raises when defaults contract is unknown",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[defaults]
+contract = "strict"
+""".strip(),
+        expected_error_fragment="Expected 'contract' to be one of",
+    ),
+    LoadProjectConfigErrorTestCase(
         description="raises when snapshot current state full refresh policy is unknown",
         project_file_contents="""
 name = "demo"
@@ -533,6 +544,7 @@ concurrency = 8
 [defaults]
 materialized = "table"
 row_diff_exclude_columns = ["loaded_at"]
+contract = "enforced"
 
 [defaults.row_diff_tolerances.by_type.float]
 relative = 0.0001
@@ -607,6 +619,7 @@ target_path = "target/dbt"
                     "revenue": {"absolute": 0.01},
                 },
             },
+            expected_contract="enforced",
             expected_path_default_schema="staging",
             expected_vars={"user": "kevin"},
             expected_dev_connection={"warehouse": "dev_wh"},
@@ -660,6 +673,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.defaults.materialized == test_case.expected_materialized
     assert config.defaults.row_diff_exclude_columns == test_case.expected_row_diff_exclude_columns
     assert config.defaults.row_diff_tolerances == test_case.expected_row_diff_tolerances
+    assert config.defaults.contract == test_case.expected_contract
     assert config.path_defaults["staging"]["schema"] == test_case.expected_path_default_schema
     assert config.vars == test_case.expected_vars
     assert config.environments["dev"].connection == test_case.expected_dev_connection

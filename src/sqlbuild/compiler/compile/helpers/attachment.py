@@ -24,6 +24,7 @@ from sqlbuild.compiler.compile.helpers.macros import (
     load_project_macros,
 )
 from sqlbuild.compiler.compile.helpers.model_config_validation import (
+    validate_contract_config,
     validate_custom_materialization_config,
     validate_incremental_config,
     validate_non_incremental_config,
@@ -209,6 +210,10 @@ def build_model_inputs(
             model_name=model_file.file_path.stem,
             ref_count=len(references),
             known_input_names=frozenset(reference.ref_name for reference in references),
+        )
+        validate_contract_config(
+            config=effective_config,
+            model_name=model_file.file_path.stem,
         )
         validate_non_incremental_config(
             config=effective_config,
@@ -3081,6 +3086,8 @@ def project_defaults_to_mapping(defaults: DefaultsConfig) -> dict[str, object]:
         values["database"] = defaults.database
     if defaults.schema is not None:
         values["schema"] = defaults.schema
+    if defaults.contract is not None:
+        values["contract"] = defaults.contract
     if defaults.incremental_strategy is not None:
         values["incremental_strategy"] = defaults.incremental_strategy
     if defaults.incremental_mode is not None:

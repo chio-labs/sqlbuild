@@ -30,6 +30,7 @@ class SourceEntry:
     expression: str | None = None
     description: str | None = None
     type_enforcement: bool | None = None
+    contract: str | None = None
     meta: dict[str, object] = field(default_factory=dict)
     columns: tuple[SourceColumnEntry, ...] = field(default_factory=tuple)
     audits: tuple[SchemaAuditInstance, ...] = field(default_factory=tuple)

@@ -24,6 +24,8 @@ class BuildExecutionTestCase:
         default_factory=tuple
     )
     expected_function_error_fragments: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    expected_model_error_fragments: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    expected_model_error_codes: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     expected_model_audit_count: int = 0
     expected_source_audit_count: int = 0
     expected_end_audit_count: int = 0

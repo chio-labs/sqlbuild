@@ -11,6 +11,7 @@ from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.spec.models.schema import SourceLocation
 from tests.unit.src.sqlbuild.compiler.contracts._test_types import (
     ContractLocationTestCase,
+    ContractMissingDeclarationsTestCase,
     ContractValidationTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.contracts.helpers import make_contract_project
@@ -95,6 +96,40 @@ TEST_CASES: tuple[ContractValidationTestCase, ...] = (
         expected_messages=(),
     ),
     ContractValidationTestCase(
+        description="extra inferred columns fail with enforced contract",
+        declared_columns=(("order_id", None),),
+        inferred_columns=(("order_id", None), ("extra_column", None)),
+        type_enforcement=None,
+        contract="enforced",
+        expected_codes=("K005",),
+        expected_severities=("error",),
+        expected_messages=(
+            "column 'extra_column' is not declared in enforced contract for model 'orders'",
+        ),
+    ),
+    ContractValidationTestCase(
+        description="same columns in different order pass with enforced contract",
+        declared_columns=(("order_id", None), ("customer_id", None)),
+        inferred_columns=(("customer_id", None), ("order_id", None)),
+        type_enforcement=None,
+        contract="enforced",
+        expected_codes=(),
+        expected_severities=(),
+        expected_messages=(),
+    ),
+    ContractValidationTestCase(
+        description="typed mismatch with enforced contract is error without type enforcement",
+        declared_columns=(("amount_cents", "INTEGER"),),
+        inferred_columns=(("amount_cents", "VARCHAR"),),
+        type_enforcement=False,
+        contract="enforced",
+        expected_codes=("K002",),
+        expected_severities=("error",),
+        expected_messages=(
+            "column 'amount_cents' inferred as VARCHAR but contract declares INTEGER",
+        ),
+    ),
+    ContractValidationTestCase(
         description="declared not null ignores unknown inferred nullability",
         declared_columns=(("order_id", None),),
         declared_not_null_columns=("order_id",),
@@ -140,6 +175,21 @@ TEST_CASES: tuple[ContractValidationTestCase, ...] = (
     ),
 )
 
+MISSING_DECLARATION_TEST_CASES: tuple[ContractMissingDeclarationsTestCase, ...] = (
+    ContractMissingDeclarationsTestCase(
+        description="enforced contract requires declared columns",
+        contract="enforced",
+        expected_codes=("K006",),
+        expected_messages=("model 'orders' has contract enforced but declares no columns",),
+    ),
+    ContractMissingDeclarationsTestCase(
+        description="none contract allows missing declarations",
+        contract="none",
+        expected_codes=(),
+        expected_messages=(),
+    ),
+)
+
 
 @pytest.mark.parametrize("test_case", TEST_CASES, ids=[case.description for case in TEST_CASES])
 def test_given_compiled_project_when_validating_contracts_then_returns_expected_diagnostics(
@@ -153,6 +203,7 @@ def test_given_compiled_project_when_validating_contracts_then_returns_expected_
             declared_not_null_columns=test_case.declared_not_null_columns,
             declared_nullable_by_column=test_case.declared_nullable_by_column,
             inferred_nullability_by_column=test_case.inferred_nullability_by_column,
+            contract=test_case.contract,
         ),
         dialect=TypeDialect.DUCKDB,
     )
@@ -207,3 +258,28 @@ def test_given_column_location_when_validating_contracts_then_diagnostic_uses_lo
     assert result.diagnostics[0].path == test_case.expected_path
     assert result.diagnostics[0].line == test_case.expected_line
     assert result.diagnostics[0].column == test_case.expected_column
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    MISSING_DECLARATION_TEST_CASES,
+    ids=[case.description for case in MISSING_DECLARATION_TEST_CASES],
+)
+def test_given_contract_without_declared_columns_when_validating_then_returns_expected_diagnostics(
+    test_case: ContractMissingDeclarationsTestCase,
+) -> None:
+    result: ContractValidationResult = validate_model_contracts(
+        make_contract_project(
+            declared_columns=(),
+            inferred_columns=(("order_id", None),),
+            type_enforcement=None,
+            contract=test_case.contract,
+        ),
+        dialect=TypeDialect.DUCKDB,
+    )
+
+    assert tuple(diagnostic.code for diagnostic in result.diagnostics) == test_case.expected_codes
+    assert (
+        tuple(diagnostic.message for diagnostic in result.diagnostics)
+        == test_case.expected_messages
+    )
