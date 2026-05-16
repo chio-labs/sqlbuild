@@ -17,6 +17,7 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.run.helpers.contracts import validate_runtime_contract
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.results import build_failed_result
@@ -122,6 +123,11 @@ def execute_snapshot_entry(
             )
             _validate_delta_columns(
                 entry=entry, delta_columns=delta_columns, check_columns=check_columns
+            )
+            validate_runtime_contract(
+                entry=entry,
+                actual_columns=delta_columns,
+                dialect=adapter.sqlglot_dialect_name,
             )
             _validate_unique_snapshot_keys(
                 adapter=adapter,

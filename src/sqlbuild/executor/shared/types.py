@@ -16,6 +16,7 @@ class ExecutionPhase(StrEnum):
     STAGING = "staging"
     SCHEMA_CHANGE = "schema_change"
     TYPE_ENFORCEMENT = "type_enforcement"
+    CONTRACT = "contract"
     AUDIT = "audit"
     PROMOTION = "promotion"
     DML = "dml"

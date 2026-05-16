@@ -12,6 +12,7 @@ from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
 from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorBounds, ModelPlanEntry
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.run.helpers.contracts import validate_runtime_contract
 from sqlbuild.executor.run.helpers.cursor_bounds import (
     has_model_backed_cursor_inputs,
     resolve_runtime_cursor_bounds,
@@ -256,6 +257,32 @@ def _staged_lifecycle(
                 audit_results=audit_results,
                 statement_recorder=statement_recorder,
             )
+
+    try:
+        with diagnostics_context(
+            sqlbuild_phase="contract", sqlbuild_action_name="validate_staging"
+        ):
+            staging_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
+                connection,
+                database=target_database,
+                schema=target_schema,
+                name=staging_table,
+            )
+            validate_runtime_contract(
+                entry=entry,
+                actual_columns=staging_columns,
+                dialect=adapter.sqlglot_dialect_name,
+            )
+    except Exception as exc:
+        return build_failed_result(
+            entry=entry,
+            phase=ExecutionPhase.CONTRACT,
+            error=str(exc),
+            staging_relation=staging_qualified,
+            warnings=warnings,
+            audit_results=audit_results,
+            statement_recorder=statement_recorder,
+        )
 
     overrides: dict[str, str] = {entry.name: staging_qualified}
     audit_error: bool = False

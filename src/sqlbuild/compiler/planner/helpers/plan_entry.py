@@ -144,6 +144,8 @@ def plan_model(
 
     type_enforcement: bool = _get_type_enforcement(model)
     declared_columns: tuple[ColumnInfo, ...] = _get_declared_columns(model)
+    contract_enforced: bool = model.config.values.get("contract") == ContractPolicy.ENFORCED
+    contract_columns: tuple[ColumnInfo, ...] = _get_contract_columns(model)
     unique_key: tuple[str, ...] = _get_unique_key(model)
     warehouse_columns: tuple[ColumnInfo, ...] = snapshot.existing_columns.get(model.name, ())
 
@@ -296,6 +298,8 @@ def plan_model(
         on_schema_change=on_schema_change,
         type_enforcement=type_enforcement,
         declared_columns=declared_columns,
+        contract_enforced=contract_enforced,
+        contract_columns=contract_columns,
         pre_hook=pre_hook,
         post_hook=post_hook,
         previous_query_sql=previous_query_sql,
@@ -515,6 +519,14 @@ def _get_declared_columns(model: CompiledModel) -> tuple[ColumnInfo, ...]:
         if col.type is not None:
             columns.append(ColumnInfo(name=col.name, type=col.type))
     return tuple(columns)
+
+
+def _get_contract_columns(model: CompiledModel) -> tuple[ColumnInfo, ...]:
+    if model.schema_entry is None:
+        return ()
+    return tuple(
+        ColumnInfo(name=col.name, type=col.type or "") for col in model.schema_entry.columns
+    )
 
 
 def _get_unique_key(model: CompiledModel) -> tuple[str, ...]:
