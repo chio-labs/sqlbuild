@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.13.0](https://github.com/chio-labs/sqlbuild/compare/v0.12.0...v0.13.0) (2026-05-16)
+
+
+### Features
+
+* add Dagster asset loader ([6cf6e29](https://github.com/chio-labs/sqlbuild/commit/6cf6e29cb5c4887f2fa7e82bee60bd34768fc0e6))
+* add Dagster CLI resource ([c718d55](https://github.com/chio-labs/sqlbuild/commit/c718d55a706e2e205722e548ec3ee5a9346d4019))
+* add Dagster playground template ([718e77d](https://github.com/chio-labs/sqlbuild/commit/718e77d2cbc14d6760b7af5dac50d1249ef234db))
+* add Dagster project preparation ([df92013](https://github.com/chio-labs/sqlbuild/commit/df9201367a8359fd838c12f142941d4e7a3c11b2))
+* add Dagster scenario checks helper ([75473bd](https://github.com/chio-labs/sqlbuild/commit/75473bd36455132be1df12d25a737aa112c9e10a))
+* add static DAG JSON output ([1c8f497](https://github.com/chio-labs/sqlbuild/commit/1c8f49752bd72719ab3b5ff4e9c02b28fbcc1d1b))
+* bridge Dagster asset selections ([2e60398](https://github.com/chio-labs/sqlbuild/commit/2e603981c9ffc2aeab241645080fbbe41d68c3d3))
+* emit Dagster events from execution JSON ([4e5e1b6](https://github.com/chio-labs/sqlbuild/commit/4e5e1b62898a32a9a3d060f5b6f3aca38587ad8b))
+* select Dagster scenarios from assets ([6f584c8](https://github.com/chio-labs/sqlbuild/commit/6f584c83702689d90931006ba1bae19a5b2b1407))
+* stream SQLBuild output in Dagster ([b603449](https://github.com/chio-labs/sqlbuild/commit/b60344921fb88fb780239dc55aaf0d160b30a5f7))
+* tag SQLBuild Dagster asset kinds ([342bb61](https://github.com/chio-labs/sqlbuild/commit/342bb613dc022dd92f242a6035b1d2918ffd4926))
+
+
+### Bug Fixes
+
+* group Dagster assets by SQLBuild project ([00c324f](https://github.com/chio-labs/sqlbuild/commit/00c324fa7feced8ae78c4fca98e89a2bfff8eccc))
+* improve Dagster demo and logging ([e120222](https://github.com/chio-labs/sqlbuild/commit/e12022213990de3c4fdf45708a0dfda8d8ddf157))
+
 ## [0.12.0](https://github.com/chio-labs/sqlbuild/compare/v0.11.0...v0.12.0) (2026-05-15)
 
 
