@@ -54,3 +54,12 @@ class DagsterSqlBuildScenarioE2ETestCase:
     expected_daily_revenue_check_names: tuple[str, ...]
     scenario_order_prices_asset_key: tuple[str, ...]
     unexpected_scenario_order_prices_check_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DagsterSqlBuildStreamingE2ETestCase:
+    """Test case for live SQLBuild stream forwarding through Dagster."""
+
+    description: str
+    selected_asset_key: tuple[str, ...]
+    expected_stdout_fragment: str

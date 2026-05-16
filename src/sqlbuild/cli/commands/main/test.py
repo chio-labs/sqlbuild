@@ -15,7 +15,10 @@ from sqlbuild.cli.commands.main.helpers.sql_test_progress import (
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
-from sqlbuild.cli.commands.main.shared.helpers.execution_json import format_test_execution_json
+from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
+    format_test_execution_json,
+    write_execution_json_output,
+)
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
 )
@@ -46,6 +49,7 @@ def run_test(
     exclude: tuple[str, ...] = (),
     cli_vars: dict[str, object] | None = None,
     json_output: bool = False,
+    json_output_path: Path | None = None,
 ) -> int:
     """Execute the test command."""
 
@@ -169,9 +173,11 @@ def run_test(
     fail_count: int = len(results) - pass_count
     progress_stream.write(f"\nPASS={pass_count}  FAIL={fail_count}  TOTAL={len(results)}\n")
     progress_stream.flush()
-    if json_output:
-        sys.stdout.write(format_test_execution_json(results=results))
-        sys.stdout.flush()
+    write_execution_json_output(
+        payload=format_test_execution_json(results=results),
+        json_output=json_output,
+        json_output_path=json_output_path,
+    )
 
     return 0 if fail_count == 0 else 1
 

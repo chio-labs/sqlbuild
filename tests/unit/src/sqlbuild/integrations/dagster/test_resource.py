@@ -15,6 +15,7 @@ from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterCliStreamTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
+    assert_json_output_file_behavior,
     assert_positional_selector_behavior,
     assert_select_file_behavior,
     write_dagster_test_dag,
@@ -51,6 +52,7 @@ CLI_SELECTION_TEST_CASES: list[DagsterCliSelectionTestCase] = [
         command_args=("build",),
         expected_selectors=("orders",),
         expected_uses_select_file=True,
+        expected_uses_json_output=True,
     ),
     DagsterCliSelectionTestCase(
         description="explicit SQLBuild selector is preserved",
@@ -58,6 +60,7 @@ CLI_SELECTION_TEST_CASES: list[DagsterCliSelectionTestCase] = [
         command_args=("build", "--select", "manual_selector"),
         expected_selectors=(),
         expected_uses_select_file=False,
+        expected_uses_json_output=True,
     ),
     DagsterCliSelectionTestCase(
         description="selected Dagster asset appends attached scenario selectors",
@@ -65,6 +68,7 @@ CLI_SELECTION_TEST_CASES: list[DagsterCliSelectionTestCase] = [
         command_args=("scenario", "test"),
         expected_selectors=("orders_minimal",),
         expected_uses_select_file=False,
+        expected_uses_json_output=True,
     ),
     DagsterCliSelectionTestCase(
         description="explicit scenario selector is preserved",
@@ -72,6 +76,7 @@ CLI_SELECTION_TEST_CASES: list[DagsterCliSelectionTestCase] = [
         command_args=("scenario", "test", "manual_scenario"),
         expected_selectors=(),
         expected_uses_select_file=False,
+        expected_uses_json_output=True,
     ),
 ]
 
@@ -280,4 +285,8 @@ def test_given_selected_dagster_assets_when_invoking_cli_then_applies_sqlbuild_s
     assert_select_file_behavior(
         command=invocation.command,
         expected_uses_select_file=test_case.expected_uses_select_file,
+    )
+    assert_json_output_file_behavior(
+        command=invocation.command,
+        expected_uses_json_output=test_case.expected_uses_json_output,
     )

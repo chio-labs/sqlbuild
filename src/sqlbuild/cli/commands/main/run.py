@@ -13,7 +13,10 @@ from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import (
     ConnectionProgressReporter,
 )
-from sqlbuild.cli.commands.main.shared.helpers.execution_json import format_run_execution_json
+from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
+    format_run_execution_json,
+    write_execution_json_output,
+)
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
 )
@@ -52,6 +55,7 @@ def run_run(
     debug: bool = False,
     cli_vars: dict[str, object] | None = None,
     json_output: bool = False,
+    json_output_path: Path | None = None,
 ) -> int:
     """Execute the run command."""
 
@@ -167,8 +171,10 @@ def run_run(
     footer: str = format_build_footer(result=result, elapsed=callbacks.elapsed, use_color=use_color)
     progress_stream.write("\n" + footer + "\n")
     progress_stream.flush()
-    if json_output:
-        sys.stdout.write(format_run_execution_json(result=result, plan=plan_output))
-        sys.stdout.flush()
+    write_execution_json_output(
+        payload=format_run_execution_json(result=result, plan=plan_output),
+        json_output=json_output,
+        json_output_path=json_output_path,
+    )
 
     return 0 if result.status == BuildStatus.SUCCESS else 1

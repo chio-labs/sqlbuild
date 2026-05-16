@@ -22,6 +22,7 @@ from sqlbuild.cli.commands.main.shared.helpers.connection_progress import Connec
 from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
     format_scenario_execution_json,
     format_scenario_snapshot_execution_json,
+    write_execution_json_output,
 )
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
@@ -96,6 +97,7 @@ def run_scenario(
     max_snapshot_bytes: int | None = None,
     max_snapshot_total_bytes: int | None = None,
     json_output: bool = False,
+    json_output_path: Path | None = None,
 ) -> int:
     """Execute the scenario test command."""
 
@@ -209,14 +211,14 @@ def run_scenario(
             capture_results_out=capture_results,
         )
         if capture_exit_code != 0:
-            if json_output:
-                sys.stdout.write(
-                    format_scenario_snapshot_execution_json(
-                        results=tuple(capture_results),
-                        refresh=refresh,
-                    )
-                )
-                sys.stdout.flush()
+            write_execution_json_output(
+                payload=format_scenario_snapshot_execution_json(
+                    results=tuple(capture_results),
+                    refresh=refresh,
+                ),
+                json_output=json_output,
+                json_output_path=json_output_path,
+            )
             return capture_exit_code
     header: str = f"Scenario ({len(scenarios)} selected)"
     styled_header: str = green_bold(header) if use_color else header
@@ -292,9 +294,11 @@ def run_scenario(
         exit_code = _write_local_summary(results=results, stream=progress_stream)
     else:
         exit_code = _write_remote_summary(results=results, stream=progress_stream)
-    if json_output:
-        sys.stdout.write(format_scenario_execution_json(results=results, local=local))
-        sys.stdout.flush()
+    write_execution_json_output(
+        payload=format_scenario_execution_json(results=results, local=local),
+        json_output=json_output,
+        json_output_path=json_output_path,
+    )
     return exit_code
 
 

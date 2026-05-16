@@ -28,6 +28,7 @@ class CliNamespace:
     to_environment: str | None = None
     hard_copy: bool = False
     json: bool = False
+    json_output: Path | None = None
     manifest: bool = False
     dag: str | None = None
     compile_lineage_mode: CompileLineageMode = CompileLineageMode.FAST
@@ -139,6 +140,7 @@ class CliEntrypointHandlers:
             bool,
             dict[str, object],
             bool,
+            Path | None,
         ],
         int,
     ]
@@ -158,11 +160,21 @@ class CliEntrypointHandlers:
             bool,
             dict[str, object],
             bool,
+            Path | None,
         ],
         int,
     ]
     run_test: Callable[
-        [Path | None, bool, bool, tuple[str, ...], tuple[str, ...], dict[str, object], bool],
+        [
+            Path | None,
+            bool,
+            bool,
+            tuple[str, ...],
+            tuple[str, ...],
+            dict[str, object],
+            bool,
+            Path | None,
+        ],
         int,
     ]
     run_audit: Callable[
@@ -175,11 +187,21 @@ class CliEntrypointHandlers:
             tuple[str, ...],
             dict[str, object],
             bool,
+            Path | None,
         ],
         int,
     ]
     run_seed: Callable[
-        [Path | None, bool, tuple[str, ...], tuple[str, ...], dict[str, object], bool], int
+        [
+            Path | None,
+            bool,
+            tuple[str, ...],
+            tuple[str, ...],
+            dict[str, object],
+            bool,
+            Path | None,
+        ],
+        int,
     ]
     run_clone: Callable[
         [
@@ -251,6 +273,7 @@ class CliEntrypointHandlers:
             int | None,
             int | None,
             bool,
+            Path | None,
         ],
         int,
     ]

@@ -113,7 +113,11 @@ def write_fake_sqb_command(
                 "    raise SystemExit(99)",
                 "if len(sys.argv) >= 4 and tuple(sys.argv[1:3]) == ('compile', '--dag'):",
                 f"    Path(sys.argv[3]).write_text({stdout!r}, encoding='utf-8')",
-                f"sys.stdout.write({stdout!r})",
+                "if '--json-output' in sys.argv[1:]:",
+                "    json_output_path = Path(sys.argv[sys.argv.index('--json-output') + 1])",
+                f"    json_output_path.write_text({stdout!r}, encoding='utf-8')",
+                "else:",
+                f"    sys.stdout.write({stdout!r})",
                 f"sys.stderr.write({stderr!r})",
                 f"raise SystemExit({exit_code})",
             )
@@ -148,3 +152,14 @@ def assert_positional_selector_behavior(
         return
     for selector in selectors:
         assert selector in command
+
+
+def assert_json_output_file_behavior(
+    *, command: tuple[str, ...], expected_uses_json_output: bool
+) -> None:
+    uses_json_output: bool = "--json-output" in command
+    assert uses_json_output is expected_uses_json_output
+    assert "--json" not in command
+    if uses_json_output:
+        json_output_index: int = command.index("--json-output") + 1
+        assert not Path(command[json_output_index]).exists()

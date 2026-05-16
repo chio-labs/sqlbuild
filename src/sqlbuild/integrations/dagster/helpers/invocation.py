@@ -6,9 +6,10 @@ import json
 import subprocess
 import sys
 import tempfile
+import threading
 from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import IO, Any
+from typing import IO, Any, TextIO
 
 from sqlbuild.integrations.dagster.helpers.imports import load_dagster
 
@@ -27,6 +28,7 @@ class SqlBuildCliInvocation:
         dag: Mapping[str, Any] | None = None,
         selection: tuple[str, ...] = (),
         selector_file: Path | None = None,
+        execution_json_path: Path | None = None,
     ) -> None:
         self.process: subprocess.Popen[str] = process
         self.command: tuple[str, ...] = command
@@ -37,34 +39,55 @@ class SqlBuildCliInvocation:
         self.selection: tuple[str, ...] = selection
         self.selector_file: Path | None = selector_file
         self.selector_file_path: str = str(selector_file) if selector_file is not None else ""
+        self.execution_json_path: Path | None = execution_json_path
         self.stdout: str = ""
         self.stderr: str = ""
+        self.execution_payload: Mapping[str, Any] | None = None
         self.returncode: int | None = None
 
     def wait(self) -> SqlBuildCliInvocation:
         """Wait for the SQLBuild process to complete."""
 
-        stdout: str
-        stderr: str
-        stdout, stderr = self.process.communicate()
-        self.stdout = stdout
-        self.stderr = stderr
-        self.returncode = self.process.returncode
+        stdout_lines: list[str] = []
+        stderr_lines: list[str] = []
+        stdout_thread: threading.Thread | None = _start_stream_thread(
+            source=self.process.stdout,
+            sink=sys.stdout,
+            captured=stdout_lines,
+        )
+        stderr_thread: threading.Thread | None = _start_stream_thread(
+            source=self.process.stderr,
+            sink=sys.stderr,
+            captured=stderr_lines,
+        )
+        self.returncode = self.process.wait()
+        if stdout_thread is not None:
+            stdout_thread.join()
+        if stderr_thread is not None:
+            stderr_thread.join()
+        self.stdout = "".join(stdout_lines)
+        self.stderr = "".join(stderr_lines)
+        self.execution_payload = _load_execution_payload_from_path(self.execution_json_path)
         if self.raise_on_error and not self.is_successful():
             error: Exception | None = self.get_error()
             if error is not None:
-                self._cleanup_selector_file()
+                self._cleanup_temp_files()
                 raise error
-        self._cleanup_selector_file()
+        self._cleanup_temp_files()
         return self
 
-    def _cleanup_selector_file(self) -> None:
-        if self.selector_file is None:
+    def _cleanup_temp_files(self) -> None:
+        if self.selector_file is not None:
+            try:
+                self.selector_file.unlink(missing_ok=True)
+            finally:
+                self.selector_file = None
+        if self.execution_json_path is None:
             return
         try:
-            self.selector_file.unlink(missing_ok=True)
+            self.execution_json_path.unlink(missing_ok=True)
         finally:
-            self.selector_file = None
+            self.execution_json_path = None
 
     def is_successful(self) -> bool:
         """Return whether the invocation completed successfully."""
@@ -110,7 +133,9 @@ class SqlBuildCliInvocation:
         _log_invocation(context=self.context, invocation=self)
         dg: Any = load_dagster()
         if self.dag is not None:
-            execution_payload: Mapping[str, Any] | None = _load_execution_payload(self.stdout)
+            execution_payload: Mapping[str, Any] | None = self.execution_payload
+            if execution_payload is None:
+                execution_payload = _load_execution_payload(self.stdout)
             if execution_payload is not None:
                 yield from _build_results_from_execution_payload(
                     dg=dg,
@@ -160,7 +185,8 @@ def start_sqlbuild_cli_invocation(
         context=context,
         dag=dag,
     )
-    resolved_args: tuple[str, ...] = _with_json_output_args(
+    execution_json_path: Path | None
+    resolved_args, execution_json_path = _with_json_output_args(
         args=selected_args,
         context=context,
         dag=dag,
@@ -182,6 +208,7 @@ def start_sqlbuild_cli_invocation(
         dag=dag,
         selection=selection,
         selector_file=selector_file,
+        execution_json_path=execution_json_path,
     )
 
 
@@ -200,14 +227,6 @@ def _log_invocation(*, context: Any, invocation: SqlBuildCliInvocation) -> None:
         logger.info("SQLBuild selected assets from Dagster (%s):", len(invocation.selection))
         for line in _wrap_selectors(invocation.selection):
             logger.info("  %s", line)
-    if invocation.stdout and _load_execution_payload(invocation.stdout) is None:
-        sys.stdout.write(invocation.stdout)
-        if not invocation.stdout.endswith("\n"):
-            sys.stdout.write("\n")
-    if invocation.stderr:
-        sys.stderr.write(invocation.stderr)
-        if not invocation.stderr.endswith("\n"):
-            sys.stderr.write("\n")
 
 
 def _wrap_selectors(selectors: tuple[str, ...], *, width: int = 100) -> tuple[str, ...]:
@@ -342,14 +361,48 @@ def _scenario_check_is_selected(
 
 def _with_json_output_args(
     *, args: tuple[str, ...], context: Any, dag: Mapping[str, Any] | None
-) -> tuple[str, ...]:
-    if dag is None or context is None or not args or "--json" in args:
-        return args
+) -> tuple[tuple[str, ...], Path | None]:
+    if dag is None or context is None or not args or "--json" in args or "--json-output" in args:
+        return args, None
     if args[0] in {"build", "run", "test", "audit", "seed"}:
-        return (*args, "--json")
+        path: Path = _create_execution_json_path()
+        return (*args, "--json-output", str(path)), path
     if len(args) >= 2 and args[0] == "scenario" and args[1] == "test":
-        return (*args, "--json")
-    return args
+        path = _create_execution_json_path()
+        return (*args, "--json-output", str(path)), path
+    return args, None
+
+
+def _create_execution_json_path() -> Path:
+    handle: IO[str] = tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        prefix="sqlbuild-dagster-execution-",
+        suffix=".json",
+        delete=False,
+    )
+    with handle:
+        return Path(handle.name)
+
+
+def _start_stream_thread(
+    *, source: IO[str] | None, sink: TextIO, captured: list[str]
+) -> threading.Thread | None:
+    if source is None:
+        return None
+
+    def _forward() -> None:
+        try:
+            for chunk in iter(source.readline, ""):
+                captured.append(chunk)
+                sink.write(chunk)
+                sink.flush()
+        finally:
+            source.close()
+
+    thread: threading.Thread = threading.Thread(target=_forward, daemon=True)
+    thread.start()
+    return thread
 
 
 def _write_selector_file(selectors: tuple[str, ...]) -> Path:
@@ -405,6 +458,12 @@ def _load_execution_payload(stdout: str) -> Mapping[str, Any] | None:
     if payload.get("version") != 1:
         return None
     return payload
+
+
+def _load_execution_payload_from_path(path: Path | None) -> Mapping[str, Any] | None:
+    if path is None or not path.exists():
+        return None
+    return _load_execution_payload(path.read_text(encoding="utf-8"))
 
 
 def _build_results_from_execution_payload(

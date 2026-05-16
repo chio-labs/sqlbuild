@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import sys
+from pathlib import Path
 
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -27,6 +29,20 @@ from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 
 _JSON_VERSION: int = 1
+
+
+def write_execution_json_output(
+    *, payload: str, json_output: bool, json_output_path: Path | None
+) -> None:
+    """Write execution JSON to stdout or a requested side-channel file."""
+
+    if json_output_path is not None:
+        json_output_path.parent.mkdir(parents=True, exist_ok=True)
+        json_output_path.write_text(payload, encoding="utf-8")
+        return
+    if json_output:
+        sys.stdout.write(payload)
+        sys.stdout.flush()
 
 
 def format_build_execution_json(*, result: BuildExecutionResult, plan: PlanOutput) -> str:
