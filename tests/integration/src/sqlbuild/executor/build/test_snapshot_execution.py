@@ -8,6 +8,11 @@ from typing import Any
 
 import pytest
 
+from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
+from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.shared.types import ExecutionStatus
@@ -149,6 +154,54 @@ SNAPSHOT_TIMESTAMP_TEST_CASES: list[SnapshotTimestampExecutionTestCase] = [
             (1, "eu", "basic", "2024-01-01 00:00:00", None),
         ),
     ),
+    SnapshotTimestampExecutionTestCase(
+        description="current-state timestamp snapshot supports custom validity columns",
+        model_name="customer_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_customers\n    schema: main\n    table: raw_customers\n"
+            ),
+            "models/customer_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id],\n"
+                "  snapshot_strategy timestamp,\n"
+                "  updated_at updated_at,\n"
+                "  valid_from_column effective_from,\n"
+                "  valid_to_column effective_to\n"
+                ");\n\n"
+                'SELECT customer_id, plan, updated_at FROM __source("raw_customers")'
+            ),
+        },
+        initial_setup_sql=(
+            "CREATE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'basic' AS plan, "
+            "TIMESTAMP '2024-01-01 00:00:00' AS updated_at",
+        ),
+        stale_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'basic' AS plan, "
+            "TIMESTAMP '2023-12-31 00:00:00' AS updated_at",
+        ),
+        changed_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'pro' AS plan, "
+            "TIMESTAMP '2024-01-03 00:00:00' AS updated_at",
+        ),
+        expected_query=(
+            "SELECT customer_id, plan, CAST(effective_from AS VARCHAR), "
+            "CAST(effective_to AS VARCHAR) FROM main.customer_snapshot "
+            "ORDER BY customer_id, effective_from"
+        ),
+        expected_validity_columns=("effective_from", "effective_to"),
+        expected_initial_rows=((1, "basic", "2024-01-01 00:00:00", None),),
+        expected_stale_rows=((1, "basic", "2024-01-01 00:00:00", None),),
+        expected_changed_rows=(
+            (1, "basic", "2024-01-01 00:00:00", "2024-01-03 00:00:00"),
+            (1, "pro", "2024-01-03 00:00:00", None),
+        ),
+    ),
 ]
 
 SNAPSHOT_TIMESTAMP_FAILURE_TEST_CASES: list[SnapshotTimestampFailureTestCase] = [
@@ -205,6 +258,90 @@ SNAPSHOT_TIMESTAMP_FAILURE_TEST_CASES: list[SnapshotTimestampFailureTestCase] = 
             "SELECT 1 AS customer_id, TIMESTAMP '2024-01-01 00:00:00' AS updated_at",
         ),
         expected_error_fragment="query output includes generated validity columns: valid_from",
+    ),
+    SnapshotTimestampFailureTestCase(
+        description="custom validity column collision fails before target mutation",
+        model_name="customer_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_customers\n    schema: main\n    table: raw_customers\n"
+            ),
+            "models/customer_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id],\n"
+                "  snapshot_strategy timestamp,\n"
+                "  updated_at updated_at,\n"
+                "  valid_from_column effective_from,\n"
+                "  valid_to_column effective_to\n"
+                ");\n\n"
+                "SELECT customer_id, updated_at, updated_at AS effective_from "
+                'FROM __source("raw_customers")'
+            ),
+        },
+        setup_sql=(
+            "CREATE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, TIMESTAMP '2024-01-01 00:00:00' AS updated_at",
+        ),
+        expected_error_fragment="query output includes generated validity columns: effective_from",
+    ),
+    SnapshotTimestampFailureTestCase(
+        description="custom validity column collision is case-insensitive",
+        model_name="customer_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_customers\n    schema: main\n    table: raw_customers\n"
+            ),
+            "models/customer_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id],\n"
+                "  snapshot_strategy timestamp,\n"
+                "  updated_at updated_at,\n"
+                "  valid_from_column effective_from,\n"
+                "  valid_to_column effective_to\n"
+                ");\n\n"
+                "SELECT customer_id, updated_at, updated_at AS EFFECTIVE_FROM "
+                'FROM __source("raw_customers")'
+            ),
+        },
+        setup_sql=(
+            "CREATE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, TIMESTAMP '2024-01-01 00:00:00' AS updated_at",
+        ),
+        expected_error_fragment="query output includes generated validity columns: effective_from",
+    ),
+    SnapshotTimestampFailureTestCase(
+        description=(
+            "observed_at initial validity remains rejected until historical execution exists"
+        ),
+        model_name="customer_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_customers\n    schema: main\n    table: raw_customers\n"
+            ),
+            "models/customer_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id],\n"
+                "  snapshot_strategy timestamp,\n"
+                "  updated_at updated_at,\n"
+                "  observed_at observed_at,\n"
+                "  historical_input snapshot,\n"
+                "  initial_valid_from observed_at\n"
+                ");\n\n"
+                'SELECT customer_id, updated_at, observed_at FROM __source("raw_customers")'
+            ),
+        },
+        setup_sql=(
+            "CREATE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, TIMESTAMP '2024-01-01 00:00:00' AS updated_at, "
+            "TIMESTAMP '2024-01-02 00:00:00' AS observed_at",
+        ),
+        expected_error_fragment="snapshot execution does not support historical observed_at yet",
     ),
 ]
 
@@ -507,6 +644,50 @@ SNAPSHOT_CHECK_TEST_CASES: list[SnapshotCheckExecutionTestCase] = [
             (2, "us", "basic", "active", "bronze", True),
         ),
     ),
+    SnapshotCheckExecutionTestCase(
+        description="current-state check snapshot supports custom validity columns",
+        model_name="customer_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_customers\n    schema: main\n    table: raw_customers\n"
+            ),
+            "models/customer_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id],\n"
+                "  snapshot_strategy check,\n"
+                "  check_columns [status],\n"
+                "  valid_from_column effective_from,\n"
+                "  valid_to_column effective_to\n"
+                ");\n\n"
+                'SELECT customer_id, plan, status FROM __source("raw_customers")'
+            ),
+        },
+        initial_setup_sql=(
+            "CREATE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'basic' AS plan, 'active' AS status",
+        ),
+        unchecked_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'pro' AS plan, 'active' AS status",
+        ),
+        checked_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'pro' AS plan, 'paused' AS status",
+        ),
+        expected_query=(
+            "SELECT customer_id, plan, status, effective_to IS NULL "
+            "FROM main.customer_snapshot ORDER BY customer_id, effective_to IS NULL, plan"
+        ),
+        expected_validity_columns=("effective_from", "effective_to"),
+        expected_initial_rows=((1, "basic", "active", True),),
+        expected_unchecked_rows=((1, "basic", "active", True),),
+        expected_checked_rows=(
+            (1, "basic", "active", False),
+            (1, "pro", "paused", True),
+        ),
+    ),
 ]
 
 SNAPSHOT_CHECK_FAILURE_TEST_CASES: list[SnapshotCheckFailureTestCase] = [
@@ -703,7 +884,7 @@ def test_given_current_state_timestamp_snapshot_when_building_then_tracks_histor
         for row in connection.execute(
             "SELECT column_name FROM information_schema.columns "
             f"WHERE table_name = '{test_case.model_name}' "
-            "AND column_name IN ('valid_from', 'valid_to') ORDER BY ordinal_position"
+            f"AND column_name IN {test_case.expected_validity_columns} ORDER BY ordinal_position"
         ).fetchall()
     )
     rows_after_changed: tuple[tuple[object, ...], ...] = tuple(
@@ -839,7 +1020,7 @@ def test_given_current_state_check_snapshot_when_building_then_tracks_checked_ch
         for row in connection.execute(
             "SELECT column_name FROM information_schema.columns "
             f"WHERE table_name = '{test_case.model_name}' "
-            "AND column_name IN ('valid_from', 'valid_to') ORDER BY ordinal_position"
+            f"AND column_name IN {test_case.expected_validity_columns} ORDER BY ordinal_position"
         ).fetchall()
     )
     rows_after_checked: tuple[tuple[object, ...], ...] = tuple(
@@ -898,6 +1079,325 @@ def test_given_invalid_check_snapshot_source_when_building_then_fails_before_tar
         is not None
     )
     assert target_exists is False
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildExecutionTestCase(
+            description="check snapshot initial_valid_from can use updated_at",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_YML,
+                "sources/raw.yml": (
+                    "sources:\n"
+                    "  - name: raw_customers\n"
+                    "    schema: main\n"
+                    "    table: raw_customers\n"
+                ),
+                "models/customer_snapshot.sql": (
+                    "MODEL (\n"
+                    "  materialized snapshot,\n"
+                    "  unique_key [customer_id],\n"
+                    "  snapshot_strategy check,\n"
+                    "  check_columns [status],\n"
+                    "  updated_at updated_at,\n"
+                    "  initial_valid_from updated_at\n"
+                    ");\n\n"
+                    'SELECT customer_id, status, updated_at FROM __source("raw_customers")'
+                ),
+            },
+            setup_sql=(
+                "CREATE TABLE main.raw_customers AS "
+                "SELECT 1 AS customer_id, 'active' AS status, "
+                "TIMESTAMP '2024-01-01 00:00:00' AS updated_at",
+            ),
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=1,
+            expected_model_statuses=(("customer_snapshot", ExecutionStatus.SUCCESS),),
+            expected_query_results=(
+                (
+                    "SELECT customer_id, status, CAST(valid_from AS VARCHAR), valid_to "
+                    "FROM main.customer_snapshot",
+                    ((1, "active", "2024-01-01 00:00:00", None),),
+                ),
+            ),
+        )
+    ],
+    ids=["check snapshot initial_valid_from can use updated_at"],
+)
+def test_given_check_snapshot_with_initial_valid_from_when_building_then_uses_configured_source(
+    test_case: BuildExecutionTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    result: BuildExecutionResult = run_build_for_project(
+        test_case=test_case,
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+    rows: tuple[tuple[object, ...], ...] = tuple(
+        tuple(row) for row in connection.execute(test_case.expected_query_results[0][0]).fetchall()
+    )
+
+    assert result.status == test_case.expected_status
+    verify_model_statuses(result=result, test_case=test_case)
+    assert rows == test_case.expected_query_results[0][1]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildExecutionTestCase(
+            description="timestamp snapshot initial_valid_from can explicitly use updated_at",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_YML,
+                "sources/raw.yml": (
+                    "sources:\n"
+                    "  - name: raw_customers\n"
+                    "    schema: main\n"
+                    "    table: raw_customers\n"
+                ),
+                "models/customer_snapshot.sql": (
+                    "MODEL (\n"
+                    "  materialized snapshot,\n"
+                    "  unique_key [customer_id],\n"
+                    "  snapshot_strategy timestamp,\n"
+                    "  updated_at updated_at,\n"
+                    "  initial_valid_from updated_at\n"
+                    ");\n\n"
+                    'SELECT customer_id, updated_at FROM __source("raw_customers")'
+                ),
+            },
+            setup_sql=(
+                "CREATE TABLE main.raw_customers AS "
+                "SELECT 1 AS customer_id, TIMESTAMP '2024-01-01 00:00:00' AS updated_at",
+            ),
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=1,
+            expected_model_statuses=(("customer_snapshot", ExecutionStatus.SUCCESS),),
+            expected_query_results=(
+                (
+                    "SELECT customer_id, CAST(valid_from AS VARCHAR), valid_to "
+                    "FROM main.customer_snapshot",
+                    ((1, "2024-01-01 00:00:00", None),),
+                ),
+            ),
+        )
+    ],
+    ids=["timestamp snapshot initial_valid_from can explicitly use updated_at"],
+)
+def test_given_timestamp_snapshot_with_updated_at_initial_validity_when_building_then_uses_cursor(
+    test_case: BuildExecutionTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    result: BuildExecutionResult = run_build_for_project(
+        test_case=test_case,
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+    rows: tuple[tuple[object, ...], ...] = tuple(
+        tuple(row) for row in connection.execute(test_case.expected_query_results[0][0]).fetchall()
+    )
+
+    assert result.status == test_case.expected_status
+    verify_model_statuses(result=result, test_case=test_case)
+    assert rows == test_case.expected_query_results[0][1]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildExecutionTestCase(
+            description="timestamp snapshot initial_valid_from can use execution time",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_YML,
+                "sources/raw.yml": (
+                    "sources:\n"
+                    "  - name: raw_customers\n"
+                    "    schema: main\n"
+                    "    table: raw_customers\n"
+                ),
+                "models/customer_snapshot.sql": (
+                    "MODEL (\n"
+                    "  materialized snapshot,\n"
+                    "  unique_key [customer_id],\n"
+                    "  snapshot_strategy timestamp,\n"
+                    "  updated_at updated_at,\n"
+                    "  initial_valid_from execution_time\n"
+                    ");\n\n"
+                    'SELECT customer_id, updated_at FROM __source("raw_customers")'
+                ),
+            },
+            setup_sql=(
+                "CREATE TABLE main.raw_customers AS "
+                "SELECT 1 AS customer_id, TIMESTAMP '2024-01-01 00:00:00' AS updated_at",
+            ),
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=1,
+            expected_model_statuses=(("customer_snapshot", ExecutionStatus.SUCCESS),),
+            expected_query_results=(
+                (
+                    "SELECT customer_id, valid_from > updated_at, valid_to IS NULL "
+                    "FROM main.customer_snapshot",
+                    ((1, True, True),),
+                ),
+            ),
+        )
+    ],
+    ids=["timestamp snapshot initial_valid_from can use execution time"],
+)
+def test_given_timestamp_snapshot_with_execution_initial_validity_when_building_then_uses_run_time(
+    test_case: BuildExecutionTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    result: BuildExecutionResult = run_build_for_project(
+        test_case=test_case,
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+    rows: tuple[tuple[object, ...], ...] = tuple(
+        tuple(row) for row in connection.execute(test_case.expected_query_results[0][0]).fetchall()
+    )
+
+    assert result.status == test_case.expected_status
+    verify_model_statuses(result=result, test_case=test_case)
+    assert rows == test_case.expected_query_results[0][1]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildExecutionTestCase(
+            description="check snapshot explicitly accepts execution-time initial validity",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_YML,
+                "sources/raw.yml": (
+                    "sources:\n"
+                    "  - name: raw_customers\n"
+                    "    schema: main\n"
+                    "    table: raw_customers\n"
+                ),
+                "models/customer_snapshot.sql": (
+                    "MODEL (\n"
+                    "  materialized snapshot,\n"
+                    "  unique_key [customer_id],\n"
+                    "  snapshot_strategy check,\n"
+                    "  check_columns [status],\n"
+                    "  updated_at updated_at,\n"
+                    "  initial_valid_from execution_time\n"
+                    ");\n\n"
+                    'SELECT customer_id, status, updated_at FROM __source("raw_customers")'
+                ),
+            },
+            setup_sql=(
+                "CREATE TABLE main.raw_customers AS "
+                "SELECT 1 AS customer_id, 'active' AS status, "
+                "TIMESTAMP '2024-01-01 00:00:00' AS updated_at",
+            ),
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=1,
+            expected_model_statuses=(("customer_snapshot", ExecutionStatus.SUCCESS),),
+            expected_query_results=(
+                (
+                    "SELECT customer_id, valid_from > updated_at, valid_to IS NULL "
+                    "FROM main.customer_snapshot",
+                    ((1, True, True),),
+                ),
+            ),
+        )
+    ],
+    ids=["check snapshot explicitly accepts execution-time initial validity"],
+)
+def test_given_check_snapshot_with_execution_initial_validity_when_building_then_uses_run_time(
+    test_case: BuildExecutionTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    result: BuildExecutionResult = run_build_for_project(
+        test_case=test_case,
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+    rows: tuple[tuple[object, ...], ...] = tuple(
+        tuple(row) for row in connection.execute(test_case.expected_query_results[0][0]).fetchall()
+    )
+
+    assert result.status == test_case.expected_status
+    verify_model_statuses(result=result, test_case=test_case)
+    assert rows == test_case.expected_query_results[0][1]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildExecutionTestCase(
+            description="planner carries initial_valid_from into snapshot plan entries",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_YML,
+                "sources/raw.yml": (
+                    "sources:\n"
+                    "  - name: raw_customers\n"
+                    "    schema: main\n"
+                    "    table: raw_customers\n"
+                ),
+                "models/customer_snapshot.sql": (
+                    "MODEL (\n"
+                    "  materialized snapshot,\n"
+                    "  unique_key [customer_id],\n"
+                    "  snapshot_strategy timestamp,\n"
+                    "  updated_at updated_at,\n"
+                    "  initial_valid_from execution_time\n"
+                    ");\n\n"
+                    'SELECT customer_id, updated_at FROM __source("raw_customers")'
+                ),
+            },
+            expected_status=BuildStatus.SUCCESS,
+            expected_model_statuses=(("customer_snapshot", ExecutionStatus.SUCCESS),),
+        )
+    ],
+    ids=["planner carries initial_valid_from into snapshot plan entries"],
+)
+def test_given_snapshot_initial_validity_config_when_planning_then_plan_entry_preserves_value(
+    test_case: BuildExecutionTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    adapter: DuckDbAdapter,
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+    pipeline_result: CompilePipelineResult = run_compile_pipeline(
+        discovered_inputs=discovered,
+        adapter=adapter,
+        no_sql_validation=True,
+    )
+    plan: PlanOutput = pipeline_result.plan_output
+    entry: ModelPlanEntry = plan.model_entries[0]
+
+    assert entry.name == test_case.expected_model_statuses[0][0]
+    assert entry.initial_valid_from == "execution_time"
 
 
 @pytest.mark.parametrize(

@@ -54,7 +54,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
-                      updated_at updated_at
+                      updated_at updated_at,
+                      valid_from_column effective_from,
+                      valid_to_column effective_to
                     );
 
                     SELECT customer_id, plan, updated_at
@@ -90,9 +92,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
             command=("--no-color", "build"),
             expected_exit_code=0,
             expected_query=(
-                "SELECT customer_id, plan, CAST(valid_from AS VARCHAR), "
-                "CAST(valid_to AS VARCHAR) FROM main.customer_snapshot "
-                "ORDER BY customer_id, valid_from"
+                "SELECT customer_id, plan, CAST(effective_from AS VARCHAR), "
+                "CAST(effective_to AS VARCHAR) FROM main.customer_snapshot "
+                "ORDER BY customer_id, effective_from"
             ),
             expected_initial_rows=((1, "basic", "2024-01-01 00:00:00", None),),
             expected_changed_rows=(
@@ -273,7 +275,9 @@ def test_given_duplicate_timestamp_snapshot_source_when_building_then_cli_report
                       materialized snapshot,
                       unique_key [customer_id],
                       snapshot_strategy check,
-                      check_columns [status]
+                      check_columns [status],
+                      valid_from_column effective_from,
+                      valid_to_column effective_to
                     );
 
                     SELECT customer_id, plan, status
@@ -307,8 +311,8 @@ def test_given_duplicate_timestamp_snapshot_source_when_building_then_cli_report
             command=("--no-color", "build"),
             expected_exit_code=0,
             expected_query=(
-                "SELECT customer_id, plan, status, valid_to IS NULL "
-                "FROM main.customer_snapshot ORDER BY customer_id, valid_to IS NULL, plan"
+                "SELECT customer_id, plan, status, effective_to IS NULL "
+                "FROM main.customer_snapshot ORDER BY customer_id, effective_to IS NULL, plan"
             ),
             expected_initial_rows=((1, "basic", "active", True),),
             expected_changed_rows=(
