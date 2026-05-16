@@ -1,7 +1,7 @@
 TEST();
 
 WITH
-__source__raw_orders AS (
+__source__raw__orders AS (
   SELECT
     1 AS id,
     100 AS customer_id,
@@ -18,7 +18,7 @@ __source__raw_orders AS (
     CAST('2026-04-01 11:00:00' AS TIMESTAMP) AS ordered_at,
     'completed' AS status
 ),
-__source__raw_payments AS (
+__source__raw__payments AS (
   SELECT
     10 AS id,
     1 AS order_id,

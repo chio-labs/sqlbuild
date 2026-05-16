@@ -1,7 +1,7 @@
 TEST();
 
 WITH
-__source__raw_orders AS (
+__source__raw__orders AS (
   SELECT
     1 AS id,
     100 AS customer_id,
