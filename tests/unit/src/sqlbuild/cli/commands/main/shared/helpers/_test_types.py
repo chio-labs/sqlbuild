@@ -4,6 +4,7 @@ from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.spec.models.project import SnapshotsConfig
 
 
@@ -47,6 +48,15 @@ class BuildFooterTestCase:
 class BuildProgressFailureOutputTestCase:
     description: str
     node_result: object
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class BuildProgressModelOutputTestCase:
+    description: str
+    node_result: ModelExecutionResult
+    plan_output: PlanOutput
     expected_fragments: tuple[str, ...]
     unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
 

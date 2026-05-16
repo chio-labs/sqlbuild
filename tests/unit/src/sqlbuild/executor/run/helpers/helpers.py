@@ -35,6 +35,41 @@ def build_result_model_plan_entry() -> ModelPlanEntry:
     )
 
 
+def build_snapshot_execution_plan_entry(
+    *,
+    pre_hook: object = None,
+    post_hook: object = None,
+) -> ModelPlanEntry:
+    return ModelPlanEntry(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.MODEL,
+            name="customer_snapshot",
+        ),
+        name="customer_snapshot",
+        relative_path=Path("models/customer_snapshot.sql"),
+        materialization_type=MaterializationType.SNAPSHOT,
+        action=PlanAction.SNAPSHOT,
+        reason=PlanReason.FIRST_RUN,
+        target=CompiledRelationTarget(
+            database=None,
+            schema="main",
+            name="customer_snapshot",
+            qualified_name="main.customer_snapshot",
+        ),
+        fingerprint_query_sql="SELECT 1 AS customer_id",
+        resolved_sql=(
+            "SELECT 1 AS customer_id, 'basic' AS plan, "
+            "TIMESTAMP '2024-01-01 00:00:00' AS updated_at"
+        ),
+        logical_ddl="",
+        unique_key=("customer_id",),
+        snapshot_strategy="timestamp",
+        updated_at_column="updated_at",
+        pre_hook=pre_hook,
+        post_hook=post_hook,
+    )
+
+
 class FakeCursorAdapter:
     def execute(self, connection: Any, sql: str) -> Any:
         return connection.execute(sql)

@@ -34,6 +34,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import
     BuildFooterTestCase,
     BuildProgressActiveSpinnerTestCase,
     BuildProgressFailureOutputTestCase,
+    BuildProgressModelOutputTestCase,
     BuildProgressSpinnerLifecycleTestCase,
     BuildProgressSqlTestRowsTestCase,
     NestedProgressChildRowsTestCase,
@@ -41,6 +42,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import
 )
 from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers.helpers import (
     build_audit_result,
+    build_progress_snapshot_plan_output,
 )
 
 TRUNCATE_NAME_TEST_CASES: list[TruncateNameTestCase] = [
@@ -391,6 +393,13 @@ BUILD_PROGRESS_ACTIVE_SPINNER_TEST_CASES: list[BuildProgressActiveSpinnerTestCas
         expected_fragments=("view", "stg_customers", "⠋"),
         unexpected_fragments=("...",),
     ),
+    BuildProgressActiveSpinnerTestCase(
+        description="active snapshot row uses snapshot resource type",
+        node_name="customer_snapshot",
+        node_type=MaterializationType.SNAPSHOT,
+        expected_fragments=("snapshot", "customer_snapshot", "⠋"),
+        unexpected_fragments=("table",),
+    ),
 ]
 
 
@@ -515,6 +524,52 @@ def test_given_failed_top_level_node_when_reporting_progress_then_writes_error_d
     monkeypatch.setattr("sys.stdout", stream)
     callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
         plan=PlanOutput(),
+        use_color=False,
+    )
+
+    callbacks.on_node_complete(test_case.node_result)
+    output: str = stream.getvalue()
+
+    expected_fragment: str
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in output
+    unexpected_fragment: str
+    for unexpected_fragment in test_case.unexpected_fragments:
+        assert unexpected_fragment not in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildProgressModelOutputTestCase(
+            description="completed snapshot row shows strategy and historical shape annotation",
+            node_result=ModelExecutionResult(
+                model_name="customer_snapshot",
+                status=ExecutionStatus.SUCCESS,
+                duration_ms=120,
+            ),
+            plan_output=build_progress_snapshot_plan_output(
+                observed_at_column="loaded_at",
+                historical_input="changes",
+            ),
+            expected_fragments=(
+                "snapshot  customer_snapshot  (timestamp, historical changes)",
+                "OK",
+                "0.12s",
+            ),
+            unexpected_fragments=("table",),
+        )
+    ],
+    ids=["completed snapshot row shows strategy and historical shape annotation"],
+)
+def test_given_model_node_when_reporting_progress_then_writes_materialization_label(
+    test_case: BuildProgressModelOutputTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stream: StringIO = StringIO()
+    monkeypatch.setattr("sys.stdout", stream)
+    callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
+        plan=test_case.plan_output,
         use_color=False,
     )
 

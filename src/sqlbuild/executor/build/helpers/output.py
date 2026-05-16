@@ -8,9 +8,7 @@ from sqlbuild.adapter.shared.models import LifeCycleEvent
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
-from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
 from sqlbuild.executor.build.helpers.color import (
     blue_dim,
     colorize_completion,
@@ -27,6 +25,10 @@ from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
+from sqlbuild.shared.helpers.materialization_labels import (
+    model_execution_annotation,
+    model_resource_type,
+)
 
 
 @dataclass(frozen=True)
@@ -582,22 +584,11 @@ def _build_test_results_by_model(
 
 
 def _resolve_resource_type(plan_entry: ModelPlanEntry | None) -> str:
-    if plan_entry is None:
-        return MaterializationType.TABLE
-    if plan_entry.materialization_type == MaterializationType.VIEW:
-        return MaterializationType.VIEW
-    return MaterializationType.TABLE
+    return model_resource_type(plan_entry)
 
 
 def _resolve_annotation(plan_entry: ModelPlanEntry | None) -> str:
-    if plan_entry is None:
-        return ""
-    if plan_entry.action not in INCREMENTAL_ACTIONS:
-        return ""
-    parts: list[str] = []
-    if plan_entry.incremental_strategy:
-        parts.append(plan_entry.incremental_strategy)
-    return ", ".join(parts)
+    return model_execution_annotation(plan_entry)
 
 
 def _format_duration(duration_ms: int | None) -> str:

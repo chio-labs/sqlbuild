@@ -133,3 +133,70 @@ def assert_fragments_in_order(output: str, fragments: tuple[str, ...]) -> None:
         index: int = normalized_output.find(fragment, position)
         assert index != -1, f"missing fragment in order: {fragment!r}\n\n{normalized_output}"
         position = index + len(fragment)
+
+
+def assert_snapshot_scd2_invariants(
+    *,
+    db_path: Path,
+    table_name: str,
+    key_columns: tuple[str, ...],
+    valid_from_column: str = "valid_from",
+    valid_to_column: str = "valid_to",
+    schema: str = "main",
+) -> None:
+    """Assert generic SCD2 safety invariants for a snapshot table."""
+
+    key_sql: str = ", ".join(key_columns)
+    key_match_sql: str = " AND ".join(
+        f"left_row.{column} = right_row.{column}" for column in key_columns
+    )
+    tie_break_sql: str = " OR ".join(
+        f"left_row.{column} <> right_row.{column}" for column in (*key_columns, valid_to_column)
+    )
+    qualified_table: str = f"{schema}.{table_name}"
+
+    duplicate_open_rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT COUNT(*) FROM ("
+            f"SELECT {key_sql} FROM {qualified_table} WHERE {valid_to_column} IS NULL "
+            f"GROUP BY {key_sql} HAVING COUNT(*) > 1"
+            ")"
+        ),
+    )
+    duplicate_valid_from_rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT COUNT(*) FROM ("
+            f"SELECT {key_sql}, {valid_from_column} FROM {qualified_table} "
+            f"GROUP BY {key_sql}, {valid_from_column} HAVING COUNT(*) > 1"
+            ")"
+        ),
+    )
+    invalid_interval_rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=db_path,
+        sql=(
+            f"SELECT COUNT(*) FROM {qualified_table} "
+            f"WHERE {valid_to_column} IS NOT NULL "
+            f"AND {valid_from_column} >= {valid_to_column}"
+        ),
+    )
+    overlapping_rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT COUNT(*) FROM ("
+            f"SELECT 1 FROM {qualified_table} AS left_row "
+            f"JOIN {qualified_table} AS right_row ON {key_match_sql} "
+            f"AND ({tie_break_sql}) "
+            f"AND left_row.{valid_from_column} < "
+            f"COALESCE(right_row.{valid_to_column}, TIMESTAMP '9999-12-31') "
+            f"AND right_row.{valid_from_column} < "
+            f"COALESCE(left_row.{valid_to_column}, TIMESTAMP '9999-12-31')"
+            ")"
+        ),
+    )
+
+    assert duplicate_open_rows == [(0,)]
+    assert duplicate_valid_from_rows == [(0,)]
+    assert invalid_interval_rows == [(0,)]
+    assert overlapping_rows == [(0,)]
