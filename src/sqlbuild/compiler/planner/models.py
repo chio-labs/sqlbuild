@@ -247,6 +247,7 @@ class ModelPlanEntry:
     updated_at_column: str | None = None
     check_columns: tuple[str, ...] = field(default_factory=tuple)
     observed_at_column: str | None = None
+    historical_input: str | None = None
     valid_from_column: str | None = None
     valid_to_column: str | None = None
     initial_valid_from: str | None = None

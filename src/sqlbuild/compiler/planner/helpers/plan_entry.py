@@ -206,6 +206,7 @@ def plan_model(
     updated_at_column: str | None = _get_config_str(model, "updated_at")
     check_columns: tuple[str, ...] = _get_check_columns(model)
     observed_at_column: str | None = _get_config_str(model, "observed_at")
+    historical_input: str | None = _get_config_str(model, "historical_input")
     valid_from_column: str | None = _get_config_str(model, "valid_from_column")
     valid_to_column: str | None = _get_config_str(model, "valid_to_column")
     initial_valid_from: str | None = _get_config_str(model, "initial_valid_from")
@@ -281,6 +282,7 @@ def plan_model(
         updated_at_column=updated_at_column,
         check_columns=check_columns,
         observed_at_column=observed_at_column,
+        historical_input=historical_input,
         valid_from_column=valid_from_column,
         valid_to_column=valid_to_column,
         initial_valid_from=initial_valid_from,

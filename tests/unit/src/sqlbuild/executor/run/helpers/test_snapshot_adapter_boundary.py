@@ -10,7 +10,12 @@ import pytest
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledRelationTarget
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ModelPlanEntry
-from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
+from sqlbuild.compiler.planner.types import (
+    HistoricalInput,
+    MaterializationType,
+    PlanAction,
+    PlanReason,
+)
 from sqlbuild.executor.run.helpers.snapshot import execute_snapshot_entry
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
@@ -25,6 +30,7 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
         super().__init__()
         self.marker: str = marker
         self.rendered_timestamp_changes: bool = False
+        self.rendered_historical_timestamp_changes: bool = False
 
     def render_apply_timestamp_snapshot_changes(
         self,
@@ -53,6 +59,31 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
             invalidate_hard_deletes,
         )
         self.rendered_timestamp_changes = True
+        return (f"INSERT INTO main.rendered_snapshot_sql VALUES ('{self.marker}')",)
+
+    def render_apply_historical_timestamp_snapshot_changes(
+        self,
+        *,
+        target: str,
+        source: str,
+        unique_key: tuple[str, ...],
+        updated_at_column: str,
+        observed_at_column: str,
+        valid_from_column: str,
+        valid_to_column: str,
+        output_columns: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        del (
+            target,
+            source,
+            unique_key,
+            updated_at_column,
+            observed_at_column,
+            valid_from_column,
+            valid_to_column,
+            output_columns,
+        )
+        self.rendered_historical_timestamp_changes = True
         return (f"INSERT INTO main.rendered_snapshot_sql VALUES ('{self.marker}')",)
 
 
@@ -134,5 +165,84 @@ def test_given_existing_snapshot_target_when_executing_then_uses_adapter_rendere
     assert lifecycle_sql == (
         f"INSERT INTO main.rendered_snapshot_sql VALUES ('{test_case.expected_rendered_marker}')",
     )
+
+    adapter.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnapshotAdapterRenderingTestCase(
+            description="historical timestamp snapshot DML is rendered by adapter",
+            expected_rendered_marker="adapter-rendered-historical-timestamp",
+        )
+    ],
+    ids=["historical timestamp snapshot DML is rendered by adapter"],
+)
+def test_given_existing_historical_timestamp_snapshot_when_executing_then_uses_adapter_dml(
+    test_case: SnapshotAdapterRenderingTestCase,
+) -> None:
+    adapter: _SnapshotRenderingAdapter = _SnapshotRenderingAdapter(
+        marker=test_case.expected_rendered_marker
+    )
+    connection: Any = adapter.connect({"database": ":memory:"})
+    connection.execute("CREATE TABLE main.rendered_snapshot_sql (marker VARCHAR)")
+    connection.execute(
+        "CREATE TABLE main.customer_snapshot AS "
+        "SELECT 1 AS customer_id, 'basic' AS plan, "
+        "TIMESTAMP '2024-01-01 00:00:00' AS updated_at, "
+        "TIMESTAMP '2024-01-02 00:00:00' AS observed_at, "
+        "TIMESTAMP '2024-01-01 00:00:00' AS valid_from, "
+        "CAST(NULL AS TIMESTAMP) AS valid_to"
+    )
+    entry: ModelPlanEntry = ModelPlanEntry(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.MODEL,
+            name="customer_snapshot",
+        ),
+        name="customer_snapshot",
+        relative_path=Path("models/customer_snapshot.sql"),
+        materialization_type=MaterializationType.SNAPSHOT,
+        action=PlanAction.SNAPSHOT,
+        reason=PlanReason.NORMAL_INCREMENTAL,
+        target=CompiledRelationTarget(
+            database=None,
+            schema="main",
+            name="customer_snapshot",
+            qualified_name="main.customer_snapshot",
+        ),
+        fingerprint_query_sql="SELECT 1 AS customer_id",
+        resolved_sql=(
+            "SELECT 1 AS customer_id, 'pro' AS plan, "
+            "TIMESTAMP '2024-01-03 00:00:00' AS updated_at, "
+            "TIMESTAMP '2024-01-04 00:00:00' AS observed_at"
+        ),
+        logical_ddl="",
+        unique_key=("customer_id",),
+        snapshot_strategy="timestamp",
+        updated_at_column="updated_at",
+        observed_at_column="observed_at",
+        historical_input=HistoricalInput.SNAPSHOT,
+    )
+
+    result: ModelExecutionResult = execute_snapshot_entry(
+        entry=entry,
+        adapter=adapter,
+        connection=connection,
+        model_targets={},
+        seed_targets={},
+        source_map={},
+        model_audits=(),
+        run_id="test_run",
+        query_change_tracking=False,
+    )
+    rendered_rows: tuple[tuple[object, ...], ...] = tuple(
+        tuple(row)
+        for row in connection.execute("SELECT marker FROM main.rendered_snapshot_sql").fetchall()
+    )
+
+    assert result.status == ExecutionStatus.SUCCESS
+    assert adapter.rendered_historical_timestamp_changes is True
+    assert rendered_rows == ((test_case.expected_rendered_marker,),)
 
     adapter.close(connection)

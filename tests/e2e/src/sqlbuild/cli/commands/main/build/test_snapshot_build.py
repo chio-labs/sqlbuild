@@ -13,6 +13,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     SnapshotFullRefreshFailureBuildE2ETestCase,
     SnapshotFullRefreshSuccessBuildE2ETestCase,
     SnapshotHistoricalCheckBuildE2ETestCase,
+    SnapshotHistoricalTimestampBuildE2ETestCase,
     SnapshotTimestampBuildE2ETestCase,
     SnapshotTimestampFailureBuildE2ETestCase,
 )
@@ -642,6 +643,134 @@ def test_given_historical_check_snapshot_project_when_rerunning_build_then_track
 @pytest.mark.parametrize(
     "test_case",
     [
+        SnapshotHistoricalTimestampBuildE2ETestCase(
+            description="historical timestamp snapshot tracks updated history through CLI",
+            repo_files={
+                "sqlbuild_project.toml": dedent(
+                    """
+                    name = "historical_timestamp_snapshot_project"
+                    adapter = "duckdb"
+
+                    [connection]
+                    database = "historical_timestamp_snapshot.duckdb"
+                    """
+                ).strip()
+                + "\n",
+                "sources/raw.yml": dedent(
+                    """
+                    sources:
+                      - name: raw_customer_extracts
+                        schema: main
+                        table: raw_customer_extracts
+                    """
+                ).strip()
+                + "\n",
+                "models/customer_snapshot.sql": dedent(
+                    """
+                    MODEL (
+                      materialized snapshot,
+                      unique_key [customer_id],
+                      snapshot_strategy timestamp,
+                      updated_at updated_at,
+                      observed_at observed_at,
+                      historical_input snapshot
+                    );
+
+                    SELECT customer_id, plan, updated_at, observed_at
+                    FROM __source("raw_customer_extracts")
+                    """
+                ).strip()
+                + "\n",
+            },
+            initial_seed_sql=dedent(
+                """
+                CREATE TABLE main.raw_customer_extracts AS
+                SELECT 1 AS customer_id, 'basic' AS plan,
+                  TIMESTAMP '2024-01-01' AS updated_at,
+                  TIMESTAMP '2024-01-02' AS observed_at
+                UNION ALL SELECT 1, 'basic', TIMESTAMP '2024-01-01', TIMESTAMP '2024-01-03'
+                UNION ALL SELECT 1, 'pro', TIMESTAMP '2024-01-04', TIMESTAMP '2024-01-06'
+                """
+            ).strip(),
+            mutation_sql=(
+                dedent(
+                    """
+                    CREATE OR REPLACE TABLE main.raw_customer_extracts AS
+                    SELECT 1 AS customer_id, 'basic' AS plan,
+                      TIMESTAMP '2024-01-01' AS updated_at,
+                      TIMESTAMP '2024-01-02' AS observed_at
+                    UNION ALL SELECT 1, 'basic', TIMESTAMP '2024-01-01', TIMESTAMP '2024-01-03'
+                    UNION ALL SELECT 1, 'pro', TIMESTAMP '2024-01-04', TIMESTAMP '2024-01-06'
+                    UNION ALL SELECT 1, 'team', TIMESTAMP '2024-01-07', TIMESTAMP '2024-01-08'
+                    """
+                ).strip(),
+            ),
+            command=("--no-color", "build"),
+            expected_exit_code=0,
+            expected_query=(
+                "SELECT customer_id, plan, CAST(valid_from AS VARCHAR), "
+                "CAST(valid_to AS VARCHAR) FROM main.customer_snapshot "
+                "ORDER BY customer_id, valid_from"
+            ),
+            expected_initial_rows=(
+                (1, "basic", "2024-01-01 00:00:00", "2024-01-04 00:00:00"),
+                (1, "pro", "2024-01-04 00:00:00", None),
+            ),
+            expected_changed_rows=(
+                (1, "basic", "2024-01-01 00:00:00", "2024-01-04 00:00:00"),
+                (1, "pro", "2024-01-04 00:00:00", "2024-01-07 00:00:00"),
+                (1, "team", "2024-01-07 00:00:00", None),
+            ),
+        )
+    ],
+    ids=["historical timestamp snapshot tracks updated history through CLI"],
+)
+def test_given_historical_timestamp_snapshot_project_when_rerunning_build_then_tracks_history(
+    test_case: SnapshotHistoricalTimestampBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="historical_timestamp_snapshot_project",
+        repo_files=test_case.repo_files,
+    )
+    db_path: Path = project_dir / "historical_timestamp_snapshot.duckdb"
+
+    import duckdb
+
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(str(db_path))
+    connection.execute(test_case.initial_seed_sql)
+    connection.close()
+
+    first_result: object = run_sqb(command=test_case.command, project_dir=project_dir)
+    assert first_result.returncode == test_case.expected_exit_code, (
+        first_result.stdout + first_result.stderr
+    )
+    rows_after_initial: tuple[tuple[object, ...], ...] = tuple(
+        tuple(row) for row in query_duckdb(db_path=db_path, sql=test_case.expected_query)
+    )
+
+    connection = duckdb.connect(str(db_path))
+    statement: str
+    for statement in test_case.mutation_sql:
+        connection.execute(statement)
+    connection.close()
+
+    second_result: object = run_sqb(command=test_case.command, project_dir=project_dir)
+    assert second_result.returncode == test_case.expected_exit_code, (
+        second_result.stdout + second_result.stderr
+    )
+    rows_after_changed: tuple[tuple[object, ...], ...] = tuple(
+        tuple(row) for row in query_duckdb(db_path=db_path, sql=test_case.expected_query)
+    )
+
+    assert rows_after_initial == test_case.expected_initial_rows
+    assert rows_after_changed == test_case.expected_changed_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         SnapshotCheckFailureBuildE2ETestCase(
             description="missing check snapshot output column fails build through CLI",
             repo_files={
@@ -1143,6 +1272,168 @@ SNAPSHOT_FULL_REFRESH_SUCCESS_TEST_CASES: list[SnapshotFullRefreshSuccessBuildE2
         expected_refreshed_rows=(
             (1, "basic", "2024-02-01 00:00:00", "2024-02-03 00:00:00"),
             (1, "team", "2024-02-03 00:00:00", None),
+        ),
+    ),
+    SnapshotFullRefreshSuccessBuildE2ETestCase(
+        description="historical timestamp snapshot full refresh rebuilds through build command",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                    name = "historical_snapshot_full_refresh_project"
+                    adapter = "duckdb"
+
+                    [connection]
+                    database = "historical_snapshot_full_refresh.duckdb"
+                    """
+            ).strip()
+            + "\n",
+            "sources/raw.yml": dedent(
+                """
+                    sources:
+                      - name: raw_customer_extracts
+                        schema: main
+                        table: raw_customer_extracts
+                    """
+            ).strip()
+            + "\n",
+            "models/customer_snapshot.sql": dedent(
+                """
+                    MODEL (
+                      materialized snapshot,
+                      unique_key [customer_id],
+                      snapshot_strategy timestamp,
+                      updated_at updated_at,
+                      observed_at observed_at,
+                      historical_input snapshot
+                    );
+
+                    SELECT customer_id, plan, updated_at, observed_at
+                    FROM __source("raw_customer_extracts")
+                    """
+            ).strip()
+            + "\n",
+        },
+        initial_seed_sql=dedent(
+            """
+                CREATE TABLE main.raw_customer_extracts AS
+                SELECT 1 AS customer_id, 'basic' AS plan,
+                  TIMESTAMP '2024-01-01' AS updated_at,
+                  TIMESTAMP '2024-01-02' AS observed_at
+                UNION ALL SELECT 1, 'pro', TIMESTAMP '2024-01-04', TIMESTAMP '2024-01-06'
+                """
+        ).strip(),
+        mutation_sql=(
+            dedent(
+                """
+                    CREATE OR REPLACE TABLE main.raw_customer_extracts AS
+                    SELECT 1 AS customer_id, 'basic' AS plan,
+                      TIMESTAMP '2024-02-01' AS updated_at,
+                      TIMESTAMP '2024-02-02' AS observed_at
+                    UNION ALL SELECT 1, 'team', TIMESTAMP '2024-02-04', TIMESTAMP '2024-02-06'
+                    """
+            ).strip(),
+        ),
+        initial_command=("--no-color", "build"),
+        full_refresh_command=(
+            "--no-color",
+            "build",
+            "--full-refresh",
+            "--allow-snapshot-full-refresh",
+        ),
+        expected_exit_code=0,
+        expected_query=(
+            "SELECT customer_id, plan, CAST(valid_from AS VARCHAR), "
+            "CAST(valid_to AS VARCHAR) FROM main.customer_snapshot "
+            "ORDER BY customer_id, valid_from"
+        ),
+        expected_initial_rows=(
+            (1, "basic", "2024-01-01 00:00:00", "2024-01-04 00:00:00"),
+            (1, "pro", "2024-01-04 00:00:00", None),
+        ),
+        expected_refreshed_rows=(
+            (1, "basic", "2024-02-01 00:00:00", "2024-02-04 00:00:00"),
+            (1, "team", "2024-02-04 00:00:00", None),
+        ),
+    ),
+    SnapshotFullRefreshSuccessBuildE2ETestCase(
+        description="historical timestamp snapshot full refresh rebuilds through run command",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                    name = "historical_snapshot_full_refresh_project"
+                    adapter = "duckdb"
+
+                    [connection]
+                    database = "historical_snapshot_full_refresh.duckdb"
+                    """
+            ).strip()
+            + "\n",
+            "sources/raw.yml": dedent(
+                """
+                    sources:
+                      - name: raw_customer_extracts
+                        schema: main
+                        table: raw_customer_extracts
+                    """
+            ).strip()
+            + "\n",
+            "models/customer_snapshot.sql": dedent(
+                """
+                    MODEL (
+                      materialized snapshot,
+                      unique_key [customer_id],
+                      snapshot_strategy timestamp,
+                      updated_at updated_at,
+                      observed_at observed_at,
+                      historical_input snapshot
+                    );
+
+                    SELECT customer_id, plan, updated_at, observed_at
+                    FROM __source("raw_customer_extracts")
+                    """
+            ).strip()
+            + "\n",
+        },
+        initial_seed_sql=dedent(
+            """
+                CREATE TABLE main.raw_customer_extracts AS
+                SELECT 1 AS customer_id, 'basic' AS plan,
+                  TIMESTAMP '2024-01-01' AS updated_at,
+                  TIMESTAMP '2024-01-02' AS observed_at
+                UNION ALL SELECT 1, 'pro', TIMESTAMP '2024-01-04', TIMESTAMP '2024-01-06'
+                """
+        ).strip(),
+        mutation_sql=(
+            dedent(
+                """
+                    CREATE OR REPLACE TABLE main.raw_customer_extracts AS
+                    SELECT 1 AS customer_id, 'basic' AS plan,
+                      TIMESTAMP '2024-02-01' AS updated_at,
+                      TIMESTAMP '2024-02-02' AS observed_at
+                    UNION ALL SELECT 1, 'team', TIMESTAMP '2024-02-04', TIMESTAMP '2024-02-06'
+                    """
+            ).strip(),
+        ),
+        initial_command=("--no-color", "build"),
+        full_refresh_command=(
+            "--no-color",
+            "run",
+            "--full-refresh",
+            "--allow-snapshot-full-refresh",
+        ),
+        expected_exit_code=0,
+        expected_query=(
+            "SELECT customer_id, plan, CAST(valid_from AS VARCHAR), "
+            "CAST(valid_to AS VARCHAR) FROM main.customer_snapshot "
+            "ORDER BY customer_id, valid_from"
+        ),
+        expected_initial_rows=(
+            (1, "basic", "2024-01-01 00:00:00", "2024-01-04 00:00:00"),
+            (1, "pro", "2024-01-04 00:00:00", None),
+        ),
+        expected_refreshed_rows=(
+            (1, "basic", "2024-02-01 00:00:00", "2024-02-04 00:00:00"),
+            (1, "team", "2024-02-04 00:00:00", None),
         ),
     ),
 ]
