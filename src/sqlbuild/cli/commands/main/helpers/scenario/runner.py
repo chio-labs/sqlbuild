@@ -19,6 +19,11 @@ from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
+from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
+    format_scenario_execution_json,
+    format_scenario_snapshot_execution_json,
+    write_execution_json_output,
+)
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
 )
@@ -91,6 +96,8 @@ def run_scenario(
     max_snapshot_total_rows: int | None = None,
     max_snapshot_bytes: int | None = None,
     max_snapshot_total_bytes: int | None = None,
+    json_output: bool = False,
+    json_output_path: Path | None = None,
 ) -> int:
     """Execute the scenario test command."""
 
@@ -137,7 +144,7 @@ def run_scenario(
         )
     )
     use_color: bool = not no_color and supports_color()
-    progress_stream: TextIO = sys.stdout
+    progress_stream: TextIO = sys.stderr if json_output else sys.stdout
     target_label: str | None = " ".join(selectors) if selectors else None
     execution_header: str = format_build_header(
         command="sqb scenario test --local" if local else "sqb scenario test",
@@ -178,6 +185,7 @@ def run_scenario(
         project_dir=effective_project_dir,
     )
     if local and (sync_snapshots or refresh):
+        capture_results: list[ScenarioSnapshotCaptureRunResult] = []
         capture_exit_code: int = _sync_local_snapshots(
             project_dir=effective_project_dir,
             discovered_inputs=discovered_inputs,
@@ -200,8 +208,17 @@ def run_scenario(
             max_snapshot_total_bytes=max_snapshot_total_bytes,
             progress_stream=progress_stream,
             use_color=use_color,
+            capture_results_out=capture_results,
         )
         if capture_exit_code != 0:
+            write_execution_json_output(
+                payload=format_scenario_snapshot_execution_json(
+                    results=tuple(capture_results),
+                    refresh=refresh,
+                ),
+                json_output=json_output,
+                json_output_path=json_output_path,
+            )
             return capture_exit_code
     header: str = f"Scenario ({len(scenarios)} selected)"
     styled_header: str = green_bold(header) if use_color else header
@@ -272,9 +289,17 @@ def run_scenario(
         )
     scenario_status.close()
 
+    exit_code: int
     if local:
-        return _write_local_summary(results=results, stream=progress_stream)
-    return _write_remote_summary(results=results, stream=progress_stream)
+        exit_code = _write_local_summary(results=results, stream=progress_stream)
+    else:
+        exit_code = _write_remote_summary(results=results, stream=progress_stream)
+    write_execution_json_output(
+        payload=format_scenario_execution_json(results=results, local=local),
+        json_output=json_output,
+        json_output_path=json_output_path,
+    )
+    return exit_code
 
 
 def _validate_local_scenario_sqlglot_enabled(
@@ -330,6 +355,7 @@ def _sync_local_snapshots(
     max_snapshot_total_bytes: int | None,
     progress_stream: TextIO,
     use_color: bool,
+    capture_results_out: list[ScenarioSnapshotCaptureRunResult] | None = None,
 ) -> int:
     capture_dialect: str = project_adapter.sqlglot_dialect() or project_adapter_name
     capture_names: tuple[str, ...] = select_scenario_snapshot_capture_candidates(
@@ -435,6 +461,8 @@ def _sync_local_snapshots(
             use_color=use_color,
         ),
     )
+    if capture_results_out is not None:
+        capture_results_out.extend(results)
     scenario_status.close()
     pass_count: int = sum(1 for result in results if result.status == SUCCESS_STATUS)
     fail_count: int = len(results) - pass_count

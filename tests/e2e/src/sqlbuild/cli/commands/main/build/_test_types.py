@@ -225,6 +225,20 @@ class CompileJsonBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class DagJsonBuildE2ETestCase:
+    """Test case for dag JSON behavior."""
+
+    description: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_project_name: str
+    expected_node_ids: tuple[str, ...]
+    expected_edge_pairs: tuple[tuple[str, str], ...]
+    expected_check_ids: tuple[str, ...]
+    expected_absent_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class PlanCommandBuildE2ETestCase:
     """Test case for plan command surface behavior."""
 

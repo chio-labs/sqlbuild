@@ -19,10 +19,14 @@ class MainTestCase:
     expected_full_refresh: bool = False
     expected_no_color: bool = False
     expected_debug: bool = False
+    expected_json: bool = False
+    expected_json_output_path: Path | None = None
     expected_manifest: bool = False
+    expected_dag: str | None = None
     expected_compile_lineage_mode: CompileLineageMode = CompileLineageMode.FAST
     expected_column_lineage_mode: ColumnLineageMode = ColumnLineageMode.RICH
     expected_scenario_selectors: tuple[str, ...] = ()
+    expected_select: tuple[str, ...] = ()
     expected_dbt_args: tuple[str, ...] = ()
     expected_skills_global: bool = False
     expected_skills_targets: tuple[str, ...] = ()

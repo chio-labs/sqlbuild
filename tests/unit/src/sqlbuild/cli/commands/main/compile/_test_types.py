@@ -22,6 +22,14 @@ class CompileCommandTestCase:
 
 
 @dataclass(frozen=True)
+class CompileDagArtifactTestCase:
+    description: str
+    dag_path: str
+    expected_project_name: str
+    expected_node_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class CompileTextOutputTestCase:
     description: str
     model_count: int
