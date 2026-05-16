@@ -292,6 +292,28 @@ RESOLVE_ACTION_TEST_CASES: list[ResolveModelPlanActionTestCase] = [
         expected_action=PlanAction.INCREMENTAL_MERGE,
         expected_reason=PlanReason.NORMAL_INCREMENTAL,
     ),
+    ResolveModelPlanActionTestCase(
+        description="snapshot with no change returns snapshot action",
+        materialized="snapshot",
+        incremental_strategy=None,
+        change_kind=ChangeKind.NO_CHANGE,
+        query_changed=False,
+        backfill_action=BackfillAction.WARN_ONLY,
+        full_refresh=False,
+        expected_action=PlanAction.SNAPSHOT,
+        expected_reason=PlanReason.NORMAL_INCREMENTAL,
+    ),
+    ResolveModelPlanActionTestCase(
+        description="snapshot with full refresh keeps snapshot action and full refresh reason",
+        materialized="snapshot",
+        incremental_strategy=None,
+        change_kind=ChangeKind.NO_CHANGE,
+        query_changed=False,
+        backfill_action=BackfillAction.WARN_ONLY,
+        full_refresh=True,
+        expected_action=PlanAction.SNAPSHOT,
+        expected_reason=PlanReason.FULL_REFRESH,
+    ),
 ]
 
 

@@ -25,6 +25,8 @@ class LoadProjectConfigTestCase:
     expected_retention_days: int
     expected_janitor_delete_tracked_only: bool
     expected_janitor_exclude_patterns: tuple[str, ...]
+    expected_current_state_full_refresh: str = "deny"
+    expected_historical_full_refresh: str = "require_confirmation"
     expected_scenario_local_type_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
     expected_snapshot_limits: dict[str, int | None] = field(
         default_factory=lambda: {
