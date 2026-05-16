@@ -23,6 +23,7 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
             table: orders
             description: Raw orders from ingestion.
             type_enforcement: true
+            contract: enforced
             meta:
               owner: finance
             audits:
@@ -48,6 +49,7 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
         expected_source_names=("raw_orders", "raw_customers"),
         expected_column_names=(("order_id", "created_at"), ()),
         expected_type_enforcement_values=(True, None),
+        expected_contract_values=("enforced", None),
         expected_expressions=(None, None),
         expected_source_audit_names=(("source_freshness",), ()),
         expected_column_audit_names=((("not_null",), ("recency",)), ()),
@@ -69,6 +71,7 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
         expected_source_names=("raw_orders",),
         expected_column_names=(("order_id", "status"),),
         expected_type_enforcement_values=(True,),
+        expected_contract_values=(None,),
         expected_expressions=("SELECT 1 AS order_id, 'placed' AS status\n",),
         expected_source_audit_names=((),),
         expected_column_audit_names=(((), ()),),
@@ -88,6 +91,7 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
         expected_source_names=("raw_orders",),
         expected_column_names=(("order_id",),),
         expected_type_enforcement_values=(True,),
+        expected_contract_values=(None,),
         expected_expressions=("SELECT 1 AS order_id, 'placed' AS status\n",),
         expected_source_audit_names=((),),
         expected_column_audit_names=(((),),),
@@ -106,6 +110,7 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
         expected_source_names=("raw_orders",),
         expected_column_names=(("order_id",),),
         expected_type_enforcement_values=(None,),
+        expected_contract_values=(None,),
         expected_expressions=(None,),
         expected_source_audit_names=((),),
         expected_column_audit_names=(((),),),
@@ -125,6 +130,7 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
         expected_source_names=("raw_orders",),
         expected_column_names=(("order_id",),),
         expected_type_enforcement_values=(False,),
+        expected_contract_values=(None,),
         expected_expressions=(None,),
         expected_source_audit_names=((),),
         expected_column_audit_names=(((),),),
@@ -135,6 +141,7 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
         expected_source_names=(),
         expected_column_names=(),
         expected_type_enforcement_values=(),
+        expected_contract_values=(),
         expected_expressions=(),
         expected_source_audit_names=(),
         expected_column_audit_names=(),
@@ -169,6 +176,7 @@ def test_given_sources_yaml_variants_when_parsing_then_it_returns_expected_raw_m
         tuple(entry.type_enforcement for entry in source_entries)
         == test_case.expected_type_enforcement_values
     )
+    assert tuple(entry.contract for entry in source_entries) == test_case.expected_contract_values
     assert tuple(entry.expression for entry in source_entries) == test_case.expected_expressions
     assert (
         tuple(tuple(audit.definition_name for audit in entry.audits) for entry in source_entries)
@@ -199,6 +207,15 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
             meta: []
         """,
         expected_error_fragment="source 'meta' must be a mapping",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source contract is unknown",
+        contents="""
+        sources:
+          - name: raw_orders
+            contract: strict
+        """,
+        expected_error_fragment="source 'contract' must be one of",
     ),
     ParseSourcesYamlErrorTestCase(
         description="raises when sources is not a list",

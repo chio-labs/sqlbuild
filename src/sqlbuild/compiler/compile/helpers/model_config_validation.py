@@ -8,6 +8,7 @@ from decimal import Decimal, InvalidOperation
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models.core import CompileModelConfig
 from sqlbuild.compiler.planner.types import (
+    ContractPolicy,
     CursorGrain,
     CursorType,
     HistoricalInput,
@@ -24,6 +25,7 @@ _VALID_STRATEGIES: frozenset[str] = frozenset(s.value for s in IncrementalStrate
 _VALID_CURSOR_TYPES: frozenset[str] = frozenset(ct.value for ct in CursorType)
 _VALID_CURSOR_GRAINS: frozenset[str] = frozenset(cg.value for cg in CursorGrain)
 _VALID_INCREMENTAL_MODES: frozenset[str] = frozenset(m.value for m in IncrementalMode)
+_VALID_CONTRACT_POLICIES: frozenset[str] = frozenset(p.value for p in ContractPolicy)
 _VALID_SNAPSHOT_STRATEGIES: frozenset[str] = frozenset(s.value for s in SnapshotStrategy)
 _VALID_HISTORICAL_INPUTS: frozenset[str] = frozenset(h.value for h in HistoricalInput)
 _VALID_INITIAL_VALID_FROM: frozenset[str] = frozenset(v.value for v in InitialValidFrom)
@@ -196,6 +198,26 @@ def validate_incremental_config(
         raise CompileInputError(
             f"model '{model_name}': batch_concurrency is not supported; "
             f"microbatch processes batches serially"
+        )
+
+
+def validate_contract_config(
+    *,
+    config: CompileModelConfig,
+    model_name: str,
+) -> None:
+    """Validate model contract config values after layering."""
+
+    raw_contract: object | None = config.values.get("contract")
+    if raw_contract is None:
+        return
+    if not isinstance(raw_contract, str):
+        raise CompileInputError(f"model '{model_name}': contract must be a string")
+    contract: str = raw_contract
+    if contract not in _VALID_CONTRACT_POLICIES:
+        raise CompileInputError(
+            f"model '{model_name}': unknown contract '{contract}'; valid values: "
+            f"{', '.join(sorted(_VALID_CONTRACT_POLICIES))}"
         )
 
 

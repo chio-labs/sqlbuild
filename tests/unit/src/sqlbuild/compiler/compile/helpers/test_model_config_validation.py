@@ -6,6 +6,7 @@ import pytest
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.helpers.model_config_validation import (
+    validate_contract_config,
     validate_custom_materialization_config,
     validate_incremental_config,
     validate_non_incremental_config,
@@ -14,6 +15,8 @@ from sqlbuild.compiler.compile.helpers.model_config_validation import (
 )
 from sqlbuild.compiler.compile.models.core import CompileModelConfig
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
+    ContractConfigErrorTestCase,
+    ContractConfigValidTestCase,
     CustomMaterializationConfigErrorTestCase,
     CustomMaterializationConfigValidTestCase,
     IncrementalConfigErrorTestCase,
@@ -25,6 +28,67 @@ from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     SnapshotConfigErrorTestCase,
     SnapshotConfigValidTestCase,
 )
+
+CONTRACT_VALID_TEST_CASES: list[ContractConfigValidTestCase] = [
+    ContractConfigValidTestCase(
+        description="allows enforced contract config",
+        config_values={"materialized": "table", "contract": "enforced"},
+    ),
+    ContractConfigValidTestCase(
+        description="allows none contract config",
+        config_values={"materialized": "table", "contract": "none"},
+    ),
+    ContractConfigValidTestCase(
+        description="allows omitted contract config",
+        config_values={"materialized": "table"},
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    CONTRACT_VALID_TEST_CASES,
+    ids=[case.description for case in CONTRACT_VALID_TEST_CASES],
+)
+def test_given_valid_contract_config_when_validating_then_passes(
+    test_case: ContractConfigValidTestCase,
+) -> None:
+    config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
+
+    validate_contract_config(config=config, model_name="test_model")
+
+    assert test_case.expected_valid is True
+
+
+CONTRACT_ERROR_TEST_CASES: list[ContractConfigErrorTestCase] = [
+    ContractConfigErrorTestCase(
+        description="rejects unknown contract config",
+        config_values={"materialized": "table", "contract": "strict"},
+        expected_error_fragment="unknown contract 'strict'",
+    ),
+    ContractConfigErrorTestCase(
+        description="rejects non-string contract config",
+        config_values={"materialized": "table", "contract": True},
+        expected_error_fragment="contract must be a string",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    CONTRACT_ERROR_TEST_CASES,
+    ids=[case.description for case in CONTRACT_ERROR_TEST_CASES],
+)
+def test_given_invalid_contract_config_when_validating_then_raises(
+    test_case: ContractConfigErrorTestCase,
+) -> None:
+    config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
+
+    with pytest.raises(CompileInputError) as exc_info:
+        validate_contract_config(config=config, model_name="test_model")
+
+    assert test_case.expected_error_fragment in str(exc_info.value)
+
 
 VALID_TEST_CASES: list[IncrementalConfigValidTestCase] = [
     IncrementalConfigValidTestCase(
