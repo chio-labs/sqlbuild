@@ -16,6 +16,7 @@ from sqlbuild.integrations.dagster.helpers.assets import (
     build_scenario_check_specs,
 )
 from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
+    DagsterAssetCheckFilterTestCase,
     DagsterAssetSpecTestCase,
     DagsterDecoratorTestCase,
     DagsterScenarioCheckDecoratorTestCase,
@@ -154,6 +155,31 @@ def test_given_sqlbuild_dag_when_building_scenario_check_specs_then_filters_non_
     check_specs: tuple[Any, ...] = build_scenario_check_specs(
         dag=build_dagster_test_dag(),
         translator=SqlBuildDagsterTranslator(),
+    )
+    check_names: tuple[str, ...] = tuple(spec.name for spec in check_specs)
+
+    assert check_names == test_case.expected_check_names
+    assert not set(test_case.unexpected_check_names).intersection(check_names)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterAssetCheckFilterTestCase(
+            description="excludes scenario checks when requested",
+            expected_check_names=("audit__not_null__order_id", "audit__freshness__loaded_at"),
+            unexpected_check_names=("scenario__orders_minimal", "scenario__customers_minimal"),
+        )
+    ],
+    ids=["excludes scenario checks when requested"],
+)
+def test_given_sqlbuild_dag_when_building_check_specs_then_can_exclude_scenarios(
+    test_case: DagsterAssetCheckFilterTestCase,
+) -> None:
+    check_specs: tuple[Any, ...] = build_check_specs(
+        dag=build_dagster_test_dag(),
+        translator=SqlBuildDagsterTranslator(),
+        include_scenarios=False,
     )
     check_names: tuple[str, ...] = tuple(spec.name for spec in check_specs)
 

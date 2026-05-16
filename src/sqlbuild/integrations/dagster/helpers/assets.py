@@ -44,11 +44,20 @@ def build_asset_specs(
 
 
 def build_check_specs(
-    *, dag: Mapping[str, Any], translator: SqlBuildDagsterTranslator
+    *,
+    dag: Mapping[str, Any],
+    translator: SqlBuildDagsterTranslator,
+    include_scenarios: bool = True,
 ) -> tuple[Any, ...]:
     """Build Dagster check specs from SQLBuild test/audit/scenario checks."""
 
-    return _build_check_specs(dag=dag, translator=translator, kinds=None)
+    excluded_kinds: set[str] = set() if include_scenarios else {"scenario"}
+    return _build_check_specs(
+        dag=dag,
+        translator=translator,
+        kinds=None,
+        excluded_kinds=excluded_kinds,
+    )
 
 
 def build_scenario_check_specs(
@@ -56,11 +65,20 @@ def build_scenario_check_specs(
 ) -> tuple[Any, ...]:
     """Build Dagster check specs for SQLBuild scenario checks only."""
 
-    return _build_check_specs(dag=dag, translator=translator, kinds={"scenario"})
+    return _build_check_specs(
+        dag=dag,
+        translator=translator,
+        kinds={"scenario"},
+        excluded_kinds=set(),
+    )
 
 
 def _build_check_specs(
-    *, dag: Mapping[str, Any], translator: SqlBuildDagsterTranslator, kinds: set[str] | None
+    *,
+    dag: Mapping[str, Any],
+    translator: SqlBuildDagsterTranslator,
+    kinds: set[str] | None,
+    excluded_kinds: set[str],
 ) -> tuple[Any, ...]:
     """Build Dagster check specs from SQLBuild checks matching optional kinds."""
 
@@ -68,7 +86,10 @@ def _build_check_specs(
     nodes_by_id: dict[str, Mapping[str, Any]] = _nodes_by_id(dag)
     specs: list[Any] = []
     for check in dag["checks"]:
-        if kinds is not None and str(check.get("kind")) not in kinds:
+        check_kind: str = str(check.get("kind"))
+        if check_kind in excluded_kinds:
+            continue
+        if kinds is not None and check_kind not in kinds:
             continue
         for asset_id in check.get("checked_asset_ids", ()):
             node: Mapping[str, Any] | None = nodes_by_id.get(str(asset_id))

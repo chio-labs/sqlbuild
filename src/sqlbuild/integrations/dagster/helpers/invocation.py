@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 import tempfile
 from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
@@ -199,10 +200,14 @@ def _log_invocation(*, context: Any, invocation: SqlBuildCliInvocation) -> None:
         logger.info("SQLBuild selected assets from Dagster (%s):", len(invocation.selection))
         for line in _wrap_selectors(invocation.selection):
             logger.info("  %s", line)
-    for line in invocation.stdout.splitlines():
-        logger.info(line)
-    for line in invocation.stderr.splitlines():
-        logger.warning(line)
+    if invocation.stdout and _load_execution_payload(invocation.stdout) is None:
+        sys.stdout.write(invocation.stdout)
+        if not invocation.stdout.endswith("\n"):
+            sys.stdout.write("\n")
+    if invocation.stderr:
+        sys.stderr.write(invocation.stderr)
+        if not invocation.stderr.endswith("\n"):
+            sys.stderr.write("\n")
 
 
 def _wrap_selectors(selectors: tuple[str, ...], *, width: int = 100) -> tuple[str, ...]:

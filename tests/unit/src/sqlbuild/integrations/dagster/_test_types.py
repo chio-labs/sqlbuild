@@ -28,6 +28,13 @@ class DagsterScenarioCheckDecoratorTestCase:
 
 
 @dataclass(frozen=True)
+class DagsterAssetCheckFilterTestCase:
+    description: str
+    expected_check_names: tuple[str, ...]
+    unexpected_check_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DagsterCliInvocationTestCase:
     description: str
     command_stdout: str

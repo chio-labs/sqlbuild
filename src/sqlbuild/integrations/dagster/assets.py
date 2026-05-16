@@ -27,6 +27,7 @@ def sqlbuild_assets(
     translator: SqlBuildDagsterTranslator | None = None,
     name: str | None = None,
     required_resource_keys: set[str] | None = None,
+    include_scenario_checks: bool = True,
 ) -> Callable[[Callable[..., Any]], Any]:
     """Create a Dagster multi-asset definition from a SQLBuild DAG artifact."""
 
@@ -46,6 +47,7 @@ def sqlbuild_assets(
     check_specs: tuple[Any, ...] = build_check_specs(
         dag=resolved_dag,
         translator=resolved_translator,
+        include_scenarios=include_scenario_checks,
     )
 
     def decorator(fn: Callable[..., Any]) -> Any:
