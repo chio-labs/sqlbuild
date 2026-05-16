@@ -25,6 +25,7 @@ from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.spec.models.project import SnapshotsConfig
 
 
 def execute_build_plan(
@@ -36,6 +37,8 @@ def execute_build_plan(
     promotion_mode: TablePromotionMode,
     run_id: str,
     query_change_tracking: bool = True,
+    snapshots: SnapshotsConfig | None = None,
+    allow_snapshot_schema_change: bool = False,
     run_audits: bool = True,
     run_tests: bool = True,
     fail_fast: bool = False,
@@ -60,6 +63,8 @@ def execute_build_plan(
         promotion_mode=promotion_mode,
         run_id=run_id,
         query_change_tracking=query_change_tracking,
+        snapshots=snapshots or SnapshotsConfig(),
+        allow_snapshot_schema_change=allow_snapshot_schema_change,
         run_audits=run_audits,
         run_tests=run_tests,
         fail_fast=fail_fast,

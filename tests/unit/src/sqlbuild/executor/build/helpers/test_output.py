@@ -60,6 +60,38 @@ TEST_CASES: list[BuildOutputTestCase] = [
         ),
     ),
     BuildOutputTestCase(
+        description="snapshot model output shows strategy and historical shape annotation",
+        result=BuildExecutionResult(
+            status=BuildStatus.SUCCESS,
+            model_results=(
+                ModelExecutionResult(
+                    model_name="customer_snapshot",
+                    status=ExecutionStatus.SUCCESS,
+                    duration_ms=150,
+                ),
+            ),
+            success_count=1,
+        ),
+        model_plan_overrides=(
+            ModelPlanOverride(
+                name="customer_snapshot",
+                materialization_type=MaterializationType.SNAPSHOT,
+                action=PlanAction.SNAPSHOT,
+                snapshot_strategy="check",
+                observed_at_column="observed_at",
+                historical_input="snapshot",
+            ),
+        ),
+        expected_output_fragments=(
+            "1/1",
+            "snapshot",
+            "customer_snapshot  (check, historical snapshot)",
+            "OK",
+            "0.15s",
+        ),
+        expected_absent_fragments=("table",),
+    ),
+    BuildOutputTestCase(
         description="failed model shows FAIL status with phase and failure detail",
         result=BuildExecutionResult(
             status=BuildStatus.FAILED,
@@ -668,6 +700,9 @@ def test_given_build_result_when_formatting_output_then_contains_expected_fragme
                 name=model_result.model_name,
                 materialization_type=mat_type,
                 action=action,
+                snapshot_strategy=override.snapshot_strategy if override else None,
+                observed_at_column=override.observed_at_column if override else None,
+                historical_input=override.historical_input if override else None,
             )
         )
 

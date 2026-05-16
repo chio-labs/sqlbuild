@@ -56,6 +56,8 @@ def run_build_for_project(
         promotion_mode=promotion_mode,
         run_id="test_run",
         query_change_tracking=test_case.query_change_tracking,
+        snapshots=discovered.project_config.snapshots,
+        allow_snapshot_schema_change=test_case.allow_snapshot_schema_change,
         run_audits=test_case.run_audits,
         run_tests=test_case.run_tests,
         fail_fast=test_case.fail_fast,

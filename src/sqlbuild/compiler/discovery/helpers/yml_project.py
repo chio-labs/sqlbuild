@@ -31,7 +31,19 @@ from sqlbuild.spec.models.project import (
     ScenarioConfig,
     ScenarioSnapshotLimitsConfig,
     SettingsConfig,
+    SnapshotsConfig,
 )
+
+_SNAPSHOT_FULL_REFRESH_POLICIES: frozenset[str] = frozenset(
+    {"allow", "deny", "require_confirmation"}
+)
+_SNAPSHOT_SCHEMA_CHANGE_POLICIES: frozenset[str] = frozenset(
+    {"append_new_columns", "deny", "require_confirmation"}
+)
+_DEFAULT_CURRENT_STATE_SNAPSHOT_FULL_REFRESH: str = "deny"
+_DEFAULT_HISTORICAL_SNAPSHOT_FULL_REFRESH: str = "require_confirmation"
+_DEFAULT_SNAPSHOT_SCHEMA_CHANGE: str = "append_new_columns"
+_DEFAULT_WILDCARD_CHECK_SNAPSHOT_SCHEMA_CHANGE: str = "require_confirmation"
 
 
 def load_project_config(*, project_dir: Path) -> ProjectConfig:
@@ -58,6 +70,9 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         file_path=file_path,
     )
     janitor: JanitorConfig = _load_janitor(payload=payload.get("janitor"), file_path=file_path)
+    snapshots: SnapshotsConfig = _load_snapshots(
+        payload=payload.get("snapshots"), file_path=file_path
+    )
     scenario: ScenarioConfig = _load_scenario(payload=payload.get("scenario"), file_path=file_path)
     dbt: DbtConfig = _load_dbt(payload=payload.get("dbt"), file_path=file_path)
     if janitor.enabled and janitor.delete_tracked_only and not settings.query_change_tracking:
@@ -77,6 +92,7 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         vars=vars_map,
         environments=environments,
         janitor=janitor,
+        snapshots=snapshots,
         scenario=scenario,
         dbt=dbt,
     )
@@ -496,6 +512,47 @@ def _load_janitor(*, payload: object, file_path: Path) -> JanitorConfig:
     )
 
 
+def _load_snapshots(*, payload: object, file_path: Path) -> SnapshotsConfig:
+    mapping: dict[str, object] = _coerce_mapping(
+        payload=payload, label="snapshots", file_path=file_path
+    )
+    _validate_allowed_keys(
+        mapping=mapping,
+        allowed_keys=frozenset(
+            {
+                "current_state_full_refresh",
+                "historical_full_refresh",
+                "schema_change",
+                "wildcard_check_schema_change",
+            }
+        ),
+        label="snapshots",
+        file_path=file_path,
+    )
+    return SnapshotsConfig(
+        current_state_full_refresh=_optional_full_refresh_policy(
+            mapping=mapping,
+            key="current_state_full_refresh",
+            default=_DEFAULT_CURRENT_STATE_SNAPSHOT_FULL_REFRESH,
+        ),
+        historical_full_refresh=_optional_full_refresh_policy(
+            mapping=mapping,
+            key="historical_full_refresh",
+            default=_DEFAULT_HISTORICAL_SNAPSHOT_FULL_REFRESH,
+        ),
+        schema_change=_optional_snapshot_schema_change_policy(
+            mapping=mapping,
+            key="schema_change",
+            default=_DEFAULT_SNAPSHOT_SCHEMA_CHANGE,
+        ),
+        wildcard_check_schema_change=_optional_snapshot_schema_change_policy(
+            mapping=mapping,
+            key="wildcard_check_schema_change",
+            default=_DEFAULT_WILDCARD_CHECK_SNAPSHOT_SCHEMA_CHANGE,
+        ),
+    )
+
+
 def _load_scenario(*, payload: object, file_path: Path) -> ScenarioConfig:
     mapping: dict[str, object] = _coerce_mapping(
         payload=payload, label="scenario", file_path=file_path
@@ -683,6 +740,32 @@ def _optional_scalar_batch_size(*, mapping: dict[str, object], key: str) -> str 
     if isinstance(value, (str, int)):
         return value
     raise ProjectConfigError(f"Expected '{key}' to be a string or integer when provided")
+
+
+def _optional_full_refresh_policy(*, mapping: dict[str, object], key: str, default: str) -> str:
+    value: object | None = mapping.get(key)
+    if value is None:
+        return default
+    if not isinstance(value, str):
+        raise ProjectConfigError(f"Expected '{key}' to be a string when provided")
+    if value not in _SNAPSHOT_FULL_REFRESH_POLICIES:
+        valid_values: str = ", ".join(sorted(_SNAPSHOT_FULL_REFRESH_POLICIES))
+        raise ProjectConfigError(f"Expected '{key}' to be one of: {valid_values}")
+    return value
+
+
+def _optional_snapshot_schema_change_policy(
+    *, mapping: dict[str, object], key: str, default: str
+) -> str:
+    value: object | None = mapping.get(key)
+    if value is None:
+        return default
+    if not isinstance(value, str):
+        raise ProjectConfigError(f"Expected '{key}' to be a string when provided")
+    if value not in _SNAPSHOT_SCHEMA_CHANGE_POLICIES:
+        valid_values: str = ", ".join(sorted(_SNAPSHOT_SCHEMA_CHANGE_POLICIES))
+        raise ProjectConfigError(f"Expected '{key}' to be one of: {valid_values}")
+    return value
 
 
 def _optional_cursor_start(*, mapping: dict[str, object], key: str) -> object | None:

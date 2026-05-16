@@ -8,11 +8,20 @@ import pytest
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo
-from sqlbuild.compiler.compile.models.core import CompiledProject
-from sqlbuild.compiler.planner.helpers.plan_entry import gather_source_columns
+from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledProject
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.helpers.plan_entry import (
+    gather_source_columns,
+    validate_source_cursor_input_columns,
+)
+from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.source import SourceEntry
-from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import SourceColumnsTestCase
+from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
+    SourceColumnsTestCase,
+    SourceCursorInputColumnsTestCase,
+)
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
+    build_source_cursor_input_model,
     build_test_project_with_source_entry,
 )
 
@@ -75,6 +84,54 @@ TEST_CASES: list[SourceColumnsTestCase] = [
     ),
 ]
 
+CURSOR_INPUT_TEST_CASES: list[SourceCursorInputColumnsTestCase] = [
+    SourceCursorInputColumnsTestCase(
+        description="passes when source cursor input column is known",
+        reference_kind=SqlReferenceKind.SOURCE,
+        reference_name="raw_orders",
+        cursor_column="event_time",
+        cursor_inputs={"raw_orders": "loaded_at"},
+        source_columns={"raw_orders": ("order_id", "loaded_at")},
+        expected_valid=True,
+    ),
+    SourceCursorInputColumnsTestCase(
+        description="passes when default source cursor column is known",
+        reference_kind=SqlReferenceKind.SOURCE,
+        reference_name="raw_orders",
+        cursor_column="event_time",
+        cursor_inputs=None,
+        source_columns={"raw_orders": ("order_id", "event_time")},
+        expected_valid=True,
+    ),
+    SourceCursorInputColumnsTestCase(
+        description="skips when source columns are unknown",
+        reference_kind=SqlReferenceKind.SOURCE,
+        reference_name="raw_orders",
+        cursor_column="event_time",
+        cursor_inputs={"raw_orders": "missing_loaded_at"},
+        source_columns={},
+        expected_valid=True,
+    ),
+    SourceCursorInputColumnsTestCase(
+        description="skips dbt ref cursor input validation",
+        reference_kind=SqlReferenceKind.DBT_REF,
+        reference_name="dbt_orders",
+        cursor_column="event_time",
+        cursor_inputs={"dbt_orders": "missing_loaded_at"},
+        source_columns={"dbt_orders": ("order_id", "event_time")},
+        expected_valid=True,
+    ),
+    SourceCursorInputColumnsTestCase(
+        description="skips model ref cursor input validation",
+        reference_kind=SqlReferenceKind.REF,
+        reference_name="stg_orders",
+        cursor_column="event_time",
+        cursor_inputs={"stg_orders": "missing_loaded_at"},
+        source_columns={"stg_orders": ("order_id", "event_time")},
+        expected_valid=True,
+    ),
+]
+
 
 @pytest.mark.parametrize("test_case", TEST_CASES, ids=[case.description for case in TEST_CASES])
 def test_given_sources_when_gathering_columns_then_returns_expected_source_columns(
@@ -91,3 +148,65 @@ def test_given_sources_when_gathering_columns_then_returns_expected_source_colum
     assert tuple(column.name for column in result.get("raw_payments", ())) == (
         test_case.expected_source_column_names
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    CURSOR_INPUT_TEST_CASES,
+    ids=[case.description for case in CURSOR_INPUT_TEST_CASES],
+)
+def test_given_valid_cursor_input_source_columns_when_validating_then_passes(
+    test_case: SourceCursorInputColumnsTestCase,
+) -> None:
+    model: CompiledModel = build_source_cursor_input_model(test_case)
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]] = {
+        source_name: tuple(ColumnInfo(name=name, type="") for name in column_names)
+        for source_name, column_names in test_case.source_columns.items()
+    }
+
+    validate_source_cursor_input_columns(
+        model=model,
+        cursor_column=test_case.cursor_column,
+        source_warehouse_columns=source_warehouse_columns,
+    )
+
+    assert test_case.expected_valid is True
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SourceCursorInputColumnsTestCase(
+            description="raises when source cursor input column is missing",
+            reference_kind=SqlReferenceKind.SOURCE,
+            reference_name="raw_orders",
+            cursor_column="event_time",
+            cursor_inputs={"raw_orders": "missing_loaded_at"},
+            source_columns={"raw_orders": ("order_id", "event_time")},
+            expected_valid=False,
+            expected_error_fragment=(
+                "model 'test_model': cursor_inputs references source 'raw_orders' column "
+                "'missing_loaded_at'"
+            ),
+        ),
+    ],
+    ids=["raises when source cursor input column is missing"],
+)
+def test_given_missing_cursor_input_source_column_when_validating_then_raises_clear_error(
+    test_case: SourceCursorInputColumnsTestCase,
+) -> None:
+    model: CompiledModel = build_source_cursor_input_model(test_case)
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]] = {
+        source_name: tuple(ColumnInfo(name=name, type="") for name in column_names)
+        for source_name, column_names in test_case.source_columns.items()
+    }
+    assert test_case.expected_error_fragment is not None
+
+    with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment):
+        validate_source_cursor_input_columns(
+            model=model,
+            cursor_column=test_case.cursor_column,
+            source_warehouse_columns=source_warehouse_columns,
+        )
+
+    assert test_case.expected_valid is False

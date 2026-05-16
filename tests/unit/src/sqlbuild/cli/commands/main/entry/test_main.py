@@ -1379,9 +1379,18 @@ def test_given_dag_command_arguments_when_running_then_dispatches_expected_handl
     [
         MainTestCase(
             description="passes global debug and no color plus full refresh to build handler",
-            argv=["--debug", "--no-color", "build", "--full-refresh"],
+            argv=[
+                "--debug",
+                "--no-color",
+                "build",
+                "--full-refresh",
+                "--allow-snapshot-full-refresh",
+                "--allow-snapshot-schema-change",
+            ],
             expected_exit_code=5,
             expected_full_refresh=True,
+            expected_allow_snapshot_full_refresh=True,
+            expected_allow_snapshot_schema_change=True,
             expected_no_color=True,
             expected_debug=True,
         )
@@ -1391,7 +1400,7 @@ def test_given_dag_command_arguments_when_running_then_dispatches_expected_handl
 def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[bool, bool, bool, bool]] = []
+    received_args: list[tuple[bool, bool, bool, bool, bool, bool]] = []
 
     def run_build(
         project_dir: Path | None,
@@ -1401,6 +1410,8 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         no_color: bool,
         fail_fast: bool,
         full_refresh: bool,
+        allow_snapshot_full_refresh: bool,
+        allow_snapshot_schema_change: bool,
         concurrency: int | None,
         select: tuple[str, ...],
         exclude: tuple[str, ...],
@@ -1421,7 +1432,16 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         del cli_vars
         del json_output
         del json_output_path
-        received_args.append((no_color, fail_fast, full_refresh, debug))
+        received_args.append(
+            (
+                no_color,
+                fail_fast,
+                full_refresh,
+                allow_snapshot_full_refresh,
+                allow_snapshot_schema_change,
+                debug,
+            )
+        )
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -1435,6 +1455,8 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
             test_case.expected_no_color,
             False,
             test_case.expected_full_refresh,
+            test_case.expected_allow_snapshot_full_refresh,
+            test_case.expected_allow_snapshot_schema_change,
             test_case.expected_debug,
         )
     ]
@@ -1455,7 +1477,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
 def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[bool] = []
+    received_args: list[tuple[bool, bool, bool]] = []
 
     def run_run(
         project_dir: Path | None,
@@ -1465,6 +1487,8 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
         no_color: bool,
         fail_fast: bool,
         full_refresh: bool,
+        allow_snapshot_full_refresh: bool,
+        allow_snapshot_schema_change: bool,
         concurrency: int | None,
         select: tuple[str, ...],
         exclude: tuple[str, ...],
@@ -1488,7 +1512,9 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
         del cli_vars
         del json_output
         del json_output_path
-        received_args.append(full_refresh)
+        received_args.append(
+            (full_refresh, allow_snapshot_full_refresh, allow_snapshot_schema_change)
+        )
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -1497,7 +1523,7 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
     )
 
     assert exit_code == test_case.expected_exit_code
-    assert received_args == [test_case.expected_full_refresh]
+    assert received_args == [(test_case.expected_full_refresh, False, False)]
 
 
 @pytest.mark.parametrize(

@@ -57,6 +57,200 @@ class AppendCursorBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class SnapshotTimestampBuildE2ETestCase:
+    """Test case for timestamp snapshot build behavior across CLI reruns."""
+
+    description: str
+    repo_files: dict[str, str]
+    initial_seed_sql: str
+    mutation_sql: tuple[str, ...]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_query: str
+    expected_initial_rows: tuple[tuple[object, ...], ...]
+    expected_changed_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SnapshotTimestampFailureBuildE2ETestCase:
+    """Test case for timestamp snapshot build failures through the CLI."""
+
+    description: str
+    repo_files: dict[str, str]
+    initial_seed_sql: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SnapshotDmlFailureRollbackBuildE2ETestCase:
+    """Test case for snapshot DML failure rollback behavior."""
+
+    description: str
+    repo_files: dict[str, str]
+    initial_seed_sql: str
+    mutation_sql: tuple[str, ...]
+    command: tuple[str, ...]
+    expected_initial_exit_code: int
+    expected_failure_exit_code: int
+    expected_error_fragments: tuple[str, ...]
+    expected_query: str
+    expected_rows_after_failure: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SnapshotCheckBuildE2ETestCase:
+    """Test case for check snapshot build behavior across CLI reruns."""
+
+    description: str
+    repo_files: dict[str, str]
+    initial_seed_sql: str
+    mutation_sql: tuple[str, ...]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_query: str
+    expected_initial_rows: tuple[tuple[object, ...], ...]
+    expected_changed_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SnapshotHistoricalCheckBuildE2ETestCase:
+    """Test case for historical check snapshot build behavior across CLI reruns."""
+
+    description: str
+    repo_files: dict[str, str]
+    initial_seed_sql: str
+    mutation_sql: tuple[str, ...]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_query: str
+    expected_initial_rows: tuple[tuple[object, ...], ...]
+    expected_changed_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SnapshotHistoricalTimestampBuildE2ETestCase:
+    """Test case for historical timestamp snapshot build behavior across CLI reruns."""
+
+    description: str
+    repo_files: dict[str, str]
+    initial_seed_sql: str
+    mutation_sql: tuple[str, ...]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_query: str
+    expected_initial_rows: tuple[tuple[object, ...], ...]
+    expected_changed_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SnapshotCheckFailureBuildE2ETestCase:
+    """Test case for check snapshot build failures through the CLI."""
+
+    description: str
+    repo_files: dict[str, str]
+    initial_seed_sql: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SnapshotFullRefreshFailureBuildE2ETestCase:
+    """Test case for snapshot full-refresh safety failures through the CLI."""
+
+    description: str
+    repo_files: dict[str, str]
+    initial_seed_sql: str
+    initial_command: tuple[str, ...]
+    full_refresh_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SnapshotFullRefreshSuccessBuildE2ETestCase:
+    """Test case for confirmed snapshot full-refresh behavior through the CLI."""
+
+    description: str
+    repo_files: dict[str, str]
+    initial_seed_sql: str
+    mutation_sql: tuple[str, ...]
+    initial_command: tuple[str, ...]
+    full_refresh_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_query: str
+    expected_initial_rows: tuple[tuple[object, ...], ...]
+    expected_refreshed_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SnapshotWaffleShopRerunBuildE2ETestCase:
+    """Test case for a shallow multi-source snapshot rerun project."""
+
+    description: str
+    repo_files: dict[str, str]
+    initial_seed_sql: str
+    mutation_sql_by_round: tuple[tuple[str, ...], ...]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_query_results_by_round: tuple[
+        tuple[tuple[str, tuple[tuple[object, ...], ...]], ...], ...
+    ]
+
+
+@dataclass(frozen=True)
+class SnapshotSelectorBuildE2ETestCase:
+    """Test case for snapshot dependency selector behavior through the CLI."""
+
+    description: str
+    repo_files: dict[str, str]
+    initial_seed_sql: str
+    mutation_sql: tuple[str, ...]
+    excluded_downstream_command: tuple[str, ...]
+    downstream_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_snapshot_query: str
+    expected_snapshot_rows_after_excluded_downstream: tuple[tuple[object, ...], ...]
+    expected_downstream_query: str
+    expected_downstream_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SnapshotHookBuildE2ETestCase:
+    """Test case for snapshot hook behavior through the CLI."""
+
+    description: str
+    repo_files: dict[str, str]
+    initial_seed_sql: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_hook_query: str
+    expected_hook_rows: tuple[tuple[object, ...], ...]
+    expected_snapshot_query: str
+    expected_snapshot_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SnapshotFailureConsistencyBuildE2ETestCase:
+    """Test case for snapshot consistency after failure paths."""
+
+    description: str
+    repo_files: dict[str, str]
+    initial_seed_sql: str
+    mutation_sql: tuple[str, ...]
+    command: tuple[str, ...]
+    expected_initial_exit_code: int
+    expected_failure_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+    expected_snapshot_query: str
+    expected_rows_after_failure: tuple[tuple[object, ...], ...]
+    recovery_sql: tuple[str, ...] = field(default_factory=tuple)
+    expected_rows_after_recovery: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class TemplateExpressionsBuildE2ETestCase:
     """Test case for config-side template expression helpers."""
 

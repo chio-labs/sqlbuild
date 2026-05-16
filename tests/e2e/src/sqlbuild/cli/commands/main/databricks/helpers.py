@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import os
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 from sqlbuild.integrations.databricks.client import DatabricksAdapter
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_waffle_shop
+from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    prepare_waffle_shop,
+    stringify_warehouse_rows,
+)
 from tests.integration.src.sqlbuild.integrations.databricks.helpers import (
     build_databricks_connection_config,
     build_unique_schema_name,
@@ -87,6 +94,21 @@ def prepare_databricks_waffle_shop(*, tmp_path: Path) -> tuple[Path, str]:
         encoding="utf-8",
     )
     return project_dir, schema_name
+
+
+@contextmanager
+def databricks_e2e_timing(label: str) -> Iterator[None]:
+    """Print opt-in coarse timing for slow real-warehouse e2e phases."""
+
+    if os.environ.get("SQB_E2E_TIMING") != "1":
+        yield
+        return
+    start: float = time.perf_counter()
+    try:
+        yield
+    finally:
+        elapsed: float = time.perf_counter() - start
+        print(f"[sqb-e2e-timing] {label}: {elapsed:.2f}s", flush=True)
 
 
 def ensure_databricks_schema_ready(*, schema_name: str) -> None:
@@ -247,3 +269,111 @@ def write_local_environment_override(
         build_databricks_local_config(environment=environment, schema_name=schema_name),
         encoding="utf-8",
     )
+
+
+def assert_current_databricks_snapshot_rows(
+    *, schema_name: str, expected_rows: tuple[tuple[object, ...], ...]
+) -> None:
+    """Assert current snapshot rows for Databricks real-warehouse e2e tests."""
+
+    rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+        schema_name=schema_name,
+        sql=(
+            "SELECT customer_id, region_id, plan, CAST(effective_from AS DATE), "
+            "CAST(effective_to AS DATE) "
+            f"FROM {relation_name(schema_name=schema_name, name='current_customer_snapshot')} "
+            "ORDER BY customer_id, region_id, effective_from"
+        ),
+    )
+    assert stringify_warehouse_rows(rows) == expected_rows
+
+
+def assert_databricks_snapshot_matrix_rows(
+    *,
+    schema_name: str,
+    expected_current_rows: tuple[tuple[object, ...], ...],
+    expected_historical_timestamp_rows: tuple[tuple[object, ...], ...],
+    expected_historical_check_rows: tuple[tuple[object, ...], ...],
+) -> None:
+    """Assert all compact snapshot matrix rows for Databricks."""
+
+    assert_current_databricks_snapshot_rows(
+        schema_name=schema_name,
+        expected_rows=expected_current_rows,
+    )
+    historical_timestamp_rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+        schema_name=schema_name,
+        sql=(
+            "SELECT customer_id, plan, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
+            f"FROM {relation_name(schema_name=schema_name, name='historical_customer_snapshot')} "
+            "ORDER BY customer_id, valid_from"
+        ),
+    )
+    historical_check_rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+        schema_name=schema_name,
+        sql=(
+            "SELECT customer_id, status, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
+            f"FROM {relation_name(schema_name=schema_name, name='historical_membership_snapshot')} "
+            "ORDER BY customer_id, valid_from"
+        ),
+    )
+    actual_historical_timestamp_rows: tuple[tuple[object, ...], ...] = stringify_warehouse_rows(
+        historical_timestamp_rows
+    )
+    actual_historical_check_rows: tuple[tuple[object, ...], ...] = stringify_warehouse_rows(
+        historical_check_rows
+    )
+    assert actual_historical_timestamp_rows == expected_historical_timestamp_rows, (
+        actual_historical_timestamp_rows
+    )
+    assert actual_historical_check_rows == expected_historical_check_rows, (
+        actual_historical_check_rows
+    )
+
+
+def assert_databricks_snapshot_apply_rows(
+    *,
+    schema_name: str,
+    expected_current_check_rows: tuple[tuple[object, ...], ...],
+    expected_current_delete_rows: tuple[tuple[object, ...], ...],
+    expected_historical_timestamp_rows: tuple[tuple[object, ...], ...],
+    expected_historical_check_rows: tuple[tuple[object, ...], ...],
+) -> None:
+    """Assert existing-target snapshot apply rows for Databricks."""
+
+    current_check_rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+        schema_name=schema_name,
+        sql=(
+            "SELECT customer_id, status, valid_to IS NULL "
+            f"FROM {relation_name(schema_name=schema_name, name='current_check_snapshot')} "
+            "ORDER BY customer_id, status, valid_to IS NULL"
+        ),
+    )
+    current_delete_rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+        schema_name=schema_name,
+        sql=(
+            "SELECT customer_id, plan, valid_to IS NULL "
+            f"FROM {relation_name(schema_name=schema_name, name='current_delete_snapshot')} "
+            "ORDER BY customer_id, plan, valid_to IS NULL"
+        ),
+    )
+    historical_timestamp_rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+        schema_name=schema_name,
+        sql=(
+            "SELECT customer_id, plan, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
+            f"FROM {relation_name(schema_name=schema_name, name='historical_timestamp_snapshot')} "
+            "ORDER BY customer_id, valid_from"
+        ),
+    )
+    historical_check_rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+        schema_name=schema_name,
+        sql=(
+            "SELECT customer_id, status, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
+            f"FROM {relation_name(schema_name=schema_name, name='historical_check_snapshot')} "
+            "ORDER BY customer_id, valid_from"
+        ),
+    )
+    assert stringify_warehouse_rows(current_check_rows) == expected_current_check_rows
+    assert stringify_warehouse_rows(current_delete_rows) == expected_current_delete_rows
+    assert stringify_warehouse_rows(historical_timestamp_rows) == expected_historical_timestamp_rows
+    assert stringify_warehouse_rows(historical_check_rows) == expected_historical_check_rows

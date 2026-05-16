@@ -29,6 +29,7 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
     WarningSeverity,
 )
+from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -54,6 +55,18 @@ class SourceColumnsTestCase:
     adapter_column_names: tuple[str, ...]
     expected_queried_sql: tuple[str, ...]
     expected_source_column_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SourceCursorInputColumnsTestCase:
+    description: str
+    reference_kind: SqlReferenceKind
+    reference_name: str
+    cursor_column: str | None
+    cursor_inputs: dict[str, object] | None
+    source_columns: dict[str, tuple[str, ...]]
+    expected_valid: bool
+    expected_error_fragment: str | None = None
 
 
 @dataclass(frozen=True)

@@ -44,7 +44,12 @@ def build_sql_test_comparison_sql(
         comparison_ctes.append(f"{actual_cte} AS ({actual_sql})")
         if step.expected_cte_sql is None:
             continue
-        comparison_ctes.append(f"{expected_cte} AS ({step.expected_cte_sql})")
+        expected_sql: str = lift_step_ctes(
+            step.expected_cte_sql,
+            lifted_ctes,
+            sqlglot_enabled=test_entry.sqlglot_enabled,
+        )
+        comparison_ctes.append(f"{expected_cte} AS ({expected_sql})")
         select_parts.append(
             "SELECT "
             f"{step_index} AS step_index, "

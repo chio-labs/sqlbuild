@@ -35,7 +35,7 @@ from sqlbuild.executor.pipeline.helpers.settings import resolve_promotion_mode
 from sqlbuild.executor.pipeline.helpers.testing import (
     run_test_pipeline as run_test_pipeline,
 )
-from sqlbuild.spec.models.project import SettingsConfig
+from sqlbuild.spec.models.project import SettingsConfig, SnapshotsConfig
 
 
 def run_build_pipeline(
@@ -45,6 +45,8 @@ def run_build_pipeline(
     adapter: BaseAdapter,
     settings: SettingsConfig,
     run_id: str,
+    snapshots: SnapshotsConfig | None = None,
+    allow_snapshot_schema_change: bool = False,
     run_tests: bool = True,
     run_audits: bool = True,
     fail_fast: bool = False,
@@ -99,6 +101,8 @@ def run_build_pipeline(
             promotion_mode=promotion_mode,
             run_id=run_id,
             query_change_tracking=settings.query_change_tracking,
+            snapshots=snapshots or SnapshotsConfig(),
+            allow_snapshot_schema_change=allow_snapshot_schema_change,
             run_audits=run_audits,
             run_tests=run_tests,
             fail_fast=fail_fast,

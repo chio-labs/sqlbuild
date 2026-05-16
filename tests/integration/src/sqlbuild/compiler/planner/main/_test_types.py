@@ -53,3 +53,16 @@ class BuildExecutionPlanTestCase:
     expected_cascade_action: dict[str, BackfillAction] = field(default_factory=dict)
     expected_cascade_root_cause: dict[str, str] = field(default_factory=dict)
     expected_progress_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class SourceCursorInputPlanErrorTestCase:
+    description: str
+    setup_sql: tuple[str, ...]
+    model_name: str
+    source_name: str
+    source_schema: str
+    source_table: str
+    cursor_column: str
+    cursor_input_column: str
+    expected_error_fragment: str

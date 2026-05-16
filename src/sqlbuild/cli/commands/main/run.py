@@ -28,6 +28,9 @@ from sqlbuild.cli.commands.main.shared.helpers.progress import (
     format_build_header,
 )
 from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import write_runtime_target
+from sqlbuild.cli.commands.main.shared.helpers.snapshot_full_refresh import (
+    enforce_snapshot_full_refresh_policy,
+)
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
@@ -48,6 +51,8 @@ def run_run(
     no_color: bool = False,
     fail_fast: bool = False,
     full_refresh: bool = False,
+    allow_snapshot_full_refresh: bool = False,
+    allow_snapshot_schema_change: bool = False,
     concurrency: int | None = None,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
@@ -123,6 +128,14 @@ def run_run(
     plan_stream.write("\n" + plan_text + "\n\n")
     plan_stream.flush()
 
+    enforce_snapshot_full_refresh_policy(
+        plan=plan_output,
+        snapshots_config=discovered_inputs.project_config.snapshots,
+        allow_snapshot_full_refresh=allow_snapshot_full_refresh,
+        input_stream=sys.stdin,
+        output_stream=sys.stdout,
+    )
+
     write_compile_target(
         target_dir=effective_project_dir / "target",
         adapter=adapter,
@@ -149,6 +162,8 @@ def run_run(
         connection_config=connection_config,
         adapter=adapter,
         settings=pipeline_result.project.settings,
+        snapshots=discovered_inputs.project_config.snapshots,
+        allow_snapshot_schema_change=allow_snapshot_schema_change,
         run_id=pipeline_result.project.run_id,
         run_tests=False,
         run_audits=False,

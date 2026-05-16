@@ -68,6 +68,7 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     PlanScenarioGraphErrorTestCase,
     PlanScenarioGraphTestCase,
     ResolveModelPlanActionTestCase,
+    SourceCursorInputColumnsTestCase,
 )
 
 
@@ -563,6 +564,38 @@ def build_test_project_with_source_entry(source_entry: SourceEntry) -> CompiledP
         effective_connection={},
         effective_vars={},
         sources=(source,),
+    )
+
+
+def build_source_cursor_input_model(
+    test_case: SourceCursorInputColumnsTestCase,
+) -> CompiledModel:
+    """Build an incremental model for source cursor input column validation."""
+
+    config_values: dict[str, object] = {"materialized": "incremental"}
+    if test_case.cursor_column is not None:
+        config_values["cursor"] = test_case.cursor_column
+    if test_case.cursor_inputs is not None:
+        config_values["cursor_inputs"] = test_case.cursor_inputs
+    return CompiledModel(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="test_model"),
+        deps=(),
+        name="test_model",
+        relative_path=Path("models/test_model.sql"),
+        query_sql="SELECT 1",
+        references=(
+            CompileSqlReference(
+                ref_kind=test_case.reference_kind,
+                ref_name=test_case.reference_name,
+            ),
+        ),
+        config=CompileModelConfig(values=config_values),
+        target=CompiledRelationTarget(
+            database=None,
+            schema="staging",
+            name="test_model",
+            qualified_name="staging.test_model",
+        ),
     )
 
 

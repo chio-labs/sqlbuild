@@ -87,6 +87,16 @@ class JanitorConfig:
 
 
 @dataclass(frozen=True)
+class SnapshotsConfig:
+    """Snapshot materialization safety defaults."""
+
+    current_state_full_refresh: str = "deny"
+    historical_full_refresh: str = "require_confirmation"
+    schema_change: str = "append_new_columns"
+    wildcard_check_schema_change: str = "require_confirmation"
+
+
+@dataclass(frozen=True)
 class ScenarioSnapshotLimitsConfig:
     """Scenario snapshot capture safety limits."""
 
@@ -130,6 +140,7 @@ class ProjectConfig:
     vars: dict[str, str] = field(default_factory=dict)
     environments: dict[str, EnvironmentConfig] = field(default_factory=dict)
     janitor: JanitorConfig = field(default_factory=JanitorConfig)
+    snapshots: SnapshotsConfig = field(default_factory=SnapshotsConfig)
     scenario: ScenarioConfig = field(default_factory=ScenarioConfig)
     dbt: DbtConfig = field(default_factory=DbtConfig)
 

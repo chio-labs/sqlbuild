@@ -212,6 +212,39 @@ amount = 1
         expected_error_fragment="Expected 'batch_size' to be a string or integer when provided",
     ),
     LoadProjectConfigErrorTestCase(
+        description="raises when snapshot current state full refresh policy is unknown",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[snapshots]
+current_state_full_refresh = "force"
+""".strip(),
+        expected_error_fragment="Expected 'current_state_full_refresh' to be one of",
+    ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when snapshot historical full refresh policy is not string",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[snapshots]
+historical_full_refresh = true
+""".strip(),
+        expected_error_fragment="Expected 'historical_full_refresh' to be a string",
+    ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when snapshot schema change policy is unknown",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[snapshots]
+schema_change = "sync_all_columns"
+""".strip(),
+        expected_error_fragment="Expected 'schema_change' to be one of",
+    ),
+    LoadProjectConfigErrorTestCase(
         description="raises when path defaults child value is not a mapping",
         project_file_contents="""
 name = "demo"
@@ -533,6 +566,12 @@ retention_days = 14
 delete_tracked_only = false
 exclude_patterns = ["partition_*"]
 
+[snapshots]
+current_state_full_refresh = "require_confirmation"
+historical_full_refresh = "allow"
+schema_change = "deny"
+wildcard_check_schema_change = "append_new_columns"
+
 [scenario.local_type_overrides.snowflake]
 "NUMBER(*,0)" = "BIGINT"
 OBJECT = "JSON"
@@ -578,6 +617,10 @@ target_path = "target/dbt"
             expected_retention_days=14,
             expected_janitor_delete_tracked_only=False,
             expected_janitor_exclude_patterns=("partition_*",),
+            expected_current_state_full_refresh="require_confirmation",
+            expected_historical_full_refresh="allow",
+            expected_snapshot_schema_change="deny",
+            expected_wildcard_check_schema_change="append_new_columns",
             expected_scenario_local_type_overrides={
                 "snowflake": {
                     "NUMBER(*,0)": "BIGINT",
@@ -627,6 +670,15 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.janitor.retention_days == test_case.expected_retention_days
     assert config.janitor.delete_tracked_only is test_case.expected_janitor_delete_tracked_only
     assert config.janitor.exclude_patterns == test_case.expected_janitor_exclude_patterns
+    assert (
+        config.snapshots.current_state_full_refresh == test_case.expected_current_state_full_refresh
+    )
+    assert config.snapshots.historical_full_refresh == test_case.expected_historical_full_refresh
+    assert config.snapshots.schema_change == test_case.expected_snapshot_schema_change
+    assert (
+        config.snapshots.wildcard_check_schema_change
+        == test_case.expected_wildcard_check_schema_change
+    )
     assert config.scenario.local_type_overrides == test_case.expected_scenario_local_type_overrides
     assert {
         "max_rows_per_relation": config.scenario.snapshot_limits.max_rows_per_relation,

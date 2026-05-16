@@ -28,6 +28,7 @@ from sqlbuild.compiler.compile.helpers.model_config_validation import (
     validate_incremental_config,
     validate_non_incremental_config,
     validate_placeholder_config,
+    validate_snapshot_config,
 )
 from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
 from sqlbuild.compiler.compile.helpers.scenarios import extract_sql_scenario_ctes
@@ -210,6 +211,10 @@ def build_model_inputs(
             known_input_names=frozenset(reference.ref_name for reference in references),
         )
         validate_non_incremental_config(
+            config=effective_config,
+            model_name=model_file.file_path.stem,
+        )
+        validate_snapshot_config(
             config=effective_config,
             model_name=model_file.file_path.stem,
         )
