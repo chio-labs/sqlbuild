@@ -8,6 +8,7 @@ class CreatePlaygroundProjectTestCase:
     target_relative_path: Path
     expected_files: tuple[Path, ...]
     unexpected_paths: tuple[Path, ...]
+    template: str = "waffle_shop"
     expected_error_fragment: str = ""
 
 
@@ -16,3 +17,4 @@ class RunPlaygroundTestCase:
     description: str
     target_path: str
     expected_stdout_fragments: tuple[str, ...]
+    template: str = "waffle_shop"

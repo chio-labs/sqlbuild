@@ -60,6 +60,7 @@ class CliNamespace:
     full: bool = False
     schema_only: bool = False
     playground_path: str = "sqlbuild-playground"
+    playground_template: str = "waffle_shop"
     scenario_command: str | None = None
     scenario_selector: list[str] = field(default_factory=list)
     scenario_retain: bool = False
@@ -254,7 +255,7 @@ class CliEntrypointHandlers:
         int,
     ]
     run_janitor: Callable[[Path | None, bool, bool, int | None], int]
-    run_playground: Callable[[Path | None, str], int]
+    run_playground: Callable[[Path | None, str, str], int]
     run_skills_update: Callable[[Path | None, bool, tuple[str, ...], bool], int]
     run_scenario: Callable[
         [
