@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -87,6 +91,21 @@ def prepare_databricks_waffle_shop(*, tmp_path: Path) -> tuple[Path, str]:
         encoding="utf-8",
     )
     return project_dir, schema_name
+
+
+@contextmanager
+def databricks_e2e_timing(label: str) -> Iterator[None]:
+    """Print opt-in coarse timing for slow real-warehouse e2e phases."""
+
+    if os.environ.get("SQB_E2E_TIMING") != "1":
+        yield
+        return
+    start: float = time.perf_counter()
+    try:
+        yield
+    finally:
+        elapsed: float = time.perf_counter() - start
+        print(f"[sqb-e2e-timing] {label}: {elapsed:.2f}s", flush=True)
 
 
 def ensure_databricks_schema_ready(*, schema_name: str) -> None:

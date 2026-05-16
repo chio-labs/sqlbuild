@@ -17,6 +17,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.databricks._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.databricks.helpers import (
     build_databricks_project_toml,
     cleanup_databricks_schema,
+    databricks_e2e_timing,
     databricks_relation_row_count,
     ensure_databricks_schema_ready,
     execute_databricks_sql,
@@ -379,57 +380,61 @@ def test_given_waffle_shop_when_running_full_build_on_databricks_then_expected_v
 ) -> None:
     project_dir: Path
     schema_name: str
-    project_dir, schema_name = prepare_databricks_waffle_shop(tmp_path=tmp_path)
+    with databricks_e2e_timing("prepare waffle shop fixture"):
+        project_dir, schema_name = prepare_databricks_waffle_shop(tmp_path=tmp_path)
 
     try:
-        result: subprocess.CompletedProcess[str] = run_sqb(
-            command=test_case.command,
-            project_dir=project_dir,
-        )
+        with databricks_e2e_timing("sqb build"):
+            result: subprocess.CompletedProcess[str] = run_sqb(
+                command=test_case.command,
+                project_dir=project_dir,
+            )
 
         assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
         fragment: str
         for fragment in test_case.expected_stdout_fragments:
             assert fragment in result.stdout
-        rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
-            schema_name=schema_name,
-            sql=(
-                "SELECT COUNT(*) FROM "
-                f"{relation_name(schema_name=schema_name, name=test_case.expected_table_name)}"
-            ),
-        )
-        assert rows[0][0] == test_case.expected_row_count
-        fact_order_rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
-            schema_name=schema_name,
-            sql=(
-                "SELECT order_id, waffle_name, waffle_category, line_total_cents, "
-                "order_status, payment_status FROM "
-                f"{relation_name(schema_name=schema_name, name='fact_orders')} "
-                "WHERE order_id IN (1, 3, 10) ORDER BY order_id"
-            ),
-        )
-        assert fact_order_rows == test_case.expected_fact_order_rows
-        udf_rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
-            schema_name=schema_name,
-            sql=(
-                "SELECT order_id, is_completed_order, is_completed_order_py FROM "
-                f"{relation_name(schema_name=schema_name, name='fact_orders')} "
-                "WHERE order_id IN (1, 10) ORDER BY order_id"
-            ),
-        )
-        assert udf_rows == test_case.expected_udf_rows
-        daily_revenue_rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
-            schema_name=schema_name,
-            sql=(
-                "SELECT CAST(revenue_date AS STRING), order_count, waffles_sold, "
-                "total_revenue_cents FROM "
-                f"{relation_name(schema_name=schema_name, name='daily_revenue')} "
-                "ORDER BY revenue_date"
-            ),
-        )
-        assert daily_revenue_rows == test_case.expected_daily_revenue_rows
+        with databricks_e2e_timing("post-build verification queries"):
+            rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+                schema_name=schema_name,
+                sql=(
+                    "SELECT COUNT(*) FROM "
+                    f"{relation_name(schema_name=schema_name, name=test_case.expected_table_name)}"
+                ),
+            )
+            assert rows[0][0] == test_case.expected_row_count
+            fact_order_rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+                schema_name=schema_name,
+                sql=(
+                    "SELECT order_id, waffle_name, waffle_category, line_total_cents, "
+                    "order_status, payment_status FROM "
+                    f"{relation_name(schema_name=schema_name, name='fact_orders')} "
+                    "WHERE order_id IN (1, 3, 10) ORDER BY order_id"
+                ),
+            )
+            assert fact_order_rows == test_case.expected_fact_order_rows
+            udf_rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+                schema_name=schema_name,
+                sql=(
+                    "SELECT order_id, is_completed_order, is_completed_order_py FROM "
+                    f"{relation_name(schema_name=schema_name, name='fact_orders')} "
+                    "WHERE order_id IN (1, 10) ORDER BY order_id"
+                ),
+            )
+            assert udf_rows == test_case.expected_udf_rows
+            daily_revenue_rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+                schema_name=schema_name,
+                sql=(
+                    "SELECT CAST(revenue_date AS STRING), order_count, waffles_sold, "
+                    "total_revenue_cents FROM "
+                    f"{relation_name(schema_name=schema_name, name='daily_revenue')} "
+                    "ORDER BY revenue_date"
+                ),
+            )
+            assert daily_revenue_rows == test_case.expected_daily_revenue_rows
     finally:
-        cleanup_databricks_schema(schema_name=schema_name)
+        with databricks_e2e_timing("cleanup schema"):
+            cleanup_databricks_schema(schema_name=schema_name)
 
 
 DATABRICKS_DIFF_E2E_TEST_CASES: list[DatabricksDiffE2ETestCase] = [

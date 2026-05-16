@@ -39,3 +39,14 @@ class RuntimeCursorStartTestCase:
 class SnapshotAdapterRenderingTestCase:
     description: str
     expected_rendered_marker: str
+
+
+@dataclass(frozen=True)
+class SnapshotLifecycleTestCase:
+    description: str
+    run_id: str
+    pre_hook: tuple[str, ...]
+    post_hook: tuple[str, ...]
+    expected_hook_events: tuple[str, ...]
+    expected_model_name: str
+    expected_target_name: str

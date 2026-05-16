@@ -212,3 +212,23 @@ class TransactionalAtomicityTestCase:
     unique_key: str | tuple[str, ...]
     expected_rows_after_failure: tuple[tuple[object, ...], ...]
     verify_sql: str
+
+
+@dataclass(frozen=True)
+class SnapshotAdapterMethodsTestCase:
+    description: str
+    expected_initial_custom_rows: tuple[tuple[object, ...], ...]
+    expected_timestamp_rows: tuple[tuple[object, ...], ...]
+    expected_timestamp_hard_delete_rows: tuple[tuple[object, ...], ...]
+    expected_check_rows: tuple[tuple[object, ...], ...]
+    expected_historical_timestamp_rows: tuple[tuple[object, ...], ...]
+    expected_historical_changes_rows: tuple[tuple[object, ...], ...]
+    expected_historical_check_rows: tuple[tuple[object, ...], ...]
+    expected_historical_check_apply_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SnapshotTransactionRollbackTestCase:
+    description: str
+    expected_error_fragment: str
+    expected_rows_after_failure: tuple[tuple[object, ...], ...]

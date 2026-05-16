@@ -15,9 +15,7 @@ from sqlbuild.cli.commands.main.helpers.sql_test_progress import (
 )
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
-from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
     FunctionExecutionResult,
@@ -35,6 +33,11 @@ from sqlbuild.shared.helpers.colors import (
     red_bold,
     red_dim,
     yellow_bold,
+)
+from sqlbuild.shared.helpers.materialization_labels import (
+    materialization_type_display,
+    model_execution_annotation,
+    model_resource_type,
 )
 
 _TYPE_WIDTH: int = 10
@@ -112,7 +115,7 @@ class BuildProgressCallbacks:
         max_name_len: int = 0
         entry: ModelPlanEntry
         for entry in plan.model_entries:
-            annotation: str = _resolve_annotation(entry)
+            annotation: str = model_execution_annotation(entry)
             display_name: str = entry.name
             if annotation:
                 display_name = f"{entry.name}  ({annotation})"
@@ -179,7 +182,7 @@ class BuildProgressCallbacks:
 
     def _write_spinner_line(self) -> None:
         ctr: str = f"{self._counter + 1}/{self._total}".rjust(len(str(self._total)) * 2 + 1)
-        display_type: str = _materialization_type_display(self._current_node_type)
+        display_type: str = materialization_type_display(self._current_node_type)
         status: str = colorize_status(
             _ACTIVE_SPINNER_FRAMES[self._spinner_frame_index],
             use_color=self._use_color,
@@ -297,10 +300,8 @@ class BuildProgressCallbacks:
 
     def _write_model_result(self, *, ctr: str, model_result: ModelExecutionResult) -> None:
         plan_entry: ModelPlanEntry | None = self._model_entry_map.get(model_result.model_name)
-        display_type: str = _materialization_type_display(
-            plan_entry.materialization_type if plan_entry else MaterializationType.TABLE
-        )
-        annotation: str = _resolve_annotation(plan_entry)
+        display_type: str = model_resource_type(plan_entry)
+        annotation: str = model_execution_annotation(plan_entry)
         name_display: str = model_result.model_name
         if annotation:
             name_display = f"{model_result.model_name}  ({annotation})"
@@ -701,33 +702,6 @@ def _test_outcome_display(outcome: SqlTestOutcome) -> str:
     if outcome == SqlTestOutcome.PASS:
         return "PASS"
     return "FAIL"
-
-
-def _materialization_type_display(materialization_type: str) -> str:
-    if materialization_type == MaterializationType.VIEW:
-        return "view"
-    if materialization_type == MaterializationType.SEED:
-        return "seed"
-    if materialization_type == "function":
-        return "function"
-    if materialization_type == MaterializationType.CUSTOM:
-        return "custom"
-    return "table"
-
-
-def _resolve_annotation(plan_entry: ModelPlanEntry | None) -> str:
-    if plan_entry is None:
-        return ""
-    is_incremental: bool = (
-        plan_entry.action in INCREMENTAL_ACTIONS
-        or plan_entry.materialization_type == MaterializationType.INCREMENTAL
-    )
-    if not is_incremental:
-        return ""
-    parts: list[str] = []
-    if plan_entry.incremental_strategy:
-        parts.append(plan_entry.incremental_strategy)
-    return ", ".join(parts)
 
 
 def _aggregate_audit_results(

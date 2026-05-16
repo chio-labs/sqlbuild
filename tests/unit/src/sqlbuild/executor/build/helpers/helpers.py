@@ -34,6 +34,9 @@ class ModelPlanOverride:
     name: str
     materialization_type: MaterializationType = MaterializationType.TABLE
     action: PlanAction = PlanAction.CREATE_TABLE
+    snapshot_strategy: str | None = None
+    observed_at_column: str | None = None
+    historical_input: str | None = None
 
 
 def build_model_result_fields(
@@ -88,6 +91,9 @@ def build_model_plan_entry(
     materialization_type: MaterializationType = MaterializationType.TABLE,
     action: PlanAction = PlanAction.CREATE_TABLE,
     incremental_strategy: str | None = None,
+    snapshot_strategy: str | None = None,
+    observed_at_column: str | None = None,
+    historical_input: str | None = None,
 ) -> ModelPlanEntry:
     return ModelPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name),
@@ -103,6 +109,9 @@ def build_model_plan_entry(
         resolved_sql="SELECT 1",
         logical_ddl=f"CREATE TABLE main.{name} AS SELECT 1",
         incremental_strategy=incremental_strategy,
+        snapshot_strategy=snapshot_strategy,
+        observed_at_column=observed_at_column,
+        historical_input=historical_input,
     )
 
 

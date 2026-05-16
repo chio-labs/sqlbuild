@@ -271,7 +271,7 @@ class DatabricksAdapter(BaseAdapter):
             f") "
             f"FROM __new_changes"
         )
-        return (insert_sql, close_sql)
+        return (close_sql, insert_sql)
 
     def render_apply_historical_timestamp_changes(
         self,
@@ -320,7 +320,7 @@ class DatabricksAdapter(BaseAdapter):
             f") "
             f"FROM __new_changes"
         )
-        return (insert_sql, close_sql)
+        return (close_sql, insert_sql)
 
     def render_apply_check_snapshot_changes(
         self,
@@ -482,7 +482,7 @@ class DatabricksAdapter(BaseAdapter):
             f") "
             f"FROM __new_changes"
         )
-        return (insert_sql, close_sql)
+        return (close_sql, insert_sql)
 
     def supports_zero_copy_clone(self) -> bool:
         return True
@@ -2081,8 +2081,8 @@ class DatabricksAdapter(BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> str:
         partition_sql: str = ", ".join(unique_key)
-        active_join_condition: str = cls._snapshot_key_condition(
-            left_alias="__delta_changes", right_alias="__active", unique_key=unique_key
+        latest_join_condition: str = cls._snapshot_key_condition(
+            left_alias="__delta_changes", right_alias="__latest", unique_key=unique_key
         )
         first_key: str = unique_key[0]
         return (
@@ -2093,13 +2093,15 @@ class DatabricksAdapter(BaseAdapter):
             "), __delta_changes AS ("
             f"SELECT * FROM __ordered WHERE __prev_updated_at IS NULL "
             f"OR {updated_at_column} IS DISTINCT FROM __prev_updated_at"
-            "), __active AS ("
-            f"SELECT * FROM {target} WHERE {valid_to_column} IS NULL"
+            "), __latest AS ("
+            f"SELECT * FROM {target} QUALIFY ROW_NUMBER() OVER ("
+            f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
+            ") = 1"
             "), __new_changes AS ("
             "SELECT __delta_changes.* FROM __delta_changes "
-            f"LEFT JOIN __active ON {active_join_condition} "
-            f"WHERE __active.{first_key} IS NULL "
-            f"OR __delta_changes.{updated_at_column} > __active.{updated_at_column}"
+            f"LEFT JOIN __latest ON {latest_join_condition} "
+            f"WHERE __latest.{first_key} IS NULL "
+            f"OR __delta_changes.{updated_at_column} > __latest.{valid_from_column}"
             ")"
         )
 
@@ -2133,18 +2135,21 @@ class DatabricksAdapter(BaseAdapter):
         updated_at_column: str,
         valid_to_column: str,
     ) -> str:
-        active_join_condition: str = cls._snapshot_key_condition(
-            left_alias="__source", right_alias="__active", unique_key=unique_key
+        latest_join_condition: str = cls._snapshot_key_condition(
+            left_alias="__source", right_alias="__latest", unique_key=unique_key
         )
+        partition_sql: str = ", ".join(unique_key)
         first_key: str = unique_key[0]
         return (
-            "__active AS ("
-            f"SELECT * FROM {target} WHERE {valid_to_column} IS NULL"
+            "__latest AS ("
+            f"SELECT * FROM {target} QUALIFY ROW_NUMBER() OVER ("
+            f"PARTITION BY {partition_sql} ORDER BY {updated_at_column} DESC"
+            ") = 1"
             "), __new_changes AS ("
             f"SELECT __source.* FROM {source} AS __source "
-            f"LEFT JOIN __active ON {active_join_condition} "
-            f"WHERE __active.{first_key} IS NULL "
-            f"OR __source.{updated_at_column} > __active.{updated_at_column}"
+            f"LEFT JOIN __latest ON {latest_join_condition} "
+            f"WHERE __latest.{first_key} IS NULL "
+            f"OR __source.{updated_at_column} > __latest.{updated_at_column}"
             ")"
         )
 
@@ -2172,11 +2177,11 @@ class DatabricksAdapter(BaseAdapter):
         delta_change_condition: str = " OR ".join(
             f"{column} IS DISTINCT FROM __prev_{column}" for column in check_columns
         )
-        active_join_condition: str = cls._snapshot_key_condition(
-            left_alias="__delta_changes", right_alias="__active", unique_key=unique_key
+        latest_join_condition: str = cls._snapshot_key_condition(
+            left_alias="__delta_changes", right_alias="__latest", unique_key=unique_key
         )
-        active_change_condition: str = " OR ".join(
-            f"__delta_changes.{column} IS DISTINCT FROM __active.{column}"
+        latest_change_condition: str = " OR ".join(
+            f"__delta_changes.{column} IS DISTINCT FROM __latest.{column}"
             for column in check_columns
         )
         first_key: str = unique_key[0]
@@ -2191,14 +2196,16 @@ class DatabricksAdapter(BaseAdapter):
             f") AS __prev_observed_at{previous_columns_sql} FROM {source}"
             "), __delta_changes AS ("
             f"{changed_or_first_sql}"
-            "), __active AS ("
-            f"SELECT * FROM {target} WHERE {valid_to_column} IS NULL"
+            "), __latest AS ("
+            f"SELECT * FROM {target} QUALIFY ROW_NUMBER() OVER ("
+            f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
+            ") = 1"
             "), __new_changes AS ("
             "SELECT __delta_changes.* FROM __delta_changes "
-            f"LEFT JOIN __active ON {active_join_condition} "
-            f"WHERE __active.{first_key} IS NULL OR ("
-            f"__delta_changes.{observed_at_column} > __active.{valid_from_column} "
-            f"AND ({active_change_condition})"
+            f"LEFT JOIN __latest ON {latest_join_condition} "
+            f"WHERE __latest.{first_key} IS NULL OR ("
+            f"__delta_changes.{observed_at_column} > __latest.{valid_from_column} "
+            f"AND ({latest_change_condition})"
             ")"
             ")"
         )
