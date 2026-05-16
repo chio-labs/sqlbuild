@@ -204,6 +204,114 @@ sources:
         expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
+        description="validates incremental config columns against authored enforced contract",
+        repo_files=base_repo_files()
+        | {
+            "models/orders.sql": """
+MODEL (
+  materialized incremental,
+  contract enforced,
+  columns (
+    id (type INTEGER),
+    event_time (type TIMESTAMP),
+  ),
+  incremental_strategy delete_insert,
+  cursor event_time,
+  cursor_type timestamp,
+  cursor_grain second,
+  unique_key [id],
+);
+
+SELECT 1 AS id, CURRENT_TIMESTAMP AS event_time
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        cli_vars={},
+        run_id=None,
+        expected_model_schema_names=("orders",),
+        expected_model_config_values=(
+            {
+                "materialized": "incremental",
+                "contract": "enforced",
+                "incremental_strategy": "delete_insert",
+                "cursor": "event_time",
+                "cursor_type": "timestamp",
+                "cursor_grain": "second",
+                "unique_key": ["id"],
+            },
+        ),
+        expected_model_query_sqls=("SELECT 1 AS id, CURRENT_TIMESTAMP AS event_time",),
+        expected_model_path_defaults=(None,),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_effective_environment_name=None,
+        expected_effective_connection={},
+        expected_effective_vars={},
+        expected_model_column_metadata=(
+            (
+                ("id", "INTEGER", None, ()),
+                ("event_time", "TIMESTAMP", None, ()),
+            ),
+        ),
+        expected_model_references=((),),
+        expected_audit_references=(),
+    ),
+    BuildCompileInputsTestCase(
+        description="does not require snapshot generated validity columns in enforced contract",
+        repo_files=base_repo_files()
+        | {
+            "models/customer_snapshot.sql": """
+MODEL (
+  materialized snapshot,
+  contract enforced,
+  columns (
+    customer_id (type INTEGER),
+    updated_at (type TIMESTAMP),
+  ),
+  unique_key [customer_id],
+  snapshot_strategy timestamp,
+  updated_at updated_at,
+  valid_from_column effective_from,
+  valid_to_column effective_to,
+);
+
+SELECT 1 AS customer_id, CURRENT_TIMESTAMP AS updated_at
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        cli_vars={},
+        run_id=None,
+        expected_model_schema_names=("customer_snapshot",),
+        expected_model_config_values=(
+            {
+                "materialized": "snapshot",
+                "contract": "enforced",
+                "unique_key": ["customer_id"],
+                "snapshot_strategy": "timestamp",
+                "updated_at": "updated_at",
+                "valid_from_column": "effective_from",
+                "valid_to_column": "effective_to",
+            },
+        ),
+        expected_model_query_sqls=("SELECT 1 AS customer_id, CURRENT_TIMESTAMP AS updated_at",),
+        expected_model_path_defaults=(None,),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_effective_environment_name=None,
+        expected_effective_connection={},
+        expected_effective_vars={},
+        expected_model_column_metadata=(
+            (
+                ("customer_id", "INTEGER", None, ()),
+                ("updated_at", "TIMESTAMP", None, ()),
+            ),
+        ),
+        expected_model_references=((),),
+        expected_audit_references=(),
+    ),
+    BuildCompileInputsTestCase(
         description="prefers selected environment over local and project defaults",
         repo_files=base_repo_files()
         | {
@@ -2376,6 +2484,56 @@ SELECT * FROM __source("missing_source")
         selected_environment=None,
         run_id=None,
         expected_error_fragment="references unknown source 'missing_source'",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when authored enforced contract omits incremental cursor",
+        repo_files=base_repo_files()
+        | {
+            "models/orders.sql": """
+MODEL (
+  materialized incremental,
+  contract enforced,
+  columns (
+    id (type INTEGER),
+  ),
+  incremental_strategy delete_insert,
+  cursor event_time,
+  cursor_type timestamp,
+  cursor_grain second,
+);
+
+SELECT 1 AS id, CURRENT_TIMESTAMP AS event_time
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="cursor references column 'event_time' not declared",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when authored enforced contract omits snapshot check column",
+        repo_files=base_repo_files()
+        | {
+            "models/customer_snapshot.sql": """
+MODEL (
+  materialized snapshot,
+  contract enforced,
+  columns (
+    customer_id (type INTEGER),
+    plan (type VARCHAR),
+  ),
+  unique_key [customer_id],
+  snapshot_strategy check,
+  check_columns [plan, status],
+);
+
+SELECT 1 AS customer_id, 'pro' AS plan, 'active' AS status
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="check_columns references column 'status' not declared",
     ),
     BuildCompileInputsErrorTestCase(
         description="raises when an audit references an unknown source",
