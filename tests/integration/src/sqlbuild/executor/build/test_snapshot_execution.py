@@ -21,6 +21,7 @@ from tests.integration.src.sqlbuild.executor.build._test_types import (
     BuildExecutionTestCase,
     SnapshotCheckExecutionTestCase,
     SnapshotCheckFailureTestCase,
+    SnapshotHardDeleteExecutionTestCase,
     SnapshotTimestampExecutionTestCase,
     SnapshotTimestampFailureTestCase,
 )
@@ -791,6 +792,252 @@ SNAPSHOT_CHECK_FAILURE_TEST_CASES: list[SnapshotCheckFailureTestCase] = [
     ),
 ]
 
+SNAPSHOT_HARD_DELETE_TEST_CASES: list[SnapshotHardDeleteExecutionTestCase] = [
+    SnapshotHardDeleteExecutionTestCase(
+        description="timestamp snapshot closes missing source rows when hard deletes are enabled",
+        model_name="customer_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_customers\n    schema: main\n    table: raw_customers\n"
+            ),
+            "models/customer_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id],\n"
+                "  snapshot_strategy timestamp,\n"
+                "  updated_at updated_at,\n"
+                "  invalidate_hard_deletes true\n"
+                ");\n\n"
+                'SELECT customer_id, plan, updated_at FROM __source("raw_customers")'
+            ),
+        },
+        initial_setup_sql=(
+            "CREATE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'basic' AS plan, "
+            "TIMESTAMP '2024-01-01 00:00:00' AS updated_at "
+            "UNION ALL SELECT 2 AS customer_id, 'pro' AS plan, "
+            "TIMESTAMP '2024-01-02 00:00:00' AS updated_at",
+        ),
+        delete_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'team' AS plan, "
+            "TIMESTAMP '2024-01-03 00:00:00' AS updated_at "
+            "UNION ALL SELECT 3 AS customer_id, 'basic' AS plan, "
+            "TIMESTAMP '2024-01-04 00:00:00' AS updated_at",
+        ),
+        expected_query=(
+            "SELECT customer_id, plan, valid_to IS NULL FROM main.customer_snapshot "
+            "ORDER BY customer_id, valid_to IS NULL, plan"
+        ),
+        expected_initial_rows=((1, "basic", True), (2, "pro", True)),
+        expected_deleted_rows=(
+            (1, "basic", False),
+            (1, "team", True),
+            (2, "pro", False),
+            (3, "basic", True),
+        ),
+    ),
+    SnapshotHardDeleteExecutionTestCase(
+        description="check snapshot closes missing source rows when hard deletes are enabled",
+        model_name="customer_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_customers\n    schema: main\n    table: raw_customers\n"
+            ),
+            "models/customer_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id],\n"
+                "  snapshot_strategy check,\n"
+                "  check_columns [status],\n"
+                "  invalidate_hard_deletes true\n"
+                ");\n\n"
+                'SELECT customer_id, plan, status FROM __source("raw_customers")'
+            ),
+        },
+        initial_setup_sql=(
+            "CREATE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'basic' AS plan, 'active' AS status "
+            "UNION ALL SELECT 2 AS customer_id, 'pro' AS plan, 'active' AS status",
+        ),
+        delete_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'basic' AS plan, 'paused' AS status "
+            "UNION ALL SELECT 3 AS customer_id, 'basic' AS plan, 'active' AS status",
+        ),
+        expected_query=(
+            "SELECT customer_id, plan, status, valid_to IS NULL FROM main.customer_snapshot "
+            "ORDER BY customer_id, valid_to IS NULL, status"
+        ),
+        expected_initial_rows=((1, "basic", "active", True), (2, "pro", "active", True)),
+        expected_deleted_rows=(
+            (1, "basic", "active", False),
+            (1, "basic", "paused", True),
+            (2, "pro", "active", False),
+            (3, "basic", "active", True),
+        ),
+    ),
+    SnapshotHardDeleteExecutionTestCase(
+        description="timestamp snapshot leaves missing rows active by default",
+        model_name="customer_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_customers\n    schema: main\n    table: raw_customers\n"
+            ),
+            "models/customer_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id],\n"
+                "  snapshot_strategy timestamp,\n"
+                "  updated_at updated_at\n"
+                ");\n\n"
+                'SELECT customer_id, plan, updated_at FROM __source("raw_customers")'
+            ),
+        },
+        initial_setup_sql=(
+            "CREATE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'basic' AS plan, "
+            "TIMESTAMP '2024-01-01 00:00:00' AS updated_at "
+            "UNION ALL SELECT 2 AS customer_id, 'pro' AS plan, "
+            "TIMESTAMP '2024-01-02 00:00:00' AS updated_at",
+        ),
+        delete_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'basic' AS plan, "
+            "TIMESTAMP '2024-01-01 00:00:00' AS updated_at",
+        ),
+        expected_query=(
+            "SELECT customer_id, plan, valid_to IS NULL FROM main.customer_snapshot "
+            "ORDER BY customer_id"
+        ),
+        expected_initial_rows=((1, "basic", True), (2, "pro", True)),
+        expected_deleted_rows=((1, "basic", True), (2, "pro", True)),
+    ),
+    SnapshotHardDeleteExecutionTestCase(
+        description="timestamp snapshot leaves missing rows active when hard deletes are false",
+        model_name="customer_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_customers\n    schema: main\n    table: raw_customers\n"
+            ),
+            "models/customer_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id],\n"
+                "  snapshot_strategy timestamp,\n"
+                "  updated_at updated_at,\n"
+                "  invalidate_hard_deletes false\n"
+                ");\n\n"
+                'SELECT customer_id, plan, updated_at FROM __source("raw_customers")'
+            ),
+        },
+        initial_setup_sql=(
+            "CREATE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'basic' AS plan, "
+            "TIMESTAMP '2024-01-01 00:00:00' AS updated_at "
+            "UNION ALL SELECT 2 AS customer_id, 'pro' AS plan, "
+            "TIMESTAMP '2024-01-02 00:00:00' AS updated_at",
+        ),
+        delete_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'basic' AS plan, "
+            "TIMESTAMP '2024-01-01 00:00:00' AS updated_at",
+        ),
+        expected_query=(
+            "SELECT customer_id, plan, valid_to IS NULL FROM main.customer_snapshot "
+            "ORDER BY customer_id"
+        ),
+        expected_initial_rows=((1, "basic", True), (2, "pro", True)),
+        expected_deleted_rows=((1, "basic", True), (2, "pro", True)),
+    ),
+    SnapshotHardDeleteExecutionTestCase(
+        description="hard deletes use configured validity column names",
+        model_name="customer_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_customers\n    schema: main\n    table: raw_customers\n"
+            ),
+            "models/customer_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id],\n"
+                "  snapshot_strategy timestamp,\n"
+                "  updated_at updated_at,\n"
+                "  invalidate_hard_deletes true,\n"
+                "  valid_from_column effective_from,\n"
+                "  valid_to_column effective_to\n"
+                ");\n\n"
+                'SELECT customer_id, plan, updated_at FROM __source("raw_customers")'
+            ),
+        },
+        initial_setup_sql=(
+            "CREATE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'basic' AS plan, "
+            "TIMESTAMP '2024-01-01 00:00:00' AS updated_at "
+            "UNION ALL SELECT 2 AS customer_id, 'pro' AS plan, "
+            "TIMESTAMP '2024-01-02 00:00:00' AS updated_at",
+        ),
+        delete_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'basic' AS plan, "
+            "TIMESTAMP '2024-01-01 00:00:00' AS updated_at",
+        ),
+        expected_query=(
+            "SELECT customer_id, plan, effective_to IS NULL FROM main.customer_snapshot "
+            "ORDER BY customer_id"
+        ),
+        expected_initial_rows=((1, "basic", True), (2, "pro", True)),
+        expected_deleted_rows=((1, "basic", True), (2, "pro", False)),
+    ),
+    SnapshotHardDeleteExecutionTestCase(
+        description="hard deletes respect composite unique keys",
+        model_name="customer_region_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_customer_regions\n"
+                "    schema: main\n"
+                "    table: raw_customer_regions\n"
+            ),
+            "models/customer_region_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id, region],\n"
+                "  snapshot_strategy timestamp,\n"
+                "  updated_at updated_at,\n"
+                "  invalidate_hard_deletes true\n"
+                ");\n\n"
+                "SELECT customer_id, region, plan, updated_at "
+                'FROM __source("raw_customer_regions")'
+            ),
+        },
+        initial_setup_sql=(
+            "CREATE TABLE main.raw_customer_regions AS "
+            "SELECT 1 AS customer_id, 'us' AS region, 'basic' AS plan, "
+            "TIMESTAMP '2024-01-01 00:00:00' AS updated_at "
+            "UNION ALL SELECT 1 AS customer_id, 'eu' AS region, 'basic' AS plan, "
+            "TIMESTAMP '2024-01-01 00:00:00' AS updated_at",
+        ),
+        delete_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customer_regions AS "
+            "SELECT 1 AS customer_id, 'us' AS region, 'basic' AS plan, "
+            "TIMESTAMP '2024-01-01 00:00:00' AS updated_at",
+        ),
+        expected_query=(
+            "SELECT customer_id, region, plan, valid_to IS NULL "
+            "FROM main.customer_region_snapshot ORDER BY region"
+        ),
+        expected_initial_rows=((1, "eu", "basic", True), (1, "us", "basic", True)),
+        expected_deleted_rows=((1, "eu", "basic", False), (1, "us", "basic", True)),
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -1079,6 +1326,156 @@ def test_given_invalid_check_snapshot_source_when_building_then_fails_before_tar
         is not None
     )
     assert target_exists is False
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SNAPSHOT_HARD_DELETE_TEST_CASES,
+    ids=[case.description for case in SNAPSHOT_HARD_DELETE_TEST_CASES],
+)
+def test_given_current_state_snapshot_when_source_row_disappears_then_hard_delete_policy_applies(
+    test_case: SnapshotHardDeleteExecutionTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    initial_result: BuildExecutionResult = run_build_for_project(
+        test_case=BuildExecutionTestCase(
+            description=test_case.description,
+            project_files=test_case.project_files,
+            setup_sql=test_case.initial_setup_sql,
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=1,
+            expected_model_statuses=((test_case.model_name, ExecutionStatus.SUCCESS),),
+        ),
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+    rows_after_initial: tuple[tuple[object, ...], ...] = tuple(
+        tuple(row) for row in connection.execute(test_case.expected_query).fetchall()
+    )
+    sql: str
+    for sql in test_case.delete_setup_sql:
+        connection.execute(sql)
+    deleted_result: BuildExecutionResult = run_build_for_project(
+        test_case=BuildExecutionTestCase(
+            description=test_case.description,
+            project_files=test_case.project_files,
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=1,
+            expected_model_statuses=((test_case.model_name, ExecutionStatus.SUCCESS),),
+        ),
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+    rows_after_deleted: tuple[tuple[object, ...], ...] = tuple(
+        tuple(row) for row in connection.execute(test_case.expected_query).fetchall()
+    )
+
+    assert initial_result.status == BuildStatus.SUCCESS
+    assert deleted_result.status == BuildStatus.SUCCESS
+    assert rows_after_initial == test_case.expected_initial_rows
+    assert rows_after_deleted == test_case.expected_deleted_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnapshotHardDeleteExecutionTestCase(
+            description="hard deletes do not run when duplicate source keys fail validation",
+            model_name="customer_snapshot",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_YML,
+                "sources/raw.yml": (
+                    "sources:\n"
+                    "  - name: raw_customers\n"
+                    "    schema: main\n"
+                    "    table: raw_customers\n"
+                ),
+                "models/customer_snapshot.sql": (
+                    "MODEL (\n"
+                    "  materialized snapshot,\n"
+                    "  unique_key [customer_id],\n"
+                    "  snapshot_strategy timestamp,\n"
+                    "  updated_at updated_at,\n"
+                    "  invalidate_hard_deletes true\n"
+                    ");\n\n"
+                    'SELECT customer_id, plan, updated_at FROM __source("raw_customers")'
+                ),
+            },
+            initial_setup_sql=(
+                "CREATE TABLE main.raw_customers AS "
+                "SELECT 1 AS customer_id, 'basic' AS plan, "
+                "TIMESTAMP '2024-01-01 00:00:00' AS updated_at "
+                "UNION ALL SELECT 2 AS customer_id, 'pro' AS plan, "
+                "TIMESTAMP '2024-01-02 00:00:00' AS updated_at",
+            ),
+            delete_setup_sql=(
+                "CREATE OR REPLACE TABLE main.raw_customers AS "
+                "SELECT 1 AS customer_id, 'basic' AS plan, "
+                "TIMESTAMP '2024-01-01 00:00:00' AS updated_at "
+                "UNION ALL SELECT 1 AS customer_id, 'team' AS plan, "
+                "TIMESTAMP '2024-01-03 00:00:00' AS updated_at",
+            ),
+            expected_query=(
+                "SELECT customer_id, plan, valid_to IS NULL FROM main.customer_snapshot "
+                "ORDER BY customer_id"
+            ),
+            expected_initial_rows=((1, "basic", True), (2, "pro", True)),
+            expected_deleted_rows=((1, "basic", True), (2, "pro", True)),
+        )
+    ],
+    ids=["hard deletes do not run when duplicate source keys fail validation"],
+)
+def test_given_hard_delete_snapshot_when_duplicate_keys_fail_then_target_history_is_unchanged(
+    test_case: SnapshotHardDeleteExecutionTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    initial_result: BuildExecutionResult = run_build_for_project(
+        test_case=BuildExecutionTestCase(
+            description=test_case.description,
+            project_files=test_case.project_files,
+            setup_sql=test_case.initial_setup_sql,
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=1,
+            expected_model_statuses=((test_case.model_name, ExecutionStatus.SUCCESS),),
+        ),
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+    sql: str
+    for sql in test_case.delete_setup_sql:
+        connection.execute(sql)
+    failed_result: BuildExecutionResult = run_build_for_project(
+        test_case=BuildExecutionTestCase(
+            description=test_case.description,
+            project_files=test_case.project_files,
+            expected_status=BuildStatus.FAILED,
+            expected_failure_count=1,
+            expected_model_statuses=((test_case.model_name, ExecutionStatus.FAILED),),
+        ),
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+    rows_after_failed_run: tuple[tuple[object, ...], ...] = tuple(
+        tuple(row) for row in connection.execute(test_case.expected_query).fetchall()
+    )
+
+    assert initial_result.status == BuildStatus.SUCCESS
+    assert failed_result.status == BuildStatus.FAILED
+    assert rows_after_failed_run == test_case.expected_deleted_rows
 
 
 @pytest.mark.parametrize(

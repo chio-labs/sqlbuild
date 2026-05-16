@@ -209,6 +209,7 @@ def plan_model(
     valid_from_column: str | None = _get_config_str(model, "valid_from_column")
     valid_to_column: str | None = _get_config_str(model, "valid_to_column")
     initial_valid_from: str | None = _get_config_str(model, "initial_valid_from")
+    invalidate_hard_deletes: bool = _get_config_bool(model, "invalidate_hard_deletes")
 
     microbatch_range: CursorBounds | None = _compute_microbatch_range(
         model=model,
@@ -282,6 +283,7 @@ def plan_model(
         valid_from_column=valid_from_column,
         valid_to_column=valid_to_column,
         initial_valid_from=initial_valid_from,
+        invalidate_hard_deletes=invalidate_hard_deletes,
         on_schema_change=on_schema_change,
         type_enforcement=type_enforcement,
         declared_columns=declared_columns,
@@ -856,6 +858,13 @@ def _get_config_str(model: CompiledModel, key: str) -> str | None:
 
     raw: object | None = model.config.values.get(key)
     return raw if isinstance(raw, str) else None
+
+
+def _get_config_bool(model: CompiledModel, key: str) -> bool:
+    """Extract a boolean config value from model config."""
+
+    raw: object | None = model.config.values.get(key)
+    return raw if isinstance(raw, bool) else False
 
 
 def _get_cursor_start(model: CompiledModel) -> str | None:

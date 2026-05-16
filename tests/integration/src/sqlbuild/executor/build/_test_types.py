@@ -81,3 +81,15 @@ class SnapshotCheckFailureTestCase:
     project_files: dict[str, str]
     setup_sql: tuple[str, ...]
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class SnapshotHardDeleteExecutionTestCase:
+    description: str
+    model_name: str
+    project_files: dict[str, str]
+    initial_setup_sql: tuple[str, ...]
+    delete_setup_sql: tuple[str, ...]
+    expected_initial_rows: tuple[tuple[object, ...], ...]
+    expected_deleted_rows: tuple[tuple[object, ...], ...]
+    expected_query: str

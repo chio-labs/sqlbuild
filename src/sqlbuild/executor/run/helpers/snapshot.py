@@ -418,6 +418,16 @@ def _apply_timestamp_snapshot_changes(
         f"OR __source.{updated_at_column} > __active.{updated_at_column}"
     )
     statements: tuple[str, ...] = (close_sql, insert_sql)
+    if entry.invalidate_hard_deletes:
+        statements = (
+            *statements,
+            _build_hard_delete_close_sql(
+                target_qualified=target_qualified,
+                delta_qualified=delta_qualified,
+                entry=entry,
+                valid_to_column=valid_to_column,
+            ),
+        )
     statement_recorder.record_many(statements)
     with adapter.transaction(connection):
         statement: str
@@ -477,6 +487,16 @@ def _apply_check_snapshot_changes(
         f"OR ({active_change_condition})"
     )
     statements: tuple[str, ...] = (close_sql, insert_sql)
+    if entry.invalidate_hard_deletes:
+        statements = (
+            *statements,
+            _build_hard_delete_close_sql(
+                target_qualified=target_qualified,
+                delta_qualified=delta_qualified,
+                entry=entry,
+                valid_to_column=valid_to_column,
+            ),
+        )
     statement_recorder.record_many(statements)
     with adapter.transaction(connection):
         statement: str
@@ -488,6 +508,28 @@ def _require_updated_at(entry: ModelPlanEntry) -> str:
     if entry.updated_at_column is None:
         raise ExecutorInputError("timestamp snapshot execution requires updated_at")
     return entry.updated_at_column
+
+
+def _build_hard_delete_close_sql(
+    *,
+    target_qualified: str,
+    delta_qualified: str,
+    entry: ModelPlanEntry,
+    valid_to_column: str,
+) -> str:
+    missing_key_condition: str = " AND ".join(
+        f"__source.{column} = __target.{column}" for column in entry.unique_key
+    )
+    first_key: str = entry.unique_key[0]
+    return (
+        f"UPDATE {target_qualified} AS __target "
+        f"SET {valid_to_column} = CURRENT_TIMESTAMP "
+        f"WHERE __target.{valid_to_column} IS NULL "
+        f"AND NOT EXISTS ("
+        f"SELECT 1 FROM {delta_qualified} AS __source "
+        f"WHERE {missing_key_condition} AND __source.{first_key} IS NOT NULL"
+        f")"
+    )
 
 
 def _initial_valid_from_expr(entry: ModelPlanEntry, *, source_alias: str | None = None) -> str:
