@@ -38,9 +38,22 @@ class BuildExecutionTestCase:
 @dataclass(frozen=True)
 class SnapshotTimestampExecutionTestCase:
     description: str
+    model_name: str
     project_files: dict[str, str]
     initial_setup_sql: tuple[str, ...]
+    stale_setup_sql: tuple[str, ...]
     changed_setup_sql: tuple[str, ...]
+    expected_validity_columns: tuple[str, ...]
     expected_initial_rows: tuple[tuple[object, ...], ...]
+    expected_stale_rows: tuple[tuple[object, ...], ...]
     expected_changed_rows: tuple[tuple[object, ...], ...]
     expected_query: str
+
+
+@dataclass(frozen=True)
+class SnapshotTimestampFailureTestCase:
+    description: str
+    model_name: str
+    project_files: dict[str, str]
+    setup_sql: tuple[str, ...]
+    expected_error_fragment: str
