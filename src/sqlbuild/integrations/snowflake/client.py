@@ -165,6 +165,7 @@ class SnowflakeAdapter(BaseAdapter):
         valid_from_column: str,
         valid_to_column: str,
         output_columns: tuple[str, ...],
+        invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         historical_sql: str = self._historical_timestamp_snapshot_select_sql(
             source=source,
@@ -174,6 +175,7 @@ class SnowflakeAdapter(BaseAdapter):
             valid_from_column=valid_from_column,
             valid_to_column=valid_to_column,
             output_columns=output_columns,
+            invalidate_hard_deletes=invalidate_hard_deletes,
         )
         return self.render_create_table_as(target=target, sql=historical_sql)
 
@@ -209,6 +211,7 @@ class SnowflakeAdapter(BaseAdapter):
         valid_from_column: str,
         valid_to_column: str,
         output_columns: tuple[str, ...],
+        invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         new_changes_sql: str = self._historical_timestamp_new_changes_cte_sql(
             target=target,
@@ -216,25 +219,37 @@ class SnowflakeAdapter(BaseAdapter):
             unique_key=unique_key,
             updated_at_column=updated_at_column,
             observed_at_column=observed_at_column,
+            valid_from_column=valid_from_column,
             valid_to_column=valid_to_column,
+            invalidate_hard_deletes=invalidate_hard_deletes,
         )
         key_condition: str = self._snapshot_key_condition(
             left_alias="__target", right_alias="__new_changes", unique_key=unique_key
         )
-        close_sql: str = (
-            f"WITH {new_changes_sql} "
-            f"UPDATE {target} AS __target "
-            f"SET {valid_to_column} = ("
-            f"SELECT MIN(__new_changes.{updated_at_column}) "
-            f"FROM __new_changes WHERE {key_condition}"
-            f") "
-            f"WHERE __target.{valid_to_column} IS NULL "
-            f"AND __target.{valid_from_column} < ("
-            f"SELECT MIN(__new_changes.{updated_at_column}) "
-            f"FROM __new_changes WHERE {key_condition}"
-            f") "
-            f"AND EXISTS (SELECT 1 FROM __new_changes WHERE {key_condition})"
-        )
+        if invalidate_hard_deletes:
+            close_sql: str = self._historical_snapshot_combined_close_sql(
+                target=target,
+                new_changes_sql=new_changes_sql,
+                unique_key=unique_key,
+                valid_from_column=valid_from_column,
+                valid_to_column=valid_to_column,
+                change_time_column=updated_at_column,
+            )
+        else:
+            close_sql = (
+                f"WITH {new_changes_sql} "
+                f"UPDATE {target} AS __target "
+                f"SET {valid_to_column} = ("
+                f"SELECT MIN(__new_changes.{updated_at_column}) "
+                f"FROM __new_changes WHERE {key_condition}"
+                f") "
+                f"WHERE __target.{valid_to_column} IS NULL "
+                f"AND __target.{valid_from_column} < ("
+                f"SELECT MIN(__new_changes.{updated_at_column}) "
+                f"FROM __new_changes WHERE {key_condition}"
+                f") "
+                f"AND EXISTS (SELECT 1 FROM __new_changes WHERE {key_condition})"
+            )
         insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
         output_select_sql: str = ", ".join(f"__new_changes.{column}" for column in output_columns)
         partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
@@ -382,6 +397,7 @@ class SnowflakeAdapter(BaseAdapter):
         valid_from_column: str,
         valid_to_column: str,
         output_columns: tuple[str, ...],
+        invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         historical_sql: str = self._historical_check_snapshot_select_sql(
             source=source,
@@ -391,6 +407,7 @@ class SnowflakeAdapter(BaseAdapter):
             valid_from_column=valid_from_column,
             valid_to_column=valid_to_column,
             output_columns=output_columns,
+            invalidate_hard_deletes=invalidate_hard_deletes,
         )
         return self.render_create_table_as(target=target, sql=historical_sql)
 
@@ -405,6 +422,7 @@ class SnowflakeAdapter(BaseAdapter):
         valid_from_column: str,
         valid_to_column: str,
         output_columns: tuple[str, ...],
+        invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         new_changes_sql: str = self._historical_check_new_changes_cte_sql(
             target=target,
@@ -414,24 +432,35 @@ class SnowflakeAdapter(BaseAdapter):
             observed_at_column=observed_at_column,
             valid_from_column=valid_from_column,
             valid_to_column=valid_to_column,
+            invalidate_hard_deletes=invalidate_hard_deletes,
         )
         key_condition: str = self._snapshot_key_condition(
             left_alias="__target", right_alias="__new_changes", unique_key=unique_key
         )
-        close_sql: str = (
-            f"WITH {new_changes_sql} "
-            f"UPDATE {target} AS __target "
-            f"SET {valid_to_column} = ("
-            f"SELECT MIN(__new_changes.{observed_at_column}) "
-            f"FROM __new_changes WHERE {key_condition}"
-            f") "
-            f"WHERE __target.{valid_to_column} IS NULL "
-            f"AND __target.{valid_from_column} < ("
-            f"SELECT MIN(__new_changes.{observed_at_column}) "
-            f"FROM __new_changes WHERE {key_condition}"
-            f") "
-            f"AND EXISTS (SELECT 1 FROM __new_changes WHERE {key_condition})"
-        )
+        if invalidate_hard_deletes:
+            close_sql: str = self._historical_snapshot_combined_close_sql(
+                target=target,
+                new_changes_sql=new_changes_sql,
+                unique_key=unique_key,
+                valid_from_column=valid_from_column,
+                valid_to_column=valid_to_column,
+                change_time_column=observed_at_column,
+            )
+        else:
+            close_sql = (
+                f"WITH {new_changes_sql} "
+                f"UPDATE {target} AS __target "
+                f"SET {valid_to_column} = ("
+                f"SELECT MIN(__new_changes.{observed_at_column}) "
+                f"FROM __new_changes WHERE {key_condition}"
+                f") "
+                f"WHERE __target.{valid_to_column} IS NULL "
+                f"AND __target.{valid_from_column} < ("
+                f"SELECT MIN(__new_changes.{observed_at_column}) "
+                f"FROM __new_changes WHERE {key_condition}"
+                f") "
+                f"AND EXISTS (SELECT 1 FROM __new_changes WHERE {key_condition})"
+            )
         insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
         output_select_sql: str = ", ".join(f"__new_changes.{column}" for column in output_columns)
         partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
@@ -1626,6 +1655,7 @@ class SnowflakeAdapter(BaseAdapter):
         valid_from_column: str,
         valid_to_column: str,
         output_columns: tuple[str, ...],
+        invalidate_hard_deletes: bool,
     ) -> str:
         partition_sql: str = ", ".join(unique_key)
         previous_columns_sql: str = ", ".join(
@@ -1664,6 +1694,7 @@ class SnowflakeAdapter(BaseAdapter):
         valid_from_column: str,
         valid_to_column: str,
         output_columns: tuple[str, ...],
+        invalidate_hard_deletes: bool,
     ) -> str:
         partition_sql: str = ", ".join(unique_key)
         output_select_sql: str = ", ".join(column for column in output_columns)
@@ -1691,7 +1722,9 @@ class SnowflakeAdapter(BaseAdapter):
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str,
+        valid_from_column: str,
         valid_to_column: str,
+        invalidate_hard_deletes: bool,
     ) -> str:
         partition_sql: str = ", ".join(unique_key)
         active_join_condition: str = cls._snapshot_key_condition(
@@ -1772,6 +1805,7 @@ class SnowflakeAdapter(BaseAdapter):
         observed_at_column: str,
         valid_from_column: str,
         valid_to_column: str,
+        invalidate_hard_deletes: bool,
     ) -> str:
         partition_sql: str = ", ".join(unique_key)
         previous_columns_sql: str = ", ".join(
@@ -1821,4 +1855,32 @@ class SnowflakeAdapter(BaseAdapter):
     ) -> str:
         return " AND ".join(
             f"{left_alias}.{column} = {right_alias}.{column}" for column in unique_key
+        )
+
+    @classmethod
+    def _historical_snapshot_combined_close_sql(
+        cls,
+        *,
+        target: str,
+        new_changes_sql: str,
+        unique_key: tuple[str, ...],
+        valid_from_column: str,
+        valid_to_column: str,
+        change_time_column: str,
+    ) -> str:
+        close_candidate_condition: str = cls._snapshot_key_condition(
+            left_alias="__close_candidates", right_alias="__target", unique_key=unique_key
+        )
+        candidate_key_sql: str = ", ".join(unique_key)
+        return (
+            f"WITH {new_changes_sql}, __close_candidates AS ("
+            f"SELECT {candidate_key_sql}, {change_time_column} AS __close_at FROM __new_changes"
+            ") "
+            f"UPDATE {target} AS __target "
+            f"SET {valid_to_column} = (SELECT MIN(__close_candidates.__close_at) "
+            f"FROM __close_candidates WHERE {close_candidate_condition}) "
+            f"WHERE __target.{valid_to_column} IS NULL "
+            f"AND __target.{valid_from_column} < (SELECT MIN(__close_candidates.__close_at) "
+            f"FROM __close_candidates WHERE {close_candidate_condition}) "
+            f"AND EXISTS (SELECT 1 FROM __close_candidates WHERE {close_candidate_condition})"
         )

@@ -33,6 +33,7 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
         self.rendered_historical_timestamp_changes: bool = False
         self.rendered_initial_historical_timestamp_change_records: bool = False
         self.rendered_historical_timestamp_change_records: bool = False
+        self.rendered_historical_timestamp_invalidate_hard_deletes: bool | None = None
 
     def render_apply_timestamp_snapshot_changes(
         self,
@@ -74,6 +75,7 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
         valid_from_column: str,
         valid_to_column: str,
         output_columns: tuple[str, ...],
+        invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         del (
             target,
@@ -86,6 +88,7 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
             output_columns,
         )
         self.rendered_historical_timestamp_changes = True
+        self.rendered_historical_timestamp_invalidate_hard_deletes = invalidate_hard_deletes
         return (f"INSERT INTO main.rendered_snapshot_sql VALUES ('{self.marker}')",)
 
     def render_apply_historical_timestamp_changes(
@@ -270,6 +273,7 @@ def test_given_existing_historical_timestamp_snapshot_when_executing_then_uses_a
         updated_at_column="updated_at",
         observed_at_column="observed_at",
         historical_input=HistoricalInput.SNAPSHOT,
+        invalidate_hard_deletes=True,
     )
 
     result: ModelExecutionResult = execute_snapshot_entry(
@@ -290,6 +294,7 @@ def test_given_existing_historical_timestamp_snapshot_when_executing_then_uses_a
 
     assert result.status == ExecutionStatus.SUCCESS
     assert adapter.rendered_historical_timestamp_changes is True
+    assert adapter.rendered_historical_timestamp_invalidate_hard_deletes is True
     assert rendered_rows == ((test_case.expected_rendered_marker,),)
 
     adapter.close(connection)

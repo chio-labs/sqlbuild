@@ -253,7 +253,11 @@ def _validate_supported_snapshot(entry: ModelPlanEntry) -> None:
         raise ExecutorInputError(
             "snapshot execution currently supports snapshot_strategy=timestamp or check"
         )
-    if entry.observed_at_column is not None and entry.invalidate_hard_deletes:
+    if (
+        entry.observed_at_column is not None
+        and entry.invalidate_hard_deletes
+        and entry.historical_input == HistoricalInput.CHANGES
+    ):
         raise ExecutorInputError("snapshot execution does not support historical hard deletes yet")
     if entry.snapshot_strategy == SnapshotStrategy.TIMESTAMP and entry.updated_at_column is None:
         raise ExecutorInputError("timestamp snapshot execution requires updated_at")
@@ -373,6 +377,7 @@ def _create_initial_snapshot_target(
                 valid_from_column=valid_from_column,
                 valid_to_column=valid_to_column,
                 output_columns=output_columns,
+                invalidate_hard_deletes=entry.invalidate_hard_deletes,
             )
     elif entry.snapshot_strategy == SnapshotStrategy.CHECK and entry.observed_at_column is not None:
         output_columns: tuple[str, ...] = tuple(column.name for column in delta_columns)
@@ -385,6 +390,7 @@ def _create_initial_snapshot_target(
             valid_from_column=valid_from_column,
             valid_to_column=valid_to_column,
             output_columns=output_columns,
+            invalidate_hard_deletes=entry.invalidate_hard_deletes,
         )
     else:
         statements = adapter.render_create_initial_snapshot_target(
@@ -474,6 +480,7 @@ def _apply_timestamp_snapshot_changes(
                 valid_from_column=valid_from_column,
                 valid_to_column=valid_to_column,
                 output_columns=output_columns,
+                invalidate_hard_deletes=entry.invalidate_hard_deletes,
             )
         statement_recorder.record_many(statements)
         with adapter.transaction(connection):
@@ -523,6 +530,7 @@ def _apply_check_snapshot_changes(
             valid_from_column=valid_from_column,
             valid_to_column=valid_to_column,
             output_columns=output_columns,
+            invalidate_hard_deletes=entry.invalidate_hard_deletes,
         )
     else:
         statements = adapter.render_apply_check_snapshot_changes(

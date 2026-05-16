@@ -329,6 +329,7 @@ class StrictAdapter(
         valid_from_column: str,
         valid_to_column: str,
         output_columns: tuple[str, ...],
+        invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         """Render SQL statements that create an initial historical timestamp snapshot."""
         ...
@@ -360,6 +361,7 @@ class StrictAdapter(
         valid_from_column: str,
         valid_to_column: str,
         output_columns: tuple[str, ...],
+        invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         """Render SQL statements that apply historical timestamp snapshot changes."""
         ...
@@ -410,6 +412,7 @@ class StrictAdapter(
         valid_from_column: str,
         valid_to_column: str,
         output_columns: tuple[str, ...],
+        invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         """Render SQL statements that create an initial historical check snapshot."""
         ...
@@ -426,6 +429,7 @@ class StrictAdapter(
         valid_from_column: str,
         valid_to_column: str,
         output_columns: tuple[str, ...],
+        invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         """Render SQL statements that apply historical check snapshot changes."""
         ...
