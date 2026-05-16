@@ -81,7 +81,9 @@ def test_given_sqlbuild_dag_when_building_specs_then_maps_assets_deps_and_checks
     assert {tuple(spec.key.path): frozenset(spec.kinds) for spec in asset_specs} == dict(
         test_case.expected_kinds_by_asset_key
     )
-    assert tuple(sorted({spec.group_name for spec in asset_specs})) == test_case.expected_group_names
+    assert (
+        tuple(sorted({spec.group_name for spec in asset_specs})) == test_case.expected_group_names
+    )
 
 
 @pytest.mark.parametrize(

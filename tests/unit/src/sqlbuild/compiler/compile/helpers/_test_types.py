@@ -259,6 +259,20 @@ class NonIncrementalConfigErrorTestCase:
 
 
 @dataclass(frozen=True)
+class SnapshotConfigValidTestCase:
+    description: str
+    config_values: dict[str, object]
+    expected_valid: bool = True
+
+
+@dataclass(frozen=True)
+class SnapshotConfigErrorTestCase:
+    description: str
+    config_values: dict[str, object]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class ResolveAuditSeverityTestCase:
     description: str
     instance_severity: str | None

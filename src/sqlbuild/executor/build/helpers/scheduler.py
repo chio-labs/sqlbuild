@@ -714,6 +714,12 @@ def _dispatch_model(
             run_id=run_id,
             query_change_tracking=query_change_tracking,
         )
+    if entry.action == PlanAction.SNAPSHOT:
+        return ModelExecutionResult(
+            model_name=entry.name,
+            status=ExecutionStatus.FAILED,
+            error_message="snapshot materialization execution is not implemented yet",
+        )
     return execute_table_entry(
         entry=entry,
         adapter=adapter,
