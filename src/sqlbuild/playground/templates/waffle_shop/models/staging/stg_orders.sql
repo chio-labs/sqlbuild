@@ -23,4 +23,4 @@ SELECT
   quantity,
   ordered_at,
   status
-FROM __source("raw_orders")
+FROM __source("raw__orders")
