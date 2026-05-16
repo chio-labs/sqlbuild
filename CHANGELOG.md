@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.14.0](https://github.com/chio-labs/sqlbuild/compare/v0.13.0...v0.14.0) (2026-05-16)
+
+
+### Features
+
+* add snapshot materialization config skeleton ([c0f220e](https://github.com/chio-labs/sqlbuild/commit/c0f220ea20b7cebb338aefcaf4c392b9024c79cf))
+* enforce snapshot full refresh policy ([58a30e8](https://github.com/chio-labs/sqlbuild/commit/58a30e8e0af5d8198160dbf704c1ce912f37ed96))
+* execute check snapshot models ([0715946](https://github.com/chio-labs/sqlbuild/commit/07159465cfe2c4ff9f98fb27d92ea1d3a72324c2))
+* execute historical check snapshots ([f1d49d6](https://github.com/chio-labs/sqlbuild/commit/f1d49d624943d4542dce975dac5f03b34d554370))
+* execute historical timestamp change snapshots ([d955081](https://github.com/chio-labs/sqlbuild/commit/d95508157df6f41fa88ca5067ab2b4a7ebac1e5a))
+* execute historical timestamp snapshots ([8044d9c](https://github.com/chio-labs/sqlbuild/commit/8044d9c9447996b190c22dced3be203c5d2b4c37))
+* execute timestamp snapshot models ([470b7aa](https://github.com/chio-labs/sqlbuild/commit/470b7aafe7380b61a6bed385f6ef1a43943c009b))
+* handle snapshot schema changes ([64f160a](https://github.com/chio-labs/sqlbuild/commit/64f160a0a421f88fadea3871b0f070b9049f6bf0))
+* invalidate historical snapshot hard deletes ([e2c148d](https://github.com/chio-labs/sqlbuild/commit/e2c148ddaa1706eada97a41377d833247b21484b))
+* invalidate snapshot hard deletes ([9faa501](https://github.com/chio-labs/sqlbuild/commit/9faa501dc8ff1514eecf882255ef5de4cf7dd192))
+* support snapshot validity configuration ([b7fd384](https://github.com/chio-labs/sqlbuild/commit/b7fd3843f49c66e099af111221d608af1b3427ce))
+* support wildcard snapshot check columns ([90630f6](https://github.com/chio-labs/sqlbuild/commit/90630f630083d012ee39132d233c6c332f73c74c))
+
+
+### Bug Fixes
+
+* preserve warehouse-specific test SQL behavior ([bce7b6c](https://github.com/chio-labs/sqlbuild/commit/bce7b6c87331c039d2d1a143eeb8b46cb95443b8))
+* run snapshot delta audits before mutation ([921b69c](https://github.com/chio-labs/sqlbuild/commit/921b69cb0a1d91a9d6aaf25a145f83e40a4b7343))
+* validate source cursor input columns ([fb55504](https://github.com/chio-labs/sqlbuild/commit/fb55504913bff097819211eee53ab3c66184765b))
+
+
+### Documentation
+
+* update README source names ([f2041b7](https://github.com/chio-labs/sqlbuild/commit/f2041b78b544ecdd4e8a17139cf9d69b28be2551))
+
 ## [0.13.0](https://github.com/chio-labs/sqlbuild/compare/v0.12.0...v0.13.0) (2026-05-16)
 
 
