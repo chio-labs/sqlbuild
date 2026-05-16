@@ -186,6 +186,27 @@ class DatabricksAdapter(BaseAdapter):
         )
         return self.render_create_table_as(target=target, sql=historical_sql)
 
+    def render_create_initial_historical_timestamp_changes_target(
+        self,
+        *,
+        target: str,
+        source: str,
+        unique_key: tuple[str, ...],
+        updated_at_column: str,
+        valid_from_column: str,
+        valid_to_column: str,
+        output_columns: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        historical_sql: str = self._historical_timestamp_changes_select_sql(
+            source=source,
+            unique_key=unique_key,
+            updated_at_column=updated_at_column,
+            valid_from_column=valid_from_column,
+            valid_to_column=valid_to_column,
+            output_columns=output_columns,
+        )
+        return self.render_create_table_as(target=target, sql=historical_sql)
+
     def render_apply_historical_timestamp_snapshot_changes(
         self,
         *,
@@ -204,6 +225,55 @@ class DatabricksAdapter(BaseAdapter):
             unique_key=unique_key,
             updated_at_column=updated_at_column,
             observed_at_column=observed_at_column,
+            valid_to_column=valid_to_column,
+        )
+        key_condition: str = self._snapshot_key_condition(
+            left_alias="__target", right_alias="__new_changes", unique_key=unique_key
+        )
+        close_sql: str = (
+            f"WITH {new_changes_sql} "
+            f"UPDATE {target} AS __target "
+            f"SET {valid_to_column} = ("
+            f"SELECT MIN(__new_changes.{updated_at_column}) "
+            f"FROM __new_changes WHERE {key_condition}"
+            f") "
+            f"WHERE __target.{valid_to_column} IS NULL "
+            f"AND __target.{valid_from_column} < ("
+            f"SELECT MIN(__new_changes.{updated_at_column}) "
+            f"FROM __new_changes WHERE {key_condition}"
+            f") "
+            f"AND EXISTS (SELECT 1 FROM __new_changes WHERE {key_condition})"
+        )
+        insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
+        output_select_sql: str = ", ".join(f"__new_changes.{column}" for column in output_columns)
+        partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
+        insert_sql: str = (
+            f"WITH {new_changes_sql} "
+            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"SELECT {output_select_sql}, __new_changes.{updated_at_column}, "
+            f"LEAD(__new_changes.{updated_at_column}) OVER ("
+            f"PARTITION BY {partition_sql} ORDER BY __new_changes.{updated_at_column}"
+            f") "
+            f"FROM __new_changes"
+        )
+        return (insert_sql, close_sql)
+
+    def render_apply_historical_timestamp_changes(
+        self,
+        *,
+        target: str,
+        source: str,
+        unique_key: tuple[str, ...],
+        updated_at_column: str,
+        valid_from_column: str,
+        valid_to_column: str,
+        output_columns: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        new_changes_sql: str = self._historical_timestamp_changes_new_records_cte_sql(
+            target=target,
+            source=source,
+            unique_key=unique_key,
+            updated_at_column=updated_at_column,
             valid_to_column=valid_to_column,
         )
         key_condition: str = self._snapshot_key_condition(
@@ -1997,6 +2067,51 @@ class DatabricksAdapter(BaseAdapter):
             f"LEFT JOIN __active ON {active_join_condition} "
             f"WHERE __active.{first_key} IS NULL "
             f"OR __delta_changes.{updated_at_column} > __active.{updated_at_column}"
+            ")"
+        )
+
+    @classmethod
+    def _historical_timestamp_changes_select_sql(
+        cls,
+        *,
+        source: str,
+        unique_key: tuple[str, ...],
+        updated_at_column: str,
+        valid_from_column: str,
+        valid_to_column: str,
+        output_columns: tuple[str, ...],
+    ) -> str:
+        partition_sql: str = ", ".join(unique_key)
+        output_select_sql: str = ", ".join(column for column in output_columns)
+        return (
+            f"SELECT {output_select_sql}, {updated_at_column} AS {valid_from_column}, "
+            f"LEAD({updated_at_column}) OVER (PARTITION BY {partition_sql} "
+            f"ORDER BY {updated_at_column}) AS {valid_to_column} "
+            f"FROM {source}"
+        )
+
+    @classmethod
+    def _historical_timestamp_changes_new_records_cte_sql(
+        cls,
+        *,
+        target: str,
+        source: str,
+        unique_key: tuple[str, ...],
+        updated_at_column: str,
+        valid_to_column: str,
+    ) -> str:
+        active_join_condition: str = cls._snapshot_key_condition(
+            left_alias="__source", right_alias="__active", unique_key=unique_key
+        )
+        first_key: str = unique_key[0]
+        return (
+            "__active AS ("
+            f"SELECT * FROM {target} WHERE {valid_to_column} IS NULL"
+            "), __new_changes AS ("
+            f"SELECT __source.* FROM {source} AS __source "
+            f"LEFT JOIN __active ON {active_join_condition} "
+            f"WHERE __active.{first_key} IS NULL "
+            f"OR __source.{updated_at_column} > __active.{updated_at_column}"
             ")"
         )
 
