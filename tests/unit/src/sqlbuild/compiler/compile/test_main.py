@@ -60,6 +60,7 @@ project_only = "present"
 materialized = "table"
 schema = "analytics"
 batch_size = "1h"
+contract = "enforced"
 
 [path_defaults]
 
@@ -117,6 +118,7 @@ MODEL (
   cursor_grain second,
   incremental_mode microbatch,
   batch_size 30m,
+  contract none,
 );
 
 select 1
@@ -155,8 +157,14 @@ sources:
                 "cursor_grain": "second",
                 "incremental_mode": "microbatch",
                 "batch_size": "30m",
+                "contract": "none",
             },
-            {"materialized": "view", "schema": "staging", "batch_size": "1h"},
+            {
+                "materialized": "view",
+                "schema": "staging",
+                "batch_size": "1h",
+                "contract": "enforced",
+            },
         ),
         expected_model_query_sqls=("select 1", "select 1"),
         expected_model_path_defaults=("staging/nested", "staging"),
