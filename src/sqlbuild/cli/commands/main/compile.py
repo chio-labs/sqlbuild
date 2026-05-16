@@ -9,6 +9,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.compile.constants import (
     RICH_LINEAGE_STATUS_MODEL_THRESHOLD,
 )
+from sqlbuild.cli.commands.main.helpers.compile.dag import resolve_compile_dag_path
 from sqlbuild.cli.commands.main.helpers.compile.models import WrittenTarget
 from sqlbuild.cli.commands.main.helpers.compile.output import (
     format_compile_json,
@@ -22,6 +23,7 @@ from sqlbuild.compiler.compile.main.load_macros import load_macros
 from sqlbuild.compiler.compile.models.core import LoadedMacro
 from sqlbuild.compiler.contracts.main.validate import validate_model_contracts
 from sqlbuild.compiler.contracts.models import ContractValidationResult
+from sqlbuild.compiler.dag.main.build import build_dag_json
 from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -41,6 +43,7 @@ def run_compile(
     defer_to: str | None = None,
     json_output: bool = False,
     manifest: bool = False,
+    dag_path: str | None = None,
     no_color: bool = False,
     lineage_mode: CompileLineageMode = CompileLineageMode.FAST,
     cli_vars: dict[str, object] | None = None,
@@ -100,6 +103,19 @@ def run_compile(
             ),
             upstream_deps=graph.upstream_deps,
             downstream_deps=graph.downstream_deps,
+        )
+    if dag_path is not None:
+        resolved_dag_path: Path = resolve_compile_dag_path(
+            project_dir=effective_project_dir,
+            dag_path=dag_path,
+        )
+        resolved_dag_path.parent.mkdir(parents=True, exist_ok=True)
+        resolved_dag_path.write_text(
+            build_dag_json(
+                graph=graph,
+                project_name=discovered_inputs.project_config.name,
+            ),
+            encoding="utf-8",
         )
 
     write_start: float = time.monotonic()

@@ -15,6 +15,10 @@ from sqlbuild.cli.commands.main.helpers.sql_test_progress import (
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
+from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
+    format_test_execution_json,
+    write_execution_json_output,
+)
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
 )
@@ -44,6 +48,8 @@ def run_test(
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     cli_vars: dict[str, object] | None = None,
+    json_output: bool = False,
+    json_output_path: Path | None = None,
 ) -> int:
     """Execute the test command."""
 
@@ -64,7 +70,7 @@ def run_test(
         cli_vars=cli_vars,
     )
     use_color: bool = not no_color and supports_color()
-    progress_stream: TextIO = sys.stdout
+    progress_stream: TextIO = sys.stderr if json_output else sys.stdout
     execution_header: str = format_build_header(command="sqb test", target=None, concurrency=1)
     execution_label: str = blue_bold("Execution") if use_color else "Execution"
     header_detail: str = dim(execution_header) if use_color else execution_header
@@ -113,8 +119,8 @@ def run_test(
         use_color=use_color,
         name_width=resolve_test_name_width(pipeline_result.plan_output.test_entries),
     )
-    sys.stdout.write(f"\n{styled_header}\n\n")
-    sys.stdout.flush()
+    progress_stream.write(f"\n{styled_header}\n\n")
+    progress_stream.flush()
     execution_connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
         adapter_name=resolve_effective_adapter_name(
             project_config=discovered_inputs.project_config,
@@ -133,7 +139,7 @@ def run_test(
 
     def on_test_progress(message: str) -> None:
         if message.startswith("Prepared "):
-            preflight_progress.complete(message)
+            preflight_progress.complete(message, blank_line_after=True)
             preflight_active[0] = False
             return
         if not preflight_active[0]:
@@ -165,8 +171,13 @@ def run_test(
 
     pass_count: int = sum(1 for r in results if r.outcome == SqlTestOutcome.PASS)
     fail_count: int = len(results) - pass_count
-    sys.stdout.write(f"\nPASS={pass_count}  FAIL={fail_count}  TOTAL={len(results)}\n")
-    sys.stdout.flush()
+    progress_stream.write(f"\nPASS={pass_count}  FAIL={fail_count}  TOTAL={len(results)}\n")
+    progress_stream.flush()
+    write_execution_json_output(
+        payload=format_test_execution_json(results=results),
+        json_output=json_output,
+        json_output_path=json_output_path,
+    )
 
     return 0 if fail_count == 0 else 1
 

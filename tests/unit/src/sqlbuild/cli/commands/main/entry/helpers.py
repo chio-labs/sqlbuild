@@ -16,6 +16,7 @@ def build_handlers(**overrides: Any) -> CliEntrypointHandlers:
 
     return CliEntrypointHandlers(
         run_compile=overrides.get("run_compile", noop_handler),
+        run_dag=overrides.get("run_dag", noop_handler),
         run_plan=overrides.get("run_plan", noop_handler),
         run_dbt_plan=overrides.get("run_dbt_plan", noop_handler),
         run_dbt_run=overrides.get("run_dbt_run", noop_handler),

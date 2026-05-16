@@ -22,6 +22,10 @@ test-dbt:
 	uv run pytest tests/integration/src/sqlbuild/integrations/dbt tests/e2e/src/sqlbuild/cli/commands/main/dbt -m "dbt and not real_warehouse" -vv
 
 
+waffle-shop:
+	cd tests/e2e/fixtures/waffle_shop && $${SHELL:-/bin/sh}
+
+
 test-real:
 	uv run pytest tests -m real_warehouse -vv
 

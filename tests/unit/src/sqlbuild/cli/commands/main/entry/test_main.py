@@ -70,6 +70,57 @@ ERROR_RENDERING_TEST_CASES: list[MainErrorRenderingTestCase] = [
     ),
 ]
 
+EXECUTION_JSON_TEST_CASES: list[MainTestCase] = [
+    MainTestCase(
+        description="dispatches build json flag",
+        argv=["build", "--json"],
+        expected_exit_code=0,
+        expected_json=True,
+    ),
+    MainTestCase(
+        description="dispatches run json flag",
+        argv=["run", "--json"],
+        expected_exit_code=0,
+        expected_json=True,
+    ),
+    MainTestCase(
+        description="dispatches test json flag",
+        argv=["test", "--json"],
+        expected_exit_code=0,
+        expected_json=True,
+    ),
+    MainTestCase(
+        description="dispatches audit json flag",
+        argv=["audit", "--json"],
+        expected_exit_code=0,
+        expected_json=True,
+    ),
+    MainTestCase(
+        description="dispatches seed json flag",
+        argv=["seed", "--json"],
+        expected_exit_code=0,
+        expected_json=True,
+    ),
+    MainTestCase(
+        description="dispatches scenario test json flag",
+        argv=["scenario", "test", "daily", "--json"],
+        expected_exit_code=0,
+        expected_json=True,
+    ),
+    MainTestCase(
+        description="dispatches build json output path",
+        argv=["build", "--json-output", "target/execution.json"],
+        expected_exit_code=0,
+        expected_json_output_path=Path("target/execution.json"),
+    ),
+    MainTestCase(
+        description="dispatches scenario test json output path",
+        argv=["scenario", "test", "daily", "--json-output", "target/scenario.json"],
+        expected_exit_code=0,
+        expected_json_output_path=Path("target/scenario.json"),
+    ),
+]
+
 COMMAND_LOCAL_GLOBAL_FLAG_ERROR_TEST_CASES: list[MainTestCase] = [
     MainTestCase(
         description="returns parser error for command local debug",
@@ -112,6 +163,20 @@ COMPILE_DISPATCH_TEST_CASES: list[MainTestCase] = [
         expected_manifest=True,
     ),
     MainTestCase(
+        description="passes dag flag to compile handler",
+        argv=["compile", "--dag"],
+        expected_exit_code=3,
+        expected_project_dir=None,
+        expected_dag="",
+    ),
+    MainTestCase(
+        description="passes dag artifact path to compile handler",
+        argv=["compile", "--dag", "target/custom_dag.json"],
+        expected_exit_code=3,
+        expected_project_dir=None,
+        expected_dag="target/custom_dag.json",
+    ),
+    MainTestCase(
         description="passes rich lineage mode to compile handler",
         argv=["compile", "--lineage-mode", "rich"],
         expected_exit_code=3,
@@ -140,6 +205,21 @@ COMPILE_DISPATCH_TEST_CASES: list[MainTestCase] = [
             "grants": {"role": "analyst"},
             "roles": ["reporter"],
         },
+    ),
+]
+
+DAG_DISPATCH_TEST_CASES: list[MainTestCase] = [
+    MainTestCase(
+        description="passes dag json and no sql validation flags to handler",
+        argv=["dag", "--json", "--no-sql-validation"],
+        expected_exit_code=3,
+        expected_no_sql_validation=True,
+    ),
+    MainTestCase(
+        description="passes sqlbuild vars to dag handler",
+        argv=["dag", "--vars", '{"schema":"analytics"}'],
+        expected_exit_code=3,
+        expected_vars={"schema": "analytics"},
     ),
 ]
 
@@ -551,6 +631,8 @@ def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispa
             int | None,
             int | None,
             int | None,
+            bool,
+            Path | None,
         ]
     ] = []
 
@@ -569,6 +651,8 @@ def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispa
         max_snapshot_total_rows: int | None,
         max_snapshot_bytes: int | None,
         max_snapshot_total_bytes: int | None,
+        json_output: bool,
+        json_output_path: Path | None,
     ) -> int:
         received_args.append(
             (
@@ -586,6 +670,8 @@ def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispa
                 max_snapshot_total_rows,
                 max_snapshot_bytes,
                 max_snapshot_total_bytes,
+                json_output,
+                json_output_path,
             )
         )
         return test_case.expected_exit_code
@@ -612,8 +698,40 @@ def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispa
             None,
             None,
             None,
+            False,
+            None,
         )
     ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    EXECUTION_JSON_TEST_CASES,
+    ids=[case.description for case in EXECUTION_JSON_TEST_CASES],
+)
+def test_given_execution_command_json_flag_when_running_then_dispatches_json_output(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[tuple[bool, Path | None]] = []
+
+    def record_json_handler(*args: object) -> int:
+        received_args.append((bool(args[-2]), args[-1] if isinstance(args[-1], Path) else None))
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(
+            run_build=record_json_handler,
+            run_run=record_json_handler,
+            run_test=record_json_handler,
+            run_audit=record_json_handler,
+            run_seed=record_json_handler,
+            run_scenario=record_json_handler,
+        ),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [(test_case.expected_json, test_case.expected_json_output_path)]
 
 
 @pytest.mark.parametrize(
@@ -1164,6 +1282,7 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
             str | None,
             bool,
             bool,
+            str | None,
             bool,
             CompileLineageMode,
             dict[str, object],
@@ -1176,6 +1295,7 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
         defer_to: str | None,
         json_output: bool,
         manifest: bool,
+        dag_path: str | None,
         no_color: bool,
         lineage_mode: CompileLineageMode,
         cli_vars: dict[str, object],
@@ -1187,6 +1307,7 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
                 defer_to,
                 json_output,
                 manifest,
+                dag_path,
                 no_color,
                 lineage_mode,
                 cli_vars,
@@ -1207,8 +1328,44 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
             None,
             False,
             test_case.expected_manifest,
+            test_case.expected_dag,
             False,
             test_case.expected_compile_lineage_mode,
+            {} if test_case.expected_vars is None else test_case.expected_vars,
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    DAG_DISPATCH_TEST_CASES,
+    ids=[case.description for case in DAG_DISPATCH_TEST_CASES],
+)
+def test_given_dag_command_arguments_when_running_then_dispatches_expected_handler(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[tuple[Path | None, bool, bool, dict[str, object]]] = []
+
+    def run_dag(
+        project_dir: Path | None,
+        no_sql_validation: bool,
+        json_output: bool,
+        cli_vars: dict[str, object],
+    ) -> int:
+        received_args.append((project_dir, no_sql_validation, json_output, cli_vars))
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_dag=run_dag),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [
+        (
+            test_case.expected_project_dir,
+            test_case.expected_no_sql_validation,
+            "--json" in test_case.argv,
             {} if test_case.expected_vars is None else test_case.expected_vars,
         )
     ]
@@ -1247,6 +1404,8 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         verbose: bool = False,
         debug: bool = False,
         cli_vars: dict[str, object] | None = None,
+        json_output: bool = False,
+        json_output_path: Path | None = None,
     ) -> int:
         del project_dir
         del no_sql_validation
@@ -1257,6 +1416,8 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         del exclude
         del verbose
         del cli_vars
+        del json_output
+        del json_output_path
         received_args.append((no_color, fail_fast, full_refresh, debug))
         return test_case.expected_exit_code
 
@@ -1307,6 +1468,8 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
         verbose: bool = False,
         debug: bool = False,
         cli_vars: dict[str, object] | None = None,
+        json_output: bool = False,
+        json_output_path: Path | None = None,
     ) -> int:
         del project_dir
         del no_sql_validation
@@ -1320,6 +1483,8 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
         del verbose
         del debug
         del cli_vars
+        del json_output
+        del json_output_path
         received_args.append(full_refresh)
         return test_case.expected_exit_code
 
@@ -1340,6 +1505,7 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
             argv=["--no-color", "plan", "--select", "orders", "--exclude", "customers"],
             expected_exit_code=4,
             expected_no_color=True,
+            expected_select=("orders",),
         )
     ],
     ids=["passes global no color to plan handler"],
@@ -1404,11 +1570,67 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
         False,
         False,
         test_case.expected_no_color,
-        ("orders",),
+        test_case.expected_select,
         ("customers",),
         False,
         {},
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="passes selectors from select file to plan handler",
+            argv=["plan", "--select", "orders", "--select-file", "selectors.txt"],
+            expected_exit_code=4,
+            expected_select=("orders", "customers", "payments"),
+        )
+    ],
+    ids=["passes selectors from select file to plan handler"],
+)
+def test_given_select_file_when_running_then_dispatches_file_selectors(
+    test_case: MainTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "selectors.txt").write_text("customers\n\n# ignored\npayments\n", encoding="utf-8")
+    received_selects: list[tuple[str, ...]] = []
+
+    def run_plan(
+        project_dir: Path | None,
+        no_sql_validation: bool,
+        defer_to: str | None,
+        cursor_overrides: object,
+        json_output: bool,
+        full_refresh: bool,
+        no_color: bool,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+        verbose: bool,
+        cli_vars: dict[str, object],
+    ) -> int:
+        del (
+            project_dir,
+            no_sql_validation,
+            defer_to,
+            cursor_overrides,
+            json_output,
+            full_refresh,
+            no_color,
+            exclude,
+            verbose,
+            cli_vars,
+        )
+        received_selects.append(select)
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=[*test_case.argv[:4], str(tmp_path / test_case.argv[4])],
+        handlers=build_handlers(run_plan=run_plan),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_selects == [test_case.expected_select]
 
 
 @pytest.mark.parametrize(
@@ -1493,6 +1715,7 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
         defer_to: str | None,
         json_output: bool,
         manifest: bool,
+        dag_path: str | None,
         no_color: bool,
         lineage_mode: CompileLineageMode,
         cli_vars: dict[str, object],
@@ -1501,6 +1724,7 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
         del defer_to
         del json_output
         del manifest
+        del dag_path
         del no_color
         del lineage_mode
         del cli_vars

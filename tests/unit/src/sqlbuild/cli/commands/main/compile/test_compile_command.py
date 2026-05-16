@@ -13,6 +13,7 @@ from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileCommandTestCase,
+    CompileDagArtifactTestCase,
     CompileJsonDiagnosticsTestCase,
     CompileLineageModeTestCase,
 )
@@ -132,6 +133,44 @@ def test_given_local_project_when_running_compile_then_it_does_not_connect(
         assert fragment in rendered_stdout
     assert (project_dir / "target" / "compiled" / "models" / "orders.sql").exists()
     assert not (project_dir / "target" / "manifest.json").exists()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CompileDagArtifactTestCase(
+            description="writes dag artifact to default target path",
+            dag_path="",
+            expected_project_name="offline_compile",
+            expected_node_ids=("model:orders",),
+        )
+    ],
+    ids=["writes dag artifact to default target path"],
+)
+def test_given_dag_flag_when_running_compile_then_writes_dag_artifact(
+    test_case: CompileDagArtifactTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_dir: Path = prepare_static_compile_project(tmp_path)
+    monkeypatch.setattr(
+        compile_command,
+        "resolve_adapter",
+        lambda *args, **kwargs: NoConnectDuckDbAdapter(),
+    )
+
+    exit_code: int = run_compile(
+        project_dir=project_dir,
+        no_sql_validation=True,
+        dag_path=test_case.dag_path,
+    )
+    dag_payload: dict[str, object] = json.loads(
+        (project_dir / "target" / "sqlbuild_dag.json").read_text(encoding="utf-8")
+    )
+
+    assert exit_code == 0
+    assert dag_payload["project_name"] == test_case.expected_project_name
+    assert tuple(node["id"] for node in dag_payload["nodes"]) == test_case.expected_node_ids
 
 
 @pytest.mark.parametrize(

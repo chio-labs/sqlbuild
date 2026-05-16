@@ -30,6 +30,10 @@ bigquery = [
 databricks = [
   "databricks-sql-connector[pyarrow]>=4.1.2",
 ]
+dagster = [
+  "dagster>=1.13.0",
+  "dagster-webserver>=1.13.0",
+]
 
 [project.scripts]
 sqb = "sqlbuild.cli.commands.main.entry:main"

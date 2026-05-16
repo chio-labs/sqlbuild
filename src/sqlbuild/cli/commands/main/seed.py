@@ -6,10 +6,15 @@ import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
+from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
+from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
+    format_seed_execution_json,
+    write_execution_json_output,
+)
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
 )
@@ -30,6 +35,8 @@ def run_seed(
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     cli_vars: dict[str, object] | None = None,
+    json_output: bool = False,
+    json_output_path: Path | None = None,
 ) -> int:
     """Execute the seed command."""
 
@@ -63,11 +70,15 @@ def run_seed(
     )
 
     use_color: bool = not no_color and supports_color()
-    sys.stdout.write("sqb seed\n\n")
-    sys.stdout.flush()
+    progress_stream: TextIO = sys.stderr if json_output else sys.stdout
+    progress_stream.write("sqb seed\n\n")
+    progress_stream.flush()
 
     start: float = time.monotonic()
-    on_complete: Callable[[SeedExecutionResult], None] = _build_on_complete(use_color=use_color)
+    on_complete: Callable[[SeedExecutionResult], None] = _build_on_complete(
+        stream=progress_stream,
+        use_color=use_color,
+    )
     results: tuple[SeedExecutionResult, ...] = run_seed_pipeline(
         plan=pipeline_result.plan_output,
         connection_config=connection_config,
@@ -84,15 +95,20 @@ def run_seed(
         if fail_count == 0
         else colorize_status("FAIL", use_color=use_color)
     )
-    sys.stdout.write(
+    progress_stream.write(
         f"\n{completion}  {success_count} loaded, {fail_count} failed  ({elapsed_str})\n"
     )
-    sys.stdout.flush()
+    progress_stream.flush()
+    write_execution_json_output(
+        payload=format_seed_execution_json(results=results, plan=pipeline_result.plan_output),
+        json_output=json_output,
+        json_output_path=json_output_path,
+    )
 
     return 0 if fail_count == 0 else 1
 
 
-def _build_on_complete(*, use_color: bool) -> Callable[[SeedExecutionResult], None]:
+def _build_on_complete(*, stream: TextIO, use_color: bool) -> Callable[[SeedExecutionResult], None]:
     def _on_complete(result: SeedExecutionResult) -> None:
         status_text: str = "OK" if result.status == ExecutionStatus.SUCCESS else "FAIL"
         status: str = colorize_status(status_text, use_color=use_color)
@@ -100,9 +116,9 @@ def _build_on_complete(*, use_color: bool) -> Callable[[SeedExecutionResult], No
         if result.duration_ms is not None:
             seconds: float = result.duration_ms / 1000.0
             duration = f"{seconds:.2f}s"
-        sys.stdout.write(f"  {result.seed_name:<50} {status:<6} {duration}\n")
+        stream.write(f"  {result.seed_name:<50} {status:<6} {duration}\n")
         if result.error_message is not None:
-            sys.stdout.write(f"    {result.error_message}\n")
-        sys.stdout.flush()
+            stream.write(f"    {result.error_message}\n")
+        stream.flush()
 
     return _on_complete

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 from typing import Any
 
 
@@ -50,11 +51,32 @@ def add_execution_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--verbose", "-v", action="store_true", default=False)
 
 
+def add_execution_json_output_arg(parser: argparse.ArgumentParser) -> None:
+    """Add structured execution JSON output flags."""
+
+    parser.add_argument("--json-output", type=Path, default=None)
+
+
 def add_select_args(parser: argparse.ArgumentParser) -> None:
     """Add --select and --exclude flags for scope selection."""
 
     parser.add_argument("--select", "-s", nargs="+", action="extend", default=[])
+    parser.add_argument("--select-file", action="append", default=[])
     parser.add_argument("--exclude", nargs="+", action="extend", default=[])
+
+
+def read_selector_files(paths: list[str]) -> tuple[str, ...]:
+    """Read newline-delimited selector files."""
+
+    selectors: list[str] = []
+    for raw_path in paths:
+        path: Path = Path(raw_path)
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped: str = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            selectors.append(stripped)
+    return tuple(selectors)
 
 
 def add_dbt_config_args(parser: argparse.ArgumentParser, *, prefix: str = "dbt") -> None:

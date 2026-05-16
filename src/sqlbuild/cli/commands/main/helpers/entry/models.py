@@ -28,7 +28,9 @@ class CliNamespace:
     to_environment: str | None = None
     hard_copy: bool = False
     json: bool = False
+    json_output: Path | None = None
     manifest: bool = False
+    dag: str | None = None
     compile_lineage_mode: CompileLineageMode = CompileLineageMode.FAST
     start_cursor_ts: str | None = None
     end_cursor_ts: str | None = None
@@ -75,6 +77,7 @@ class CliNamespace:
     skills_target: list[str] = field(default_factory=list)
     skills_force: bool = False
     select: list[str] = field(default_factory=list)
+    select_file: list[str] = field(default_factory=list)
     exclude: list[str] = field(default_factory=list)
     dbt_command: str | None = None
     dbt_args: list[str] = field(default_factory=list)
@@ -86,9 +89,20 @@ class CliEntrypointHandlers:
     """Injected command handlers for the CLI entrypoint."""
 
     run_compile: Callable[
-        [Path | None, bool, str | None, bool, bool, bool, CompileLineageMode, dict[str, object]],
+        [
+            Path | None,
+            bool,
+            str | None,
+            bool,
+            bool,
+            str | None,
+            bool,
+            CompileLineageMode,
+            dict[str, object],
+        ],
         int,
     ]
+    run_dag: Callable[[Path | None, bool, bool, dict[str, object]], int]
     run_plan: Callable[
         [
             Path | None,
@@ -125,6 +139,8 @@ class CliEntrypointHandlers:
             bool,
             bool,
             dict[str, object],
+            bool,
+            Path | None,
         ],
         int,
     ]
@@ -143,18 +159,49 @@ class CliEntrypointHandlers:
             bool,
             bool,
             dict[str, object],
+            bool,
+            Path | None,
         ],
         int,
     ]
     run_test: Callable[
-        [Path | None, bool, bool, tuple[str, ...], tuple[str, ...], dict[str, object]], int
+        [
+            Path | None,
+            bool,
+            bool,
+            tuple[str, ...],
+            tuple[str, ...],
+            dict[str, object],
+            bool,
+            Path | None,
+        ],
+        int,
     ]
     run_audit: Callable[
-        [Path | None, bool, str | None, bool, tuple[str, ...], tuple[str, ...], dict[str, object]],
+        [
+            Path | None,
+            bool,
+            str | None,
+            bool,
+            tuple[str, ...],
+            tuple[str, ...],
+            dict[str, object],
+            bool,
+            Path | None,
+        ],
         int,
     ]
     run_seed: Callable[
-        [Path | None, bool, tuple[str, ...], tuple[str, ...], dict[str, object]], int
+        [
+            Path | None,
+            bool,
+            tuple[str, ...],
+            tuple[str, ...],
+            dict[str, object],
+            bool,
+            Path | None,
+        ],
+        int,
     ]
     run_clone: Callable[
         [
@@ -225,6 +272,8 @@ class CliEntrypointHandlers:
             int | None,
             int | None,
             int | None,
+            bool,
+            Path | None,
         ],
         int,
     ]

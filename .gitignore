@@ -57,3 +57,5 @@ sqlbuild_local.yml
 **/sqlbuild_local.yml
 sqlbuild_local.toml
 **/sqlbuild_local.toml
+
+.tmp*
