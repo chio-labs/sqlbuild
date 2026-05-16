@@ -72,6 +72,18 @@ class SnapshotTimestampBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class SnapshotTimestampFailureBuildE2ETestCase:
+    """Test case for timestamp snapshot build failures through the CLI."""
+
+    description: str
+    repo_files: dict[str, str]
+    initial_seed_sql: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class TemplateExpressionsBuildE2ETestCase:
     """Test case for config-side template expression helpers."""
 
