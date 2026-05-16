@@ -27,10 +27,27 @@ SNAPSHOT_SQL_RENDERING_ADAPTER_TEST_CASES: list[SnapshotSqlRenderingAdapterTestC
             "__target.region = __source.region",
             "WHERE __target.effective_to IS NULL AND NOT EXISTS",
         ),
+        expected_historical_check_initial_hard_delete_fragments=(
+            "__hard_deleted_at",
+            "WHEN __hard_deleted_at < __next_change_at THEN __hard_deleted_at",
+            "NOT EXISTS",
+        ),
+        expected_historical_timestamp_initial_hard_delete_fragments=(
+            "__hard_deleted_at",
+            "WHEN __hard_deleted_at < __next_change_at THEN __hard_deleted_at",
+            "NOT EXISTS",
+        ),
+        expected_historical_timestamp_apply_hard_delete_fragments=(
+            "__hard_deletes AS (",
+            "AS __close_at FROM target_table AS __target",
+            "UNION ALL",
+        ),
         expected_historical_check_apply_fragments=(
             "LAG(plan) OVER (PARTITION BY customer_id ORDER BY observed_at)",
+            "__hard_deletes AS (",
             "INSERT INTO target_table (customer_id, plan, observed_at, valid_from, valid_to)",
             "SET valid_to = (SELECT MIN(__close_candidates.__close_at)",
+            "UNION ALL",
         ),
     ),
     SnapshotSqlRenderingAdapterTestCase(
@@ -47,10 +64,27 @@ SNAPSHOT_SQL_RENDERING_ADAPTER_TEST_CASES: list[SnapshotSqlRenderingAdapterTestC
             "__target.region = __source.region",
             "WHERE __target.effective_to IS NULL AND NOT EXISTS",
         ),
+        expected_historical_check_initial_hard_delete_fragments=(
+            "__hard_deleted_at",
+            "WHEN __hard_deleted_at < __next_change_at THEN __hard_deleted_at",
+            "__hard_delete_candidates AS (",
+        ),
+        expected_historical_timestamp_initial_hard_delete_fragments=(
+            "__hard_deleted_at",
+            "WHEN __hard_deleted_at < __next_change_at THEN __hard_deleted_at",
+            "__hard_delete_candidates AS (",
+        ),
+        expected_historical_timestamp_apply_hard_delete_fragments=(
+            "__hard_deletes AS (",
+            "AS __close_at FROM target_table AS __target",
+            "UNION ALL",
+        ),
         expected_historical_check_apply_fragments=(
             "LAG(plan) OVER (PARTITION BY customer_id ORDER BY observed_at)",
+            "__hard_deletes AS (",
             "INSERT INTO target_table (customer_id, plan, observed_at, valid_from, valid_to)",
             "SET valid_to = (SELECT MIN(__close_candidates.__close_at)",
+            "UNION ALL",
         ),
     ),
     SnapshotSqlRenderingAdapterTestCase(
@@ -67,10 +101,27 @@ SNAPSHOT_SQL_RENDERING_ADAPTER_TEST_CASES: list[SnapshotSqlRenderingAdapterTestC
             "__target.region = __source.region",
             "WHERE __target.effective_to IS NULL AND NOT EXISTS",
         ),
+        expected_historical_check_initial_hard_delete_fragments=(
+            "__hard_deleted_at",
+            "WHEN __hard_deleted_at < __next_change_at THEN __hard_deleted_at",
+            "__hard_delete_candidates AS (",
+        ),
+        expected_historical_timestamp_initial_hard_delete_fragments=(
+            "__hard_deleted_at",
+            "WHEN __hard_deleted_at < __next_change_at THEN __hard_deleted_at",
+            "__hard_delete_candidates AS (",
+        ),
+        expected_historical_timestamp_apply_hard_delete_fragments=(
+            "__hard_deletes AS (",
+            "AS __close_at FROM target_table AS __target",
+            "UNION ALL",
+        ),
         expected_historical_check_apply_fragments=(
             "LAG(plan) OVER (PARTITION BY customer_id ORDER BY observed_at)",
+            "__hard_deletes AS (",
             "INSERT INTO target_table (customer_id, plan, observed_at, valid_from, valid_to)",
             "SET valid_to = (SELECT MIN(__close_candidates.__close_at)",
+            "UNION ALL",
         ),
     ),
     SnapshotSqlRenderingAdapterTestCase(
@@ -82,15 +133,32 @@ SNAPSHOT_SQL_RENDERING_ADAPTER_TEST_CASES: list[SnapshotSqlRenderingAdapterTestC
             "CAST(NULL AS TIMESTAMP) AS valid_to",
         ),
         expected_timestamp_hard_delete_fragments=(
-            "UPDATE target_table AS __target SET effective_to = __source.updated_at",
+            "MERGE INTO target_table AS __target USING source_table AS __source",
             "__target.customer_id = __source.customer_id",
             "__target.region = __source.region",
-            "WHERE __target.effective_to IS NULL AND NOT EXISTS",
+            "WHEN MATCHED THEN UPDATE SET effective_to = __source.updated_at",
+        ),
+        expected_historical_check_initial_hard_delete_fragments=(
+            "__hard_deleted_at",
+            "WHEN __hard_deleted_at < __next_change_at THEN __hard_deleted_at",
+            "__hard_delete_candidates AS (",
+        ),
+        expected_historical_timestamp_initial_hard_delete_fragments=(
+            "__hard_deleted_at",
+            "WHEN __hard_deleted_at < __next_change_at THEN __hard_deleted_at",
+            "__hard_delete_candidates AS (",
+        ),
+        expected_historical_timestamp_apply_hard_delete_fragments=(
+            "__hard_deletes AS (",
+            "AS __close_at FROM target_table AS __target",
+            "UNION ALL",
         ),
         expected_historical_check_apply_fragments=(
             "LAG(plan) OVER (PARTITION BY customer_id ORDER BY observed_at)",
+            "__hard_deletes AS (",
             "INSERT INTO target_table (customer_id, plan, observed_at, valid_from, valid_to)",
             "SET valid_to = (SELECT MIN(__close_candidates.__close_at)",
+            "UNION ALL",
         ),
     ),
 ]
@@ -130,6 +198,45 @@ def test_given_builtin_adapter_when_rendering_snapshot_sql_then_covers_snapshot_
             invalidate_hard_deletes=True,
         )
     )
+    historical_check_initial_sql: str = "\n".join(
+        test_case.adapter.render_create_initial_historical_check_snapshot_target(
+            target="target_table",
+            source="source_table",
+            unique_key=("customer_id",),
+            check_columns=("plan",),
+            observed_at_column="observed_at",
+            valid_from_column="valid_from",
+            valid_to_column="valid_to",
+            output_columns=("customer_id", "plan", "observed_at"),
+            invalidate_hard_deletes=True,
+        )
+    )
+    historical_timestamp_initial_sql: str = "\n".join(
+        test_case.adapter.render_create_initial_historical_timestamp_snapshot_target(
+            target="target_table",
+            source="source_table",
+            unique_key=("customer_id",),
+            updated_at_column="updated_at",
+            observed_at_column="observed_at",
+            valid_from_column="valid_from",
+            valid_to_column="valid_to",
+            output_columns=("customer_id", "plan", "updated_at", "observed_at"),
+            invalidate_hard_deletes=True,
+        )
+    )
+    historical_timestamp_apply_sql: str = "\n".join(
+        test_case.adapter.render_apply_historical_timestamp_snapshot_changes(
+            target="target_table",
+            source="source_table",
+            unique_key=("customer_id",),
+            updated_at_column="updated_at",
+            observed_at_column="observed_at",
+            valid_from_column="valid_from",
+            valid_to_column="valid_to",
+            output_columns=("customer_id", "plan", "updated_at", "observed_at"),
+            invalidate_hard_deletes=True,
+        )
+    )
     historical_check_apply_sql: str = "\n".join(
         test_case.adapter.render_apply_historical_check_snapshot_changes(
             target="target_table",
@@ -149,5 +256,11 @@ def test_given_builtin_adapter_when_rendering_snapshot_sql_then_covers_snapshot_
         assert expected_fragment in create_initial_sql
     for expected_fragment in test_case.expected_timestamp_hard_delete_fragments:
         assert expected_fragment in timestamp_hard_delete_sql
+    for expected_fragment in test_case.expected_historical_check_initial_hard_delete_fragments:
+        assert expected_fragment in historical_check_initial_sql
+    for expected_fragment in test_case.expected_historical_timestamp_initial_hard_delete_fragments:
+        assert expected_fragment in historical_timestamp_initial_sql
+    for expected_fragment in test_case.expected_historical_timestamp_apply_hard_delete_fragments:
+        assert expected_fragment in historical_timestamp_apply_sql
     for expected_fragment in test_case.expected_historical_check_apply_fragments:
         assert expected_fragment in historical_check_apply_sql

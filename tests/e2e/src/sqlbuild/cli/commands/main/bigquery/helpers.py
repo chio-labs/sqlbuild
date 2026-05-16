@@ -7,7 +7,10 @@ from shutil import copytree
 from typing import Any
 
 from sqlbuild.integrations.bigquery.client import BigQueryAdapter
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import REPO_ROOT
+from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    REPO_ROOT,
+    stringify_warehouse_rows,
+)
 from tests.integration.src.sqlbuild.integrations.bigquery.helpers import (
     build_bigquery_connection_config,
     build_unique_dataset_name,
@@ -242,6 +245,67 @@ def execute_bigquery_sql(*, dataset_name: str, sql: str) -> None:
         adapter.execute(connection, sql)
     finally:
         adapter.close(connection)
+
+
+def assert_current_bigquery_snapshot_rows(
+    *, dataset_name: str, expected_rows: tuple[tuple[object, ...], ...]
+) -> None:
+    """Assert current snapshot rows for BigQuery real-warehouse e2e tests."""
+
+    rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
+        dataset_name=dataset_name,
+        sql=(
+            "SELECT customer_id, region_id, plan, CAST(effective_from AS DATE), "
+            "CAST(effective_to AS DATE) "
+            f"FROM {relation_name(dataset_name=dataset_name, name='current_customer_snapshot')} "
+            "ORDER BY customer_id, region_id, effective_from"
+        ),
+    )
+    assert stringify_warehouse_rows(rows) == expected_rows
+
+
+def assert_bigquery_snapshot_matrix_rows(
+    *,
+    dataset_name: str,
+    expected_current_rows: tuple[tuple[object, ...], ...],
+    expected_historical_timestamp_rows: tuple[tuple[object, ...], ...],
+    expected_historical_check_rows: tuple[tuple[object, ...], ...],
+) -> None:
+    """Assert all compact snapshot matrix rows for BigQuery."""
+
+    assert_current_bigquery_snapshot_rows(
+        dataset_name=dataset_name,
+        expected_rows=expected_current_rows,
+    )
+    historical_timestamp_rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
+        dataset_name=dataset_name,
+        sql=(
+            "SELECT customer_id, plan, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
+            f"FROM {relation_name(dataset_name=dataset_name, name='historical_customer_snapshot')} "
+            "ORDER BY customer_id, valid_from"
+        ),
+    )
+    historical_check_rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
+        dataset_name=dataset_name,
+        sql=(
+            "SELECT customer_id, status, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
+            "FROM "
+            f"{relation_name(dataset_name=dataset_name, name='historical_membership_snapshot')} "
+            "ORDER BY customer_id, valid_from"
+        ),
+    )
+    actual_historical_timestamp_rows: tuple[tuple[object, ...], ...] = stringify_warehouse_rows(
+        historical_timestamp_rows
+    )
+    actual_historical_check_rows: tuple[tuple[object, ...], ...] = stringify_warehouse_rows(
+        historical_check_rows
+    )
+    assert actual_historical_timestamp_rows == expected_historical_timestamp_rows, (
+        actual_historical_timestamp_rows
+    )
+    assert actual_historical_check_rows == expected_historical_check_rows, (
+        actual_historical_check_rows
+    )
 
 
 def write_local_environment_override(*, project_dir: Path, environment: str) -> None:
