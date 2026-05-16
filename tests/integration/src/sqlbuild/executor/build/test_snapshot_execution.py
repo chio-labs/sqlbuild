@@ -1419,7 +1419,7 @@ SNAPSHOT_CHECK_FAILURE_TEST_CASES: list[SnapshotCheckFailureTestCase] = [
         expected_error_fragment="query output is missing required columns: status",
     ),
     SnapshotCheckFailureTestCase(
-        description="check snapshot wildcard check columns are not treated as supported",
+        description="check snapshot wildcard check columns fail when no data columns remain",
         model_name="customer_snapshot",
         project_files={
             "sqlbuild_project.toml": _PROJECT_YML,
@@ -1433,13 +1433,13 @@ SNAPSHOT_CHECK_FAILURE_TEST_CASES: list[SnapshotCheckFailureTestCase] = [
                 "  snapshot_strategy check,\n"
                 "  check_columns [*]\n"
                 ");\n\n"
-                'SELECT customer_id, status FROM __source("raw_customers")'
+                'SELECT customer_id FROM __source("raw_customers")'
             ),
         },
         setup_sql=(
             "CREATE TABLE main.raw_customers AS SELECT 1 AS customer_id, 'active' AS status",
         ),
-        expected_error_fragment="query output is missing required columns: *",
+        expected_error_fragment="check_columns [*] did not match any data columns",
     ),
     SnapshotCheckFailureTestCase(
         description="check snapshot missing one of multiple check columns fails clearly",
@@ -2602,7 +2602,7 @@ def test_given_snapshot_initial_validity_config_when_planning_then_plan_entry_pr
                     "  unique_key [customer_id],\n"
                     "  snapshot_strategy check,\n"
                     "  check_columns [status],\n"
-                    "  columns (customer_id (audits [not_null]))\n"
+                    "  columns (customer_id (audits [not_null (run_scope final)]))\n"
                     ");\n\n"
                     'SELECT customer_id, status FROM __source("raw_customers")'
                 ),
@@ -2675,7 +2675,7 @@ def test_given_check_snapshot_with_final_audit_when_building_then_runs_audit(
                     "  unique_key [customer_id],\n"
                     "  snapshot_strategy check,\n"
                     "  check_columns [status],\n"
-                    "  columns (customer_id (audits [not_null]))\n"
+                    "  columns (customer_id (audits [not_null (run_scope final)]))\n"
                     ");\n\n"
                     'SELECT customer_id, status FROM __source("raw_customers")'
                 ),
