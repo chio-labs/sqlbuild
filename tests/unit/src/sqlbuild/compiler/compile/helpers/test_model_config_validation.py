@@ -170,6 +170,36 @@ VALID_TEST_CASES: list[IncrementalConfigValidTestCase] = [
         },
         ref_count=2,
     ),
+    IncrementalConfigValidTestCase(
+        description="enforced contract allows declared cursor and unique key",
+        config_values={
+            "materialized": "incremental",
+            "contract": "enforced",
+            "columns": {
+                "id": {},
+                "event_time": {},
+            },
+            "incremental_strategy": "delete_insert",
+            "cursor": "event_time",
+            "cursor_type": "timestamp",
+            "cursor_grain": "second",
+            "unique_key": ["id"],
+        },
+        ref_count=1,
+    ),
+    IncrementalConfigValidTestCase(
+        description="non-enforced contract ignores omitted cursor declaration",
+        config_values={
+            "materialized": "incremental",
+            "contract": "none",
+            "columns": {"id": {}},
+            "incremental_strategy": "delete_insert",
+            "cursor": "event_time",
+            "cursor_type": "timestamp",
+            "cursor_grain": "second",
+        },
+        ref_count=1,
+    ),
 ]
 
 
@@ -347,6 +377,32 @@ ERROR_TEST_CASES: list[IncrementalConfigErrorTestCase] = [
         },
         ref_count=1,
         expected_error_fragment="unknown cursor_type",
+    ),
+    IncrementalConfigErrorTestCase(
+        description="enforced contract rejects undeclared cursor",
+        config_values={
+            "materialized": "incremental",
+            "contract": "enforced",
+            "columns": {"id": {}},
+            "incremental_strategy": "delete_insert",
+            "cursor": "event_time",
+            "cursor_type": "timestamp",
+            "cursor_grain": "second",
+        },
+        ref_count=1,
+        expected_error_fragment="cursor references column 'event_time' not declared",
+    ),
+    IncrementalConfigErrorTestCase(
+        description="enforced contract rejects undeclared incremental unique key",
+        config_values={
+            "materialized": "incremental",
+            "contract": "enforced",
+            "columns": {"event_time": {}},
+            "incremental_strategy": "merge",
+            "unique_key": ["id"],
+        },
+        ref_count=1,
+        expected_error_fragment="unique_key references column 'id' not declared",
     ),
 ]
 
@@ -549,6 +605,49 @@ SNAPSHOT_VALID_TEST_CASES: list[SnapshotConfigValidTestCase] = [
             "snapshot_schema_change": "append_new_columns",
         },
     ),
+    SnapshotConfigValidTestCase(
+        description="enforced contract allows declared snapshot config columns",
+        config_values={
+            "materialized": "snapshot",
+            "contract": "enforced",
+            "columns": {
+                "id": {},
+                "updated_at": {},
+                "snapshot_date": {},
+            },
+            "unique_key": ["id"],
+            "snapshot_strategy": "timestamp",
+            "updated_at": "updated_at",
+            "observed_at": "snapshot_date",
+            "historical_input": "snapshot",
+        },
+    ),
+    SnapshotConfigValidTestCase(
+        description="non-enforced contract ignores omitted snapshot declaration",
+        config_values={
+            "materialized": "snapshot",
+            "contract": "none",
+            "columns": {"id": {}},
+            "unique_key": ["id"],
+            "snapshot_strategy": "timestamp",
+            "updated_at": "updated_at",
+        },
+    ),
+    SnapshotConfigValidTestCase(
+        description="enforced contract allows wildcard check columns",
+        config_values={
+            "materialized": "snapshot",
+            "contract": "enforced",
+            "columns": {
+                "id": {},
+                "plan": {},
+                "status": {},
+            },
+            "unique_key": ["id"],
+            "snapshot_strategy": "check",
+            "check_columns": ["*"],
+        },
+    ),
 ]
 
 
@@ -695,6 +794,62 @@ SNAPSHOT_ERROR_TEST_CASES: list[SnapshotConfigErrorTestCase] = [
             "valid_to_column": "VALID_AT",
         },
         expected_error_fragment="valid_from_column and valid_to_column must differ",
+    ),
+    SnapshotConfigErrorTestCase(
+        description="enforced contract rejects undeclared snapshot unique key",
+        config_values={
+            "materialized": "snapshot",
+            "contract": "enforced",
+            "columns": {"updated_at": {}},
+            "unique_key": ["id"],
+            "snapshot_strategy": "timestamp",
+            "updated_at": "updated_at",
+        },
+        expected_error_fragment="unique_key references column 'id' not declared",
+    ),
+    SnapshotConfigErrorTestCase(
+        description="enforced contract rejects undeclared updated_at",
+        config_values={
+            "materialized": "snapshot",
+            "contract": "enforced",
+            "columns": {"id": {}},
+            "unique_key": ["id"],
+            "snapshot_strategy": "timestamp",
+            "updated_at": "updated_at",
+        },
+        expected_error_fragment="updated_at references column 'updated_at' not declared",
+    ),
+    SnapshotConfigErrorTestCase(
+        description="enforced contract rejects undeclared observed_at",
+        config_values={
+            "materialized": "snapshot",
+            "contract": "enforced",
+            "columns": {
+                "id": {},
+                "updated_at": {},
+            },
+            "unique_key": ["id"],
+            "snapshot_strategy": "timestamp",
+            "updated_at": "updated_at",
+            "observed_at": "snapshot_date",
+            "historical_input": "snapshot",
+        },
+        expected_error_fragment="observed_at references column 'snapshot_date' not declared",
+    ),
+    SnapshotConfigErrorTestCase(
+        description="enforced contract rejects undeclared check column",
+        config_values={
+            "materialized": "snapshot",
+            "contract": "enforced",
+            "columns": {
+                "id": {},
+                "plan": {},
+            },
+            "unique_key": ["id"],
+            "snapshot_strategy": "check",
+            "check_columns": ["plan", "status"],
+        },
+        expected_error_fragment="check_columns references column 'status' not declared",
     ),
 ]
 
