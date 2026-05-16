@@ -1,5 +1,7 @@
 """E2E tests for executing SQLBuild through Dagster assets."""
 
+import threading
+import time
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -30,6 +32,7 @@ from tests.e2e.src.sqlbuild.integrations.dagster._test_types import (
     DagsterSqlBuildFailedCheckE2ETestCase,
     DagsterSqlBuildScenarioE2ETestCase,
     DagsterSqlBuildSelectionE2ETestCase,
+    DagsterSqlBuildStreamingE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.integrations.dagster.helpers import (
     add_failing_daily_revenue_audits,
@@ -37,7 +40,9 @@ from tests.e2e.src.sqlbuild.integrations.dagster.helpers import (
     check_severity_for_asset,
     failed_check_severities_for_asset,
     materialization_metadata_keys,
+    wait_for_captured_stdout_fragment,
     write_sqb_capture_command,
+    write_sqb_streaming_command,
 )
 
 SELECTION_TEST_CASES: list[DagsterSqlBuildSelectionE2ETestCase] = [
@@ -208,6 +213,92 @@ def test_given_dagster_asset_selection_when_executing_sqlbuild_then_uses_select_
     assert test_case.expected_selector_log_line in rendered_logs
     for table_name in test_case.expected_table_names:
         assert table_exists(db_path=project_dir / "waffle_shop.duckdb", table_name=table_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterSqlBuildStreamingE2ETestCase(
+            description="sqlbuild stdout is visible before process exits",
+            selected_asset_key=("main", "waffle_types"),
+            expected_stdout_fragment="streamed before exit\n",
+        )
+    ],
+    ids=["sqlbuild stdout is visible before process exits"],
+)
+def test_given_sqlbuild_process_is_still_running_when_emitting_stdout_then_dagster_streams_output(
+    test_case: DagsterSqlBuildStreamingE2ETestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project_dir: Path = prepare_waffle_shop(tmp_path)
+    sqb_executable: Path = REPO_ROOT / ".venv" / "bin" / "sqb"
+    sqlbuild_project: SqlBuildProject = SqlBuildProject(
+        project_dir=project_dir,
+        sqb_command=(str(sqb_executable),),
+    )
+    monkeypatch.setenv("DAGSTER_IS_DEV_CLI", "1")
+    sqlbuild_project.prepare_if_dev()
+    started_path: Path = tmp_path / "stream-started.txt"
+    release_path: Path = tmp_path / "stream-release.txt"
+    json_payload: str = (
+        '{"version": 1, "command": "build", "status": "success", '
+        '"summary": {}, "assets": [{"kind": "seed", "name": "waffle_types", '
+        '"status": "success", "duration_ms": 1}], "checks": []}'
+    )
+    streaming_command: tuple[str, ...] = write_sqb_streaming_command(
+        root=tmp_path,
+        started_path=started_path,
+        release_path=release_path,
+        stdout_text=test_case.expected_stdout_fragment,
+        json_payload=json_payload,
+    )
+
+    @sqlbuild_assets(project=sqlbuild_project, required_resource_keys={"sqb"})
+    def sqlbuild_waffle_shop(context: AssetExecutionContext) -> Iterator[object]:
+        yield from context.resources.sqb.cli(["build"], context=context).stream()
+
+    result_out: list[ExecuteInProcessResult] = []
+    error_out: list[BaseException] = []
+
+    def run_materialize() -> None:
+        try:
+            result_out.append(
+                materialize(
+                    [sqlbuild_waffle_shop],
+                    resources={
+                        "sqb": SqlBuildCliResource(
+                            project_dir=sqlbuild_project,
+                            sqb_command=list(streaming_command),
+                        )
+                    },
+                    selection=[AssetKey(list(test_case.selected_asset_key))],
+                )
+            )
+        except BaseException as error:
+            error_out.append(error)
+
+    thread: threading.Thread = threading.Thread(target=run_materialize)
+    thread.start()
+    try:
+        deadline: float = time.monotonic() + 10.0
+        while not started_path.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert started_path.exists()
+        rendered_stdout: str = wait_for_captured_stdout_fragment(
+            capsys=capsys,
+            expected_fragment=test_case.expected_stdout_fragment,
+            deadline=deadline,
+        )
+        assert test_case.expected_stdout_fragment in rendered_stdout
+    finally:
+        release_path.write_text("release", encoding="utf-8")
+        thread.join(timeout=10.0)
+
+    assert not thread.is_alive()
+    assert error_out == []
+    assert result_out[0].success
 
 
 @pytest.mark.parametrize(

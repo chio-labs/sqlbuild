@@ -78,6 +78,7 @@ class DagsterCliSelectionTestCase:
     command_args: tuple[str, ...]
     expected_selectors: tuple[str, ...]
     expected_uses_select_file: bool
+    expected_uses_json_output: bool
 
 
 @dataclass(frozen=True)

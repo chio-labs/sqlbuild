@@ -11,7 +11,10 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
-from sqlbuild.cli.commands.main.shared.helpers.execution_json import format_audit_execution_json
+from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
+    format_audit_execution_json,
+    write_execution_json_output,
+)
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
 )
@@ -39,6 +42,7 @@ def run_audit(
     exclude: tuple[str, ...] = (),
     cli_vars: dict[str, object] | None = None,
     json_output: bool = False,
+    json_output_path: Path | None = None,
 ) -> int:
     """Execute the audit command."""
 
@@ -145,9 +149,11 @@ def run_audit(
         f"\nPASS={pass_count}  WARN={warn_count}  FAIL={fail_count}  TOTAL={len(results)}\n"
     )
     progress_stream.flush()
-    if json_output:
-        sys.stdout.write(format_audit_execution_json(results=results))
-        sys.stdout.flush()
+    write_execution_json_output(
+        payload=format_audit_execution_json(results=results),
+        json_output=json_output,
+        json_output_path=json_output_path,
+    )
 
     return 0 if fail_count == 0 else 1
 

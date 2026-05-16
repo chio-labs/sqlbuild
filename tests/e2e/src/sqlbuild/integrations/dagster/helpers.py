@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
+from typing import Any
 
 from dagster import (
     AssetCheckEvaluation,
@@ -45,6 +47,59 @@ def write_sqb_capture_command(
         encoding="utf-8",
     )
     return ("python", str(script_path))
+
+
+def write_sqb_streaming_command(
+    *,
+    root: Path,
+    started_path: Path,
+    release_path: Path,
+    stdout_text: str,
+    json_payload: str,
+) -> tuple[str, ...]:
+    """Write a wrapper that emits stdout before waiting for test release."""
+
+    script_path: Path = root / "streaming_sqb.py"
+    script_path.write_text(
+        "\n".join(
+            (
+                "from __future__ import annotations",
+                "import sys",
+                "import time",
+                "from pathlib import Path",
+                f"started_path = Path({str(started_path)!r})",
+                f"release_path = Path({str(release_path)!r})",
+                f"stdout_text = {stdout_text!r}",
+                f"json_payload = {json_payload!r}",
+                "sys.stdout.write(stdout_text)",
+                "sys.stdout.flush()",
+                "started_path.write_text('started', encoding='utf-8')",
+                "while not release_path.exists():",
+                "    time.sleep(0.01)",
+                "if '--json-output' in sys.argv[1:]:",
+                "    json_output_path = Path(sys.argv[sys.argv.index('--json-output') + 1])",
+                "    json_output_path.write_text(json_payload, encoding='utf-8')",
+                "raise SystemExit(0)",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return ("python", str(script_path))
+
+
+def wait_for_captured_stdout_fragment(
+    *, capsys: Any, expected_fragment: str, deadline: float
+) -> str:
+    """Wait until pytest capture has received a stdout fragment."""
+
+    rendered_stdout: str = ""
+    while time.monotonic() < deadline:
+        rendered_stdout += capsys.readouterr().out
+        if expected_fragment in rendered_stdout:
+            return rendered_stdout
+        time.sleep(0.01)
+    return rendered_stdout
 
 
 def add_failing_daily_revenue_audits(*, project_dir: Path) -> None:

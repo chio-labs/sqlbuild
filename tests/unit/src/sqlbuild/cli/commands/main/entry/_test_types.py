@@ -20,6 +20,7 @@ class MainTestCase:
     expected_no_color: bool = False
     expected_debug: bool = False
     expected_json: bool = False
+    expected_json_output_path: Path | None = None
     expected_manifest: bool = False
     expected_dag: str | None = None
     expected_compile_lineage_mode: CompileLineageMode = CompileLineageMode.FAST

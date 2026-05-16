@@ -51,6 +51,12 @@ def add_execution_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--verbose", "-v", action="store_true", default=False)
 
 
+def add_execution_json_output_arg(parser: argparse.ArgumentParser) -> None:
+    """Add structured execution JSON output flags."""
+
+    parser.add_argument("--json-output", type=Path, default=None)
+
+
 def add_select_args(parser: argparse.ArgumentParser) -> None:
     """Add --select and --exclude flags for scope selection."""
 

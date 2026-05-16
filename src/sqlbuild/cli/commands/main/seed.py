@@ -11,7 +11,10 @@ from typing import TextIO
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
-from sqlbuild.cli.commands.main.shared.helpers.execution_json import format_seed_execution_json
+from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
+    format_seed_execution_json,
+    write_execution_json_output,
+)
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
 )
@@ -33,6 +36,7 @@ def run_seed(
     exclude: tuple[str, ...] = (),
     cli_vars: dict[str, object] | None = None,
     json_output: bool = False,
+    json_output_path: Path | None = None,
 ) -> int:
     """Execute the seed command."""
 
@@ -95,11 +99,11 @@ def run_seed(
         f"\n{completion}  {success_count} loaded, {fail_count} failed  ({elapsed_str})\n"
     )
     progress_stream.flush()
-    if json_output:
-        sys.stdout.write(
-            format_seed_execution_json(results=results, plan=pipeline_result.plan_output)
-        )
-        sys.stdout.flush()
+    write_execution_json_output(
+        payload=format_seed_execution_json(results=results, plan=pipeline_result.plan_output),
+        json_output=json_output,
+        json_output_path=json_output_path,
+    )
 
     return 0 if fail_count == 0 else 1
 

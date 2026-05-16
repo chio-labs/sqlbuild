@@ -23,6 +23,7 @@ def run_scenario(
     max_snapshot_bytes: int | None = None,
     max_snapshot_total_bytes: int | None = None,
     json_output: bool = False,
+    json_output_path: Path | None = None,
 ) -> int:
     """Run the scenario command."""
 
@@ -42,4 +43,5 @@ def run_scenario(
         max_snapshot_bytes=max_snapshot_bytes,
         max_snapshot_total_bytes=max_snapshot_total_bytes,
         json_output=json_output,
+        json_output_path=json_output_path,
     )
