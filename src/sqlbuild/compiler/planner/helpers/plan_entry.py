@@ -208,6 +208,7 @@ def plan_model(
     observed_at_column: str | None = _get_config_str(model, "observed_at")
     valid_from_column: str | None = _get_config_str(model, "valid_from_column")
     valid_to_column: str | None = _get_config_str(model, "valid_to_column")
+    initial_valid_from: str | None = _get_config_str(model, "initial_valid_from")
 
     microbatch_range: CursorBounds | None = _compute_microbatch_range(
         model=model,
@@ -280,6 +281,7 @@ def plan_model(
         observed_at_column=observed_at_column,
         valid_from_column=valid_from_column,
         valid_to_column=valid_to_column,
+        initial_valid_from=initial_valid_from,
         on_schema_change=on_schema_change,
         type_enforcement=type_enforcement,
         declared_columns=declared_columns,

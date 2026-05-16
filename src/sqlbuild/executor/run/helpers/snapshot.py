@@ -9,7 +9,7 @@ from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
-from sqlbuild.compiler.planner.types import SnapshotStrategy
+from sqlbuild.compiler.planner.types import InitialValidFrom, SnapshotStrategy
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
@@ -266,6 +266,13 @@ def _validate_delta_columns(
         required_columns = (*entry.unique_key, *entry.check_columns)
     else:
         required_columns = entry.unique_key
+    if entry.initial_valid_from == InitialValidFrom.UPDATED_AT:
+        required_columns = (*required_columns, _require_updated_at(entry))
+    if (
+        entry.initial_valid_from == InitialValidFrom.OBSERVED_AT
+        and entry.observed_at_column is not None
+    ):
+        required_columns = (*required_columns, entry.observed_at_column)
     missing_columns: list[str] = [
         column for column in required_columns if column.lower() not in column_names
     ]
@@ -316,11 +323,7 @@ def _create_initial_snapshot_target(
 ) -> None:
     valid_from_column: str = _valid_from_column(entry)
     valid_to_column: str = _valid_to_column(entry)
-    valid_from_expr: str = (
-        _require_updated_at(entry)
-        if entry.snapshot_strategy == SnapshotStrategy.TIMESTAMP
-        else "CURRENT_TIMESTAMP"
-    )
+    valid_from_expr: str = _initial_valid_from_expr(entry)
     sql: str = (
         f"SELECT *, {valid_from_expr} AS {valid_from_column}, "
         f"CAST(NULL AS TIMESTAMP) AS {valid_to_column} FROM {delta_qualified}"
@@ -381,6 +384,7 @@ def _apply_timestamp_snapshot_changes(
     updated_at_column: str = _require_updated_at(entry)
     valid_from_column: str = _valid_from_column(entry)
     valid_to_column: str = _valid_to_column(entry)
+    initial_valid_from_expr: str = _initial_valid_from_expr(entry, source_alias="__source")
     key_condition: str = " AND ".join(
         f"__target.{column} = __source.{column}" for column in entry.unique_key
     )
@@ -400,9 +404,13 @@ def _apply_timestamp_snapshot_changes(
         f"__active.{column} = __source.{column}" for column in entry.unique_key
     )
     first_key: str = entry.unique_key[0]
+    version_valid_from_expr: str = (
+        f"CASE WHEN __active.{first_key} IS NULL THEN {initial_valid_from_expr} "
+        f"ELSE __source.{updated_at_column} END"
+    )
     insert_sql: str = (
         f"INSERT INTO {target_qualified} ({insert_column_sql}) "
-        f"SELECT {output_select_sql}, __source.{updated_at_column}, CAST(NULL AS TIMESTAMP) "
+        f"SELECT {output_select_sql}, {version_valid_from_expr}, CAST(NULL AS TIMESTAMP) "
         f"FROM {delta_qualified} AS __source "
         f"LEFT JOIN {target_qualified} AS __active "
         f"ON {active_join_condition} AND __active.{valid_to_column} IS NULL "
@@ -429,6 +437,7 @@ def _apply_check_snapshot_changes(
 ) -> None:
     valid_from_column: str = _valid_from_column(entry)
     valid_to_column: str = _valid_to_column(entry)
+    initial_valid_from_expr: str = _initial_valid_from_expr(entry, source_alias="__source")
     key_condition: str = " AND ".join(
         f"__target.{column} = __source.{column}" for column in entry.unique_key
     )
@@ -454,9 +463,13 @@ def _apply_check_snapshot_changes(
         f"__source.{column} IS DISTINCT FROM __active.{column}" for column in entry.check_columns
     )
     first_key: str = entry.unique_key[0]
+    version_valid_from_expr: str = (
+        f"CASE WHEN __active.{first_key} IS NULL THEN {initial_valid_from_expr} "
+        "ELSE CURRENT_TIMESTAMP END"
+    )
     insert_sql: str = (
         f"INSERT INTO {target_qualified} ({insert_column_sql}) "
-        f"SELECT {output_select_sql}, CURRENT_TIMESTAMP, CAST(NULL AS TIMESTAMP) "
+        f"SELECT {output_select_sql}, {version_valid_from_expr}, CAST(NULL AS TIMESTAMP) "
         f"FROM {delta_qualified} AS __source "
         f"LEFT JOIN {target_qualified} AS __active "
         f"ON {active_join_condition} AND __active.{valid_to_column} IS NULL "
@@ -475,6 +488,21 @@ def _require_updated_at(entry: ModelPlanEntry) -> str:
     if entry.updated_at_column is None:
         raise ExecutorInputError("timestamp snapshot execution requires updated_at")
     return entry.updated_at_column
+
+
+def _initial_valid_from_expr(entry: ModelPlanEntry, *, source_alias: str | None = None) -> str:
+    prefix: str = f"{source_alias}." if source_alias is not None else ""
+    if entry.initial_valid_from == InitialValidFrom.EXECUTION_TIME:
+        return "CURRENT_TIMESTAMP"
+    if entry.initial_valid_from == InitialValidFrom.OBSERVED_AT:
+        if entry.observed_at_column is None:
+            raise ExecutorInputError("initial_valid_from=observed_at requires observed_at")
+        return f"{prefix}{entry.observed_at_column}"
+    if entry.initial_valid_from == InitialValidFrom.UPDATED_AT:
+        return f"{prefix}{_require_updated_at(entry)}"
+    if entry.snapshot_strategy == SnapshotStrategy.TIMESTAMP:
+        return f"{prefix}{_require_updated_at(entry)}"
+    return "CURRENT_TIMESTAMP"
 
 
 def _valid_from_column(entry: ModelPlanEntry) -> str:

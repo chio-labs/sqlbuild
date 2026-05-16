@@ -249,6 +249,7 @@ class ModelPlanEntry:
     observed_at_column: str | None = None
     valid_from_column: str | None = None
     valid_to_column: str | None = None
+    initial_valid_from: str | None = None
     on_schema_change: OnSchemaChange | None = None
     type_enforcement: bool = False
     declared_columns: tuple[ColumnInfo, ...] = field(default_factory=tuple)
