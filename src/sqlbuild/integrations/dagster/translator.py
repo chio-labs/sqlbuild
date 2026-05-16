@@ -17,8 +17,8 @@ class SqlBuildDagsterTranslator:
         return dg.AssetKey([str(part) for part in node["asset_key"]])
 
     def get_group_name(self, node: Mapping[str, Any]) -> str | None:
-        kind: str = str(node.get("kind", "sqlbuild"))
-        return kind.replace("-", "_")
+        group_name: str = str(node.get("project_name") or "sqlbuild")
+        return group_name.replace("-", "_")
 
     def get_tags(self, node: Mapping[str, Any]) -> Mapping[str, str]:
         tags: dict[str, str] = {"sqlbuild/kind": str(node.get("kind", ""))}

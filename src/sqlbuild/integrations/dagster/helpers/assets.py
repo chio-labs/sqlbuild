@@ -19,10 +19,12 @@ def build_asset_specs(
     dg: Any = load_dagster()
     nodes_by_id: dict[str, Mapping[str, Any]] = _nodes_by_id(dag)
     upstream_by_id: dict[str, list[str]] = _upstream_by_id(dag)
+    project_name: object = dag.get("project_name")
     specs: list[Any] = []
     for node in dag["nodes"]:
         if str(node.get("kind")) not in _ASSET_KINDS:
             continue
+        translated_node: Mapping[str, Any] = {**node, "project_name": project_name}
         deps: list[Any] = []
         for upstream_id in upstream_by_id.get(str(node["id"]), []):
             upstream_node: Mapping[str, Any] | None = nodes_by_id.get(upstream_id)
@@ -31,13 +33,13 @@ def build_asset_specs(
             deps.append(dg.AssetDep(translator.get_asset_key(upstream_node)))
         specs.append(
             dg.AssetSpec(
-                key=translator.get_asset_key(node),
+                key=translator.get_asset_key(translated_node),
                 deps=deps,
-                description=translator.get_description(node),
-                group_name=translator.get_group_name(node),
-                metadata=translator.get_metadata(node),
-                tags=translator.get_tags(node),
-                kinds=_asset_spec_kinds(node),
+                description=translator.get_description(translated_node),
+                group_name=translator.get_group_name(translated_node),
+                metadata=translator.get_metadata(translated_node),
+                tags=translator.get_tags(translated_node),
+                kinds=_asset_spec_kinds(translated_node),
             )
         )
     return tuple(specs)

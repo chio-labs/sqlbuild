@@ -1,5 +1,5 @@
 sources:
-  - name: raw_customers
+  - name: raw__customers
     expression: |
       SELECT 1 AS id, 'Leslie' AS first_name, 'Knope' AS last_name, 'leslie@pawnee.gov' AS email, CAST('2026-01-15 09:00:00' AS TIMESTAMP) AS created_at
       UNION ALL SELECT 2 AS id, 'Ron' AS first_name, 'Swanson' AS last_name, 'ron@pawnee.gov' AS email, CAST('2026-02-01 08:00:00' AS TIMESTAMP) AS created_at
@@ -14,7 +14,7 @@ sources:
       - name: email
       - name: created_at
 
-  - name: raw_orders
+  - name: raw__orders
     expression: |
       SELECT 1 AS id, 1 AS customer_id, 1 AS waffle_type_id, 2 AS quantity, CAST('2026-04-01 09:15:00' AS TIMESTAMP) AS ordered_at, 'completed' AS status
       UNION ALL SELECT 2 AS id, 1 AS customer_id, 4 AS waffle_type_id, 1 AS quantity, CAST('2026-04-01 09:15:00' AS TIMESTAMP) AS ordered_at, 'completed' AS status
@@ -27,7 +27,7 @@ sources:
       UNION ALL SELECT 9 AS id, 2 AS customer_id, 6 AS waffle_type_id, 2 AS quantity, CAST('2026-04-04 10:00:00' AS TIMESTAMP) AS ordered_at, 'preparing' AS status
       UNION ALL SELECT 10 AS id, 3 AS customer_id, 1 AS waffle_type_id, 4 AS quantity, CAST('2026-04-04 14:30:00' AS TIMESTAMP) AS ordered_at, 'placed' AS status
 
-  - name: raw_payments
+  - name: raw__payments
     expression: |
       SELECT 1 AS id, 1 AS order_id, 1700 AS amount_cents, 'credit_card' AS payment_method, CAST('2026-04-01 09:16:00' AS TIMESTAMP) AS paid_at, 'success' AS status
       UNION ALL SELECT 2 AS id, 2 AS order_id, 1050 AS amount_cents, 'credit_card' AS payment_method, CAST('2026-04-01 09:16:00' AS TIMESTAMP) AS paid_at, 'success' AS status
