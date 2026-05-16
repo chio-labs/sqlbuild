@@ -2536,6 +2536,32 @@ SELECT 1 AS customer_id, 'pro' AS plan, 'active' AS status
         expected_error_fragment="check_columns references column 'status' not declared",
     ),
     BuildCompileInputsErrorTestCase(
+        description="raises when authored enforced snapshot appends new columns",
+        repo_files=base_repo_files()
+        | {
+            "models/customer_snapshot.sql": """
+MODEL (
+  materialized snapshot,
+  contract enforced,
+  columns (
+    customer_id (type INTEGER),
+    updated_at (type TIMESTAMP),
+  ),
+  unique_key [customer_id],
+  snapshot_strategy timestamp,
+  updated_at updated_at,
+  snapshot_schema_change append_new_columns,
+);
+
+SELECT 1 AS customer_id, CURRENT_TIMESTAMP AS updated_at
+""".strip()
+            + "\n",
+        },
+        selected_environment=None,
+        run_id=None,
+        expected_error_fragment="snapshot_schema_change=append_new_columns is not valid",
+    ),
+    BuildCompileInputsErrorTestCase(
         description="raises when an audit references an unknown source",
         repo_files=base_repo_files()
         | {
@@ -3273,6 +3299,59 @@ def test_given_attachment_conflicts_when_building_compile_inputs_then_it_raises_
                 project_dir=tmp_path
             ),
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildCompileInputsErrorTestCase(
+            description="snapshot append new columns contract conflict has code",
+            repo_files=base_repo_files()
+            | {
+                "models/customer_snapshot.sql": """
+MODEL (
+  materialized snapshot,
+  contract enforced,
+  columns (
+    customer_id (type INTEGER),
+    updated_at (type TIMESTAMP),
+  ),
+  unique_key [customer_id],
+  snapshot_strategy timestamp,
+  updated_at updated_at,
+  snapshot_schema_change append_new_columns,
+);
+
+SELECT 1 AS customer_id, CURRENT_TIMESTAMP AS updated_at
+""".strip()
+                + "\n",
+            },
+            selected_environment=None,
+            run_id=None,
+            expected_error_fragment="snapshot_schema_change=append_new_columns is not valid",
+        ),
+    ],
+    ids=["snapshot append new columns contract conflict has code"],
+)
+def test_given_snapshot_contract_schema_change_conflict_when_building_then_error_has_code(
+    test_case: BuildCompileInputsErrorTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.repo_files)
+    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+
+    with pytest.raises(ValueError, match=test_case.expected_error_fragment) as exc_info:
+        build_compile_inputs(
+            discovered_inputs,
+            selected_environment=test_case.selected_environment,
+            run_id=test_case.run_id,
+            external_sql_reference_resolver=build_external_sql_reference_resolver(
+                project_dir=tmp_path
+            ),
+        )
+
+    assert getattr(exc_info.value, "code", None) == "K012"
 
 
 @pytest.mark.parametrize(

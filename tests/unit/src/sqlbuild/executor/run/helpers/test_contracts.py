@@ -71,6 +71,7 @@ ERROR_TEST_CASES: list[RuntimeContractValidationTestCase] = [
         actual_columns=(ColumnInfo(name="id", type="INTEGER"),),
         expected_valid=False,
         expected_error_fragment="declares no columns",
+        expected_error_code="K007",
     ),
     RuntimeContractValidationTestCase(
         description="rejects missing runtime column",
@@ -82,6 +83,7 @@ ERROR_TEST_CASES: list[RuntimeContractValidationTestCase] = [
         actual_columns=(ColumnInfo(name="id", type="INTEGER"),),
         expected_valid=False,
         expected_error_fragment="missing columns: status",
+        expected_error_code="K008",
     ),
     RuntimeContractValidationTestCase(
         description="rejects extra runtime column",
@@ -93,6 +95,7 @@ ERROR_TEST_CASES: list[RuntimeContractValidationTestCase] = [
         ),
         expected_valid=False,
         expected_error_fragment="extra columns: extra_column",
+        expected_error_code="K009",
     ),
     RuntimeContractValidationTestCase(
         description="rejects incompatible runtime type",
@@ -101,6 +104,7 @@ ERROR_TEST_CASES: list[RuntimeContractValidationTestCase] = [
         actual_columns=(ColumnInfo(name="id", type="VARCHAR"),),
         expected_valid=False,
         expected_error_fragment="has type VARCHAR but contract declares INTEGER",
+        expected_error_code="K010",
     ),
 ]
 
@@ -119,7 +123,8 @@ def test_given_invalid_runtime_contract_when_validating_then_raises(
     )
     assert test_case.expected_error_fragment is not None
 
-    with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
+    with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment) as exc_info:
         validate_runtime_contract(entry=entry, actual_columns=test_case.actual_columns)
 
     assert test_case.expected_valid is False
+    assert exc_info.value.code == test_case.expected_error_code

@@ -124,11 +124,6 @@ def execute_snapshot_entry(
             _validate_delta_columns(
                 entry=entry, delta_columns=delta_columns, check_columns=check_columns
             )
-            validate_runtime_contract(
-                entry=entry,
-                actual_columns=delta_columns,
-                dialect=adapter.sqlglot_dialect_name,
-            )
             _validate_unique_snapshot_keys(
                 adapter=adapter,
                 connection=connection,
@@ -140,6 +135,24 @@ def execute_snapshot_entry(
             entry=entry,
             phase=ExecutionPhase.STAGING,
             error=str(exc),
+            staging_relation=delta_qualified,
+            warnings=warnings,
+            audit_results=audit_results,
+            statement_recorder=statement_recorder,
+        )
+
+    try:
+        with diagnostics_context(sqlbuild_phase="contract", sqlbuild_action_name="validate_delta"):
+            validate_runtime_contract(
+                entry=entry,
+                actual_columns=delta_columns,
+                dialect=adapter.sqlglot_dialect_name,
+            )
+    except Exception as exc:
+        return build_failed_result(
+            entry=entry,
+            phase=ExecutionPhase.CONTRACT,
+            error=exc,
             staging_relation=delta_qualified,
             warnings=warnings,
             audit_results=audit_results,

@@ -161,6 +161,20 @@ def execute_table_entry(
             resolved_sql=resolved_sql,
         )
 
+    if entry.contract_enforced:
+        return build_failed_result(
+            entry=entry,
+            phase=ExecutionPhase.CONTRACT,
+            error=ExecutorInputError(
+                f"model '{entry.name}': contract enforced requires staged table promotion; "
+                "direct table promotion cannot validate runtime output before target mutation",
+                code="K011",
+            ),
+            warnings=warnings,
+            audit_results=audit_results,
+            statement_recorder=statement_recorder,
+        )
+
     return _direct_lifecycle(
         entry=entry,
         adapter=adapter,
@@ -277,7 +291,7 @@ def _staged_lifecycle(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.CONTRACT,
-            error=str(exc),
+            error=exc,
             staging_relation=staging_qualified,
             warnings=warnings,
             audit_results=audit_results,

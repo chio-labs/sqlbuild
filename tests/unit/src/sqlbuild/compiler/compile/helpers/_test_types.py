@@ -284,6 +284,7 @@ class SnapshotConfigErrorTestCase:
     description: str
     config_values: dict[str, object]
     expected_error_fragment: str
+    expected_error_code: str = "P001"
 
 
 @dataclass(frozen=True)

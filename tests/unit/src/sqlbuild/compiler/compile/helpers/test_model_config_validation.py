@@ -679,6 +679,23 @@ SNAPSHOT_ERROR_TEST_CASES: list[SnapshotConfigErrorTestCase] = [
         expected_error_fragment="unknown snapshot_schema_change",
     ),
     SnapshotConfigErrorTestCase(
+        description="enforced contract rejects append new columns snapshot policy",
+        config_values={
+            "materialized": "snapshot",
+            "contract": "enforced",
+            "columns": {
+                "id": {},
+                "updated_at": {},
+            },
+            "unique_key": ["id"],
+            "snapshot_strategy": "timestamp",
+            "updated_at": "updated_at",
+            "snapshot_schema_change": "append_new_columns",
+        },
+        expected_error_fragment="snapshot_schema_change=append_new_columns is not valid",
+        expected_error_code="K012",
+    ),
+    SnapshotConfigErrorTestCase(
         description="snapshot without unique key raises",
         config_values={"materialized": "snapshot", "snapshot_strategy": "timestamp"},
         expected_error_fragment="requires unique_key",
@@ -864,8 +881,10 @@ def test_given_invalid_snapshot_config_when_validating_then_raises(
 ) -> None:
     config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
 
-    with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
+    with pytest.raises(CompileInputError, match=test_case.expected_error_fragment) as exc_info:
         validate_snapshot_config(config=config, model_name="test_model")
+
+    assert exc_info.value.code == test_case.expected_error_code
 
 
 CUSTOM_MATERIALIZATION_VALID_TEST_CASES: list[CustomMaterializationConfigValidTestCase] = [
