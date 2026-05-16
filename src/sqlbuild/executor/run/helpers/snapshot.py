@@ -122,6 +122,32 @@ def execute_snapshot_entry(
             statement_recorder=statement_recorder,
         )
 
+    delta_audit_results: tuple[AuditExecutionResult, ...] = _execute_snapshot_delta_audits(
+        entry=entry,
+        adapter=adapter,
+        connection=connection,
+        model_targets=model_targets,
+        seed_targets=seed_targets,
+        source_map=source_map,
+        model_audits=model_audits,
+        delta_qualified=delta_qualified,
+    )
+    audit_results.extend(delta_audit_results)
+
+    if any(result.outcome == AuditOutcome.ERROR for result in delta_audit_results):
+        return build_failed_result(
+            entry=entry,
+            phase=ExecutionPhase.AUDIT,
+            error=(
+                f"delta audit for '{entry.name}' failed before target update "
+                "with severity level: error"
+            ),
+            staging_relation=delta_qualified,
+            warnings=warnings,
+            audit_results=audit_results,
+            statement_recorder=statement_recorder,
+        )
+
     try:
         with diagnostics_context(sqlbuild_phase="dml", sqlbuild_action_name="apply_snapshot"):
             if entry.reason == PlanReason.FULL_REFRESH:
@@ -246,6 +272,39 @@ def execute_snapshot_entry(
         warning_messages=tuple(warnings),
         lifecycle_events=statement_recorder.snapshot(),
     )
+
+
+def _execute_snapshot_delta_audits(
+    *,
+    entry: ModelPlanEntry,
+    adapter: BaseAdapter,
+    connection: Any,
+    model_targets: dict[str, CompiledRelationTarget],
+    seed_targets: dict[str, CompiledRelationTarget],
+    source_map: dict[str, SourceEntry],
+    model_audits: tuple[AuditPlanEntry, ...],
+    delta_qualified: str,
+) -> tuple[AuditExecutionResult, ...]:
+    """Run snapshot delta-and-final audits against the pre-DML delta relation."""
+
+    delta_overrides: dict[str, str] = {entry.name: delta_qualified}
+    audit_results: list[AuditExecutionResult] = []
+    audit: AuditPlanEntry
+    for audit in model_audits:
+        if audit.effective_run_scope != AuditRunScope.DELTA_AND_FINAL:
+            continue
+        result: AuditExecutionResult = execute_audit(
+            audit=audit,
+            adapter=adapter,
+            connection=connection,
+            model_targets=model_targets,
+            seed_targets=seed_targets,
+            source_map=source_map,
+            relation_overrides=delta_overrides,
+            run_scope_phase=AuditRunScope.DELTA_AND_FINAL,
+        )
+        audit_results.append(result)
+    return tuple(audit_results)
 
 
 def _validate_supported_snapshot(entry: ModelPlanEntry) -> None:

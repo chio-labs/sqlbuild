@@ -59,14 +59,17 @@ def resolve_effective_run_scope(
 ) -> AuditRunScope:
     """Resolve effective run scope after degradation rules.
 
-    delta_and_final degrades to final when the attached model is not incremental.
+    delta_and_final degrades to final when the attached model does not expose a delta phase.
     Source and end audits always pass None materialization, so they degrade naturally.
     """
 
     if requested_run_scope == AuditRunScope.FINAL:
         return AuditRunScope.FINAL
 
-    if attached_model_materialization != MaterializationType.INCREMENTAL:
+    if attached_model_materialization not in (
+        MaterializationType.INCREMENTAL,
+        MaterializationType.SNAPSHOT,
+    ):
         return AuditRunScope.FINAL
 
     return AuditRunScope.DELTA_AND_FINAL

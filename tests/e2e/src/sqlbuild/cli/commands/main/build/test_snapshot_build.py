@@ -752,6 +752,103 @@ SNAPSHOT_FAILURE_CONSISTENCY_TEST_CASES: list[SnapshotFailureConsistencyBuildE2E
         ),
     ),
     SnapshotFailureConsistencyBuildE2ETestCase(
+        description="default delta-and-final audit failure leaves snapshot history unchanged",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "snapshot_failure_consistency_project"
+                adapter = "duckdb"
+
+                [connection]
+                database = "snapshot_failure_consistency.duckdb"
+
+                [settings]
+                default_audit_severity = "error"
+                """
+            ).strip()
+            + "\n",
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_customers
+                    schema: main
+                    table: raw_customers
+                """
+            ).strip()
+            + "\n",
+            "models/customer_snapshot.sql": dedent(
+                """
+                MODEL (
+                  materialized snapshot,
+                  unique_key [customer_id],
+                  snapshot_strategy timestamp,
+                  updated_at updated_at,
+                  audits [
+                    expression_is_true (
+                      name "plan is allowed",
+                      expression "plan <> 'bad'",
+                    ),
+                  ],
+                );
+
+                SELECT customer_id, plan, updated_at
+                FROM __source("raw_customers")
+                """
+            ).strip()
+            + "\n",
+            "audits/generic/expression_is_true.sql": dedent(
+                """
+                AUDIT ();
+
+                SELECT * FROM __ref("@model") WHERE NOT (@expression)
+                """
+            ).strip()
+            + "\n",
+        },
+        initial_seed_sql=dedent(
+            """
+            CREATE TABLE main.raw_customers AS
+            SELECT 1 AS customer_id, 'basic' AS plan,
+              TIMESTAMP '2024-01-01' AS updated_at;
+            """
+        ).strip(),
+        mutation_sql=(
+            dedent(
+                """
+                CREATE OR REPLACE TABLE main.raw_customers AS
+                SELECT 1 AS customer_id, 'bad' AS plan,
+                  TIMESTAMP '2024-01-03' AS updated_at;
+                """
+            ).strip(),
+        ),
+        command=("--no-color", "build"),
+        expected_initial_exit_code=0,
+        expected_failure_exit_code=1,
+        expected_output_fragments=(
+            "customer_snapshot",
+            "delta audit for 'customer_snapshot' failed before target update",
+        ),
+        expected_snapshot_query=(
+            "SELECT customer_id, plan, CAST(valid_from AS VARCHAR), "
+            "CAST(valid_to AS VARCHAR) FROM main.customer_snapshot "
+            "ORDER BY customer_id, valid_from"
+        ),
+        expected_rows_after_failure=((1, "basic", "2024-01-01 00:00:00", None),),
+        recovery_sql=(
+            dedent(
+                """
+                CREATE OR REPLACE TABLE main.raw_customers AS
+                SELECT 1 AS customer_id, 'pro' AS plan,
+                  TIMESTAMP '2024-01-03' AS updated_at;
+                """
+            ).strip(),
+        ),
+        expected_rows_after_recovery=(
+            (1, "basic", "2024-01-01 00:00:00", "2024-01-03 00:00:00"),
+            (1, "pro", "2024-01-03 00:00:00", None),
+        ),
+    ),
+    SnapshotFailureConsistencyBuildE2ETestCase(
         description="final audit failure leaves updated snapshot history valid",
         repo_files={
             "sqlbuild_project.toml": dedent(
