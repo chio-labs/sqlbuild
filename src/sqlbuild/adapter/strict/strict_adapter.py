@@ -337,6 +337,38 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_create_initial_historical_check_snapshot_target(
+        self,
+        *,
+        target: str,
+        source: str,
+        unique_key: tuple[str, ...],
+        check_columns: tuple[str, ...],
+        observed_at_column: str,
+        valid_from_column: str,
+        valid_to_column: str,
+        output_columns: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        """Render SQL statements that create an initial historical check snapshot."""
+        ...
+
+    @abstractmethod
+    def render_apply_historical_check_snapshot_changes(
+        self,
+        *,
+        target: str,
+        source: str,
+        unique_key: tuple[str, ...],
+        check_columns: tuple[str, ...],
+        observed_at_column: str,
+        valid_from_column: str,
+        valid_to_column: str,
+        output_columns: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        """Render SQL statements that apply historical check snapshot changes."""
+        ...
+
+    @abstractmethod
     def render_current_timestamp(self) -> str:
         """Render the warehouse current timestamp expression."""
         ...

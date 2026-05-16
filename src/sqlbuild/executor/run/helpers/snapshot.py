@@ -9,7 +9,7 @@ from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
-from sqlbuild.compiler.planner.types import SnapshotStrategy
+from sqlbuild.compiler.planner.types import PlanReason, SnapshotStrategy
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
@@ -124,6 +124,13 @@ def execute_snapshot_entry(
 
     try:
         with diagnostics_context(sqlbuild_phase="dml", sqlbuild_action_name="apply_snapshot"):
+            if entry.reason == PlanReason.FULL_REFRESH:
+                adapter.drop(
+                    connection,
+                    target=target_qualified,
+                    if_exists=True,
+                    statement_recorder=statement_recorder,
+                )
             target_exists: bool = adapter.relation_exists(
                 connection,
                 database=target_database,
@@ -137,6 +144,7 @@ def execute_snapshot_entry(
                     entry=entry,
                     target_qualified=target_qualified,
                     delta_qualified=delta_qualified,
+                    delta_columns=delta_columns,
                     statement_recorder=statement_recorder,
                 )
             else:
@@ -245,8 +253,10 @@ def _validate_supported_snapshot(entry: ModelPlanEntry) -> None:
         raise ExecutorInputError(
             "snapshot execution currently supports snapshot_strategy=timestamp or check"
         )
-    if entry.observed_at_column is not None:
-        raise ExecutorInputError("snapshot execution does not support historical observed_at yet")
+    if entry.observed_at_column is not None and entry.snapshot_strategy != SnapshotStrategy.CHECK:
+        raise ExecutorInputError("snapshot execution does not support historical timestamp yet")
+    if entry.observed_at_column is not None and entry.invalidate_hard_deletes:
+        raise ExecutorInputError("snapshot execution does not support historical hard deletes yet")
     if entry.snapshot_strategy == SnapshotStrategy.TIMESTAMP and entry.updated_at_column is None:
         raise ExecutorInputError("timestamp snapshot execution requires updated_at")
     if entry.snapshot_strategy == SnapshotStrategy.CHECK and not entry.check_columns:
@@ -264,6 +274,8 @@ def _validate_delta_columns(
         required_columns = (*entry.unique_key, _require_updated_at(entry))
     elif entry.snapshot_strategy == SnapshotStrategy.CHECK:
         required_columns = (*entry.unique_key, *entry.check_columns)
+        if entry.observed_at_column is not None:
+            required_columns = (*required_columns, entry.observed_at_column)
     else:
         required_columns = entry.unique_key
     if entry.initial_valid_from == "updated_at":
@@ -297,15 +309,21 @@ def _validate_unique_snapshot_keys(
     entry: ModelPlanEntry,
     delta_qualified: str,
 ) -> None:
-    key_list: str = ", ".join(entry.unique_key)
+    identity_columns: tuple[str, ...] = entry.unique_key
+    if entry.observed_at_column is not None:
+        identity_columns = (*identity_columns, entry.observed_at_column)
+    key_list: str = ", ".join(identity_columns)
     duplicate_sql: str = (
         f"SELECT 1 FROM {delta_qualified} GROUP BY {key_list} HAVING COUNT(*) > 1 LIMIT 1"
     )
     cursor: Any = adapter.execute(connection, duplicate_sql)
     if cursor.fetchone() is not None:
+        identity_label: str = (
+            "snapshot identity" if entry.observed_at_column is not None else "unique_key"
+        )
         raise ExecutorInputError(
             f"snapshot model '{entry.name}' source query returned multiple rows for the same "
-            f"unique_key ({key_list})"
+            f"{identity_label} ({key_list})"
         )
 
 
@@ -316,20 +334,36 @@ def _create_initial_snapshot_target(
     entry: ModelPlanEntry,
     target_qualified: str,
     delta_qualified: str,
+    delta_columns: tuple[ColumnInfo, ...],
     statement_recorder: StatementRecorder,
 ) -> None:
     valid_from_column: str = _valid_from_column(entry)
     valid_to_column: str = _valid_to_column(entry)
-    statements: tuple[str, ...] = adapter.render_create_initial_snapshot_target(
-        target=target_qualified,
-        source=delta_qualified,
-        snapshot_strategy=entry.snapshot_strategy,
-        updated_at_column=entry.updated_at_column,
-        observed_at_column=entry.observed_at_column,
-        valid_from_column=valid_from_column,
-        valid_to_column=valid_to_column,
-        initial_valid_from=entry.initial_valid_from,
-    )
+    if entry.snapshot_strategy == SnapshotStrategy.CHECK and entry.observed_at_column is not None:
+        output_columns: tuple[str, ...] = tuple(column.name for column in delta_columns)
+        statements: tuple[str, ...] = (
+            adapter.render_create_initial_historical_check_snapshot_target(
+                target=target_qualified,
+                source=delta_qualified,
+                unique_key=entry.unique_key,
+                check_columns=entry.check_columns,
+                observed_at_column=entry.observed_at_column,
+                valid_from_column=valid_from_column,
+                valid_to_column=valid_to_column,
+                output_columns=output_columns,
+            )
+        )
+    else:
+        statements = adapter.render_create_initial_snapshot_target(
+            target=target_qualified,
+            source=delta_qualified,
+            snapshot_strategy=entry.snapshot_strategy,
+            updated_at_column=entry.updated_at_column,
+            observed_at_column=entry.observed_at_column,
+            valid_from_column=valid_from_column,
+            valid_to_column=valid_to_column,
+            initial_valid_from=entry.initial_valid_from,
+        )
     statement_recorder.record_many(statements)
     statement: str
     for statement in statements:
@@ -417,19 +451,31 @@ def _apply_check_snapshot_changes(
     valid_from_column: str = _valid_from_column(entry)
     valid_to_column: str = _valid_to_column(entry)
     output_columns: tuple[str, ...] = tuple(column.name for column in delta_columns)
-    statements: tuple[str, ...] = adapter.render_apply_check_snapshot_changes(
-        target=target_qualified,
-        source=delta_qualified,
-        unique_key=entry.unique_key,
-        check_columns=entry.check_columns,
-        updated_at_column=entry.updated_at_column,
-        observed_at_column=entry.observed_at_column,
-        valid_from_column=valid_from_column,
-        valid_to_column=valid_to_column,
-        initial_valid_from=entry.initial_valid_from,
-        output_columns=output_columns,
-        invalidate_hard_deletes=entry.invalidate_hard_deletes,
-    )
+    if entry.observed_at_column is not None:
+        statements: tuple[str, ...] = adapter.render_apply_historical_check_snapshot_changes(
+            target=target_qualified,
+            source=delta_qualified,
+            unique_key=entry.unique_key,
+            check_columns=entry.check_columns,
+            observed_at_column=entry.observed_at_column,
+            valid_from_column=valid_from_column,
+            valid_to_column=valid_to_column,
+            output_columns=output_columns,
+        )
+    else:
+        statements = adapter.render_apply_check_snapshot_changes(
+            target=target_qualified,
+            source=delta_qualified,
+            unique_key=entry.unique_key,
+            check_columns=entry.check_columns,
+            updated_at_column=entry.updated_at_column,
+            observed_at_column=entry.observed_at_column,
+            valid_from_column=valid_from_column,
+            valid_to_column=valid_to_column,
+            initial_valid_from=entry.initial_valid_from,
+            output_columns=output_columns,
+            invalidate_hard_deletes=entry.invalidate_hard_deletes,
+        )
     statement_recorder.record_many(statements)
     with adapter.transaction(connection):
         statement: str
