@@ -68,3 +68,4 @@ class RuntimeContractValidationTestCase:
     actual_columns: tuple[ColumnInfo, ...]
     expected_valid: bool
     expected_error_fragment: str | None = None
+    expected_error_code: str | None = None

@@ -522,6 +522,27 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         expected_failure_count=1,
         expected_model_statuses=(("orders", ExecutionStatus.FAILED),),
         expected_model_error_fragments=(("orders", "runtime contract has extra columns: status"),),
+        expected_model_error_codes=(("orders", "K009"),),
+        expected_missing_relations=("main.orders",),
+    ),
+    BuildExecutionTestCase(
+        description="direct table promotion rejects enforced contract before mutation",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML_DIRECT,
+            "models/orders.sql": (
+                "MODEL (\n"
+                "  materialized table,\n"
+                "  contract enforced,\n"
+                "  columns (id (type INTEGER)),\n"
+                ");\n\n"
+                "SELECT 1 AS id"
+            ),
+        },
+        expected_status=BuildStatus.FAILED,
+        expected_failure_count=1,
+        expected_model_statuses=(("orders", ExecutionStatus.FAILED),),
+        expected_model_error_fragments=(("orders", "requires staged table promotion"),),
+        expected_model_error_codes=(("orders", "K011"),),
         expected_missing_relations=("main.orders",),
     ),
     BuildExecutionTestCase(
@@ -553,6 +574,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         expected_model_error_fragments=(
             ("customer_snapshot", "runtime contract has extra columns: plan"),
         ),
+        expected_model_error_codes=(("customer_snapshot", "K009"),),
         expected_missing_relations=("main.customer_snapshot",),
     ),
     BuildExecutionTestCase(
@@ -584,6 +606,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         expected_failure_count=1,
         expected_model_statuses=(("orders", ExecutionStatus.FAILED),),
         expected_model_error_fragments=(("orders", "runtime contract has extra columns: status"),),
+        expected_model_error_codes=(("orders", "K009"),),
         expected_query_results=(
             (
                 "SELECT id, CAST(updated_at AS VARCHAR) FROM main.orders",

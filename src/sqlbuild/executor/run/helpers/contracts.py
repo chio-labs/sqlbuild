@@ -6,6 +6,12 @@ from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.adapter.shared.type_normalization import types_equal
 from sqlbuild.adapter.shared.types import TypeDialect
 from sqlbuild.compiler.planner.models import ModelPlanEntry
+from sqlbuild.executor.run.constants import (
+    RUNTIME_CONTRACT_EXTRA_COLUMN_CODE,
+    RUNTIME_CONTRACT_MISSING_COLUMN_CODE,
+    RUNTIME_CONTRACT_MISSING_DECLARATIONS_CODE,
+    RUNTIME_CONTRACT_TYPE_MISMATCH_CODE,
+)
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 
 
@@ -21,7 +27,8 @@ def validate_runtime_contract(
         return
     if not entry.contract_columns:
         raise ExecutorInputError(
-            f"model '{entry.name}' has contract enforced but declares no columns"
+            f"model '{entry.name}' has contract enforced but declares no columns",
+            code=RUNTIME_CONTRACT_MISSING_DECLARATIONS_CODE,
         )
 
     declared_by_name: dict[str, ColumnInfo] = {
@@ -38,7 +45,8 @@ def validate_runtime_contract(
     )
     if missing_names:
         raise ExecutorInputError(
-            f"model '{entry.name}' runtime contract missing columns: {', '.join(missing_names)}"
+            f"model '{entry.name}' runtime contract missing columns: {', '.join(missing_names)}",
+            code=RUNTIME_CONTRACT_MISSING_COLUMN_CODE,
         )
 
     extra_names: tuple[str, ...] = tuple(
@@ -46,7 +54,8 @@ def validate_runtime_contract(
     )
     if extra_names:
         raise ExecutorInputError(
-            f"model '{entry.name}' runtime contract has extra columns: {', '.join(extra_names)}"
+            f"model '{entry.name}' runtime contract has extra columns: {', '.join(extra_names)}",
+            code=RUNTIME_CONTRACT_EXTRA_COLUMN_CODE,
         )
 
     actual_column: ColumnInfo
@@ -58,5 +67,6 @@ def validate_runtime_contract(
             continue
         raise ExecutorInputError(
             f"model '{entry.name}' runtime contract column '{declared_column.name}' "
-            f"has type {actual_column.type} but contract declares {declared_column.type}"
+            f"has type {actual_column.type} but contract declares {declared_column.type}",
+            code=RUNTIME_CONTRACT_TYPE_MISMATCH_CODE,
         )

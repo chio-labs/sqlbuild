@@ -377,6 +377,16 @@ def validate_snapshot_config(
                 f"'{snapshot_schema_change}'; valid values: "
                 f"{', '.join(sorted(_VALID_SNAPSHOT_SCHEMA_CHANGE_POLICIES))}"
             )
+        if (
+            config.values.get("contract") == ContractPolicy.ENFORCED.value
+            and snapshot_schema_change == SnapshotSchemaChangePolicy.APPEND_NEW_COLUMNS
+        ):
+            raise CompileInputError(
+                f"model '{model_name}': snapshot_schema_change=append_new_columns "
+                "is not valid with contract enforced; add new columns to the contract "
+                "or set contract none",
+                code="K012",
+            )
 
     if valid_from_column is not None and valid_to_column is not None:
         if valid_from_column.lower() == valid_to_column.lower():

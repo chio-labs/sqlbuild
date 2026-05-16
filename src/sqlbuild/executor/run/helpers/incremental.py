@@ -216,7 +216,7 @@ def execute_incremental_entry(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.CONTRACT,
-            error=str(exc),
+            error=exc,
             staging_relation=delta_qualified,
             warnings=warnings,
             audit_results=audit_results,
