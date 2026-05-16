@@ -430,6 +430,177 @@ class BaseAdapter(StrictAdapter):
         merge_sql += f"WHEN NOT MATCHED THEN INSERT ({insert_columns}) VALUES ({insert_values})"
         return (merge_sql,)
 
+    def render_create_initial_snapshot_target(
+        self,
+        *,
+        target: str,
+        source: str,
+        snapshot_strategy: str | None,
+        updated_at_column: str | None,
+        observed_at_column: str | None,
+        valid_from_column: str,
+        valid_to_column: str,
+        initial_valid_from: str | None,
+    ) -> tuple[str, ...]:
+        valid_from_expr: str = _snapshot_initial_valid_from_expr(
+            snapshot_strategy=snapshot_strategy,
+            updated_at_column=updated_at_column,
+            observed_at_column=observed_at_column,
+            initial_valid_from=initial_valid_from,
+            source_alias=None,
+            current_timestamp=self.render_current_timestamp(),
+        )
+        return self.render_create_table_as(
+            target=target,
+            sql=(
+                f"SELECT *, {valid_from_expr} AS {valid_from_column}, "
+                f"CAST(NULL AS TIMESTAMP) AS {valid_to_column} FROM {source}"
+            ),
+        )
+
+    def render_apply_timestamp_snapshot_changes(
+        self,
+        *,
+        target: str,
+        source: str,
+        unique_key: tuple[str, ...],
+        updated_at_column: str,
+        observed_at_column: str | None,
+        valid_from_column: str,
+        valid_to_column: str,
+        initial_valid_from: str | None,
+        output_columns: tuple[str, ...],
+        invalidate_hard_deletes: bool,
+    ) -> tuple[str, ...]:
+        current_timestamp: str = self.render_current_timestamp()
+        initial_valid_from_expr: str = _snapshot_initial_valid_from_expr(
+            snapshot_strategy="timestamp",
+            updated_at_column=updated_at_column,
+            observed_at_column=observed_at_column,
+            initial_valid_from=initial_valid_from,
+            source_alias="__source",
+            current_timestamp=current_timestamp,
+        )
+        key_condition: str = _snapshot_key_condition(
+            left_alias="__target", right_alias="__source", unique_key=unique_key
+        )
+        close_sql: str = (
+            f"UPDATE {target} AS __target "
+            f"SET {valid_to_column} = __source.{updated_at_column} "
+            f"FROM {source} AS __source "
+            f"WHERE {key_condition} "
+            f"AND __target.{valid_to_column} IS NULL "
+            f"AND __source.{updated_at_column} > __target.{updated_at_column}"
+        )
+        insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
+        output_select_sql: str = ", ".join(f"__source.{column}" for column in output_columns)
+        active_join_condition: str = _snapshot_key_condition(
+            left_alias="__active", right_alias="__source", unique_key=unique_key
+        )
+        first_key: str = unique_key[0]
+        version_valid_from_expr: str = (
+            f"CASE WHEN __active.{first_key} IS NULL THEN {initial_valid_from_expr} "
+            f"ELSE __source.{updated_at_column} END"
+        )
+        insert_sql: str = (
+            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"SELECT {output_select_sql}, {version_valid_from_expr}, CAST(NULL AS TIMESTAMP) "
+            f"FROM {source} AS __source "
+            f"LEFT JOIN {target} AS __active "
+            f"ON {active_join_condition} AND __active.{valid_to_column} IS NULL "
+            f"WHERE __active.{first_key} IS NULL "
+            f"OR __source.{updated_at_column} > __active.{updated_at_column}"
+        )
+        statements: tuple[str, ...] = (close_sql, insert_sql)
+        if invalidate_hard_deletes:
+            statements = (
+                *statements,
+                _snapshot_hard_delete_close_sql(
+                    target=target,
+                    source=source,
+                    unique_key=unique_key,
+                    valid_to_column=valid_to_column,
+                    current_timestamp=current_timestamp,
+                ),
+            )
+        return statements
+
+    def render_apply_check_snapshot_changes(
+        self,
+        *,
+        target: str,
+        source: str,
+        unique_key: tuple[str, ...],
+        check_columns: tuple[str, ...],
+        updated_at_column: str | None,
+        observed_at_column: str | None,
+        valid_from_column: str,
+        valid_to_column: str,
+        initial_valid_from: str | None,
+        output_columns: tuple[str, ...],
+        invalidate_hard_deletes: bool,
+    ) -> tuple[str, ...]:
+        current_timestamp: str = self.render_current_timestamp()
+        initial_valid_from_expr: str = _snapshot_initial_valid_from_expr(
+            snapshot_strategy="check",
+            updated_at_column=updated_at_column,
+            observed_at_column=observed_at_column,
+            initial_valid_from=initial_valid_from,
+            source_alias="__source",
+            current_timestamp=current_timestamp,
+        )
+        key_condition: str = _snapshot_key_condition(
+            left_alias="__target", right_alias="__source", unique_key=unique_key
+        )
+        change_condition: str = " OR ".join(
+            f"__source.{column} IS DISTINCT FROM __target.{column}" for column in check_columns
+        )
+        close_sql: str = (
+            f"UPDATE {target} AS __target "
+            f"SET {valid_to_column} = {current_timestamp} "
+            f"FROM {source} AS __source "
+            f"WHERE {key_condition} "
+            f"AND __target.{valid_to_column} IS NULL "
+            f"AND ({change_condition})"
+        )
+        insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
+        output_select_sql: str = ", ".join(f"__source.{column}" for column in output_columns)
+        active_join_condition: str = _snapshot_key_condition(
+            left_alias="__active", right_alias="__source", unique_key=unique_key
+        )
+        active_change_condition: str = " OR ".join(
+            f"__source.{column} IS DISTINCT FROM __active.{column}" for column in check_columns
+        )
+        first_key: str = unique_key[0]
+        version_valid_from_expr: str = (
+            f"CASE WHEN __active.{first_key} IS NULL THEN {initial_valid_from_expr} "
+            f"ELSE {current_timestamp} END"
+        )
+        insert_sql: str = (
+            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"SELECT {output_select_sql}, {version_valid_from_expr}, CAST(NULL AS TIMESTAMP) "
+            f"FROM {source} AS __source "
+            f"LEFT JOIN {target} AS __active "
+            f"ON {active_join_condition} AND __active.{valid_to_column} IS NULL "
+            f"WHERE __active.{first_key} IS NULL OR ({active_change_condition})"
+        )
+        statements: tuple[str, ...] = (close_sql, insert_sql)
+        if invalidate_hard_deletes:
+            statements = (
+                *statements,
+                _snapshot_hard_delete_close_sql(
+                    target=target,
+                    source=source,
+                    unique_key=unique_key,
+                    valid_to_column=valid_to_column,
+                    current_timestamp=current_timestamp,
+                ),
+            )
+        return statements
+
+    def render_current_timestamp(self) -> str:
+        return "CURRENT_TIMESTAMP"
+
     def create_table_as(
         self,
         connection: Any,
@@ -983,3 +1154,53 @@ def _build_names_filter(
         return ""
     quoted: str = ", ".join(f"'{name}'" for name in names)
     return f" AND {column_name} IN ({quoted})"
+
+
+def _snapshot_initial_valid_from_expr(
+    *,
+    snapshot_strategy: str | None,
+    updated_at_column: str | None,
+    observed_at_column: str | None,
+    initial_valid_from: str | None,
+    source_alias: str | None,
+    current_timestamp: str,
+) -> str:
+    prefix: str = f"{source_alias}." if source_alias is not None else ""
+    if initial_valid_from == "execution_time":
+        return current_timestamp
+    if initial_valid_from == "observed_at" and observed_at_column is not None:
+        return f"{prefix}{observed_at_column}"
+    if initial_valid_from == "updated_at" and updated_at_column is not None:
+        return f"{prefix}{updated_at_column}"
+    if snapshot_strategy == "timestamp" and updated_at_column is not None:
+        return f"{prefix}{updated_at_column}"
+    return current_timestamp
+
+
+def _snapshot_hard_delete_close_sql(
+    *,
+    target: str,
+    source: str,
+    unique_key: tuple[str, ...],
+    valid_to_column: str,
+    current_timestamp: str,
+) -> str:
+    missing_key_condition: str = _snapshot_key_condition(
+        left_alias="__source", right_alias="__target", unique_key=unique_key
+    )
+    first_key: str = unique_key[0]
+    return (
+        f"UPDATE {target} AS __target "
+        f"SET {valid_to_column} = {current_timestamp} "
+        f"WHERE __target.{valid_to_column} IS NULL "
+        f"AND NOT EXISTS ("
+        f"SELECT 1 FROM {source} AS __source "
+        f"WHERE {missing_key_condition} AND __source.{first_key} IS NOT NULL"
+        f")"
+    )
+
+
+def _snapshot_key_condition(
+    *, left_alias: str, right_alias: str, unique_key: tuple[str, ...]
+) -> str:
+    return " AND ".join(f"{left_alias}.{column} = {right_alias}.{column}" for column in unique_key)
