@@ -42,6 +42,7 @@ from sqlbuild.executor.run.main.execute import (
     execute_custom_entry,
     execute_incremental_entry,
     execute_microbatch_entry,
+    execute_snapshot_entry,
     execute_table_entry,
     execute_view_entry,
 )
@@ -715,10 +716,16 @@ def _dispatch_model(
             query_change_tracking=query_change_tracking,
         )
     if entry.action == PlanAction.SNAPSHOT:
-        return ModelExecutionResult(
-            model_name=entry.name,
-            status=ExecutionStatus.FAILED,
-            error_message="snapshot materialization execution is not implemented yet",
+        return execute_snapshot_entry(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_targets=plan.model_targets,
+            seed_targets=plan.seed_targets,
+            source_map=plan.source_map,
+            model_audits=model_audits,
+            run_id=run_id,
+            query_change_tracking=query_change_tracking,
         )
     return execute_table_entry(
         entry=entry,

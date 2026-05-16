@@ -33,3 +33,14 @@ class BuildExecutionTestCase:
         default_factory=tuple
     )
     expected_missing_relations: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class SnapshotTimestampExecutionTestCase:
+    description: str
+    project_files: dict[str, str]
+    initial_setup_sql: tuple[str, ...]
+    changed_setup_sql: tuple[str, ...]
+    expected_initial_rows: tuple[tuple[object, ...], ...]
+    expected_changed_rows: tuple[tuple[object, ...], ...]
+    expected_query: str
