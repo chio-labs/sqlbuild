@@ -353,12 +353,12 @@ class DatabricksAdapter(BaseAdapter):
             f"__source.{column} IS DISTINCT FROM __target.{column}" for column in check_columns
         )
         close_sql: str = (
-            f"UPDATE {target} AS __target "
-            f"SET {valid_to_column} = {current_timestamp} "
-            f"FROM {source} AS __source "
-            f"WHERE {key_condition} "
+            f"MERGE INTO {target} AS __target "
+            f"USING {source} AS __source "
+            f"ON {key_condition} "
             f"AND __target.{valid_to_column} IS NULL "
-            f"AND ({change_condition})"
+            f"AND ({change_condition}) "
+            f"WHEN MATCHED THEN UPDATE SET {valid_to_column} = {current_timestamp}"
         )
         insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
         output_select_sql: str = ", ".join(f"__source.{column}" for column in output_columns)
@@ -2208,11 +2208,12 @@ class DatabricksAdapter(BaseAdapter):
             latest_join_condition: str = cls._snapshot_key_condition(
                 left_alias="__delta_changes", right_alias="__latest", unique_key=unique_key
             )
-            hard_deleted_at_sql: str = cls._historical_hard_deleted_at_sql(
+            hard_deletes_sql: str = cls._historical_hard_deletes_select_sql(
+                target=target,
                 source=source,
                 unique_key=unique_key,
                 observed_at_column=observed_at_column,
-                row_alias="__target",
+                valid_to_column=valid_to_column,
             )
             return (
                 "__ordered AS ("
@@ -2232,9 +2233,7 @@ class DatabricksAdapter(BaseAdapter):
                 f"WHERE __latest.{first_key} IS NULL "
                 f"OR __delta_changes.{updated_at_column} > __latest.{valid_from_column}"
                 "), __hard_deletes AS ("
-                f"SELECT {', '.join(f'__target.{column}' for column in unique_key)}, "
-                f"{hard_deleted_at_sql} AS __close_at FROM {target} AS __target "
-                f"WHERE __target.{valid_to_column} IS NULL"
+                f"{hard_deletes_sql}"
                 ")"
             )
         return (
@@ -2345,15 +2344,22 @@ class DatabricksAdapter(BaseAdapter):
             latest_join_condition: str = cls._snapshot_key_condition(
                 left_alias="__delta_changes", right_alias="__latest", unique_key=unique_key
             )
+            latest_ordered_join_condition: str = cls._snapshot_key_condition(
+                left_alias="__ordered", right_alias="__latest", unique_key=unique_key
+            )
+            reappearing_partition_sql: str = ", ".join(
+                f"__ordered.{column}" for column in unique_key
+            )
             latest_change_condition: str = " OR ".join(
                 f"__delta_changes.{column} IS DISTINCT FROM __latest.{column}"
                 for column in check_columns
             )
-            hard_deleted_at_sql: str = cls._historical_hard_deleted_at_sql(
+            hard_deletes_sql: str = cls._historical_hard_deletes_select_sql(
+                target=target,
                 source=source,
                 unique_key=unique_key,
                 observed_at_column=observed_at_column,
-                row_alias="__target",
+                valid_to_column=valid_to_column,
             )
             return (
                 "__ordered AS ("
@@ -2372,10 +2378,17 @@ class DatabricksAdapter(BaseAdapter):
                 f"WHERE __latest.{first_key} IS NULL "
                 f"OR (__delta_changes.{observed_at_column} > __latest.{valid_from_column} "
                 f"AND ({latest_change_condition}))"
+                " UNION DISTINCT "
+                "SELECT __ordered.* FROM __ordered "
+                f"JOIN __latest ON {latest_ordered_join_condition} "
+                f"WHERE __latest.{valid_to_column} IS NOT NULL "
+                f"AND __ordered.{observed_at_column} > __latest.{valid_to_column} "
+                "QUALIFY ROW_NUMBER() OVER ("
+                f"PARTITION BY {reappearing_partition_sql} "
+                f"ORDER BY __ordered.{observed_at_column}"
+                ") = 1"
                 "), __hard_deletes AS ("
-                f"SELECT {', '.join(f'__target.{column}' for column in unique_key)}, "
-                f"{hard_deleted_at_sql} AS __close_at FROM {target} AS __target "
-                f"WHERE __target.{valid_to_column} IS NULL"
+                f"{hard_deletes_sql}"
                 ")"
             )
         return (
@@ -2427,6 +2440,35 @@ class DatabricksAdapter(BaseAdapter):
         )
 
     @classmethod
+    def _historical_hard_deletes_select_sql(
+        cls,
+        *,
+        target: str,
+        source: str,
+        unique_key: tuple[str, ...],
+        observed_at_column: str,
+        valid_to_column: str,
+    ) -> str:
+        target_key_sql: str = ", ".join(f"__target.{column}" for column in unique_key)
+        present_condition: str = cls._snapshot_key_condition(
+            left_alias="__present", right_alias="__target", unique_key=unique_key
+        )
+        first_key: str = unique_key[0]
+        return (
+            f"SELECT {target_key_sql}, MIN(__observed_groups.__observed_at) AS __close_at "
+            f"FROM {target} AS __target "
+            f"JOIN (SELECT DISTINCT {observed_at_column} AS __observed_at FROM {source}) "
+            "AS __observed_groups "
+            f"ON __observed_groups.__observed_at > __target.{observed_at_column} "
+            f"LEFT JOIN {source} AS __present "
+            f"ON __present.{observed_at_column} = __observed_groups.__observed_at "
+            f"AND {present_condition} "
+            f"WHERE __target.{valid_to_column} IS NULL "
+            f"AND __present.{first_key} IS NULL "
+            f"GROUP BY {target_key_sql}"
+        )
+
+    @classmethod
     def _historical_snapshot_combined_close_sql(
         cls,
         *,
@@ -2438,21 +2480,25 @@ class DatabricksAdapter(BaseAdapter):
         change_time_column: str,
     ) -> str:
         close_candidate_condition: str = cls._snapshot_key_condition(
-            left_alias="__close_candidates", right_alias="__target", unique_key=unique_key
+            left_alias="__target", right_alias="__close_candidates", unique_key=unique_key
         )
         candidate_key_sql: str = ", ".join(unique_key)
-        return (
+        close_candidates_query: str = (
             f"WITH {new_changes_sql}, __close_candidates AS ("
             f"SELECT {candidate_key_sql}, {change_time_column} AS __close_at FROM __new_changes "
             "UNION ALL "
             f"SELECT {candidate_key_sql}, __close_at FROM __hard_deletes "
             "WHERE __close_at IS NOT NULL"
             ") "
-            f"UPDATE {target} AS __target "
-            f"SET {valid_to_column} = (SELECT MIN(__close_candidates.__close_at) "
-            f"FROM __close_candidates WHERE {close_candidate_condition}) "
-            f"WHERE __target.{valid_to_column} IS NULL "
-            f"AND __target.{valid_from_column} < (SELECT MIN(__close_candidates.__close_at) "
-            f"FROM __close_candidates WHERE {close_candidate_condition}) "
-            f"AND EXISTS (SELECT 1 FROM __close_candidates WHERE {close_candidate_condition})"
+            f"SELECT {candidate_key_sql}, MIN(__close_at) AS __close_at "
+            "FROM __close_candidates GROUP BY "
+            f"{candidate_key_sql}"
+        )
+        return (
+            f"MERGE INTO {target} AS __target "
+            f"USING ({close_candidates_query}) AS __close_candidates "
+            f"ON {close_candidate_condition} "
+            f"AND __target.{valid_to_column} IS NULL "
+            f"AND __target.{valid_from_column} < __close_candidates.__close_at "
+            f"WHEN MATCHED THEN UPDATE SET {valid_to_column} = __close_candidates.__close_at"
         )
