@@ -16,6 +16,7 @@ from sqlbuild.compiler.planner.types import (
     InitialValidFrom,
     MaterializationType,
     SnapshotFullRefreshPolicy,
+    SnapshotSchemaChangePolicy,
     SnapshotStrategy,
 )
 
@@ -28,6 +29,9 @@ _VALID_HISTORICAL_INPUTS: frozenset[str] = frozenset(h.value for h in Historical
 _VALID_INITIAL_VALID_FROM: frozenset[str] = frozenset(v.value for v in InitialValidFrom)
 _VALID_SNAPSHOT_FULL_REFRESH_POLICIES: frozenset[str] = frozenset(
     p.value for p in SnapshotFullRefreshPolicy
+)
+_VALID_SNAPSHOT_SCHEMA_CHANGE_POLICIES: frozenset[str] = frozenset(
+    p.value for p in SnapshotSchemaChangePolicy
 )
 _BUILTIN_MATERIALIZATION_TYPES: frozenset[str] = frozenset(
     (
@@ -231,6 +235,7 @@ def validate_snapshot_config(
     historical_input: str | None = _str(config, "historical_input")
     initial_valid_from: str | None = _str(config, "initial_valid_from")
     snapshot_full_refresh: str | None = _str(config, "snapshot_full_refresh")
+    snapshot_schema_change: str | None = _str(config, "snapshot_schema_change")
     unique_key: object | None = config.values.get("unique_key")
     check_columns: object | None = config.values.get("check_columns")
     invalidate_hard_deletes: object | None = config.values.get("invalidate_hard_deletes")
@@ -325,6 +330,14 @@ def validate_snapshot_config(
                 f"model '{model_name}': unknown snapshot_full_refresh "
                 f"'{snapshot_full_refresh}'; valid values: "
                 f"{', '.join(sorted(_VALID_SNAPSHOT_FULL_REFRESH_POLICIES))}"
+            )
+
+    if snapshot_schema_change is not None:
+        if snapshot_schema_change not in _VALID_SNAPSHOT_SCHEMA_CHANGE_POLICIES:
+            raise CompileInputError(
+                f"model '{model_name}': unknown snapshot_schema_change "
+                f"'{snapshot_schema_change}'; valid values: "
+                f"{', '.join(sorted(_VALID_SNAPSHOT_SCHEMA_CHANGE_POLICIES))}"
             )
 
     if valid_from_column is not None and valid_to_column is not None:

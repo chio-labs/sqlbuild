@@ -37,8 +37,13 @@ from sqlbuild.spec.models.project import (
 _SNAPSHOT_FULL_REFRESH_POLICIES: frozenset[str] = frozenset(
     {"allow", "deny", "require_confirmation"}
 )
+_SNAPSHOT_SCHEMA_CHANGE_POLICIES: frozenset[str] = frozenset(
+    {"append_new_columns", "deny", "require_confirmation"}
+)
 _DEFAULT_CURRENT_STATE_SNAPSHOT_FULL_REFRESH: str = "deny"
 _DEFAULT_HISTORICAL_SNAPSHOT_FULL_REFRESH: str = "require_confirmation"
+_DEFAULT_SNAPSHOT_SCHEMA_CHANGE: str = "append_new_columns"
+_DEFAULT_WILDCARD_CHECK_SNAPSHOT_SCHEMA_CHANGE: str = "require_confirmation"
 
 
 def load_project_config(*, project_dir: Path) -> ProjectConfig:
@@ -513,7 +518,14 @@ def _load_snapshots(*, payload: object, file_path: Path) -> SnapshotsConfig:
     )
     _validate_allowed_keys(
         mapping=mapping,
-        allowed_keys=frozenset({"current_state_full_refresh", "historical_full_refresh"}),
+        allowed_keys=frozenset(
+            {
+                "current_state_full_refresh",
+                "historical_full_refresh",
+                "schema_change",
+                "wildcard_check_schema_change",
+            }
+        ),
         label="snapshots",
         file_path=file_path,
     )
@@ -527,6 +539,16 @@ def _load_snapshots(*, payload: object, file_path: Path) -> SnapshotsConfig:
             mapping=mapping,
             key="historical_full_refresh",
             default=_DEFAULT_HISTORICAL_SNAPSHOT_FULL_REFRESH,
+        ),
+        schema_change=_optional_snapshot_schema_change_policy(
+            mapping=mapping,
+            key="schema_change",
+            default=_DEFAULT_SNAPSHOT_SCHEMA_CHANGE,
+        ),
+        wildcard_check_schema_change=_optional_snapshot_schema_change_policy(
+            mapping=mapping,
+            key="wildcard_check_schema_change",
+            default=_DEFAULT_WILDCARD_CHECK_SNAPSHOT_SCHEMA_CHANGE,
         ),
     )
 
@@ -728,6 +750,20 @@ def _optional_full_refresh_policy(*, mapping: dict[str, object], key: str, defau
         raise ProjectConfigError(f"Expected '{key}' to be a string when provided")
     if value not in _SNAPSHOT_FULL_REFRESH_POLICIES:
         valid_values: str = ", ".join(sorted(_SNAPSHOT_FULL_REFRESH_POLICIES))
+        raise ProjectConfigError(f"Expected '{key}' to be one of: {valid_values}")
+    return value
+
+
+def _optional_snapshot_schema_change_policy(
+    *, mapping: dict[str, object], key: str, default: str
+) -> str:
+    value: object | None = mapping.get(key)
+    if value is None:
+        return default
+    if not isinstance(value, str):
+        raise ProjectConfigError(f"Expected '{key}' to be a string when provided")
+    if value not in _SNAPSHOT_SCHEMA_CHANGE_POLICIES:
+        valid_values: str = ", ".join(sorted(_SNAPSHOT_SCHEMA_CHANGE_POLICIES))
         raise ProjectConfigError(f"Expected '{key}' to be one of: {valid_values}")
     return value
 

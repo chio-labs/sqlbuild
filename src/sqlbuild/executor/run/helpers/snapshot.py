@@ -9,7 +9,12 @@ from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
-from sqlbuild.compiler.planner.types import HistoricalInput, PlanReason, SnapshotStrategy
+from sqlbuild.compiler.planner.types import (
+    HistoricalInput,
+    PlanReason,
+    SnapshotSchemaChangePolicy,
+    SnapshotStrategy,
+)
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
@@ -23,10 +28,16 @@ from sqlbuild.shared.helpers.naming import (
     resolve_qualified_name_parts,
     resolve_target_qualified_name,
 )
+from sqlbuild.spec.models.project import SnapshotsConfig
 from sqlbuild.spec.models.source import SourceEntry
 
 _DEFAULT_VALID_FROM_COLUMN: str = "valid_from"
 _DEFAULT_VALID_TO_COLUMN: str = "valid_to"
+_SCHEMA_CHANGE_STRICTNESS: dict[SnapshotSchemaChangePolicy, int] = {
+    SnapshotSchemaChangePolicy.APPEND_NEW_COLUMNS: 0,
+    SnapshotSchemaChangePolicy.REQUIRE_CONFIRMATION: 1,
+    SnapshotSchemaChangePolicy.DENY: 2,
+}
 
 
 def execute_snapshot_entry(
@@ -40,6 +51,8 @@ def execute_snapshot_entry(
     model_audits: tuple[AuditPlanEntry, ...],
     run_id: str,
     query_change_tracking: bool,
+    snapshots: SnapshotsConfig | None = None,
+    allow_snapshot_schema_change: bool = False,
 ) -> ModelExecutionResult:
     """Execute one current-state snapshot model."""
 
@@ -180,6 +193,23 @@ def execute_snapshot_entry(
                     statement_recorder=statement_recorder,
                 )
             else:
+                target_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
+                    connection,
+                    database=target_database,
+                    schema=target_schema,
+                    name=target_table,
+                )
+                _apply_snapshot_schema_change(
+                    adapter=adapter,
+                    connection=connection,
+                    entry=entry,
+                    snapshots=snapshots or SnapshotsConfig(),
+                    target_qualified=target_qualified,
+                    target_columns=target_columns,
+                    delta_columns=delta_columns,
+                    allow_snapshot_schema_change=allow_snapshot_schema_change,
+                    statement_recorder=statement_recorder,
+                )
                 _apply_snapshot_changes(
                     adapter=adapter,
                     connection=connection,
@@ -648,6 +678,86 @@ def _expanded_check_columns(
             f"snapshot model '{entry.name}' check_columns [*] did not match any data columns"
         )
     return expanded_columns
+
+
+def _apply_snapshot_schema_change(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    entry: ModelPlanEntry,
+    snapshots: SnapshotsConfig,
+    target_qualified: str,
+    target_columns: tuple[ColumnInfo, ...],
+    delta_columns: tuple[ColumnInfo, ...],
+    allow_snapshot_schema_change: bool,
+    statement_recorder: StatementRecorder,
+) -> None:
+    target_map: dict[str, ColumnInfo] = {column.name.lower(): column for column in target_columns}
+
+    added: tuple[ColumnInfo, ...] = tuple(
+        column for column in delta_columns if column.name.lower() not in target_map
+    )
+    type_changed: tuple[str, ...] = tuple(
+        column.name
+        for column in delta_columns
+        if column.name.lower() in target_map
+        and target_map[column.name.lower()].type.upper() != column.type.upper()
+    )
+
+    if type_changed:
+        raise ExecutorInputError(
+            f"snapshot schema change does not support type changes: {', '.join(type_changed)}"
+        )
+    if not added:
+        return
+
+    policy: SnapshotSchemaChangePolicy = _effective_snapshot_schema_change_policy(
+        entry=entry, snapshots=snapshots
+    )
+    added_names: str = ", ".join(column.name for column in added)
+    if policy == SnapshotSchemaChangePolicy.DENY:
+        raise ExecutorInputError(
+            f"snapshot model '{entry.name}' detected new output columns: {added_names}; "
+            "snapshot_schema_change is set to deny"
+        )
+    if (
+        policy == SnapshotSchemaChangePolicy.REQUIRE_CONFIRMATION
+        and not allow_snapshot_schema_change
+    ):
+        if entry.snapshot_strategy == SnapshotStrategy.CHECK and entry.check_columns == ("*",):
+            raise ExecutorInputError(
+                f"snapshot model '{entry.name}' check_columns [*] detected new data columns "
+                f"on existing target: {added_names}. These columns would become part of "
+                "change detection. Re-run with --allow-snapshot-schema-change to accept, "
+                "or use explicit check_columns."
+            )
+        raise ExecutorInputError(
+            f"snapshot model '{entry.name}' detected new output columns: {added_names}; "
+            "re-run with --allow-snapshot-schema-change to accept"
+        )
+
+    adapter.add_columns(
+        connection,
+        target=target_qualified,
+        columns=added,
+        statement_recorder=statement_recorder,
+    )
+
+
+def _effective_snapshot_schema_change_policy(
+    *, entry: ModelPlanEntry, snapshots: SnapshotsConfig
+) -> SnapshotSchemaChangePolicy:
+    project_policy: SnapshotSchemaChangePolicy = SnapshotSchemaChangePolicy(
+        snapshots.wildcard_check_schema_change
+        if entry.snapshot_strategy == SnapshotStrategy.CHECK and entry.check_columns == ("*",)
+        else snapshots.schema_change
+    )
+    if entry.snapshot_schema_change is None:
+        return project_policy
+    model_policy: SnapshotSchemaChangePolicy = SnapshotSchemaChangePolicy(
+        entry.snapshot_schema_change
+    )
+    return max((project_policy, model_policy), key=lambda policy: _SCHEMA_CHANGE_STRICTNESS[policy])
 
 
 def _require_updated_at(entry: ModelPlanEntry) -> str:

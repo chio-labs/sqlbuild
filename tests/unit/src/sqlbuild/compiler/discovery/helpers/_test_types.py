@@ -27,6 +27,8 @@ class LoadProjectConfigTestCase:
     expected_janitor_exclude_patterns: tuple[str, ...]
     expected_current_state_full_refresh: str = "deny"
     expected_historical_full_refresh: str = "require_confirmation"
+    expected_snapshot_schema_change: str = "append_new_columns"
+    expected_wildcard_check_schema_change: str = "require_confirmation"
     expected_scenario_local_type_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
     expected_snapshot_limits: dict[str, int | None] = field(
         default_factory=lambda: {

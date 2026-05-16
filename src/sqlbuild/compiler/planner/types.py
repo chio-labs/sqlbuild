@@ -105,6 +105,12 @@ class SnapshotFullRefreshPolicy(StrEnum):
     ALLOW = "allow"
 
 
+class SnapshotSchemaChangePolicy(StrEnum):
+    DENY = "deny"
+    REQUIRE_CONFIRMATION = "require_confirmation"
+    APPEND_NEW_COLUMNS = "append_new_columns"
+
+
 class CursorType(StrEnum):
     TIMESTAMP = "timestamp"
     INTEGER = "integer"

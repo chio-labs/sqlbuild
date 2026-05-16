@@ -18,6 +18,7 @@ class BuildExecutionTestCase:
     run_audits: bool = True
     run_tests: bool = True
     fail_fast: bool = False
+    allow_snapshot_schema_change: bool = False
     expected_model_statuses: tuple[tuple[str, ExecutionStatus], ...] = field(default_factory=tuple)
     expected_function_statuses: tuple[tuple[str, ExecutionStatus], ...] = field(
         default_factory=tuple
@@ -105,6 +106,20 @@ class SnapshotCheckFailureTestCase:
     project_files: dict[str, str]
     setup_sql: tuple[str, ...]
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class SnapshotSchemaChangeExecutionTestCase:
+    description: str
+    initial_project_files: dict[str, str]
+    changed_project_files: dict[str, str]
+    initial_setup_sql: tuple[str, ...]
+    changed_setup_sql: tuple[str, ...]
+    expected_status: BuildStatus
+    expected_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
+    expected_error_fragment: str = ""
+    allow_snapshot_schema_change: bool = False
+    expected_query: str = ""
 
 
 @dataclass(frozen=True)

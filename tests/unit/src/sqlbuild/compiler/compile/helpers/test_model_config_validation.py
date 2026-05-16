@@ -482,6 +482,7 @@ SNAPSHOT_VALID_TEST_CASES: list[SnapshotConfigValidTestCase] = [
             "valid_to_column": "effective_to",
             "initial_valid_from": "updated_at",
             "snapshot_full_refresh": "require_confirmation",
+            "snapshot_schema_change": "append_new_columns",
         },
     ),
 ]
@@ -503,6 +504,17 @@ def test_given_valid_snapshot_config_when_validating_then_passes(
 
 
 SNAPSHOT_ERROR_TEST_CASES: list[SnapshotConfigErrorTestCase] = [
+    SnapshotConfigErrorTestCase(
+        description="unknown snapshot schema change policy raises",
+        config_values={
+            "materialized": "snapshot",
+            "unique_key": ["id"],
+            "snapshot_strategy": "timestamp",
+            "updated_at": "updated_at",
+            "snapshot_schema_change": "sync_all_columns",
+        },
+        expected_error_fragment="unknown snapshot_schema_change",
+    ),
     SnapshotConfigErrorTestCase(
         description="snapshot without unique key raises",
         config_values={"materialized": "snapshot", "snapshot_strategy": "timestamp"},
