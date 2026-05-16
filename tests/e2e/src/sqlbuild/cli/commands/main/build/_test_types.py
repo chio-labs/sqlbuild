@@ -84,6 +84,33 @@ class SnapshotTimestampFailureBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class SnapshotCheckBuildE2ETestCase:
+    """Test case for check snapshot build behavior across CLI reruns."""
+
+    description: str
+    repo_files: dict[str, str]
+    initial_seed_sql: str
+    mutation_sql: tuple[str, ...]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_query: str
+    expected_initial_rows: tuple[tuple[object, ...], ...]
+    expected_changed_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SnapshotCheckFailureBuildE2ETestCase:
+    """Test case for check snapshot build failures through the CLI."""
+
+    description: str
+    repo_files: dict[str, str]
+    initial_seed_sql: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class TemplateExpressionsBuildE2ETestCase:
     """Test case for config-side template expression helpers."""
 

@@ -14,6 +14,8 @@ from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.executor.build._test_types import (
     BuildExecutionTestCase,
+    SnapshotCheckExecutionTestCase,
+    SnapshotCheckFailureTestCase,
     SnapshotTimestampExecutionTestCase,
     SnapshotTimestampFailureTestCase,
 )
@@ -30,6 +32,8 @@ _PROJECT_YML: str = (
     "[settings]\n"
     'default_audit_severity = "error"\n'
 )
+
+_NOT_NULL_AUDIT: str = 'AUDIT ();\n\nSELECT @column FROM __ref("@model") WHERE @column IS NULL'
 
 
 SNAPSHOT_TIMESTAMP_TEST_CASES: list[SnapshotTimestampExecutionTestCase] = [
@@ -204,6 +208,408 @@ SNAPSHOT_TIMESTAMP_FAILURE_TEST_CASES: list[SnapshotTimestampFailureTestCase] = 
     ),
 ]
 
+SNAPSHOT_CHECK_TEST_CASES: list[SnapshotCheckExecutionTestCase] = [
+    SnapshotCheckExecutionTestCase(
+        description="current-state check snapshot tracks checked column changes only",
+        model_name="customer_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_customers\n    schema: main\n    table: raw_customers\n"
+            ),
+            "models/customer_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id],\n"
+                "  snapshot_strategy check,\n"
+                "  check_columns [status]\n"
+                ");\n\n"
+                'SELECT customer_id, plan, status FROM __source("raw_customers")'
+            ),
+        },
+        initial_setup_sql=(
+            "CREATE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'basic' AS plan, 'active' AS status",
+        ),
+        unchecked_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'pro' AS plan, 'active' AS status",
+        ),
+        checked_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'pro' AS plan, 'paused' AS status "
+            "UNION ALL SELECT 2 AS customer_id, 'basic' AS plan, 'active' AS status",
+        ),
+        expected_query=(
+            "SELECT customer_id, plan, status, valid_to IS NULL "
+            "FROM main.customer_snapshot ORDER BY customer_id, valid_to IS NULL, plan"
+        ),
+        expected_validity_columns=("valid_from", "valid_to"),
+        expected_initial_rows=((1, "basic", "active", True),),
+        expected_unchecked_rows=((1, "basic", "active", True),),
+        expected_checked_rows=(
+            (1, "basic", "active", False),
+            (1, "pro", "paused", True),
+            (2, "basic", "active", True),
+        ),
+    ),
+    SnapshotCheckExecutionTestCase(
+        description="current-state check snapshot supports composite unique keys",
+        model_name="customer_region_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_customer_regions\n"
+                "    schema: main\n"
+                "    table: raw_customer_regions\n"
+            ),
+            "models/customer_region_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id, region],\n"
+                "  snapshot_strategy check,\n"
+                "  check_columns [status]\n"
+                ");\n\n"
+                "SELECT customer_id, region, plan, status "
+                'FROM __source("raw_customer_regions")'
+            ),
+        },
+        initial_setup_sql=(
+            "CREATE TABLE main.raw_customer_regions AS "
+            "SELECT 1 AS customer_id, 'us' AS region, 'basic' AS plan, 'active' AS status "
+            "UNION ALL SELECT 1 AS customer_id, 'eu' AS region, 'basic' AS plan, "
+            "'active' AS status",
+        ),
+        unchecked_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customer_regions AS "
+            "SELECT 1 AS customer_id, 'us' AS region, 'pro' AS plan, 'active' AS status "
+            "UNION ALL SELECT 1 AS customer_id, 'eu' AS region, 'basic' AS plan, "
+            "'active' AS status",
+        ),
+        checked_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customer_regions AS "
+            "SELECT 1 AS customer_id, 'us' AS region, 'pro' AS plan, 'paused' AS status "
+            "UNION ALL SELECT 1 AS customer_id, 'eu' AS region, 'basic' AS plan, "
+            "'active' AS status",
+        ),
+        expected_query=(
+            "SELECT customer_id, region, plan, status, valid_to IS NULL "
+            "FROM main.customer_region_snapshot "
+            "ORDER BY customer_id, region DESC, valid_to IS NULL, plan"
+        ),
+        expected_validity_columns=("valid_from", "valid_to"),
+        expected_initial_rows=(
+            (1, "us", "basic", "active", True),
+            (1, "eu", "basic", "active", True),
+        ),
+        expected_unchecked_rows=(
+            (1, "us", "basic", "active", True),
+            (1, "eu", "basic", "active", True),
+        ),
+        expected_checked_rows=(
+            (1, "us", "basic", "active", False),
+            (1, "us", "pro", "paused", True),
+            (1, "eu", "basic", "active", True),
+        ),
+    ),
+    SnapshotCheckExecutionTestCase(
+        description="current-state check snapshot compares null values safely",
+        model_name="customer_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_customers\n    schema: main\n    table: raw_customers\n"
+            ),
+            "models/customer_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id],\n"
+                "  snapshot_strategy check,\n"
+                "  check_columns [status]\n"
+                ");\n\n"
+                'SELECT customer_id, plan, status FROM __source("raw_customers")'
+            ),
+        },
+        initial_setup_sql=(
+            "CREATE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'basic' AS plan, NULL::VARCHAR AS status",
+        ),
+        unchecked_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'pro' AS plan, NULL::VARCHAR AS status",
+        ),
+        checked_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'pro' AS plan, 'active' AS status",
+        ),
+        expected_query=(
+            "SELECT customer_id, plan, status, valid_to IS NULL "
+            "FROM main.customer_snapshot "
+            "ORDER BY customer_id, valid_to IS NULL, status NULLS FIRST"
+        ),
+        expected_validity_columns=("valid_from", "valid_to"),
+        expected_initial_rows=((1, "basic", None, True),),
+        expected_unchecked_rows=((1, "basic", None, True),),
+        expected_checked_rows=(
+            (1, "basic", None, False),
+            (1, "pro", "active", True),
+        ),
+    ),
+    SnapshotCheckExecutionTestCase(
+        description="current-state check snapshot tracks value to null changes",
+        model_name="customer_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_customers\n    schema: main\n    table: raw_customers\n"
+            ),
+            "models/customer_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id],\n"
+                "  snapshot_strategy check,\n"
+                "  check_columns [status]\n"
+                ");\n\n"
+                'SELECT customer_id, plan, status FROM __source("raw_customers")'
+            ),
+        },
+        initial_setup_sql=(
+            "CREATE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'basic' AS plan, 'active' AS status",
+        ),
+        unchecked_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'pro' AS plan, 'active' AS status",
+        ),
+        checked_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'pro' AS plan, NULL::VARCHAR AS status",
+        ),
+        expected_query=(
+            "SELECT customer_id, plan, status, valid_to IS NULL "
+            "FROM main.customer_snapshot "
+            "ORDER BY customer_id, valid_to IS NULL, status NULLS FIRST"
+        ),
+        expected_validity_columns=("valid_from", "valid_to"),
+        expected_initial_rows=((1, "basic", "active", True),),
+        expected_unchecked_rows=((1, "basic", "active", True),),
+        expected_checked_rows=(
+            (1, "basic", "active", False),
+            (1, "pro", None, True),
+        ),
+    ),
+    SnapshotCheckExecutionTestCase(
+        description="current-state check snapshot supports multiple check columns",
+        model_name="customer_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_customers\n    schema: main\n    table: raw_customers\n"
+            ),
+            "models/customer_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id],\n"
+                "  snapshot_strategy check,\n"
+                "  check_columns [status, tier]\n"
+                ");\n\n"
+                'SELECT customer_id, plan, status, tier FROM __source("raw_customers")'
+            ),
+        },
+        initial_setup_sql=(
+            "CREATE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'basic' AS plan, 'active' AS status, 'bronze' AS tier",
+        ),
+        unchecked_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'pro' AS plan, 'active' AS status, 'bronze' AS tier",
+        ),
+        checked_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'pro' AS plan, 'active' AS status, 'gold' AS tier",
+        ),
+        expected_query=(
+            "SELECT customer_id, plan, status, tier, valid_to IS NULL "
+            "FROM main.customer_snapshot ORDER BY customer_id, valid_to IS NULL, tier"
+        ),
+        expected_validity_columns=("valid_from", "valid_to"),
+        expected_initial_rows=((1, "basic", "active", "bronze", True),),
+        expected_unchecked_rows=((1, "basic", "active", "bronze", True),),
+        expected_checked_rows=(
+            (1, "basic", "active", "bronze", False),
+            (1, "pro", "active", "gold", True),
+        ),
+    ),
+    SnapshotCheckExecutionTestCase(
+        description="current-state check snapshot supports composite keys with multiple checks",
+        model_name="customer_region_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_customer_regions\n"
+                "    schema: main\n"
+                "    table: raw_customer_regions\n"
+            ),
+            "models/customer_region_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id, region],\n"
+                "  snapshot_strategy check,\n"
+                "  check_columns [status, tier]\n"
+                ");\n\n"
+                "SELECT customer_id, region, plan, status, tier "
+                'FROM __source("raw_customer_regions")'
+            ),
+        },
+        initial_setup_sql=(
+            "CREATE TABLE main.raw_customer_regions AS "
+            "SELECT 1 AS customer_id, 'us' AS region, 'basic' AS plan, "
+            "'active' AS status, 'bronze' AS tier "
+            "UNION ALL SELECT 1 AS customer_id, 'eu' AS region, 'basic' AS plan, "
+            "'active' AS status, 'bronze' AS tier",
+        ),
+        unchecked_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customer_regions AS "
+            "SELECT 1 AS customer_id, 'us' AS region, 'pro' AS plan, "
+            "'active' AS status, 'bronze' AS tier "
+            "UNION ALL SELECT 1 AS customer_id, 'eu' AS region, 'basic' AS plan, "
+            "'active' AS status, 'bronze' AS tier",
+        ),
+        checked_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customer_regions AS "
+            "SELECT 1 AS customer_id, 'us' AS region, 'pro' AS plan, "
+            "'active' AS status, 'gold' AS tier "
+            "UNION ALL SELECT 1 AS customer_id, 'eu' AS region, 'basic' AS plan, "
+            "'active' AS status, 'bronze' AS tier "
+            "UNION ALL SELECT 2 AS customer_id, 'us' AS region, 'basic' AS plan, "
+            "'active' AS status, 'bronze' AS tier",
+        ),
+        expected_query=(
+            "SELECT customer_id, region, plan, status, tier, valid_to IS NULL "
+            "FROM main.customer_region_snapshot "
+            "ORDER BY customer_id, region DESC, valid_to IS NULL, tier"
+        ),
+        expected_validity_columns=("valid_from", "valid_to"),
+        expected_initial_rows=(
+            (1, "us", "basic", "active", "bronze", True),
+            (1, "eu", "basic", "active", "bronze", True),
+        ),
+        expected_unchecked_rows=(
+            (1, "us", "basic", "active", "bronze", True),
+            (1, "eu", "basic", "active", "bronze", True),
+        ),
+        expected_checked_rows=(
+            (1, "us", "basic", "active", "bronze", False),
+            (1, "us", "pro", "active", "gold", True),
+            (1, "eu", "basic", "active", "bronze", True),
+            (2, "us", "basic", "active", "bronze", True),
+        ),
+    ),
+]
+
+SNAPSHOT_CHECK_FAILURE_TEST_CASES: list[SnapshotCheckFailureTestCase] = [
+    SnapshotCheckFailureTestCase(
+        description="check snapshot duplicate source unique key fails before target mutation",
+        model_name="customer_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_customers\n    schema: main\n    table: raw_customers\n"
+            ),
+            "models/customer_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id],\n"
+                "  snapshot_strategy check,\n"
+                "  check_columns [status]\n"
+                ");\n\n"
+                'SELECT customer_id, status FROM __source("raw_customers")'
+            ),
+        },
+        setup_sql=(
+            "CREATE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'active' AS status "
+            "UNION ALL SELECT 1 AS customer_id, 'paused' AS status",
+        ),
+        expected_error_fragment=(
+            "source query returned multiple rows for the same unique_key (customer_id)"
+        ),
+    ),
+    SnapshotCheckFailureTestCase(
+        description="check snapshot missing check column fails before target mutation",
+        model_name="customer_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_customers\n    schema: main\n    table: raw_customers\n"
+            ),
+            "models/customer_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id],\n"
+                "  snapshot_strategy check,\n"
+                "  check_columns [status]\n"
+                ");\n\n"
+                'SELECT customer_id, plan FROM __source("raw_customers")'
+            ),
+        },
+        setup_sql=(
+            "CREATE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'basic' AS plan, 'active' AS status",
+        ),
+        expected_error_fragment="query output is missing required columns: status",
+    ),
+    SnapshotCheckFailureTestCase(
+        description="check snapshot wildcard check columns are not treated as supported",
+        model_name="customer_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_customers\n    schema: main\n    table: raw_customers\n"
+            ),
+            "models/customer_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id],\n"
+                "  snapshot_strategy check,\n"
+                "  check_columns [*]\n"
+                ");\n\n"
+                'SELECT customer_id, status FROM __source("raw_customers")'
+            ),
+        },
+        setup_sql=(
+            "CREATE TABLE main.raw_customers AS SELECT 1 AS customer_id, 'active' AS status",
+        ),
+        expected_error_fragment="query output is missing required columns: *",
+    ),
+    SnapshotCheckFailureTestCase(
+        description="check snapshot missing one of multiple check columns fails clearly",
+        model_name="customer_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_customers\n    schema: main\n    table: raw_customers\n"
+            ),
+            "models/customer_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id],\n"
+                "  snapshot_strategy check,\n"
+                "  check_columns [status, tier]\n"
+                ");\n\n"
+                'SELECT customer_id, status FROM __source("raw_customers")'
+            ),
+        },
+        setup_sql=(
+            "CREATE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'active' AS status, 'bronze' AS tier",
+        ),
+        expected_error_fragment="query output is missing required columns: tier",
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -357,3 +763,289 @@ def test_given_invalid_timestamp_snapshot_source_when_building_then_fails_before
         is not None
     )
     assert target_exists is False
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SNAPSHOT_CHECK_TEST_CASES,
+    ids=[case.description for case in SNAPSHOT_CHECK_TEST_CASES],
+)
+def test_given_current_state_check_snapshot_when_building_then_tracks_checked_changes(
+    test_case: SnapshotCheckExecutionTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+    build_case: BuildExecutionTestCase = BuildExecutionTestCase(
+        description=test_case.description,
+        project_files=test_case.project_files,
+        setup_sql=test_case.initial_setup_sql,
+        expected_status=BuildStatus.SUCCESS,
+        expected_success_count=1,
+        expected_model_statuses=((test_case.model_name, ExecutionStatus.SUCCESS),),
+    )
+
+    initial_result: BuildExecutionResult = run_build_for_project(
+        test_case=build_case,
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+    rows_after_initial: tuple[tuple[object, ...], ...] = tuple(
+        tuple(row) for row in connection.execute(test_case.expected_query).fetchall()
+    )
+    for sql in test_case.unchecked_setup_sql:
+        connection.execute(sql)
+    unchecked_result: BuildExecutionResult = run_build_for_project(
+        test_case=BuildExecutionTestCase(
+            description=test_case.description,
+            project_files=test_case.project_files,
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=1,
+            expected_model_statuses=((test_case.model_name, ExecutionStatus.SUCCESS),),
+        ),
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+    rows_after_unchecked: tuple[tuple[object, ...], ...] = tuple(
+        tuple(row) for row in connection.execute(test_case.expected_query).fetchall()
+    )
+    for sql in test_case.checked_setup_sql:
+        connection.execute(sql)
+    checked_result: BuildExecutionResult = run_build_for_project(
+        test_case=BuildExecutionTestCase(
+            description=test_case.description,
+            project_files=test_case.project_files,
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=1,
+            expected_model_statuses=((test_case.model_name, ExecutionStatus.SUCCESS),),
+        ),
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+
+    assert initial_result.status == BuildStatus.SUCCESS
+    assert unchecked_result.status == BuildStatus.SUCCESS
+    assert checked_result.status == BuildStatus.SUCCESS
+    verify_model_statuses(result=initial_result, test_case=build_case)
+    verify_model_statuses(result=unchecked_result, test_case=build_case)
+    verify_model_statuses(result=checked_result, test_case=build_case)
+    validity_columns: tuple[str, ...] = tuple(
+        row[0]
+        for row in connection.execute(
+            "SELECT column_name FROM information_schema.columns "
+            f"WHERE table_name = '{test_case.model_name}' "
+            "AND column_name IN ('valid_from', 'valid_to') ORDER BY ordinal_position"
+        ).fetchall()
+    )
+    rows_after_checked: tuple[tuple[object, ...], ...] = tuple(
+        tuple(row) for row in connection.execute(test_case.expected_query).fetchall()
+    )
+    assert validity_columns == test_case.expected_validity_columns
+    assert rows_after_initial == test_case.expected_initial_rows
+    assert rows_after_unchecked == test_case.expected_unchecked_rows
+    assert rows_after_checked == test_case.expected_checked_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SNAPSHOT_CHECK_FAILURE_TEST_CASES,
+    ids=[case.description for case in SNAPSHOT_CHECK_FAILURE_TEST_CASES],
+)
+def test_given_invalid_check_snapshot_source_when_building_then_fails_before_target_mutation(
+    test_case: SnapshotCheckFailureTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    result: BuildExecutionResult = run_build_for_project(
+        test_case=BuildExecutionTestCase(
+            description=test_case.description,
+            project_files=test_case.project_files,
+            setup_sql=test_case.setup_sql,
+            expected_status=BuildStatus.FAILED,
+            expected_failure_count=1,
+            expected_model_statuses=((test_case.model_name, ExecutionStatus.FAILED),),
+        ),
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+
+    assert result.status == BuildStatus.FAILED
+    assert result.failure_count == 1
+    verify_model_statuses(
+        result=result,
+        test_case=BuildExecutionTestCase(
+            description=test_case.description,
+            project_files=test_case.project_files,
+            expected_status=BuildStatus.FAILED,
+            expected_model_statuses=((test_case.model_name, ExecutionStatus.FAILED),),
+        ),
+    )
+    assert test_case.expected_error_fragment in (result.model_results[0].error_message or "")
+    target_exists: bool = (
+        connection.execute(
+            f"SELECT 1 FROM information_schema.tables WHERE table_name = '{test_case.model_name}'"
+        ).fetchone()
+        is not None
+    )
+    assert target_exists is False
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildExecutionTestCase(
+            description="check snapshot runs final column audits",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_YML,
+                "sources/raw.yml": (
+                    "sources:\n"
+                    "  - name: raw_customers\n"
+                    "    schema: main\n"
+                    "    table: raw_customers\n"
+                ),
+                "models/customer_snapshot.sql": (
+                    "MODEL (\n"
+                    "  materialized snapshot,\n"
+                    "  unique_key [customer_id],\n"
+                    "  snapshot_strategy check,\n"
+                    "  check_columns [status],\n"
+                    "  columns (customer_id (audits [not_null]))\n"
+                    ");\n\n"
+                    'SELECT customer_id, status FROM __source("raw_customers")'
+                ),
+                "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
+            },
+            setup_sql=(
+                "CREATE TABLE main.raw_customers AS SELECT 1 AS customer_id, 'active' AS status",
+            ),
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=1,
+            expected_model_statuses=(("customer_snapshot", ExecutionStatus.SUCCESS),),
+            expected_model_audit_count=1,
+            expected_query_results=(
+                (
+                    "SELECT customer_id, status, valid_to IS NULL FROM main.customer_snapshot",
+                    ((1, "active", True),),
+                ),
+            ),
+        )
+    ],
+    ids=["check snapshot runs final column audits"],
+)
+def test_given_check_snapshot_with_final_audit_when_building_then_runs_audit(
+    test_case: BuildExecutionTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    result: BuildExecutionResult = run_build_for_project(
+        test_case=test_case,
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+
+    assert result.status == test_case.expected_status
+    assert result.success_count == test_case.expected_success_count
+    verify_model_statuses(result=result, test_case=test_case)
+    assert sum(len(model_result.audit_results) for model_result in result.model_results) == (
+        test_case.expected_model_audit_count
+    )
+    query: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    for query, expected_rows in test_case.expected_query_results:
+        actual_rows: tuple[tuple[object, ...], ...] = tuple(
+            tuple(row) for row in connection.execute(query).fetchall()
+        )
+        assert actual_rows == expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildExecutionTestCase(
+            description="check snapshot final audit failure fails after target update",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_YML,
+                "sources/raw.yml": (
+                    "sources:\n"
+                    "  - name: raw_customers\n"
+                    "    schema: main\n"
+                    "    table: raw_customers\n"
+                ),
+                "models/customer_snapshot.sql": (
+                    "MODEL (\n"
+                    "  materialized snapshot,\n"
+                    "  unique_key [customer_id],\n"
+                    "  snapshot_strategy check,\n"
+                    "  check_columns [status],\n"
+                    "  columns (customer_id (audits [not_null]))\n"
+                    ");\n\n"
+                    'SELECT customer_id, status FROM __source("raw_customers")'
+                ),
+                "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
+            },
+            setup_sql=(
+                "CREATE TABLE main.raw_customers AS "
+                "SELECT NULL::INTEGER AS customer_id, 'active' AS status",
+            ),
+            expected_status=BuildStatus.FAILED,
+            expected_failure_count=1,
+            expected_model_statuses=(("customer_snapshot", ExecutionStatus.FAILED),),
+            expected_model_audit_count=1,
+            expected_query_results=(
+                (
+                    "SELECT customer_id, status, valid_to IS NULL FROM main.customer_snapshot",
+                    ((None, "active", True),),
+                ),
+            ),
+        )
+    ],
+    ids=["check snapshot final audit failure fails after target update"],
+)
+def test_given_check_snapshot_with_failing_final_audit_when_building_then_fails_after_update(
+    test_case: BuildExecutionTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    result: BuildExecutionResult = run_build_for_project(
+        test_case=test_case,
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+
+    assert result.status == test_case.expected_status
+    assert result.failure_count == test_case.expected_failure_count
+    verify_model_statuses(result=result, test_case=test_case)
+    assert sum(len(model_result.audit_results) for model_result in result.model_results) == (
+        test_case.expected_model_audit_count
+    )
+    assert result.model_results[0].error_message is not None
+    assert "final audit for 'customer_snapshot' failed after target update" in (
+        result.model_results[0].error_message
+    )
+    query: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    for query, expected_rows in test_case.expected_query_results:
+        actual_rows: tuple[tuple[object, ...], ...] = tuple(
+            tuple(row) for row in connection.execute(query).fetchall()
+        )
+        assert actual_rows == expected_rows

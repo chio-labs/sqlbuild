@@ -245,6 +245,7 @@ class ModelPlanEntry:
     unique_key: tuple[str, ...] = field(default_factory=tuple)
     snapshot_strategy: str | None = None
     updated_at_column: str | None = None
+    check_columns: tuple[str, ...] = field(default_factory=tuple)
     observed_at_column: str | None = None
     valid_from_column: str | None = None
     valid_to_column: str | None = None

@@ -51,7 +51,31 @@ class SnapshotTimestampExecutionTestCase:
 
 
 @dataclass(frozen=True)
+class SnapshotCheckExecutionTestCase:
+    description: str
+    model_name: str
+    project_files: dict[str, str]
+    initial_setup_sql: tuple[str, ...]
+    unchecked_setup_sql: tuple[str, ...]
+    checked_setup_sql: tuple[str, ...]
+    expected_validity_columns: tuple[str, ...]
+    expected_initial_rows: tuple[tuple[object, ...], ...]
+    expected_unchecked_rows: tuple[tuple[object, ...], ...]
+    expected_checked_rows: tuple[tuple[object, ...], ...]
+    expected_query: str
+
+
+@dataclass(frozen=True)
 class SnapshotTimestampFailureTestCase:
+    description: str
+    model_name: str
+    project_files: dict[str, str]
+    setup_sql: tuple[str, ...]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class SnapshotCheckFailureTestCase:
     description: str
     model_name: str
     project_files: dict[str, str]

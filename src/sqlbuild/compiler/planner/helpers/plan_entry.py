@@ -204,6 +204,7 @@ def plan_model(
     batch_size: str | None = _get_config_str(model, "batch_size")
     snapshot_strategy: str | None = _get_config_str(model, "snapshot_strategy")
     updated_at_column: str | None = _get_config_str(model, "updated_at")
+    check_columns: tuple[str, ...] = _get_check_columns(model)
     observed_at_column: str | None = _get_config_str(model, "observed_at")
     valid_from_column: str | None = _get_config_str(model, "valid_from_column")
     valid_to_column: str | None = _get_config_str(model, "valid_to_column")
@@ -275,6 +276,7 @@ def plan_model(
         unique_key=unique_key,
         snapshot_strategy=snapshot_strategy,
         updated_at_column=updated_at_column,
+        check_columns=check_columns,
         observed_at_column=observed_at_column,
         valid_from_column=valid_from_column,
         valid_to_column=valid_to_column,
@@ -510,6 +512,17 @@ def _get_unique_key(model: CompiledModel) -> tuple[str, ...]:
         return (raw,)
     if isinstance(raw, list):
         return tuple(k for k in raw if isinstance(k, str))
+    return ()
+
+
+def _get_check_columns(model: CompiledModel) -> tuple[str, ...]:
+    """Extract check_columns from model config as a normalized tuple."""
+
+    raw: object | None = model.config.values.get("check_columns")
+    if isinstance(raw, str):
+        return (raw,)
+    if isinstance(raw, list):
+        return tuple(column for column in raw if isinstance(column, str))
     return ()
 
 
