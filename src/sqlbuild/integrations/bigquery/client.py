@@ -571,7 +571,27 @@ class BigQueryAdapter(BaseAdapter):
         """Execute a SQL statement against BigQuery."""
 
         log_sql(logger=logging.getLogger("sqlbuild.adapter.bigquery"), sql=sql)
-        return connection.execute(sql)
+        try:
+            return connection.execute(sql)
+        except Exception as error:
+            raise RuntimeError(self._format_bigquery_error(error)) from error
+
+    @staticmethod
+    def _format_bigquery_error(error: Exception) -> str:
+        message_parts: list[str] = [str(error)]
+        error_details: object | None = getattr(error, "errors", None)
+        if isinstance(error_details, list):
+            detail: object
+            for detail in error_details:
+                if not isinstance(detail, dict):
+                    continue
+                detail_message: object | None = detail.get("message")
+                if detail_message is None:
+                    continue
+                detail_text: str = str(detail_message)
+                if detail_text not in message_parts:
+                    message_parts.append(detail_text)
+        return "\n".join(message_parts)
 
     def query(self, connection: Any, sql: str, *, limit: int | None) -> QueryResult:
         """Execute SQL and return normalized rows for ad hoc query output."""

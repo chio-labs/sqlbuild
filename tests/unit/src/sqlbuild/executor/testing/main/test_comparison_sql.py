@@ -12,6 +12,8 @@ from tests.unit.src.sqlbuild.executor.testing.main.helpers import (
     build_assertion_test_entry,
     build_comparison_test_adapter,
     build_comparison_test_entry,
+    build_comparison_test_entry_with_helper_ctes,
+    build_table_function_test_entry,
 )
 
 TEST_CASES: list[BuildComparisonSqlTestCase] = [
@@ -133,3 +135,64 @@ def test_given_assertion_step_when_building_comparison_sql_then_it_counts_failin
     expected_fragment: str
     for expected_fragment in test_case.expected_fragments:
         assert expected_fragment in comparison_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildComparisonSqlTestCase(
+            description="matching helper CTEs are lifted once from actual and expected SQL",
+            adapter_name="duckdb",
+            expected_fragments=(
+                "input_values AS",
+                "__actual__orders AS (",
+                "__expected__orders AS (",
+            ),
+        )
+    ],
+    ids=["matching helper CTEs are lifted once from actual and expected SQL"],
+)
+def test_given_matching_helper_ctes_when_building_comparison_sql_then_lifts_once(
+    test_case: BuildComparisonSqlTestCase,
+) -> None:
+    adapter: BaseAdapter = build_comparison_test_adapter(test_case.adapter_name)
+
+    comparison_sql: str = build_sql_test_comparison_sql(
+        build_comparison_test_entry_with_helper_ctes(),
+        set_difference_operator=adapter.render_set_difference_operator(),
+        sqlglot_dialect=adapter.sqlglot_dialect(),
+    )
+
+    expected_fragment: str
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in comparison_sql
+    assert comparison_sql.lower().count("input_values as") == 1
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildComparisonSqlTestCase(
+            description="databricks quoted table function names preserve case",
+            adapter_name="databricks",
+            expected_fragments=("`workspace`.`test`.`customer_orders`(1)",),
+        )
+    ],
+    ids=["databricks quoted table function names preserve case"],
+)
+def test_given_databricks_table_fn_when_building_comparison_sql_then_preserves_case(
+    test_case: BuildComparisonSqlTestCase,
+) -> None:
+    adapter: BaseAdapter = build_comparison_test_adapter(test_case.adapter_name)
+
+    comparison_sql: str = build_sql_test_comparison_sql(
+        build_table_function_test_entry(),
+        set_difference_operator=adapter.render_set_difference_operator(),
+        sqlglot_dialect=adapter.sqlglot_dialect(),
+    )
+
+    expected_fragment: str
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in comparison_sql
+    assert "`workspace`.`test`.`CUSTOMER_ORDERS`" not in comparison_sql
+    assert "\n" in comparison_sql
