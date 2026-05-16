@@ -42,6 +42,10 @@ _PROJECT_YML: str = (
     'default_audit_severity = "error"\n'
 )
 
+_PROJECT_YML_CONFIRM_SCHEMA_CHANGE: str = (
+    _PROJECT_YML + '\n[snapshots]\nschema_change = "require_confirmation"\n'
+)
+
 _NOT_NULL_AUDIT: str = 'AUDIT ();\n\nSELECT @column FROM __ref("@model") WHERE @column IS NULL'
 
 
@@ -2261,6 +2265,243 @@ def test_given_snapshot_source_adds_column_when_building_then_appends_target_col
             expected_status=test_case.expected_status,
             expected_success_count=1,
             expected_model_statuses=(("customer_snapshot", ExecutionStatus.SUCCESS),),
+        ),
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+    rows: tuple[tuple[object, ...], ...] = tuple(
+        tuple(row) for row in connection.execute(test_case.expected_query).fetchall()
+    )
+
+    assert initial_result.status == BuildStatus.SUCCESS
+    assert changed_result.status == test_case.expected_status
+    assert rows == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnapshotSchemaChangeExecutionTestCase(
+            description="contract snapshot requires confirmation for declared new column",
+            initial_project_files={
+                "sqlbuild_project.toml": _PROJECT_YML_CONFIRM_SCHEMA_CHANGE,
+                "sources/raw.yml": (
+                    "sources:\n  - name: raw_customers\n    schema: main\n"
+                    "    table: raw_customers\n"
+                ),
+                "models/customer_snapshot.sql": (
+                    "MODEL (\n"
+                    "  materialized snapshot,\n"
+                    "  contract enforced,\n"
+                    "  columns (\n"
+                    "    customer_id (type INTEGER),\n"
+                    "    status (type VARCHAR),\n"
+                    "    updated_at (type TIMESTAMP),\n"
+                    "  ),\n"
+                    "  unique_key [customer_id],\n"
+                    "  snapshot_strategy timestamp,\n"
+                    "  updated_at updated_at\n"
+                    ");\n\n"
+                    'SELECT customer_id, status, updated_at FROM __source("raw_customers")'
+                ),
+            },
+            changed_project_files={
+                "sqlbuild_project.toml": _PROJECT_YML_CONFIRM_SCHEMA_CHANGE,
+                "sources/raw.yml": (
+                    "sources:\n  - name: raw_customers\n    schema: main\n"
+                    "    table: raw_customers\n"
+                ),
+                "models/customer_snapshot.sql": (
+                    "MODEL (\n"
+                    "  materialized snapshot,\n"
+                    "  contract enforced,\n"
+                    "  columns (\n"
+                    "    customer_id (type INTEGER),\n"
+                    "    status (type VARCHAR),\n"
+                    "    plan (type VARCHAR),\n"
+                    "    updated_at (type TIMESTAMP),\n"
+                    "  ),\n"
+                    "  unique_key [customer_id],\n"
+                    "  snapshot_strategy timestamp,\n"
+                    "  updated_at updated_at\n"
+                    ");\n\n"
+                    'SELECT customer_id, status, plan, updated_at FROM __source("raw_customers")'
+                ),
+            },
+            initial_setup_sql=(
+                "CREATE TABLE main.raw_customers AS SELECT 1 AS customer_id, "
+                "'active' AS status, TIMESTAMP '2024-01-01' AS updated_at",
+            ),
+            changed_setup_sql=(
+                "CREATE OR REPLACE TABLE main.raw_customers AS SELECT 1 AS customer_id, "
+                "'active' AS status, 'pro' AS plan, TIMESTAMP '2024-01-02' AS updated_at",
+            ),
+            expected_status=BuildStatus.FAILED,
+            expected_error_fragment="re-run with --allow-snapshot-schema-change to accept",
+            expected_query=(
+                "SELECT customer_id, status, CAST(valid_from AS VARCHAR), "
+                "CAST(valid_to AS VARCHAR) FROM main.customer_snapshot ORDER BY valid_from"
+            ),
+            expected_rows=((1, "active", "2024-01-01 00:00:00", None),),
+        )
+    ],
+    ids=["contract snapshot requires confirmation for declared new column"],
+)
+def test_given_contract_snapshot_adds_declared_column_when_building_then_requires_confirmation(
+    test_case: SnapshotSchemaChangeExecutionTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    write_repo_files(tmp_path, test_case.initial_project_files)
+    initial_result: BuildExecutionResult = run_build_for_project(
+        test_case=BuildExecutionTestCase(
+            description="initial contract snapshot before schema change",
+            project_files=test_case.initial_project_files,
+            setup_sql=test_case.initial_setup_sql,
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=1,
+            expected_model_statuses=(("customer_snapshot", ExecutionStatus.SUCCESS),),
+        ),
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+    write_repo_files(tmp_path, test_case.changed_project_files)
+    for sql in test_case.changed_setup_sql:
+        connection.execute(sql)
+
+    changed_result: BuildExecutionResult = run_build_for_project(
+        test_case=BuildExecutionTestCase(
+            description="contract snapshot adds declared column",
+            project_files=test_case.changed_project_files,
+            expected_status=test_case.expected_status,
+            expected_failure_count=1,
+            expected_model_statuses=(("customer_snapshot", ExecutionStatus.FAILED),),
+        ),
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+    rows: tuple[tuple[object, ...], ...] = tuple(
+        tuple(row) for row in connection.execute(test_case.expected_query).fetchall()
+    )
+
+    assert initial_result.status == BuildStatus.SUCCESS
+    assert changed_result.status == test_case.expected_status
+    assert test_case.expected_error_fragment in (
+        changed_result.model_results[0].error_message or ""
+    )
+    assert rows == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnapshotSchemaChangeExecutionTestCase(
+            description="confirmed contract snapshot appends declared new column",
+            initial_project_files={
+                "sqlbuild_project.toml": _PROJECT_YML_CONFIRM_SCHEMA_CHANGE,
+                "sources/raw.yml": (
+                    "sources:\n  - name: raw_customers\n    schema: main\n"
+                    "    table: raw_customers\n"
+                ),
+                "models/customer_snapshot.sql": (
+                    "MODEL (\n"
+                    "  materialized snapshot,\n"
+                    "  contract enforced,\n"
+                    "  columns (\n"
+                    "    customer_id (type INTEGER),\n"
+                    "    status (type VARCHAR),\n"
+                    "    updated_at (type TIMESTAMP),\n"
+                    "  ),\n"
+                    "  unique_key [customer_id],\n"
+                    "  snapshot_strategy timestamp,\n"
+                    "  updated_at updated_at\n"
+                    ");\n\n"
+                    'SELECT customer_id, status, updated_at FROM __source("raw_customers")'
+                ),
+            },
+            changed_project_files={
+                "sqlbuild_project.toml": _PROJECT_YML_CONFIRM_SCHEMA_CHANGE,
+                "sources/raw.yml": (
+                    "sources:\n  - name: raw_customers\n    schema: main\n"
+                    "    table: raw_customers\n"
+                ),
+                "models/customer_snapshot.sql": (
+                    "MODEL (\n"
+                    "  materialized snapshot,\n"
+                    "  contract enforced,\n"
+                    "  columns (\n"
+                    "    customer_id (type INTEGER),\n"
+                    "    status (type VARCHAR),\n"
+                    "    plan (type VARCHAR),\n"
+                    "    updated_at (type TIMESTAMP),\n"
+                    "  ),\n"
+                    "  unique_key [customer_id],\n"
+                    "  snapshot_strategy timestamp,\n"
+                    "  updated_at updated_at\n"
+                    ");\n\n"
+                    'SELECT customer_id, status, plan, updated_at FROM __source("raw_customers")'
+                ),
+            },
+            initial_setup_sql=(
+                "CREATE TABLE main.raw_customers AS SELECT 1 AS customer_id, "
+                "'active' AS status, TIMESTAMP '2024-01-01' AS updated_at",
+            ),
+            changed_setup_sql=(
+                "CREATE OR REPLACE TABLE main.raw_customers AS SELECT 1 AS customer_id, "
+                "'active' AS status, 'pro' AS plan, TIMESTAMP '2024-01-02' AS updated_at",
+            ),
+            expected_status=BuildStatus.SUCCESS,
+            allow_snapshot_schema_change=True,
+            expected_query=(
+                "SELECT customer_id, status, plan, CAST(valid_from AS VARCHAR), "
+                "CAST(valid_to AS VARCHAR) FROM main.customer_snapshot ORDER BY valid_from"
+            ),
+            expected_rows=(
+                (1, "active", None, "2024-01-01 00:00:00", "2024-01-02 00:00:00"),
+                (1, "active", "pro", "2024-01-02 00:00:00", None),
+            ),
+        )
+    ],
+    ids=["confirmed contract snapshot appends declared new column"],
+)
+def test_given_confirmed_contract_snapshot_adds_declared_column_when_building_then_appends(
+    test_case: SnapshotSchemaChangeExecutionTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    write_repo_files(tmp_path, test_case.initial_project_files)
+    initial_result: BuildExecutionResult = run_build_for_project(
+        test_case=BuildExecutionTestCase(
+            description="initial contract snapshot before confirmed schema change",
+            project_files=test_case.initial_project_files,
+            setup_sql=test_case.initial_setup_sql,
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=1,
+            expected_model_statuses=(("customer_snapshot", ExecutionStatus.SUCCESS),),
+        ),
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+    write_repo_files(tmp_path, test_case.changed_project_files)
+    for sql in test_case.changed_setup_sql:
+        connection.execute(sql)
+
+    changed_result: BuildExecutionResult = run_build_for_project(
+        test_case=BuildExecutionTestCase(
+            description="confirmed contract snapshot adds declared column",
+            project_files=test_case.changed_project_files,
+            expected_status=test_case.expected_status,
+            expected_success_count=1,
+            expected_model_statuses=(("customer_snapshot", ExecutionStatus.SUCCESS),),
+            allow_snapshot_schema_change=test_case.allow_snapshot_schema_change,
         ),
         project_dir=tmp_path,
         adapter=adapter,
