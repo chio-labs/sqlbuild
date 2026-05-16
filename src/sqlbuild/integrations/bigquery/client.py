@@ -268,6 +268,81 @@ class BigQueryAdapter(BaseAdapter):
             )
         return statements
 
+    def render_create_initial_historical_check_snapshot_target(
+        self,
+        *,
+        target: str,
+        source: str,
+        unique_key: tuple[str, ...],
+        check_columns: tuple[str, ...],
+        observed_at_column: str,
+        valid_from_column: str,
+        valid_to_column: str,
+        output_columns: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        historical_sql: str = self._historical_check_snapshot_select_sql(
+            source=source,
+            unique_key=unique_key,
+            check_columns=check_columns,
+            observed_at_column=observed_at_column,
+            valid_from_column=valid_from_column,
+            valid_to_column=valid_to_column,
+            output_columns=output_columns,
+        )
+        return self.render_create_table_as(target=target, sql=historical_sql)
+
+    def render_apply_historical_check_snapshot_changes(
+        self,
+        *,
+        target: str,
+        source: str,
+        unique_key: tuple[str, ...],
+        check_columns: tuple[str, ...],
+        observed_at_column: str,
+        valid_from_column: str,
+        valid_to_column: str,
+        output_columns: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        new_changes_sql: str = self._historical_check_new_changes_cte_sql(
+            target=target,
+            source=source,
+            unique_key=unique_key,
+            check_columns=check_columns,
+            observed_at_column=observed_at_column,
+            valid_from_column=valid_from_column,
+            valid_to_column=valid_to_column,
+        )
+        key_condition: str = self._snapshot_key_condition(
+            left_alias="__target", right_alias="__new_changes", unique_key=unique_key
+        )
+        close_sql: str = (
+            f"WITH {new_changes_sql} "
+            f"UPDATE {target} AS __target "
+            f"SET {valid_to_column} = ("
+            f"SELECT MIN(__new_changes.{observed_at_column}) "
+            f"FROM __new_changes WHERE {key_condition}"
+            f") "
+            f"WHERE __target.{valid_to_column} IS NULL "
+            f"AND __target.{valid_from_column} < ("
+            f"SELECT MIN(__new_changes.{observed_at_column}) "
+            f"FROM __new_changes WHERE {key_condition}"
+            f") "
+            f"AND EXISTS (SELECT 1 FROM __new_changes WHERE {key_condition})"
+        )
+        insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
+        output_select_sql: str = ", ".join(f"__new_changes.{column}" for column in output_columns)
+        partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
+        insert_sql: str = (
+            f"WITH {new_changes_sql} "
+            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"SELECT {output_select_sql}, __new_changes.{observed_at_column}, "
+            f"LEAD(__new_changes.{observed_at_column}) OVER ("
+            f"PARTITION BY {partition_sql} ORDER BY __new_changes.{observed_at_column}"
+            f") "
+            f"FROM __new_changes"
+        )
+        return (insert_sql, close_sql)
+
     def __init__(self) -> None:
         self._location: str | None = None
 
@@ -1409,6 +1484,98 @@ class BigQueryAdapter(BaseAdapter):
             f"SELECT 1 FROM {source} AS __source "
             f"WHERE {missing_key_condition} AND __source.{first_key} IS NOT NULL"
             f")"
+        )
+
+    @classmethod
+    def _historical_check_snapshot_select_sql(
+        cls,
+        *,
+        source: str,
+        unique_key: tuple[str, ...],
+        check_columns: tuple[str, ...],
+        observed_at_column: str,
+        valid_from_column: str,
+        valid_to_column: str,
+        output_columns: tuple[str, ...],
+    ) -> str:
+        partition_sql: str = ", ".join(unique_key)
+        previous_columns_sql: str = ", ".join(
+            f"LAG({column}) OVER (PARTITION BY {partition_sql} ORDER BY {observed_at_column}) "
+            f"AS __prev_{column}"
+            for column in check_columns
+        )
+        if previous_columns_sql:
+            previous_columns_sql = f", {previous_columns_sql}"
+        change_condition: str = " OR ".join(
+            f"{column} IS DISTINCT FROM __prev_{column}" for column in check_columns
+        )
+        output_select_sql: str = ", ".join(column for column in output_columns)
+        return (
+            "WITH __ordered AS ("
+            f"SELECT *, LAG({observed_at_column}) OVER ("
+            f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
+            f") AS __prev_observed_at{previous_columns_sql} FROM {source}"
+            "), __changes AS ("
+            f"SELECT * FROM __ordered WHERE __prev_observed_at IS NULL OR ({change_condition})"
+            ") "
+            f"SELECT {output_select_sql}, {observed_at_column} AS {valid_from_column}, "
+            f"LEAD({observed_at_column}) OVER (PARTITION BY {partition_sql} "
+            f"ORDER BY {observed_at_column}) AS {valid_to_column} "
+            "FROM __changes"
+        )
+
+    @classmethod
+    def _historical_check_new_changes_cte_sql(
+        cls,
+        *,
+        target: str,
+        source: str,
+        unique_key: tuple[str, ...],
+        check_columns: tuple[str, ...],
+        observed_at_column: str,
+        valid_from_column: str,
+        valid_to_column: str,
+    ) -> str:
+        partition_sql: str = ", ".join(unique_key)
+        previous_columns_sql: str = ", ".join(
+            f"LAG({column}) OVER (PARTITION BY {partition_sql} ORDER BY {observed_at_column}) "
+            f"AS __prev_{column}"
+            for column in check_columns
+        )
+        if previous_columns_sql:
+            previous_columns_sql = f", {previous_columns_sql}"
+        delta_change_condition: str = " OR ".join(
+            f"{column} IS DISTINCT FROM __prev_{column}" for column in check_columns
+        )
+        active_join_condition: str = cls._snapshot_key_condition(
+            left_alias="__delta_changes", right_alias="__active", unique_key=unique_key
+        )
+        active_change_condition: str = " OR ".join(
+            f"__delta_changes.{column} IS DISTINCT FROM __active.{column}"
+            for column in check_columns
+        )
+        first_key: str = unique_key[0]
+        changed_or_first_sql: str = (
+            "SELECT * FROM __ordered WHERE __prev_observed_at IS NULL "
+            f"OR ({delta_change_condition})"
+        )
+        return (
+            "__ordered AS ("
+            f"SELECT *, LAG({observed_at_column}) OVER ("
+            f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
+            f") AS __prev_observed_at{previous_columns_sql} FROM {source}"
+            "), __delta_changes AS ("
+            f"{changed_or_first_sql}"
+            "), __active AS ("
+            f"SELECT * FROM {target} WHERE {valid_to_column} IS NULL"
+            "), __new_changes AS ("
+            "SELECT __delta_changes.* FROM __delta_changes "
+            f"LEFT JOIN __active ON {active_join_condition} "
+            f"WHERE __active.{first_key} IS NULL OR ("
+            f"__delta_changes.{observed_at_column} > __active.{valid_from_column} "
+            f"AND ({active_change_condition})"
+            ")"
+            ")"
         )
 
     @staticmethod

@@ -22,6 +22,7 @@ from tests.integration.src.sqlbuild.executor.build._test_types import (
     SnapshotCheckExecutionTestCase,
     SnapshotCheckFailureTestCase,
     SnapshotHardDeleteExecutionTestCase,
+    SnapshotHistoricalCheckExecutionTestCase,
     SnapshotTimestampExecutionTestCase,
     SnapshotTimestampFailureTestCase,
 )
@@ -315,9 +316,7 @@ SNAPSHOT_TIMESTAMP_FAILURE_TEST_CASES: list[SnapshotTimestampFailureTestCase] = 
         expected_error_fragment="query output includes generated validity columns: effective_from",
     ),
     SnapshotTimestampFailureTestCase(
-        description=(
-            "observed_at initial validity remains rejected until historical execution exists"
-        ),
+        description="historical timestamp execution remains rejected until implemented",
         model_name="customer_snapshot",
         project_files={
             "sqlbuild_project.toml": _PROJECT_YML,
@@ -342,7 +341,7 @@ SNAPSHOT_TIMESTAMP_FAILURE_TEST_CASES: list[SnapshotTimestampFailureTestCase] = 
             "SELECT 1 AS customer_id, TIMESTAMP '2024-01-01 00:00:00' AS updated_at, "
             "TIMESTAMP '2024-01-02 00:00:00' AS observed_at",
         ),
-        expected_error_fragment="snapshot execution does not support historical observed_at yet",
+        expected_error_fragment="snapshot execution does not support historical timestamp yet",
     ),
 ]
 
@@ -691,6 +690,171 @@ SNAPSHOT_CHECK_TEST_CASES: list[SnapshotCheckExecutionTestCase] = [
     ),
 ]
 
+SNAPSHOT_HISTORICAL_CHECK_TEST_CASES: list[SnapshotHistoricalCheckExecutionTestCase] = [
+    SnapshotHistoricalCheckExecutionTestCase(
+        description="historical check snapshot builds collapsed history from observations",
+        model_name="customer_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_customer_daily\n"
+                "    schema: main\n"
+                "    table: raw_customer_daily\n"
+            ),
+            "models/customer_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id],\n"
+                "  snapshot_strategy check,\n"
+                "  check_columns [plan],\n"
+                "  observed_at observed_at\n"
+                ");\n\n"
+                'SELECT customer_id, plan, observed_at FROM __source("raw_customer_daily")'
+            ),
+        },
+        initial_setup_sql=(
+            "CREATE TABLE main.raw_customer_daily AS "
+            "SELECT 1 AS customer_id, 'basic' AS plan, "
+            "TIMESTAMP '2024-01-01' AS observed_at "
+            "UNION ALL SELECT 1, 'pro', TIMESTAMP '2024-01-02' "
+            "UNION ALL SELECT 1, 'pro', TIMESTAMP '2024-01-03' "
+            "UNION ALL SELECT 1, 'team', TIMESTAMP '2024-01-04'",
+        ),
+        changed_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customer_daily AS "
+            "SELECT 1 AS customer_id, 'basic' AS plan, "
+            "TIMESTAMP '2024-01-01' AS observed_at "
+            "UNION ALL SELECT 1, 'pro', TIMESTAMP '2024-01-02' "
+            "UNION ALL SELECT 1, 'pro', TIMESTAMP '2024-01-03' "
+            "UNION ALL SELECT 1, 'team', TIMESTAMP '2024-01-04' "
+            "UNION ALL SELECT 1, 'enterprise', TIMESTAMP '2024-01-05' "
+            "UNION ALL SELECT 2, 'basic', TIMESTAMP '2024-01-03'",
+        ),
+        expected_query=(
+            "SELECT customer_id, plan, CAST(valid_from AS VARCHAR), "
+            "CAST(valid_to AS VARCHAR) FROM main.customer_snapshot "
+            "ORDER BY customer_id, valid_from"
+        ),
+        expected_initial_rows=(
+            (1, "basic", "2024-01-01 00:00:00", "2024-01-02 00:00:00"),
+            (1, "pro", "2024-01-02 00:00:00", "2024-01-04 00:00:00"),
+            (1, "team", "2024-01-04 00:00:00", None),
+        ),
+        expected_changed_rows=(
+            (1, "basic", "2024-01-01 00:00:00", "2024-01-02 00:00:00"),
+            (1, "pro", "2024-01-02 00:00:00", "2024-01-04 00:00:00"),
+            (1, "team", "2024-01-04 00:00:00", "2024-01-05 00:00:00"),
+            (1, "enterprise", "2024-01-05 00:00:00", None),
+            (2, "basic", "2024-01-03 00:00:00", None),
+        ),
+    ),
+    SnapshotHistoricalCheckExecutionTestCase(
+        description="historical check snapshot supports composite unique keys",
+        model_name="customer_region_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_customer_region_daily\n"
+                "    schema: main\n"
+                "    table: raw_customer_region_daily\n"
+            ),
+            "models/customer_region_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id, region],\n"
+                "  snapshot_strategy check,\n"
+                "  check_columns [plan],\n"
+                "  observed_at observed_at\n"
+                ");\n\n"
+                "SELECT customer_id, region, plan, observed_at "
+                'FROM __source("raw_customer_region_daily")'
+            ),
+        },
+        initial_setup_sql=(
+            "CREATE TABLE main.raw_customer_region_daily AS "
+            "SELECT 1 AS customer_id, 'us' AS region, 'basic' AS plan, "
+            "TIMESTAMP '2024-01-01' AS observed_at "
+            "UNION ALL SELECT 1, 'us', 'basic', TIMESTAMP '2024-01-02' "
+            "UNION ALL SELECT 1, 'eu', 'basic', TIMESTAMP '2024-01-01' "
+            "UNION ALL SELECT 1, 'eu', 'pro', TIMESTAMP '2024-01-03'",
+        ),
+        changed_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customer_region_daily AS "
+            "SELECT 1 AS customer_id, 'us' AS region, 'basic' AS plan, "
+            "TIMESTAMP '2024-01-01' AS observed_at "
+            "UNION ALL SELECT 1, 'us', 'basic', TIMESTAMP '2024-01-02' "
+            "UNION ALL SELECT 1, 'us', 'team', TIMESTAMP '2024-01-04' "
+            "UNION ALL SELECT 1, 'eu', 'basic', TIMESTAMP '2024-01-01' "
+            "UNION ALL SELECT 1, 'eu', 'pro', TIMESTAMP '2024-01-03' "
+            "UNION ALL SELECT 2, 'us', 'basic', TIMESTAMP '2024-01-02'",
+        ),
+        expected_query=(
+            "SELECT customer_id, region, plan, CAST(valid_from AS VARCHAR), "
+            "CAST(valid_to AS VARCHAR) FROM main.customer_region_snapshot "
+            "ORDER BY customer_id, region, valid_from"
+        ),
+        expected_initial_rows=(
+            (1, "eu", "basic", "2024-01-01 00:00:00", "2024-01-03 00:00:00"),
+            (1, "eu", "pro", "2024-01-03 00:00:00", None),
+            (1, "us", "basic", "2024-01-01 00:00:00", None),
+        ),
+        expected_changed_rows=(
+            (1, "eu", "basic", "2024-01-01 00:00:00", "2024-01-03 00:00:00"),
+            (1, "eu", "pro", "2024-01-03 00:00:00", None),
+            (1, "us", "basic", "2024-01-01 00:00:00", "2024-01-04 00:00:00"),
+            (1, "us", "team", "2024-01-04 00:00:00", None),
+            (2, "us", "basic", "2024-01-02 00:00:00", None),
+        ),
+    ),
+    SnapshotHistoricalCheckExecutionTestCase(
+        description="historical check snapshot accepts initial_valid_from observed_at",
+        model_name="customer_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_customer_daily\n"
+                "    schema: main\n"
+                "    table: raw_customer_daily\n"
+            ),
+            "models/customer_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id],\n"
+                "  snapshot_strategy check,\n"
+                "  check_columns [plan],\n"
+                "  observed_at observed_at,\n"
+                "  initial_valid_from observed_at\n"
+                ");\n\n"
+                'SELECT customer_id, plan, observed_at FROM __source("raw_customer_daily")'
+            ),
+        },
+        initial_setup_sql=(
+            "CREATE TABLE main.raw_customer_daily AS "
+            "SELECT 1 AS customer_id, 'basic' AS plan, "
+            "TIMESTAMP '2024-01-01' AS observed_at",
+        ),
+        changed_setup_sql=(
+            "CREATE OR REPLACE TABLE main.raw_customer_daily AS "
+            "SELECT 1 AS customer_id, 'basic' AS plan, "
+            "TIMESTAMP '2024-01-01' AS observed_at "
+            "UNION ALL SELECT 1, 'pro', TIMESTAMP '2024-01-03'",
+        ),
+        expected_query=(
+            "SELECT customer_id, plan, CAST(valid_from AS VARCHAR), "
+            "CAST(valid_to AS VARCHAR) FROM main.customer_snapshot "
+            "ORDER BY customer_id, valid_from"
+        ),
+        expected_initial_rows=((1, "basic", "2024-01-01 00:00:00", None),),
+        expected_changed_rows=(
+            (1, "basic", "2024-01-01 00:00:00", "2024-01-03 00:00:00"),
+            (1, "pro", "2024-01-03 00:00:00", None),
+        ),
+    ),
+]
+
 SNAPSHOT_CHECK_FAILURE_TEST_CASES: list[SnapshotCheckFailureTestCase] = [
     SnapshotCheckFailureTestCase(
         description="check snapshot duplicate source unique key fails before target mutation",
@@ -717,6 +881,40 @@ SNAPSHOT_CHECK_FAILURE_TEST_CASES: list[SnapshotCheckFailureTestCase] = [
         ),
         expected_error_fragment=(
             "source query returned multiple rows for the same unique_key (customer_id)"
+        ),
+    ),
+    SnapshotCheckFailureTestCase(
+        description="historical check snapshot duplicate identity fails before target mutation",
+        model_name="customer_snapshot",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_customer_daily\n"
+                "    schema: main\n"
+                "    table: raw_customer_daily\n"
+            ),
+            "models/customer_snapshot.sql": (
+                "MODEL (\n"
+                "  materialized snapshot,\n"
+                "  unique_key [customer_id],\n"
+                "  snapshot_strategy check,\n"
+                "  check_columns [plan],\n"
+                "  observed_at observed_at\n"
+                ");\n\n"
+                'SELECT customer_id, plan, observed_at FROM __source("raw_customer_daily")'
+            ),
+        },
+        setup_sql=(
+            "CREATE TABLE main.raw_customer_daily AS "
+            "SELECT 1 AS customer_id, 'basic' AS plan, "
+            "TIMESTAMP '2024-01-01' AS observed_at "
+            "UNION ALL SELECT 1 AS customer_id, 'pro' AS plan, "
+            "TIMESTAMP '2024-01-01' AS observed_at",
+        ),
+        expected_error_fragment=(
+            "source query returned multiple rows for the same snapshot identity "
+            "(customer_id, observed_at)"
         ),
     ),
     SnapshotCheckFailureTestCase(
@@ -1277,6 +1475,61 @@ def test_given_current_state_check_snapshot_when_building_then_tracks_checked_ch
     assert rows_after_initial == test_case.expected_initial_rows
     assert rows_after_unchecked == test_case.expected_unchecked_rows
     assert rows_after_checked == test_case.expected_checked_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SNAPSHOT_HISTORICAL_CHECK_TEST_CASES,
+    ids=[case.description for case in SNAPSHOT_HISTORICAL_CHECK_TEST_CASES],
+)
+def test_given_historical_check_snapshot_when_building_then_tracks_observed_history(
+    test_case: SnapshotHistoricalCheckExecutionTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    initial_result: BuildExecutionResult = run_build_for_project(
+        test_case=BuildExecutionTestCase(
+            description=test_case.description,
+            project_files=test_case.project_files,
+            setup_sql=test_case.initial_setup_sql,
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=1,
+            expected_model_statuses=((test_case.model_name, ExecutionStatus.SUCCESS),),
+        ),
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+    rows_after_initial: tuple[tuple[object, ...], ...] = tuple(
+        tuple(row) for row in connection.execute(test_case.expected_query).fetchall()
+    )
+
+    for sql in test_case.changed_setup_sql:
+        connection.execute(sql)
+    changed_result: BuildExecutionResult = run_build_for_project(
+        test_case=BuildExecutionTestCase(
+            description=test_case.description,
+            project_files=test_case.project_files,
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=1,
+            expected_model_statuses=((test_case.model_name, ExecutionStatus.SUCCESS),),
+        ),
+        project_dir=tmp_path,
+        adapter=adapter,
+        connection=connection,
+    )
+    rows_after_changed: tuple[tuple[object, ...], ...] = tuple(
+        tuple(row) for row in connection.execute(test_case.expected_query).fetchall()
+    )
+
+    assert initial_result.status == BuildStatus.SUCCESS
+    assert changed_result.status == BuildStatus.SUCCESS
+    assert rows_after_initial == test_case.expected_initial_rows
+    assert rows_after_changed == test_case.expected_changed_rows
 
 
 @pytest.mark.parametrize(
