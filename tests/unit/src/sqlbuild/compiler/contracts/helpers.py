@@ -25,6 +25,7 @@ def make_contract_project(
     declared_columns: tuple[tuple[str, str | None], ...],
     inferred_columns: tuple[tuple[str, str | None], ...] | None,
     type_enforcement: bool | None,
+    contract: str | None = None,
     model_name: str = "orders",
     column_locations: dict[str, SourceLocation] | None = None,
     declared_not_null_columns: tuple[str, ...] = (),
@@ -49,7 +50,9 @@ def make_contract_project(
                 name=model_name,
                 relative_path=Path(f"models/{model_name}.sql"),
                 query_sql="SELECT 1 AS id",
-                config=CompileModelConfig(values={}),
+                config=CompileModelConfig(
+                    values={} if contract is None else {"contract": contract}
+                ),
                 target=CompiledRelationTarget(
                     database=None,
                     schema="analytics",
