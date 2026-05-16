@@ -45,6 +45,10 @@ test-real-databricks:
 	uv run pytest tests -m "real_warehouse and databricks" -vv
 
 
+test-real-postgres:
+	uv run pytest tests -m "real_warehouse and postgres" -vv
+
+
 test-e2e-real-snowflake:
 	uv run pytest tests/e2e -m "real_warehouse and snowflake" -vv
 
