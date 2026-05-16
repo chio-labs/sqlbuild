@@ -106,6 +106,7 @@ def test_given_waffle_shop_when_executing_sqlbuild_assets_then_dagster_run_succe
     test_case: DagsterSqlBuildE2ETestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     project_dir: Path = prepare_waffle_shop(tmp_path)
     sqb_executable: Path = REPO_ROOT / ".venv" / "bin" / "sqb"
@@ -150,6 +151,10 @@ def test_given_waffle_shop_when_executing_sqlbuild_assets_then_dagster_run_succe
         )
         == AssetCheckSeverity.WARN
     )
+    rendered_logs: str = capsys.readouterr().err
+    assert '"version": 1' not in rendered_logs
+    assert '"assets": [' not in rendered_logs
+    assert '"checks": [' not in rendered_logs
 
 
 @pytest.mark.parametrize(

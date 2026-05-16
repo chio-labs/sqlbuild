@@ -32,6 +32,7 @@ databricks = [
 ]
 dagster = [
   "dagster>=1.13.0",
+  "dagster-webserver>=1.13.0",
 ]
 
 [project.scripts]
