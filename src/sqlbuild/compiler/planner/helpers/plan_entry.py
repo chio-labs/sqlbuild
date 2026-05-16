@@ -23,6 +23,7 @@ from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
 )
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.changes.detect import detect_model_changes
 from sqlbuild.compiler.planner.helpers.cursor_type_check import (
     check_cursor_type_consistency,
@@ -172,6 +173,11 @@ def plan_model(
             source_map=source_map,
             cursor_column=cursor_column,
         )
+    validate_source_cursor_input_columns(
+        model=model,
+        cursor_column=cursor_column,
+        source_warehouse_columns=source_warehouse_columns,
+    )
     runtime_owned_cursor_bounds: bool = _has_model_backed_cursor_inputs(cursor_input_relations)
     cursor_bounds: CursorBounds | None = _compute_plan_cursor_bounds(
         model=model,
@@ -702,6 +708,41 @@ def _build_cursor_input_relations(
                 )
             )
     return tuple(relations)
+
+
+def validate_source_cursor_input_columns(
+    *,
+    model: CompiledModel,
+    cursor_column: str | None,
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
+) -> None:
+    """Validate cursor input columns for source references when source columns are known."""
+
+    materialized: str | None = _get_config_str(model, "materialized")
+    if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
+        return
+
+    cursor_inputs: dict[str, str] = _get_cursor_inputs(model=model, cursor_column=cursor_column)
+    ref: CompileSqlReference
+    for ref in model.references:
+        if ref.ref_kind != SqlReferenceKind.SOURCE:
+            continue
+        input_cursor_column: str | None = cursor_inputs.get(ref.ref_name)
+        if input_cursor_column is None:
+            continue
+        known_columns: tuple[ColumnInfo, ...] | None = source_warehouse_columns.get(ref.ref_name)
+        if known_columns is None:
+            continue
+        known_column_names: frozenset[str] = frozenset(col.name.lower() for col in known_columns)
+        if input_cursor_column.lower() in known_column_names:
+            continue
+        known_display: str = ", ".join(col.name for col in known_columns) or "none"
+        raise PlannerInputError(
+            f"model '{model.name}': cursor_inputs references source '{ref.ref_name}' "
+            f"column '{input_cursor_column}', but that source does not expose the column. "
+            f"Known source columns: {known_display}",
+            code="S302",
+        )
 
 
 def _has_model_backed_cursor_inputs(

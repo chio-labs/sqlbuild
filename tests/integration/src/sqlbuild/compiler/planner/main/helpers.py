@@ -14,11 +14,17 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
     CompiledRelationTarget,
     CompiledSeed,
+    CompiledSource,
     CompileModelConfig,
+    CompileSqlReference,
     FunctionArgument,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
-from sqlbuild.compiler.discovery.models import DiscoveredSchemaFile, DiscoveredSeedFile
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredSchemaFile,
+    DiscoveredSeedFile,
+    DiscoveredSourceFile,
+)
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.helpers.function_fingerprints import (
@@ -26,11 +32,14 @@ from sqlbuild.compiler.planner.helpers.function_fingerprints import (
 )
 from sqlbuild.compiler.shared.helpers.hashing import compute_query_hash
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
+from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.project import SettingsConfig
 from sqlbuild.spec.models.schema import SchemaSeedEntry
+from sqlbuild.spec.models.source import SourceEntry
 from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     BuildExecutionPlanTestCase,
     FormatPlanIntegrationTestCase,
+    SourceCursorInputPlanErrorTestCase,
 )
 
 
@@ -163,6 +172,71 @@ def _settings_bool(settings: dict[str, object], key: str, *, default: bool) -> b
     if isinstance(raw_value, bool):
         return raw_value
     return default
+
+
+def build_project_from_source_cursor_input_test_case(
+    test_case: SourceCursorInputPlanErrorTestCase,
+) -> CompiledProject:
+    """Build a project with one incremental model reading one source."""
+
+    source_entry: SourceEntry = SourceEntry(
+        name=test_case.source_name,
+        schema=test_case.source_schema,
+        table=test_case.source_table,
+    )
+    source: CompiledSource = CompiledSource(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.SOURCE,
+            name=test_case.source_name,
+        ),
+        deps=(),
+        name=test_case.source_name,
+        source_entry=source_entry,
+        source_file=DiscoveredSourceFile(
+            file_path=Path("sources/raw.yml"),
+            relative_path=Path("sources/raw.yml"),
+            contents="",
+            source_entries=(source_entry,),
+        ),
+    )
+    model: CompiledModel = CompiledModel(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.MODEL,
+            name=test_case.model_name,
+        ),
+        deps=(source.key,),
+        name=test_case.model_name,
+        relative_path=Path(f"models/{test_case.model_name}.sql"),
+        query_sql=f'SELECT * FROM __source("{test_case.source_name}")',
+        references=(
+            CompileSqlReference(
+                ref_kind=SqlReferenceKind.SOURCE,
+                ref_name=test_case.source_name,
+            ),
+        ),
+        config=CompileModelConfig(
+            values={
+                "materialized": "incremental",
+                "cursor": test_case.cursor_column,
+                "cursor_inputs": {test_case.source_name: test_case.cursor_input_column},
+            }
+        ),
+        target=CompiledRelationTarget(
+            database=None,
+            schema="staging",
+            name=test_case.model_name,
+            qualified_name=f"staging.{test_case.model_name}",
+        ),
+    )
+    return CompiledProject(
+        run_id="test_run",
+        effective_environment_name=None,
+        effective_connection={},
+        effective_vars={},
+        settings=SettingsConfig(),
+        models=(model,),
+        sources=(source,),
+    )
 
 
 def write_previous_function_fingerprints(
