@@ -76,6 +76,7 @@ def test_given_skills_update_cli_when_running_then_writes_expected_skill_files(
     expected_file: Path
     for expected_file in test_case.expected_files:
         contents: str = (tmp_path / expected_file).read_text(encoding="utf-8")
+        assert contents.startswith("---\nname: sqlbuild\n")
         assert generated_marker in contents
         assert test_case.expected_content_fragment in contents
     assert (
