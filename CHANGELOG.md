@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.1](https://github.com/chio-labs/sqlbuild/compare/v0.16.0...v0.16.1) (2026-05-17)
+
+
+### Bug Fixes
+
+* emit skill frontmatter before generated marker ([28c7a7c](https://github.com/chio-labs/sqlbuild/commit/28c7a7c8cdd2030552f7dae2eec1381a6e169c40))
+* emit skill frontmatter before generated marker ([fc57032](https://github.com/chio-labs/sqlbuild/commit/fc57032d64eb6add883a00c6ef18633d5a6665e2))
+
 ## [0.16.0](https://github.com/chio-labs/sqlbuild/compare/v0.15.0...v0.16.0) (2026-05-17)
 
 
