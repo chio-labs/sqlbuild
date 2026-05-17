@@ -15,9 +15,12 @@ from sqlbuild.integrations.dagster.helpers.assets import (
     build_check_specs,
     build_scenario_check_specs,
 )
+from sqlbuild.integrations.dagster.exceptions import DagsterDagInputError
+from sqlbuild.integrations.dagster.project import SqlBuildProject
 from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterAssetCheckFilterTestCase,
     DagsterAssetSpecTestCase,
+    DagsterConflictingInputTestCase,
     DagsterDecoratorTestCase,
     DagsterScenarioCheckDecoratorTestCase,
 )
@@ -164,6 +167,41 @@ def test_given_sqlbuild_dag_when_building_scenario_check_specs_then_filters_non_
 
     assert check_names == test_case.expected_check_names
     assert not set(test_case.unexpected_check_names).intersection(check_names)
+
+
+CONFLICTING_INPUT_TEST_CASES: list[DagsterConflictingInputTestCase] = [
+    DagsterConflictingInputTestCase(
+        description="assets decorator rejects dag and project together",
+        decorator_name="assets",
+        expected_error_fragment="sqlbuild_assets received both 'dag' and 'project'",
+        expected_error_code="I002",
+    ),
+    DagsterConflictingInputTestCase(
+        description="scenario checks decorator rejects dag and project together",
+        decorator_name="scenario_checks",
+        expected_error_fragment="sqlbuild_scenario_checks received both 'dag' and 'project'",
+        expected_error_code="I002",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    CONFLICTING_INPUT_TEST_CASES,
+    ids=[case.description for case in CONFLICTING_INPUT_TEST_CASES],
+)
+def test_given_dag_and_project_when_building_dagster_decorator_then_raises_coded_input_error(
+    test_case: DagsterConflictingInputTestCase,
+) -> None:
+    project: SqlBuildProject = SqlBuildProject(project_dir=".")
+
+    with pytest.raises(DagsterDagInputError, match=test_case.expected_error_fragment) as error:
+        if test_case.decorator_name == "assets":
+            sqlbuild_assets(dag=build_dagster_test_dag(), project=project)
+        else:
+            sqlbuild_scenario_checks(dag=build_dagster_test_dag(), project=project)
+
+    assert error.value.code == test_case.expected_error_code
 
 
 @pytest.mark.parametrize(

@@ -147,7 +147,11 @@ def _validate_audit_names(*, file_path: Path, blocks: tuple[DiscoveredAuditBlock
     seen_names: set[str] = set()
     block: DiscoveredAuditBlock
     for block in blocks:
-        assert block.name is not None
+        if block.name is None:
+            raise SqlAuditParseError(
+                f"SQL audit '{file_path}' contains multiple AUDIT blocks; every block must define "
+                "a unique `name`"
+            )
         if block.name in seen_names:
             raise SqlAuditParseError(
                 f"SQL audit '{file_path}' defines duplicate AUDIT() name '{block.name}'"

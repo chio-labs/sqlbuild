@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.adapter.shared.type_normalization import types_equal
 from sqlbuild.adapter.shared.types import TypeDialect
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     InferredColumn,
@@ -172,7 +173,13 @@ def _type_diagnostics(
     dialect: TypeDialect | str | None,
     contract_enforced: bool,
 ) -> tuple[CompilerDiagnostic, ...]:
-    assert declared_column.type is not None
+    declared_type: str | None = declared_column.type
+    if declared_type is None:
+        raise CompileInputError(
+            f"model '{model.name}' column '{declared_column.name}' reached type validation "
+            "without a declared type",
+            code="P003",
+        )
     type_enforcement: bool = model.schema_entry is not None and bool(
         model.schema_entry.type_enforcement
     )
@@ -186,7 +193,7 @@ def _type_diagnostics(
                 code=_UNKNOWN_TYPE_CODE,
                 message=(
                     f"column '{declared_column.name}' type could not be proven against "
-                    f"declared {declared_column.type}"
+                    f"declared {declared_type}"
                 ),
                 resource_type=CompiledResourceType.MODEL,
                 resource_name=model.name,
@@ -202,7 +209,7 @@ def _type_diagnostics(
             ),
         )
 
-    if types_equal(left=declared_column.type, right=inferred_column.type, dialect=dialect):
+    if types_equal(left=declared_type, right=inferred_column.type, dialect=dialect):
         return ()
 
     return (
@@ -214,7 +221,7 @@ def _type_diagnostics(
             code=_TYPE_MISMATCH_CODE,
             message=(
                 f"column '{declared_column.name}' inferred as {inferred_column.type} "
-                f"but contract declares {declared_column.type}"
+                f"but contract declares {declared_type}"
             ),
             resource_type=CompiledResourceType.MODEL,
             resource_name=model.name,
