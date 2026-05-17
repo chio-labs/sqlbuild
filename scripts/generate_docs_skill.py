@@ -14,6 +14,15 @@ from typing import Any
 default_repo_url = "https://github.com/chio-labs/sqlbuild-docs"
 default_clone_dir = Path(tempfile.gettempdir()) / "sqlbuild-docs-skill-source"
 default_output_path = Path("src/sqlbuild/.agents/skills/sqlbuild/SKILL.md")
+generated_marker = "<!-- generated-by: sqlbuild skills update -->"
+skill_description = (
+    "Use when working with SQLBuild syntax, project structure, configuration, testing, "
+    "adapters, CLI behavior, SQLBuild docs, or SQLBuild-related code."
+)
+skill_frontmatter = f"""---
+name: sqlbuild
+description: {skill_description}
+---"""
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -190,6 +199,8 @@ def _shift_markdown_heading(line: str) -> str:
 def _render_skill_header(*, page_paths: list[Path]) -> str:
     page_list = "\n".join(f"- `{path.with_suffix('').as_posix()}`" for path in page_paths)
     return (
+        f"{skill_frontmatter}\n\n"
+        f"{generated_marker}\n\n"
         "# SQLBuild Skill\n\n"
         "This file is generated from the SQLBuild documentation. Use it as the source of truth "
         "for SQLBuild syntax, project structure, configuration, testing, adapters, and CLI "

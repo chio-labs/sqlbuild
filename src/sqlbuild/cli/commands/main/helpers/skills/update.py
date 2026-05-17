@@ -161,6 +161,11 @@ def load_packaged_skill_content() -> str:
 def ensure_generated_marker(content: str) -> str:
     if generated_marker in content:
         return content
+    if content.startswith("---\n"):
+        frontmatter_end: int = content.find("\n---\n", 4)
+        if frontmatter_end != -1:
+            insert_at: int = frontmatter_end + len("\n---\n")
+            return f"{content[:insert_at]}\n{generated_marker}\n{content[insert_at:]}"
     return f"{generated_marker}\n{content}"
 
 
