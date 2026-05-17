@@ -101,6 +101,7 @@ TEST_CASES: list[BuildOutputTestCase] = [
                     status=ExecutionStatus.FAILED,
                     failed_phase=ExecutionPhase.STAGING,
                     duration_ms=50,
+                    error_code="R002",
                     error_message="Table raw_orders does not exist",
                 ),
             ),
@@ -114,7 +115,30 @@ TEST_CASES: list[BuildOutputTestCase] = [
             "FAIL=1",
             "Failures:",
             "orders  (staging)",
+            "error[R002]: Table raw_orders does not exist",
             "Table raw_orders does not exist",
+        ),
+    ),
+    BuildOutputTestCase(
+        description="colorized failed model shows styled coded error and help",
+        result=BuildExecutionResult(
+            status=BuildStatus.FAILED,
+            model_results=(
+                ModelExecutionResult(
+                    model_name="orders",
+                    status=ExecutionStatus.FAILED,
+                    failed_phase=ExecutionPhase.PROMOTION,
+                    error_code="R007",
+                    error_help="inspect staging relation",
+                    error_message="promotion failed",
+                ),
+            ),
+            failure_count=1,
+        ),
+        use_color=True,
+        expected_output_fragments=(
+            "\033[31m\033[1merror[R007]:\033[0m promotion failed",
+            "\033[2m= help:\033[0m inspect staging relation",
         ),
     ),
     BuildOutputTestCase(

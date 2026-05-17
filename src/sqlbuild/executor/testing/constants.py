@@ -1,0 +1,6 @@
+"""SQL test executor diagnostic codes."""
+
+SQL_TEST_TOO_LARGE_CODE: str = "T001"
+SQL_TEST_EXECUTION_ERROR_CODE: str = "T002"
+SQL_TEST_ASSERTION_FAILED_CODE: str = "T003"
+SQL_TEST_ENTRY_MISSING_CODE: str = "T004"

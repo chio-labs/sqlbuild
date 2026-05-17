@@ -25,6 +25,7 @@ from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
+from sqlbuild.shared.helpers.coded_errors import format_coded_error
 from sqlbuild.shared.helpers.materialization_labels import (
     model_execution_annotation,
     model_resource_type,
@@ -156,7 +157,7 @@ def format_build_output(
     )
     lines.append(_format_summary_counts(result=result, elapsed_seconds=elapsed_seconds))
 
-    failure_lines: list[str] = _format_failure_details(result)
+    failure_lines: list[str] = _format_failure_details(result, use_color=use_color)
     if failure_lines:
         lines.append("")
         lines.extend(failure_lines)
@@ -452,7 +453,7 @@ def _format_summary_counts(
     return counts
 
 
-def _format_failure_details(result: BuildExecutionResult) -> list[str]:
+def _format_failure_details(result: BuildExecutionResult, *, use_color: bool) -> list[str]:
     lines: list[str] = []
     has_failures: bool = False
 
@@ -466,7 +467,14 @@ def _format_failure_details(result: BuildExecutionResult) -> list[str]:
             has_failures = True
         lines.append(f"  {seed_result.seed_name}  (seed)")
         if seed_result.error_message is not None:
-            lines.append(f"    {seed_result.error_message}")
+            lines.extend(
+                _format_result_error_lines(
+                    error_code=seed_result.error_code,
+                    error_message=seed_result.error_message,
+                    error_help=seed_result.error_help,
+                    use_color=use_color,
+                )
+            )
         lines.append("")
 
     function_result: FunctionExecutionResult
@@ -479,7 +487,14 @@ def _format_failure_details(result: BuildExecutionResult) -> list[str]:
             has_failures = True
         lines.append(f"  {function_result.function_name}  (function)")
         if function_result.error_message is not None:
-            lines.append(f"    {function_result.error_message}")
+            lines.extend(
+                _format_result_error_lines(
+                    error_code=function_result.error_code,
+                    error_message=function_result.error_message,
+                    error_help=function_result.error_help,
+                    use_color=use_color,
+                )
+            )
         lines.append("")
 
     model_result: ModelExecutionResult
@@ -493,7 +508,14 @@ def _format_failure_details(result: BuildExecutionResult) -> list[str]:
         phase_str: str = f"  ({model_result.failed_phase})" if model_result.failed_phase else ""
         lines.append(f"  {model_result.model_name}{phase_str}")
         if model_result.error_message is not None:
-            lines.append(f"    {model_result.error_message}")
+            lines.extend(
+                _format_result_error_lines(
+                    error_code=model_result.error_code,
+                    error_message=model_result.error_message,
+                    error_help=model_result.error_help,
+                    use_color=use_color,
+                )
+            )
         if model_result.staging_relation is not None:
             lines.append(f"    {_inspection_relation_message(model_result.staging_relation)}")
         lines.append("")
@@ -508,10 +530,33 @@ def _format_failure_details(result: BuildExecutionResult) -> list[str]:
             has_failures = True
         lines.append(f"  {test_result.test_name}  (test)")
         if test_result.error_message is not None:
-            lines.append(f"    {test_result.error_message}")
+            lines.extend(
+                _format_result_error_lines(
+                    error_code=test_result.error_code,
+                    error_message=test_result.error_message,
+                    error_help=test_result.error_help,
+                    use_color=use_color,
+                )
+            )
         lines.append("")
 
     return lines
+
+
+def _format_result_error_lines(
+    *, error_code: str | None, error_message: str, error_help: str | None, use_color: bool
+) -> list[str]:
+    rendered_error: str = (
+        error_message
+        if error_code is None
+        else format_coded_error(
+            code=error_code,
+            message=error_message,
+            help=error_help,
+            use_color=use_color,
+        )
+    )
+    return [f"    {line}" for line in rendered_error.splitlines()]
 
 
 def _format_warning_details(result: BuildExecutionResult) -> list[str]:

@@ -103,7 +103,11 @@ def verify_function_statuses(
 ) -> None:
     """Assert per-function execution statuses and error fragments match expected."""
 
-    if not test_case.expected_function_statuses and not test_case.expected_function_error_fragments:
+    if (
+        not test_case.expected_function_statuses
+        and not test_case.expected_function_error_fragments
+        and not test_case.expected_function_error_codes
+    ):
         return
     actual_statuses: dict[str, ExecutionStatus] = {
         r.function_name: r.status for r in result.function_results
@@ -120,6 +124,13 @@ def verify_function_statuses(
     for expected_name, expected_fragment in test_case.expected_function_error_fragments:
         assert expected_fragment in actual_errors.get(expected_name, "")
 
+    actual_error_codes: dict[str, str | None] = {
+        r.function_name: r.error_code for r in result.function_results
+    }
+    expected_code: str
+    for expected_name, expected_code in test_case.expected_function_error_codes:
+        assert actual_error_codes.get(expected_name) == expected_code
+
 
 def verify_test_counts(
     *,
@@ -129,6 +140,13 @@ def verify_test_counts(
     """Assert test result counts match expected."""
 
     assert len(result.test_results) == test_case.expected_test_count
+
+    actual_error_codes: dict[str, str | None] = {
+        r.test_name: r.error_code for r in result.test_results
+    }
+    expected_code: str
+    for expected_name, expected_code in test_case.expected_test_error_codes:
+        assert actual_error_codes.get(expected_name) == expected_code
 
 
 def verify_audit_counts(

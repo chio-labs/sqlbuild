@@ -6,6 +6,7 @@ import threading
 from typing import TextIO
 
 from sqlbuild.cli.commands.main.shared.models import NestedProgressChildRow
+from sqlbuild.shared.helpers.coded_errors import format_coded_error
 from sqlbuild.shared.helpers.colors import bold, colorize_status
 
 _LABEL_WIDTH: int = 10
@@ -76,6 +77,8 @@ class NestedCommandProgressCallbacks:
         item_name: str,
         status_text: str,
         detail: str = "",
+        error_code: str | None = None,
+        error_help: str | None = None,
         error_message: str | None = None,
         child_rows: tuple[NestedProgressChildRow, ...] = (),
     ) -> None:
@@ -101,7 +104,13 @@ class NestedCommandProgressCallbacks:
                 f"{child_status}{child_row.detail}\n"
             )
         if error_message is not None:
-            self._stream.write(f"{'':>14}{error_message}\n")
+            rendered_error: str = _format_nested_error(
+                error_code=error_code,
+                error_message=error_message,
+                error_help=error_help,
+                use_color=self._use_color,
+            )
+            self._stream.write(f"{'':>14}{rendered_error}\n")
         self._stream.flush()
 
     def _write_spinner_line(self) -> None:
@@ -156,3 +165,16 @@ class NestedCommandProgressCallbacks:
             self._stream.write("\033[?25h")
             self._stream.flush()
         self._cursor_hidden = False
+
+
+def _format_nested_error(
+    *, error_code: str | None, error_message: str, error_help: str | None, use_color: bool
+) -> str:
+    if error_code is None:
+        return error_message
+    return format_coded_error(
+        code=error_code,
+        message=error_message,
+        help=error_help,
+        use_color=use_color,
+    )
