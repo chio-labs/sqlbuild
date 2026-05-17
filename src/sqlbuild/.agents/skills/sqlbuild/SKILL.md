@@ -1,3 +1,10 @@
+---
+name: sqlbuild
+description: Use when working with SQLBuild syntax, project structure, configuration, testing, adapters, CLI behavior, SQLBuild docs, or SQLBuild-related code.
+---
+
+<!-- generated-by: sqlbuild skills update -->
+
 # SQLBuild Skill
 
 This file is generated from the SQLBuild documentation. Use it as the source of truth for SQLBuild syntax, project structure, configuration, testing, adapters, and CLI behavior.
@@ -15,6 +22,7 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/adapters/snowflake`
 - `concepts/adapters/bigquery`
 - `concepts/adapters/databricks`
+- `concepts/adapters/postgres`
 - `concepts/sources`
 - `concepts/seeds`
 - `concepts/models`
@@ -686,7 +694,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | dbt interop | Run alongside dbt - reads manifest, no migration | N/A | Jinja compatibility layer plus own macro system |
 | **Other** | | | |
 | Reference syntax | `__ref()` - parses as valid SQL | `{{ ref() }}` - Jinja template | `model_name` with dependency tracking |
-| Adapters | DuckDB, MotherDuck, Snowflake, BigQuery, Databricks | 30+ (community adapters) | DuckDB, Snowflake, BigQuery, Databricks, Spark, Redshift, Postgres, Trino, MySQL |
+| Adapters | DuckDB, MotherDuck, Snowflake, BigQuery, Databricks, PostgreSQL | 30+ (community adapters) | DuckDB, Snowflake, BigQuery, Databricks, Spark, Redshift, Postgres, Trino, MySQL |
 | State requirements | Stateless by default | manifest.json + target/ | Requires state store (local database or PostgreSQL for production) |
 | Playground | `sqb playground` | Clone example repo | Example project |
 | AI agent skills | `sqb skills update` | No | No |
@@ -1056,7 +1064,7 @@ SQLBuild uses adapters to connect to different database engines.
 | [Snowflake](/concepts/adapters/snowflake) | Supported | `sqlbuild[snowflake]` |
 | [BigQuery](/concepts/adapters/bigquery) | Supported | `sqlbuild[bigquery]` |
 | [Databricks](/concepts/adapters/databricks) | Supported | `sqlbuild[databricks]` |
-| PostgreSQL | Coming soon | |
+| [PostgreSQL](/concepts/adapters/postgres) | Supported | `sqlbuild[postgres]` |
 | ClickHouse | Coming soon | |
 | Microsoft SQL Server | Coming soon | |
 
@@ -1421,6 +1429,67 @@ schema = "my_schema"
 ### Session initialization
 
 On connect, SQLBuild runs `USE CATALOG` and `USE SCHEMA` statements to set the session context.
+
+## PostgreSQL
+
+Source: `concepts/adapters/postgres.mdx`
+
+PostgreSQL adapter configuration for SQLBuild.
+
+PostgreSQL requires the optional `psycopg` dependency:
+
+```bash
+pip install 'sqlbuild[postgres]'
+# or
+uv pip install 'sqlbuild[postgres]'
+```
+
+### Connection config
+
+```toml
+adapter = "postgres"
+
+[connection]
+host = "localhost"
+port = 5432
+user = "my_user"
+password = "my_password"
+dbname = "my_database"
+```
+
+| Field | Description |
+|-------|-------------|
+| `host` | PostgreSQL server hostname (default: `localhost`) |
+| `port` | PostgreSQL server port (default: `5432`) |
+| `user` | Database user |
+| `password` | Database password |
+| `dbname` | Database name |
+
+All fields in `connection` are passed to `psycopg.connect()`. See the [psycopg documentation](https://www.psycopg.org/psycopg3/docs/api/connections.html) for all available options.
+
+### Per-environment connections
+
+```toml
+adapter = "postgres"
+
+[connection]
+host = "localhost"
+user = "my_user"
+password = "${ENV:PG_PASSWORD}"
+
+[environments.prod]
+schema = "prod"
+
+[environments.prod.connection]
+host = "prod-db.example.com"
+dbname = "analytics"
+
+[environments.dev]
+schema = "dev"
+
+[environments.dev.connection]
+dbname = "analytics_dev"
+```
 
 ## Sources
 
