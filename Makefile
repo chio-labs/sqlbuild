@@ -45,6 +45,10 @@ test-real-databricks:
 	uv run pytest tests -m "real_warehouse and databricks" -vv
 
 
+test-real-postgres:
+	uv run pytest tests -m "real_warehouse and postgres" -vv
+
+
 test-real-motherduck:
 	uv run pytest tests -m "real_warehouse and motherduck" -vv
 

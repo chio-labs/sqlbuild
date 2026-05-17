@@ -13,6 +13,7 @@ def builtin_adapter_classes() -> dict[str, type[BaseAdapter]]:
     from sqlbuild.integrations.databricks.client import DatabricksAdapter
     from sqlbuild.integrations.duckdb.client import DuckDbAdapter
     from sqlbuild.integrations.motherduck.client import MotherDuckAdapter
+    from sqlbuild.integrations.postgres.client import PostgresAdapter
     from sqlbuild.integrations.snowflake.client import SnowflakeAdapter
 
     return {
@@ -21,4 +22,5 @@ def builtin_adapter_classes() -> dict[str, type[BaseAdapter]]:
         BuiltinAdapter.SNOWFLAKE.value: SnowflakeAdapter,
         BuiltinAdapter.BIGQUERY.value: BigQueryAdapter,
         BuiltinAdapter.DATABRICKS.value: DatabricksAdapter,
+        BuiltinAdapter.POSTGRES.value: PostgresAdapter,
     }
