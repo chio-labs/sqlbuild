@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.15.0](https://github.com/chio-labs/sqlbuild/compare/v0.14.0...v0.15.0) (2026-05-17)
+
+
+### Features
+
+* add structured execution diagnostics ([4bb1374](https://github.com/chio-labs/sqlbuild/commit/4bb13749c79fdc7a9c3cba86252f93bc2c4262a1))
+* tighten contract runtime diagnostics ([e051d44](https://github.com/chio-labs/sqlbuild/commit/e051d44663baf60b702578bb866499f0e43ad674))
+* validate runtime model contracts ([b298ea1](https://github.com/chio-labs/sqlbuild/commit/b298ea1c858ac96f22280f894c95e53b5223e12d))
+* validate source contract metadata ([ab906f2](https://github.com/chio-labs/sqlbuild/commit/ab906f2255ee7d2970a59aa05157035abc0aa435))
+
+
+### Bug Fixes
+
+* replace raw diagnostics with structured errors ([7a10cc6](https://github.com/chio-labs/sqlbuild/commit/7a10cc6602cc159144e42b14aea92d681ac6167d))
+
+
+### Documentation
+
+* update generated sqlbuild skill ([0d1f18a](https://github.com/chio-labs/sqlbuild/commit/0d1f18ac2abd563aab9fa7257436947b6be1510c))
+
 ## [0.14.0](https://github.com/chio-labs/sqlbuild/compare/v0.13.0...v0.14.0) (2026-05-16)
 
 
