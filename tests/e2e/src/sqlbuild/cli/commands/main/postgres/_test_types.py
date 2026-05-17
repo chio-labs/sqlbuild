@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 class PostgresBuildE2ETestCase:
     description: str
     expected_row_count: int
+    expected_table_name: str = "fact_orders"
     command: tuple[str, ...] = field(default_factory=tuple)
     expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
     expected_return_code: int = 0
