@@ -6,12 +6,13 @@ from pathlib import Path
 from typing import cast
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.helpers.builtins import builtin_adapter_classes
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
 from sqlbuild.integrations.dbt.helpers.config import resolve_dbt_config
 from sqlbuild.integrations.dbt.models import DbtCliConfigOverrides, DbtCliOptions, ResolvedDbtConfig
-from sqlbuild.shared.helpers.adapters import builtin_adapter_classes, discover_project_adapters
+from sqlbuild.shared.helpers.adapters import discover_project_adapters
 
 
 def resolve_dbt_plan_options(
