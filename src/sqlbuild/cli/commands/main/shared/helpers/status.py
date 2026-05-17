@@ -10,6 +10,7 @@ from typing import TextIO
 from rich.console import Console
 from rich.status import Status
 
+from sqlbuild.shared.exceptions.errors import SharedInputError
 from sqlbuild.shared.helpers.colors import dim
 
 
@@ -35,7 +36,11 @@ class TransientStatusReporter:
     def start(self, message: str) -> None:
         if self._enabled:
             self.close()
-            assert self._console is not None
+            if self._console is None:
+                raise SharedInputError(
+                    "status reporter was enabled without an initialized console",
+                    code="G001",
+                )
             self._status_context = self._console.status(message, spinner="dots")
             self._status = self._status_context.__enter__()
             return

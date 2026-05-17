@@ -1571,7 +1571,11 @@ def build_model_attached_audit_inputs(
 ) -> tuple[CompileAuditInput, ...]:
     """Render schema-attached model audits into compile audit inputs."""
 
-    assert model_input.schema_entry is not None
+    if model_input.schema_entry is None:
+        raise CompileInputError(
+            f"Model file {model_input.model_file.relative_path} has no schema entry for "
+            "schema-attached audits"
+        )
     owner_file: Path = (
         model_input.schema_file.relative_path
         if model_input.schema_file is not None
