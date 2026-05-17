@@ -562,11 +562,14 @@ class BigQueryAdapter(BaseAdapter):
         try:
             return connection.execute(sql)
         except Exception as error:
-            raise RuntimeError(self._format_bigquery_error(error)) from error
+            raise AdapterUserError(
+                self._format_bigquery_error(error),
+                code="A104",
+            ) from error
 
     @staticmethod
     def _format_bigquery_error(error: Exception) -> str:
-        message_parts: list[str] = [str(error)]
+        message_parts: list[str] = []
         error_details: object | None = getattr(error, "errors", None)
         if isinstance(error_details, list):
             detail: object
@@ -579,6 +582,9 @@ class BigQueryAdapter(BaseAdapter):
                 detail_text: str = str(detail_message)
                 if detail_text not in message_parts:
                     message_parts.append(detail_text)
+        error_text: str = str(error)
+        if error_text not in message_parts:
+            message_parts.append(error_text)
         return "\n".join(message_parts)
 
     def query(self, connection: Any, sql: str, *, limit: int | None) -> QueryResult:
@@ -653,6 +659,13 @@ class BigQueryAdapter(BaseAdapter):
                 return "STRING"
             case FrameworkType.TIMESTAMP:
                 return "TIMESTAMP"
+
+    def render_source_expression_cast(
+        self, *, expression: str, target_type: str, alias: str
+    ) -> str:
+        """Render BigQuery source expression type-enforcement casts explicitly."""
+
+        return f"CAST({expression} AS {target_type}) AS {alias}"
 
     def render_set_difference_operator(self) -> str:
         """Render the BigQuery set-difference operator explicitly."""

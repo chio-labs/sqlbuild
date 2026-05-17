@@ -4,6 +4,7 @@ from datetime import datetime
 
 import pytest
 
+from sqlbuild.adapter.shared.exceptions import AdapterUserError
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
     CursorValue,
@@ -427,6 +428,7 @@ def test_given_missing_bigquery_project_when_connecting_then_raises_clear_error(
             error_message="400 GET https://bigquery.googleapis.com/bigquery/v2/projects/demo",
             error_details=[{"message": "Unrecognized name: missing_column at [1:8]"}],
             expected_error_fragment="missing_column",
+            expected_error_code="A104",
         ),
     ],
     ids=["includes BigQuery error details from failed jobs"],
@@ -445,8 +447,10 @@ def test_given_bigquery_job_failure_when_executing_then_includes_error_details(
     )
     adapter: BigQueryAdapter = BigQueryAdapter()
 
-    with pytest.raises(RuntimeError, match=test_case.expected_error_fragment):
+    with pytest.raises(AdapterUserError, match=test_case.expected_error_fragment) as error:
         adapter.execute(connection, "SELECT missing_column")
+
+    assert error.value.code == test_case.expected_error_code
 
 
 @pytest.mark.parametrize(

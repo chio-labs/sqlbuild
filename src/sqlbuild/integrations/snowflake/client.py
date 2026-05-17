@@ -781,6 +781,13 @@ class SnowflakeAdapter(BaseAdapter):
             case FrameworkType.TIMESTAMP:
                 return "TIMESTAMP"
 
+    def render_source_expression_cast(
+        self, *, expression: str, target_type: str, alias: str
+    ) -> str:
+        """Render Snowflake source expression type-enforcement casts explicitly."""
+
+        return f"CAST({expression} AS {target_type}) AS {alias}"
+
     def render_set_difference_operator(self) -> str:
         """Render Snowflake set-difference operator explicitly."""
 

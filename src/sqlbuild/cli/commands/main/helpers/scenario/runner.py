@@ -496,6 +496,7 @@ def _complete_snapshot_sync(
             error_code=result.error_code,
             error_message=result.error_message,
             error_help=result.error_help,
+            use_color=use_color,
         )
         error_line: str
         for error_line in rendered_error_message.splitlines():
@@ -639,6 +640,7 @@ def _write_scenario_result(*, result: ScenarioRunResult, stream: TextIO, use_col
             error_code=result.error_code,
             error_message=result.error_message,
             error_help=result.error_help,
+            use_color=use_color,
         )
         error_line: str
         for error_line in rendered_error_message.splitlines():
@@ -678,6 +680,7 @@ def _write_checks(*, result: ScenarioRunResult, stream: TextIO, use_color: bool)
                 error_code=expected.error_code,
                 error_message=expected.error_message,
                 error_help=expected.error_help,
+                use_color=use_color,
             )
             stream.write(f"{'':>14}{rendered_error}\n")
     assertion: ScenarioAssertionCheckExecutionResult
@@ -698,16 +701,26 @@ def _write_checks(*, result: ScenarioRunResult, stream: TextIO, use_color: bool)
                 error_code=assertion.error_code,
                 error_message=assertion.error_message,
                 error_help=assertion.error_help,
+                use_color=use_color,
             )
             stream.write(f"{'':>14}{rendered_error}\n")
 
 
 def _render_result_error(
-    *, error_code: str | None, error_message: str, error_help: str | None = None
+    *,
+    error_code: str | None,
+    error_message: str,
+    error_help: str | None = None,
+    use_color: bool = False,
 ) -> str:
     if error_code is None:
         return error_message
-    return format_coded_error(code=error_code, message=error_message, help=error_help)
+    return format_coded_error(
+        code=error_code,
+        message=error_message,
+        help=error_help,
+        use_color=use_color,
+    )
 
 
 def _write_check_failures(*, result: ScenarioRunResult, stream: TextIO) -> None:

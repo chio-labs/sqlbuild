@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
+from sqlbuild.integrations.dagster.exceptions import DagsterDagInputError
 from sqlbuild.integrations.dagster.helpers.assets import (
     build_asset_specs,
     build_check_specs,
@@ -33,8 +34,9 @@ def sqlbuild_assets(
 
     dg: Any = load_dagster()
     if dag is not None and project is not None:
-        msg: str = "sqlbuild_assets received both 'dag' and 'project'; pass only one"
-        raise ValueError(msg)
+        raise DagsterDagInputError(
+            "sqlbuild_assets received both 'dag' and 'project'; pass only one"
+        )
     dag_input: SqlBuildDagInput = (
         dag if dag is not None else project.dag_path if project is not None else _DEFAULT_DAG_PATH
     )
@@ -74,8 +76,9 @@ def sqlbuild_scenario_checks(
 
     dg: Any = load_dagster()
     if dag is not None and project is not None:
-        msg: str = "sqlbuild_scenario_checks received both 'dag' and 'project'; pass only one"
-        raise ValueError(msg)
+        raise DagsterDagInputError(
+            "sqlbuild_scenario_checks received both 'dag' and 'project'; pass only one"
+        )
     dag_input: SqlBuildDagInput = (
         dag if dag is not None else project.dag_path if project is not None else _DEFAULT_DAG_PATH
     )

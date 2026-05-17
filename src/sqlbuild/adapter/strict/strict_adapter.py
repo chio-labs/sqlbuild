@@ -520,6 +520,13 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_source_expression_cast(
+        self, *, expression: str, target_type: str, alias: str
+    ) -> str:
+        """Render a cast projection for source expression type enforcement."""
+        ...
+
+    @abstractmethod
     def render_set_difference_operator(self) -> str:
         """Render the set-difference operator keyword for this adapter."""
         ...

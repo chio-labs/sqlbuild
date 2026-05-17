@@ -25,6 +25,7 @@ from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.shared.helpers.coded_errors import format_coded_error
 from sqlbuild.shared.helpers.colors import (
     blue_dim,
     colorize_completion,
@@ -272,7 +273,11 @@ class BuildProgressCallbacks:
                 duration=duration,
             )
             if node_result.status == ExecutionStatus.FAILED and node_result.error_message:
-                self._write_error_detail(node_result.error_message)
+                self._write_error_detail(
+                    error_code=node_result.error_code,
+                    error_message=node_result.error_message,
+                    error_help=node_result.error_help,
+                )
             self._stream.flush()
             return
 
@@ -291,7 +296,11 @@ class BuildProgressCallbacks:
                 duration=duration,
             )
             if node_result.status == ExecutionStatus.FAILED and node_result.error_message:
-                self._write_error_detail(node_result.error_message)
+                self._write_error_detail(
+                    error_code=node_result.error_code,
+                    error_message=node_result.error_message,
+                    error_help=node_result.error_help,
+                )
             self._stream.flush()
             return
 
@@ -327,7 +336,11 @@ class BuildProgressCallbacks:
             detail=detail,
         )
         if model_result.status == ExecutionStatus.FAILED and model_result.error_message:
-            self._write_error_detail(model_result.error_message)
+            self._write_error_detail(
+                error_code=model_result.error_code,
+                error_message=model_result.error_message,
+                error_help=model_result.error_help,
+            )
 
         if self._verbose:
             event: LifeCycleEvent
@@ -412,9 +425,17 @@ class BuildProgressCallbacks:
             f"  {ctr}  {resource_type:<{_TYPE_WIDTH}}{name:<{nw}} {status:<6} {duration}{detail}\n"
         )
 
-    def _write_error_detail(self, message: str) -> None:
+    def _write_error_detail(
+        self, *, error_code: str | None, error_message: str, error_help: str | None = None
+    ) -> None:
         pad: str = " " * self._prefix_width
         label: str = red_dim("error") if self._use_color else "error"
+        message: str = _format_result_error(
+            error_code=error_code,
+            error_message=error_message,
+            error_help=error_help,
+            use_color=self._use_color,
+        )
         line: str
         for line_index, line in enumerate(_format_error_lines(message)):
             display_label: str = label if line_index == 0 else ""
@@ -529,7 +550,12 @@ def _format_failure_details(result: BuildExecutionResult, *, use_color: bool) ->
         lines.append(f"  {seed_result.seed_name}  (seed)")
         if seed_result.error_message is not None:
             lines.extend(
-                _format_failure_error_block(seed_result.error_message, use_color=use_color)
+                _format_failure_error_block(
+                    error_code=seed_result.error_code,
+                    error_message=seed_result.error_message,
+                    error_help=seed_result.error_help,
+                    use_color=use_color,
+                )
             )
         lines.append("")
 
@@ -546,7 +572,12 @@ def _format_failure_details(result: BuildExecutionResult, *, use_color: bool) ->
         lines.append(f"  {model_result.model_name}{phase_str}")
         if model_result.error_message is not None:
             lines.extend(
-                _format_failure_error_block(model_result.error_message, use_color=use_color)
+                _format_failure_error_block(
+                    error_code=model_result.error_code,
+                    error_message=model_result.error_message,
+                    error_help=model_result.error_help,
+                    use_color=use_color,
+                )
             )
         if model_result.staging_relation is not None:
             lines.append(f"    {_inspection_relation_message(model_result.staging_relation)}")
@@ -564,7 +595,12 @@ def _format_failure_details(result: BuildExecutionResult, *, use_color: bool) ->
         lines.append(f"  {function_result.function_name}  (function)")
         if function_result.error_message is not None:
             lines.extend(
-                _format_failure_error_block(function_result.error_message, use_color=use_color)
+                _format_failure_error_block(
+                    error_code=function_result.error_code,
+                    error_message=function_result.error_message,
+                    error_help=function_result.error_help,
+                    use_color=use_color,
+                )
             )
         lines.append("")
 
@@ -579,7 +615,14 @@ def _format_failure_details(result: BuildExecutionResult, *, use_color: bool) ->
             has_failures = True
         lines.append(f"  {test_r.test_name}  (test)")
         if test_r.error_message is not None:
-            lines.extend(_format_failure_error_block(test_r.error_message, use_color=use_color))
+            lines.extend(
+                _format_failure_error_block(
+                    error_code=test_r.error_code,
+                    error_message=test_r.error_message,
+                    error_help=test_r.error_help,
+                    use_color=use_color,
+                )
+            )
         lines.append("")
 
     return lines
@@ -639,14 +682,35 @@ def _inspection_relation_message(relation_name: str) -> str:
     return f"staging table kept for inspection: {relation_name}"
 
 
-def _format_failure_error_block(message: str, *, use_color: bool) -> list[str]:
+def _format_failure_error_block(
+    *, error_code: str | None, error_message: str, error_help: str | None, use_color: bool
+) -> list[str]:
     lines: list[str] = []
     label: str = red_dim("error") if use_color else "error"
+    message: str = _format_result_error(
+        error_code=error_code,
+        error_message=error_message,
+        error_help=error_help,
+        use_color=use_color,
+    )
     formatted_line: str
     for index, formatted_line in enumerate(_format_error_lines(message)):
         display_label: str = label if index == 0 else ""
         lines.append(f"    {display_label:<{_TYPE_WIDTH}}{formatted_line}")
     return lines
+
+
+def _format_result_error(
+    *, error_code: str | None, error_message: str, error_help: str | None, use_color: bool
+) -> str:
+    if error_code is None:
+        return error_message
+    return format_coded_error(
+        code=error_code,
+        message=error_message,
+        help=error_help,
+        use_color=use_color,
+    )
 
 
 def _format_error_lines(message: str) -> list[str]:

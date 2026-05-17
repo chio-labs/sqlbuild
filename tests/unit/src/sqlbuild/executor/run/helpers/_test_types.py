@@ -16,10 +16,12 @@ class BuildQualifiedNameTestCase:
 @dataclass(frozen=True)
 class BuildFailedResultTestCase:
     description: str
+    error: str | BaseException
     recorded_statements: tuple[str, ...]
     warning_messages: tuple[str, ...]
     expected_model_name: str
     expected_error_message: str
+    expected_error_code: str
     expected_lifecycle_events: tuple[LifeCycleEvent, ...]
 
 
