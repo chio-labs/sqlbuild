@@ -24,9 +24,9 @@ MODEL (
 );
 
 SELECT
-  DATE_TRUNC('hour', o.ordered_at) AS activity_hour,
+  @timestamp_trunc('hour', 'o.ordered_at') AS activity_hour,
   COUNT(*) AS orders_placed,
   SUM(o.quantity) AS waffles_ordered,
   SUM(o.line_total_cents) AS revenue_cents
 FROM __ref("fact_orders") o
-GROUP BY DATE_TRUNC('hour', o.ordered_at)
+GROUP BY @timestamp_trunc('hour', 'o.ordered_at')

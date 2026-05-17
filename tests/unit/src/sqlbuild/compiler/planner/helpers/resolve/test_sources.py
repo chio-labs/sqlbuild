@@ -158,6 +158,32 @@ TEST_CASES: list[SourceResolutionTestCase] = [
         ),
     ),
     SourceResolutionTestCase(
+        description="casts expression source columns matched case-insensitively",
+        query_sql='SELECT * FROM __source("raw_customers")',
+        star_exclude_keyword="EXCLUDE",
+        source_map={
+            "raw_customers": SourceEntry(
+                name="raw_customers",
+                expression="SELECT 1 AS id, 'Leslie' AS first_name",
+                type_enforcement=True,
+                columns=(
+                    SourceColumnEntry(name="id", type="INTEGER"),
+                    SourceColumnEntry(name="first_name"),
+                ),
+            ),
+        },
+        source_warehouse_columns={
+            "raw_customers": (
+                ColumnInfo(name="ID", type=""),
+                ColumnInfo(name="FIRST_NAME", type=""),
+            ),
+        },
+        expected_sql=(
+            "SELECT * FROM (SELECT CAST(ID AS INTEGER) AS id, FIRST_NAME "
+            "FROM (SELECT 1 AS id, 'Leslie' AS first_name))"
+        ),
+    ),
+    SourceResolutionTestCase(
         description="replaces source with CAST subquery when enforcement enabled",
         query_sql='SELECT * FROM __source("raw_orders")',
         star_exclude_keyword="EXCLUDE",

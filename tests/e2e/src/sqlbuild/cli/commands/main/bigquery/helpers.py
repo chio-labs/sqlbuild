@@ -8,7 +8,7 @@ from typing import Any
 
 from sqlbuild.integrations.bigquery.client import BigQueryAdapter
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
-    REPO_ROOT,
+    WAFFLE_SHOP_DIR,
     stringify_warehouse_rows,
 )
 from tests.integration.src.sqlbuild.integrations.bigquery.helpers import (
@@ -17,8 +17,6 @@ from tests.integration.src.sqlbuild.integrations.bigquery.helpers import (
     fetch_rows,
     qualified_name,
 )
-
-EXAMPLE_WAFFLE_SHOP_DIR: Path = REPO_ROOT / "examples" / "waffle_shop"
 
 
 def build_bigquery_local_config(*, environment: str = "dev", location: str) -> str:
@@ -54,10 +52,10 @@ def build_bigquery_project_toml(*, project_name: str, dataset_name: str) -> str:
 
 
 def prepare_bigquery_waffle_shop(*, tmp_path: Path) -> tuple[Path, str]:
-    """Prepare the example waffle shop project wired to a unique BigQuery dataset."""
+    """Prepare the e2e waffle shop project wired to a unique BigQuery dataset."""
 
     project_dir: Path = tmp_path / "waffle_shop"
-    copytree(EXAMPLE_WAFFLE_SHOP_DIR, project_dir)
+    copytree(WAFFLE_SHOP_DIR, project_dir)
     dataset_name: str = build_unique_dataset_name(prefix="sqlbuild_e2e")
     project_name: str = str(build_bigquery_connection_config(schema=dataset_name)["project"])
     location: str = str(build_bigquery_connection_config(schema=dataset_name)["location"])
