@@ -1345,6 +1345,13 @@ class BaseAdapter(StrictAdapter):
             case FrameworkType.TIMESTAMP:
                 return "TIMESTAMP"
 
+    def render_source_expression_cast(
+        self, *, expression: str, target_type: str, alias: str
+    ) -> str:
+        """Render a generic cast projection for source expression type enforcement."""
+
+        return f"CAST({expression} AS {target_type}) AS {alias}"
+
     def render_set_difference_operator(self) -> str:
         """Render the generic SQL set-difference operator."""
 
