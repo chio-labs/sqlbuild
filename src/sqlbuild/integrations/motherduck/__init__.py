@@ -1,0 +1,1 @@
+"""MotherDuck adapter."""

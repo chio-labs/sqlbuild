@@ -6,9 +6,10 @@ from pathlib import Path
 from typing import cast
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.helpers.builtins import builtin_adapter_classes
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
-from sqlbuild.shared.helpers.adapters import builtin_adapter_classes, discover_project_adapters
+from sqlbuild.shared.helpers.adapters import discover_project_adapters
 
 
 def resolve_adapter(adapter_name: str, *, project_dir: Path | None = None) -> BaseAdapter:
