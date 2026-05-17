@@ -8,6 +8,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.planner.models import SeedPlanEntry
 from sqlbuild.executor.build.models import SeedExecutionResult
+from sqlbuild.executor.seed.constants import SEED_LOAD_FAILED_CODE
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
 
@@ -43,6 +44,7 @@ def execute_seed(
             seed_name=seed_entry.name,
             status=ExecutionStatus.FAILED,
             lifecycle_events=statement_recorder.snapshot(),
+            error_code=SEED_LOAD_FAILED_CODE,
             error_message=str(exc),
         )
     return SeedExecutionResult(

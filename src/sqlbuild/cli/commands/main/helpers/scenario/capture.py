@@ -273,6 +273,7 @@ def _write_capture_result(
             error_code=result.error_code,
             error_message=result.error_message,
             error_help=result.error_help,
+            use_color=use_color,
         )
         error_line: str
         for error_line in rendered_error_message.splitlines():
@@ -356,11 +357,20 @@ def _capture_detail(result: ScenarioSnapshotCaptureRunResult) -> str:
 
 
 def _render_result_error(
-    *, error_code: str | None, error_message: str, error_help: str | None = None
+    *,
+    error_code: str | None,
+    error_message: str,
+    error_help: str | None = None,
+    use_color: bool = False,
 ) -> str:
     if error_code is None:
         return error_message
-    return format_coded_error(code=error_code, message=error_message, help=error_help)
+    return format_coded_error(
+        code=error_code,
+        message=error_message,
+        help=error_help,
+        use_color=use_color,
+    )
 
 
 def _captured_at() -> str:

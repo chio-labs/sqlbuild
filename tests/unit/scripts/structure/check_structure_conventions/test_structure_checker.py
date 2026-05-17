@@ -965,6 +965,49 @@ TEST_CASES: list[CheckPathsTestCase] = [
         },
         expected_violation_codes=("SC034",),
     ),
+    CheckPathsTestCase(
+        description="reports raw built-in raise in production code",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/load.py": dedent(
+                """
+                def load_example() -> str:
+                    raise ValueError("bad example")
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("SC035",),
+    ),
+    CheckPathsTestCase(
+        description="reports assert in production code",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/load.py": dedent(
+                """
+                def load_example(value: str | None) -> str:
+                    assert value is not None
+                    return value
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("SC036",),
+    ),
+    CheckPathsTestCase(
+        description="allows raw built-in names outside raise and assert contexts",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/load.py": dedent(
+                """
+                def load_example(error: ValueError) -> str:
+                    return str(error)
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=(),
+    ),
 ]
 
 

@@ -13,8 +13,15 @@ from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import FunctionPlanEntry
 from sqlbuild.executor.build.models import FunctionExecutionResult
+from sqlbuild.executor.functions.constants import (
+    FUNCTION_EXECUTION_FAILED_CODE,
+    FUNCTION_PYTHON_UNSUPPORTED_CODE,
+    FUNCTION_TABLE_UNSUPPORTED_CODE,
+    FUNCTION_TARGET_INVALID_CODE,
+)
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.shared.helpers.coded_errors import error_code, error_help, error_message
 
 
 def execute_function(
@@ -32,6 +39,7 @@ def execute_function(
         return FunctionExecutionResult(
             function_name=function_entry.name,
             status=ExecutionStatus.FAILED,
+            error_code=FUNCTION_TARGET_INVALID_CODE,
             error_message="function target could not be qualified",
         )
     warnings: list[str] = []
@@ -41,11 +49,13 @@ def execute_function(
             and not adapter.supports_python_functions()
         ):
             raise ExecutorInputError(
-                f"Adapter '{type(adapter).__name__}' does not support Python UDFs"
+                f"Adapter '{type(adapter).__name__}' does not support Python UDFs",
+                code=FUNCTION_PYTHON_UNSUPPORTED_CODE,
             )
         if function_entry.return_columns and not adapter.supports_table_functions():
             raise ExecutorInputError(
-                f"Adapter '{type(adapter).__name__}' does not support SQL table functions"
+                f"Adapter '{type(adapter).__name__}' does not support SQL table functions",
+                code=FUNCTION_TABLE_UNSUPPORTED_CODE,
             )
         adapter.ensure_schema(
             connection,
@@ -86,7 +96,9 @@ def execute_function(
         return FunctionExecutionResult(
             function_name=function_entry.name,
             status=ExecutionStatus.FAILED,
-            error_message=str(error),
+            error_code=error_code(error, fallback_code=FUNCTION_EXECUTION_FAILED_CODE),
+            error_help=error_help(error),
+            error_message=error_message(error),
             warning_messages=tuple(warnings),
             lifecycle_events=statement_recorder.snapshot(),
         )

@@ -502,6 +502,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
             ("stg_orders", ExecutionStatus.FAILED),
             ("orders", ExecutionStatus.SKIPPED),
         ),
+        expected_model_error_codes=(("stg_orders", "R002"),),
         expected_missing_relations=("main.stg_orders", "main.orders"),
     ),
     BuildExecutionTestCase(
@@ -646,6 +647,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
                 "DuckDB Python UDF 'is_positive_int' cannot set database or schema",
             ),
         ),
+        expected_function_error_codes=(("is_positive_int", "F004"),),
         expected_model_statuses=(("validated_orders", ExecutionStatus.SKIPPED),),
         expected_missing_relations=("main.validated_orders",),
     ),
@@ -1138,6 +1140,7 @@ SQL_TEST_BUILD_TEST_CASES: list[BuildExecutionTestCase] = [
         expected_failure_count=1,
         expected_skipped_count=1,
         expected_test_count=1,
+        expected_test_error_codes=(("test_stg_orders", "T003"),),
         expected_model_statuses=(("stg_orders", ExecutionStatus.SKIPPED),),
         expected_missing_relations=("main.stg_orders",),
     ),
