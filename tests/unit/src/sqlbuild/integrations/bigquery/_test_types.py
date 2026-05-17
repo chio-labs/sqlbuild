@@ -94,6 +94,7 @@ class BigQueryExecutionErrorTestCase:
     error_message: str
     error_details: list[dict[str, object]]
     expected_error_fragment: str
+    expected_error_code: str
 
 
 @dataclass(frozen=True)

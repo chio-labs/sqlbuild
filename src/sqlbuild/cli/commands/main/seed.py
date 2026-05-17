@@ -25,6 +25,7 @@ from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.build.types import ExecutionStatus
 from sqlbuild.executor.pipeline.main.run import run_seed_pipeline
+from sqlbuild.shared.helpers.coded_errors import format_coded_error
 from sqlbuild.shared.helpers.colors import colorize_status, supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
@@ -118,7 +119,20 @@ def _build_on_complete(*, stream: TextIO, use_color: bool) -> Callable[[SeedExec
             duration = f"{seconds:.2f}s"
         stream.write(f"  {result.seed_name:<50} {status:<6} {duration}\n")
         if result.error_message is not None:
-            stream.write(f"    {result.error_message}\n")
+            stream.write(f"    {_format_seed_error(result=result, use_color=use_color)}\n")
         stream.flush()
 
     return _on_complete
+
+
+def _format_seed_error(*, result: SeedExecutionResult, use_color: bool) -> str:
+    if result.error_message is None:
+        return ""
+    if result.error_code is None:
+        return result.error_message
+    return format_coded_error(
+        code=result.error_code,
+        message=result.error_message,
+        help=result.error_help,
+        use_color=use_color,
+    )

@@ -16,6 +16,8 @@ class StepResult:
     actual_row_count: int = 0
     expected_row_count: int = 0
     mismatched_row_count: int = 0
+    error_code: str | None = None
+    error_help: str | None = None
     error_message: str | None = None
 
 
@@ -26,4 +28,6 @@ class SqlTestExecutionResult:
     test_name: str
     outcome: SqlTestOutcome
     step_results: tuple[StepResult, ...] = field(default_factory=tuple)
+    error_code: str | None = None
+    error_help: str | None = None
     error_message: str | None = None

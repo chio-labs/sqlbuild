@@ -307,6 +307,8 @@ def _format_sql_test_checks(
                 "passed": result.outcome == SqlTestOutcome.PASS,
                 "status": result.outcome.value,
                 "asset_name": _sql_test_asset_name(result),
+                "error_code": result.error_code,
+                "error_help": result.error_help,
                 "error_message": result.error_message,
                 "steps": tuple(_format_sql_test_step(step) for step in result.step_results),
             }
@@ -323,6 +325,8 @@ def _format_sql_test_step(step: StepResult) -> dict[str, object]:
             "actual_row_count": step.actual_row_count,
             "expected_row_count": step.expected_row_count,
             "mismatched_row_count": step.mismatched_row_count,
+            "error_code": step.error_code,
+            "error_help": step.error_help,
             "error_message": step.error_message,
         }
     )

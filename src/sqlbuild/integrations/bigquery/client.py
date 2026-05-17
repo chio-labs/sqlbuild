@@ -562,7 +562,10 @@ class BigQueryAdapter(BaseAdapter):
         try:
             return connection.execute(sql)
         except Exception as error:
-            raise RuntimeError(self._format_bigquery_error(error)) from error
+            raise AdapterUserError(
+                self._format_bigquery_error(error),
+                code="A104",
+            ) from error
 
     @staticmethod
     def _format_bigquery_error(error: Exception) -> str:

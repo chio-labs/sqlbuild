@@ -26,7 +26,13 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import IncrementalMode, MaterializationType, PlanAction
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
+from sqlbuild.executor.build.constants import (
+    BUILD_CUSTOM_MATERIALIZATION_MISSING_CODE,
+    BUILD_MODEL_ENTRY_MISSING_CODE,
+    BUILD_UNKNOWN_RESOURCE_FAILED_CODE,
+    BUILD_WORKER_FAILED_CODE,
+    INCREMENTAL_ACTIONS,
+)
 from sqlbuild.executor.build.helpers.blocking import block_downstream
 from sqlbuild.executor.build.helpers.end_audits import run_end_audits
 from sqlbuild.executor.build.helpers.source_audits import run_pending_source_audits
@@ -37,6 +43,7 @@ from sqlbuild.executor.build.models import (
     SeedExecutionResult,
 )
 from sqlbuild.executor.custom.models import MaterializationResult
+from sqlbuild.executor.functions.constants import FUNCTION_ENTRY_MISSING_CODE
 from sqlbuild.executor.functions.main.execute import execute_function
 from sqlbuild.executor.run.main.execute import (
     execute_custom_entry,
@@ -47,8 +54,10 @@ from sqlbuild.executor.run.main.execute import (
     execute_view_entry,
 )
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.seed.constants import SEED_ENTRY_MISSING_CODE
 from sqlbuild.executor.seed.main.execute import execute_seed
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.testing.constants import SQL_TEST_ENTRY_MISSING_CODE
 from sqlbuild.executor.testing.main.execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
@@ -273,6 +282,7 @@ class BuildScheduler:
                     result=ModelExecutionResult(
                         model_name=key.name,
                         status=ExecutionStatus.FAILED,
+                        error_code=BUILD_WORKER_FAILED_CODE,
                         error_message=str(exc),
                     ),
                 )
@@ -342,12 +352,22 @@ class BuildScheduler:
             return self._execute_test_node(key, connection)
         if key.resource_type == CompiledResourceType.MODEL:
             return self._execute_model_node(key, connection)
-        return ModelExecutionResult(model_name=key.name, status=ExecutionStatus.FAILED)
+        return ModelExecutionResult(
+            model_name=key.name,
+            status=ExecutionStatus.FAILED,
+            error_code=BUILD_UNKNOWN_RESOURCE_FAILED_CODE,
+            error_message=f"unknown executable resource type '{key.resource_type}'",
+        )
 
     def _execute_seed_node(self, key: CompiledObjectKey, connection: Any) -> SeedExecutionResult:
         seed_entry: SeedPlanEntry | None = self._indexes.seed_entries_by_key.get(key)
         if seed_entry is None:
-            return SeedExecutionResult(seed_name=key.name, status=ExecutionStatus.FAILED)
+            return SeedExecutionResult(
+                seed_name=key.name,
+                status=ExecutionStatus.FAILED,
+                error_code=SEED_ENTRY_MISSING_CODE,
+                error_message="seed entry not found",
+            )
         if self._on_progress is not None:
             self._on_progress(f"seed: {seed_entry.name}")
         if self._on_node_start is not None:
@@ -392,6 +412,7 @@ class BuildScheduler:
             return SqlTestExecutionResult(
                 test_name=key.name,
                 outcome=SqlTestOutcome.ERROR,
+                error_code=SQL_TEST_ENTRY_MISSING_CODE,
                 error_message="test entry not found",
             )
         if self._on_progress is not None:
@@ -429,7 +450,12 @@ class BuildScheduler:
     ) -> FunctionExecutionResult:
         function_entry: FunctionPlanEntry | None = self._indexes.function_entries_by_key.get(key)
         if function_entry is None:
-            return FunctionExecutionResult(function_name=key.name, status=ExecutionStatus.FAILED)
+            return FunctionExecutionResult(
+                function_name=key.name,
+                status=ExecutionStatus.FAILED,
+                error_code=FUNCTION_ENTRY_MISSING_CODE,
+                error_message="function entry not found",
+            )
         if self._on_progress is not None:
             self._on_progress(f"function: {function_entry.name}")
         if self._on_node_start is not None:
@@ -449,7 +475,12 @@ class BuildScheduler:
     def _execute_model_node(self, key: CompiledObjectKey, connection: Any) -> ModelExecutionResult:
         model_entry: ModelPlanEntry | None = self._indexes.model_entries_by_key.get(key)
         if model_entry is None:
-            return ModelExecutionResult(model_name=key.name, status=ExecutionStatus.FAILED)
+            return ModelExecutionResult(
+                model_name=key.name,
+                status=ExecutionStatus.FAILED,
+                error_code=BUILD_MODEL_ENTRY_MISSING_CODE,
+                error_message="model entry not found",
+            )
         if self._on_progress is not None:
             self._on_progress(f"model: {model_entry.name}")
         if self._on_node_start is not None:
@@ -644,6 +675,7 @@ def _dispatch_model(
             return ModelExecutionResult(
                 model_name=entry.name,
                 status=ExecutionStatus.FAILED,
+                error_code=BUILD_CUSTOM_MATERIALIZATION_MISSING_CODE,
                 error_message=f"custom materialization '{mat_name}' not found in registry",
             )
         existing: RelationInfo | None = (warehouse_relations or {}).get(entry.name)

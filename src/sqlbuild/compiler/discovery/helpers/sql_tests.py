@@ -172,7 +172,11 @@ def _validate_test_names(*, file_path: Path, blocks: tuple[DiscoveredSqlTestBloc
     seen_names: set[str] = set()
     block: DiscoveredSqlTestBlock
     for block in blocks:
-        assert block.name is not None
+        if block.name is None:
+            raise SqlTestParseError(
+                f"SQL test '{file_path}' contains multiple TEST blocks; every block must define "
+                "a unique `name`"
+            )
         if block.name in seen_names:
             raise SqlTestParseError(
                 f"SQL test '{file_path}' defines duplicate TEST() name '{block.name}'"
