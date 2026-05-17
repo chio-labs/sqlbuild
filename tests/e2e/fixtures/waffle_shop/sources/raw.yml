@@ -1,13 +1,11 @@
 sources:
   - name: raw_customers
     expression: |
-      SELECT * FROM (VALUES
-        (1, 'Leslie', 'Knope', 'leslie@pawnee.gov', TIMESTAMP '2026-01-15 09:00:00'),
-        (2, 'Ron', 'Swanson', 'ron@pawnee.gov', TIMESTAMP '2026-02-01 08:00:00'),
-        (3, 'Ann', 'Perkins', 'ann@pawnee.gov', TIMESTAMP '2026-02-14 10:00:00'),
-        (4, 'Ben', 'Wyatt', 'ben@pawnee.gov', TIMESTAMP '2026-03-01 07:30:00'),
-        (5, 'April', 'Ludgate', 'april@pawnee.gov', TIMESTAMP '2026-03-15 11:00:00')
-      ) AS raw_customers(id, first_name, last_name, email, created_at)
+      SELECT 1 AS id, 'Leslie' AS first_name, 'Knope' AS last_name, 'leslie@pawnee.gov' AS email, CAST('2026-01-15 09:00:00' AS TIMESTAMP) AS created_at
+      UNION ALL SELECT 2 AS id, 'Ron' AS first_name, 'Swanson' AS last_name, 'ron@pawnee.gov' AS email, CAST('2026-02-01 08:00:00' AS TIMESTAMP) AS created_at
+      UNION ALL SELECT 3 AS id, 'Ann' AS first_name, 'Perkins' AS last_name, 'ann@pawnee.gov' AS email, CAST('2026-02-14 10:00:00' AS TIMESTAMP) AS created_at
+      UNION ALL SELECT 4 AS id, 'Ben' AS first_name, 'Wyatt' AS last_name, 'ben@pawnee.gov' AS email, CAST('2026-03-01 07:30:00' AS TIMESTAMP) AS created_at
+      UNION ALL SELECT 5 AS id, 'April' AS first_name, 'Ludgate' AS last_name, 'april@pawnee.gov' AS email, CAST('2026-03-15 11:00:00' AS TIMESTAMP) AS created_at
     columns:
       - name: id
         type: INTEGER
@@ -18,31 +16,27 @@ sources:
 
   - name: raw_orders
     expression: |
-      SELECT * FROM (VALUES
-        (1, 1, 1, 2, TIMESTAMP '2026-04-01 09:15:00', 'completed'),
-        (2, 1, 4, 1, TIMESTAMP '2026-04-01 09:15:00', 'completed'),
-        (3, 2, 6, 3, TIMESTAMP '2026-04-01 10:30:00', 'completed'),
-        (4, 3, 2, 1, TIMESTAMP '2026-04-02 08:45:00', 'completed'),
-        (5, 4, 1, 1, TIMESTAMP '2026-04-02 12:00:00', 'completed'),
-        (6, 4, 3, 1, TIMESTAMP '2026-04-02 12:00:00', 'completed'),
-        (7, 5, 5, 2, TIMESTAMP '2026-04-03 09:00:00', 'cancelled'),
-        (8, 1, 2, 1, TIMESTAMP '2026-04-03 11:00:00', 'completed'),
-        (9, 2, 6, 2, TIMESTAMP '2026-04-04 10:00:00', 'preparing'),
-        (10, 3, 1, 4, TIMESTAMP '2026-04-04 14:30:00', 'placed')
-      ) AS raw_orders(id, customer_id, waffle_type_id, quantity, ordered_at, status)
+      SELECT 1 AS id, 1 AS customer_id, 1 AS waffle_type_id, 2 AS quantity, CAST('2026-04-01 09:15:00' AS TIMESTAMP) AS ordered_at, 'completed' AS status
+      UNION ALL SELECT 2 AS id, 1 AS customer_id, 4 AS waffle_type_id, 1 AS quantity, CAST('2026-04-01 09:15:00' AS TIMESTAMP) AS ordered_at, 'completed' AS status
+      UNION ALL SELECT 3 AS id, 2 AS customer_id, 6 AS waffle_type_id, 3 AS quantity, CAST('2026-04-01 10:30:00' AS TIMESTAMP) AS ordered_at, 'completed' AS status
+      UNION ALL SELECT 4 AS id, 3 AS customer_id, 2 AS waffle_type_id, 1 AS quantity, CAST('2026-04-02 08:45:00' AS TIMESTAMP) AS ordered_at, 'completed' AS status
+      UNION ALL SELECT 5 AS id, 4 AS customer_id, 1 AS waffle_type_id, 1 AS quantity, CAST('2026-04-02 12:00:00' AS TIMESTAMP) AS ordered_at, 'completed' AS status
+      UNION ALL SELECT 6 AS id, 4 AS customer_id, 3 AS waffle_type_id, 1 AS quantity, CAST('2026-04-02 12:00:00' AS TIMESTAMP) AS ordered_at, 'completed' AS status
+      UNION ALL SELECT 7 AS id, 5 AS customer_id, 5 AS waffle_type_id, 2 AS quantity, CAST('2026-04-03 09:00:00' AS TIMESTAMP) AS ordered_at, 'cancelled' AS status
+      UNION ALL SELECT 8 AS id, 1 AS customer_id, 2 AS waffle_type_id, 1 AS quantity, CAST('2026-04-03 11:00:00' AS TIMESTAMP) AS ordered_at, 'completed' AS status
+      UNION ALL SELECT 9 AS id, 2 AS customer_id, 6 AS waffle_type_id, 2 AS quantity, CAST('2026-04-04 10:00:00' AS TIMESTAMP) AS ordered_at, 'preparing' AS status
+      UNION ALL SELECT 10 AS id, 3 AS customer_id, 1 AS waffle_type_id, 4 AS quantity, CAST('2026-04-04 14:30:00' AS TIMESTAMP) AS ordered_at, 'placed' AS status
 
   - name: raw_payments
     expression: |
-      SELECT * FROM (VALUES
-        (1, 1, 1700, 'credit_card', TIMESTAMP '2026-04-01 09:16:00', 'success'),
-        (2, 2, 1050, 'credit_card', TIMESTAMP '2026-04-01 09:16:00', 'success'),
-        (3, 3, 4350, 'cash', TIMESTAMP '2026-04-01 10:31:00', 'success'),
-        (4, 4, 950, 'credit_card', TIMESTAMP '2026-04-02 08:46:00', 'success'),
-        (5, 5, 850, 'debit_card', TIMESTAMP '2026-04-02 12:01:00', 'success'),
-        (6, 6, 750, 'debit_card', TIMESTAMP '2026-04-02 12:01:00', 'success'),
-        (7, 7, 2200, 'credit_card', NULL, 'failed'),
-        (8, 8, 950, 'cash', TIMESTAMP '2026-04-03 11:01:00', 'success')
-      ) AS raw_payments(id, order_id, amount_cents, payment_method, paid_at, status)
+      SELECT 1 AS id, 1 AS order_id, 1700 AS amount_cents, 'credit_card' AS payment_method, CAST('2026-04-01 09:16:00' AS TIMESTAMP) AS paid_at, 'success' AS status
+      UNION ALL SELECT 2 AS id, 2 AS order_id, 1050 AS amount_cents, 'credit_card' AS payment_method, CAST('2026-04-01 09:16:00' AS TIMESTAMP) AS paid_at, 'success' AS status
+      UNION ALL SELECT 3 AS id, 3 AS order_id, 4350 AS amount_cents, 'cash' AS payment_method, CAST('2026-04-01 10:31:00' AS TIMESTAMP) AS paid_at, 'success' AS status
+      UNION ALL SELECT 4 AS id, 4 AS order_id, 950 AS amount_cents, 'credit_card' AS payment_method, CAST('2026-04-02 08:46:00' AS TIMESTAMP) AS paid_at, 'success' AS status
+      UNION ALL SELECT 5 AS id, 5 AS order_id, 850 AS amount_cents, 'debit_card' AS payment_method, CAST('2026-04-02 12:01:00' AS TIMESTAMP) AS paid_at, 'success' AS status
+      UNION ALL SELECT 6 AS id, 6 AS order_id, 750 AS amount_cents, 'debit_card' AS payment_method, CAST('2026-04-02 12:01:00' AS TIMESTAMP) AS paid_at, 'success' AS status
+      UNION ALL SELECT 7 AS id, 7 AS order_id, 2200 AS amount_cents, 'credit_card' AS payment_method, CAST(NULL AS TIMESTAMP) AS paid_at, 'failed' AS status
+      UNION ALL SELECT 8 AS id, 8 AS order_id, 950 AS amount_cents, 'cash' AS payment_method, CAST('2026-04-03 11:01:00' AS TIMESTAMP) AS paid_at, 'success' AS status
     columns:
       - name: amount_cents
         type: INTEGER

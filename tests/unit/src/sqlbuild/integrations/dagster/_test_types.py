@@ -29,6 +29,13 @@ class DagsterScenarioCheckDecoratorTestCase:
 
 
 @dataclass(frozen=True)
+class DagsterConflictingInputTestCase:
+    description: str
+    expected_error_fragment: str
+    expected_error_code: str
+
+
+@dataclass(frozen=True)
 class DagsterAssetCheckFilterTestCase:
     description: str
     expected_check_names: tuple[str, ...]

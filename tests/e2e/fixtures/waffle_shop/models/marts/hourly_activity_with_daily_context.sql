@@ -31,4 +31,4 @@ SELECT
   h.revenue_cents
 FROM __ref("hourly_order_activity") h
 INNER JOIN __ref("daily_activity_rollup") d
-  ON DATE_TRUNC('day', h.activity_hour) = d.activity_day
+  ON @timestamp_trunc('day', 'h.activity_hour') = d.activity_day

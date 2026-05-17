@@ -6,6 +6,11 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import SqlTestPlanEntry
+from sqlbuild.executor.testing.constants import (
+    SQL_TEST_ASSERTION_FAILED_CODE,
+    SQL_TEST_EXECUTION_ERROR_CODE,
+    SQL_TEST_TOO_LARGE_CODE,
+)
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from sqlbuild.executor.testing.main.sql_length import (
     validate_unit_test_sql_length,
@@ -50,9 +55,11 @@ def execute_sql_test(
                 StepResult(
                     model_name=error_model_name,
                     outcome=SqlTestOutcome.ERROR,
+                    error_code=SQL_TEST_TOO_LARGE_CODE,
                     error_message=error_message,
                 ),
             ),
+            error_code=SQL_TEST_TOO_LARGE_CODE,
             error_message=error_message,
         )
 
@@ -71,9 +78,11 @@ def execute_sql_test(
                 StepResult(
                     model_name=error_model_name,
                     outcome=SqlTestOutcome.ERROR,
+                    error_code=SQL_TEST_EXECUTION_ERROR_CODE,
                     error_message=error_message,
                 ),
             ),
+            error_code=SQL_TEST_EXECUTION_ERROR_CODE,
             error_message=error_message,
         )
 
@@ -95,6 +104,9 @@ def execute_sql_test(
         test_name=test_entry.name,
         outcome=overall_outcome,
         step_results=tuple(step_results),
+        error_code=SQL_TEST_ASSERTION_FAILED_CODE
+        if overall_outcome == SqlTestOutcome.FAIL
+        else None,
         error_message=error_message,
     )
 

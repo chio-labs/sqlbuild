@@ -7,7 +7,8 @@ import sys
 from collections.abc import Callable, Sequence
 from typing import NoReturn
 
-from sqlbuild.shared.helpers.colors import dim, red_bold
+from sqlbuild.shared.helpers.coded_errors import format_coded_error
+from sqlbuild.shared.helpers.colors import red_bold
 
 
 class SqlbuildArgumentParser(argparse.ArgumentParser):
@@ -33,13 +34,8 @@ def build_argument_parser_class(*, use_color: bool) -> type[SqlbuildArgumentPars
 def format_expected_error(error: Exception, *, fallback_code: str, use_color: bool) -> str:
     code: str = str(getattr(error, "code", fallback_code))
     message: str = str(getattr(error, "message", str(error)))
-    prefix: str = _style(f"error[{code}]:", red_bold, use_color=use_color)
-    rendered: str = f"{prefix} {message}"
     help_text: str | None = getattr(error, "help", None)
-    if help_text is not None:
-        help_label: str = _style("= help:", dim, use_color=use_color)
-        rendered = f"{rendered}\n  {help_label} {help_text}"
-    return rendered
+    return format_coded_error(code=code, message=message, help=help_text, use_color=use_color)
 
 
 def cli_error_use_color(

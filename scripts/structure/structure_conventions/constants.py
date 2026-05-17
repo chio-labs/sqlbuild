@@ -9,3 +9,14 @@ TYPE_CLASS_BASE_NAMES: frozenset[str] = frozenset(
     {"Enum", "IntEnum", "StrEnum", "Flag", "IntFlag", "NamedTuple", "Protocol", "TypedDict"}
 )
 MODEL_CLASS_BASE_NAMES: frozenset[str] = frozenset({"BaseModel"})
+RAW_BUILTIN_RAISE_NAMES: frozenset[str] = frozenset(
+    {
+        "AssertionError",
+        "Exception",
+        "KeyError",
+        "NotImplementedError",
+        "RuntimeError",
+        "TypeError",
+        "ValueError",
+    }
+)

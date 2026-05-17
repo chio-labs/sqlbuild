@@ -66,6 +66,7 @@ def resolve_source_references(
                     source_relation=resolved_source,
                     declared_columns=source_entry.columns,
                     expression_columns=warehouse_cols,
+                    adapter=adapter,
                 )
             elif warehouse_cols is not None and warehouse_cols:
                 resolved_source = _build_relation_cast_subquery(
@@ -186,6 +187,7 @@ def _build_expression_cast_subquery(
     source_relation: str,
     declared_columns: tuple[SourceColumnEntry, ...],
     expression_columns: tuple[ColumnInfo, ...] | None,
+    adapter: BaseAdapter,
 ) -> str:
     """Build a CAST projection for expression sources using probed column names."""
 
@@ -202,8 +204,9 @@ def _build_expression_cast_subquery(
         )
 
     expression_names: tuple[str, ...] = tuple(col.name for col in expression_columns)
+    expression_name_map: dict[str, str] = {name.lower(): name for name in expression_names}
     missing_names: tuple[str, ...] = tuple(
-        col.name for col in declared_columns if col.name not in expression_names
+        col.name for col in declared_columns if col.name.lower() not in expression_name_map
     )
     if missing_names:
         missing_columns: str = ", ".join(missing_names)
@@ -214,12 +217,48 @@ def _build_expression_cast_subquery(
             code="S403",
         )
 
-    projections: list[str] = [
-        f"CAST({name} AS {enforced_map[name]}) AS {name}" if name in enforced_map else name
-        for name in expression_names
-    ]
+    projections: list[str] = _build_expression_source_projections(
+        expression_names=expression_names,
+        declared_columns=declared_columns,
+        expression_name_map=expression_name_map,
+        adapter=adapter,
+    )
     projection_clause: str = ", ".join(projections)
     return f"(SELECT {projection_clause} FROM {source_relation})"
+
+
+def _build_expression_source_projections(
+    *,
+    expression_names: tuple[str, ...],
+    declared_columns: tuple[SourceColumnEntry, ...],
+    expression_name_map: dict[str, str],
+    adapter: BaseAdapter,
+) -> list[str]:
+    enforced_map: dict[str, str] = {
+        col.name: col.type for col in declared_columns if col.type is not None
+    }
+    enforced_by_expression_name: dict[str, tuple[str, str]] = {
+        expression_name_map[name.lower()]: (name, column_type)
+        for name, column_type in enforced_map.items()
+        if name.lower() in expression_name_map
+    }
+    projections: list[str] = []
+    for name in expression_names:
+        enforced_entry: tuple[str, str] | None = enforced_by_expression_name.get(name)
+        if enforced_entry is None:
+            projections.append(name)
+            continue
+        declared_name: str
+        column_type: str
+        declared_name, column_type = enforced_entry
+        projections.append(
+            adapter.render_source_expression_cast(
+                expression=name,
+                target_type=column_type,
+                alias=declared_name,
+            )
+        )
+    return projections
 
 
 def _build_cursor_subquery(

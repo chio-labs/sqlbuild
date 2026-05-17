@@ -95,7 +95,10 @@ def _validate_model_attached_audit(
 ) -> None:
     """Validate that all model refs in a model-attached audit are upstream of the attached model."""
 
-    assert audit.attached_target_name is not None
+    if audit.attached_target_name is None:
+        raise PlannerInputError(
+            f"audit '{audit.name}': model-attached audit is missing an attached model name"
+        )
     attached_key: CompiledObjectKey = CompiledObjectKey(
         resource_type=CompiledResourceType.MODEL, name=audit.attached_target_name
     )

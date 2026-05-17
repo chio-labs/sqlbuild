@@ -10,6 +10,7 @@ from scripts.structure.structure_conventions.constants import (
     DEV_TOOLING_FILE_PREFIXES,
     DEV_TOOLING_SEGMENTS,
     MODEL_CLASS_BASE_NAMES,
+    RAW_BUILTIN_RAISE_NAMES,
     TYPE_CLASS_BASE_NAMES,
 )
 from scripts.structure.structure_conventions.models import Violation
@@ -451,6 +452,41 @@ def check_model_declarations_outside_models(file_path: Path, module: ast.Module)
                     path=file_path,
                     line=node.lineno,
                     message="structured runtime models must be defined in models.py",
+                )
+            )
+    return violations
+
+
+def check_no_raw_runtime_diagnostics(file_path: Path, module: ast.Module) -> list[Violation]:
+    """Reject raw built-in raises and asserts in production runtime code."""
+
+    if not _is_runtime_source_file(file_path):
+        return []
+
+    violations: list[Violation] = []
+    for node in ast.walk(module):
+        if isinstance(node, ast.Raise) and _raise_uses_raw_builtin(node):
+            violations.append(
+                Violation(
+                    code="SC035",
+                    path=file_path,
+                    line=node.lineno,
+                    message=(
+                        "production code must raise a structured SQLBuild error instead of "
+                        "a raw built-in exception"
+                    ),
+                )
+            )
+        if isinstance(node, ast.Assert):
+            violations.append(
+                Violation(
+                    code="SC036",
+                    path=file_path,
+                    line=node.lineno,
+                    message=(
+                        "production code must not use assert for runtime invariants; "
+                        "raise a structured SQLBuild error"
+                    ),
                 )
             )
     return violations
@@ -1224,6 +1260,20 @@ def _base_name(node: ast.expr) -> str | None:
     if isinstance(node, ast.Subscript):
         return _base_name(node.value)
     return None
+
+
+def _is_runtime_source_file(file_path: Path) -> bool:
+    parts: tuple[str, ...] = file_path.parts
+    return "src" in parts and "sqlbuild" in parts and file_path.suffix == ".py"
+
+
+def _raise_uses_raw_builtin(node: ast.Raise) -> bool:
+    if node.exc is None:
+        return False
+    raised_name: str | None = (
+        _base_name(node.exc.func) if isinstance(node.exc, ast.Call) else _base_name(node.exc)
+    )
+    return raised_name in RAW_BUILTIN_RAISE_NAMES
 
 
 def _decorator_name(node: ast.expr) -> str:

@@ -271,6 +271,8 @@ def _build_test_on_complete(
             item_name=result.test_name,
             status_text=status_text,
             child_rows=build_test_check_rows(result),
+            error_code=result.error_code,
+            error_help=result.error_help,
             error_message=result.error_message,
         )
 
