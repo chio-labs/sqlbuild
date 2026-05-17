@@ -21,6 +21,7 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/macros`
 - `concepts/functions`
 - `concepts/incremental`
+- `concepts/snapshots`
 - `concepts/audits`
 - `concepts/testing`
 - `concepts/scenarios`
@@ -175,7 +176,6 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
 
 ### What's next
 
-- **Snapshot / SCD models** - Slowly changing dimension support with automatic valid_from/valid_to history tracking, hard delete detection, and point-in-time querying
 - **Python models** - Define models in Python using Pandas, PySpark, Snowpark, or BigFrames for transformations that don't fit naturally in SQL, with the same testing and audit guarantees as SQL models
 
 ### Quick links
@@ -196,7 +196,7 @@ This guide walks you through creating and running a complete transformation proj
 ### Prerequisites
 
 - Python 3.12+
-- SQLBuild installed: `uv add sqlbuild` or `pip install sqlbuild`
+- SQLBuild installed: `uv pip install sqlbuild` or `pip install sqlbuild`
 
 ### 1. Create the playground
 
@@ -664,7 +664,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | **Compilation** | | | |
 | SQL validation | SQLGlot-based, offline | dbt Fusion (proprietary license) | SQLGlot-based |
 | Column-level lineage | Compile-time, fast and rich modes | Post-hoc via docs | Compile-time |
-| Column contract validation | Infer columns, check types offline | YAML schema contracts at runtime | Schema contracts via plan |
+| Column contract validation | Compile-time inference plus runtime enforcement with `contract enforced` | YAML schema contracts at runtime | Schema contracts via plan |
 | SQL transpilation | For local E2E replay into DuckDB | No | For cross-dialect model execution |
 | Python macros | `@macro()` syntax | No (Jinja only) | SQLMesh macro syntax |
 | Jinja support | No (Python macros instead) | Yes (core templating) | Yes |
@@ -672,7 +672,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | Incremental strategies | append, delete_insert, merge | append, delete+insert, merge | time-range, unique-key, partition, SCD Type 2, append |
 | Microbatch execution | Configurable batch sizes with per-batch audits | Microbatch (recent addition) | Batch size support |
 | Stateful interval tracking | No - cursor-based (no external state) | No | Yes - tracks which intervals ran |
-| SCD Type 2 models | Coming soon | Snapshots (limited) | Built-in |
+| SCD Type 2 models | Timestamp and check strategies, historical input, hard deletes | Snapshots (limited) | Built-in |
 | **Environments** | | | |
 | Virtual environments | No | No | Pointer swaps, no compute cost |
 | Environment diffs | Full row-level data comparison | No | Table diff |
@@ -700,9 +700,9 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 
 ### Not yet in SQLBuild
 
-- **SCD Type 2 models** - slowly changing dimension support (in active development)
 - **Python models** - Pandas, PySpark, Snowpark, BigFrames (in active development)
 - **First-party partition state tracking** - opt-in stateful partition tracking (currently possible via custom materializations, first-party support coming soon)
+- **Broader adapter support** - PostgreSQL, ClickHouse, and Microsoft SQL Server are coming soon
 
 ## Project Configuration
 
@@ -1215,7 +1215,7 @@ Snowflake requires the optional `snowflake-connector-python` dependency:
 ```bash
 pip install 'sqlbuild[snowflake]'
 # or
-uv add 'sqlbuild[snowflake]'
+uv pip install 'sqlbuild[snowflake]'
 ```
 
 ### Connection config
@@ -1279,7 +1279,7 @@ BigQuery requires the optional `google-cloud-bigquery` dependency:
 ```bash
 pip install 'sqlbuild[bigquery]'
 # or
-uv add 'sqlbuild[bigquery]'
+uv pip install 'sqlbuild[bigquery]'
 ```
 
 ### Connection config
@@ -1323,7 +1323,7 @@ Databricks requires the optional `databricks-sql-connector` dependency:
 ```bash
 pip install 'sqlbuild[databricks]'
 # or
-uv add 'sqlbuild[databricks]'
+uv pip install 'sqlbuild[databricks]'
 ```
 
 ### Connection config
@@ -1442,6 +1442,7 @@ You can explicitly set `type_enforcement: false` on a source to disable casting 
 | `expression` | Inline SQL expression (alternative to table reference) |
 | `description` | Human-readable description |
 | `type_enforcement` | Override implicit type enforcement (`true`/`false`). Defaults to `true` when any column declares a type. |
+| `contract` | `enforced` or `none`. When enforced, downstream models validate configured column references against source columns. |
 | `columns` | Column declarations with optional types and audits |
 | `audits` | Source-level audits |
 
@@ -1658,6 +1659,29 @@ FROM __ref("fact_orders") o
 GROUP BY DATE_TRUNC('hour', o.ordered_at)
 ```
 
+#### snapshot
+
+Maintains historical row versions with SCD Type 2 semantics. Supports timestamp-based and value-check-based change detection, historical source inputs, hard delete invalidation, and configurable full-refresh safety policies.
+
+```sql
+MODEL (
+  materialized snapshot,
+  unique_key [customer_id],
+  snapshot_strategy timestamp,
+  updated_at updated_at,
+);
+
+SELECT
+  customer_id,
+  name,
+  plan,
+  status,
+  updated_at
+FROM __source("customers")
+```
+
+See [Snapshots](/concepts/snapshots) for full configuration, historical input modes, and querying patterns.
+
 #### custom
 
 User-defined Python materialization function. Custom materializations get full access to the framework including adapter, schema change signals, query change detection, and audit hooks.
@@ -1805,6 +1829,44 @@ MODEL (
 
 When enabled, SQLBuild casts columns to declared types and uses them for schema-change detection. There is no need to set `type_enforcement: true` explicitly.
 
+#### Contracts
+
+Contracts enforce that a model's output matches its declared column schema exactly - column names, column count, and column types. When `contract enforced` is set, the declared columns become the authoritative output contract.
+
+```sql
+MODEL (
+  materialized table,
+  contract enforced,
+  columns (
+    order_id (type INTEGER, audits [not_null]),
+    customer_id (type INTEGER, audits [not_null]),
+    amount_cents (type INTEGER),
+    status (type VARCHAR),
+  ),
+);
+```
+
+Contract enforcement happens at two levels:
+
+**Compile time** - config fields that reference columns (`unique_key`, `cursor`, `updated_at`, `check_columns`) are validated against the declared column names. If a referenced column is not in the contract, compilation fails.
+
+**Runtime** - after materialization into the staging table, SQLBuild inspects the actual output columns and validates them against the contract before promotion:
+
+- Missing declared columns fail with code `K010`
+- Extra undeclared columns fail with code `K011`
+- Type mismatches (e.g. `VARCHAR` where `INTEGER` was declared) fail with code `K013`
+
+If any validation fails, the production table is untouched. Types are compared using adapter-aware normalization, so equivalent types across dialects are handled correctly.
+
+Contract values:
+
+| Value | Behavior |
+|-------|----------|
+| `enforced` | Declared columns are the complete, authoritative output schema |
+| `none` | No contract enforcement (default) |
+
+Contracts interact with schema change policies. For snapshot models, `snapshot_schema_change append_new_columns` is incompatible with `contract enforced` because appending columns would violate the contract.
+
 #### Audit run scope
 
 Audits on incremental models can specify `run_scope` to control when they execute:
@@ -1872,6 +1934,7 @@ Hooks also support macro calls and project variable interpolation (`@@name`, `@@
 | `pre_hook` | SQL statements to execute before materialization |
 | `post_hook` | SQL statements to execute after materialization |
 | `enabled` | Set to `false` to skip the model |
+| `contract` | `enforced` or `none`. When enforced, declared columns are the authoritative output schema. |
 
 #### Incremental config
 
@@ -2648,6 +2711,360 @@ Controls how schema differences are handled at execution time:
 When an upstream model has a backfill policy and its query or schema changes, the backfill signal cascades to all downstream incremental models. The plan shows these as `Upstream changed` with the root cause and effective rebuild window.
 
 Downstream models can override the cascaded behavior by setting their own `query_change_backfill` or `schema_change_backfill` policies. If a downstream model has its own policy, that takes precedence over the cascaded signal. If it has no policy, it inherits the upstream's rebuild scope.
+
+## Snapshots (SCD Type 2)
+
+Source: `concepts/snapshots.mdx`
+
+Preserve row history over time using SCD Type 2 semantics with timestamp or check-based change detection.
+
+Snapshot models maintain historical row versions with validity windows. They answer questions like: what does this entity look like now, what did it look like before, when did it change, and was it absent during a period.
+
+### How snapshots work
+
+SQLBuild adds two generated columns to the target table:
+
+| Column | Meaning |
+|--------|---------|
+| `valid_from` | When this version became valid (inclusive) |
+| `valid_to` | When this version stopped being valid (exclusive). `NULL` means currently active. |
+
+A point-in-time query uses the interval `valid_from <= point_in_time < valid_to`.
+
+### Change detection strategies
+
+#### Timestamp strategy
+
+Use when your source has a reliable column recording when the entity changed.
+
+```sql
+MODEL (
+  materialized snapshot,
+  unique_key [customer_id],
+  snapshot_strategy timestamp,
+  updated_at updated_at,
+);
+
+SELECT
+  customer_id,
+  name,
+  plan,
+  status,
+  updated_at
+FROM __source("customers")
+```
+
+If the source `updated_at` is newer than the active target row's `updated_at`, SQLBuild closes the old version and inserts the new one. If `updated_at` is unchanged or older, nothing happens.
+
+#### Check strategy
+
+Use when the source does not have a reliable update timestamp.
+
+```sql
+MODEL (
+  materialized snapshot,
+  unique_key [customer_id],
+  snapshot_strategy check,
+  check_columns [name, plan, status],
+);
+
+SELECT
+  customer_id,
+  name,
+  plan,
+  status
+FROM __source("customers")
+```
+
+SQLBuild compares `check_columns` between source and active target rows. If any checked value differs, a new version is created. Changes to unchecked columns are ignored.
+
+`check_columns [*]` checks all output columns except `unique_key` and the generated validity columns. Explicit columns are recommended for important models to avoid noisy history from volatile metadata columns.
+
+### Historical input
+
+By default, SQLBuild treats the model query as returning the current state of each entity (one row per `unique_key`). When your source contains historical observations over time, add `observed_at` to switch to historical mode.
+
+#### Historical check snapshot
+
+Use for daily full exports or periodic snapshots without a business update timestamp.
+
+```sql
+MODEL (
+  materialized snapshot,
+  unique_key [customer_id],
+  snapshot_strategy check,
+  check_columns [plan, status],
+  observed_at snapshot_date,
+);
+
+SELECT
+  customer_id,
+  plan,
+  status,
+  snapshot_date
+FROM __source("customers_daily_snapshot")
+```
+
+Each `observed_at` group is treated as a complete picture of the source at that time. Consecutive unchanged observations are collapsed into a single version.
+
+#### Historical timestamp snapshot
+
+Use for historical observations that include a business update timestamp.
+
+```sql
+MODEL (
+  materialized snapshot,
+  unique_key [customer_id],
+  snapshot_strategy timestamp,
+  updated_at updated_at,
+  observed_at extract_date,
+  historical_input snapshot,
+);
+
+SELECT
+  customer_id,
+  plan,
+  status,
+  updated_at,
+  extract_date
+FROM __source("customers_historical_extracts")
+```
+
+Each row means: "at `extract_date`, the source's current state for this key had this `updated_at`." Validity windows use `updated_at`, not `observed_at`.
+
+#### Historical change records
+
+Use for CDC tables, audit logs, or historical backfills where rows are individual version records.
+
+```sql
+MODEL (
+  materialized snapshot,
+  unique_key [customer_id],
+  snapshot_strategy timestamp,
+  updated_at updated_at,
+  observed_at loaded_at,
+  historical_input changes,
+);
+
+SELECT
+  customer_id,
+  plan,
+  status,
+  updated_at,
+  loaded_at
+FROM __source("customers_cdc")
+```
+
+Multiple changes for the same key in one batch are allowed. `updated_at` determines version ordering. `observed_at` is arrival/load time, not validity time.
+
+#### Historical input rules
+
+| Strategy | `historical_input` | Source shape | Uniqueness | Hard deletes |
+|----------|-------------------|-------------|-----------|-------------|
+| `check` | `snapshot` (default) | Complete observations over time | `unique_key + observed_at` | Allowed |
+| `timestamp` | `snapshot` | Complete observations with update timestamp | `unique_key + observed_at` | Allowed |
+| `timestamp` | `changes` | Individual change/version records | `unique_key + updated_at` | Not allowed |
+| `check` | `changes` | Not supported | - | - |
+
+Timestamp snapshots with `observed_at` require `historical_input` to be set explicitly.
+
+### Hard deletes
+
+```sql
+invalidate_hard_deletes true,
+```
+
+When enabled, active target rows whose keys are missing from the source are closed:
+
+- **Current-state input**: closed at execution time
+- **Historical input** (`historical_input snapshot`): closed at the `observed_at` time of the group where the key is missing
+
+Hard deletes are not allowed with `historical_input changes` because change-record batches are not complete source snapshots - a missing key just means no change, not deletion.
+
+Reappearing keys create a new active version.
+
+### Configuration reference
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `materialized snapshot` | Yes | Enables snapshot lifecycle |
+| `unique_key` | Yes | Column(s) identifying one entity |
+| `snapshot_strategy` | Yes | `timestamp` or `check` |
+| `updated_at` | Timestamp only | Source column with business update time |
+| `check_columns` | Check only | Columns compared to detect changes. Use `[*]` for all non-key columns. |
+| `observed_at` | No | Source column with observation/extract time. Presence enables historical mode. |
+| `historical_input` | Conditional | `snapshot` or `changes`. Required for timestamp with `observed_at`. Defaults to `snapshot` for check with `observed_at`. |
+| `invalidate_hard_deletes` | No | Close active rows missing from source. Default `false`. |
+| `valid_from_column` | No | Override generated column name. Default `valid_from`. |
+| `valid_to_column` | No | Override generated column name. Default `valid_to`. |
+| `initial_valid_from` | No | First-version start time: `updated_at`, `observed_at`, or `execution_time`. See defaults below. |
+| `snapshot_full_refresh` | No | Model-level full-refresh safety: `deny`, `require_confirmation`, or `allow`. |
+
+#### Initial valid_from defaults
+
+| Case | Default |
+|------|---------|
+| Timestamp, no `observed_at` | `updated_at` |
+| Timestamp, with `observed_at` | `updated_at` |
+| Check, no `observed_at` | `execution_time` |
+| Check, with `observed_at` | `observed_at` |
+
+### Full refresh safety
+
+Snapshot full refresh can permanently discard history that cannot be reconstructed from the source. SQLBuild guards against this with configurable safety policies.
+
+#### Project config
+
+```toml
+[snapshots]
+current_state_full_refresh = "deny"
+historical_full_refresh = "require_confirmation"
+```
+
+| Policy | Behavior |
+|--------|----------|
+| `deny` | Full refresh is blocked regardless of CLI flags |
+| `require_confirmation` | Requires `--allow-snapshot-full-refresh` flag or interactive confirmation |
+| `allow` | No snapshot-specific confirmation required |
+
+#### Defaults
+
+| Snapshot type | Default policy | Reason |
+|--------------|---------------|--------|
+| Current-state (no `observed_at`) | `deny` | Cannot reconstruct older history from current-state source |
+| Historical (with `observed_at`) | `require_confirmation` | Can reconstruct if query returns full history, but SQLBuild cannot prove that |
+
+#### Model override
+
+The model `snapshot_full_refresh` field can only make the policy **stricter** than the project setting. A model cannot weaken `deny` to `allow`.
+
+```sql
+MODEL (
+  materialized snapshot,
+  ...
+  snapshot_full_refresh deny,
+);
+```
+
+#### CLI usage
+
+```bash
+# Fails if any selected snapshot has effective policy 'deny'
+sqb build --full-refresh
+
+# Satisfies 'require_confirmation' policy (cannot override 'deny')
+sqb build --full-refresh --allow-snapshot-full-refresh
+```
+
+### Audits
+
+Snapshot models support the same audit system as other materializations. Audits with `delta_and_final` run scope execute against the snapshot delta relation before target mutation, blocking promotion if an error-severity audit fails. Final audits run after target mutation.
+
+```sql
+MODEL (
+  materialized snapshot,
+  unique_key [customer_id],
+  snapshot_strategy timestamp,
+  updated_at updated_at,
+  columns (
+    customer_id (audits [not_null (run_scope delta_and_final)]),
+  ),
+);
+```
+
+### Duplicate handling
+
+SQLBuild fails with an actionable error if the source query produces duplicate rows at the snapshot identity grain:
+
+- Current-state: duplicate `unique_key`
+- Historical snapshot: duplicate `unique_key + observed_at`
+- Historical changes: duplicate `unique_key + updated_at`
+
+Deduplicate in your model SQL:
+
+```sql
+WITH ranked AS (
+  SELECT
+    *,
+    ROW_NUMBER() OVER (
+      PARTITION BY customer_id, snapshot_date
+      ORDER BY loaded_at DESC
+    ) AS rn
+  FROM __source("customer_daily")
+)
+
+SELECT customer_id, plan, status, snapshot_date
+FROM ranked
+WHERE rn = 1
+```
+
+### Querying snapshots
+
+#### Current rows
+
+```sql
+SELECT * FROM customer_snapshot WHERE valid_to IS NULL
+```
+
+#### Point-in-time
+
+```sql
+SELECT *
+FROM customer_snapshot
+WHERE customer_id = 1
+  AND TIMESTAMP '2026-02-15' >= valid_from
+  AND (valid_to IS NULL OR TIMESTAMP '2026-02-15' < valid_to)
+```
+
+#### Fact-to-dimension historical join
+
+```sql
+SELECT
+  o.order_id,
+  o.ordered_at,
+  c.plan
+FROM orders o
+JOIN customer_snapshot c
+  ON o.customer_id = c.customer_id
+ AND o.ordered_at >= c.valid_from
+ AND (c.valid_to IS NULL OR o.ordered_at < c.valid_to)
+```
+
+### Examples
+
+#### Composite key
+
+```sql
+MODEL (
+  materialized snapshot,
+  unique_key [user_id, role_id],
+  snapshot_strategy check,
+  check_columns [role_name, role_status],
+  observed_at snapshot_date,
+  invalidate_hard_deletes true,
+);
+
+SELECT
+  user_id, role_id, role_name, role_status, snapshot_date
+FROM __source("user_role_daily")
+```
+
+#### Custom validity column names
+
+```sql
+MODEL (
+  materialized snapshot,
+  unique_key [product_id],
+  snapshot_strategy timestamp,
+  updated_at modified_at,
+  valid_from_column effective_from,
+  valid_to_column effective_to,
+);
+
+SELECT
+  product_id, name, price, modified_at
+FROM __source("products")
+```
 
 ## Audits
 
@@ -3946,8 +4363,8 @@ SQLBuild includes a Dagster integration that maps your project's models, sources
 ```bash
 sqb playground dagster my-dagster-project
 cd my-dagster-project
-uv add 'sqlbuild[dagster]'
-DAGSTER_IS_DEV_CLI=1 uv run dagster dev -f dagster/definitions.py
+uv pip install 'sqlbuild[dagster]'
+DAGSTER_IS_DEV_CLI=1 dagster dev -f dagster/definitions.py
 ```
 
 This creates the waffle shop project with a `dagster/definitions.py` that includes asset definitions, scenario checks, and a configured resource. Open the Dagster UI, materialize the assets, then run the scenario checks.
@@ -3955,7 +4372,7 @@ This creates the waffle shop project with a `dagster/definitions.py` that includ
 ### Install
 
 ```bash
-uv add 'sqlbuild[dagster]'
+uv pip install 'sqlbuild[dagster]'
 # or
 pip install 'sqlbuild[dagster]'
 ```
@@ -5894,8 +6311,8 @@ sqb build
 # With Dagster integration
 sqb playground dagster my-dagster-project
 cd my-dagster-project
-uv add 'sqlbuild[dagster]'
-DAGSTER_IS_DEV_CLI=1 uv run dagster dev -f dagster/definitions.py
+uv pip install 'sqlbuild[dagster]'
+DAGSTER_IS_DEV_CLI=1 dagster dev -f dagster/definitions.py
 ```
 
 ### Notes
