@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
@@ -57,7 +57,11 @@ class PostgresRowDiffSampleTestCase:
     left_sql: str
     right_sql: str
     unique_key: tuple[str, ...]
-    expected_unequal_rows: tuple[RowDiffSampleRow, ...]
+    expected_unequal_rows: tuple[RowDiffSampleRow, ...] = field(default_factory=tuple)
+    expected_side_only_rows: tuple[tuple[tuple[str, object], ...], ...] = field(
+        default_factory=tuple
+    )
+    side: str = "left"
 
 
 @dataclass(frozen=True)

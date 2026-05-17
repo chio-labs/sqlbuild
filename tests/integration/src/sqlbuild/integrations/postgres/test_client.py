@@ -167,26 +167,59 @@ def test_given_merge_sql_when_merging_then_postgres_upserts_via_on_conflict(
     assert rows == test_case.expected_rows
 
 
+ROW_DIFF_TEST_CASES: list[PostgresRowDiffTestCase] = [
+    PostgresRowDiffTestCase(
+        description="detects one mismatched row between left and right",
+        left_sql="SELECT 1 AS id, 100 AS amount UNION ALL SELECT 2, 200",
+        right_sql="SELECT 1 AS id, 100 AS amount UNION ALL SELECT 2, 999",
+        unique_key=("id",),
+        expected_result=RowDiffResult(
+            left_count=2,
+            right_count=2,
+            joined_count=2,
+            equal_count=1,
+            unequal_count=1,
+            left_only_count=0,
+            right_only_count=0,
+        ),
+    ),
+    PostgresRowDiffTestCase(
+        description="counts equal rows for identical tables",
+        left_sql="SELECT 1 AS id, 10 AS amount",
+        right_sql="SELECT 1 AS id, 10 AS amount",
+        unique_key=("id",),
+        expected_result=RowDiffResult(
+            left_count=1,
+            right_count=1,
+            joined_count=1,
+            equal_count=1,
+            unequal_count=0,
+            left_only_count=0,
+            right_only_count=0,
+        ),
+    ),
+    PostgresRowDiffTestCase(
+        description="detects equal unequal and side-only rows across three rows",
+        left_sql=("SELECT 1 AS id, 'a' AS val UNION ALL SELECT 2, 'b' UNION ALL SELECT 3, 'c'"),
+        right_sql=("SELECT 1 AS id, 'a' AS val UNION ALL SELECT 2, 'x' UNION ALL SELECT 4, 'd'"),
+        unique_key=("id",),
+        expected_result=RowDiffResult(
+            left_count=3,
+            right_count=3,
+            joined_count=4,
+            equal_count=1,
+            unequal_count=1,
+            left_only_count=1,
+            right_only_count=1,
+        ),
+    ),
+]
+
+
 @pytest.mark.parametrize(
     "test_case",
-    [
-        PostgresRowDiffTestCase(
-            description="detects one mismatched row between left and right",
-            left_sql="SELECT 1 AS id, 100 AS amount UNION ALL SELECT 2, 200",
-            right_sql="SELECT 1 AS id, 100 AS amount UNION ALL SELECT 2, 999",
-            unique_key=("id",),
-            expected_result=RowDiffResult(
-                left_count=2,
-                right_count=2,
-                joined_count=2,
-                equal_count=1,
-                unequal_count=1,
-                left_only_count=0,
-                right_only_count=0,
-            ),
-        )
-    ],
-    ids=["detects one mismatched row between left and right"],
+    ROW_DIFF_TEST_CASES,
+    ids=[case.description for case in ROW_DIFF_TEST_CASES],
 )
 def test_given_two_relations_when_diffing_rows_then_postgres_returns_diff_counts(
     test_case: PostgresRowDiffTestCase,
@@ -214,25 +247,38 @@ def test_given_two_relations_when_diffing_rows_then_postgres_returns_diff_counts
     assert result.right_only_count == test_case.expected_result.right_only_count
 
 
+ROW_DIFF_SAMPLE_TEST_CASES: list[PostgresRowDiffSampleTestCase] = [
+    PostgresRowDiffSampleTestCase(
+        description="samples the mismatched row with left and right values",
+        left_sql="SELECT 1 AS id, 100 AS amount",
+        right_sql="SELECT 1 AS id, 999 AS amount",
+        unique_key=("id",),
+        expected_unequal_rows=(
+            RowDiffSampleRow(
+                key_values=(("id", 1),),
+                changed_cells=(RowDiffSampleCell(name="amount", left_value=100, right_value=999),),
+            ),
+        ),
+    ),
+    PostgresRowDiffSampleTestCase(
+        description="samples changed values for multiple mismatched rows",
+        left_sql=("SELECT 1 AS id, 'a' AS val UNION ALL SELECT 2 AS id, 'b' AS val"),
+        right_sql=("SELECT 1 AS id, 'x' AS val UNION ALL SELECT 2 AS id, 'b' AS val"),
+        unique_key=("id",),
+        expected_unequal_rows=(
+            RowDiffSampleRow(
+                key_values=(("id", 1),),
+                changed_cells=(RowDiffSampleCell(name="val", left_value="a", right_value="x"),),
+            ),
+        ),
+    ),
+]
+
+
 @pytest.mark.parametrize(
     "test_case",
-    [
-        PostgresRowDiffSampleTestCase(
-            description="samples the mismatched row with left and right values",
-            left_sql="SELECT 1 AS id, 100 AS amount",
-            right_sql="SELECT 1 AS id, 999 AS amount",
-            unique_key=("id",),
-            expected_unequal_rows=(
-                RowDiffSampleRow(
-                    key_values=(("id", 1),),
-                    changed_cells=(
-                        RowDiffSampleCell(name="amount", left_value=100, right_value=999),
-                    ),
-                ),
-            ),
-        )
-    ],
-    ids=["samples the mismatched row with left and right values"],
+    ROW_DIFF_SAMPLE_TEST_CASES,
+    ids=[case.description for case in ROW_DIFF_SAMPLE_TEST_CASES],
 )
 def test_given_mismatched_rows_when_sampling_then_postgres_returns_changed_cells(
     test_case: PostgresRowDiffSampleTestCase,
@@ -261,17 +307,78 @@ def test_given_mismatched_rows_when_sampling_then_postgres_returns_changed_cells
 @pytest.mark.parametrize(
     "test_case",
     [
-        PostgresSchemaDiffTestCase(
-            description="detects added and removed columns between two tables",
-            left_ddl="CREATE TABLE {target} (id INTEGER, name VARCHAR)",
-            right_ddl="CREATE TABLE {target} (id INTEGER, email VARCHAR)",
-            expected_result=SchemaDiffResult(
-                added_columns=(ColumnInfo(name="email", type="character varying"),),
-                removed_columns=(ColumnInfo(name="name", type="character varying"),),
-            ),
+        PostgresRowDiffSampleTestCase(
+            description="returns left-only key samples",
+            left_sql=("SELECT 1 AS id, 'a' AS val UNION ALL SELECT 2 AS id, 'b' AS val"),
+            right_sql=("SELECT 2 AS id, 'b' AS val UNION ALL SELECT 3 AS id, 'c' AS val"),
+            unique_key=("id",),
+            side="left",
+            expected_side_only_rows=((("id", 1),),),
         )
     ],
-    ids=["detects added and removed columns between two tables"],
+    ids=["returns left-only key samples"],
+)
+def test_given_side_only_rows_when_sampling_then_postgres_returns_key_values(
+    test_case: PostgresRowDiffSampleTestCase,
+    adapter: PostgresAdapter,
+    connection: Any,
+    postgres_schema: str,
+) -> None:
+    left: str = qualified_name(schema=postgres_schema, name="left_rel")
+    right: str = qualified_name(schema=postgres_schema, name="right_rel")
+    adapter.execute(connection, f"CREATE TABLE {left} AS {test_case.left_sql}")
+    adapter.execute(connection, f"CREATE TABLE {right} AS {test_case.right_sql}")
+
+    side_only: tuple[tuple[tuple[str, object], ...], ...] = adapter.sample_side_only_rows(
+        connection,
+        left=left,
+        right=right,
+        unique_key=test_case.unique_key,
+        side=test_case.side,
+        limit=5,
+    )
+
+    assert side_only == test_case.expected_side_only_rows
+
+
+SCHEMA_DIFF_TEST_CASES: list[PostgresSchemaDiffTestCase] = [
+    PostgresSchemaDiffTestCase(
+        description="detects added and removed columns between two tables",
+        left_ddl="CREATE TABLE {target} (id INTEGER, name VARCHAR)",
+        right_ddl="CREATE TABLE {target} (id INTEGER, email VARCHAR)",
+        expected_result=SchemaDiffResult(
+            added_columns=(ColumnInfo(name="email", type="character varying"),),
+            removed_columns=(ColumnInfo(name="name", type="character varying"),),
+        ),
+    ),
+    PostgresSchemaDiffTestCase(
+        description="detects added removed and type-changed columns",
+        left_ddl="CREATE TABLE {target} (id INTEGER, status TEXT, old_col BOOLEAN)",
+        right_ddl="CREATE TABLE {target} (id BIGINT, status TEXT, new_col DATE)",
+        expected_result=SchemaDiffResult(
+            added_columns=(ColumnInfo(name="new_col", type="date"),),
+            removed_columns=(ColumnInfo(name="old_col", type="boolean"),),
+            type_changed_columns=(
+                (
+                    ColumnInfo(name="id", type="integer"),
+                    ColumnInfo(name="id", type="bigint"),
+                ),
+            ),
+        ),
+    ),
+    PostgresSchemaDiffTestCase(
+        description="ignores equivalent type aliases such as NUMERIC and DECIMAL",
+        left_ddl="CREATE TABLE {target} (id INTEGER, amount NUMERIC(10,2))",
+        right_ddl="CREATE TABLE {target} (id INT4, amount DECIMAL(10,2))",
+        expected_result=SchemaDiffResult(),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SCHEMA_DIFF_TEST_CASES,
+    ids=[case.description for case in SCHEMA_DIFF_TEST_CASES],
 )
 def test_given_two_tables_when_diffing_schema_then_postgres_detects_column_changes(
     test_case: PostgresSchemaDiffTestCase,
