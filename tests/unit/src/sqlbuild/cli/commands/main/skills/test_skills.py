@@ -6,6 +6,7 @@ import pytest
 
 from sqlbuild.cli.commands.main.helpers.skills.models import SkillUpdateResult
 from sqlbuild.cli.commands.main.helpers.skills.update import (
+    ensure_generated_marker,
     generated_marker,
     update_sqlbuild_skills,
 )
@@ -79,6 +80,7 @@ def test_given_skill_update_options_when_updating_then_writes_expected_targets(
     expected_path: Path
     for expected_path in test_case.expected_written_paths:
         contents: str = read_relative_file(project_dir=tmp_path, relative_path=expected_path)
+        assert contents.startswith("---\nname: sqlbuild\n")
         assert generated_marker in contents
         assert test_case.expected_content_fragment in contents
 
@@ -118,6 +120,7 @@ def test_given_global_skill_update_when_updating_then_writes_under_home_director
     expected_path: Path
     for expected_path in test_case.expected_written_paths:
         contents: str = read_relative_file(project_dir=tmp_path, relative_path=expected_path)
+        assert contents.startswith("---\nname: sqlbuild\n")
         assert generated_marker in contents
 
 
@@ -143,3 +146,26 @@ def test_given_non_generated_skill_file_when_updating_without_force_then_raises_
         update_sqlbuild_skills(project_dir=tmp_path, requested_targets=test_case.requested_targets)
 
     assert test_case.expected_error_fragment in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SkillUpdateTestCase(
+            description="keeps skill frontmatter before generated marker",
+            expected_content_fragment=(
+                f"---\nname: sqlbuild\n---\n\n{generated_marker}\n# SQLBuild Skill"
+            ),
+        )
+    ],
+    ids=["keeps skill frontmatter before generated marker"],
+)
+def test_given_skill_frontmatter_when_adding_generated_marker_then_marker_follows_frontmatter(
+    test_case: SkillUpdateTestCase,
+) -> None:
+    content: str = "---\nname: sqlbuild\n---\n# SQLBuild Skill\n"
+
+    updated_content: str = ensure_generated_marker(content)
+
+    assert updated_content.startswith("---\nname: sqlbuild\n")
+    assert test_case.expected_content_fragment in updated_content
