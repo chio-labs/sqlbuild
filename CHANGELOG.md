@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.16.0](https://github.com/chio-labs/sqlbuild/compare/v0.15.0...v0.16.0) (2026-05-17)
+
+
+### Features
+
+* add MotherDuck adapter ([403d536](https://github.com/chio-labs/sqlbuild/commit/403d536c0af1a65ed793d3dc6744fb923c32e1a3))
+* add MotherDuck adapter ([36b70ef](https://github.com/chio-labs/sqlbuild/commit/36b70ef0746954db09a6755e79dd9d1ba585f947))
+* add PostgreSQL adapter ([2b7b1c5](https://github.com/chio-labs/sqlbuild/commit/2b7b1c5822a75eda23ab1610541ce8cdcb998802))
+* complete PostgresAdapter with testcontainer tests and e2e coverage ([428405c](https://github.com/chio-labs/sqlbuild/commit/428405cc0f9a4292b22bcd361df1584ef76bf1f0))
+
+
+### Bug Fixes
+
+* address reviewer feedback on postgres adapter coverage ([e1858bd](https://github.com/chio-labs/sqlbuild/commit/e1858bdcc1220a76861103c5c4acb5e4aaf501e1))
+* make shared waffle fixture warehouse portable ([d8b84fa](https://github.com/chio-labs/sqlbuild/commit/d8b84fa64bf1c51950958c772b6bfc48d7c5c81d))
+* make shared waffle fixture warehouse portable ([1ad677d](https://github.com/chio-labs/sqlbuild/commit/1ad677d47caa1fdb1fc7400e32004f724f285d9e))
+
 ## [0.15.0](https://github.com/chio-labs/sqlbuild/compare/v0.14.0...v0.15.0) (2026-05-17)
 
 
