@@ -11,6 +11,7 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/project-configuration`
 - `concepts/adapters`
 - `concepts/adapters/duckdb`
+- `concepts/adapters/motherduck`
 - `concepts/adapters/snowflake`
 - `concepts/adapters/bigquery`
 - `concepts/adapters/databricks`
@@ -685,7 +686,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | dbt interop | Run alongside dbt - reads manifest, no migration | N/A | Jinja compatibility layer plus own macro system |
 | **Other** | | | |
 | Reference syntax | `__ref()` - parses as valid SQL | `{{ ref() }}` - Jinja template | `model_name` with dependency tracking |
-| Adapters | DuckDB, Snowflake, BigQuery, Databricks | 30+ (community adapters) | DuckDB, Snowflake, BigQuery, Databricks, Spark, Redshift, Postgres, Trino, MySQL |
+| Adapters | DuckDB, MotherDuck, Snowflake, BigQuery, Databricks | 30+ (community adapters) | DuckDB, Snowflake, BigQuery, Databricks, Spark, Redshift, Postgres, Trino, MySQL |
 | State requirements | Stateless by default | manifest.json + target/ | Requires state store (local database or PostgreSQL for production) |
 | Playground | `sqb playground` | Clone example repo | Example project |
 | AI agent skills | `sqb skills update` | No | No |
@@ -1051,6 +1052,7 @@ SQLBuild uses adapters to connect to different database engines.
 | Adapter | Status | Install |
 |---------|--------|---------|
 | [DuckDB](/concepts/adapters/duckdb) | Supported | included by default |
+| [MotherDuck](/concepts/adapters/motherduck) | Supported | included by default (uses DuckDB) |
 | [Snowflake](/concepts/adapters/snowflake) | Supported | `sqlbuild[snowflake]` |
 | [BigQuery](/concepts/adapters/bigquery) | Supported | `sqlbuild[bigquery]` |
 | [Databricks](/concepts/adapters/databricks) | Supported | `sqlbuild[databricks]` |
@@ -1203,6 +1205,75 @@ DuckDB defaults to `staged` promotion: tables are materialized into a staging ta
 [settings]
 table_promotion_mode = "staged"
 ```
+
+## MotherDuck
+
+Source: `concepts/adapters/motherduck.mdx`
+
+MotherDuck adapter configuration for SQLBuild.
+
+MotherDuck uses DuckDB's built-in `md:` connection support. No extra installation needed beyond the core DuckDB dependency.
+
+### Connection config
+
+```toml
+adapter = "motherduck"
+
+[connection]
+database = "my_database"
+token = "your_motherduck_token"
+```
+
+| Field | Description |
+|-------|-------------|
+| `database` | MotherDuck database name. Automatically prefixed with `md:` if not already present. Defaults to `md:` (your default MotherDuck database). |
+| `token` | MotherDuck access token. Can also be set via environment variable. |
+
+### Authentication
+
+MotherDuck requires an access token. Generate one from the MotherDuck UI and pass it via the connection config or an environment variable:
+
+```toml
+[connection]
+database = "my_database"
+token = "${ENV:MOTHERDUCK_TOKEN}"
+```
+
+### Per-environment connections
+
+Use environments to separate production and development databases on MotherDuck:
+
+```toml
+adapter = "motherduck"
+
+[connection]
+token = "${ENV:MOTHERDUCK_TOKEN}"
+
+[environments.prod]
+schema = "prod"
+
+[environments.prod.connection]
+database = "prod_db"
+
+[environments.dev]
+schema = "dev"
+
+[environments.dev.connection]
+database = "dev_db"
+```
+
+### Local development with DuckDB
+
+Use `sqlbuild_local.toml` to override the adapter for local development against a plain DuckDB file:
+
+```toml
+adapter = "duckdb"
+
+[connection]
+database = "local_dev.duckdb"
+```
+
+This lets you develop and test locally with zero MotherDuck compute cost, then deploy to MotherDuck in production. SQLBuild's [scenario replay](/concepts/scenarios) also runs locally in DuckDB regardless of the production adapter.
 
 ## Snowflake
 
@@ -1506,7 +1577,7 @@ LEFT JOIN __seed("waffle_types") w ON o.waffle_type_id = w.waffle_type_id
 Seeds are loaded automatically during `sqb build`. You can also load them standalone:
 
 ```bash
-sqb --project-dir examples/waffle_shop seed
+sqb seed
 ```
 
 Seeds are fully replaced on every run. If the CSV changes, the table is recreated with the new data.
@@ -3268,7 +3339,7 @@ If a model is not incremental, `delta_and_final` degrades to `final` automatical
 ### Running audits standalone
 
 ```bash
-sqb --project-dir examples/waffle_shop audit
+sqb audit
 ```
 
 This runs all audits without rebuilding any models.
@@ -3960,9 +4031,9 @@ Selectors let you scope commands to specific subsets of your project. They work 
 ### Basic usage
 
 ```bash
-sqb --project-dir examples/waffle_shop build --select daily_revenue
-sqb --project-dir examples/waffle_shop build --select daily_revenue customer_status_snapshot
-sqb --project-dir examples/waffle_shop build --exclude stg_customers
+sqb build --select daily_revenue
+sqb build --select daily_revenue customer_status_snapshot
+sqb build --exclude stg_customers
 ```
 
 `--select` (or `-s` for short) accepts one or more names. Multiple values are unioned. Space-separated names within one `--select` are also unioned. `--exclude` subtracts from the selected set.
@@ -4228,7 +4299,7 @@ Compare schemas and data between environments to validate changes before promoti
 SQLBuild can compare schemas and row-level data between any two environments. This lets you validate that changes in dev produce the expected results before promoting to production.
 
 ```bash
-sqb --project-dir examples/waffle_shop diff prod:dev --full --select customer_status_snapshot
+sqb diff prod:dev --full --select customer_status_snapshot
 ```
 
 ### Comparison modes
@@ -4800,7 +4871,7 @@ Compile returns exit code `1` when any error-severity diagnostic is found, makin
 #### Text output (default)
 
 ```bash
-sqb --project-dir examples/waffle_shop compile
+sqb compile
 ```
 
 ```
@@ -4823,7 +4894,7 @@ Each model shows its name, status (OK or FAIL), and column count. Models with co
 #### JSON output
 
 ```bash
-sqb --project-dir examples/waffle_shop compile --json
+sqb compile --json
 ```
 
 Returns a structured report including:
@@ -5013,7 +5084,7 @@ PASS=66  WARN=0  FAIL=0  SKIP=0  TOTAL=66  (1.09s)
 Use `--defer-to` to resolve unselected model references against another environment. This lets you build a subset of models in dev while referencing production tables for everything else:
 
 ```bash
-sqb --project-dir examples/waffle_shop build --select fact_orders --defer-to prod
+sqb build --select fact_orders --defer-to prod
 ```
 
 No `manifest.json` is required. Deferred references resolve directly against the live environment.
@@ -5094,10 +5165,10 @@ sqb --project-dir <path> test [flags]
 
 ```bash
 # Run all tests
-sqb --project-dir examples/waffle_shop test
+sqb test
 
 # Run tests for a specific model
-sqb --project-dir examples/waffle_shop test --select stg_orders
+sqb test --select stg_orders
 ```
 
 ## audit
@@ -5129,10 +5200,10 @@ sqb --project-dir <path> audit [flags]
 
 ```bash
 # Run all audits
-sqb --project-dir examples/waffle_shop audit
+sqb audit
 
 # Run audits for marts only
-sqb --project-dir examples/waffle_shop audit --select path:marts
+sqb audit --select path:marts
 ```
 
 ## seed
@@ -5162,10 +5233,10 @@ sqb --project-dir <path> seed [flags]
 
 ```bash
 # Load all seeds
-sqb --project-dir examples/waffle_shop seed
+sqb seed
 
 # Load a specific seed
-sqb --project-dir examples/waffle_shop seed --select seed:waffle_types
+sqb seed --select seed:waffle_types
 ```
 
 ## clone
@@ -5201,13 +5272,13 @@ sqb --project-dir <path> clone --from <env> --to <env> [flags]
 
 ```bash
 # Clone all models from prod to dev
-sqb --project-dir examples/waffle_shop clone --from prod --to dev
+sqb clone --from prod --to dev
 
 # Clone only marts to dev
-sqb --project-dir examples/waffle_shop clone --from prod --to dev --select path:marts
+sqb clone --from prod --to dev --select path:marts
 
 # Force physical copies
-sqb --project-dir examples/waffle_shop clone --from prod --to dev --hard-copy
+sqb clone --from prod --to dev --hard-copy
 ```
 
 ### Clone policies
@@ -5248,13 +5319,13 @@ The first argument is a positional environment range in `FROM:TO` format. Exactl
 
 ```bash
 # Full diff of a specific model
-sqb --project-dir examples/waffle_shop diff prod:dev --full --select customer_status_snapshot
+sqb diff prod:dev --full --select customer_status_snapshot
 
 # Schema-only diff of all marts
-sqb --project-dir examples/waffle_shop diff prod:dev --schema-only --select path:marts
+sqb diff prod:dev --schema-only --select path:marts
 
 # Bounded diff of last 14 days
-sqb --project-dir examples/waffle_shop diff prod:dev --bounded 14d --select hourly_order_activity
+sqb diff prod:dev --bounded 14d --select hourly_order_activity
 ```
 
 ### Exit codes
@@ -5305,7 +5376,7 @@ When the target is a plain resource name, lineage shows the model-level dependen
 The default. Shows an indented dependency tree with resource types and file paths:
 
 ```bash
-sqb --project-dir examples/waffle_shop lineage fact_orders --direction both
+sqb lineage fact_orders --direction both
 ```
 
 ```
@@ -5334,7 +5405,7 @@ Cycles and repeated nodes are annotated with "(already shown)" to avoid infinite
 An edge list showing each dependency as a directed pair:
 
 ```bash
-sqb --project-dir examples/waffle_shop lineage fact_orders --format list
+sqb lineage fact_orders --format list
 ```
 
 ```
@@ -5350,7 +5421,7 @@ seed:waffle_types    -> model:fact_orders
 Structured output with nodes, edges, and metadata:
 
 ```bash
-sqb --project-dir examples/waffle_shop lineage fact_orders --format json
+sqb lineage fact_orders --format json
 ```
 
 ```json
@@ -5396,7 +5467,7 @@ Column lineage supports `upstream` and `downstream` directions (not `both`). The
 #### Tree
 
 ```bash
-sqb --project-dir examples/waffle_shop lineage fact_orders.total_cents
+sqb lineage fact_orders.total_cents
 ```
 
 ```
@@ -5702,7 +5773,7 @@ The command runs three groups of checks:
 ### Example
 
 ```bash
-sqb --project-dir examples/waffle_shop debug
+sqb debug
 ```
 
 ```
@@ -5779,13 +5850,13 @@ See [Project Configuration](/concepts/project-configuration) for details on jani
 
 ```bash
 # Interactive mode (prompts for confirmation)
-sqb --project-dir examples/waffle_shop janitor
+sqb janitor
 
 # Auto-approve deletion
-sqb --project-dir examples/waffle_shop janitor --auto-approve
+sqb janitor --auto-approve
 
 # Override retention to 7 days
-sqb --project-dir examples/waffle_shop janitor --retention-days 7
+sqb janitor --retention-days 7
 ```
 
 ### Safety
@@ -5879,16 +5950,16 @@ order_id,customer_id,status
 
 ```bash
 # Quick inspection with default format
-sqb --project-dir examples/waffle_shop query "SELECT * FROM dev.fact_orders"
+sqb query "SELECT * FROM dev.fact_orders"
 
 # Table format with higher limit
-sqb --project-dir examples/waffle_shop query "SELECT * FROM dev.dim_customers" --format table --limit 50
+sqb query "SELECT * FROM dev.dim_customers" --format table --limit 50
 
 # Export to JSON
-sqb --project-dir examples/waffle_shop query "SELECT * FROM dev.daily_revenue" --format json --no-limit
+sqb query "SELECT * FROM dev.daily_revenue" --format json --no-limit
 
 # Run SQL from a file
-sqb --project-dir examples/waffle_shop query --file debug_query.sql
+sqb query --file debug_query.sql
 ```
 
 ## scenario

@@ -341,13 +341,7 @@ def test_given_two_relations_when_diffing_rows_then_postgres_returns_diff_counts
         end_cursor=test_case.end_cursor,
     )
 
-    assert result.left_count == test_case.expected_result.left_count
-    assert result.right_count == test_case.expected_result.right_count
-    assert result.equal_count == test_case.expected_result.equal_count
-    assert result.unequal_count == test_case.expected_result.unequal_count
-    assert result.left_only_count == test_case.expected_result.left_only_count
-    assert result.right_only_count == test_case.expected_result.right_only_count
-    assert result.column_results == test_case.expected_result.column_results
+    assert result == test_case.expected_result
 
 
 ROW_DIFF_ERROR_TEST_CASES: list[PostgresRowDiffErrorTestCase] = [
@@ -394,7 +388,7 @@ def test_given_invalid_diff_when_diffing_rows_then_postgres_raises_clear_error(
     adapter.execute(connection, f"CREATE TABLE {left} AS {test_case.left_sql}")
     adapter.execute(connection, f"CREATE TABLE {right} AS {test_case.right_sql}")
 
-    with pytest.raises(Exception, match=test_case.expected_error_fragment):
+    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
         adapter.diff_rows(
             connection,
             left=left,

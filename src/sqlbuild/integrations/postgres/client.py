@@ -31,7 +31,7 @@ from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settin
 
 
 class _PostgresConnection:
-    """Thin wrapper exposing a cursor-based execute interface over a raw psycopg2 connection."""
+    """Thin wrapper exposing a cursor-based execute interface over a raw psycopg connection."""
 
     def __init__(self, raw_connection: Any) -> None:
         self.raw_connection: Any = raw_connection
@@ -49,9 +49,9 @@ class _PostgresConnection:
 
 
 class PostgresAdapter(BaseAdapter):
-    """PostgreSQL adapter backed by psycopg2.
+    """PostgreSQL adapter backed by psycopg.
 
-    psycopg2 opens implicit transactions by default. The connection is set to
+    psycopg opens implicit transactions by default. The connection is set to
     autocommit=True so the framework can manage transaction boundaries explicitly
     via BEGIN/COMMIT/ROLLBACK through the ConnectionMixin.transaction() context manager.
     """
