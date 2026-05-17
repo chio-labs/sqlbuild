@@ -17,6 +17,7 @@ from sqlbuild.compiler.planner.models import FunctionPlanEntry, PlanOutput, SqlT
 from sqlbuild.executor.build.models import FunctionExecutionResult
 from sqlbuild.executor.functions.main.execute import execute_function
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.testing.constants import SQL_TEST_EXECUTION_ERROR_CODE
 from sqlbuild.executor.testing.main.execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
@@ -215,8 +216,10 @@ def _build_missing_function_result(
             StepResult(
                 model_name=model_name,
                 outcome=SqlTestOutcome.ERROR,
+                error_code=SQL_TEST_EXECUTION_ERROR_CODE,
                 error_message=error_message,
             ),
         ),
+        error_code=SQL_TEST_EXECUTION_ERROR_CODE,
         error_message=error_message,
     )
