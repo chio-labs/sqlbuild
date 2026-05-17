@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.postgres._test_types import (
+    PostgresBuildE2ETestCase,
     PostgresScenarioLocalReplayE2ETestCase,
     PostgresSnapshotApplyE2ETestCase,
     PostgresSnapshotE2ETestCase,
@@ -18,6 +19,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.postgres.helpers import (
     build_unique_schema_name,
     cleanup_postgres_schema,
     ensure_postgres_schema_ready,
+    fetch_postgres_rows,
+    prepare_postgres_waffle_shop,
+    relation_name,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     assert_optional_local_replay_rows,
@@ -35,6 +39,55 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     prepare_inline_project,
     run_sqb,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresBuildE2ETestCase(
+            description="waffle shop full build succeeds on postgres",
+            command=("--no-color", "build", "--concurrency", "4"),
+            expected_table_name="fact_orders",
+            expected_row_count=10,
+            expected_stdout_fragments=("Execution", "OK"),
+        )
+    ],
+    ids=["waffle shop full build succeeds on postgres"],
+)
+def test_given_waffle_shop_when_running_full_build_on_postgres_then_expected_table_exists(
+    tmp_path: Path,
+    test_case: PostgresBuildE2ETestCase,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    project_dir: Path
+    schema_name: str
+    project_dir, schema_name = prepare_postgres_waffle_shop(
+        tmp_path=tmp_path, config=postgres_e2e_config
+    )
+    ensure_postgres_schema_ready(schema_name=schema_name, config=postgres_e2e_config)
+
+    try:
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=test_case.command,
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in result.stdout
+        rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
+            sql=(
+                f"SELECT COUNT(*) FROM "
+                f"{relation_name(schema_name=schema_name, name=test_case.expected_table_name)}"
+            ),
+            config=postgres_e2e_config,
+        )
+        row_count: object = rows[0][0]
+        assert isinstance(row_count, int)
+        assert row_count == test_case.expected_row_count
+    finally:
+        cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
+
 
 POSTGRES_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES: list[PostgresScenarioLocalReplayE2ETestCase] = [
     PostgresScenarioLocalReplayE2ETestCase(

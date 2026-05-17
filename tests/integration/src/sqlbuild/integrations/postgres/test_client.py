@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -7,18 +8,25 @@ import pytest
 
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
+    CursorValue,
     QueryResult,
+    RowDiffColumnResult,
     RowDiffResult,
     RowDiffSampleCell,
     RowDiffSampleRow,
+    RowDiffTolerance,
+    RowDiffTolerances,
     SchemaDiffResult,
     StatementRecorder,
 )
+from sqlbuild.adapter.shared.types import CursorKind
 from sqlbuild.integrations.postgres.client import PostgresAdapter
 from tests.integration.src.sqlbuild.integrations.postgres._test_types import (
     PostgresBuildFlowTestCase,
+    PostgresCountRowsTestCase,
     PostgresMergeTestCase,
     PostgresQueryTestCase,
+    PostgresRowDiffErrorTestCase,
     PostgresRowDiffSampleTestCase,
     PostgresRowDiffTestCase,
     PostgresSchemaDiffTestCase,
@@ -181,6 +189,7 @@ ROW_DIFF_TEST_CASES: list[PostgresRowDiffTestCase] = [
             unequal_count=1,
             left_only_count=0,
             right_only_count=0,
+            column_results=(RowDiffColumnResult(name="amount", mismatched_count=1),),
         ),
     ),
     PostgresRowDiffTestCase(
@@ -196,6 +205,7 @@ ROW_DIFF_TEST_CASES: list[PostgresRowDiffTestCase] = [
             unequal_count=0,
             left_only_count=0,
             right_only_count=0,
+            column_results=(RowDiffColumnResult(name="amount", mismatched_count=0),),
         ),
     ),
     PostgresRowDiffTestCase(
@@ -211,6 +221,93 @@ ROW_DIFF_TEST_CASES: list[PostgresRowDiffTestCase] = [
             unequal_count=1,
             left_only_count=1,
             right_only_count=1,
+            column_results=(RowDiffColumnResult(name="val", mismatched_count=1),),
+        ),
+    ),
+    PostgresRowDiffTestCase(
+        description="excludes columns from comparison",
+        left_sql="SELECT 1 AS id, 'a' AS val, 'ignore1' AS extra",
+        right_sql="SELECT 1 AS id, 'a' AS val, 'ignore2' AS extra",
+        unique_key=("id",),
+        excluded_columns=("extra",),
+        expected_result=RowDiffResult(
+            left_count=1,
+            right_count=1,
+            joined_count=1,
+            equal_count=1,
+            unequal_count=0,
+            left_only_count=0,
+            right_only_count=0,
+            column_results=(RowDiffColumnResult(name="val", mismatched_count=0),),
+        ),
+    ),
+    PostgresRowDiffTestCase(
+        description="treats values within absolute tolerance as equal",
+        left_sql="SELECT 1 AS id, CAST(100.00 AS NUMERIC) AS amount",
+        right_sql="SELECT 1 AS id, CAST(100.005 AS NUMERIC) AS amount",
+        unique_key=("id",),
+        tolerances=RowDiffTolerances(
+            by_column={"amount": RowDiffTolerance(absolute=Decimal("0.01"))},
+        ),
+        expected_result=RowDiffResult(
+            left_count=1,
+            right_count=1,
+            joined_count=1,
+            equal_count=1,
+            unequal_count=0,
+            left_only_count=0,
+            right_only_count=0,
+            column_results=(
+                RowDiffColumnResult(
+                    name="amount",
+                    mismatched_count=0,
+                    tolerance=RowDiffTolerance(absolute=Decimal("0.01")),
+                ),
+            ),
+        ),
+    ),
+    PostgresRowDiffTestCase(
+        description="reports numeric difference outside absolute tolerance",
+        left_sql="SELECT 1 AS id, CAST(100.00 AS NUMERIC) AS amount",
+        right_sql="SELECT 1 AS id, CAST(100.02 AS NUMERIC) AS amount",
+        unique_key=("id",),
+        tolerances=RowDiffTolerances(
+            by_column={"amount": RowDiffTolerance(absolute=Decimal("0.01"))},
+        ),
+        expected_result=RowDiffResult(
+            left_count=1,
+            right_count=1,
+            joined_count=1,
+            equal_count=0,
+            unequal_count=1,
+            left_only_count=0,
+            right_only_count=0,
+            column_results=(
+                RowDiffColumnResult(
+                    name="amount",
+                    mismatched_count=1,
+                    tolerance=RowDiffTolerance(absolute=Decimal("0.01")),
+                ),
+            ),
+        ),
+    ),
+    PostgresRowDiffTestCase(
+        description="filters rows by integer cursor bounds",
+        left_sql=("SELECT 1 AS id, 'a' AS val UNION ALL SELECT 2, 'b' UNION ALL SELECT 3, 'c'"),
+        right_sql=("SELECT 1 AS id, 'a' AS val UNION ALL SELECT 2, 'b' UNION ALL SELECT 3, 'c'"),
+        unique_key=("id",),
+        cursor_column="id",
+        start_cursor=CursorValue(kind=CursorKind.INTEGER, value=2),
+        end_cursor=CursorValue(kind=CursorKind.INTEGER, value=3),
+        expected_result=RowDiffResult(
+            left_count=1,
+            right_count=1,
+            joined_count=1,
+            equal_count=1,
+            unequal_count=0,
+            left_only_count=0,
+            right_only_count=0,
+            column_results=(RowDiffColumnResult(name="val", mismatched_count=0),),
         ),
     ),
 ]
@@ -237,6 +334,11 @@ def test_given_two_relations_when_diffing_rows_then_postgres_returns_diff_counts
         left=left,
         right=right,
         unique_key=test_case.unique_key,
+        excluded_columns=test_case.excluded_columns,
+        tolerances=test_case.tolerances,
+        cursor_column=test_case.cursor_column,
+        start_cursor=test_case.start_cursor,
+        end_cursor=test_case.end_cursor,
     )
 
     assert result.left_count == test_case.expected_result.left_count
@@ -245,6 +347,106 @@ def test_given_two_relations_when_diffing_rows_then_postgres_returns_diff_counts
     assert result.unequal_count == test_case.expected_result.unequal_count
     assert result.left_only_count == test_case.expected_result.left_only_count
     assert result.right_only_count == test_case.expected_result.right_only_count
+    assert result.column_results == test_case.expected_result.column_results
+
+
+ROW_DIFF_ERROR_TEST_CASES: list[PostgresRowDiffErrorTestCase] = [
+    PostgresRowDiffErrorTestCase(
+        description="rejects duplicate unique key in left relation",
+        left_sql="SELECT 1 AS id, 'a' AS val UNION ALL SELECT 1, 'b'",
+        right_sql="SELECT 1 AS id, 'a' AS val",
+        unique_key=("id",),
+        expected_error_fragment="left relation contains duplicate unique_key values",
+    ),
+    PostgresRowDiffErrorTestCase(
+        description="rejects duplicate unique key in right relation",
+        left_sql="SELECT 1 AS id, 'a' AS val",
+        right_sql="SELECT 1 AS id, 'a' AS val UNION ALL SELECT 1, 'b'",
+        unique_key=("id",),
+        expected_error_fragment="right relation contains duplicate unique_key values",
+    ),
+    PostgresRowDiffErrorTestCase(
+        description="rejects tolerance for non-numeric column",
+        left_sql="SELECT 1 AS id, 'a' AS status",
+        right_sql="SELECT 1 AS id, 'b' AS status",
+        unique_key=("id",),
+        tolerances=RowDiffTolerances(
+            by_column={"status": RowDiffTolerance(absolute=Decimal("1"))},
+        ),
+        expected_error_fragment="row diff tolerance for non-numeric column 'status' is invalid",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    ROW_DIFF_ERROR_TEST_CASES,
+    ids=[case.description for case in ROW_DIFF_ERROR_TEST_CASES],
+)
+def test_given_invalid_diff_when_diffing_rows_then_postgres_raises_clear_error(
+    test_case: PostgresRowDiffErrorTestCase,
+    adapter: PostgresAdapter,
+    connection: Any,
+    postgres_schema: str,
+) -> None:
+    left: str = qualified_name(schema=postgres_schema, name="left_rel")
+    right: str = qualified_name(schema=postgres_schema, name="right_rel")
+    adapter.execute(connection, f"CREATE TABLE {left} AS {test_case.left_sql}")
+    adapter.execute(connection, f"CREATE TABLE {right} AS {test_case.right_sql}")
+
+    with pytest.raises(Exception, match=test_case.expected_error_fragment):
+        adapter.diff_rows(
+            connection,
+            left=left,
+            right=right,
+            unique_key=test_case.unique_key,
+            tolerances=test_case.tolerances,
+        )
+
+
+COUNT_ROWS_TEST_CASES: list[PostgresCountRowsTestCase] = [
+    PostgresCountRowsTestCase(
+        description="counts all rows without cursor filter",
+        table_name="count_t",
+        values_sql="(1), (2), (3)",
+        expected_count=3,
+    ),
+    PostgresCountRowsTestCase(
+        description="counts rows bounded by integer cursor",
+        table_name="count_bounded",
+        values_sql="(1), (2), (3), (4), (5)",
+        cursor_column="id",
+        start_cursor=CursorValue(kind=CursorKind.INTEGER, value=2),
+        end_cursor=CursorValue(kind=CursorKind.INTEGER, value=4),
+        expected_count=2,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    COUNT_ROWS_TEST_CASES,
+    ids=[case.description for case in COUNT_ROWS_TEST_CASES],
+)
+def test_given_table_when_counting_rows_then_postgres_returns_expected_count(
+    test_case: PostgresCountRowsTestCase,
+    adapter: PostgresAdapter,
+    connection: Any,
+    postgres_schema: str,
+) -> None:
+    target: str = qualified_name(schema=postgres_schema, name=test_case.table_name)
+    adapter.execute(connection, f"CREATE TABLE {target} (id INTEGER)")
+    adapter.execute(connection, f"INSERT INTO {target} VALUES {test_case.values_sql}")
+
+    count: int = adapter.count_rows(
+        connection,
+        relation=target,
+        cursor_column=test_case.cursor_column,
+        start_cursor=test_case.start_cursor,
+        end_cursor=test_case.end_cursor,
+    )
+
+    assert count == test_case.expected_count
 
 
 ROW_DIFF_SAMPLE_TEST_CASES: list[PostgresRowDiffSampleTestCase] = [
@@ -304,19 +506,30 @@ def test_given_mismatched_rows_when_sampling_then_postgres_returns_changed_cells
         assert sample.changed_cells == expected.changed_cells
 
 
+SIDE_ONLY_SAMPLE_TEST_CASES: list[PostgresRowDiffSampleTestCase] = [
+    PostgresRowDiffSampleTestCase(
+        description="returns left-only key samples",
+        left_sql=("SELECT 1 AS id, 'a' AS val UNION ALL SELECT 2 AS id, 'b' AS val"),
+        right_sql=("SELECT 2 AS id, 'b' AS val UNION ALL SELECT 3 AS id, 'c' AS val"),
+        unique_key=("id",),
+        side="left",
+        expected_side_only_rows=((("id", 1),),),
+    ),
+    PostgresRowDiffSampleTestCase(
+        description="returns right-only key samples",
+        left_sql=("SELECT 1 AS id, 'a' AS val UNION ALL SELECT 2 AS id, 'b' AS val"),
+        right_sql=("SELECT 2 AS id, 'b' AS val UNION ALL SELECT 3 AS id, 'c' AS val"),
+        unique_key=("id",),
+        side="right",
+        expected_side_only_rows=((("id", 3),),),
+    ),
+]
+
+
 @pytest.mark.parametrize(
     "test_case",
-    [
-        PostgresRowDiffSampleTestCase(
-            description="returns left-only key samples",
-            left_sql=("SELECT 1 AS id, 'a' AS val UNION ALL SELECT 2 AS id, 'b' AS val"),
-            right_sql=("SELECT 2 AS id, 'b' AS val UNION ALL SELECT 3 AS id, 'c' AS val"),
-            unique_key=("id",),
-            side="left",
-            expected_side_only_rows=((("id", 1),),),
-        )
-    ],
-    ids=["returns left-only key samples"],
+    SIDE_ONLY_SAMPLE_TEST_CASES,
+    ids=[case.description for case in SIDE_ONLY_SAMPLE_TEST_CASES],
 )
 def test_given_side_only_rows_when_sampling_then_postgres_returns_key_values(
     test_case: PostgresRowDiffSampleTestCase,
@@ -395,6 +608,7 @@ def test_given_two_tables_when_diffing_schema_then_postgres_detects_column_chang
 
     assert result.added_columns == test_case.expected_result.added_columns
     assert result.removed_columns == test_case.expected_result.removed_columns
+    assert result.type_changed_columns == test_case.expected_result.type_changed_columns
 
 
 @pytest.mark.parametrize(

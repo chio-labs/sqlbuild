@@ -2,9 +2,11 @@ from dataclasses import dataclass, field
 
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
+    CursorValue,
     QueryResult,
     RowDiffResult,
     RowDiffSampleRow,
+    RowDiffTolerances,
     SchemaDiffResult,
 )
 
@@ -49,6 +51,32 @@ class PostgresRowDiffTestCase:
     right_sql: str
     unique_key: tuple[str, ...]
     expected_result: RowDiffResult
+    excluded_columns: tuple[str, ...] = field(default_factory=tuple)
+    tolerances: RowDiffTolerances | None = None
+    cursor_column: str | None = None
+    start_cursor: CursorValue | None = None
+    end_cursor: CursorValue | None = None
+
+
+@dataclass(frozen=True)
+class PostgresRowDiffErrorTestCase:
+    description: str
+    left_sql: str
+    right_sql: str
+    unique_key: tuple[str, ...]
+    expected_error_fragment: str
+    tolerances: RowDiffTolerances | None = None
+
+
+@dataclass(frozen=True)
+class PostgresCountRowsTestCase:
+    description: str
+    table_name: str
+    values_sql: str
+    cursor_column: str | None = None
+    start_cursor: CursorValue | None = None
+    end_cursor: CursorValue | None = None
+    expected_count: int = 0
 
 
 @dataclass(frozen=True)

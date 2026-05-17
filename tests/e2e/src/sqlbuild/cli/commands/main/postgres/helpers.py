@@ -7,7 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.integrations.postgres.client import PostgresAdapter
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import stringify_warehouse_rows
+from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    prepare_waffle_shop,
+    stringify_warehouse_rows,
+)
 
 
 def build_unique_schema_name(*, prefix: str) -> str:
@@ -240,3 +243,54 @@ def assert_postgres_snapshot_apply_rows(
     assert stringify_warehouse_rows(current_delete_rows) == expected_current_delete_rows
     assert stringify_warehouse_rows(historical_timestamp_rows) == expected_historical_timestamp_rows
     assert stringify_warehouse_rows(historical_check_rows) == expected_historical_check_rows
+
+
+def prepare_postgres_waffle_shop(*, tmp_path: Path, config: dict[str, object]) -> tuple[Path, str]:
+    """Copy waffle shop to tmp dir and wire it to a unique Postgres schema."""
+
+    schema_name: str = build_unique_schema_name(prefix="sqb_waffle")
+    project_dir: Path = prepare_waffle_shop(tmp_path)
+
+    (project_dir / "functions" / "sql" / "customer_orders.sql").unlink(missing_ok=True)
+    (project_dir / "functions" / "python" / "is_completed_order_py.py").unlink(missing_ok=True)
+    (project_dir / "tests" / "unit" / "test_customer_orders_table_fn.sql").unlink(missing_ok=True)
+    (project_dir / "models" / "marts" / "daily_order_partitioned.sql").unlink(missing_ok=True)
+    (project_dir / "tests" / "unit" / "test_is_completed_order_udf.sql").unlink(missing_ok=True)
+    is_completed_order_path: Path = project_dir / "functions" / "sql" / "is_completed_order.sql"
+    is_completed_order_path.write_text(
+        is_completed_order_path.read_text(encoding="utf-8")
+        .replace("STRING", "TEXT")
+        .replace("order_status = 'completed'", "SELECT order_status = 'completed'"),
+        encoding="utf-8",
+    )
+
+    fact_orders_path: Path = project_dir / "models" / "marts" / "fact_orders.sql"
+    fact_orders_path.write_text(
+        fact_orders_path.read_text(encoding="utf-8").replace(
+            '__udf("is_completed_order_py")(o.status) AS is_completed_order_py,',
+            '__udf("is_completed_order")(o.status) AS is_completed_order_py,',
+        ),
+        encoding="utf-8",
+    )
+    project_file_path: Path = project_dir / "sqlbuild_project.toml"
+    project_file_path.write_text(
+        'name = "waffle_shop"\n'
+        'adapter = "postgres"\n'
+        'default_environment = "dev"\n\n'
+        "[connection]\n"
+        f'host = "{config["host"]}"\n'
+        f"port = {config['port']}\n"
+        f'dbname = "{config["dbname"]}"\n'
+        f'user = "{config["user"]}"\n'
+        f'password = "{config["password"]}"\n\n'
+        "[settings]\n"
+        'default_audit_severity = "warn"\n\n'
+        "[defaults]\n"
+        'materialized = "table"\n\n'
+        "[environments.dev]\n"
+        f'schema = "{schema_name}"\n\n'
+        "[path_defaults.staging]\n"
+        'materialized = "view"\n',
+        encoding="utf-8",
+    )
+    return project_dir, schema_name
