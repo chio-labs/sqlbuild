@@ -6,16 +6,15 @@ from pathlib import Path
 from typing import cast
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.types import BuiltinAdapter
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
-from sqlbuild.shared.helpers.adapters import discover_project_adapters
+from sqlbuild.shared.helpers.adapters import builtin_adapter_classes, discover_project_adapters
 
 
 def resolve_adapter(adapter_name: str, *, project_dir: Path | None = None) -> BaseAdapter:
     """Resolve an adapter name from project config to an adapter instance."""
 
-    builtin_adapters: dict[str, type[BaseAdapter]] = _builtin_adapter_classes()
+    builtin_adapters: dict[str, type[BaseAdapter]] = builtin_adapter_classes()
     adapter_class: type[StrictAdapter] | None = None
     if project_dir is not None:
         local_adapters: dict[str, type[StrictAdapter]] = discover_project_adapters(
@@ -36,17 +35,3 @@ def resolve_adapter(adapter_name: str, *, project_dir: Path | None = None) -> Ba
             code="C601",
         )
     return cast(BaseAdapter, adapter_class())
-
-
-def _builtin_adapter_classes() -> dict[str, type[BaseAdapter]]:
-    from sqlbuild.integrations.bigquery.client import BigQueryAdapter
-    from sqlbuild.integrations.databricks.client import DatabricksAdapter
-    from sqlbuild.integrations.duckdb.client import DuckDbAdapter
-    from sqlbuild.integrations.snowflake.client import SnowflakeAdapter
-
-    return {
-        BuiltinAdapter.DUCKDB.value: DuckDbAdapter,
-        BuiltinAdapter.SNOWFLAKE.value: SnowflakeAdapter,
-        BuiltinAdapter.BIGQUERY.value: BigQueryAdapter,
-        BuiltinAdapter.DATABRICKS.value: DatabricksAdapter,
-    }

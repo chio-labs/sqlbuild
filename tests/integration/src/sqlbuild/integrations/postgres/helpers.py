@@ -2,38 +2,12 @@
 
 from __future__ import annotations
 
-import os
 import uuid
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.integrations.postgres.client import PostgresAdapter
-
-_ENV_KEYS: tuple[str, ...] = (
-    "SQB_TEST_POSTGRES_HOST",
-    "SQB_TEST_POSTGRES_PORT",
-    "SQB_TEST_POSTGRES_DATABASE",
-    "SQB_TEST_POSTGRES_USER",
-    "SQB_TEST_POSTGRES_PASSWORD",
-)
-
-
-def build_postgres_connection_config() -> dict[str, object]:
-    """Return Postgres connection config from required env vars or skip."""
-
-    missing: list[str] = [key for key in _ENV_KEYS if not os.environ.get(key)]
-    if missing:
-        pytest.skip("Postgres credentials not configured: " + ", ".join(sorted(missing)))
-    return {
-        "host": os.environ["SQB_TEST_POSTGRES_HOST"],
-        "port": int(os.environ["SQB_TEST_POSTGRES_PORT"]),
-        "dbname": os.environ["SQB_TEST_POSTGRES_DATABASE"],
-        "user": os.environ["SQB_TEST_POSTGRES_USER"],
-        "password": os.environ["SQB_TEST_POSTGRES_PASSWORD"],
-    }
 
 
 def build_unique_schema_name(*, prefix: str) -> str:

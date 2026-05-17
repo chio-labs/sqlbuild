@@ -15,6 +15,7 @@ class BuiltinAdapter(StrEnum):
     SNOWFLAKE = "snowflake"
     BIGQUERY = "bigquery"
     DATABRICKS = "databricks"
+    POSTGRES = "postgres"
 
 
 class CursorKind(StrEnum):

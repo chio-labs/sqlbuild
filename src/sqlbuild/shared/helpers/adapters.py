@@ -12,8 +12,25 @@ from typing import Any, cast
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.exceptions import AdapterUserError
+from sqlbuild.adapter.shared.types import BuiltinAdapter
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.shared.models import DiscoveredAdapter
+
+
+def builtin_adapter_classes() -> dict[str, type[BaseAdapter]]:
+    from sqlbuild.integrations.bigquery.client import BigQueryAdapter
+    from sqlbuild.integrations.databricks.client import DatabricksAdapter
+    from sqlbuild.integrations.duckdb.client import DuckDbAdapter
+    from sqlbuild.integrations.postgres.client import PostgresAdapter
+    from sqlbuild.integrations.snowflake.client import SnowflakeAdapter
+
+    return {
+        BuiltinAdapter.DUCKDB.value: DuckDbAdapter,
+        BuiltinAdapter.SNOWFLAKE.value: SnowflakeAdapter,
+        BuiltinAdapter.BIGQUERY.value: BigQueryAdapter,
+        BuiltinAdapter.DATABRICKS.value: DatabricksAdapter,
+        BuiltinAdapter.POSTGRES.value: PostgresAdapter,
+    }
 
 
 def discover_project_adapters(
