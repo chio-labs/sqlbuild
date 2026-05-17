@@ -73,6 +73,7 @@ markers = [
   "snowflake: tests that require a live Snowflake warehouse",
   "bigquery: tests that require a live BigQuery warehouse",
   "databricks: tests that require a live Databricks warehouse",
+  "motherduck: tests that require live MotherDuck credentials",
 ]
 
 [tool.ruff]
