@@ -31,7 +31,6 @@ class DagsterScenarioCheckDecoratorTestCase:
 @dataclass(frozen=True)
 class DagsterConflictingInputTestCase:
     description: str
-    decorator_name: str
     expected_error_fragment: str
     expected_error_code: str
 

@@ -4,6 +4,7 @@ from datetime import datetime
 
 import pytest
 
+from sqlbuild.adapter.shared.exceptions import AdapterUserError
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
     CursorValue,
@@ -15,7 +16,6 @@ from sqlbuild.adapter.shared.models import (
     RowDiffSampleRow,
     SchemaDiffResult,
 )
-from sqlbuild.adapter.shared.exceptions import AdapterUserError
 from sqlbuild.adapter.shared.types import CursorKind, FunctionNullabilityRule
 from sqlbuild.compiler.compile.models.core import (
     FunctionArgument,

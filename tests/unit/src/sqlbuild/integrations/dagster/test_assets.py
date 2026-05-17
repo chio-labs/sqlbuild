@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -10,12 +11,12 @@ from sqlbuild.integrations.dagster import (
     sqlbuild_assets,
     sqlbuild_scenario_checks,
 )
+from sqlbuild.integrations.dagster.exceptions import DagsterDagInputError
 from sqlbuild.integrations.dagster.helpers.assets import (
     build_asset_specs,
     build_check_specs,
     build_scenario_check_specs,
 )
-from sqlbuild.integrations.dagster.exceptions import DagsterDagInputError
 from sqlbuild.integrations.dagster.project import SqlBuildProject
 from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterAssetCheckFilterTestCase,
@@ -169,37 +170,46 @@ def test_given_sqlbuild_dag_when_building_scenario_check_specs_then_filters_non_
     assert not set(test_case.unexpected_check_names).intersection(check_names)
 
 
-CONFLICTING_INPUT_TEST_CASES: list[DagsterConflictingInputTestCase] = [
-    DagsterConflictingInputTestCase(
-        description="assets decorator rejects dag and project together",
-        decorator_name="assets",
-        expected_error_fragment="sqlbuild_assets received both 'dag' and 'project'",
-        expected_error_code="I002",
-    ),
-    DagsterConflictingInputTestCase(
-        description="scenario checks decorator rejects dag and project together",
-        decorator_name="scenario_checks",
-        expected_error_fragment="sqlbuild_scenario_checks received both 'dag' and 'project'",
-        expected_error_code="I002",
-    ),
-]
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterConflictingInputTestCase(
+            description="assets decorator rejects dag and project together",
+            expected_error_fragment="sqlbuild_assets received both 'dag' and 'project'",
+            expected_error_code="I002",
+        )
+    ],
+    ids=["assets decorator rejects dag and project together"],
+)
+def test_given_dag_and_project_when_building_assets_decorator_then_raises_coded_input_error(
+    test_case: DagsterConflictingInputTestCase,
+) -> None:
+    project: SqlBuildProject = SqlBuildProject(project_dir=Path("."))
+
+    with pytest.raises(DagsterDagInputError, match=test_case.expected_error_fragment) as error:
+        sqlbuild_assets(dag=build_dagster_test_dag(), project=project)
+
+    assert error.value.code == test_case.expected_error_code
 
 
 @pytest.mark.parametrize(
     "test_case",
-    CONFLICTING_INPUT_TEST_CASES,
-    ids=[case.description for case in CONFLICTING_INPUT_TEST_CASES],
+    [
+        DagsterConflictingInputTestCase(
+            description="scenario checks decorator rejects dag and project together",
+            expected_error_fragment="sqlbuild_scenario_checks received both 'dag' and 'project'",
+            expected_error_code="I002",
+        )
+    ],
+    ids=["scenario checks decorator rejects dag and project together"],
 )
-def test_given_dag_and_project_when_building_dagster_decorator_then_raises_coded_input_error(
+def test_given_dag_and_project_when_building_scenario_checks_then_raises_coded_input_error(
     test_case: DagsterConflictingInputTestCase,
 ) -> None:
-    project: SqlBuildProject = SqlBuildProject(project_dir=".")
+    project: SqlBuildProject = SqlBuildProject(project_dir=Path("."))
 
     with pytest.raises(DagsterDagInputError, match=test_case.expected_error_fragment) as error:
-        if test_case.decorator_name == "assets":
-            sqlbuild_assets(dag=build_dagster_test_dag(), project=project)
-        else:
-            sqlbuild_scenario_checks(dag=build_dagster_test_dag(), project=project)
+        sqlbuild_scenario_checks(dag=build_dagster_test_dag(), project=project)
 
     assert error.value.code == test_case.expected_error_code
 
