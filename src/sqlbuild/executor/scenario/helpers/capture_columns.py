@@ -20,6 +20,44 @@ class _TypePattern:
 
 
 _POSTGRES_SERIAL_TYPES: frozenset[str] = frozenset({"BIGSERIAL", "SERIAL", "SMALLSERIAL"})
+_POSTGRES_DIRECT_LOCAL_TYPES: dict[str, str] = {
+    "SMALLINT": "SMALLINT",
+    "INT2": "SMALLINT",
+    "SMALLSERIAL": "SMALLINT",
+    "INTEGER": "INT",
+    "INT": "INT",
+    "INT4": "INT",
+    "SERIAL": "INT",
+    "BIGSERIAL": "BIGINT",
+    "REAL": "REAL",
+    "FLOAT4": "REAL",
+    "TEXT": "TEXT",
+    "UUID": "UUID",
+    "INET": "INET",
+    "INTERVAL": "INTERVAL",
+    "TIMESTAMPTZ": "TIMESTAMPTZ",
+    "TIMESTAMP WITH TIME ZONE": "TIMESTAMPTZ",
+}
+_POSTGRES_ARRAY_ELEMENT_LOCAL_TYPES: dict[str, str] = {
+    "SMALLINT": "SMALLINT",
+    "INT2": "SMALLINT",
+    "INTEGER": "INT",
+    "INT": "INT",
+    "INT4": "INT",
+    "BIGINT": "BIGINT",
+    "INT8": "BIGINT",
+    "TEXT": "TEXT",
+    "VARCHAR": "VARCHAR",
+    "BOOLEAN": "BOOLEAN",
+    "BOOL": "BOOLEAN",
+    "REAL": "REAL",
+    "FLOAT4": "REAL",
+    "DOUBLE PRECISION": "DOUBLE",
+    "FLOAT8": "DOUBLE",
+    "NUMERIC": "DECIMAL",
+    "DECIMAL": "DECIMAL",
+    "UUID": "UUID",
+}
 _POSTGRES_VARCHAR_TYPES: frozenset[str] = frozenset(
     {
         "CIDR",
@@ -88,6 +126,11 @@ def local_type_for_warehouse_type(
     if override_type is not None:
         return override_type
 
+    if sqlglot_dialect == "postgres":
+        postgres_type: str | None = _postgres_pre_local_type(warehouse_type)
+        if postgres_type is not None:
+            return postgres_type
+
     sqlglot_local_type: str | None = _local_type_with_sqlglot(
         warehouse_type=warehouse_type,
         sqlglot_dialect=sqlglot_dialect,
@@ -141,6 +184,24 @@ def _local_type_from_overrides(
             ),
         )
     return best_local_types.pop()
+
+
+def _postgres_pre_local_type(warehouse_type: str) -> str | None:
+    pattern: _TypePattern = _parse_type_pattern(warehouse_type)
+    base: str = pattern.base
+    args: tuple[str, ...] = pattern.args
+    if base in _POSTGRES_DIRECT_LOCAL_TYPES:
+        return _POSTGRES_DIRECT_LOCAL_TYPES[base]
+    if base in {"VARCHAR", "CHARACTER VARYING"} and args:
+        return f"TEXT({args[0]})"
+    if base in {"NUMERIC", "DECIMAL"} and args:
+        return "DECIMAL(" + ", ".join(args) + ")"
+    if base.endswith("[]"):
+        element_base: str = base[:-2].strip()
+        mapped: str | None = _POSTGRES_ARRAY_ELEMENT_LOCAL_TYPES.get(element_base)
+        if mapped is not None:
+            return f"{mapped}[]"
+    return None
 
 
 def _local_type_with_sqlglot(*, warehouse_type: str, sqlglot_dialect: str | None) -> str | None:
