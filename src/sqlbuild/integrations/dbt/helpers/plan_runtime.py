@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import cast
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.types import BuiltinAdapter
+from sqlbuild.adapter.shared.helpers.builtins import builtin_adapter_classes
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
@@ -88,7 +88,7 @@ def resolve_dbt_interop_adapter(
 ) -> BaseAdapter:
     """Resolve an adapter for dbt interop runtime planning."""
 
-    builtin_adapters: dict[str, type[BaseAdapter]] = _builtin_adapter_classes()
+    builtin_adapters: dict[str, type[BaseAdapter]] = builtin_adapter_classes()
     adapter_class: type[StrictAdapter] | type[BaseAdapter] | None = None
     if project_dir is not None:
         local_adapters: dict[str, type[StrictAdapter]] = discover_project_adapters(
@@ -105,17 +105,3 @@ def resolve_dbt_interop_adapter(
             f"{', '.join(available)}."
         )
     return cast(BaseAdapter, adapter_class())
-
-
-def _builtin_adapter_classes() -> dict[str, type[BaseAdapter]]:
-    from sqlbuild.integrations.bigquery.client import BigQueryAdapter
-    from sqlbuild.integrations.databricks.client import DatabricksAdapter
-    from sqlbuild.integrations.duckdb.client import DuckDbAdapter
-    from sqlbuild.integrations.snowflake.client import SnowflakeAdapter
-
-    return {
-        BuiltinAdapter.DUCKDB.value: DuckDbAdapter,
-        BuiltinAdapter.SNOWFLAKE.value: SnowflakeAdapter,
-        BuiltinAdapter.BIGQUERY.value: BigQueryAdapter,
-        BuiltinAdapter.DATABRICKS.value: DatabricksAdapter,
-    }

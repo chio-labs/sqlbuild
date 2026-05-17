@@ -38,6 +38,11 @@ RESOLVE_ADAPTER_TEST_CASES: list[ResolveAdapterTestCase] = [
         adapter_name="bigquery",
         expected_adapter_class_name="BigQueryAdapter",
     ),
+    ResolveAdapterTestCase(
+        description="resolves motherduck adapter lazily",
+        adapter_name="motherduck",
+        expected_adapter_class_name="MotherDuckAdapter",
+    ),
 ]
 
 

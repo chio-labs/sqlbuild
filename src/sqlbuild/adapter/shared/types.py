@@ -12,6 +12,7 @@ type FunctionNullabilityRule = Callable[[tuple[InferredNullability, ...]], Infer
 
 class BuiltinAdapter(StrEnum):
     DUCKDB = "duckdb"
+    MOTHERDUCK = "motherduck"
     SNOWFLAKE = "snowflake"
     BIGQUERY = "bigquery"
     DATABRICKS = "databricks"
@@ -59,4 +60,5 @@ class TypeDialect(StrEnum):
     BIGQUERY = "bigquery"
     SNOWFLAKE = "snowflake"
     DUCKDB = "duckdb"
+    MOTHERDUCK = "motherduck"
     DATABRICKS = "databricks"
