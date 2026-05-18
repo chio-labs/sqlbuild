@@ -134,8 +134,8 @@ __source__raw__refunds AS (
 __expected__daily_revenue AS (
   SELECT DATE '2026-01-01' AS order_date, 75.00 AS revenue
 ),
-__assert__no_negative_revenue AS (
-  SELECT * FROM __ref("daily_revenue") WHERE revenue < 0
+__assert__all_refunds_linked AS (
+  SELECT * FROM __ref("fact_refunds") WHERE order_id IS NULL
 )
 SELECT 1
 ```
