@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.2](https://github.com/chio-labs/sqlbuild/compare/v0.16.1...v0.16.2) (2026-05-18)
+
+
+### Documentation
+
+* update README assertion example ([34de007](https://github.com/chio-labs/sqlbuild/commit/34de00739f28fca41237c80f3b13ce8a3dff6c56))
+* update README assertion example ([1bbd600](https://github.com/chio-labs/sqlbuild/commit/1bbd600d3bd7f62220a03e68111a4fa3e1bed9aa))
+
 ## [0.16.1](https://github.com/chio-labs/sqlbuild/compare/v0.16.0...v0.16.1) (2026-05-17)
 
 
