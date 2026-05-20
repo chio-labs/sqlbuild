@@ -39,6 +39,7 @@ class CliNamespace:
     no_color: bool = False
     fail_fast: bool = False
     full_refresh: bool = False
+    reload: bool = False
     allow_snapshot_full_refresh: bool = False
     allow_snapshot_schema_change: bool = False
     concurrency: int | None = None
@@ -204,6 +205,19 @@ class CliEntrypointHandlers:
             bool,
             tuple[str, ...],
             tuple[str, ...],
+            dict[str, object],
+            bool,
+            Path | None,
+        ],
+        int,
+    ]
+    run_load: Callable[
+        [
+            Path | None,
+            bool,
+            tuple[str, ...],
+            tuple[str, ...],
+            bool,
             dict[str, object],
             bool,
             Path | None,

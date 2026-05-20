@@ -13,6 +13,7 @@ class CliCommand(StrEnum):
     BUILD = "build"
     TEST = "test"
     AUDIT = "audit"
+    LOAD = "load"
     SEED = "seed"
     CLONE = "clone"
     DIFF = "diff"
