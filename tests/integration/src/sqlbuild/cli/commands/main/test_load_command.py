@@ -109,6 +109,61 @@ def raw_events_loader(ctx):
         ),
         select=("raw_orders",),
     ),
+    LoadCommandIntegrationTestCase(
+        description="passes effective context values to loader",
+        project_files={
+            "sqlbuild_project.toml": (
+                'name = "demo"\n'
+                'adapter = "duckdb"\n'
+                'default_environment = "dev"\n\n'
+                "[connection]\n"
+                'database = "demo.duckdb"\n\n'
+                "[vars]\n"
+                'tier = "project"\n'
+                'project_only = "yes"\n\n'
+                "[environments.dev.vars]\n"
+                'tier = "dev"\n'
+            ),
+            "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    loader: raw_orders_loader
+    write_strategy: table
+    columns:
+      - name: order_id
+        type: INTEGER
+      - name: status
+        type: VARCHAR
+""".strip()
+            + "\n",
+            "loaders/raw_orders.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_orders_loader(ctx):
+    status = ":".join([
+        str(ctx.environment),
+        str(ctx.vars["tier"]),
+        str(ctx.vars["project_only"]),
+        str(ctx.run_id != "demo"),
+    ])
+    return [{
+        "order_id": 4,
+        "status": status,
+    }]
+""",
+        },
+        expected_exit_code=0,
+        expected_rows=((4, "dev:cli:yes:True"),),
+        expected_stdout_fragment="raw_orders",
+        expected_json_staging_relation="raw_orders__staging",
+        expected_lifecycle_sql_fragments=(
+            "CREATE OR REPLACE TABLE raw_orders__staging",
+            "CREATE OR REPLACE TABLE raw_orders AS SELECT * FROM raw_orders__staging",
+            "DROP TABLE IF EXISTS raw_orders__staging",
+        ),
+        cli_vars={"tier": "cli"},
+    ),
 ]
 
 
@@ -130,6 +185,7 @@ def test_given_source_loader_when_running_load_then_writes_source_table(
         project_dir=tmp_path,
         no_color=True,
         select=test_case.select,
+        cli_vars=test_case.cli_vars,
         json_output_path=json_output_path,
     )
 
@@ -184,8 +240,8 @@ def test_given_source_loader_when_running_pipeline_then_uses_staging_relation(
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
         run_id="test_run",
-        environment=None,
-        vars={},
+        environment="dev",
+        vars={"tier": "cli", "project_only": "yes"},
         is_reload=False,
     )
 

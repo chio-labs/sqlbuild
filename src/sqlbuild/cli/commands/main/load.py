@@ -15,6 +15,7 @@ from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
     format_load_execution_json,
     write_execution_json_output,
 )
+from sqlbuild.compiler.compile.main.effective_runtime import build_effective_runtime_config
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile
 from sqlbuild.executor.load.main.run import run_load_pipeline
@@ -52,6 +53,13 @@ def run_load(
         project_dir=effective_project_dir,
         cli_vars=cli_vars,
     )
+    environment_name: str | None
+    effective_vars: dict[str, object]
+    run_id: str
+    environment_name, effective_vars, run_id = build_effective_runtime_config(
+        discovered_inputs=discovered_inputs,
+        cli_vars=cli_vars,
+    )
     selected_sources: tuple[SourceEntry, ...] = _select_managed_sources(
         discovered_inputs=discovered_inputs,
         select=select,
@@ -72,10 +80,9 @@ def run_load(
         loader_functions=discovered_inputs.loader_functions,
         connection_config=connection_config,
         adapter=adapter,
-        run_id=discovered_inputs.project_config.name,
-        environment=discovered_inputs.local_config.environment
-        or discovered_inputs.project_config.default_environment,
-        vars=connection_config,
+        run_id=run_id,
+        environment=environment_name,
+        vars=effective_vars,
         is_reload=reload,
         on_load_complete=on_complete,
     )
