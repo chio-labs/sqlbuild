@@ -46,6 +46,7 @@ class LoadExecutionResult:
     loader_name: str
     status: ExecutionStatus
     target: str
+    staging_relation: str | None = None
     rows_loaded: int = 0
     duration_ms: int | None = None
     lifecycle_events: tuple[LifeCycleEvent, ...] = field(default_factory=tuple)
