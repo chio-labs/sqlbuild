@@ -11,4 +11,6 @@ class LoadCommandIntegrationTestCase:
     expected_rows: tuple[tuple[object, ...], ...]
     expected_stdout_fragment: str
     expected_stdout_absent_fragments: tuple[str, ...] = ()
+    expected_json_staging_relation: str | None = None
+    expected_lifecycle_sql_fragments: tuple[str, ...] = ()
     select: tuple[str, ...] = ()

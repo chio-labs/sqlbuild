@@ -31,11 +31,18 @@ def execute_source_load(
     """Run one source loader and write returned rows using the table strategy."""
 
     target_name: str = source_entry.table if source_entry.table is not None else source_entry.name
+    staging_name: str = f"{target_name}__staging"
     target: str = resolve_qualified_name_parts(
         adapter=adapter,
         database=source_entry.database,
         schema=source_entry.schema,
         name=target_name,
+    )
+    staging: str = resolve_qualified_name_parts(
+        adapter=adapter,
+        database=source_entry.database,
+        schema=source_entry.schema,
+        name=staging_name,
     )
     start: float = time.monotonic()
     try:
@@ -75,8 +82,20 @@ def execute_source_load(
         sql: str = build_rows_sql(rows=rows, columns=source_entry.columns)
         adapter.create_table_as(
             connection,
-            target=target,
+            target=staging,
             sql=sql,
+            statement_recorder=statement_recorder,
+        )
+        adapter.replace_table_from_relation(
+            connection,
+            target=target,
+            source=staging,
+            statement_recorder=statement_recorder,
+        )
+        adapter.drop(
+            connection,
+            target=staging,
+            if_exists=True,
             statement_recorder=statement_recorder,
         )
     except Exception as error:
@@ -85,6 +104,7 @@ def execute_source_load(
             loader_name=loader_function.name,
             status=ExecutionStatus.FAILED,
             target=target,
+            staging_relation=staging,
             duration_ms=int((time.monotonic() - start) * 1000),
             lifecycle_events=statement_recorder.snapshot(),
             error_message=str(error),
@@ -94,6 +114,7 @@ def execute_source_load(
         loader_name=loader_function.name,
         status=ExecutionStatus.SUCCESS,
         target=target,
+        staging_relation=staging,
         rows_loaded=len(rows),
         duration_ms=int((time.monotonic() - start) * 1000),
         lifecycle_events=statement_recorder.snapshot(),

@@ -302,6 +302,7 @@ def _format_load_assets(
                 "status": result.status.value,
                 "duration_ms": result.duration_ms,
                 "target": result.target,
+                "staging_relation": result.staging_relation,
                 "loader": result.loader_name,
                 "rows_loaded": result.rows_loaded,
                 "error_message": result.error_message,
