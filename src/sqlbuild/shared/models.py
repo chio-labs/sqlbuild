@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,6 +23,15 @@ class DiscoveredAdapter:
     adapter_name: str
     adapter_class: type[StrictAdapter]
     file_path: Path
+
+
+@dataclass(frozen=True)
+class LoaderDefinition:
+    """Metadata attached to a decorated source loader function."""
+
+    name: str
+    depends_on: tuple[Callable[..., object], ...] = ()
+    target: str | None = None
 
 
 @dataclass(frozen=True)

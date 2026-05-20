@@ -19,6 +19,8 @@ from sqlbuild.compiler.discovery.helpers.yml_primitives import (
 from sqlbuild.spec.models.schema import SchemaAuditInstance
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 
+_SOURCE_WRITE_STRATEGIES: frozenset[str] = frozenset({"append", "delete_insert", "merge", "table"})
+
 
 def parse_sources_yml(contents: str, file_path: Path) -> tuple[SourceEntry, ...]:
     """Parse one sources/*.yml file into raw source declarations."""
@@ -109,6 +111,28 @@ def _parse_source_entry(*, entry: dict[str, object], file_path: Path) -> SourceE
             label="source",
             error_class=SourceParseError,
         ),
+        loader=optional_non_empty_string(
+            entry=entry,
+            key="loader",
+            file_path=file_path,
+            label="source",
+            error_class=SourceParseError,
+        ),
+        write_strategy=optional_non_empty_string(
+            entry=entry,
+            key="write_strategy",
+            file_path=file_path,
+            label="source",
+            error_class=SourceParseError,
+        ),
+        cursor_column=optional_non_empty_string(
+            entry=entry,
+            key="cursor_column",
+            file_path=file_path,
+            label="source",
+            error_class=SourceParseError,
+        ),
+        unique_key=_optional_unique_key(entry=entry, file_path=file_path),
         expression=expression,
         description=optional_non_empty_string(
             entry=entry,
@@ -159,6 +183,48 @@ def _validate_source_entry(entry: SourceEntry, file_path: Path) -> None:
                 f"{file_path} source '{entry.name}' uses expression with type_enforcement "
                 "but has no typed columns"
             )
+    if entry.write_strategy is not None and entry.loader is None:
+        raise SourceParseError(
+            f"{file_path} source '{entry.name}' defines write_strategy but has no loader"
+        )
+    if entry.write_strategy is not None and entry.write_strategy not in _SOURCE_WRITE_STRATEGIES:
+        strategies: str = ", ".join(sorted(_SOURCE_WRITE_STRATEGIES))
+        raise SourceParseError(
+            f"{file_path} source '{entry.name}' write_strategy must be one of: {strategies}"
+        )
+    if entry.cursor_column is not None and entry.write_strategy != "delete_insert":
+        raise SourceParseError(
+            f"{file_path} source '{entry.name}' cursor_column requires write_strategy delete_insert"
+        )
+    if entry.unique_key and entry.write_strategy not in {"delete_insert", "merge"}:
+        raise SourceParseError(
+            f"{file_path} source '{entry.name}' unique_key requires "
+            "write_strategy delete_insert or merge"
+        )
+
+
+def _optional_unique_key(*, entry: dict[str, object], file_path: Path) -> tuple[str, ...]:
+    value: object | None = entry.get("unique_key")
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        stripped: str = value.strip()
+        if not stripped:
+            raise SourceParseError(f"{file_path} source 'unique_key' must be non-empty")
+        return (stripped,)
+    if isinstance(value, list):
+        keys: list[str] = []
+        item: object
+        for item in value:
+            if not isinstance(item, str) or not item.strip():
+                raise SourceParseError(
+                    f"{file_path} source 'unique_key' must contain only non-empty strings"
+                )
+            keys.append(item.strip())
+        if not keys:
+            raise SourceParseError(f"{file_path} source 'unique_key' must be non-empty")
+        return tuple(keys)
+    raise SourceParseError(f"{file_path} source 'unique_key' must be a string or list")
 
 
 def _parse_columns(*, entry: dict[str, object], file_path: Path) -> tuple[SourceColumnEntry, ...]:
