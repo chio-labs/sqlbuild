@@ -87,6 +87,15 @@ class BuildCompileInputsErrorTestCase:
 
 
 @dataclass(frozen=True)
+class BuildEffectiveRuntimeConfigTestCase:
+    description: str
+    selected_environment: str | None
+    cli_vars: dict[str, object] | None
+    expected_environment_name: str | None
+    expected_vars: dict[str, object]
+
+
+@dataclass(frozen=True)
 class SeedRefRegressionTestCase:
     description: str
     repo_files: dict[str, str]
