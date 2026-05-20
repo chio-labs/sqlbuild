@@ -27,6 +27,10 @@ class SourceEntry:
     database: str | None = None
     schema: str | None = None
     table: str | None = None
+    loader: str | None = None
+    write_strategy: str | None = None
+    cursor_column: str | None = None
+    unique_key: tuple[str, ...] = field(default_factory=tuple)
     expression: str | None = None
     description: str | None = None
     type_enforcement: bool | None = None

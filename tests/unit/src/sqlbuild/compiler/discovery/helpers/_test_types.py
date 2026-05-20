@@ -216,6 +216,10 @@ class ParseSourcesYamlTestCase:
     expected_type_enforcement_values: tuple[bool | None, ...]
     expected_contract_values: tuple[str | None, ...]
     expected_expressions: tuple[str | None, ...]
+    expected_loaders: tuple[str | None, ...] | None = None
+    expected_write_strategies: tuple[str | None, ...] | None = None
+    expected_cursor_columns: tuple[str | None, ...] | None = None
+    expected_unique_keys: tuple[tuple[str, ...], ...] | None = None
     expected_source_audit_names: tuple[tuple[str, ...], ...] = ()
     expected_column_audit_names: tuple[tuple[tuple[str, ...], ...], ...] = ()
     expected_column_nullables: tuple[tuple[bool | None, ...], ...] | None = None
@@ -233,3 +237,13 @@ class DiscoverMaterializationFilesTestCase:
     description: str
     files: dict[str, str]
     expected_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DiscoverLoaderFunctionsTestCase:
+    description: str
+    files: dict[str, str]
+    expected_names: tuple[str, ...]
+    expected_targets: tuple[str | None, ...]
+    expected_dependency_counts: tuple[int, ...]
+    expected_error_fragment: str = ""

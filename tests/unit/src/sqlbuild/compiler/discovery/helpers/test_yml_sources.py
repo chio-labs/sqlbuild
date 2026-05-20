@@ -136,6 +136,37 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
         expected_column_audit_names=(((),),),
     ),
     ParseSourcesYamlTestCase(
+        description="parses source loader metadata and write strategies",
+        contents="""
+        sources:
+          - name: raw_events
+            loader: event_loader
+            write_strategy: delete_insert
+            cursor_column: event_at
+          - name: raw_customers
+            loader: customer_loader
+            write_strategy: merge
+            unique_key: [customer_id, updated_at]
+          - name: raw_prices
+            loader: price_loader
+            write_strategy: table
+          - name: raw_webhooks
+            loader: webhook_loader
+            write_strategy: append
+        """,
+        expected_source_names=("raw_events", "raw_customers", "raw_prices", "raw_webhooks"),
+        expected_column_names=((), (), (), ()),
+        expected_type_enforcement_values=(None, None, None, None),
+        expected_contract_values=(None, None, None, None),
+        expected_expressions=(None, None, None, None),
+        expected_loaders=("event_loader", "customer_loader", "price_loader", "webhook_loader"),
+        expected_write_strategies=("delete_insert", "merge", "table", "append"),
+        expected_cursor_columns=("event_at", None, None, None),
+        expected_unique_keys=((), ("customer_id", "updated_at"), (), ()),
+        expected_source_audit_names=((), (), (), ()),
+        expected_column_audit_names=((), (), (), ()),
+    ),
+    ParseSourcesYamlTestCase(
         description="allows empty sources files with no declarations",
         contents="{}\n",
         expected_source_names=(),
@@ -178,6 +209,26 @@ def test_given_sources_yaml_variants_when_parsing_then_it_returns_expected_raw_m
     )
     assert tuple(entry.contract for entry in source_entries) == test_case.expected_contract_values
     assert tuple(entry.expression for entry in source_entries) == test_case.expected_expressions
+    actual_loaders: tuple[str | None, ...] = tuple(entry.loader for entry in source_entries)
+    assert actual_loaders == expected_or_actual(test_case.expected_loaders, actual_loaders)
+    actual_write_strategies: tuple[str | None, ...] = tuple(
+        entry.write_strategy for entry in source_entries
+    )
+    assert actual_write_strategies == expected_or_actual(
+        test_case.expected_write_strategies, actual_write_strategies
+    )
+    actual_cursor_columns: tuple[str | None, ...] = tuple(
+        entry.cursor_column for entry in source_entries
+    )
+    assert actual_cursor_columns == expected_or_actual(
+        test_case.expected_cursor_columns, actual_cursor_columns
+    )
+    actual_unique_keys: tuple[tuple[str, ...], ...] = tuple(
+        entry.unique_key for entry in source_entries
+    )
+    assert actual_unique_keys == expected_or_actual(
+        test_case.expected_unique_keys, actual_unique_keys
+    )
     assert (
         tuple(tuple(audit.definition_name for audit in entry.audits) for entry in source_entries)
         == test_case.expected_source_audit_names
@@ -304,6 +355,89 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
             type_enforcement: 123
         """,
         expected_error_fragment="source 'type_enforcement' must be a boolean",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source loader is blank",
+        contents="""
+        sources:
+          - name: raw_orders
+            loader: ""
+        """,
+        expected_error_fragment="source 'loader' must be a non-empty string",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when write strategy is unknown",
+        contents="""
+        sources:
+          - name: raw_orders
+            loader: order_loader
+            write_strategy: replace
+        """,
+        expected_error_fragment="write_strategy must be one of",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when write strategy has no loader",
+        contents="""
+        sources:
+          - name: raw_orders
+            write_strategy: table
+        """,
+        expected_error_fragment="defines write_strategy but has no loader",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when cursor column is used without delete insert",
+        contents="""
+        sources:
+          - name: raw_orders
+            loader: order_loader
+            write_strategy: append
+            cursor_column: event_at
+        """,
+        expected_error_fragment="cursor_column requires write_strategy delete_insert",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when unique key is used without merge or delete insert",
+        contents="""
+        sources:
+          - name: raw_orders
+            loader: order_loader
+            write_strategy: append
+            unique_key: order_id
+        """,
+        expected_error_fragment="unique_key requires write_strategy delete_insert or merge",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when unique key is empty list",
+        contents="""
+        sources:
+          - name: raw_orders
+            loader: order_loader
+            write_strategy: merge
+            unique_key: []
+        """,
+        expected_error_fragment="source 'unique_key' must be non-empty",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when unique key list contains non string",
+        contents="""
+        sources:
+          - name: raw_orders
+            loader: order_loader
+            write_strategy: merge
+            unique_key: [order_id, 123]
+        """,
+        expected_error_fragment="source 'unique_key' must contain only non-empty strings",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when unique key is wrong type",
+        contents="""
+        sources:
+          - name: raw_orders
+            loader: order_loader
+            write_strategy: merge
+            unique_key: {}
+        """,
+        expected_error_fragment="source 'unique_key' must be a string or list",
     ),
     ParseSourcesYamlErrorTestCase(
         description="raises when source audits is not a list",

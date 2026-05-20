@@ -55,6 +55,13 @@ SELECT 1
 """,
                 "audits/generic/not_null.sql": "AUDIT ();\nSELECT 1\n",
                 "macros/name_helpers.py": "def slug() -> str:\n    return 'slug'\n",
+                "loaders/raw_orders.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_orders_loader(ctx):
+    return []
+""",
                 "target/manifest.json": '{"metadata": {"dbt_schema_version": "v12"}}\n',
                 "adapter.py": "class ExampleAdapter:\n    pass\n",
                 "sqlbuild_local.toml": 'environment = "dev"\n',
@@ -85,6 +92,7 @@ SELECT 1
             expected_audit_block_names=(None,),
             expected_audit_block_sql_bodies=("SELECT 1",),
             expected_macro_paths=("macros/name_helpers.py",),
+            expected_loader_names=("raw_orders_loader",),
             expected_adapter_path="adapter.py",
         )
     ],
@@ -197,6 +205,10 @@ def test_given_project_repo_slice_when_discovering_inputs_then_it_returns_expect
     assert (
         tuple(str(macro_file.relative_path) for macro_file in discovered_inputs.macro_files)
         == test_case.expected_macro_paths
+    )
+    assert (
+        tuple(loader_function.name for loader_function in discovered_inputs.loader_functions)
+        == test_case.expected_loader_names
     )
     assert (
         None
@@ -317,6 +329,40 @@ seeds:
             + "\n",
         },
         expected_error_fragment="Logical relation name 'country_codes' is declared as both source",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when a source references an unknown loader",
+        repo_files=base_repo_files()
+        | {
+            "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    loader: missing_loader
+""".strip()
+            + "\n",
+        },
+        expected_error_fragment="Source 'raw_orders' in sources/raw.yml references unknown loader",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when loader names are duplicated",
+        repo_files=base_repo_files()
+        | {
+            "loaders/a.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_orders(ctx):
+    return []
+""",
+            "loaders/b.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_orders(ctx):
+    return []
+""",
+        },
+        expected_error_fragment="Duplicate source loader found for 'raw_orders'",
     ),
     DiscoverProjectInputsErrorTestCase(
         description="raises when seeds are declared outside seeds directory",

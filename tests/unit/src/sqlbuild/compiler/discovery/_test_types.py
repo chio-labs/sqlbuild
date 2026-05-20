@@ -27,6 +27,7 @@ class DiscoverProjectInputsTestCase:
     expected_audit_block_names: tuple[str | None, ...]
     expected_audit_block_sql_bodies: tuple[str, ...]
     expected_macro_paths: tuple[str, ...]
+    expected_loader_names: tuple[str, ...]
     expected_adapter_path: str | None
 
 
