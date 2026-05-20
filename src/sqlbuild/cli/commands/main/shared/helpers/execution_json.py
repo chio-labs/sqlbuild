@@ -16,6 +16,7 @@ from sqlbuild.executor.build.models import (
     SeedExecutionResult,
 )
 from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
+from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario.models import (
     ScenarioAssertionCheckExecutionResult,
@@ -106,6 +107,25 @@ def format_seed_execution_json(
         command="seed",
         status=BuildStatus.SUCCESS.value if fail_count == 0 else BuildStatus.FAILED.value,
         assets=_format_seed_assets(results=results, plan=plan),
+        checks=(),
+        summary={
+            "success_count": sum(
+                1 for result in results if result.status == ExecutionStatus.SUCCESS
+            ),
+            "failure_count": fail_count,
+            "total_count": len(results),
+        },
+    )
+
+
+def format_load_execution_json(*, results: tuple[LoadExecutionResult, ...]) -> str:
+    """Format load command execution results as JSON."""
+
+    fail_count: int = sum(1 for result in results if result.status == ExecutionStatus.FAILED)
+    return _format_execution_json(
+        command="load",
+        status=BuildStatus.SUCCESS.value if fail_count == 0 else BuildStatus.FAILED.value,
+        assets=_format_load_assets(results=results),
         checks=(),
         summary={
             "success_count": sum(
@@ -264,6 +284,26 @@ def _format_seed_assets(
                 "target": targets.get(result.seed_name),
                 "error_code": result.error_code,
                 "error_help": result.error_help,
+                "error_message": result.error_message,
+            }
+        )
+        for result in results
+    )
+
+
+def _format_load_assets(
+    *, results: tuple[LoadExecutionResult, ...]
+) -> tuple[dict[str, object], ...]:
+    return tuple(
+        _drop_none(
+            {
+                "kind": CompiledResourceType.SOURCE.value,
+                "name": result.source_name,
+                "status": result.status.value,
+                "duration_ms": result.duration_ms,
+                "target": result.target,
+                "loader": result.loader_name,
+                "rows_loaded": result.rows_loaded,
                 "error_message": result.error_message,
             }
         )

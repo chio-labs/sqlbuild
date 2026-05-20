@@ -130,6 +130,14 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     add_vars_args(audit_parser)
     add_dbt_config_args(audit_parser)
 
+    load_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.LOAD)
+    load_parser.add_argument("--reload", action="store_true", default=False)
+    load_parser.add_argument("--json", action="store_true", default=False)
+    add_execution_json_output_arg(load_parser)
+    add_select_args(load_parser)
+    add_cursor_override_args(load_parser)
+    add_vars_args(load_parser)
+
     seed_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.SEED)
     seed_parser.add_argument("--json", action="store_true", default=False)
     add_execution_json_output_arg(seed_parser)
@@ -274,6 +282,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.helpers.scenario.capture import run_scenario_capture
     from sqlbuild.cli.commands.main.janitor import run_janitor
     from sqlbuild.cli.commands.main.lineage import run_lineage
+    from sqlbuild.cli.commands.main.load import run_load
     from sqlbuild.cli.commands.main.plan import run_plan
     from sqlbuild.cli.commands.main.playground import run_playground
     from sqlbuild.cli.commands.main.query import run_query
@@ -322,6 +331,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_test=run_test,
         run_audit=run_audit,
         run_seed=run_seed,
+        run_load=run_load,
         run_clone=run_clone,
         run_diff=run_diff,
         run_query=run_query,
@@ -499,6 +509,17 @@ def _main_with_dependencies(
                 args.no_color,
                 select,
                 tuple(args.exclude),
+                args.vars,
+                args.json,
+                args.json_output,
+            )
+        if args.command == CliCommand.LOAD:
+            return handlers.run_load(
+                project_dir,
+                args.no_color,
+                select,
+                tuple(args.exclude),
+                args.reload,
                 args.vars,
                 args.json,
                 args.json_output,

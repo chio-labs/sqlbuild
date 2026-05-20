@@ -102,6 +102,12 @@ EXECUTION_JSON_TEST_CASES: list[MainTestCase] = [
         expected_json=True,
     ),
     MainTestCase(
+        description="dispatches load json flag",
+        argv=["load", "--json"],
+        expected_exit_code=0,
+        expected_json=True,
+    ),
+    MainTestCase(
         description="dispatches scenario test json flag",
         argv=["scenario", "test", "daily", "--json"],
         expected_exit_code=0,
@@ -726,12 +732,56 @@ def test_given_execution_command_json_flag_when_running_then_dispatches_json_out
             run_test=record_json_handler,
             run_audit=record_json_handler,
             run_seed=record_json_handler,
+            run_load=record_json_handler,
             run_scenario=record_json_handler,
         ),
     )
 
     assert exit_code == test_case.expected_exit_code
     assert received_args == [(test_case.expected_json, test_case.expected_json_output_path)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="passes load selectors and reload flag to handler",
+            argv=["load", "--select", "raw_orders", "--exclude", "raw_events", "--reload"],
+            expected_exit_code=4,
+            expected_select=("raw_orders",),
+            expected_reload=True,
+        )
+    ],
+    ids=["passes load selectors and reload flag to handler"],
+)
+def test_given_load_flags_when_running_then_dispatches_expected_arguments(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[tuple[tuple[str, ...], tuple[str, ...], bool]] = []
+
+    def run_load(
+        project_dir: Path | None,
+        no_color: bool,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+        reload: bool,
+        cli_vars: dict[str, object],
+        json_output: bool,
+        json_output_path: Path | None,
+    ) -> int:
+        del project_dir, no_color, cli_vars, json_output, json_output_path
+        received_args.append((select, exclude, reload))
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_load=run_load),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [
+        (test_case.expected_select, ("raw_events",), test_case.expected_reload)
+    ]
 
 
 @pytest.mark.parametrize(
