@@ -584,6 +584,132 @@ def raw_merge_composite_loader(ctx):
         ),
         expected_rows=((1, "api", "new", 2), (1, "feed", "inserted", 2)),
     ),
+    LoadCommandWriteStrategyTestCase(
+        description="delete insert replaces loaded cursor range and preserves outside rows",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_FILE,
+            "sources/raw.yml": """
+sources:
+  - name: raw_delete_insert_events
+    loader: raw_delete_insert_events_loader
+    write_strategy: delete_insert
+    cursor_column: event_id
+    columns:
+      - name: event_id
+        type: INTEGER
+      - name: status
+        type: VARCHAR
+""".strip()
+            + "\n",
+            "loaders/raw.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_delete_insert_events_loader(ctx):
+    if ctx.current_cursor_value is None:
+        return [
+            {"event_id": 1, "status": "old-outside-low"},
+            {"event_id": 2, "status": "old-range"},
+            {"event_id": 3, "status": "old-range"},
+            {"event_id": 5, "status": "old-outside-high"},
+        ]
+    return [
+        {"event_id": 2, "status": "new-range"},
+        {"event_id": 3, "status": "new-range"},
+    ]
+""",
+        },
+        select_sql=(
+            "SELECT event_id, status FROM raw_delete_insert_events ORDER BY event_id, status"
+        ),
+        expected_rows=(
+            (1, "old-outside-low"),
+            (2, "new-range"),
+            (3, "new-range"),
+            (5, "old-outside-high"),
+        ),
+    ),
+    LoadCommandWriteStrategyTestCase(
+        description="delete insert supports timestamp cursor ranges",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_FILE,
+            "sources/raw.yml": """
+sources:
+  - name: raw_delete_insert_ts
+    loader: raw_delete_insert_ts_loader
+    write_strategy: delete_insert
+    cursor_column: event_at
+    columns:
+      - name: event_at
+        type: TIMESTAMP
+      - name: status
+        type: VARCHAR
+""".strip()
+            + "\n",
+            "loaders/raw.py": """
+from datetime import datetime
+
+from sqlbuild.loaders import loader
+
+@loader
+def raw_delete_insert_ts_loader(ctx):
+    if ctx.current_cursor_value is None:
+        return [
+            {"event_at": datetime(2026, 1, 1, 0, 0, 0), "status": "outside-low"},
+            {"event_at": datetime(2026, 1, 1, 1, 0, 0), "status": "old-range"},
+            {"event_at": datetime(2026, 1, 1, 2, 0, 0), "status": "old-range"},
+            {"event_at": datetime(2026, 1, 1, 3, 0, 0), "status": "outside-high"},
+        ]
+    return [
+        {"event_at": datetime(2026, 1, 1, 1, 0, 0), "status": "new-range"},
+        {"event_at": datetime(2026, 1, 1, 2, 0, 0), "status": "new-range"},
+    ]
+""",
+        },
+        select_sql=(
+            "SELECT strftime(event_at, '%Y-%m-%d %H:%M:%S'), status "
+            "FROM raw_delete_insert_ts ORDER BY event_at, status"
+        ),
+        expected_rows=(
+            ("2026-01-01 00:00:00", "outside-low"),
+            ("2026-01-01 01:00:00", "new-range"),
+            ("2026-01-01 02:00:00", "new-range"),
+            ("2026-01-01 03:00:00", "outside-high"),
+        ),
+    ),
+    LoadCommandWriteStrategyTestCase(
+        description="delete insert empty rerun leaves existing target unchanged",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_FILE,
+            "sources/raw.yml": """
+sources:
+  - name: raw_delete_insert_empty
+    loader: raw_delete_insert_empty_loader
+    write_strategy: delete_insert
+    cursor_column: event_id
+    columns:
+      - name: event_id
+        type: INTEGER
+      - name: status
+        type: VARCHAR
+""".strip()
+            + "\n",
+            "loaders/raw.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_delete_insert_empty_loader(ctx):
+    if ctx.current_cursor_value is None:
+        return [
+            {"event_id": 1, "status": "existing"},
+            {"event_id": 2, "status": "existing"},
+        ]
+    return []
+""",
+        },
+        select_sql="SELECT event_id, status FROM raw_delete_insert_empty ORDER BY event_id",
+        expected_rows=((1, "existing"), (2, "existing")),
+    ),
 ]
 
 WRITE_STRATEGY_LIFECYCLE_TEST_CASES: list[LoadCommandWriteStrategyLifecycleTestCase] = [
@@ -624,6 +750,23 @@ WRITE_STRATEGY_LIFECYCLE_TEST_CASES: list[LoadCommandWriteStrategyLifecycleTestC
             "MERGE INTO raw_merge_composite",
             "__target.entity_id = __source.entity_id",
             "__target.source = __source.source",
+        ),
+    ),
+    LoadCommandWriteStrategyLifecycleTestCase(
+        description="delete insert creates target first then deletes cursor range on rerun",
+        project_files=WRITE_STRATEGY_TEST_CASES[3].project_files,
+        expected_first_run_fragments=(
+            "CREATE OR REPLACE TABLE raw_delete_insert_events AS SELECT * FROM "
+            "raw_delete_insert_events__staging",
+        ),
+        expected_second_run_fragments=(
+            "SELECT MIN(event_id), MAX(event_id) FROM raw_delete_insert_events__staging",
+            "DELETE FROM raw_delete_insert_events WHERE event_id >= '2' AND event_id < '4'",
+            "INSERT INTO raw_delete_insert_events SELECT * FROM raw_delete_insert_events__staging",
+        ),
+        absent_second_run_fragments=(
+            "CREATE OR REPLACE TABLE raw_delete_insert_events AS SELECT * FROM "
+            "raw_delete_insert_events__staging",
         ),
     ),
 ]
@@ -751,6 +894,13 @@ ADAPTER_CALL_TEST_CASES: list[LoadCommandAdapterCallTestCase] = [
         method_name="merge",
         expected_sql="SELECT * FROM raw_merge_customers__staging",
         expected_unique_key=("customer_id",),
+    ),
+    LoadCommandAdapterCallTestCase(
+        description="delete insert rerun calls adapter delete insert cursor with staging select",
+        project_files=WRITE_STRATEGY_TEST_CASES[3].project_files,
+        method_name="delete_insert_cursor",
+        expected_sql="SELECT * FROM raw_delete_insert_events__staging",
+        expected_unique_key=("event_id", "2", "4"),
     ),
 ]
 
@@ -920,8 +1070,21 @@ def test_given_source_loader_write_strategy_when_rerunning_then_calls_expected_a
     ) -> None:
         calls.append(("merge", sql, unique_key))
 
+    def delete_insert_cursor_spy(
+        connection: object,
+        *,
+        target: str,
+        sql: str,
+        cursor_column: str,
+        cursor_start: str,
+        cursor_end: str,
+        statement_recorder: object,
+    ) -> None:
+        calls.append(("delete_insert_cursor", sql, (cursor_column, cursor_start, cursor_end)))
+
     monkeypatch.setattr(adapter, "append", append_spy)
     monkeypatch.setattr(adapter, "merge", merge_spy)
+    monkeypatch.setattr(adapter, "delete_insert_cursor", delete_insert_cursor_spy)
 
     results: tuple[LoadExecutionResult, ...] = run_load_pipeline(
         sources=source_file.source_entries,
@@ -1850,31 +2013,6 @@ def raw_unexpected_none_loader(ctx):
             "defines write_strategy but loader 'raw_unexpected_none_loader' returned no rows"
         ),
     ),
-    LoadCommandFailureTestCase(
-        description=("fails clearly when delete insert reaches sqb load before execution support"),
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_FILE,
-            "sources/raw.yml": """
-sources:
-  - name: raw_delete_insert
-    loader: raw_delete_insert_loader
-    write_strategy: delete_insert
-    cursor_column: event_at
-""".strip()
-            + "\n",
-            "loaders/raw.py": """
-from sqlbuild.loaders import loader
-
-@loader
-def raw_delete_insert_loader(ctx):
-    return [{"event_at": 1}]
-""",
-        },
-        expected_exit_code=1,
-        expected_stdout_fragment=(
-            "sqb load currently supports only write_strategy append, merge, and table"
-        ),
-    ),
 ]
 
 
@@ -2020,6 +2158,42 @@ def raw_merge_failure_loader(ctx):
             "INSERT INTO raw_merge_failure VALUES (99, 'existing')",
         ),
         target_select_sql="SELECT id, status FROM raw_merge_failure ORDER BY id",
+        expected_target_rows=((99, "existing"),),
+    ),
+    LoadCommandFailureCleanupTestCase(
+        description="leaves delete insert target unchanged when a later loader batch fails",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_FILE,
+            "sources/raw.yml": """
+sources:
+  - name: raw_delete_insert_failure
+    loader: raw_delete_insert_failure_loader
+    write_strategy: delete_insert
+    cursor_column: id
+    load_batch_size: 1
+    columns:
+      - name: id
+        type: INTEGER
+      - name: status
+        type: VARCHAR
+""".strip()
+            + "\n",
+            "loaders/raw.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_delete_insert_failure_loader(ctx):
+    yield {"id": 1, "status": "new"}
+    yield {"id": "two", "status": "bad"}
+""",
+        },
+        staging_table_name="raw_delete_insert_failure__staging",
+        expected_staging_exists=False,
+        setup_sql=(
+            "CREATE TABLE raw_delete_insert_failure (id INTEGER, status VARCHAR)",
+            "INSERT INTO raw_delete_insert_failure VALUES (99, 'existing')",
+        ),
+        target_select_sql="SELECT id, status FROM raw_delete_insert_failure ORDER BY id",
         expected_target_rows=((99, "existing"),),
     ),
 ]
