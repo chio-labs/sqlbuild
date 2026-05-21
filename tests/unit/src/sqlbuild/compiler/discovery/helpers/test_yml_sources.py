@@ -6,6 +6,7 @@ import pytest
 
 from sqlbuild.compiler.discovery.helpers.yml_sources import parse_sources_yml
 from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.models.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
     ParseSourcesYamlErrorTestCase,
     ParseSourcesYamlTestCase,
@@ -147,6 +148,7 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
             loader: customer_loader
             write_strategy: merge
             unique_key: [customer_id, updated_at]
+            cursor_column: updated_at
           - name: raw_prices
             loader: price_loader
             write_strategy: table
@@ -154,6 +156,7 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
           - name: raw_webhooks
             loader: webhook_loader
             write_strategy: append
+            cursor_column: received_at
         """,
         expected_source_names=("raw_events", "raw_customers", "raw_prices", "raw_webhooks"),
         expected_column_names=((), (), (), ()),
@@ -163,7 +166,7 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
         expected_loaders=("event_loader", "customer_loader", "price_loader", "webhook_loader"),
         expected_write_strategies=("delete_insert", "merge", "table", "append"),
         expected_load_batch_sizes=(None, None, 500, None),
-        expected_cursor_columns=("event_at", None, None, None),
+        expected_cursor_columns=("event_at", "updated_at", None, "received_at"),
         expected_unique_keys=((), ("customer_id", "updated_at"), (), ()),
         expected_source_audit_names=((), (), (), ()),
         expected_column_audit_names=((), (), (), ()),
@@ -218,6 +221,10 @@ def test_given_sources_yaml_variants_when_parsing_then_it_returns_expected_raw_m
     )
     assert actual_write_strategies == expected_or_actual(
         test_case.expected_write_strategies, actual_write_strategies
+    )
+    assert all(
+        entry.write_strategy is None or isinstance(entry.write_strategy, SourceWriteStrategy)
+        for entry in source_entries
     )
     actual_load_batch_sizes: tuple[int | None, ...] = tuple(
         entry.load_batch_size for entry in source_entries
@@ -415,18 +422,18 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
         expected_error_fragment="source 'load_batch_size' must be a positive integer",
     ),
     ParseSourcesYamlErrorTestCase(
-        description="raises when cursor column is used without delete insert",
+        description="raises when cursor column is used with table strategy",
         contents="""
         sources:
           - name: raw_orders
             loader: order_loader
-            write_strategy: append
+            write_strategy: table
             cursor_column: event_at
         """,
-        expected_error_fragment="cursor_column requires write_strategy delete_insert",
+        expected_error_fragment="cursor_column is not supported with write_strategy table",
     ),
     ParseSourcesYamlErrorTestCase(
-        description="raises when unique key is used without merge or delete insert",
+        description="raises when unique key is used with append strategy",
         contents="""
         sources:
           - name: raw_orders
@@ -434,7 +441,50 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
             write_strategy: append
             unique_key: order_id
         """,
-        expected_error_fragment="unique_key requires write_strategy delete_insert or merge",
+        expected_error_fragment="unique_key is not supported with write_strategy append",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when merge has no unique key",
+        contents="""
+        sources:
+          - name: raw_orders
+            loader: order_loader
+            write_strategy: merge
+        """,
+        expected_error_fragment="write_strategy merge requires unique_key",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when unique key is used with table strategy",
+        contents="""
+        sources:
+          - name: raw_orders
+            loader: order_loader
+            write_strategy: table
+            unique_key: order_id
+        """,
+        expected_error_fragment="unique_key is not supported with write_strategy table",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when delete insert has no cursor column",
+        contents="""
+        sources:
+          - name: raw_orders
+            loader: order_loader
+            write_strategy: delete_insert
+        """,
+        expected_error_fragment="write_strategy delete_insert requires cursor_column",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when unique key is used with delete insert strategy",
+        contents="""
+        sources:
+          - name: raw_orders
+            loader: order_loader
+            write_strategy: delete_insert
+            cursor_column: event_at
+            unique_key: order_id
+        """,
+        expected_error_fragment="unique_key is not supported with write_strategy delete_insert",
     ),
     ParseSourcesYamlErrorTestCase(
         description="raises when unique key is empty list",

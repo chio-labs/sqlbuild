@@ -94,6 +94,60 @@ class LoadCommandLifecycleOrderTestCase:
 
 
 @dataclass(frozen=True)
+class LoadCommandWriteStrategyTestCase:
+    description: str
+    project_files: dict[str, str]
+    select_sql: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    run_count: int = 2
+
+
+@dataclass(frozen=True)
+class LoadCommandWriteStrategyLifecycleTestCase:
+    description: str
+    project_files: dict[str, str]
+    expected_first_run_fragments: tuple[str, ...]
+    expected_second_run_fragments: tuple[str, ...]
+    absent_second_run_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class LoadCommandCursorNoneTestCase:
+    description: str
+    project_files: dict[str, str]
+    select_sql: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    run_count: int = 2
+    setup_sql: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class LoadCommandLifecycleSqlTestCase:
+    description: str
+    project_files: dict[str, str]
+    run_count: int
+    expected_lifecycle_sql_fragments: tuple[str, ...] = ()
+    absent_lifecycle_sql_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class LoadCommandAdapterCallTestCase:
+    description: str
+    project_files: dict[str, str]
+    method_name: str
+    expected_sql: str
+    expected_unique_key: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class LoadCommandReloadContextTestCase:
+    description: str
+    project_files: dict[str, str]
+    reload: bool
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class LoadCommandEmptyRowsTestCase:
     description: str
     project_files: dict[str, str]

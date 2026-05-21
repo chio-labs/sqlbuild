@@ -36,6 +36,7 @@ class LoaderContext:
     environment: str | None
     vars: dict[str, object]
     is_reload: bool
+    current_cursor_value: object | None
     logger: logging.Logger
     statement_recorder: StatementRecorder
 
