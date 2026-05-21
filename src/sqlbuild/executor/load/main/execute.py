@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any
 
@@ -74,6 +75,7 @@ def execute_source_load(
             environment=environment,
             vars=vars,
             is_reload=is_reload,
+            logger=logging.getLogger(f"sqlbuild.loader.{loader_function.name}"),
             statement_recorder=statement_recorder,
         )
         rows: tuple[dict[str, object], ...] = normalize_loader_rows(
