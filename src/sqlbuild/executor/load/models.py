@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import LifeCycleEvent, StatementRecorder
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
 
 
 @dataclass(frozen=True)
@@ -24,6 +26,7 @@ class LoaderContext:
     environment: str | None
     vars: dict[str, object]
     is_reload: bool
+    logger: logging.Logger
     statement_recorder: StatementRecorder
 
     def execute_sql(self, sql: str) -> Any:
@@ -36,6 +39,29 @@ class LoaderContext:
 
     def log(self, message: str) -> None:
         self.statement_recorder.log(message)
+
+    def qualify_name(
+        self,
+        name: str,
+        *,
+        database: str | None = None,
+        schema: str | None = None,
+    ) -> str:
+        """Return a fully-qualified relation name, preserving already-qualified input."""
+
+        if "." in name:
+            return name
+        return resolve_qualified_name_parts(
+            adapter=self.adapter,
+            database=self.target_database if database is None else database,
+            schema=self.target_schema if schema is None else schema,
+            name=name,
+        )
+
+    def qualify_in_target_schema(self, name: str) -> str:
+        """Return a relation name qualified into the target database/schema."""
+
+        return self.qualify_name(name)
 
 
 @dataclass(frozen=True)
