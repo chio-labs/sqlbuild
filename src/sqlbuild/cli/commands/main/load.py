@@ -17,11 +17,16 @@ from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
     format_load_execution_json,
     write_execution_json_output,
 )
+from sqlbuild.cli.commands.main.shared.helpers.parsers import (
+    parse_cursor_integer,
+    parse_cursor_timestamp,
+)
 from sqlbuild.cli.commands.main.shared.helpers.progress import format_build_header
 from sqlbuild.compiler.compile.main.effective_runtime import build_effective_runtime_config
 from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile
+from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.executor.load.main.run import run_load_pipeline
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.shared.helpers.colors import (
@@ -42,6 +47,7 @@ def run_load(
     exclude: tuple[str, ...] = (),
     reload: bool = False,
     concurrency: int | None = None,
+    cursor_overrides: CursorOverrides | None = None,
     cli_vars: dict[str, object] | None = None,
     json_output: bool = False,
     json_output_path: Path | None = None,
@@ -96,6 +102,7 @@ def run_load(
         discovered_inputs=discovered_inputs,
         cli_vars=cli_vars,
     )
+    effective_cursor_overrides: CursorOverrides = cursor_overrides or CursorOverrides()
     sources_header: str = f"Sources ({len(selected_sources)})"
     styled_sources_header: str = green_bold(sources_header) if use_color else sources_header
     progress_stream.write(f"{styled_sources_header}\n")
@@ -139,6 +146,10 @@ def run_load(
         environment=environment_name,
         vars=effective_vars,
         is_reload=reload,
+        start_cursor_ts=parse_cursor_timestamp(effective_cursor_overrides.start_ts),
+        end_cursor_ts=parse_cursor_timestamp(effective_cursor_overrides.end_ts),
+        start_cursor_int=parse_cursor_integer(effective_cursor_overrides.start_int),
+        end_cursor_int=parse_cursor_integer(effective_cursor_overrides.end_int),
         max_concurrency=effective_concurrency,
         on_load_complete=on_complete,
         on_connection_start=connection_progress.on_connection_start,

@@ -220,6 +220,7 @@ class CliEntrypointHandlers:
             tuple[str, ...],
             bool,
             int | None,
+            CursorOverrides | None,
             dict[str, object],
             bool,
             Path | None,

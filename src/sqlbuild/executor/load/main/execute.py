@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -33,6 +34,10 @@ def execute_source_load(
     environment: str | None,
     vars: dict[str, object],
     is_reload: bool,
+    start_cursor_ts: datetime | None = None,
+    end_cursor_ts: datetime | None = None,
+    start_cursor_int: int | None = None,
+    end_cursor_int: int | None = None,
     statement_recorder: StatementRecorder,
 ) -> LoadExecutionResult:
     """Run one source loader and write returned rows using the table strategy."""
@@ -103,6 +108,10 @@ def execute_source_load(
             ),
             logger=logging.getLogger(f"sqlbuild.loader.{loader_function.name}"),
             statement_recorder=statement_recorder,
+            start_cursor_ts=start_cursor_ts,
+            end_cursor_ts=end_cursor_ts,
+            start_cursor_int=start_cursor_int,
+            end_cursor_int=end_cursor_int,
         )
         raw_rows: object = loader_function.function(context)
         if raw_rows is None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -25,6 +26,10 @@ def run_load_pipeline(
     environment: str | None,
     vars: dict[str, object],
     is_reload: bool,
+    start_cursor_ts: datetime | None = None,
+    end_cursor_ts: datetime | None = None,
+    start_cursor_int: int | None = None,
+    end_cursor_int: int | None = None,
     max_concurrency: int = 1,
     on_load_complete: Callable[[LoadExecutionResult], None] | None = None,
     on_connection_start: Callable[[int], None] | None = None,
@@ -77,6 +82,10 @@ def run_load_pipeline(
                     environment=environment,
                     vars=vars,
                     is_reload=is_reload,
+                    start_cursor_ts=start_cursor_ts,
+                    end_cursor_ts=end_cursor_ts,
+                    start_cursor_int=start_cursor_int,
+                    end_cursor_int=end_cursor_int,
                     statement_recorder=StatementRecorder(),
                 )
                 results[source_index] = result
