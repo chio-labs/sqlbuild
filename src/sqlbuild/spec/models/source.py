@@ -29,6 +29,7 @@ class SourceEntry:
     table: str | None = None
     loader: str | None = None
     write_strategy: str | None = None
+    load_batch_size: int | None = None
     cursor_column: str | None = None
     unique_key: tuple[str, ...] = field(default_factory=tuple)
     expression: str | None = None

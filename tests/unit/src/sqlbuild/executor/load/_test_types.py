@@ -53,6 +53,28 @@ class LoaderRowsNormalizeErrorTestCase:
 
 
 @dataclass(frozen=True)
+class LoaderRowsBatchTestCase:
+    """One loader row batching case."""
+
+    description: str
+    value: Any
+    batch_size: int
+    expected_batches: tuple[tuple[dict[str, object], ...], ...]
+
+
+@dataclass(frozen=True)
+class LoaderRowsSchemaTestCase:
+    """One loader row schema tracking case."""
+
+    description: str
+    rows: tuple[dict[str, object], ...]
+    columns: tuple[SourceColumnEntry, ...]
+    column_names: tuple[str, ...]
+    expected_column_names: tuple[str, ...]
+    expected_added_columns: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
 class LoaderRowsErrorTestCase:
     """One loader row SQL rendering error case."""
 

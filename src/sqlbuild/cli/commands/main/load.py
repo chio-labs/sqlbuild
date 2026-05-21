@@ -217,10 +217,11 @@ def _build_on_complete(
         duration: str = ""
         if result.duration_ms is not None:
             duration = f"{result.duration_ms / 1000.0:.2f}s"
+        rows_loaded: str = f"rows={result.rows_loaded:,}"
         ordinal: int = source_order[result.source_name]
         stream.write(
             f"  {ordinal}/{total_count}  source    "
-            f"{result.source_name:<30} {status:<6} {duration}\n"
+            f"{result.source_name:<30} {status:<6} {duration}  {rows_loaded}\n"
         )
         if result.error_message is not None:
             stream.write(f"    {result.error_message}\n")

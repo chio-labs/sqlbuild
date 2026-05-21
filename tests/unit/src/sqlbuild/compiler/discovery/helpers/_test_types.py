@@ -218,6 +218,7 @@ class ParseSourcesYamlTestCase:
     expected_expressions: tuple[str | None, ...]
     expected_loaders: tuple[str | None, ...] | None = None
     expected_write_strategies: tuple[str | None, ...] | None = None
+    expected_load_batch_sizes: tuple[int | None, ...] | None = None
     expected_cursor_columns: tuple[str | None, ...] | None = None
     expected_unique_keys: tuple[tuple[str, ...], ...] | None = None
     expected_source_audit_names: tuple[tuple[str, ...], ...] = ()
