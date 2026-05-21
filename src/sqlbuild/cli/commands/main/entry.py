@@ -86,6 +86,9 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     plan_parser.add_argument("--json", action="store_true", default=False)
     plan_parser.add_argument("--full-refresh", action="store_true", default=False)
     plan_parser.add_argument("--verbose", "-v", action="store_true", default=False)
+    plan_load_group: argparse._MutuallyExclusiveGroup = plan_parser.add_mutually_exclusive_group()
+    plan_load_group.add_argument("--load", dest="load_sources", action="store_true", default=None)
+    plan_load_group.add_argument("--no-load", dest="load_sources", action="store_false")
     add_cursor_override_args(plan_parser)
     add_select_args(plan_parser)
     add_vars_args(plan_parser)
@@ -97,6 +100,10 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     build_parser.add_argument("--json", action="store_true", default=False)
     add_execution_json_output_arg(build_parser)
     add_cursor_override_args(build_parser)
+    build_load_group: argparse._MutuallyExclusiveGroup = build_parser.add_mutually_exclusive_group()
+    build_load_group.add_argument("--load", dest="load_sources", action="store_true", default=None)
+    build_load_group.add_argument("--no-load", dest="load_sources", action="store_false")
+    build_load_group.add_argument("--reload", dest="reload", action="store_true", default=False)
     add_execution_args(build_parser)
     add_select_args(build_parser)
     add_vars_args(build_parser)
@@ -108,6 +115,10 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     run_parser.add_argument("--json", action="store_true", default=False)
     add_execution_json_output_arg(run_parser)
     add_cursor_override_args(run_parser)
+    run_load_group: argparse._MutuallyExclusiveGroup = run_parser.add_mutually_exclusive_group()
+    run_load_group.add_argument("--load", dest="load_sources", action="store_true", default=None)
+    run_load_group.add_argument("--no-load", dest="load_sources", action="store_false")
+    run_load_group.add_argument("--reload", dest="reload", action="store_true", default=False)
     add_execution_args(run_parser)
     add_select_args(run_parser)
     add_vars_args(run_parser)
@@ -422,6 +433,7 @@ def _main_with_dependencies(
                 cursor_overrides,
                 args.json,
                 args.full_refresh,
+                args.load_sources,
                 args.no_color,
                 select,
                 tuple(args.exclude),
@@ -455,6 +467,8 @@ def _main_with_dependencies(
                 args.no_color,
                 args.fail_fast,
                 args.full_refresh,
+                args.load_sources,
+                args.reload,
                 args.allow_snapshot_full_refresh,
                 args.allow_snapshot_schema_change,
                 args.concurrency,
@@ -481,6 +495,8 @@ def _main_with_dependencies(
                 args.no_color,
                 args.fail_fast,
                 args.full_refresh,
+                args.load_sources,
+                args.reload,
                 args.allow_snapshot_full_refresh,
                 args.allow_snapshot_schema_change,
                 args.concurrency,

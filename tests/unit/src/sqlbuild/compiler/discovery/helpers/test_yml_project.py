@@ -42,6 +42,7 @@ database = "local.duckdb"
 sqlglot = false
 sql_validation = false
 concurrency = 4
+auto_load_sources = false
 
 [vars]
 user = "kevin"
@@ -63,7 +64,10 @@ max_total_bytes = 78
         expected_sqlglot=False,
         expected_sql_validation=False,
         expected_max_concurrency=4,
-        expected_setting_overrides=frozenset({"sqlglot", "sql_validation", "concurrency"}),
+        expected_auto_load_sources=False,
+        expected_setting_overrides=frozenset(
+            {"sqlglot", "sql_validation", "concurrency", "auto_load_sources"}
+        ),
         expected_vars={"user": "kevin"},
         expected_scenario_local_type_overrides={
             "snowflake": {
@@ -540,6 +544,7 @@ path = "data.db"
 sqlglot = false
 query_change_tracking = true
 concurrency = 8
+auto_load_sources = false
 
 [defaults]
 materialized = "table"
@@ -609,6 +614,7 @@ target_path = "target/dbt"
             expected_connection={"path": "data.db"},
             expected_sqlglot=False,
             expected_max_concurrency=8,
+            expected_auto_load_sources=False,
             expected_materialized="table",
             expected_row_diff_exclude_columns=("loaded_at",),
             expected_row_diff_tolerances={
@@ -670,6 +676,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.connection == test_case.expected_connection
     assert config.settings.sqlglot is test_case.expected_sqlglot
     assert config.settings.concurrency == test_case.expected_max_concurrency
+    assert config.settings.auto_load_sources is test_case.expected_auto_load_sources
     assert config.defaults.materialized == test_case.expected_materialized
     assert config.defaults.row_diff_exclude_columns == test_case.expected_row_diff_exclude_columns
     assert config.defaults.row_diff_tolerances == test_case.expected_row_diff_tolerances
@@ -730,6 +737,7 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
     assert config.settings.sqlglot is test_case.expected_sqlglot
     assert config.settings.sql_validation is test_case.expected_sql_validation
     assert config.settings.concurrency == test_case.expected_max_concurrency
+    assert config.settings.auto_load_sources is test_case.expected_auto_load_sources
     assert config.setting_overrides == test_case.expected_setting_overrides
     assert config.vars == test_case.expected_vars
     assert config.scenario.local_type_overrides == test_case.expected_scenario_local_type_overrides

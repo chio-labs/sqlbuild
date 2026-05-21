@@ -9,6 +9,7 @@ import time
 from collections import deque
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -16,6 +17,7 @@ from sqlbuild.adapter.shared.models import RelationInfo, StatementRecorder
 from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     FunctionPlanEntry,
@@ -45,6 +47,8 @@ from sqlbuild.executor.build.models import (
 from sqlbuild.executor.custom.models import MaterializationResult
 from sqlbuild.executor.functions.constants import FUNCTION_ENTRY_MISSING_CODE
 from sqlbuild.executor.functions.main.execute import execute_function
+from sqlbuild.executor.load.main.execute import execute_source_load
+from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.run.main.execute import (
     execute_custom_entry,
     execute_incremental_entry,
@@ -62,7 +66,9 @@ from sqlbuild.executor.testing.main.execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context, log_debug_event
+from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.project import SnapshotsConfig
+from sqlbuild.spec.models.source import SourceEntry
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 
@@ -86,10 +92,16 @@ class BuildScheduler:
         run_audits: bool,
         run_tests: bool,
         fail_fast: bool,
-        on_node_start: Callable[[str, str], None] | None,
+        on_node_start: Callable[[str, ExecutionResourceKind], None] | None,
         on_node_complete: Callable[[object], None] | None,
         on_progress: Callable[[str], None] | None,
         custom_materializations: dict[str, Callable[..., MaterializationResult]] | None = None,
+        loader_functions: tuple[DiscoveredLoaderFunction, ...] = (),
+        loader_is_reload: bool = False,
+        start_cursor_ts: datetime | None = None,
+        end_cursor_ts: datetime | None = None,
+        start_cursor_int: int | None = None,
+        end_cursor_int: int | None = None,
         environment: str = "",
         effective_vars: dict[str, object] | None = None,
         warehouse_relations: dict[str, RelationInfo] | None = None,
@@ -108,12 +120,20 @@ class BuildScheduler:
         self._run_audits: bool = run_audits
         self._run_tests: bool = run_tests
         self._fail_fast: bool = fail_fast
-        self._on_node_start: Callable[[str, str], None] | None = on_node_start
+        self._on_node_start: Callable[[str, ExecutionResourceKind], None] | None = on_node_start
         self._on_node_complete: Callable[[object], None] | None = on_node_complete
         self._on_progress: Callable[[str], None] | None = on_progress
         self._custom_materializations: dict[str, Callable[..., MaterializationResult]] = (
             custom_materializations or {}
         )
+        self._loader_functions_by_name: dict[str, DiscoveredLoaderFunction] = {
+            loader.name: loader for loader in loader_functions
+        }
+        self._loader_is_reload: bool = loader_is_reload
+        self._start_cursor_ts: datetime | None = start_cursor_ts
+        self._end_cursor_ts: datetime | None = end_cursor_ts
+        self._start_cursor_int: int | None = start_cursor_int
+        self._end_cursor_int: int | None = end_cursor_int
         self._environment: str = environment
         self._effective_vars: dict[str, object] = effective_vars or {}
         self._warehouse_relations: dict[str, RelationInfo] = warehouse_relations or {}
@@ -129,6 +149,7 @@ class BuildScheduler:
         self._model_results: list[ModelExecutionResult] = []
         self._seed_results: list[SeedExecutionResult] = []
         self._function_results: list[FunctionExecutionResult] = []
+        self._load_results: list[LoadExecutionResult] = []
         self._test_results: list[SqlTestExecutionResult] = []
         self._source_audit_results: list[AuditExecutionResult] = []
 
@@ -149,6 +170,7 @@ class BuildScheduler:
         tuple[ModelExecutionResult, ...],
         tuple[SeedExecutionResult, ...],
         tuple[FunctionExecutionResult, ...],
+        tuple[LoadExecutionResult, ...],
         tuple[SqlTestExecutionResult, ...],
         tuple[AuditExecutionResult, ...],
         tuple[AuditExecutionResult, ...],
@@ -181,6 +203,7 @@ class BuildScheduler:
             tuple(self._model_results),
             tuple(self._seed_results),
             tuple(self._function_results),
+            tuple(self._load_results),
             tuple(self._test_results),
             tuple(self._source_audit_results),
             end_audit_results,
@@ -216,7 +239,11 @@ class BuildScheduler:
                     break
                 key: CompiledObjectKey = self._ready.popleft()
                 if key.resource_type == CompiledResourceType.SOURCE:
-                    self._mark_complete(key)
+                    if not self._pre_dispatch(key):
+                        self._mark_complete(key)
+                        continue
+                    result: LoadExecutionResult = self._execute_source_node(key, connection)
+                    self._handle_completion(key, result)
                     continue
                 if key in self._blocked_keys:
                     self._record_skipped(key)
@@ -230,6 +257,7 @@ class BuildScheduler:
                     | SeedExecutionResult
                     | FunctionExecutionResult
                     | SqlTestExecutionResult
+                    | LoadExecutionResult
                 ) = self._execute_node(key, connection)
                 self._handle_completion(key, result)
         finally:
@@ -246,7 +274,11 @@ class BuildScheduler:
                         break
                     key: CompiledObjectKey = self._ready.popleft()
                     if key.resource_type == CompiledResourceType.SOURCE:
-                        self._mark_complete(key)
+                        if not self._pre_dispatch(key):
+                            self._mark_complete(key)
+                            continue
+                        self._in_flight.add(key)
+                        pool.submit(self._worker, key)
                         continue
                     if key in self._blocked_keys:
                         self._record_skipped(key)
@@ -273,6 +305,7 @@ class BuildScheduler:
                 | SeedExecutionResult
                 | FunctionExecutionResult
                 | SqlTestExecutionResult
+                | LoadExecutionResult
             ) = self._execute_node(key, connection)
             self._completion_queue.put(NodeCompletion(key=key, result=result))
         except Exception as exc:
@@ -297,6 +330,10 @@ class BuildScheduler:
             if not self._run_tests:
                 return False
             return True
+
+        if key.resource_type == CompiledResourceType.SOURCE:
+            source_entry: SourceEntry | None = self._plan.source_map.get(key.name)
+            return source_entry is not None and source_entry.loader is not None
 
         if key.resource_type == CompiledResourceType.MODEL:
             if not self._run_audits:
@@ -341,11 +378,14 @@ class BuildScheduler:
         | SeedExecutionResult
         | FunctionExecutionResult
         | SqlTestExecutionResult
+        | LoadExecutionResult
     ):
         """Execute a single node. Runs in a worker thread (or scheduler thread for serial)."""
 
         if key.resource_type == CompiledResourceType.SEED:
             return self._execute_seed_node(key, connection)
+        if key.resource_type == CompiledResourceType.SOURCE:
+            return self._execute_source_node(key, connection)
         if key.resource_type == CompiledResourceType.FUNCTION:
             return self._execute_function_node(key, connection)
         if key.resource_type == CompiledResourceType.SQL_TEST:
@@ -359,6 +399,33 @@ class BuildScheduler:
             error_message=f"unknown executable resource type '{key.resource_type}'",
         )
 
+    def _execute_source_node(self, key: CompiledObjectKey, connection: Any) -> LoadExecutionResult:
+        source_entry: SourceEntry = self._plan.source_map[key.name]
+        loader_name: str = source_entry.loader or ""
+        loader_function: DiscoveredLoaderFunction = self._loader_functions_by_name[loader_name]
+        if self._on_progress is not None:
+            self._on_progress(f"source: {source_entry.name}")
+        if self._on_node_start is not None:
+            self._on_node_start(source_entry.name, ExecutionResourceKind.SOURCE)
+        start: float = time.monotonic()
+        result: LoadExecutionResult = execute_source_load(
+            source_entry=source_entry,
+            loader_function=loader_function,
+            adapter=self._adapter,
+            connection=connection,
+            run_id=self._run_id,
+            environment=self._environment,
+            vars=self._effective_vars,
+            is_reload=self._loader_is_reload,
+            start_cursor_ts=self._start_cursor_ts,
+            end_cursor_ts=self._end_cursor_ts,
+            start_cursor_int=self._start_cursor_int,
+            end_cursor_int=self._end_cursor_int,
+            statement_recorder=StatementRecorder(),
+        )
+        duration: int = int((time.monotonic() - start) * 1000)
+        return dataclasses.replace(result, duration_ms=duration)
+
     def _execute_seed_node(self, key: CompiledObjectKey, connection: Any) -> SeedExecutionResult:
         seed_entry: SeedPlanEntry | None = self._indexes.seed_entries_by_key.get(key)
         if seed_entry is None:
@@ -371,7 +438,7 @@ class BuildScheduler:
         if self._on_progress is not None:
             self._on_progress(f"seed: {seed_entry.name}")
         if self._on_node_start is not None:
-            self._on_node_start(seed_entry.name, MaterializationType.SEED)
+            self._on_node_start(seed_entry.name, ExecutionResourceKind.SEED)
         start: float = time.monotonic()
         log_debug_event(
             _DEBUG_LOGGER,
@@ -459,7 +526,7 @@ class BuildScheduler:
         if self._on_progress is not None:
             self._on_progress(f"function: {function_entry.name}")
         if self._on_node_start is not None:
-            self._on_node_start(function_entry.name, "function")
+            self._on_node_start(function_entry.name, ExecutionResourceKind.FUNCTION)
         start: float = time.monotonic()
         result: FunctionExecutionResult = execute_function(
             function_entry=function_entry,
@@ -484,7 +551,10 @@ class BuildScheduler:
         if self._on_progress is not None:
             self._on_progress(f"model: {model_entry.name}")
         if self._on_node_start is not None:
-            self._on_node_start(model_entry.name, model_entry.materialization_type)
+            self._on_node_start(
+                model_entry.name,
+                _model_execution_resource_kind(model_entry.materialization_type),
+            )
 
         model_audits: tuple[AuditPlanEntry, ...] = (
             self._indexes.model_audits_by_model.get(model_entry.name, ())
@@ -544,6 +614,7 @@ class BuildScheduler:
             | SeedExecutionResult
             | FunctionExecutionResult
             | SqlTestExecutionResult
+            | LoadExecutionResult
         ),
     ) -> None:
         """Process a completed node: record result, propagate blocking, enqueue ready."""
@@ -576,6 +647,12 @@ class BuildScheduler:
 
         elif isinstance(result, FunctionExecutionResult):
             self._function_results.append(result)
+            if self._on_node_complete is not None:
+                self._on_node_complete(result)
+            failed = result.status == ExecutionStatus.FAILED
+
+        elif isinstance(result, LoadExecutionResult):
+            self._load_results.append(result)
             if self._on_node_complete is not None:
                 self._on_node_complete(result)
             failed = result.status == ExecutionStatus.FAILED
@@ -633,6 +710,17 @@ class BuildScheduler:
                 self._function_results.append(
                     FunctionExecutionResult(
                         function_name=function_entry.name, status=ExecutionStatus.SKIPPED
+                    )
+                )
+        elif key.resource_type == CompiledResourceType.SOURCE:
+            source_entry: SourceEntry | None = self._plan.source_map.get(key.name)
+            if source_entry is not None and source_entry.loader is not None:
+                self._load_results.append(
+                    LoadExecutionResult(
+                        source_name=source_entry.name,
+                        loader_name=source_entry.loader,
+                        status=ExecutionStatus.SKIPPED,
+                        target=source_entry.table or source_entry.name,
                     )
                 )
 
@@ -783,3 +871,13 @@ def _dispatch_model(
         run_id=run_id,
         query_change_tracking=query_change_tracking,
     )
+
+
+def _model_execution_resource_kind(materialization_type: str) -> ExecutionResourceKind:
+    if materialization_type == MaterializationType.VIEW:
+        return ExecutionResourceKind.VIEW
+    if materialization_type == MaterializationType.CUSTOM:
+        return ExecutionResourceKind.CUSTOM
+    if materialization_type == MaterializationType.SNAPSHOT:
+        return ExecutionResourceKind.SNAPSHOT
+    return ExecutionResourceKind.TABLE

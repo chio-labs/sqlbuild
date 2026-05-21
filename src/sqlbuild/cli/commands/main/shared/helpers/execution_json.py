@@ -56,6 +56,7 @@ def format_build_execution_json(*, result: BuildExecutionResult, plan: PlanOutpu
             *_format_model_assets(results=result.model_results, plan=plan),
             *_format_seed_assets(results=result.seed_results, plan=plan),
             *_format_function_assets(results=result.function_results, plan=plan),
+            *_format_load_assets(results=result.load_results),
         ),
         checks=(
             *_format_sql_test_checks(result.test_results),
@@ -86,6 +87,7 @@ def format_run_execution_json(*, result: BuildExecutionResult, plan: PlanOutput)
             *_format_model_assets(results=result.model_results, plan=plan),
             *_format_seed_assets(results=result.seed_results, plan=plan),
             *_format_function_assets(results=result.function_results, plan=plan),
+            *_format_load_assets(results=result.load_results),
         ),
         checks=(),
         summary={

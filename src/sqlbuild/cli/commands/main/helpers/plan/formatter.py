@@ -14,6 +14,7 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     PlanWarning,
     SchemaFinding,
+    SourceLoadPlanEntry,
 )
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
@@ -87,8 +88,20 @@ def format_plan(
     name_column_width: int = _resolve_name_column_width(plan)
 
     if include_header:
-        header: str = f"Plan ready ({selected_count} selected)"
+        header: str = _plan_ready_header(
+            selected_count=selected_count,
+            source_load_entries=plan.source_load_entries,
+            full_refresh=False,
+        )
         lines.append(green_bold(header))
+
+    _format_source_loads(
+        lines,
+        plan,
+        name_column_width=name_column_width,
+        display_options=resolved_display_options,
+        section_header_style=section_header_style,
+    )
 
     normal: list[ModelPlanEntry] = _collect_normal(active)
     cascade: list[ModelPlanEntry] = _collect_upstream_changed(active)
@@ -186,7 +199,23 @@ def _format_full_refresh(
     name_column_width: int = _resolve_name_column_width(plan)
 
     if include_header:
-        lines.append(green_bold(f"Plan ready (full refresh, {selected_count} selected)"))
+        lines.append(
+            green_bold(
+                _plan_ready_header(
+                    selected_count=selected_count,
+                    source_load_entries=plan.source_load_entries,
+                    full_refresh=True,
+                )
+            )
+        )
+
+    _format_source_loads(
+        lines,
+        plan,
+        name_column_width=name_column_width,
+        display_options=display_options,
+        section_header_style=section_header_style,
+    )
 
     _format_functions(
         lines,
@@ -222,6 +251,80 @@ def _selected_count(plan: PlanOutput) -> int:
     """Count selected executable resources shown in plan output."""
 
     return len(plan.model_entries) + len(plan.seed_entries) + len(plan.function_entries)
+
+
+def _plan_ready_header(
+    *,
+    selected_count: int,
+    source_load_entries: tuple[SourceLoadPlanEntry, ...],
+    full_refresh: bool,
+) -> str:
+    source_count: int = len(source_load_entries)
+    parts: list[str] = []
+    if full_refresh:
+        parts.append("full refresh")
+    parts.append(f"{selected_count} selected")
+    if source_count:
+        source_noun: str = "source" if source_count == 1 else "sources"
+        action: str = "reload" if any(e.is_reload for e in source_load_entries) else "load"
+        source_label: str = f"{source_noun} to {action}"
+        parts.append(f"{source_count} {source_label}")
+    return f"Plan ready ({', '.join(parts)})"
+
+
+def _format_source_loads(
+    lines: list[str],
+    plan: PlanOutput,
+    *,
+    name_column_width: int,
+    display_options: DisplayOptions,
+    section_header_style: Callable[[str], str],
+) -> None:
+    """Append the managed source loaders section."""
+
+    if not plan.source_load_entries:
+        return
+    label: str = (
+        "Sources to reload"
+        if any(e.is_reload for e in plan.source_load_entries)
+        else "Sources to load"
+    )
+    lines.append("")
+    lines.append(section_header_style(f"{label} ({len(plan.source_load_entries)})"))
+    source_load_entry: SourceLoadPlanEntry
+    visible: Sequence[SourceLoadPlanEntry] = visible_entries(
+        plan.source_load_entries, options=display_options
+    )
+    for source_load_entry in visible:
+        lines.append(
+            _format_name_value_line(
+                source_load_entry.name,
+                _source_load_label(source_load_entry),
+                name_column_width=name_column_width,
+            )
+        )
+    append_overflow_line(
+        lines,
+        total_count=len(plan.source_load_entries),
+        visible_count=len(visible),
+        indent="  ",
+        options=display_options,
+    )
+
+
+def _source_load_label(entry: SourceLoadPlanEntry) -> str:
+    strategy: str = (
+        entry.write_strategy.value if entry.write_strategy is not None else "self-managed"
+    )
+    details: list[str] = []
+    if entry.cursor_column is not None:
+        details.append(f"cursor: {entry.cursor_column}")
+    if entry.unique_key:
+        key_text: str = ", ".join(entry.unique_key)
+        details.append(f"unique_key: {key_text}")
+    if not details:
+        return strategy
+    return f"{strategy} ({'; '.join(details)})"
 
 
 def _collect_normal(entries: list[ModelPlanEntry]) -> list[ModelPlanEntry]:

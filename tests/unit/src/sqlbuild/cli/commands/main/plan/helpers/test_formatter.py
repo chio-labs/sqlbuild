@@ -15,6 +15,7 @@ from sqlbuild.compiler.planner.types import (
     SchemaChangeKind,
     WarningSeverity,
 )
+from sqlbuild.spec.models.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers._test_types import (
     FormatPlanTestCase,
 )
@@ -24,6 +25,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers.helpers import (
     build_plan_output,
     build_schema_finding,
     build_seed_entry,
+    build_source_load_entry,
     build_warning,
 )
 
@@ -326,6 +328,58 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "sql udf",
             "is_completed_order_py",
             "python udf",
+        ),
+    ),
+    FormatPlanTestCase(
+        description="header includes source loads when sources will load",
+        plan_output=build_plan_output(
+            model_entries=(build_model_entry(name="stg_orders", action=PlanAction.CREATE_TABLE),),
+            source_load_entries=(build_source_load_entry(name="raw_orders"),),
+        ),
+        expected_fragments=(
+            "Plan ready (1 selected, 1 source to load)",
+            "Sources to load (1)",
+            "raw_orders",
+        ),
+    ),
+    FormatPlanTestCase(
+        description="header includes source reloads when sources will reload",
+        plan_output=build_plan_output(
+            model_entries=(build_model_entry(name="stg_orders", action=PlanAction.CREATE_TABLE),),
+            source_load_entries=(build_source_load_entry(name="raw_orders", is_reload=True),),
+        ),
+        full_refresh=True,
+        expected_fragments=(
+            "Plan ready (full refresh, 1 selected, 1 source to reload)",
+            "Sources to reload (1)",
+            "raw_orders",
+        ),
+    ),
+    FormatPlanTestCase(
+        description="source load section formats strategy details",
+        plan_output=build_plan_output(
+            source_load_entries=(
+                build_source_load_entry(
+                    name="raw_events",
+                    write_strategy=SourceWriteStrategy.DELETE_INSERT,
+                    cursor_column="event_at",
+                ),
+                build_source_load_entry(
+                    name="raw_orders",
+                    write_strategy=SourceWriteStrategy.MERGE,
+                    unique_key=("order_id", "updated_at"),
+                ),
+                build_source_load_entry(name="raw_self_managed", write_strategy=None),
+            ),
+        ),
+        expected_fragments=(
+            "Plan ready (0 selected, 3 sources to load)",
+            "raw_events",
+            "delete_insert (cursor: event_at)",
+            "raw_orders",
+            "merge (unique_key: order_id, updated_at)",
+            "raw_self_managed",
+            "self-managed",
         ),
     ),
     FormatPlanTestCase(

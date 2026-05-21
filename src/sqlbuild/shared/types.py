@@ -33,6 +33,18 @@ class SqlReferenceKind(StrEnum):
         return f"{self.function_name}({placeholder})"
 
 
+class ExecutionResourceKind(StrEnum):
+    """Top-level resource kind displayed during execution."""
+
+    SOURCE = "source"
+    SEED = "seed"
+    FUNCTION = "function"
+    VIEW = "view"
+    TABLE = "table"
+    CUSTOM = "custom"
+    SNAPSHOT = "snapshot"
+
+
 class ExternalSqlReferenceResolver(Protocol):
     """Resolve first-class SQLBuild references backed by external metadata.
 

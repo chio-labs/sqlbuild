@@ -51,6 +51,7 @@ class SettingsConfig:
     query_change_tracking: bool = True
     sql_validation: bool = True
     concurrency: int = 1
+    auto_load_sources: bool = True
     table_promotion_mode: str | None = None
     default_audit_severity: str | None = None
     default_audit_run_scope: str | None = None

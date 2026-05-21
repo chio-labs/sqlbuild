@@ -20,6 +20,10 @@ from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
 )
+from sqlbuild.cli.commands.main.shared.helpers.parsers import (
+    parse_cursor_integer,
+    parse_cursor_timestamp,
+)
 from sqlbuild.cli.commands.main.shared.helpers.plan_format import format_plan
 from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
 from sqlbuild.cli.commands.main.shared.helpers.progress import (
@@ -31,6 +35,7 @@ from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import writ
 from sqlbuild.cli.commands.main.shared.helpers.snapshot_full_refresh import (
     enforce_snapshot_full_refresh_policy,
 )
+from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
@@ -51,6 +56,8 @@ def run_build(
     no_color: bool = False,
     fail_fast: bool = False,
     full_refresh: bool = False,
+    load_sources: bool | None = None,
+    reload_sources: bool = False,
     allow_snapshot_full_refresh: bool = False,
     allow_snapshot_schema_change: bool = False,
     concurrency: int | None = None,
@@ -98,6 +105,11 @@ def run_build(
         stream=progress_stream,
         use_color=use_color,
     )
+    should_load_sources: bool = reload_sources or (
+        load_sources
+        if load_sources is not None
+        else build_effective_settings_config(discovered_inputs=discovered_inputs).auto_load_sources
+    )
     progress_stream.write("\n")
     progress_stream.flush()
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
@@ -109,6 +121,8 @@ def run_build(
         select=select,
         exclude=exclude,
         full_refresh=full_refresh,
+        auto_load_sources=should_load_sources,
+        reload_sources=reload_sources,
         connection_config=connection_config,
         cli_vars=cli_vars,
         on_connection_start=connection_progress.on_connection_start,
@@ -173,6 +187,12 @@ def run_build(
         on_node_complete=callbacks.on_node_complete,
         on_sub_progress=callbacks.on_sub_progress,
         custom_materializations=pipeline_result.custom_materializations,
+        loader_functions=discovered_inputs.loader_functions,
+        loader_is_reload=reload_sources,
+        start_cursor_ts=parse_cursor_timestamp((cursor_overrides or CursorOverrides()).start_ts),
+        end_cursor_ts=parse_cursor_timestamp((cursor_overrides or CursorOverrides()).end_ts),
+        start_cursor_int=parse_cursor_integer((cursor_overrides or CursorOverrides()).start_int),
+        end_cursor_int=parse_cursor_integer((cursor_overrides or CursorOverrides()).end_int),
         on_connection_start=execution_connection_progress.on_connection_start,
         on_connection_complete=execution_connection_progress.on_connection_complete,
         on_connection_error=execution_connection_progress.on_connection_error,

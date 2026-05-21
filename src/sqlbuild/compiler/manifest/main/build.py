@@ -46,8 +46,10 @@ def build_manifest(
     """Build a full dbt v12-compatible manifest dictionary."""
 
     model_plan_map: dict[str, ModelPlanEntry] = {}
+    source_load_names: frozenset[str] = frozenset()
     if plan_output is not None:
         model_plan_map = {entry.name: entry for entry in plan_output.model_entries}
+        source_load_names = frozenset(entry.name for entry in plan_output.source_load_entries)
 
     nodes: dict[str, dict[str, object]] = {}
     sources: dict[str, dict[str, object]] = {}
@@ -69,6 +71,7 @@ def build_manifest(
         sources[unique_id] = build_source_node(
             source=source,
             project_name=project_name,
+            auto_load=source.name in source_load_names,
         )
 
     seed: CompiledSeed

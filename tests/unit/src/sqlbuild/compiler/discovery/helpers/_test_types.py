@@ -43,6 +43,7 @@ class LoadProjectConfigTestCase:
     expected_dbt_profiles_dir: str | None = None
     expected_dbt_target: str | None = None
     expected_dbt_target_path: str | None = None
+    expected_auto_load_sources: bool = True
 
 
 @dataclass(frozen=True)
@@ -57,6 +58,7 @@ class LoadLocalConfigTestCase:
     expected_max_concurrency: int
     expected_setting_overrides: frozenset[str]
     expected_vars: dict[str, str]
+    expected_auto_load_sources: bool = True
     expected_environments: dict[str, dict[str, object]] = field(default_factory=dict)
     expected_missing_attributes: tuple[str, ...] = ()
     expected_scenario_local_type_overrides: dict[str, dict[str, str]] = field(default_factory=dict)

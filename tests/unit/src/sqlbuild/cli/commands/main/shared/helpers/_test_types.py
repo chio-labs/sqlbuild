@@ -5,6 +5,7 @@ from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.project import SnapshotsConfig
 
 
@@ -65,7 +66,7 @@ class BuildProgressModelOutputTestCase:
 class BuildProgressActiveSpinnerTestCase:
     description: str
     node_name: str
-    node_type: str
+    node_type: ExecutionResourceKind
     expected_fragments: tuple[str, ...]
     unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
 
@@ -74,7 +75,7 @@ class BuildProgressActiveSpinnerTestCase:
 class BuildProgressSpinnerLifecycleTestCase:
     description: str
     node_name: str
-    node_type: str
+    node_type: ExecutionResourceKind
     sleep_seconds: float
     completion_duration_ms: int
     expected_fragments: tuple[str, ...]

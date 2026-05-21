@@ -181,3 +181,71 @@ class LoadCommandFailureCleanupTestCase:
     setup_sql: tuple[str, ...] = ()
     target_select_sql: str | None = None
     expected_target_rows: tuple[tuple[object, ...], ...] = ()
+
+
+@dataclass(frozen=True)
+class BuildRunAutoLoadTestCase:
+    description: str
+    command: str
+    expected_stdout_fragments: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class BuildRunAutoLoadFlagTestCase:
+    description: str
+    command: str
+    project_files: dict[str, str]
+    args: tuple[str, ...]
+    setup_sql: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_stdout_fragments: tuple[str, ...] = ()
+    expected_stdout_absent_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class BuildRunAutoLoadSelectionTestCase:
+    description: str
+    args: tuple[str, ...]
+    setup_sql: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_stdout_fragments: tuple[str, ...] = ()
+    expected_stdout_absent_fragments: tuple[str, ...] = ()
+    project_files: dict[str, str] | None = None
+    result_table: str = "fact_orders"
+
+
+@dataclass(frozen=True)
+class BuildRunAutoLoadFailureTestCase:
+    description: str
+    project_files: dict[str, str]
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+    expected_model_exists: bool
+
+
+@dataclass(frozen=True)
+class BuildRunAutoLoadJsonTestCase:
+    description: str
+    project_files: dict[str, str]
+    expected_exit_code: int
+    expected_source_asset: dict[str, object]
+
+
+@dataclass(frozen=True)
+class PlanAutoLoadOutputTestCase:
+    description: str
+    project_files: dict[str, str]
+    load_sources: bool | None
+    expected_stdout_fragments: tuple[str, ...]
+    expected_stdout_absent_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class PlanAutoLoadJsonTestCase:
+    description: str
+    project_files: dict[str, str]
+    load_sources: bool | None
+    expected_source_loads: tuple[dict[str, object], ...]
+    expected_selected_count: int
+    expected_source_load_count: int

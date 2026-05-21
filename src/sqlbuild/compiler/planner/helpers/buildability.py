@@ -31,6 +31,8 @@ def check_buildability(
                 continue
             if dep_key.resource_type == CompiledResourceType.DBT_REF:
                 continue
+            if dep_key.resource_type == CompiledResourceType.SOURCE:
+                continue
             if dep_key in selected_keys:
                 continue
             if dep_key.name in snapshot.existing_relations:
