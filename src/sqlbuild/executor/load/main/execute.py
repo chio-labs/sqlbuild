@@ -9,6 +9,11 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
+from sqlbuild.executor.load.helpers.cursors import (
+    exclusive_cursor_end,
+    format_cursor_bound,
+    load_staging_cursor_bounds,
+)
 from sqlbuild.executor.load.helpers.staging import write_loader_rows_to_staging
 from sqlbuild.executor.load.models import LoaderContext, LoadExecutionResult
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
@@ -56,6 +61,7 @@ def execute_source_load(
         supported_write_strategies: frozenset[SourceWriteStrategy] = frozenset(
             {
                 SourceWriteStrategy.APPEND,
+                SourceWriteStrategy.DELETE_INSERT,
                 SourceWriteStrategy.MERGE,
                 SourceWriteStrategy.TABLE,
             }
@@ -67,7 +73,8 @@ def execute_source_load(
             raise ExecutorInputError(
                 f"Source '{source_entry.name}' uses write_strategy "
                 f"'{source_entry.write_strategy}', "
-                "but sqb load currently supports only write_strategy append, merge, and table"
+                "but sqb load currently supports only write_strategy append, delete_insert, "
+                "merge, and table"
             )
         adapter.ensure_schema(
             connection,
@@ -222,6 +229,31 @@ def _apply_source_write_strategy(
             target=target,
             sql=staging_sql,
             unique_key=source_entry.unique_key,
+            statement_recorder=statement_recorder,
+        )
+        return
+    if source_entry.write_strategy == SourceWriteStrategy.DELETE_INSERT:
+        if source_entry.cursor_column is None:
+            raise ExecutorInputError(
+                f"Source '{source_entry.name}' write_strategy delete_insert requires cursor_column"
+            )
+        cursor_bounds: tuple[object | None, object | None] = load_staging_cursor_bounds(
+            adapter=adapter,
+            connection=connection,
+            staging=staging,
+            cursor_column=source_entry.cursor_column,
+            statement_recorder=statement_recorder,
+        )
+        cursor_start, cursor_max = cursor_bounds
+        if cursor_start is None or cursor_max is None:
+            return
+        adapter.delete_insert_cursor(
+            connection,
+            target=target,
+            sql=staging_sql,
+            cursor_column=source_entry.cursor_column,
+            cursor_start=format_cursor_bound(cursor_start),
+            cursor_end=format_cursor_bound(exclusive_cursor_end(cursor_max)),
             statement_recorder=statement_recorder,
         )
         return
