@@ -125,6 +125,11 @@ def _parse_source_entry(*, entry: dict[str, object], file_path: Path) -> SourceE
             label="source",
             error_class=SourceParseError,
         ),
+        load_batch_size=_optional_positive_int(
+            entry=entry,
+            key="load_batch_size",
+            file_path=file_path,
+        ),
         cursor_column=optional_non_empty_string(
             entry=entry,
             key="cursor_column",
@@ -225,6 +230,15 @@ def _optional_unique_key(*, entry: dict[str, object], file_path: Path) -> tuple[
             raise SourceParseError(f"{file_path} source 'unique_key' must be non-empty")
         return tuple(keys)
     raise SourceParseError(f"{file_path} source 'unique_key' must be a string or list")
+
+
+def _optional_positive_int(*, entry: dict[str, object], key: str, file_path: Path) -> int | None:
+    value: object | None = entry.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise SourceParseError(f"{file_path} source '{key}' must be a positive integer")
+    return value
 
 
 def _parse_columns(*, entry: dict[str, object], file_path: Path) -> tuple[SourceColumnEntry, ...]:

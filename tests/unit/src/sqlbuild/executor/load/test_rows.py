@@ -7,13 +7,21 @@ from decimal import Decimal
 
 import pytest
 
-from sqlbuild.executor.load.helpers.rows import build_rows_sql, normalize_loader_rows
+from sqlbuild.executor.load.helpers.rows import (
+    build_rows_sql,
+    iter_loader_row_batches,
+    normalize_loader_rows,
+    update_loader_rows_schema,
+)
+from sqlbuild.executor.load.models import LoaderRowsSchema
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.spec.models.source import SourceColumnEntry
 from tests.unit.src.sqlbuild.executor.load._test_types import (
+    LoaderRowsBatchTestCase,
     LoaderRowsErrorTestCase,
     LoaderRowsNormalizeErrorTestCase,
     LoaderRowsNormalizeTestCase,
+    LoaderRowsSchemaTestCase,
     LoaderRowsSqlTestCase,
 )
 from tests.unit.src.sqlbuild.executor.load.helpers import LoaderContextTestAdapter
@@ -167,6 +175,58 @@ def test_given_invalid_loader_return_value_when_normalizing_then_raises(
         normalize_loader_rows(test_case.value)
 
     assert test_case.expected_error_fragment in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoaderRowsBatchTestCase(
+            description="splits generator rows into fixed-size batches",
+            value=({"id": value} for value in (1, 2, 3)),
+            batch_size=2,
+            expected_batches=(({"id": 1}, {"id": 2}), ({"id": 3},)),
+        ),
+    ],
+    ids=["splits generator rows into fixed-size batches"],
+)
+def test_given_loader_return_value_when_batching_then_yields_expected_batches(
+    test_case: LoaderRowsBatchTestCase,
+) -> None:
+    assert (
+        tuple(iter_loader_row_batches(test_case.value, batch_size=test_case.batch_size))
+        == test_case.expected_batches
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoaderRowsSchemaTestCase(
+            description="tracks late extra columns after declared columns",
+            rows=({"id": 1, "late_flag": True},),
+            columns=(SourceColumnEntry(name="id", type="INTEGER"),),
+            column_names=("id",),
+            expected_column_names=("id", "late_flag"),
+            expected_added_columns=(("late_flag", "BOOLEAN"),),
+        ),
+    ],
+    ids=["tracks late extra columns after declared columns"],
+)
+def test_given_loader_row_batch_when_updating_schema_then_tracks_added_columns(
+    test_case: LoaderRowsSchemaTestCase,
+) -> None:
+    schema: LoaderRowsSchema = update_loader_rows_schema(
+        adapter=LoaderContextTestAdapter(),
+        rows=test_case.rows,
+        columns=test_case.columns,
+        column_names=test_case.column_names,
+        inferred_types={},
+    )
+
+    assert schema.column_names == test_case.expected_column_names
+    assert tuple((column.name, column.type) for column in schema.added_columns) == (
+        test_case.expected_added_columns
+    )
 
 
 @pytest.mark.parametrize(

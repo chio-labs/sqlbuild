@@ -13,6 +13,7 @@ class LoadCommandIntegrationTestCase:
     expected_stdout_fragments: tuple[str, ...] = ()
     expected_stdout_absent_fragments: tuple[str, ...] = ()
     expected_json_staging_relation: str | None = None
+    expected_json_rows_loaded: int = 0
     expected_lifecycle_sql_fragments: tuple[str, ...] = ()
     select: tuple[str, ...] = ()
     cli_vars: dict[str, object] | None = None
@@ -64,6 +65,35 @@ class LoadCommandMultipleYieldTestCase:
 
 
 @dataclass(frozen=True)
+class LoadCommandBatchedYieldTestCase:
+    description: str
+    project_files: dict[str, str]
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_column_types: dict[str, str]
+    expected_lifecycle_sql_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class LoadCommandBatchedRowsTestCase:
+    description: str
+    project_files: dict[str, str]
+    select_sql: str
+    table_name: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_column_types: dict[str, str]
+    expected_rows_loaded: int
+    expected_lifecycle_sql_fragments: tuple[str, ...] = ()
+    absent_lifecycle_sql_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class LoadCommandLifecycleOrderTestCase:
+    description: str
+    project_files: dict[str, str]
+    expected_lifecycle_sql_order: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class LoadCommandEmptyRowsTestCase:
     description: str
     project_files: dict[str, str]
@@ -76,3 +106,14 @@ class LoadCommandFailureTestCase:
     project_files: dict[str, str]
     expected_exit_code: int
     expected_stdout_fragment: str
+
+
+@dataclass(frozen=True)
+class LoadCommandFailureCleanupTestCase:
+    description: str
+    project_files: dict[str, str]
+    staging_table_name: str
+    expected_staging_exists: bool
+    setup_sql: tuple[str, ...] = ()
+    target_select_sql: str | None = None
+    expected_target_rows: tuple[tuple[object, ...], ...] = ()

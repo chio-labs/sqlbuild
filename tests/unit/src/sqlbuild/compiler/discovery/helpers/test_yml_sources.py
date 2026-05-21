@@ -150,6 +150,7 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
           - name: raw_prices
             loader: price_loader
             write_strategy: table
+            load_batch_size: 500
           - name: raw_webhooks
             loader: webhook_loader
             write_strategy: append
@@ -161,6 +162,7 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
         expected_expressions=(None, None, None, None),
         expected_loaders=("event_loader", "customer_loader", "price_loader", "webhook_loader"),
         expected_write_strategies=("delete_insert", "merge", "table", "append"),
+        expected_load_batch_sizes=(None, None, 500, None),
         expected_cursor_columns=("event_at", None, None, None),
         expected_unique_keys=((), ("customer_id", "updated_at"), (), ()),
         expected_source_audit_names=((), (), (), ()),
@@ -216,6 +218,12 @@ def test_given_sources_yaml_variants_when_parsing_then_it_returns_expected_raw_m
     )
     assert actual_write_strategies == expected_or_actual(
         test_case.expected_write_strategies, actual_write_strategies
+    )
+    actual_load_batch_sizes: tuple[int | None, ...] = tuple(
+        entry.load_batch_size for entry in source_entries
+    )
+    assert actual_load_batch_sizes == expected_or_actual(
+        test_case.expected_load_batch_sizes, actual_load_batch_sizes
     )
     actual_cursor_columns: tuple[str | None, ...] = tuple(
         entry.cursor_column for entry in source_entries
@@ -383,6 +391,28 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
             write_strategy: table
         """,
         expected_error_fragment="defines write_strategy but has no loader",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when load batch size is not positive",
+        contents="""
+        sources:
+          - name: raw_orders
+            loader: order_loader
+            write_strategy: table
+            load_batch_size: 0
+        """,
+        expected_error_fragment="source 'load_batch_size' must be a positive integer",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when load batch size is boolean",
+        contents="""
+        sources:
+          - name: raw_orders
+            loader: order_loader
+            write_strategy: table
+            load_batch_size: true
+        """,
+        expected_error_fragment="source 'load_batch_size' must be a positive integer",
     ),
     ParseSourcesYamlErrorTestCase(
         description="raises when cursor column is used without delete insert",

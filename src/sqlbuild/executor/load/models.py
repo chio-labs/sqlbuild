@@ -7,9 +7,19 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import LifeCycleEvent, StatementRecorder
+from sqlbuild.adapter.shared.models import ColumnInfo, LifeCycleEvent, StatementRecorder
+from sqlbuild.adapter.shared.types import LoaderLogicalType
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
+
+
+@dataclass(frozen=True)
+class LoaderRowsSchema:
+    """Tracked schema state for one or more loader row batches."""
+
+    column_names: tuple[str, ...]
+    inferred_types: dict[str, LoaderLogicalType]
+    added_columns: tuple[ColumnInfo, ...]
 
 
 @dataclass(frozen=True)

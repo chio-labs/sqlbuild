@@ -9,7 +9,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.executor.load.helpers.rows import build_rows_sql, normalize_loader_rows
+from sqlbuild.executor.load.helpers.staging import write_loader_rows_to_staging
 from sqlbuild.executor.load.models import LoaderContext, LoadExecutionResult
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
@@ -78,14 +78,13 @@ def execute_source_load(
             logger=logging.getLogger(f"sqlbuild.loader.{loader_function.name}"),
             statement_recorder=statement_recorder,
         )
-        rows: tuple[dict[str, object], ...] = normalize_loader_rows(
-            loader_function.function(context)
-        )
-        sql: str = build_rows_sql(adapter=adapter, rows=rows, columns=source_entry.columns)
-        adapter.create_table_as(
-            connection,
-            target=staging,
-            sql=sql,
+        raw_rows: object = loader_function.function(context)
+        rows_loaded: int = write_loader_rows_to_staging(
+            loader_return_value=raw_rows,
+            source_entry=source_entry,
+            adapter=adapter,
+            connection=connection,
+            staging=staging,
             statement_recorder=statement_recorder,
         )
         adapter.replace_table_from_relation(
@@ -101,6 +100,15 @@ def execute_source_load(
             statement_recorder=statement_recorder,
         )
     except Exception as error:
+        try:
+            adapter.drop(
+                connection,
+                target=staging,
+                if_exists=True,
+                statement_recorder=statement_recorder,
+            )
+        except Exception:
+            pass
         return LoadExecutionResult(
             source_name=source_entry.name,
             loader_name=loader_function.name,
@@ -117,7 +125,7 @@ def execute_source_load(
         status=ExecutionStatus.SUCCESS,
         target=target,
         staging_relation=staging,
-        rows_loaded=len(rows),
+        rows_loaded=rows_loaded,
         duration_ms=int((time.monotonic() - start) * 1000),
         lifecycle_events=statement_recorder.snapshot(),
     )
