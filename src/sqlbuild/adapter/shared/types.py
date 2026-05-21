@@ -45,6 +45,16 @@ class FrameworkType(StrEnum):
     TIMESTAMP = "timestamp"
 
 
+class LoaderLogicalType(StrEnum):
+    BOOLEAN = "boolean"
+    INTEGER = "integer"
+    FLOAT = "float"
+    STRING = "string"
+    TIMESTAMP = "timestamp"
+    DATE = "date"
+    JSON = "json"
+
+
 class TypeFamily(StrEnum):
     INTEGER = "integer"
     DECIMAL = "decimal"

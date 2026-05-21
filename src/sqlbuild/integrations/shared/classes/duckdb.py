@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import logging
+from datetime import date, datetime
 from decimal import Decimal
 from importlib.machinery import ModuleSpec
 from pathlib import Path
@@ -30,7 +32,7 @@ from sqlbuild.adapter.shared.models import (
     StatementRecorder,
 )
 from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
-from sqlbuild.adapter.shared.types import CursorKind, FrameworkType
+from sqlbuild.adapter.shared.types import CursorKind, FrameworkType, LoaderLogicalType
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.shared.helpers.diagnostics_logging import log_sql
 from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
@@ -40,6 +42,41 @@ class DuckDbBackedAdapter(BaseAdapter):
     """Shared adapter implementation for DuckDB-backed connections."""
 
     sqlglot_dialect_name: ClassVar[str | None] = "duckdb"
+
+    def render_loader_logical_type(self, type_name: LoaderLogicalType) -> str:
+        match type_name:
+            case LoaderLogicalType.BOOLEAN:
+                return "BOOLEAN"
+            case LoaderLogicalType.INTEGER:
+                return "BIGINT"
+            case LoaderLogicalType.FLOAT:
+                return "DOUBLE"
+            case LoaderLogicalType.STRING:
+                return "VARCHAR"
+            case LoaderLogicalType.TIMESTAMP:
+                return "TIMESTAMP"
+            case LoaderLogicalType.DATE:
+                return "DATE"
+            case LoaderLogicalType.JSON:
+                return "JSON"
+
+    def render_loader_value_literal(
+        self, *, value: object, logical_type: LoaderLogicalType | None
+    ) -> str:
+        if value is None:
+            return "NULL"
+        if isinstance(value, bool):
+            return "TRUE" if value else "FALSE"
+        if isinstance(value, int | float | Decimal):
+            return str(value)
+        if isinstance(value, datetime | date):
+            return self._quote_sql_string(value.isoformat())
+        if isinstance(value, dict | list):
+            return self._quote_sql_string(json.dumps(value, sort_keys=True))
+        return self._quote_sql_string(str(value))
+
+    def _quote_sql_string(self, value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
 
     def render_create_initial_snapshot_target(
         self,

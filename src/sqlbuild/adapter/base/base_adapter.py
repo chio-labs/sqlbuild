@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar
@@ -24,6 +26,7 @@ from sqlbuild.adapter.shared.models import (
 from sqlbuild.adapter.shared.types import (
     CursorKind,
     FrameworkType,
+    LoaderLogicalType,
     PromotionStrategy,
     TablePromotionMode,
 )
@@ -1345,6 +1348,43 @@ class BaseAdapter(StrictAdapter):
             case FrameworkType.TIMESTAMP:
                 return "TIMESTAMP"
 
+    def render_loader_logical_type(self, type_name: LoaderLogicalType) -> str:
+        """Render one source-loader logical type using generic SQL defaults."""
+
+        match type_name:
+            case LoaderLogicalType.BOOLEAN:
+                return "BOOLEAN"
+            case LoaderLogicalType.INTEGER:
+                return "BIGINT"
+            case LoaderLogicalType.FLOAT:
+                return "DOUBLE"
+            case LoaderLogicalType.STRING:
+                return "VARCHAR"
+            case LoaderLogicalType.TIMESTAMP:
+                return "TIMESTAMP"
+            case LoaderLogicalType.DATE:
+                return "DATE"
+            case LoaderLogicalType.JSON:
+                return "JSON"
+
+    def render_loader_value_literal(
+        self, *, value: object, logical_type: LoaderLogicalType | None
+    ) -> str:
+        """Render one generic source-loader value literal."""
+
+        del logical_type
+        if value is None:
+            return "NULL"
+        if isinstance(value, bool):
+            return "TRUE" if value else "FALSE"
+        if isinstance(value, int | float | Decimal):
+            return str(value)
+        if isinstance(value, datetime | date):
+            return _quote_sql_string(value.isoformat())
+        if isinstance(value, dict | list):
+            return _quote_sql_string(json.dumps(value, sort_keys=True))
+        return _quote_sql_string(str(value))
+
     def render_source_expression_cast(
         self, *, expression: str, target_type: str, alias: str
     ) -> str:
@@ -1409,6 +1449,10 @@ def _build_names_filter(
         return ""
     quoted: str = ", ".join(f"'{name}'" for name in names)
     return f" AND {column_name} IN ({quoted})"
+
+
+def _quote_sql_string(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
 
 
 def _snapshot_initial_valid_from_expr(

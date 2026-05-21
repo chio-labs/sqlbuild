@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Iterable, Mapping
 from datetime import date, datetime
 from decimal import Decimal
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.types import LoaderLogicalType
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.spec.models.source import SourceColumnEntry
 
@@ -28,7 +29,10 @@ def normalize_loader_rows(value: object) -> tuple[dict[str, object], ...]:
 
 
 def build_rows_sql(
-    *, rows: tuple[dict[str, object], ...], columns: tuple[SourceColumnEntry, ...]
+    *,
+    adapter: BaseAdapter,
+    rows: tuple[dict[str, object], ...],
+    columns: tuple[SourceColumnEntry, ...],
 ) -> str:
     """Build a VALUES-backed SELECT for framework-managed loader rows."""
 
@@ -38,22 +42,60 @@ def build_rows_sql(
     declared_types: dict[str, str] = {
         column.name: column.type for column in columns if column.type is not None
     }
+    inferred_types: dict[str, LoaderLogicalType] = _infer_column_types(rows=rows)
     if not rows:
         projections: str = ", ".join(
-            f"CAST(NULL AS {declared_types.get(column_name, 'VARCHAR')}) AS {column_name}"
+            _empty_projection_sql(
+                adapter=adapter,
+                column_name=column_name,
+                declared_types=declared_types,
+                inferred_types=inferred_types,
+            )
             for column_name in column_names
         )
         return f"SELECT {projections} WHERE 1 = 0"
     values_sql: str = ", ".join(
-        "(" + ", ".join(_sql_literal(row.get(column_name)) for column_name in column_names) + ")"
+        "("
+        + ", ".join(
+            adapter.render_loader_value_literal(
+                value=row.get(column_name),
+                logical_type=inferred_types.get(column_name),
+            )
+            for column_name in column_names
+        )
+        + ")"
         for row in rows
     )
     column_sql: str = ", ".join(column_names)
     select_sql: str = ", ".join(
-        _projection_sql(column_name=column_name, declared_types=declared_types)
+        _projection_sql(
+            adapter=adapter,
+            column_name=column_name,
+            declared_types=declared_types,
+            inferred_types=inferred_types,
+        )
         for column_name in column_names
     )
     return f"SELECT {select_sql} FROM (VALUES {values_sql}) AS __loader_rows({column_sql})"
+
+
+def _empty_projection_sql(
+    *,
+    adapter: BaseAdapter,
+    column_name: str,
+    declared_types: dict[str, str],
+    inferred_types: dict[str, LoaderLogicalType],
+) -> str:
+    sql_type: str = (
+        _column_sql_type(
+            adapter=adapter,
+            column_name=column_name,
+            declared_types=declared_types,
+            inferred_types=inferred_types,
+        )
+        or "VARCHAR"
+    )
+    return f"CAST(NULL AS {sql_type}) AS {column_name}"
 
 
 def _resolve_column_names(
@@ -69,26 +111,74 @@ def _resolve_column_names(
     return tuple(names)
 
 
-def _projection_sql(*, column_name: str, declared_types: dict[str, str]) -> str:
-    declared_type: str | None = declared_types.get(column_name)
-    if declared_type is None:
+def _projection_sql(
+    *,
+    adapter: BaseAdapter,
+    column_name: str,
+    declared_types: dict[str, str],
+    inferred_types: dict[str, LoaderLogicalType],
+) -> str:
+    sql_type: str | None = _column_sql_type(
+        adapter=adapter,
+        column_name=column_name,
+        declared_types=declared_types,
+        inferred_types=inferred_types,
+    )
+    if sql_type is None:
         return column_name
-    return f"CAST({column_name} AS {declared_type}) AS {column_name}"
+    return f"CAST({column_name} AS {sql_type}) AS {column_name}"
 
 
-def _sql_literal(value: object) -> str:
+def _column_sql_type(
+    *,
+    adapter: BaseAdapter,
+    column_name: str,
+    declared_types: dict[str, str],
+    inferred_types: dict[str, LoaderLogicalType],
+) -> str | None:
+    declared_type: str | None = declared_types.get(column_name)
+    if declared_type is not None:
+        return declared_type
+    inferred_type: LoaderLogicalType | None = inferred_types.get(column_name)
+    if inferred_type is None:
+        return None
+    return adapter.render_loader_logical_type(inferred_type)
+
+
+def _infer_column_types(rows: tuple[dict[str, object], ...]) -> dict[str, LoaderLogicalType]:
+    inferred: dict[str, LoaderLogicalType] = {}
+    row: dict[str, object]
+    for row in rows:
+        column_name: str
+        value: object
+        for column_name, value in row.items():
+            logical_type: LoaderLogicalType | None = _infer_value_type(value)
+            if logical_type is None:
+                continue
+            previous_type: LoaderLogicalType | None = inferred.get(column_name)
+            if previous_type is not None and previous_type != logical_type:
+                raise ExecutorInputError(
+                    f"Source loader returned conflicting types for column '{column_name}'"
+                )
+            inferred[column_name] = logical_type
+    return inferred
+
+
+def _infer_value_type(value: object) -> LoaderLogicalType | None:
     if value is None:
-        return "NULL"
+        return None
     if isinstance(value, bool):
-        return "TRUE" if value else "FALSE"
-    if isinstance(value, int | float | Decimal):
-        return str(value)
-    if isinstance(value, datetime | date):
-        return _quote_sql_string(value.isoformat())
+        return LoaderLogicalType.BOOLEAN
+    if isinstance(value, int):
+        return LoaderLogicalType.INTEGER
+    if isinstance(value, float | Decimal):
+        return LoaderLogicalType.FLOAT
+    if isinstance(value, str):
+        return LoaderLogicalType.STRING
+    if isinstance(value, datetime):
+        return LoaderLogicalType.TIMESTAMP
+    if isinstance(value, date):
+        return LoaderLogicalType.DATE
     if isinstance(value, dict | list):
-        return _quote_sql_string(json.dumps(value, sort_keys=True))
-    return _quote_sql_string(str(value))
-
-
-def _quote_sql_string(value: str) -> str:
-    return "'" + value.replace("'", "''") + "'"
+        return LoaderLogicalType.JSON
+    return LoaderLogicalType.STRING

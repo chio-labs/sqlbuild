@@ -46,3 +46,33 @@ class LoadCommandConcurrencyTestCase:
     expected_connection_count: int
     expected_source_order: tuple[str, ...]
     expected_json_asset_order: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class LoadCommandInferredColumnsTestCase:
+    description: str
+    project_files: dict[str, str]
+    expected_row: tuple[object, ...]
+    expected_column_types: dict[str, str]
+
+
+@dataclass(frozen=True)
+class LoadCommandMultipleYieldTestCase:
+    description: str
+    project_files: dict[str, str]
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class LoadCommandEmptyRowsTestCase:
+    description: str
+    project_files: dict[str, str]
+    expected_column_types: dict[str, str]
+
+
+@dataclass(frozen=True)
+class LoadCommandFailureTestCase:
+    description: str
+    project_files: dict[str, str]
+    expected_exit_code: int
+    expected_stdout_fragment: str

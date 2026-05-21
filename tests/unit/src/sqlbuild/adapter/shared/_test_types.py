@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from sqlbuild.adapter.shared.type_normalization import NormalizedType
+from sqlbuild.adapter.shared.types import LoaderLogicalType
 
 
 @dataclass(frozen=True)
@@ -26,3 +27,19 @@ class NumericFamilyTestCase:
     dialect: str | None
     raw_type: str
     expected_family: str | None
+
+
+@dataclass(frozen=True)
+class AdapterLoaderTypeMappingTestCase:
+    description: str
+    adapter_name: str
+    expected_types: dict[LoaderLogicalType, str]
+
+
+@dataclass(frozen=True)
+class AdapterLoaderValueLiteralTestCase:
+    description: str
+    adapter_name: str
+    value: object
+    logical_type: LoaderLogicalType | None
+    expected_literal: str

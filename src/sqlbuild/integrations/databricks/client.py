@@ -6,6 +6,7 @@ import ast
 import csv
 import json
 import logging
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar
@@ -36,6 +37,7 @@ from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family,
 from sqlbuild.adapter.shared.types import (
     CursorKind,
     FrameworkType,
+    LoaderLogicalType,
     PromotionStrategy,
     TablePromotionMode,
 )
@@ -66,6 +68,42 @@ class DatabricksAdapter(BaseAdapter):
 
     sqlglot_dialect_name: ClassVar[str | None] = "databricks"
     max_identifier_length: ClassVar[int] = 255
+
+    def render_loader_logical_type(self, type_name: LoaderLogicalType) -> str:
+        match type_name:
+            case LoaderLogicalType.BOOLEAN:
+                return "BOOLEAN"
+            case LoaderLogicalType.INTEGER:
+                return "BIGINT"
+            case LoaderLogicalType.FLOAT:
+                return "DOUBLE"
+            case LoaderLogicalType.STRING:
+                return "STRING"
+            case LoaderLogicalType.TIMESTAMP:
+                return "TIMESTAMP"
+            case LoaderLogicalType.DATE:
+                return "DATE"
+            case LoaderLogicalType.JSON:
+                return "STRING"
+
+    def render_loader_value_literal(
+        self, *, value: object, logical_type: LoaderLogicalType | None
+    ) -> str:
+        del logical_type
+        if value is None:
+            return "NULL"
+        if isinstance(value, bool):
+            return "TRUE" if value else "FALSE"
+        if isinstance(value, int | float | Decimal):
+            return str(value)
+        if isinstance(value, datetime | date):
+            return self._quote_sql_string(value.isoformat())
+        if isinstance(value, dict | list):
+            return self._quote_sql_string(json.dumps(value, sort_keys=True))
+        return self._quote_sql_string(str(value))
+
+    def _quote_sql_string(self, value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
 
     def render_create_initial_snapshot_target(
         self,
