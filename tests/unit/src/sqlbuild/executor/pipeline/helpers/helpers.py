@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -71,10 +72,14 @@ class ScenarioLocalPipelineTestAdapter(ScenarioPipelineTestAdapter):
 class SeedPipelineTestAdapter(BaseAdapter):
     """Adapter that records seed pipeline connection and load calls."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, barrier_targets: tuple[str, ...] = ()) -> None:
         self.connections: list[object] = []
         self.closed_connections: list[object] = []
         self.loads: list[tuple[str, object]] = []
+        self.barrier_targets: frozenset[str] = frozenset(barrier_targets)
+        self.barrier: threading.Barrier | None = None
+        if self.barrier_targets:
+            self.barrier = threading.Barrier(len(self.barrier_targets))
 
     def connect(self, config: dict[str, object]) -> object:
         del config
@@ -112,6 +117,8 @@ class SeedPipelineTestAdapter(BaseAdapter):
         statement_recorder: StatementRecorder,
     ) -> None:
         del file_path, columns, csv_settings, replace, infer_types, statement_recorder
+        if self.barrier is not None and target in self.barrier_targets:
+            self.barrier.wait(timeout=1)
         self.loads.append((target, connection))
 
 
