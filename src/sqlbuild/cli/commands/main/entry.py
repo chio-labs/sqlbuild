@@ -133,6 +133,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     load_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.LOAD)
     load_parser.add_argument("--reload", action="store_true", default=False)
     load_parser.add_argument("--json", action="store_true", default=False)
+    load_parser.add_argument("--concurrency", type=int, default=None)
     add_execution_json_output_arg(load_parser)
     add_select_args(load_parser)
     add_cursor_override_args(load_parser)
@@ -140,6 +141,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
 
     seed_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.SEED)
     seed_parser.add_argument("--json", action="store_true", default=False)
+    seed_parser.add_argument("--concurrency", type=int, default=None)
     add_execution_json_output_arg(seed_parser)
     add_select_args(seed_parser)
     add_vars_args(seed_parser)
@@ -520,6 +522,7 @@ def _main_with_dependencies(
                 select,
                 tuple(args.exclude),
                 args.reload,
+                args.concurrency,
                 args.vars,
                 args.json,
                 args.json_output,
@@ -530,6 +533,7 @@ def _main_with_dependencies(
                 args.no_color,
                 select,
                 tuple(args.exclude),
+                args.concurrency,
                 args.vars,
                 args.json,
                 args.json_output,

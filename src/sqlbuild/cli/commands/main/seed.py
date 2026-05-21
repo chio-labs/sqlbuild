@@ -11,6 +11,7 @@ from typing import TextIO
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
+from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
 from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
     format_seed_execution_json,
     write_execution_json_output,
@@ -18,6 +19,7 @@ from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
 )
+from sqlbuild.cli.commands.main.shared.helpers.progress import format_build_header
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
@@ -26,7 +28,13 @@ from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.build.types import ExecutionStatus
 from sqlbuild.executor.pipeline.main.run import run_seed_pipeline
 from sqlbuild.shared.helpers.coded_errors import format_coded_error
-from sqlbuild.shared.helpers.colors import colorize_status, supports_color
+from sqlbuild.shared.helpers.colors import (
+    blue_bold,
+    colorize_status,
+    dim,
+    green_bold,
+    supports_color,
+)
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
@@ -35,6 +43,7 @@ def run_seed(
     no_color: bool = False,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
+    concurrency: int | None = None,
     cli_vars: dict[str, object] | None = None,
     json_output: bool = False,
     json_output_path: Path | None = None,
@@ -45,11 +54,12 @@ def run_seed(
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
+    adapter_name: str = resolve_effective_adapter_name(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+    )
     adapter: BaseAdapter = resolve_adapter(
-        resolve_effective_adapter_name(
-            project_config=discovered_inputs.project_config,
-            local_config=discovered_inputs.local_config,
-        ),
+        adapter_name,
         project_dir=effective_project_dir,
     )
     connection_config: dict[str, object] = resolve_project_connection_config(
@@ -57,6 +67,15 @@ def run_seed(
         project_dir=effective_project_dir,
         cli_vars=cli_vars,
     )
+    use_color: bool = not no_color and supports_color()
+    progress_stream: TextIO = sys.stderr if json_output else sys.stdout
+    connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
+        adapter_name=adapter_name,
+        stream=progress_stream,
+        use_color=use_color,
+    )
+    progress_stream.write("\n")
+    progress_stream.flush()
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
@@ -64,40 +83,74 @@ def run_seed(
         exclude=exclude,
         connection_config=connection_config,
         cli_vars=cli_vars,
+        on_connection_start=connection_progress.on_connection_start,
+        on_connection_complete=connection_progress.on_connection_complete,
+        on_connection_error=connection_progress.on_connection_error,
         external_sql_reference_resolver=resolve_external_sql_reference_resolver(
             project_dir=effective_project_dir,
             discovered_inputs=discovered_inputs,
         ),
     )
 
-    use_color: bool = not no_color and supports_color()
-    progress_stream: TextIO = sys.stderr if json_output else sys.stdout
-    progress_stream.write("sqb seed\n\n")
+    effective_concurrency: int = max(
+        1,
+        concurrency if concurrency is not None else pipeline_result.project.settings.concurrency,
+    )
+    seed_count: int = len(pipeline_result.plan_output.seed_entries)
+    ready_header: str = f"Seed ready ({seed_count} selected)"
+    styled_ready_header: str = green_bold(ready_header) if use_color else ready_header
+    progress_stream.write(f"\n{styled_ready_header}\n\n")
+    seeds_header: str = f"Seeds ({seed_count})"
+    styled_seeds_header: str = green_bold(seeds_header) if use_color else seeds_header
+    progress_stream.write(f"{styled_seeds_header}\n")
+    for seed_entry in pipeline_result.plan_output.seed_entries:
+        progress_stream.write(f"  {seed_entry.name}\n")
+    execution_header: str = format_build_header(
+        command="sqb seed", target=None, concurrency=effective_concurrency
+    )
+    execution_label: str = blue_bold("Execution") if use_color else "Execution"
+    header_detail: str = dim(execution_header) if use_color else execution_header
+    progress_stream.write(f"\n{execution_label}  {header_detail}\n\n")
     progress_stream.flush()
 
     start: float = time.monotonic()
     on_complete: Callable[[SeedExecutionResult], None] = _build_on_complete(
         stream=progress_stream,
         use_color=use_color,
+        seed_order={
+            seed_entry.name: index
+            for index, seed_entry in enumerate(pipeline_result.plan_output.seed_entries, start=1)
+        },
+        total_count=seed_count,
+    )
+    execution_connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
+        adapter_name=adapter_name,
+        stream=progress_stream,
+        blank_line_after_complete=True,
+        use_color=use_color,
     )
     results: tuple[SeedExecutionResult, ...] = run_seed_pipeline(
         plan=pipeline_result.plan_output,
         connection_config=connection_config,
         adapter=adapter,
+        max_concurrency=effective_concurrency,
         on_seed_complete=on_complete,
+        on_connection_start=execution_connection_progress.on_connection_start,
+        on_connection_complete=execution_connection_progress.on_connection_complete,
+        on_connection_error=execution_connection_progress.on_connection_error,
     )
     elapsed: float = time.monotonic() - start
 
     success_count: int = sum(1 for r in results if r.status == ExecutionStatus.SUCCESS)
     fail_count: int = sum(1 for r in results if r.status == ExecutionStatus.FAILED)
     elapsed_str: str = f"{elapsed:.2f}s"
-    completion: str = (
-        colorize_status("OK", use_color=use_color)
-        if fail_count == 0
-        else colorize_status("FAIL", use_color=use_color)
+    completion_message: str = (
+        "Completed successfully." if fail_count == 0 else "Completed with errors."
     )
+    progress_stream.write(f"\n{completion_message}\n")
     progress_stream.write(
-        f"\n{completion}  {success_count} loaded, {fail_count} failed  ({elapsed_str})\n"
+        f"PASS={success_count}  WARN=0  FAIL={fail_count}  SKIP=0  "
+        f"TOTAL={len(results)}  ({elapsed_str})\n"
     )
     progress_stream.flush()
     write_execution_json_output(
@@ -109,7 +162,13 @@ def run_seed(
     return 0 if fail_count == 0 else 1
 
 
-def _build_on_complete(*, stream: TextIO, use_color: bool) -> Callable[[SeedExecutionResult], None]:
+def _build_on_complete(
+    *,
+    stream: TextIO,
+    use_color: bool,
+    seed_order: dict[str, int],
+    total_count: int,
+) -> Callable[[SeedExecutionResult], None]:
     def _on_complete(result: SeedExecutionResult) -> None:
         status_text: str = "OK" if result.status == ExecutionStatus.SUCCESS else "FAIL"
         status: str = colorize_status(status_text, use_color=use_color)
@@ -117,7 +176,10 @@ def _build_on_complete(*, stream: TextIO, use_color: bool) -> Callable[[SeedExec
         if result.duration_ms is not None:
             seconds: float = result.duration_ms / 1000.0
             duration = f"{seconds:.2f}s"
-        stream.write(f"  {result.seed_name:<50} {status:<6} {duration}\n")
+        ordinal: int = seed_order[result.seed_name]
+        stream.write(
+            f"  {ordinal}/{total_count}  seed      {result.seed_name:<30} {status:<6} {duration}\n"
+        )
         if result.error_message is not None:
             stream.write(f"    {_format_seed_error(result=result, use_color=use_color)}\n")
         stream.flush()

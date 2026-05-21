@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -22,6 +23,7 @@ def execute_seed(
 ) -> SeedExecutionResult:
     """Load one seed into the warehouse."""
 
+    start: float = time.monotonic()
     target_qualified: str = resolve_target_qualified_name(adapter=adapter, target=seed_entry.target)
     try:
         adapter.ensure_schema(
@@ -43,6 +45,7 @@ def execute_seed(
         return SeedExecutionResult(
             seed_name=seed_entry.name,
             status=ExecutionStatus.FAILED,
+            duration_ms=int((time.monotonic() - start) * 1000),
             lifecycle_events=statement_recorder.snapshot(),
             error_code=SEED_LOAD_FAILED_CODE,
             error_message=str(exc),
@@ -50,5 +53,6 @@ def execute_seed(
     return SeedExecutionResult(
         seed_name=seed_entry.name,
         status=ExecutionStatus.SUCCESS,
+        duration_ms=int((time.monotonic() - start) * 1000),
         lifecycle_events=statement_recorder.snapshot(),
     )

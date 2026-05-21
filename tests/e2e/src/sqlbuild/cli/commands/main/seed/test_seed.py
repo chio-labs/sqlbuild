@@ -32,6 +32,15 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 (5, "Everything Bagel", "savory", 1100),
                 (6, "Chicken and Waffle", "savory", 1450),
             ),
+            expected_stdout_fragments=(
+                "Seed ready (1 selected)",
+                "Seeds (1)",
+                "waffle_types",
+                "Execution  sqb seed  (concurrency: 1)",
+                "1/1  seed      waffle_types",
+                "Completed successfully.",
+                "PASS=1  WARN=0  FAIL=0  SKIP=0  TOTAL=1",
+            ),
         ),
     ],
     ids=["seed loads waffle_types CSV with correct data"],
@@ -48,6 +57,7 @@ def test_given_waffle_shop_project_when_running_seed_then_seed_data_matches_expe
     )
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    assert all(fragment in result.stdout for fragment in test_case.expected_stdout_fragments)
     assert table_exists(db_path=db_path, table_name=test_case.expected_seed_name)
 
     seed_sql: str = (
