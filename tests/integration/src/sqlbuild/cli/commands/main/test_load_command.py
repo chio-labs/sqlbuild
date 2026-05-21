@@ -12,6 +12,7 @@ from duckdb import DuckDBPyConnection
 
 from sqlbuild.cli.commands.main.load import run_load
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
+from sqlbuild.cli.commands.main.shared.helpers.execution_json import format_load_execution_json
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile
 from sqlbuild.executor.load.main.run import run_load_pipeline
@@ -431,14 +432,22 @@ sources:
 """.strip()
                 + "\n",
                 "loaders/raw.py": """
+import threading
+import time
+
 from sqlbuild.loaders import loader
+
+barrier = threading.Barrier(2)
 
 @loader
 def raw_a_loader(ctx):
+    barrier.wait(timeout=1)
+    time.sleep(0.05)
     return [{"source_name": "raw_a", "connection_id": id(ctx.connection)}]
 
 @loader
 def raw_b_loader(ctx):
+    barrier.wait(timeout=1)
     return [{"source_name": "raw_b", "connection_id": id(ctx.connection)}]
 
 @loader
@@ -449,6 +458,7 @@ def raw_c_loader(ctx):
             max_concurrency=2,
             expected_connection_count=2,
             expected_source_order=("raw_a", "raw_b", "raw_c"),
+            expected_json_asset_order=("raw_a", "raw_b", "raw_c"),
         ),
     ],
     ids=["uses bounded concurrent connections and preserves result order"],
@@ -479,6 +489,11 @@ def test_given_multiple_source_loaders_when_running_pipeline_then_uses_concurren
 
     assert connection_starts == [test_case.expected_connection_count]
     assert tuple(result.source_name for result in results) == test_case.expected_source_order
+    payload: dict[str, Any] = cast(
+        dict[str, Any], json.loads(format_load_execution_json(results=results))
+    )
+    assets: list[dict[str, Any]] = cast(list[dict[str, Any]], payload["assets"])
+    assert tuple(asset["name"] for asset in assets) == test_case.expected_json_asset_order
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
     try:
         first_row: tuple[int] | None = connection.execute(

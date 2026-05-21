@@ -53,3 +53,4 @@ class SeedPipelineConcurrencyTestCase:
     max_concurrency: int
     expected_connection_count: int
     expected_seed_order: tuple[str, ...]
+    expected_json_asset_order: tuple[str, ...]
