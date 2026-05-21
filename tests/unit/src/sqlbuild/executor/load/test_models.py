@@ -50,6 +50,7 @@ def test_given_loader_context_when_using_helpers_then_records_and_qualifies_name
         environment="dev",
         vars={},
         is_reload=False,
+        current_cursor_value=None,
         logger=logging.getLogger(test_case.expected_logger_name),
         statement_recorder=statement_recorder,
     )

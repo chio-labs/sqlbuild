@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from sqlbuild.spec.models.schema import SchemaAuditInstance
+from sqlbuild.spec.models.types import SourceWriteStrategy
 
 
 @dataclass(frozen=True)
@@ -28,7 +29,7 @@ class SourceEntry:
     schema: str | None = None
     table: str | None = None
     loader: str | None = None
-    write_strategy: str | None = None
+    write_strategy: SourceWriteStrategy | None = None
     load_batch_size: int | None = None
     cursor_column: str | None = None
     unique_key: tuple[str, ...] = field(default_factory=tuple)
