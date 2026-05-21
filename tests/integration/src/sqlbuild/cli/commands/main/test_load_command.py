@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -20,8 +21,12 @@ from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     LoadCommandConcurrencyTestCase,
+    LoadCommandEmptyRowsTestCase,
     LoadCommandEmptySelectionTestCase,
+    LoadCommandFailureTestCase,
+    LoadCommandInferredColumnsTestCase,
     LoadCommandIntegrationTestCase,
+    LoadCommandMultipleYieldTestCase,
     LoadCommandSelectionErrorTestCase,
 )
 
@@ -509,6 +514,258 @@ def test_given_multiple_source_loaders_when_running_pipeline_then_uses_concurren
     first_connection_id: int = first_row[0]
     second_connection_id: int = second_row[0]
     assert first_connection_id != second_connection_id
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadCommandInferredColumnsTestCase(
+            description="loads generator rows with declared missing and inferred extra columns",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
+sources:
+  - name: raw_inferred
+    loader: raw_inferred_loader
+    write_strategy: table
+    columns:
+      - name: id
+        type: INTEGER
+      - name: notes
+        type: VARCHAR
+""".strip()
+                + "\n",
+                "loaders/raw.py": """
+from datetime import date, datetime
+
+from sqlbuild.loaders import loader
+
+@loader
+def raw_inferred_loader(ctx):
+    yield {
+        "id": 1,
+        "flag": True,
+        "amount": 2.5,
+        "name": "customer's order",
+        "payload": {"source": "loader"},
+        "tags": ["new", "priority"],
+        "created_at": datetime(2026, 5, 21, 12, 30, 0),
+        "service_date": date(2026, 5, 21),
+    }
+""",
+            },
+            expected_row=(
+                1,
+                None,
+                True,
+                2.5,
+                "customer's order",
+                '{"source": "loader"}',
+                '["new", "priority"]',
+                datetime(2026, 5, 21, 12, 30, 0),
+                date(2026, 5, 21),
+            ),
+            expected_column_types={
+                "id": "INTEGER",
+                "notes": "VARCHAR",
+                "flag": "BOOLEAN",
+                "amount": "DOUBLE",
+                "name": "VARCHAR",
+                "payload": "JSON",
+                "tags": "JSON",
+                "created_at": "TIMESTAMP",
+                "service_date": "DATE",
+            },
+        ),
+    ],
+    ids=["loads generator rows with declared missing and inferred extra columns"],
+)
+def test_given_generator_loader_with_inferred_columns_when_running_load_then_writes_schema_and_data(
+    test_case: LoadCommandInferredColumnsTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    exit_code: int = run_load(project_dir=tmp_path, no_color=True)
+
+    assert exit_code == 0
+    connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
+    try:
+        row: tuple[object, ...] | None = connection.execute(
+            "SELECT id, notes, flag, amount, name, CAST(payload AS VARCHAR), "
+            "CAST(tags AS VARCHAR), created_at, service_date "
+            "FROM raw_inferred"
+        ).fetchone()
+        column_rows: list[tuple[str, str]] = connection.execute(
+            "SELECT column_name, data_type FROM information_schema.columns "
+            "WHERE table_name = 'raw_inferred'"
+        ).fetchall()
+    finally:
+        connection.close()
+    assert row == test_case.expected_row
+    column_types: dict[str, str] = dict(column_rows)
+    expected_column: str
+    for expected_column, expected_type in test_case.expected_column_types.items():
+        assert column_types[expected_column] == expected_type
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadCommandMultipleYieldTestCase(
+            description="loads every row yielded by a generator loader",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
+sources:
+  - name: raw_multi_yield
+    loader: raw_multi_yield_loader
+    write_strategy: table
+    columns:
+      - name: id
+        type: INTEGER
+      - name: status
+        type: VARCHAR
+""".strip()
+                + "\n",
+                "loaders/raw.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_multi_yield_loader(ctx):
+    yield {"id": 1, "status": "first"}
+    yield {"id": 2, "status": "second"}
+""",
+            },
+            expected_rows=((1, "first"), (2, "second")),
+        ),
+    ],
+    ids=["loads every row yielded by a generator loader"],
+)
+def test_given_generator_loader_yields_multiple_rows_when_running_load_then_writes_all_rows(
+    test_case: LoadCommandMultipleYieldTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    exit_code: int = run_load(project_dir=tmp_path, no_color=True)
+
+    assert exit_code == 0
+    connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
+    try:
+        rows: list[tuple[object, ...]] = connection.execute(
+            "SELECT id, status FROM raw_multi_yield ORDER BY id"
+        ).fetchall()
+    finally:
+        connection.close()
+    assert tuple(rows) == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadCommandEmptyRowsTestCase(
+            description="loads empty returned rows into declared empty table",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
+sources:
+  - name: raw_empty
+    loader: raw_empty_loader
+    write_strategy: table
+    columns:
+      - name: id
+        type: INTEGER
+      - name: status
+        type: VARCHAR
+""".strip()
+                + "\n",
+                "loaders/raw.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_empty_loader(ctx):
+    return []
+""",
+            },
+            expected_column_types={"id": "INTEGER", "status": "VARCHAR"},
+        ),
+    ],
+    ids=["loads empty returned rows into declared empty table"],
+)
+def test_given_loader_returns_empty_rows_when_running_load_then_writes_empty_declared_table(
+    test_case: LoadCommandEmptyRowsTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    exit_code: int = run_load(project_dir=tmp_path, no_color=True)
+
+    assert exit_code == 0
+    connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
+    try:
+        row_count_row: tuple[int] | None = connection.execute(
+            "SELECT COUNT(*) FROM raw_empty"
+        ).fetchone()
+        column_rows: list[tuple[str, str]] = connection.execute(
+            "SELECT column_name, data_type FROM information_schema.columns "
+            "WHERE table_name = 'raw_empty'"
+        ).fetchall()
+    finally:
+        connection.close()
+    assert row_count_row is not None
+    row_count: int = row_count_row[0]
+    assert row_count == 0
+    assert dict(column_rows) == test_case.expected_column_types
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadCommandFailureTestCase(
+            description="fails clearly when returned rows contain conflicting inferred types",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
+sources:
+  - name: raw_conflict
+    loader: raw_conflict_loader
+    write_strategy: table
+""".strip()
+                + "\n",
+                "loaders/raw.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_conflict_loader(ctx):
+    return [
+        {"id": 1},
+        {"id": "two"},
+    ]
+""",
+            },
+            expected_exit_code=1,
+            expected_stdout_fragment="conflicting types for column 'id'",
+        ),
+    ],
+    ids=["fails clearly when returned rows contain conflicting inferred types"],
+)
+def test_given_loader_returns_conflicting_types_when_running_load_then_fails_clearly(
+    test_case: LoadCommandFailureTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    capsys: CaptureFixture[str],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    exit_code: int = run_load(project_dir=tmp_path, no_color=True)
+
+    captured: CaptureResult[str] = capsys.readouterr()
+    assert exit_code == test_case.expected_exit_code
+    assert test_case.expected_stdout_fragment in captured.out
 
 
 @pytest.mark.parametrize(

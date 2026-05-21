@@ -81,7 +81,7 @@ def execute_source_load(
         rows: tuple[dict[str, object], ...] = normalize_loader_rows(
             loader_function.function(context)
         )
-        sql: str = build_rows_sql(rows=rows, columns=source_entry.columns)
+        sql: str = build_rows_sql(adapter=adapter, rows=rows, columns=source_entry.columns)
         adapter.create_table_as(
             connection,
             target=staging,

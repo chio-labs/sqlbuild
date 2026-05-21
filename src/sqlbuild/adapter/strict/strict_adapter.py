@@ -18,7 +18,12 @@ from sqlbuild.adapter.shared.models import (
     RowDiffTolerances,
     StatementRecorder,
 )
-from sqlbuild.adapter.shared.types import FrameworkType, PromotionStrategy, TablePromotionMode
+from sqlbuild.adapter.shared.types import (
+    FrameworkType,
+    LoaderLogicalType,
+    PromotionStrategy,
+    TablePromotionMode,
+)
 from sqlbuild.compiler.compile.types import FunctionLanguage
 
 
@@ -517,6 +522,18 @@ class StrictAdapter(
     @abstractmethod
     def render_framework_type(self, type_name: FrameworkType) -> str:
         """Render one framework-internal logical type for this adapter."""
+        ...
+
+    @abstractmethod
+    def render_loader_logical_type(self, type_name: LoaderLogicalType) -> str:
+        """Render one source-loader logical type for this adapter."""
+        ...
+
+    @abstractmethod
+    def render_loader_value_literal(
+        self, *, value: object, logical_type: LoaderLogicalType | None
+    ) -> str:
+        """Render one source-loader row value as a SQL literal/expression."""
         ...
 
     @abstractmethod

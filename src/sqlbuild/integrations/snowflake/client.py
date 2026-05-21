@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import csv
+import json
 import logging
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar
@@ -29,7 +31,7 @@ from sqlbuild.adapter.shared.models import (
     StatementRecorder,
 )
 from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
-from sqlbuild.adapter.shared.types import CursorKind, FrameworkType
+from sqlbuild.adapter.shared.types import CursorKind, FrameworkType, LoaderLogicalType
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.shared.helpers.diagnostics_logging import log_sql
 from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
@@ -57,6 +59,41 @@ class SnowflakeAdapter(BaseAdapter):
 
     sqlglot_dialect_name: ClassVar[str | None] = "snowflake"
     max_identifier_length: ClassVar[int] = 255
+
+    def render_loader_logical_type(self, type_name: LoaderLogicalType) -> str:
+        match type_name:
+            case LoaderLogicalType.BOOLEAN:
+                return "BOOLEAN"
+            case LoaderLogicalType.INTEGER:
+                return "BIGINT"
+            case LoaderLogicalType.FLOAT:
+                return "DOUBLE"
+            case LoaderLogicalType.STRING:
+                return "VARCHAR"
+            case LoaderLogicalType.TIMESTAMP:
+                return "TIMESTAMP"
+            case LoaderLogicalType.DATE:
+                return "DATE"
+            case LoaderLogicalType.JSON:
+                return "VARIANT"
+
+    def render_loader_value_literal(
+        self, *, value: object, logical_type: LoaderLogicalType | None
+    ) -> str:
+        if value is not None and logical_type == LoaderLogicalType.JSON:
+            return f"PARSE_JSON({self._quote_sql_string(json.dumps(value, sort_keys=True))})"
+        if value is None:
+            return "NULL"
+        if isinstance(value, bool):
+            return "TRUE" if value else "FALSE"
+        if isinstance(value, int | float | Decimal):
+            return str(value)
+        if isinstance(value, datetime | date):
+            return self._quote_sql_string(value.isoformat())
+        return self._quote_sql_string(str(value))
+
+    def _quote_sql_string(self, value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
 
     def render_create_initial_snapshot_target(
         self,

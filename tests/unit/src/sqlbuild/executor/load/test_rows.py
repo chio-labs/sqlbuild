@@ -1,0 +1,196 @@
+"""Tests for source loader row rendering helpers."""
+
+from __future__ import annotations
+
+from datetime import date, datetime
+from decimal import Decimal
+
+import pytest
+
+from sqlbuild.executor.load.helpers.rows import build_rows_sql, normalize_loader_rows
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.spec.models.source import SourceColumnEntry
+from tests.unit.src.sqlbuild.executor.load._test_types import (
+    LoaderRowsErrorTestCase,
+    LoaderRowsNormalizeErrorTestCase,
+    LoaderRowsNormalizeTestCase,
+    LoaderRowsSqlTestCase,
+)
+from tests.unit.src.sqlbuild.executor.load.helpers import LoaderContextTestAdapter
+
+LOADER_ROWS_SQL_TEST_CASES: list[LoaderRowsSqlTestCase] = [
+    LoaderRowsSqlTestCase(
+        description="infers adapter SQL types for undeclared Python values",
+        rows=(
+            {
+                "extra_bool": True,
+                "extra_int": 7,
+                "extra_float": 2.5,
+                "extra_decimal": Decimal("3.25"),
+                "extra_string": "placed",
+                "extra_timestamp": datetime(2026, 5, 21, 12, 30),
+                "extra_date": date(2026, 5, 21),
+                "extra_json": {"source": "loader"},
+                "extra_json_list": ["a", "b"],
+                "nullable_then_string": None,
+            },
+            {"nullable_then_string": "resolved"},
+        ),
+        expected_sql_fragments=(
+            "CAST(extra_bool AS BOOLEAN) AS extra_bool",
+            "CAST(extra_int AS BIGINT) AS extra_int",
+            "CAST(extra_float AS DOUBLE) AS extra_float",
+            "CAST(extra_decimal AS DOUBLE) AS extra_decimal",
+            "CAST(extra_string AS VARCHAR) AS extra_string",
+            "CAST(extra_timestamp AS TIMESTAMP) AS extra_timestamp",
+            "CAST(extra_date AS DATE) AS extra_date",
+            "CAST(extra_json AS JSON) AS extra_json",
+            "CAST(extra_json_list AS JSON) AS extra_json_list",
+            "CAST(nullable_then_string AS VARCHAR) AS nullable_then_string",
+        ),
+    ),
+    LoaderRowsSqlTestCase(
+        description="falls back all null inferred column to uncast projection",
+        rows=({"all_null": None},),
+        expected_sql_fragments=("SELECT all_null FROM (VALUES (NULL)) AS __loader_rows(all_null)",),
+    ),
+    LoaderRowsSqlTestCase(
+        description="creates empty declared row query with declared types and order",
+        rows=(),
+        columns=(
+            SourceColumnEntry(name="id", type="INTEGER"),
+            SourceColumnEntry(name="status", type="VARCHAR"),
+        ),
+        expected_sql_fragments=(
+            "CAST(NULL AS INTEGER) AS id, CAST(NULL AS VARCHAR) AS status",
+            "WHERE 1 = 0",
+        ),
+    ),
+    LoaderRowsSqlTestCase(
+        description="preserves declared order before extra first-seen order",
+        rows=({"z_extra": 1, "a_extra": 2, "id": 3},),
+        columns=(SourceColumnEntry(name="id", type="INTEGER"),),
+        expected_sql_fragments=("AS __loader_rows(id, z_extra, a_extra)",),
+    ),
+    LoaderRowsSqlTestCase(
+        description="uses declared source column type before inferred value type",
+        rows=({"declared_text": 123},),
+        columns=(SourceColumnEntry(name="declared_text", type="VARCHAR"),),
+        expected_sql_fragments=("CAST(declared_text AS VARCHAR) AS declared_text",),
+    ),
+]
+
+LOADER_ROWS_NORMALIZE_TEST_CASES: list[LoaderRowsNormalizeTestCase] = [
+    LoaderRowsNormalizeTestCase(
+        description="accepts generator rows",
+        value=({"id": value} for value in (1, 2)),
+        expected_rows=({"id": 1}, {"id": 2}),
+    ),
+    LoaderRowsNormalizeTestCase(
+        description="accepts list rows",
+        value=[{"id": 1}],
+        expected_rows=({"id": 1},),
+    ),
+    LoaderRowsNormalizeTestCase(
+        description="accepts tuple iterable rows",
+        value=({"id": 1}, {"id": 2}),
+        expected_rows=({"id": 1}, {"id": 2}),
+    ),
+    LoaderRowsNormalizeTestCase(
+        description="coerces mapping keys to strings",
+        value=[{1: "one", "two": 2}],
+        expected_rows=({"1": "one", "two": 2},),
+    ),
+]
+
+LOADER_ROWS_NORMALIZE_ERROR_TEST_CASES: list[LoaderRowsNormalizeErrorTestCase] = [
+    LoaderRowsNormalizeErrorTestCase(
+        description="rejects string return value",
+        value="not rows",
+        expected_error_fragment="list or iterable of dict rows",
+    ),
+    LoaderRowsNormalizeErrorTestCase(
+        description="rejects bytes return value",
+        value=b"not rows",
+        expected_error_fragment="list or iterable of dict rows",
+    ),
+    LoaderRowsNormalizeErrorTestCase(
+        description="rejects non-iterable return value",
+        value=42,
+        expected_error_fragment="list or iterable of dict rows",
+    ),
+    LoaderRowsNormalizeErrorTestCase(
+        description="rejects non-dict row",
+        value=[("id", 1)],
+        expected_error_fragment="only dict rows",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    LOADER_ROWS_SQL_TEST_CASES,
+    ids=[case.description for case in LOADER_ROWS_SQL_TEST_CASES],
+)
+def test_given_loader_rows_when_building_sql_then_infers_adapter_sql_types(
+    test_case: LoaderRowsSqlTestCase,
+) -> None:
+    sql: str = build_rows_sql(
+        adapter=LoaderContextTestAdapter(),
+        rows=test_case.rows,
+        columns=test_case.columns,
+    )
+
+    assert all(fragment in sql for fragment in test_case.expected_sql_fragments)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    LOADER_ROWS_NORMALIZE_TEST_CASES,
+    ids=[case.description for case in LOADER_ROWS_NORMALIZE_TEST_CASES],
+)
+def test_given_loader_return_value_when_normalizing_then_returns_expected_rows(
+    test_case: LoaderRowsNormalizeTestCase,
+) -> None:
+    assert normalize_loader_rows(test_case.value) == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    LOADER_ROWS_NORMALIZE_ERROR_TEST_CASES,
+    ids=[case.description for case in LOADER_ROWS_NORMALIZE_ERROR_TEST_CASES],
+)
+def test_given_invalid_loader_return_value_when_normalizing_then_raises(
+    test_case: LoaderRowsNormalizeErrorTestCase,
+) -> None:
+    with pytest.raises(ExecutorInputError) as exc_info:
+        normalize_loader_rows(test_case.value)
+
+    assert test_case.expected_error_fragment in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoaderRowsErrorTestCase(
+            description="raises when one returned column has conflicting inferred types",
+            rows=(
+                {"id": 1, "status": "placed"},
+                {"id": "two", "status": "shipped"},
+            ),
+            expected_error_fragment="conflicting types for column 'id'",
+        ),
+    ],
+    ids=["raises when one returned column has conflicting inferred types"],
+)
+def test_given_loader_rows_with_conflicting_types_when_building_sql_then_raises(
+    test_case: LoaderRowsErrorTestCase,
+) -> None:
+    with pytest.raises(ExecutorInputError) as exc_info:
+        build_rows_sql(
+            adapter=LoaderContextTestAdapter(),
+            rows=test_case.rows,
+            columns=(),
+        )
+
+    assert test_case.expected_error_fragment in str(exc_info.value)

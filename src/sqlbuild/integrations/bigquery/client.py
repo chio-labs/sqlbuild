@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar
@@ -33,6 +35,7 @@ from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family,
 from sqlbuild.adapter.shared.types import (
     CursorKind,
     FrameworkType,
+    LoaderLogicalType,
     PromotionStrategy,
     TablePromotionMode,
 )
@@ -98,6 +101,41 @@ class BigQueryAdapter(BaseAdapter):
 
     sqlglot_dialect_name: ClassVar[str | None] = "bigquery"
     max_identifier_length: ClassVar[int] = 1024
+
+    def render_loader_logical_type(self, type_name: LoaderLogicalType) -> str:
+        match type_name:
+            case LoaderLogicalType.BOOLEAN:
+                return "BOOL"
+            case LoaderLogicalType.INTEGER:
+                return "INT64"
+            case LoaderLogicalType.FLOAT:
+                return "FLOAT64"
+            case LoaderLogicalType.STRING:
+                return "STRING"
+            case LoaderLogicalType.TIMESTAMP:
+                return "TIMESTAMP"
+            case LoaderLogicalType.DATE:
+                return "DATE"
+            case LoaderLogicalType.JSON:
+                return "JSON"
+
+    def render_loader_value_literal(
+        self, *, value: object, logical_type: LoaderLogicalType | None
+    ) -> str:
+        if value is None:
+            return "NULL"
+        if logical_type == LoaderLogicalType.JSON:
+            return f"JSON {self._quote_sql_string(json.dumps(value, sort_keys=True))}"
+        if isinstance(value, bool):
+            return "TRUE" if value else "FALSE"
+        if isinstance(value, int | float | Decimal):
+            return str(value)
+        if isinstance(value, datetime | date):
+            return self._quote_sql_string(value.isoformat())
+        return self._quote_sql_string(str(value))
+
+    def _quote_sql_string(self, value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
 
     def render_create_initial_snapshot_target(
         self,
