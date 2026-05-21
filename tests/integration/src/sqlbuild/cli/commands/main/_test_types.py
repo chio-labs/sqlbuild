@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild.compiler.planner.models import CursorOverrides
+
 
 @dataclass(frozen=True)
 class LoadCommandIntegrationTestCase:
@@ -144,6 +146,14 @@ class LoadCommandReloadContextTestCase:
     description: str
     project_files: dict[str, str]
     reload: bool
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class LoadCommandCursorOverrideContextTestCase:
+    description: str
+    project_files: dict[str, str]
+    cursor_overrides: CursorOverrides | None
     expected_rows: tuple[tuple[object, ...], ...]
 
 

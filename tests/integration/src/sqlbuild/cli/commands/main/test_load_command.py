@@ -17,6 +17,7 @@ from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.execution_json import format_load_execution_json
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile
+from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.executor.load.main.run import run_load_pipeline
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
@@ -26,6 +27,7 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     LoadCommandBatchedYieldTestCase,
     LoadCommandConcurrencyTestCase,
     LoadCommandCursorNoneTestCase,
+    LoadCommandCursorOverrideContextTestCase,
     LoadCommandEmptyRowsTestCase,
     LoadCommandEmptySelectionTestCase,
     LoadCommandFailureCleanupTestCase,
@@ -940,6 +942,58 @@ RELOAD_CONTEXT_TEST_CASES: list[LoadCommandReloadContextTestCase] = [
     ),
 ]
 
+CURSOR_OVERRIDE_CONTEXT_PROJECT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": _PROJECT_FILE,
+    "sources/raw.yml": """
+sources:
+  - name: raw_cursor_overrides
+    loader: raw_cursor_overrides_loader
+    write_strategy: table
+    columns:
+      - name: start_ts
+        type: VARCHAR
+      - name: end_ts
+        type: VARCHAR
+      - name: start_int
+        type: VARCHAR
+      - name: end_int
+        type: VARCHAR
+""".strip()
+    + "\n",
+    "loaders/raw.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_cursor_overrides_loader(ctx):
+    return [{
+        "start_ts": None if ctx.start_cursor_ts is None else ctx.start_cursor_ts.isoformat(),
+        "end_ts": None if ctx.end_cursor_ts is None else ctx.end_cursor_ts.isoformat(),
+        "start_int": None if ctx.start_cursor_int is None else str(ctx.start_cursor_int),
+        "end_int": None if ctx.end_cursor_int is None else str(ctx.end_cursor_int),
+    }]
+""",
+}
+
+CURSOR_OVERRIDE_CONTEXT_TEST_CASES: list[LoadCommandCursorOverrideContextTestCase] = [
+    LoadCommandCursorOverrideContextTestCase(
+        description="passes no cursor override context by default",
+        project_files=CURSOR_OVERRIDE_CONTEXT_PROJECT_FILES,
+        cursor_overrides=None,
+        expected_rows=((None, None, None, None),),
+    ),
+    LoadCommandCursorOverrideContextTestCase(
+        description="passes typed cursor override context values",
+        project_files=CURSOR_OVERRIDE_CONTEXT_PROJECT_FILES,
+        cursor_overrides=CursorOverrides(
+            start_ts="2026-01-01T01:02:03",
+            end_ts="2026-01-02T04:05:06",
+            start_int="10",
+            end_int="20",
+        ),
+        expected_rows=(("2026-01-01T01:02:03", "2026-01-02T04:05:06", "10", "20"),),
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -1197,6 +1251,37 @@ def test_given_reload_flag_when_running_load_then_passes_reload_context_to_loade
     try:
         rows: tuple[tuple[object, ...], ...] = tuple(
             connection.execute("SELECT is_reload FROM raw_reload_context").fetchall()
+        )
+    finally:
+        connection.close()
+    assert exit_code == 0
+    assert rows == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    CURSOR_OVERRIDE_CONTEXT_TEST_CASES,
+    ids=[case.description for case in CURSOR_OVERRIDE_CONTEXT_TEST_CASES],
+)
+def test_given_cursor_override_flags_when_running_load_then_passes_typed_context_to_loader(
+    test_case: LoadCommandCursorOverrideContextTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    exit_code: int = run_load(
+        project_dir=tmp_path,
+        no_color=True,
+        cursor_overrides=test_case.cursor_overrides,
+    )
+
+    connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
+    try:
+        rows: tuple[tuple[object, ...], ...] = tuple(
+            connection.execute(
+                "SELECT start_ts, end_ts, start_int, end_int FROM raw_cursor_overrides"
+            ).fetchall()
         )
     finally:
         connection.close()

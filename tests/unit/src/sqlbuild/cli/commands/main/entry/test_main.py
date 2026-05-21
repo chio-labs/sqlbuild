@@ -11,6 +11,7 @@ from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
+from sqlbuild.compiler.planner.models import CursorOverrides
 from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
     MainErrorRenderingTestCase,
     MainTestCase,
@@ -65,6 +66,26 @@ ERROR_RENDERING_TEST_CASES: list[MainErrorRenderingTestCase] = [
         ),
         expected_stderr_fragment=(
             "error[C102]: query requires SQL\n  = help: pass SQL as the query argument"
+        ),
+        expected_exit_code=1,
+    ),
+    MainErrorRenderingTestCase(
+        description="renders load timestamp cursor override validation errors",
+        argv=["load", "--start-cursor-ts", "not-a-timestamp"],
+        error_type=ValueError,
+        error_factory=lambda project_dir: ValueError("unused"),
+        expected_stderr_fragment=(
+            "error[S000]: --start-cursor-ts value 'not-a-timestamp' is not a valid ISO timestamp"
+        ),
+        expected_exit_code=1,
+    ),
+    MainErrorRenderingTestCase(
+        description="renders load integer cursor override validation errors",
+        argv=["load", "--start-cursor-int", "3.14"],
+        error_type=ValueError,
+        error_factory=lambda project_dir: ValueError("unused"),
+        expected_stderr_fragment=(
+            "error[S000]: --start-cursor-int value '3.14' is not a whole number"
         ),
         expected_exit_code=1,
     ),
@@ -745,19 +766,30 @@ def test_given_execution_command_json_flag_when_running_then_dispatches_json_out
     "test_case",
     [
         MainTestCase(
-            description="passes load selectors and reload flag to handler",
-            argv=["load", "--select", "raw_orders", "--exclude", "raw_events", "--reload"],
+            description="passes load selectors reload flag and cursor overrides to handler",
+            argv=[
+                "load",
+                "--select",
+                "raw_orders",
+                "--exclude",
+                "raw_events",
+                "--reload",
+                "--start-cursor-ts",
+                "2026-01-01T00:00:00",
+                "--end-cursor-int",
+                "20",
+            ],
             expected_exit_code=4,
             expected_select=("raw_orders",),
             expected_reload=True,
         )
     ],
-    ids=["passes load selectors and reload flag to handler"],
+    ids=["passes load selectors reload flag and cursor overrides to handler"],
 )
 def test_given_load_flags_when_running_then_dispatches_expected_arguments(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[tuple[str, ...], tuple[str, ...], bool]] = []
+    received_args: list[tuple[tuple[str, ...], tuple[str, ...], bool, CursorOverrides | None]] = []
 
     def run_load(
         project_dir: Path | None,
@@ -765,12 +797,14 @@ def test_given_load_flags_when_running_then_dispatches_expected_arguments(
         select: tuple[str, ...],
         exclude: tuple[str, ...],
         reload: bool,
+        concurrency: int | None,
+        cursor_overrides: CursorOverrides | None,
         cli_vars: dict[str, object],
         json_output: bool,
         json_output_path: Path | None,
     ) -> int:
-        del project_dir, no_color, cli_vars, json_output, json_output_path
-        received_args.append((select, exclude, reload))
+        del project_dir, no_color, concurrency, cli_vars, json_output, json_output_path
+        received_args.append((select, exclude, reload, cursor_overrides))
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -780,7 +814,12 @@ def test_given_load_flags_when_running_then_dispatches_expected_arguments(
 
     assert exit_code == test_case.expected_exit_code
     assert received_args == [
-        (test_case.expected_select, ("raw_events",), test_case.expected_reload)
+        (
+            test_case.expected_select,
+            ("raw_events",),
+            test_case.expected_reload,
+            CursorOverrides(start_ts="2026-01-01T00:00:00", end_int="20"),
+        )
     ]
 
 

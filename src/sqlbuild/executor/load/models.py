@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -39,6 +40,10 @@ class LoaderContext:
     current_cursor_value: object | None
     logger: logging.Logger
     statement_recorder: StatementRecorder
+    start_cursor_ts: datetime | None = None
+    end_cursor_ts: datetime | None = None
+    start_cursor_int: int | None = None
+    end_cursor_int: int | None = None
 
     def execute_sql(self, sql: str) -> Any:
         self.statement_recorder.record(sql)
