@@ -11,14 +11,28 @@ from _pytest.capture import CaptureFixture, CaptureResult
 from duckdb import DuckDBPyConnection
 
 from sqlbuild.cli.commands.main.load import run_load
+from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile
 from sqlbuild.executor.load.main.run import run_load_pipeline
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
+    LoadCommandConcurrencyTestCase,
+    LoadCommandEmptySelectionTestCase,
     LoadCommandIntegrationTestCase,
+    LoadCommandSelectionErrorTestCase,
 )
+
+_PROJECT_FILE: str = 'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabase = "demo.duckdb"\n'
+
+_RAW_ORDERS_LOADER: str = """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_orders_loader(ctx):
+    return [{"order_id": 1, "status": "loaded"}]
+"""
 
 LOAD_COMMAND_TEST_CASES: list[LoadCommandIntegrationTestCase] = [
     LoadCommandIntegrationTestCase(
@@ -54,6 +68,14 @@ def raw_orders_loader(ctx):
         expected_exit_code=0,
         expected_rows=((1, "placed"), (2, "shipped")),
         expected_stdout_fragment="raw_orders",
+        expected_stdout_fragments=(
+            "Load ready (1 selected)",
+            "Sources (1)",
+            "Execution  sqb load  (concurrency: 1)",
+            "1/1  source    raw_orders",
+            "Completed successfully.",
+            "PASS=1  WARN=0  FAIL=0  SKIP=0  TOTAL=1",
+        ),
         expected_json_staging_relation="raw_orders__staging",
         expected_lifecycle_sql_fragments=(
             "CREATE OR REPLACE TABLE raw_orders__staging",
@@ -166,6 +188,124 @@ def raw_orders_loader(ctx):
     ),
 ]
 
+LOAD_SELECTION_ERROR_TEST_CASES: list[LoadCommandSelectionErrorTestCase] = [
+    LoadCommandSelectionErrorTestCase(
+        description="raises when selected source does not exist",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_FILE,
+            "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    loader: raw_orders_loader
+    write_strategy: table
+""".strip()
+            + "\n",
+            "loaders/raw_orders.py": _RAW_ORDERS_LOADER,
+        },
+        select=("missing_source",),
+        exclude=(),
+        expected_error_fragment="selector 'missing_source' does not match any source",
+    ),
+    LoadCommandSelectionErrorTestCase(
+        description="raises when selected source is unmanaged",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_FILE,
+            "sources/raw.yml": """
+sources:
+  - name: raw_customers
+    expression: SELECT 1 AS customer_id
+""".strip()
+            + "\n",
+        },
+        select=("raw_customers",),
+        exclude=(),
+        expected_error_fragment="selector 'raw_customers' matches a source with no loader",
+    ),
+    LoadCommandSelectionErrorTestCase(
+        description="raises when excluded source does not exist",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_FILE,
+            "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    loader: raw_orders_loader
+    write_strategy: table
+""".strip()
+            + "\n",
+            "loaders/raw_orders.py": _RAW_ORDERS_LOADER,
+        },
+        select=(),
+        exclude=("missing_source",),
+        expected_error_fragment="selector 'missing_source' does not match any source",
+    ),
+    LoadCommandSelectionErrorTestCase(
+        description="raises when excluded source is unmanaged",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_FILE,
+            "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    loader: raw_orders_loader
+    write_strategy: table
+  - name: raw_customers
+    expression: SELECT 1 AS customer_id
+""".strip()
+            + "\n",
+            "loaders/raw_orders.py": _RAW_ORDERS_LOADER,
+        },
+        select=(),
+        exclude=("raw_customers",),
+        expected_error_fragment="selector 'raw_customers' matches a source with no loader",
+    ),
+]
+
+EMPTY_SELECTION_TEST_CASES: list[LoadCommandEmptySelectionTestCase] = [
+    LoadCommandEmptySelectionTestCase(
+        description="succeeds without connecting when project has no managed sources",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_FILE,
+            "sources/raw.yml": """
+sources:
+  - name: raw_customers
+    expression: SELECT 1 AS customer_id
+""".strip()
+            + "\n",
+        },
+        select=(),
+        exclude=(),
+        expected_exit_code=0,
+        expected_stdout_fragment="No managed sources selected.",
+        expected_stdout_fragments=(
+            "Load ready (0 selected)",
+            "Completed successfully.",
+            "PASS=0  WARN=0  FAIL=0  SKIP=0  TOTAL=0",
+        ),
+    ),
+    LoadCommandEmptySelectionTestCase(
+        description="succeeds without connecting when all managed sources are excluded",
+        project_files={
+            "sqlbuild_project.toml": _PROJECT_FILE,
+            "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    loader: raw_orders_loader
+    write_strategy: table
+""".strip()
+            + "\n",
+            "loaders/raw_orders.py": _RAW_ORDERS_LOADER,
+        },
+        select=(),
+        exclude=("raw_orders",),
+        expected_exit_code=0,
+        expected_stdout_fragment="No managed sources selected.",
+        expected_stdout_fragments=(
+            "Load ready (0 selected)",
+            "Completed successfully.",
+            "PASS=0  WARN=0  FAIL=0  SKIP=0  TOTAL=0",
+        ),
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -192,6 +332,7 @@ def test_given_source_loader_when_running_load_then_writes_source_table(
     captured: CaptureResult[str] = capsys.readouterr()
     assert exit_code == test_case.expected_exit_code
     assert test_case.expected_stdout_fragment in captured.out
+    assert all(fragment in captured.out for fragment in test_case.expected_stdout_fragments)
     assert all(
         fragment not in captured.out for fragment in test_case.expected_stdout_absent_fragments
     )
@@ -252,3 +393,154 @@ def test_given_source_loader_when_running_pipeline_then_uses_staging_relation(
         any(fragment in sql for sql in lifecycle_sql)
         for fragment in test_case.expected_lifecycle_sql_fragments
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadCommandConcurrencyTestCase(
+            description="uses bounded concurrent connections and preserves result order",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
+sources:
+  - name: raw_a
+    loader: raw_a_loader
+    write_strategy: table
+    columns:
+      - name: source_name
+        type: VARCHAR
+      - name: connection_id
+        type: BIGINT
+  - name: raw_b
+    loader: raw_b_loader
+    write_strategy: table
+    columns:
+      - name: source_name
+        type: VARCHAR
+      - name: connection_id
+        type: BIGINT
+  - name: raw_c
+    loader: raw_c_loader
+    write_strategy: table
+    columns:
+      - name: source_name
+        type: VARCHAR
+      - name: connection_id
+        type: BIGINT
+""".strip()
+                + "\n",
+                "loaders/raw.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_a_loader(ctx):
+    return [{"source_name": "raw_a", "connection_id": id(ctx.connection)}]
+
+@loader
+def raw_b_loader(ctx):
+    return [{"source_name": "raw_b", "connection_id": id(ctx.connection)}]
+
+@loader
+def raw_c_loader(ctx):
+    return [{"source_name": "raw_c", "connection_id": id(ctx.connection)}]
+""",
+            },
+            max_concurrency=2,
+            expected_connection_count=2,
+            expected_source_order=("raw_a", "raw_b", "raw_c"),
+        ),
+    ],
+    ids=["uses bounded concurrent connections and preserves result order"],
+)
+def test_given_multiple_source_loaders_when_running_pipeline_then_uses_concurrent_connections(
+    test_case: LoadCommandConcurrencyTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+    source_file: DiscoveredSourceFile = discovered_inputs.source_files[0]
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection_starts: list[int] = []
+
+    results: tuple[LoadExecutionResult, ...] = run_load_pipeline(
+        sources=source_file.source_entries,
+        loader_functions=discovered_inputs.loader_functions,
+        connection_config={"database": str(tmp_path / "demo.duckdb")},
+        adapter=adapter,
+        run_id="test_run",
+        environment="dev",
+        vars={},
+        is_reload=False,
+        max_concurrency=test_case.max_concurrency,
+        on_connection_start=connection_starts.append,
+    )
+
+    assert connection_starts == [test_case.expected_connection_count]
+    assert tuple(result.source_name for result in results) == test_case.expected_source_order
+    connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
+    try:
+        first_row: tuple[int] | None = connection.execute(
+            "SELECT connection_id FROM raw_a"
+        ).fetchone()
+        second_row: tuple[int] | None = connection.execute(
+            "SELECT connection_id FROM raw_b"
+        ).fetchone()
+    finally:
+        connection.close()
+    assert first_row is not None
+    assert second_row is not None
+    first_connection_id: int = first_row[0]
+    second_connection_id: int = second_row[0]
+    assert first_connection_id != second_connection_id
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    LOAD_SELECTION_ERROR_TEST_CASES,
+    ids=[case.description for case in LOAD_SELECTION_ERROR_TEST_CASES],
+)
+def test_given_invalid_load_selectors_when_running_load_then_it_raises_clear_error(
+    test_case: LoadCommandSelectionErrorTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    with pytest.raises(CliUserError) as exc_info:
+        run_load(
+            project_dir=tmp_path,
+            no_color=True,
+            select=test_case.select,
+            exclude=test_case.exclude,
+        )
+
+    assert test_case.expected_error_fragment in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    EMPTY_SELECTION_TEST_CASES,
+    ids=[case.description for case in EMPTY_SELECTION_TEST_CASES],
+)
+def test_given_no_selected_managed_sources_when_running_load_then_it_does_not_connect(
+    test_case: LoadCommandEmptySelectionTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    capsys: CaptureFixture[str],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    exit_code: int = run_load(
+        project_dir=tmp_path,
+        no_color=True,
+        select=test_case.select,
+        exclude=test_case.exclude,
+    )
+
+    captured: CaptureResult[str] = capsys.readouterr()
+    assert exit_code == test_case.expected_exit_code
+    assert test_case.expected_stdout_fragment in captured.out
+    assert all(fragment in captured.out for fragment in test_case.expected_stdout_fragments)
+    assert not (tmp_path / "demo.duckdb").exists()
