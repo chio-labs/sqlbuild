@@ -39,6 +39,7 @@ class CliNamespace:
     no_color: bool = False
     fail_fast: bool = False
     full_refresh: bool = False
+    load_sources: bool | None = None
     reload: bool = False
     allow_snapshot_full_refresh: bool = False
     allow_snapshot_schema_change: bool = False
@@ -115,6 +116,7 @@ class CliEntrypointHandlers:
             CursorOverrides | None,
             bool,
             bool,
+            bool | None,
             bool,
             tuple[str, ...],
             tuple[str, ...],
@@ -137,6 +139,8 @@ class CliEntrypointHandlers:
             bool,
             bool,
             bool,
+            bool | None,
+            bool,
             bool,
             bool,
             int | None,
@@ -158,6 +162,8 @@ class CliEntrypointHandlers:
             CursorOverrides | None,
             bool,
             bool,
+            bool,
+            bool | None,
             bool,
             bool,
             bool,

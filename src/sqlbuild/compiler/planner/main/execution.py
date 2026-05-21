@@ -23,6 +23,7 @@ from sqlbuild.compiler.compile.models.sql_tests import CompiledSqlTest
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.audit_entry import plan_audit
+from sqlbuild.compiler.planner.helpers.auto_load import managed_source_upstream_keys
 from sqlbuild.compiler.planner.helpers.buildability import check_buildability
 from sqlbuild.compiler.planner.helpers.cascade import build_self_cascade, resolve_cascade
 from sqlbuild.compiler.planner.helpers.function_fingerprints import (
@@ -65,6 +66,7 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     PlanWarning,
     SeedPlanEntry,
+    SourceLoadPlanEntry,
     SqlTestPlanEntry,
     WarehouseSnapshot,
 )
@@ -84,6 +86,8 @@ def build_execution_plan(
     start_cursor_override: str | None = None,
     end_cursor_override: str | None = None,
     cursor_overrides: CursorOverrides | None = None,
+    auto_load_sources: bool = False,
+    reload_sources: bool = False,
     on_progress: Callable[[str], None] | None = None,
     deferred_targets: dict[str, CompiledRelationTarget] | None = None,
     deferred_relations: dict[str, RelationInfo] | None = None,
@@ -108,6 +112,12 @@ def build_execution_plan(
         tag_index=tag_index,
         path_index=path_idx,
     )
+    if auto_load_sources:
+        selected_keys = selected_keys | managed_source_upstream_keys(
+            selected_keys=selected_keys,
+            upstream_deps=upstream_deps,
+            project=project,
+        )
 
     execution_order: tuple[CompiledObjectKey, ...] = topologically_order_keys(upstream_deps)
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = (
@@ -297,6 +307,29 @@ def build_execution_plan(
         if seed.key in selected_keys
     ]
 
+    source_load_entries: list[SourceLoadPlanEntry] = []
+    key_for_source_load: CompiledObjectKey
+    for key_for_source_load in execution_order:
+        if key_for_source_load not in selected_keys:
+            continue
+        if key_for_source_load.resource_type != CompiledResourceType.SOURCE:
+            continue
+        source_entry: SourceEntry | None = source_map.get(key_for_source_load.name)
+        if source_entry is None or source_entry.loader is None:
+            continue
+        source_load_entries.append(
+            SourceLoadPlanEntry(
+                key=key_for_source_load,
+                name=source_entry.name,
+                loader=source_entry.loader,
+                target=source_entry.table or source_entry.name,
+                write_strategy=source_entry.write_strategy,
+                cursor_column=source_entry.cursor_column,
+                unique_key=source_entry.unique_key,
+                is_reload=reload_sources,
+            )
+        )
+
     function_entries: list[FunctionPlanEntry] = [
         FunctionPlanEntry(
             key=function.key,
@@ -384,6 +417,7 @@ def build_execution_plan(
         execution_order=scoped_order,
         model_entries=tuple(model_entries),
         seed_entries=tuple(seed_entries),
+        source_load_entries=tuple(source_load_entries),
         function_entries=tuple(function_entries),
         audit_entries=tuple(audit_entries),
         test_entries=tuple(test_entries),

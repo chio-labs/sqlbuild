@@ -15,6 +15,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
+from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
@@ -72,6 +73,7 @@ class NodeCompletion:
         | SeedExecutionResult
         | FunctionExecutionResult
         | SqlTestExecutionResult
+        | LoadExecutionResult
     )
 
 
@@ -83,6 +85,7 @@ class BuildExecutionResult:
     model_results: tuple[ModelExecutionResult, ...] = field(default_factory=tuple)
     seed_results: tuple[SeedExecutionResult, ...] = field(default_factory=tuple)
     function_results: tuple[FunctionExecutionResult, ...] = field(default_factory=tuple)
+    load_results: tuple[LoadExecutionResult, ...] = field(default_factory=tuple)
     test_results: tuple[SqlTestExecutionResult, ...] = field(default_factory=tuple)
     source_audit_results: tuple[AuditExecutionResult, ...] = field(default_factory=tuple)
     end_audit_results: tuple[AuditExecutionResult, ...] = field(default_factory=tuple)

@@ -9,6 +9,7 @@ from sqlbuild.compiler.planner.types import (
     MaterializationType,
     PlanAction,
 )
+from sqlbuild.shared.types import ExecutionResourceKind
 
 _INCREMENTAL_ACTIONS: frozenset[PlanAction] = frozenset(
     {
@@ -50,20 +51,10 @@ def model_resource_type(entry: ModelPlanEntry | None) -> str:
     return MaterializationType.TABLE.value
 
 
-def materialization_type_display(materialization_type: str) -> str:
+def materialization_type_display(resource_kind: ExecutionResourceKind) -> str:
     """Return the left-column resource type for active progress rows."""
 
-    if materialization_type == MaterializationType.VIEW:
-        return MaterializationType.VIEW.value
-    if materialization_type == MaterializationType.SEED:
-        return MaterializationType.SEED.value
-    if materialization_type == "function":
-        return "function"
-    if materialization_type == MaterializationType.CUSTOM:
-        return MaterializationType.CUSTOM.value
-    if materialization_type == MaterializationType.SNAPSHOT:
-        return MaterializationType.SNAPSHOT.value
-    return MaterializationType.TABLE.value
+    return resource_kind.value
 
 
 def model_execution_annotation(entry: ModelPlanEntry | None) -> str:

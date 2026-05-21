@@ -12,7 +12,10 @@ from _pytest.capture import CaptureFixture, CaptureResult
 from _pytest.monkeypatch import MonkeyPatch
 from duckdb import DuckDBPyConnection
 
+from sqlbuild.cli.commands.main.build import run_build
 from sqlbuild.cli.commands.main.load import run_load
+from sqlbuild.cli.commands.main.plan import run_plan
+from sqlbuild.cli.commands.main.run import run_run
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.execution_json import format_load_execution_json
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -22,6 +25,11 @@ from sqlbuild.executor.load.main.run import run_load_pipeline
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
+    BuildRunAutoLoadFailureTestCase,
+    BuildRunAutoLoadFlagTestCase,
+    BuildRunAutoLoadJsonTestCase,
+    BuildRunAutoLoadSelectionTestCase,
+    BuildRunAutoLoadTestCase,
     LoadCommandAdapterCallTestCase,
     LoadCommandBatchedRowsTestCase,
     LoadCommandBatchedYieldTestCase,
@@ -41,6 +49,8 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     LoadCommandSelectionErrorTestCase,
     LoadCommandWriteStrategyLifecycleTestCase,
     LoadCommandWriteStrategyTestCase,
+    PlanAutoLoadJsonTestCase,
+    PlanAutoLoadOutputTestCase,
 )
 
 _PROJECT_FILE: str = 'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabase = "demo.duckdb"\n'
@@ -52,6 +62,314 @@ from sqlbuild.loaders import loader
 def raw_orders_loader(ctx):
     return [{"order_id": 1, "status": "loaded"}]
 """
+
+_BUILD_RUN_AUTO_LOAD_PROJECT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": _PROJECT_FILE,
+    "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    loader: raw_orders_loader
+    write_strategy: table
+    columns:
+      - name: order_id
+        type: INTEGER
+      - name: status
+        type: VARCHAR
+""".strip()
+    + "\n",
+    "loaders/raw_orders.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_orders_loader(ctx):
+    return [{"order_id": 7, "status": "loaded"}]
+""",
+    "models/stg_orders.sql": (
+        'MODEL (materialized table);\n\nSELECT order_id, status FROM __source("raw_orders")'
+    ),
+}
+
+_BUILD_RUN_AUTO_LOAD_CONFIG_FALSE_PROJECT_FILES: dict[str, str] = {
+    **_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
+    "sqlbuild_project.toml": (
+        'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabase = "demo.duckdb"\n\n'
+        "[settings]\nauto_load_sources = false\n"
+    ),
+}
+
+_BUILD_RUN_AUTO_LOAD_SELECTION_PROJECT_FILES: dict[str, str] = {
+    **_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
+    "models/fact_orders.sql": (
+        'MODEL (materialized table);\n\nSELECT order_id, status FROM __ref("stg_orders")'
+    ),
+}
+
+_BUILD_RUN_AUTO_LOAD_FAILURE_PROJECT_FILES: dict[str, str] = {
+    **_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
+    "loaders/raw_orders.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_orders_loader(ctx):
+    raise RuntimeError("loader exploded")
+""",
+}
+
+_BUILD_RUN_AUTO_LOAD_RELOAD_PROJECT_FILES: dict[str, str] = {
+    **_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
+    "loaders/raw_orders.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_orders_loader(ctx):
+    status = "reload" if ctx.is_reload else "incremental"
+    return [{"order_id": 7, "status": status}]
+""",
+}
+
+_BUILD_RUN_AUTO_LOAD_TWO_SOURCE_PROJECT_FILES: dict[str, str] = {
+    **_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
+    "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    loader: raw_orders_loader
+    write_strategy: table
+    columns:
+      - name: order_id
+        type: INTEGER
+      - name: status
+        type: VARCHAR
+  - name: raw_customers
+    loader: raw_customers_loader
+    write_strategy: table
+    columns:
+      - name: customer_id
+        type: INTEGER
+      - name: name
+        type: VARCHAR
+""".strip()
+    + "\n",
+    "loaders/raw_customers.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_customers_loader(ctx):
+    return [{"customer_id": 10, "name": "Ada"}]
+""",
+    "models/stg_customers.sql": (
+        'MODEL (materialized table);\n\nSELECT customer_id, name FROM __source("raw_customers")'
+    ),
+}
+
+_BUILD_RUN_AUTO_LOAD_SELF_MANAGED_PROJECT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": _PROJECT_FILE,
+    "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    loader: raw_orders_loader
+    columns:
+      - name: order_id
+        type: INTEGER
+      - name: status
+        type: VARCHAR
+""".strip()
+    + "\n",
+    "loaders/raw_orders.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_orders_loader(ctx):
+    ctx.execute_sql(
+        "CREATE OR REPLACE TABLE raw_orders AS "
+        "SELECT 7 AS order_id, 'self-managed' AS status"
+    )
+""",
+    "models/stg_orders.sql": (
+        'MODEL (materialized table);\n\nSELECT order_id, status FROM __source("raw_orders")'
+    ),
+}
+
+BUILD_RUN_AUTO_LOAD_TEST_CASES: list[BuildRunAutoLoadTestCase] = [
+    BuildRunAutoLoadTestCase(
+        description="build auto-loads selected managed source before models",
+        command="build",
+        expected_stdout_fragments=(
+            "raw_orders",
+            "Sources to load (1)",
+            "raw_orders           table",
+            "Execution  sqb build  (concurrency: 1)",
+            "1/2  source",
+            "2/2  table",
+            "rows=1",
+        ),
+        expected_rows=((7, "loaded"),),
+    ),
+    BuildRunAutoLoadTestCase(
+        description="run auto-loads selected managed source before models",
+        command="run",
+        expected_stdout_fragments=(
+            "raw_orders",
+            "Sources to load (1)",
+            "raw_orders           table",
+            "Execution  sqb run  (concurrency: 1)",
+            "1/2  source",
+            "2/2  table",
+            "rows=1",
+        ),
+        expected_rows=((7, "loaded"),),
+    ),
+]
+
+BUILD_RUN_AUTO_LOAD_FLAG_TEST_CASES: list[BuildRunAutoLoadFlagTestCase] = [
+    BuildRunAutoLoadFlagTestCase(
+        description="build no-load skips loader and uses existing source table",
+        command="build",
+        project_files=_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
+        args=("--no-load", "--select", "stg_orders"),
+        setup_sql=(
+            "CREATE TABLE raw_orders (order_id INTEGER, status VARCHAR)",
+            "INSERT INTO raw_orders VALUES (7, 'existing')",
+        ),
+        expected_rows=((7, "existing"),),
+        expected_stdout_absent_fragments=("source", "rows=1"),
+    ),
+    BuildRunAutoLoadFlagTestCase(
+        description="run load forces loader when auto load is disabled",
+        command="run",
+        project_files=_BUILD_RUN_AUTO_LOAD_CONFIG_FALSE_PROJECT_FILES,
+        args=("--load", "--select", "stg_orders"),
+        setup_sql=(),
+        expected_rows=((7, "loaded"),),
+        expected_stdout_fragments=("1/2  source", "rows=1"),
+    ),
+    BuildRunAutoLoadFlagTestCase(
+        description="build auto load disabled skips loader by default",
+        command="build",
+        project_files=_BUILD_RUN_AUTO_LOAD_CONFIG_FALSE_PROJECT_FILES,
+        args=("--select", "stg_orders"),
+        setup_sql=(
+            "CREATE TABLE raw_orders (order_id INTEGER, status VARCHAR)",
+            "INSERT INTO raw_orders VALUES (7, 'existing')",
+        ),
+        expected_rows=((7, "existing"),),
+        expected_stdout_absent_fragments=("source", "rows=1"),
+    ),
+    BuildRunAutoLoadFlagTestCase(
+        description="build reload and full refresh reloads loaders and models",
+        command="build",
+        project_files=_BUILD_RUN_AUTO_LOAD_RELOAD_PROJECT_FILES,
+        args=("--reload", "--full-refresh", "--select", "stg_orders"),
+        setup_sql=(),
+        expected_rows=((7, "reload"),),
+        expected_stdout_fragments=("Sources to reload (1)", "1/2  source", "2/2  table"),
+    ),
+    BuildRunAutoLoadFlagTestCase(
+        description="build reload reloads loaders without full refreshing models",
+        command="build",
+        project_files=_BUILD_RUN_AUTO_LOAD_RELOAD_PROJECT_FILES,
+        args=("--reload", "--select", "stg_orders"),
+        setup_sql=(),
+        expected_rows=((7, "reload"),),
+        expected_stdout_fragments=(
+            "Plan ready (1 selected, 1 source to reload)",
+            "1/2  source",
+            "2/2  table",
+        ),
+        expected_stdout_absent_fragments=("Full refresh",),
+    ),
+    BuildRunAutoLoadFlagTestCase(
+        description="run reload reloads loaders without full refreshing models",
+        command="run",
+        project_files=_BUILD_RUN_AUTO_LOAD_RELOAD_PROJECT_FILES,
+        args=("--reload", "--select", "stg_orders"),
+        setup_sql=(),
+        expected_rows=((7, "reload"),),
+        expected_stdout_fragments=(
+            "Plan ready (1 selected, 1 source to reload)",
+            "1/2  source",
+            "2/2  table",
+        ),
+        expected_stdout_absent_fragments=("Full refresh",),
+    ),
+]
+
+BUILD_RUN_AUTO_LOAD_SELECTION_TEST_CASES: list[BuildRunAutoLoadSelectionTestCase] = [
+    BuildRunAutoLoadSelectionTestCase(
+        description="selected downstream model does not load source referenced only upstream",
+        args=("--select", "fact_orders"),
+        setup_sql=(
+            "CREATE TABLE stg_orders (order_id INTEGER, status VARCHAR)",
+            "INSERT INTO stg_orders VALUES (7, 'existing')",
+        ),
+        expected_rows=((7, "existing"),),
+        expected_stdout_absent_fragments=("source", "rows=1"),
+    ),
+    BuildRunAutoLoadSelectionTestCase(
+        description="upstream-expanded downstream model loads source referenced upstream",
+        args=("--select", "+fact_orders"),
+        setup_sql=(),
+        expected_rows=((7, "loaded"),),
+        expected_stdout_fragments=(
+            "Sources to load (1)",
+            "1/3  source",
+            "2/3  table",
+            "3/3  table",
+        ),
+    ),
+    BuildRunAutoLoadSelectionTestCase(
+        description="selected model loads only its direct source among multiple managed sources",
+        args=("--select", "stg_orders"),
+        setup_sql=(),
+        expected_rows=((7, "loaded"),),
+        expected_stdout_fragments=("Sources to load (1)", "raw_orders", "1/2  source"),
+        expected_stdout_absent_fragments=("raw_customers", "2/3  source"),
+        project_files=_BUILD_RUN_AUTO_LOAD_TWO_SOURCE_PROJECT_FILES,
+        result_table="stg_orders",
+    ),
+]
+
+PLAN_AUTO_LOAD_OUTPUT_TEST_CASES: list[PlanAutoLoadOutputTestCase] = [
+    PlanAutoLoadOutputTestCase(
+        description="plan shows source loaders by default",
+        project_files=_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
+        load_sources=None,
+        expected_stdout_fragments=("Sources to load (1)", "raw_orders", "table"),
+    ),
+    PlanAutoLoadOutputTestCase(
+        description="plan no-load hides source loaders",
+        project_files=_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
+        load_sources=False,
+        expected_stdout_fragments=("Plan ready (1 selected)", "stg_orders"),
+        expected_stdout_absent_fragments=("Sources to load",),
+    ),
+]
+
+PLAN_AUTO_LOAD_JSON_TEST_CASES: list[PlanAutoLoadJsonTestCase] = [
+    PlanAutoLoadJsonTestCase(
+        description="plan json includes source loads",
+        project_files=_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
+        load_sources=None,
+        expected_source_loads=(
+            {
+                "name": "raw_orders",
+                "loader": "raw_orders_loader",
+                "target": "raw_orders",
+                "is_reload": False,
+                "write_strategy": "table",
+            },
+        ),
+        expected_selected_count=1,
+        expected_source_load_count=1,
+    ),
+    PlanAutoLoadJsonTestCase(
+        description="plan json no-load has zero source load count",
+        project_files=_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
+        load_sources=False,
+        expected_source_loads=(),
+        expected_selected_count=1,
+        expected_source_load_count=0,
+    ),
+]
 
 LOAD_COMMAND_TEST_CASES: list[LoadCommandIntegrationTestCase] = [
     LoadCommandIntegrationTestCase(
@@ -328,6 +646,391 @@ sources:
         ),
     ),
 ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    BUILD_RUN_AUTO_LOAD_TEST_CASES,
+    ids=[case.description for case in BUILD_RUN_AUTO_LOAD_TEST_CASES],
+)
+def test_given_selected_model_references_managed_source_when_build_or_run_then_auto_loads(
+    test_case: BuildRunAutoLoadTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    capsys: CaptureFixture[str],
+) -> None:
+    write_repo_files(tmp_path, _BUILD_RUN_AUTO_LOAD_PROJECT_FILES)
+
+    command_runners: dict[str, Callable[..., int]] = {"build": run_build, "run": run_run}
+    exit_code: int = command_runners[test_case.command](
+        project_dir=tmp_path, no_color=True, select=("stg_orders",)
+    )
+
+    captured: CaptureResult[str] = capsys.readouterr()
+    assert exit_code == 0
+    assert all(fragment in captured.out for fragment in test_case.expected_stdout_fragments)
+    connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
+    try:
+        rows: tuple[tuple[object, ...], ...] = tuple(
+            connection.execute(
+                "SELECT order_id, status FROM stg_orders ORDER BY order_id"
+            ).fetchall()
+        )
+    finally:
+        connection.close()
+    assert rows == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildRunAutoLoadFlagTestCase(
+            description="build auto-loads self-managed source before model",
+            command="build",
+            project_files=_BUILD_RUN_AUTO_LOAD_SELF_MANAGED_PROJECT_FILES,
+            args=("--select", "stg_orders"),
+            setup_sql=(),
+            expected_rows=((7, "self-managed"),),
+            expected_stdout_fragments=(
+                "Plan ready (1 selected, 1 source to load)",
+                "raw_orders           self-managed",
+                "1/2  source",
+                "2/2  table",
+            ),
+        )
+    ],
+    ids=["build auto-loads self-managed source before model"],
+)
+def test_given_self_managed_source_when_running_build_then_auto_loads_before_model(
+    test_case: BuildRunAutoLoadFlagTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    capsys: CaptureFixture[str],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    exit_code: int = run_build(project_dir=tmp_path, no_color=True, select=("stg_orders",))
+
+    captured: CaptureResult[str] = capsys.readouterr()
+    assert exit_code == 0
+    assert all(fragment in captured.out for fragment in test_case.expected_stdout_fragments)
+    connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
+    try:
+        rows: tuple[tuple[object, ...], ...] = tuple(
+            connection.execute(
+                "SELECT order_id, status FROM stg_orders ORDER BY order_id"
+            ).fetchall()
+        )
+    finally:
+        connection.close()
+    assert rows == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    BUILD_RUN_AUTO_LOAD_FLAG_TEST_CASES,
+    ids=[case.description for case in BUILD_RUN_AUTO_LOAD_FLAG_TEST_CASES],
+)
+def test_given_build_or_run_load_flags_when_running_then_applies_loader_control(
+    test_case: BuildRunAutoLoadFlagTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    capsys: CaptureFixture[str],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+    setup_connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
+    try:
+        setup_statement: str
+        for setup_statement in test_case.setup_sql:
+            setup_connection.execute(setup_statement)
+    finally:
+        setup_connection.close()
+
+    command_runners: dict[str, Callable[..., int]] = {"build": run_build, "run": run_run}
+    exit_code: int = command_runners[test_case.command](
+        project_dir=tmp_path,
+        no_color=True,
+        select=(test_case.args[test_case.args.index("--select") + 1],),
+        load_sources=(
+            True if "--load" in test_case.args else False if "--no-load" in test_case.args else None
+        ),
+        reload_sources="--reload" in test_case.args,
+        full_refresh="--full-refresh" in test_case.args,
+    )
+
+    captured: CaptureResult[str] = capsys.readouterr()
+    assert exit_code == 0
+    assert all(fragment in captured.out for fragment in test_case.expected_stdout_fragments)
+    assert all(
+        fragment not in captured.out for fragment in test_case.expected_stdout_absent_fragments
+    )
+    connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
+    try:
+        rows: tuple[tuple[object, ...], ...] = tuple(
+            connection.execute(
+                "SELECT order_id, status FROM stg_orders ORDER BY order_id"
+            ).fetchall()
+        )
+    finally:
+        connection.close()
+    assert rows == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    BUILD_RUN_AUTO_LOAD_SELECTION_TEST_CASES,
+    ids=[case.description for case in BUILD_RUN_AUTO_LOAD_SELECTION_TEST_CASES],
+)
+def test_given_downstream_selection_when_running_build_then_loads_only_direct_selected_sources(
+    test_case: BuildRunAutoLoadSelectionTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    capsys: CaptureFixture[str],
+) -> None:
+    write_repo_files(
+        tmp_path, test_case.project_files or _BUILD_RUN_AUTO_LOAD_SELECTION_PROJECT_FILES
+    )
+    setup_connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
+    try:
+        setup_statement: str
+        for setup_statement in test_case.setup_sql:
+            setup_connection.execute(setup_statement)
+    finally:
+        setup_connection.close()
+
+    exit_code: int = run_build(
+        project_dir=tmp_path,
+        no_color=True,
+        select=(test_case.args[test_case.args.index("--select") + 1],),
+    )
+
+    captured: CaptureResult[str] = capsys.readouterr()
+    assert exit_code == 0
+    assert all(fragment in captured.out for fragment in test_case.expected_stdout_fragments)
+    assert all(
+        fragment not in captured.out for fragment in test_case.expected_stdout_absent_fragments
+    )
+    connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
+    try:
+        rows: tuple[tuple[object, ...], ...] = tuple(
+            connection.execute(
+                f"SELECT order_id, status FROM {test_case.result_table} ORDER BY order_id"
+            ).fetchall()
+        )
+    finally:
+        connection.close()
+    assert rows == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildRunAutoLoadFailureTestCase(
+            description="loader failure blocks downstream model execution",
+            project_files=_BUILD_RUN_AUTO_LOAD_FAILURE_PROJECT_FILES,
+            expected_exit_code=1,
+            expected_stdout_fragments=("loader exploded", "1/2  source", "SKIP"),
+            expected_model_exists=False,
+        )
+    ],
+    ids=["loader failure blocks downstream model execution"],
+)
+def test_given_source_loader_fails_when_running_build_then_downstream_model_is_not_executed(
+    test_case: BuildRunAutoLoadFailureTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    capsys: CaptureFixture[str],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    exit_code: int = run_build(project_dir=tmp_path, no_color=True, select=("stg_orders",))
+
+    captured: CaptureResult[str] = capsys.readouterr()
+    assert exit_code == test_case.expected_exit_code
+    assert all(fragment in captured.out for fragment in test_case.expected_stdout_fragments)
+    connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
+    try:
+        model_exists: bool = (
+            connection.execute(
+                "SELECT 1 FROM information_schema.tables WHERE table_name = 'stg_orders'"
+            ).fetchone()
+            is not None
+        )
+    finally:
+        connection.close()
+    assert model_exists is test_case.expected_model_exists
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildRunAutoLoadJsonTestCase(
+            description="build json output includes source asset",
+            project_files=_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
+            expected_exit_code=0,
+            expected_source_asset={
+                "kind": "source",
+                "name": "raw_orders",
+                "status": "success",
+                "target": "raw_orders",
+                "staging_relation": "raw_orders__staging",
+                "loader": "raw_orders_loader",
+                "rows_loaded": 1,
+            },
+        )
+    ],
+    ids=["build json output includes source asset"],
+)
+def test_given_build_auto_loads_source_when_json_output_then_includes_source_asset(
+    test_case: BuildRunAutoLoadJsonTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+    json_output_path: Path = tmp_path / "target" / "build.json"
+
+    exit_code: int = run_build(
+        project_dir=tmp_path,
+        no_color=True,
+        select=("stg_orders",),
+        json_output_path=json_output_path,
+    )
+
+    payload: dict[str, Any] = json.loads(json_output_path.read_text(encoding="utf-8"))
+    source_assets: list[dict[str, object]] = [
+        asset for asset in payload["assets"] if asset["kind"] == "source"
+    ]
+    assert exit_code == test_case.expected_exit_code
+    assert len(source_assets) == 1
+    expected_key: str
+    for expected_key in test_case.expected_source_asset:
+        assert source_assets[0][expected_key] == test_case.expected_source_asset[expected_key]
+    manifest: dict[str, Any] = json.loads(
+        (tmp_path / "target" / "manifest.json").read_text(encoding="utf-8")
+    )
+    source_node: dict[str, Any] = manifest["sources"]["source.demo.raw_orders"]
+    assert source_node["meta"]["sqlbuild"] == {
+        "loader": "raw_orders_loader",
+        "auto_load": True,
+        "write_strategy": "table",
+    }
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    PLAN_AUTO_LOAD_OUTPUT_TEST_CASES,
+    ids=[case.description for case in PLAN_AUTO_LOAD_OUTPUT_TEST_CASES],
+)
+def test_given_plan_load_controls_when_running_plan_then_formats_source_load_section(
+    test_case: PlanAutoLoadOutputTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    capsys: CaptureFixture[str],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    exit_code: int = run_plan(
+        project_dir=tmp_path,
+        no_color=True,
+        select=("stg_orders",),
+        load_sources=test_case.load_sources,
+    )
+
+    captured: CaptureResult[str] = capsys.readouterr()
+    assert exit_code == 0
+    assert all(fragment in captured.out for fragment in test_case.expected_stdout_fragments)
+    assert all(
+        fragment not in captured.out for fragment in test_case.expected_stdout_absent_fragments
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    PLAN_AUTO_LOAD_JSON_TEST_CASES,
+    ids=[case.description for case in PLAN_AUTO_LOAD_JSON_TEST_CASES],
+)
+def test_given_plan_json_output_when_source_auto_loads_then_includes_source_loads(
+    test_case: PlanAutoLoadJsonTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    capsys: CaptureFixture[str],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    exit_code: int = run_plan(
+        project_dir=tmp_path,
+        no_color=True,
+        json_output=True,
+        select=("stg_orders",),
+        load_sources=test_case.load_sources,
+    )
+
+    captured: CaptureResult[str] = capsys.readouterr()
+    payload: dict[str, Any] = json.loads(captured.out)
+    assert exit_code == 0
+    assert payload["selected_count"] == test_case.expected_selected_count
+    assert payload["source_load_count"] == test_case.expected_source_load_count
+    assert payload["source_loads"] == list(test_case.expected_source_loads)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildRunAutoLoadFlagTestCase(
+            description="manifest marks source auto load false when loaders are skipped",
+            command="build",
+            project_files=_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
+            args=("--no-load", "--select", "stg_orders"),
+            setup_sql=(
+                "CREATE TABLE raw_orders (order_id INTEGER, status VARCHAR)",
+                "INSERT INTO raw_orders VALUES (7, 'existing')",
+            ),
+            expected_rows=((7, "existing"),),
+        )
+    ],
+    ids=["manifest marks source auto load false when loaders are skipped"],
+)
+def test_given_build_skips_loader_when_manifest_is_written_then_marks_source_auto_load_false(
+    test_case: BuildRunAutoLoadFlagTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+    setup_connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
+    try:
+        setup_statement: str
+        for setup_statement in test_case.setup_sql:
+            setup_connection.execute(setup_statement)
+    finally:
+        setup_connection.close()
+
+    exit_code: int = run_build(
+        project_dir=tmp_path,
+        no_color=True,
+        select=("stg_orders",),
+        load_sources=False,
+    )
+
+    manifest: dict[str, Any] = json.loads(
+        (tmp_path / "target" / "manifest.json").read_text(encoding="utf-8")
+    )
+    source_node: dict[str, Any] = manifest["sources"]["source.demo.raw_orders"]
+    connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
+    try:
+        rows: tuple[tuple[object, ...], ...] = tuple(
+            connection.execute(
+                "SELECT order_id, status FROM stg_orders ORDER BY order_id"
+            ).fetchall()
+        )
+    finally:
+        connection.close()
+    assert exit_code == 0
+    assert rows == test_case.expected_rows
+    assert source_node["meta"]["sqlbuild"] == {
+        "loader": "raw_orders_loader",
+        "auto_load": False,
+        "write_strategy": "table",
+    }
 
 
 @pytest.mark.parametrize(

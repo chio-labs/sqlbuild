@@ -12,6 +12,7 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     PlanWarning,
     SeedPlanEntry,
+    SourceLoadPlanEntry,
 )
 from sqlbuild.compiler.planner.types import PlanReason
 
@@ -24,14 +25,19 @@ def format_plan_json(plan: PlanOutput) -> str:
     functions: list[dict[str, object]] = [
         _serialize_function_entry(e) for e in plan.function_entries
     ]
+    source_loads: list[dict[str, object]] = [
+        _serialize_source_load_entry(e) for e in plan.source_load_entries
+    ]
     warnings: list[dict[str, object]] = [_serialize_warning(w) for w in plan.warnings]
 
     result: dict[str, object] = {
         "selected_count": len(plan.model_entries)
         + len(plan.seed_entries)
         + len(plan.function_entries),
+        "source_load_count": len(source_loads),
         "models": models,
         "seeds": seeds,
+        "source_loads": source_loads,
         "functions": functions,
         "warnings": warnings,
     }
@@ -186,6 +192,22 @@ def _serialize_seed_entry(entry: SeedPlanEntry) -> dict[str, object]:
     if entry.target.qualified_name is not None:
         seed["qualified_name"] = entry.target.qualified_name
     return seed
+
+
+def _serialize_source_load_entry(entry: SourceLoadPlanEntry) -> dict[str, object]:
+    source_load: dict[str, object] = {
+        "name": entry.name,
+        "loader": entry.loader,
+        "target": entry.target,
+        "is_reload": entry.is_reload,
+    }
+    if entry.write_strategy is not None:
+        source_load["write_strategy"] = entry.write_strategy.value
+    if entry.cursor_column is not None:
+        source_load["cursor_column"] = entry.cursor_column
+    if entry.unique_key:
+        source_load["unique_key"] = entry.unique_key
+    return source_load
 
 
 def _serialize_function_entry(entry: FunctionPlanEntry) -> dict[str, object]:

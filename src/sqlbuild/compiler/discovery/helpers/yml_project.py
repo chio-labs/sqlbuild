@@ -249,6 +249,7 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         default=True,
     )
     sql_validation: bool = _optional_bool(mapping=mapping, key="sql_validation", default=True)
+    auto_load_sources: bool = _optional_bool(mapping=mapping, key="auto_load_sources", default=True)
     concurrency_key: str = "max_concurrency" if "max_concurrency" in mapping else "concurrency"
     concurrency: int = _optional_int(mapping=mapping, key=concurrency_key, default=1)
     table_promotion_mode: str | None = _optional_str(payload=mapping, key="table_promotion_mode")
@@ -263,6 +264,7 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         query_change_tracking=query_change_tracking,
         sql_validation=sql_validation,
         concurrency=concurrency,
+        auto_load_sources=auto_load_sources,
         table_promotion_mode=table_promotion_mode,
         default_audit_severity=default_audit_severity,
         default_audit_run_scope=default_audit_run_scope,

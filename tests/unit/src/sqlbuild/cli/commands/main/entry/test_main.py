@@ -1463,33 +1463,54 @@ def test_given_dag_command_arguments_when_running_then_dispatches_expected_handl
     ]
 
 
+BUILD_EXECUTION_FLAG_TEST_CASES: list[MainTestCase] = [
+    MainTestCase(
+        description="passes global debug and no color plus full refresh to build handler",
+        argv=[
+            "--debug",
+            "--no-color",
+            "build",
+            "--full-refresh",
+            "--allow-snapshot-full-refresh",
+            "--allow-snapshot-schema-change",
+        ],
+        expected_exit_code=5,
+        expected_full_refresh=True,
+        expected_allow_snapshot_full_refresh=True,
+        expected_allow_snapshot_schema_change=True,
+        expected_no_color=True,
+        expected_debug=True,
+    ),
+    MainTestCase(
+        description="passes no load to build handler",
+        argv=["build", "--no-load"],
+        expected_exit_code=5,
+        expected_load_sources=False,
+    ),
+    MainTestCase(
+        description="passes load to build handler",
+        argv=["build", "--load"],
+        expected_exit_code=5,
+        expected_load_sources=True,
+    ),
+    MainTestCase(
+        description="passes reload to build handler",
+        argv=["build", "--reload"],
+        expected_exit_code=5,
+        expected_reload=True,
+    ),
+]
+
+
 @pytest.mark.parametrize(
     "test_case",
-    [
-        MainTestCase(
-            description="passes global debug and no color plus full refresh to build handler",
-            argv=[
-                "--debug",
-                "--no-color",
-                "build",
-                "--full-refresh",
-                "--allow-snapshot-full-refresh",
-                "--allow-snapshot-schema-change",
-            ],
-            expected_exit_code=5,
-            expected_full_refresh=True,
-            expected_allow_snapshot_full_refresh=True,
-            expected_allow_snapshot_schema_change=True,
-            expected_no_color=True,
-            expected_debug=True,
-        )
-    ],
-    ids=["passes global debug and no color plus full refresh to build handler"],
+    BUILD_EXECUTION_FLAG_TEST_CASES,
+    ids=[case.description for case in BUILD_EXECUTION_FLAG_TEST_CASES],
 )
 def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[bool, bool, bool, bool, bool, bool]] = []
+    received_args: list[tuple[bool, bool, bool, bool | None, bool, bool, bool, bool]] = []
 
     def run_build(
         project_dir: Path | None,
@@ -1499,6 +1520,8 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         no_color: bool,
         fail_fast: bool,
         full_refresh: bool,
+        load_sources: bool | None,
+        reload_sources: bool,
         allow_snapshot_full_refresh: bool,
         allow_snapshot_schema_change: bool,
         concurrency: int | None,
@@ -1526,6 +1549,8 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
                 no_color,
                 fail_fast,
                 full_refresh,
+                load_sources,
+                reload_sources,
                 allow_snapshot_full_refresh,
                 allow_snapshot_schema_change,
                 debug,
@@ -1544,6 +1569,8 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
             test_case.expected_no_color,
             False,
             test_case.expected_full_refresh,
+            test_case.expected_load_sources,
+            test_case.expected_reload,
             test_case.expected_allow_snapshot_full_refresh,
             test_case.expected_allow_snapshot_schema_change,
             test_case.expected_debug,
@@ -1551,22 +1578,43 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
     ]
 
 
+RUN_EXECUTION_FLAG_TEST_CASES: list[MainTestCase] = [
+    MainTestCase(
+        description="passes full refresh flag to run handler",
+        argv=["run", "--full-refresh"],
+        expected_exit_code=6,
+        expected_full_refresh=True,
+    ),
+    MainTestCase(
+        description="passes no load to run handler",
+        argv=["run", "--no-load"],
+        expected_exit_code=6,
+        expected_load_sources=False,
+    ),
+    MainTestCase(
+        description="passes load to run handler",
+        argv=["run", "--load"],
+        expected_exit_code=6,
+        expected_load_sources=True,
+    ),
+    MainTestCase(
+        description="passes reload to run handler",
+        argv=["run", "--reload"],
+        expected_exit_code=6,
+        expected_reload=True,
+    ),
+]
+
+
 @pytest.mark.parametrize(
     "test_case",
-    [
-        MainTestCase(
-            description="passes full refresh flag to run handler",
-            argv=["run", "--full-refresh"],
-            expected_exit_code=6,
-            expected_full_refresh=True,
-        )
-    ],
-    ids=["passes full refresh flag to run handler"],
+    RUN_EXECUTION_FLAG_TEST_CASES,
+    ids=[case.description for case in RUN_EXECUTION_FLAG_TEST_CASES],
 )
 def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[bool, bool, bool]] = []
+    received_args: list[tuple[bool, bool | None, bool, bool, bool]] = []
 
     def run_run(
         project_dir: Path | None,
@@ -1576,6 +1624,8 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
         no_color: bool,
         fail_fast: bool,
         full_refresh: bool,
+        load_sources: bool | None,
+        reload_sources: bool,
         allow_snapshot_full_refresh: bool,
         allow_snapshot_schema_change: bool,
         concurrency: int | None,
@@ -1602,7 +1652,13 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
         del json_output
         del json_output_path
         received_args.append(
-            (full_refresh, allow_snapshot_full_refresh, allow_snapshot_schema_change)
+            (
+                full_refresh,
+                load_sources,
+                reload_sources,
+                allow_snapshot_full_refresh,
+                allow_snapshot_schema_change,
+            )
         )
         return test_case.expected_exit_code
 
@@ -1612,7 +1668,15 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
     )
 
     assert exit_code == test_case.expected_exit_code
-    assert received_args == [(test_case.expected_full_refresh, False, False)]
+    assert received_args == [
+        (
+            test_case.expected_full_refresh,
+            test_case.expected_load_sources,
+            test_case.expected_reload,
+            False,
+            False,
+        )
+    ]
 
 
 @pytest.mark.parametrize(
@@ -1639,6 +1703,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
             object,
             bool,
             bool,
+            bool | None,
             bool,
             tuple[str, ...],
             tuple[str, ...],
@@ -1654,6 +1719,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
         cursor_overrides: object,
         json_output: bool,
         full_refresh: bool,
+        load_sources: bool | None,
         no_color: bool,
         select: tuple[str, ...],
         exclude: tuple[str, ...],
@@ -1668,6 +1734,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
                 cursor_overrides,
                 json_output,
                 full_refresh,
+                load_sources,
                 no_color,
                 select,
                 exclude,
@@ -1687,12 +1754,69 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
     assert received_args[0][4:] == (
         False,
         False,
+        None,
         test_case.expected_no_color,
         test_case.expected_select,
         ("customers",),
         False,
         {},
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="passes no load to plan handler",
+            argv=["plan", "--no-load"],
+            expected_exit_code=4,
+            expected_load_sources=False,
+        )
+    ],
+    ids=["passes no load to plan handler"],
+)
+def test_given_plan_load_flag_when_running_then_dispatches_expected_argument(
+    test_case: MainTestCase,
+) -> None:
+    received_load_sources: list[bool | None] = []
+
+    def run_plan(
+        project_dir: Path | None,
+        no_sql_validation: bool,
+        defer_to: str | None,
+        cursor_overrides: object,
+        json_output: bool,
+        full_refresh: bool,
+        load_sources: bool | None,
+        no_color: bool,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+        verbose: bool,
+        cli_vars: dict[str, object],
+    ) -> int:
+        del (
+            project_dir,
+            no_sql_validation,
+            defer_to,
+            cursor_overrides,
+            json_output,
+            full_refresh,
+            no_color,
+            select,
+            exclude,
+            verbose,
+            cli_vars,
+        )
+        received_load_sources.append(load_sources)
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_plan=run_plan),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_load_sources == [test_case.expected_load_sources]
 
 
 @pytest.mark.parametrize(
@@ -1721,6 +1845,7 @@ def test_given_select_file_when_running_then_dispatches_file_selectors(
         cursor_overrides: object,
         json_output: bool,
         full_refresh: bool,
+        load_sources: bool | None,
         no_color: bool,
         select: tuple[str, ...],
         exclude: tuple[str, ...],
@@ -1734,6 +1859,7 @@ def test_given_select_file_when_running_then_dispatches_file_selectors(
             cursor_overrides,
             json_output,
             full_refresh,
+            load_sources,
             no_color,
             exclude,
             verbose,

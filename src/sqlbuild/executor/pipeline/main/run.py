@@ -5,10 +5,12 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.types import TablePromotionMode
+from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.main.execute import execute_build_plan
 from sqlbuild.executor.build.models import BuildExecutionResult
@@ -35,6 +37,7 @@ from sqlbuild.executor.pipeline.helpers.settings import resolve_promotion_mode
 from sqlbuild.executor.pipeline.helpers.testing import (
     run_test_pipeline as run_test_pipeline,
 )
+from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.project import SettingsConfig, SnapshotsConfig
 
 
@@ -51,11 +54,17 @@ def run_build_pipeline(
     run_audits: bool = True,
     fail_fast: bool = False,
     max_concurrency: int = 1,
-    on_node_start: Callable[[str, str], None] | None = None,
+    on_node_start: Callable[[str, ExecutionResourceKind], None] | None = None,
     on_node_complete: Callable[[object], None] | None = None,
     on_progress: Callable[[str], None] | None = None,
     on_sub_progress: Callable[[str], None] | None = None,
     custom_materializations: dict[str, Callable[..., MaterializationResult]] | None = None,
+    loader_functions: tuple[DiscoveredLoaderFunction, ...] = (),
+    loader_is_reload: bool = False,
+    start_cursor_ts: datetime | None = None,
+    end_cursor_ts: datetime | None = None,
+    start_cursor_int: int | None = None,
+    end_cursor_int: int | None = None,
     environment: str = "",
     effective_vars: dict[str, object] | None = None,
     on_connection_start: Callable[[int], None] | None = None,
@@ -110,6 +119,12 @@ def run_build_pipeline(
             on_node_complete=on_node_complete,
             on_progress=on_progress,
             custom_materializations=custom_materializations,
+            loader_functions=loader_functions,
+            loader_is_reload=loader_is_reload,
+            start_cursor_ts=start_cursor_ts,
+            end_cursor_ts=end_cursor_ts,
+            start_cursor_int=start_cursor_int,
+            end_cursor_int=end_cursor_int,
             environment=environment,
             effective_vars=effective_vars,
             on_sub_progress=on_sub_progress,
