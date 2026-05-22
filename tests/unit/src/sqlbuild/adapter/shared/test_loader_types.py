@@ -8,8 +8,11 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.helpers.builtins import builtin_adapter_classes
 from sqlbuild.adapter.shared.types import BuiltinAdapter, LoaderLogicalType
 from tests.unit.src.sqlbuild.adapter.shared._test_types import (
+    AdapterLoaderRowsEmptySelectTestCase,
+    AdapterLoaderRowsSelectTestCase,
     AdapterLoaderTypeMappingTestCase,
     AdapterLoaderValueLiteralTestCase,
+    AdapterSourceExpressionRenderingTestCase,
 )
 
 _DEFAULT_EXPECTED_TYPES: dict[LoaderLogicalType, str] = {
@@ -162,3 +165,197 @@ def test_given_builtin_adapter_when_rendering_loader_value_then_returns_expected
         )
         == test_case.expected_literal
     )
+
+
+ADAPTER_LOADER_ROWS_SELECT_TEST_CASES: list[AdapterLoaderRowsSelectTestCase] = [
+    AdapterLoaderRowsSelectTestCase(
+        description="duckdb renders values row select",
+        adapter_name=BuiltinAdapter.DUCKDB.value,
+        expected_fragments=("FROM (VALUES", "AS __loader_rows(id, status)"),
+    ),
+    AdapterLoaderRowsSelectTestCase(
+        description="motherduck renders values row select",
+        adapter_name=BuiltinAdapter.MOTHERDUCK.value,
+        expected_fragments=("FROM (VALUES", "AS __loader_rows(id, status)"),
+    ),
+    AdapterLoaderRowsSelectTestCase(
+        description="postgres renders values row select",
+        adapter_name=BuiltinAdapter.POSTGRES.value,
+        expected_fragments=("FROM (VALUES", "AS __loader_rows(id, status)"),
+    ),
+    AdapterLoaderRowsSelectTestCase(
+        description="snowflake renders values row select",
+        adapter_name=BuiltinAdapter.SNOWFLAKE.value,
+        expected_fragments=("FROM (VALUES", "AS __loader_rows(id, status)"),
+    ),
+    AdapterLoaderRowsSelectTestCase(
+        description="databricks renders values row select",
+        adapter_name=BuiltinAdapter.DATABRICKS.value,
+        expected_fragments=("FROM (VALUES", "AS __loader_rows(id, status)"),
+    ),
+    AdapterLoaderRowsSelectTestCase(
+        description="bigquery renders union row select",
+        adapter_name=BuiltinAdapter.BIGQUERY.value,
+        expected_fragments=(
+            "SELECT CAST(1 AS INT64) AS id, CAST('placed' AS STRING) AS status",
+            "UNION ALL",
+            "SELECT CAST(2 AS INT64) AS id, CAST('shipped' AS STRING) AS status",
+        ),
+        forbidden_fragments=("FROM (VALUES", "__loader_rows"),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    ADAPTER_LOADER_ROWS_SELECT_TEST_CASES,
+    ids=[case.description for case in ADAPTER_LOADER_ROWS_SELECT_TEST_CASES],
+)
+def test_given_builtin_adapter_when_rendering_loader_rows_then_returns_adapter_sql(
+    test_case: AdapterLoaderRowsSelectTestCase,
+) -> None:
+    adapter_class: type[BaseAdapter] = builtin_adapter_classes()[test_case.adapter_name]
+    adapter: BaseAdapter = adapter_class()
+
+    sql: str = adapter.render_loader_rows_select(
+        rows=({"id": 1, "status": "placed"}, {"id": 2, "status": "shipped"}),
+        column_names=("id", "status"),
+        column_sql_types={
+            "id": adapter.render_loader_logical_type(LoaderLogicalType.INTEGER),
+            "status": adapter.render_loader_logical_type(LoaderLogicalType.STRING),
+        },
+        inferred_types={"id": LoaderLogicalType.INTEGER, "status": LoaderLogicalType.STRING},
+    )
+
+    assert all(fragment in sql for fragment in test_case.expected_fragments)
+    assert not any(fragment in sql for fragment in test_case.forbidden_fragments)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AdapterLoaderRowsEmptySelectTestCase(
+            description="bigquery renders empty loader rows with string default",
+            adapter_name=BuiltinAdapter.BIGQUERY.value,
+            expected_sql="SELECT CAST(NULL AS STRING) AS all_null WHERE 1 = 0",
+        )
+    ],
+    ids=["bigquery renders empty loader rows with string default"],
+)
+def test_given_adapter_when_rendering_empty_loader_rows_then_returns_expected_sql(
+    test_case: AdapterLoaderRowsEmptySelectTestCase,
+) -> None:
+    adapter_class: type[BaseAdapter] = builtin_adapter_classes()[test_case.adapter_name]
+    adapter: BaseAdapter = adapter_class()
+
+    sql: str = adapter.render_loader_rows_select(
+        rows=(),
+        column_names=("all_null",),
+        column_sql_types={},
+        inferred_types={},
+    )
+
+    assert sql == test_case.expected_sql
+
+
+ADAPTER_SOURCE_EXPRESSION_RENDERING_TEST_CASES: list[AdapterSourceExpressionRenderingTestCase] = [
+    AdapterSourceExpressionRenderingTestCase(
+        description="duckdb renders source expression shape explicitly",
+        adapter_name=BuiltinAdapter.DUCKDB.value,
+        expected_relation="(SELECT 1 AS id)",
+        expected_cast_subquery=(
+            "(SELECT CAST(id AS INTEGER) AS id FROM (SELECT 1 AS id) AS __source_expression)"
+        ),
+        expected_relation_cast_subquery=(
+            "(SELECT * EXCLUDE (id), CAST(id AS INTEGER) AS id FROM raw.orders)"
+        ),
+    ),
+    AdapterSourceExpressionRenderingTestCase(
+        description="motherduck renders source expression shape explicitly",
+        adapter_name=BuiltinAdapter.MOTHERDUCK.value,
+        expected_relation="(SELECT 1 AS id)",
+        expected_cast_subquery=(
+            "(SELECT CAST(id AS INTEGER) AS id FROM (SELECT 1 AS id) AS __source_expression)"
+        ),
+        expected_relation_cast_subquery=(
+            "(SELECT * EXCLUDE (id), CAST(id AS INTEGER) AS id FROM raw.orders)"
+        ),
+    ),
+    AdapterSourceExpressionRenderingTestCase(
+        description="postgres renders source expression shape explicitly",
+        adapter_name=BuiltinAdapter.POSTGRES.value,
+        expected_relation="(SELECT 1 AS id)",
+        expected_cast_subquery=(
+            "(SELECT CAST(id AS INTEGER) AS id FROM (SELECT 1 AS id) AS __source_expression)"
+        ),
+        expected_relation_cast_subquery=(
+            "(SELECT * EXCLUDE (id), CAST(id AS INTEGER) AS id FROM raw.orders)"
+        ),
+    ),
+    AdapterSourceExpressionRenderingTestCase(
+        description="snowflake renders source expression shape explicitly",
+        adapter_name=BuiltinAdapter.SNOWFLAKE.value,
+        expected_relation="(SELECT 1 AS id)",
+        expected_cast_subquery=(
+            "(SELECT CAST(id AS INTEGER) AS id FROM (SELECT 1 AS id) AS __source_expression)"
+        ),
+        expected_relation_cast_subquery=(
+            "(SELECT * EXCLUDE (id), CAST(id AS INTEGER) AS id FROM raw.orders)"
+        ),
+    ),
+    AdapterSourceExpressionRenderingTestCase(
+        description="databricks renders source expression shape explicitly",
+        adapter_name=BuiltinAdapter.DATABRICKS.value,
+        expected_relation="(SELECT 1 AS id)",
+        expected_cast_subquery=(
+            "(SELECT CAST(id AS INTEGER) AS id FROM (SELECT 1 AS id) AS __source_expression)"
+        ),
+        expected_relation_cast_subquery=(
+            "(SELECT * EXCEPT (id), CAST(id AS INTEGER) AS id FROM raw.orders)"
+        ),
+    ),
+    AdapterSourceExpressionRenderingTestCase(
+        description="bigquery renders source expression shape and normalized cast types",
+        adapter_name=BuiltinAdapter.BIGQUERY.value,
+        expected_relation="(SELECT 1 AS id)",
+        expected_cast_subquery=(
+            "(SELECT CAST(id AS INT64) AS id FROM (SELECT 1 AS id) AS __source_expression)"
+        ),
+        expected_relation_cast_subquery=(
+            "(SELECT * EXCEPT (id), CAST(id AS INT64) AS id FROM raw.orders)"
+        ),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    ADAPTER_SOURCE_EXPRESSION_RENDERING_TEST_CASES,
+    ids=[case.description for case in ADAPTER_SOURCE_EXPRESSION_RENDERING_TEST_CASES],
+)
+def test_given_builtin_adapter_when_rendering_source_expression_then_returns_adapter_sql(
+    test_case: AdapterSourceExpressionRenderingTestCase,
+) -> None:
+    adapter_class: type[BaseAdapter] = builtin_adapter_classes()[test_case.adapter_name]
+    adapter: BaseAdapter = adapter_class()
+
+    relation: str = adapter.render_source_expression_relation(expression=" SELECT 1 AS id; ")
+    cast_projection: str = adapter.render_source_expression_cast(
+        expression="id",
+        target_type="INTEGER",
+        alias="id",
+    )
+    cast_subquery: str = adapter.render_source_expression_cast_subquery(
+        source_relation=relation,
+        projections=(cast_projection,),
+    )
+    relation_cast_subquery: str = adapter.render_source_relation_cast_subquery(
+        source_relation="raw.orders",
+        cast_projections=(cast_projection,),
+        cast_column_names=("id",),
+        all_columns_cast=False,
+    )
+
+    assert relation == test_case.expected_relation
+    assert cast_subquery == test_case.expected_cast_subquery
+    assert relation_cast_subquery == test_case.expected_relation_cast_subquery

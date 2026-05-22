@@ -127,6 +127,7 @@ def build_test_project(
     function_names: tuple[str, ...] = (),
     sql_test_expected_model_names: tuple[str, ...] = (),
     table_fn_test_function_names: tuple[str, ...] = (),
+    audit_model_source_deps: dict[str, tuple[str, ...]] | None = None,
 ) -> CompiledProject:
     """Build a minimal CompiledProject for graph tests."""
 
@@ -290,6 +291,38 @@ def build_test_project(
             )
         )
 
+    audits: list[CompiledAudit] = []
+    model_name: str
+    audit_source_names: tuple[str, ...]
+    for model_name, audit_source_names in (audit_model_source_deps or {}).items():
+        audits.append(
+            CompiledAudit(
+                key=CompiledObjectKey(
+                    resource_type=CompiledResourceType.AUDIT,
+                    name=f"{model_name}_audit",
+                ),
+                scope_deps=(
+                    model_key(model_name),
+                    *(source_key(source_name) for source_name in audit_source_names),
+                ),
+                name=f"{model_name}_audit",
+                audit_file=DiscoveredAuditFile(
+                    file_path=Path("audits/generic/test.sql"),
+                    relative_path=Path("audits/generic/test.sql"),
+                    contents="",
+                    blocks=(),
+                ),
+                audit_block=DiscoveredAuditBlock(
+                    audit_index=0,
+                    header_values={},
+                    sql_body="SELECT 1",
+                ),
+                sql_body="SELECT 1",
+                attached_target_kind=AttachedAuditTargetKind.MODEL,
+                attached_target_name=model_name,
+            )
+        )
+
     return CompiledProject(
         run_id="test_run",
         effective_environment_name=None,
@@ -299,6 +332,7 @@ def build_test_project(
         sources=tuple(sources),
         seeds=tuple(seeds),
         functions=tuple(functions),
+        audits=tuple(audits),
         sql_tests=tuple(sql_tests),
     )
 

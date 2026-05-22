@@ -134,6 +134,56 @@ class BigQueryAdapter(BaseAdapter):
             return self._quote_sql_string(value.isoformat())
         return self._quote_sql_string(str(value))
 
+    def render_loader_rows_select(
+        self,
+        *,
+        rows: tuple[dict[str, object], ...],
+        column_names: tuple[str, ...],
+        column_sql_types: dict[str, str],
+        inferred_types: dict[str, LoaderLogicalType],
+    ) -> str:
+        if not rows:
+            projections: str = ", ".join(
+                "CAST(NULL AS "
+                f"{self._loader_row_sql_type(column_sql_types.get(column_name))}) "
+                f"AS {column_name}"
+                for column_name in column_names
+            )
+            return f"SELECT {projections} WHERE 1 = 0"
+        selects: list[str] = []
+        row: dict[str, object]
+        for row in rows:
+            projections = ", ".join(
+                self._loader_rows_projection_sql(
+                    column_name=column_name,
+                    literal=self.render_loader_value_literal(
+                        value=row.get(column_name),
+                        logical_type=inferred_types.get(column_name),
+                    ),
+                    column_sql_types=column_sql_types,
+                )
+                for column_name in column_names
+            )
+            selects.append(f"SELECT {projections}")
+        return " UNION ALL ".join(selects)
+
+    def _loader_row_sql_type(self, column_type: str | None) -> str:
+        if column_type is None:
+            return "STRING"
+        return self._to_bigquery_type(column_type)
+
+    def _loader_rows_projection_sql(
+        self,
+        *,
+        literal: str,
+        column_name: str,
+        column_sql_types: dict[str, str],
+    ) -> str:
+        sql_type: str | None = column_sql_types.get(column_name)
+        if sql_type is None:
+            return f"{literal} AS {column_name}"
+        return f"CAST({literal} AS {self._loader_row_sql_type(sql_type)}) AS {column_name}"
+
     def _quote_sql_string(self, value: str) -> str:
         return "'" + value.replace("'", "''") + "'"
 
@@ -703,7 +753,36 @@ class BigQueryAdapter(BaseAdapter):
     ) -> str:
         """Render BigQuery source expression type-enforcement casts explicitly."""
 
-        return f"CAST({expression} AS {target_type}) AS {alias}"
+        return f"CAST({expression} AS {self._to_bigquery_type(target_type)}) AS {alias}"
+
+    def render_source_expression_relation(self, *, expression: str) -> str:
+        stripped_expression: str = expression.strip().removesuffix(";").strip()
+        if stripped_expression.startswith("("):
+            return stripped_expression
+        lowered: str = stripped_expression.lower()
+        if lowered.startswith(("select", "with", "values")):
+            return f"({stripped_expression})"
+        return stripped_expression
+
+    def render_source_expression_cast_subquery(
+        self, *, source_relation: str, projections: tuple[str, ...]
+    ) -> str:
+        projection_clause: str = ", ".join(projections)
+        return f"(SELECT {projection_clause} FROM {source_relation} AS __source_expression)"
+
+    def render_source_relation_cast_subquery(
+        self,
+        *,
+        source_relation: str,
+        cast_projections: tuple[str, ...],
+        cast_column_names: tuple[str, ...],
+        all_columns_cast: bool,
+    ) -> str:
+        cast_clause: str = ", ".join(cast_projections)
+        if all_columns_cast:
+            return f"(SELECT {cast_clause} FROM {source_relation})"
+        exclude_list: str = ", ".join(cast_column_names)
+        return f"(SELECT * EXCEPT ({exclude_list}), {cast_clause} FROM {source_relation})"
 
     def render_set_difference_operator(self) -> str:
         """Render the BigQuery set-difference operator explicitly."""

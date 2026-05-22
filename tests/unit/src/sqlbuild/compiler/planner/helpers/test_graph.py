@@ -13,6 +13,7 @@ from sqlbuild.compiler.planner.helpers.graph import (
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     BuildDownstreamDepsTestCase,
+    BuildUpstreamDepsTestCase,
     CycleDetectionTestCase,
     ExpandDownstreamTestCase,
     ExpandUpstreamTestCase,
@@ -28,6 +29,44 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     seed_key,
     source_key,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildUpstreamDepsTestCase(
+            description="adds attached audit source refs to audited model deps",
+            model_deps={"stg_payments": ("raw_payments",)},
+            source_names=("raw_payments", "raw_orders"),
+            seed_names=(),
+            expected_upstream_keys={
+                "stg_payments": ("raw_payments", "raw_orders"),
+                "raw_payments": (),
+                "raw_orders": (),
+            },
+            audit_model_source_deps={"stg_payments": ("raw_orders",)},
+        ),
+    ],
+    ids=["adds attached audit source refs to audited model deps"],
+)
+def test_given_project_when_building_upstream_then_includes_expected_deps(
+    test_case: BuildUpstreamDepsTestCase,
+) -> None:
+    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_upstream_deps(
+        build_test_project(
+            model_deps=test_case.model_deps,
+            source_names=test_case.source_names,
+            seed_names=test_case.seed_names,
+            audit_model_source_deps=test_case.audit_model_source_deps,
+        )
+    )
+
+    result: dict[str, tuple[str, ...]] = {
+        key.name: tuple(dep.name for dep in deps) for key, deps in upstream.items()
+    }
+
+    assert result == test_case.expected_upstream_keys
+
 
 BUILD_UPSTREAM_ORDER_TEST_CASES: list[TopologicalOrderTestCase] = [
     TopologicalOrderTestCase(
@@ -77,6 +116,21 @@ BUILD_UPSTREAM_ORDER_TEST_CASES: list[TopologicalOrderTestCase] = [
                 resource_type="sql_test",
                 name="test_table_functions",
             ),
+        ),
+    ),
+    TopologicalOrderTestCase(
+        description="runs source refs from attached audits before audited model",
+        upstream=build_upstream_deps(
+            build_test_project(
+                model_deps={"stg_payments": ("raw_payments",)},
+                source_names=("raw_payments", "raw_orders"),
+                audit_model_source_deps={"stg_payments": ("raw_orders",)},
+            )
+        ),
+        expected_order=(
+            source_key("raw_orders"),
+            source_key("raw_payments"),
+            model_key("stg_payments"),
         ),
     ),
 ]

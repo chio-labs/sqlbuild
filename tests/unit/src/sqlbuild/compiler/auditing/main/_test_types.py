@@ -10,3 +10,4 @@ class RenderAuditSqlTestCase:
     expected_sql_fragment: str
     relation_overrides: dict[str, str] = field(default_factory=dict)
     seed_targets: dict[str, str] = field(default_factory=dict)
+    adapter_name: str | None = None

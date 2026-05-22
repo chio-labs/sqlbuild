@@ -101,6 +101,10 @@ def _normalized_from_parsed_type(
     if dtype_name in BOOLEAN_TYPE_NAMES:
         return NormalizedType(normalized_name=normalized_name, family=TypeFamily.BOOLEAN)
     if dtype_name in TIMESTAMP_TYPE_NAMES:
+        normalized_name = _timestamp_normalized_name(
+            normalized_name=normalized_name,
+            dialect=normalized_dialect,
+        )
         return NormalizedType(normalized_name=normalized_name, family=TypeFamily.TIMESTAMP)
     if dtype_name == "DATE":
         return NormalizedType(normalized_name=normalized_name, family=TypeFamily.DATE)
@@ -163,7 +167,14 @@ def _normalize_with_fallback(*, type_sql: str, dialect: TypeDialect | str | None
         )
         return NormalizedType(normalized_name=normalized_name, family=TypeFamily.BOOLEAN)
     if "TIMESTAMP" in base_type:
-        return NormalizedType(normalized_name=base_type, family=TypeFamily.TIMESTAMP)
+        normalized_timestamp_name: str = _timestamp_normalized_name(
+            normalized_name=base_type,
+            dialect=normalized_dialect,
+        )
+        return NormalizedType(
+            normalized_name=normalized_timestamp_name,
+            family=TypeFamily.TIMESTAMP,
+        )
     if base_type == "DATE":
         return NormalizedType(normalized_name=base_type, family=TypeFamily.DATE)
     if base_type == "DATETIME":
@@ -220,6 +231,19 @@ def _fallback_boolean_normalized_name(*, base_type: str, dialect: TypeDialect | 
     if dialect == TypeDialect.BIGQUERY:
         return "BOOL"
     return base_type
+
+
+def _timestamp_normalized_name(*, normalized_name: str, dialect: TypeDialect | None) -> str:
+    if dialect != TypeDialect.SNOWFLAKE:
+        return normalized_name
+    compact: str = normalized_name.replace("_", "")
+    if compact in {"TIMESTAMP", "TIMESTAMPNTZ"}:
+        return "TIMESTAMP_NTZ"
+    if compact == "TIMESTAMPLTZ":
+        return "TIMESTAMP_LTZ"
+    if compact == "TIMESTAMPTZ":
+        return "TIMESTAMP_TZ"
+    return normalized_name
 
 
 def _data_type_param_to_int(expression: Any) -> int:

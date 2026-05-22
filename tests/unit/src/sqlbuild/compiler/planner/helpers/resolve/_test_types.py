@@ -48,6 +48,16 @@ class SourceResolutionErrorTestCase:
 
 
 @dataclass(frozen=True)
+class AdapterSourceResolutionTestCase:
+    description: str
+    query_sql: str
+    source_map: dict[str, SourceEntry]
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]]
+    expected_sql_fragment: str
+    forbidden_sql_fragment: str
+
+
+@dataclass(frozen=True)
 class RefResolutionTestCase:
     description: str
     query_sql: str

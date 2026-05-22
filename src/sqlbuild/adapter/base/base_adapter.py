@@ -1385,12 +1385,88 @@ class BaseAdapter(StrictAdapter):
             return _quote_sql_string(json.dumps(value, sort_keys=True))
         return _quote_sql_string(str(value))
 
+    def render_loader_rows_select(
+        self,
+        *,
+        rows: tuple[dict[str, object], ...],
+        column_names: tuple[str, ...],
+        column_sql_types: dict[str, str],
+        inferred_types: dict[str, LoaderLogicalType],
+    ) -> str:
+        """Render generic VALUES-backed source-loader rows as a SELECT."""
+
+        if not rows:
+            projections: str = ", ".join(
+                f"CAST(NULL AS {column_sql_types.get(column_name, 'VARCHAR')}) AS {column_name}"
+                for column_name in column_names
+            )
+            return f"SELECT {projections} WHERE 1 = 0"
+        values_sql: str = ", ".join(
+            "("
+            + ", ".join(
+                self.render_loader_value_literal(
+                    value=row.get(column_name),
+                    logical_type=inferred_types.get(column_name),
+                )
+                for column_name in column_names
+            )
+            + ")"
+            for row in rows
+        )
+        column_sql: str = ", ".join(column_names)
+        select_sql: str = ", ".join(
+            _loader_rows_projection_sql(
+                column_name=column_name,
+                column_sql_types=column_sql_types,
+            )
+            for column_name in column_names
+        )
+        return f"SELECT {select_sql} FROM (VALUES {values_sql}) AS __loader_rows({column_sql})"
+
     def render_source_expression_cast(
         self, *, expression: str, target_type: str, alias: str
     ) -> str:
         """Render a generic cast projection for source expression type enforcement."""
 
         return f"CAST({expression} AS {target_type}) AS {alias}"
+
+    def render_source_expression_relation(self, *, expression: str) -> str:
+        """Render a generic source expression as a SQL table factor."""
+
+        stripped_expression: str = expression.strip().removesuffix(";").strip()
+        if stripped_expression.startswith("("):
+            return stripped_expression
+        lowered: str = stripped_expression.lower()
+        if lowered.startswith(("select", "with", "values")):
+            return f"({stripped_expression})"
+        return stripped_expression
+
+    def render_source_expression_cast_subquery(
+        self, *, source_relation: str, projections: tuple[str, ...]
+    ) -> str:
+        """Render a generic type-enforced source expression table factor."""
+
+        projection_clause: str = ", ".join(projections)
+        return f"(SELECT {projection_clause} FROM {source_relation} AS __source_expression)"
+
+    def render_source_relation_cast_subquery(
+        self,
+        *,
+        source_relation: str,
+        cast_projections: tuple[str, ...],
+        cast_column_names: tuple[str, ...],
+        all_columns_cast: bool,
+    ) -> str:
+        """Render a generic type-enforced source relation table factor."""
+
+        cast_clause: str = ", ".join(cast_projections)
+        if all_columns_cast:
+            return f"(SELECT {cast_clause} FROM {source_relation})"
+        exclude_list: str = ", ".join(cast_column_names)
+        return (
+            f"(SELECT * {self.star_exclude_keyword()} ({exclude_list}), {cast_clause} "
+            f"FROM {source_relation})"
+        )
 
     def render_set_difference_operator(self) -> str:
         """Render the generic SQL set-difference operator."""
@@ -1453,6 +1529,13 @@ def _build_names_filter(
 
 def _quote_sql_string(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
+
+
+def _loader_rows_projection_sql(*, column_name: str, column_sql_types: dict[str, str]) -> str:
+    sql_type: str | None = column_sql_types.get(column_name)
+    if sql_type is None:
+        return column_name
+    return f"CAST({column_name} AS {sql_type}) AS {column_name}"
 
 
 def _snapshot_initial_valid_from_expr(

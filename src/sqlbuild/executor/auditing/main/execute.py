@@ -37,6 +37,7 @@ def execute_audit(
         model_targets=model_targets,
         seed_targets=seed_targets,
         source_map=source_map,
+        adapter=adapter,
         relation_overrides=relation_overrides,
     )
     assert_no_unresolved_sql_markers(

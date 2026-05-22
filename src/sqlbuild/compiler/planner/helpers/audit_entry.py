@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.auditing.main.render import render_audit_sql
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
@@ -28,6 +29,7 @@ def plan_audit(
     model_targets: dict[str, CompiledRelationTarget],
     seed_targets: dict[str, CompiledRelationTarget],
     source_map: dict[str, SourceEntry],
+    adapter: BaseAdapter,
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     model_materializations: dict[str, str],
@@ -39,6 +41,7 @@ def plan_audit(
         model_targets=model_targets,
         seed_targets=seed_targets,
         source_map=source_map,
+        adapter=adapter,
     )
     assert_no_unresolved_sql_markers(
         sql=resolved_sql,

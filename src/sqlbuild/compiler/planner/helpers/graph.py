@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models.core import (
+    CompiledAudit,
     CompiledObjectKey,
     CompiledProject,
 )
 from sqlbuild.compiler.compile.models.sql_tests import CompiledSqlTest
-from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
+from sqlbuild.compiler.compile.types import (
+    AttachedAuditTargetKind,
+    CompiledResourceType,
+    SqlTestMode,
+)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 
 
@@ -27,18 +32,45 @@ def build_upstream_deps(
     upstream.update({seed.key: list(seed.deps) for seed in project.seeds})
     upstream.update({function.key: list(function.deps) for function in project.functions})
 
+    audit: CompiledAudit
+    for audit in project.audits:
+        target_key: CompiledObjectKey | None = _attached_audit_target_key(audit=audit)
+        if target_key is None or target_key not in upstream:
+            continue
+        dep_key: CompiledObjectKey
+        for dep_key in audit.scope_deps:
+            if dep_key == target_key or dep_key in upstream[target_key]:
+                continue
+            upstream[target_key].append(dep_key)
+
     test: CompiledSqlTest
     for test in project.sql_tests:
         if test.mode == SqlTestMode.TABLE_FN:
             upstream[test.key] = list(_function_scope_deps_for_test(test=test))
             continue
         upstream[test.key] = list(_function_deps_for_test(test=test, upstream=upstream))
-        target_key: CompiledObjectKey
         for target_key in test.scope_deps:
             if target_key in upstream:
                 upstream[target_key].append(test.key)
 
     return {k: tuple(v) for k, v in upstream.items()}
+
+
+def _attached_audit_target_key(*, audit: CompiledAudit) -> CompiledObjectKey | None:
+    if audit.attached_target_kind is None or audit.attached_target_name is None:
+        return None
+    target_kind: AttachedAuditTargetKind = AttachedAuditTargetKind(audit.attached_target_kind)
+    if target_kind == AttachedAuditTargetKind.MODEL:
+        return CompiledObjectKey(
+            resource_type=CompiledResourceType.MODEL,
+            name=audit.attached_target_name,
+        )
+    if target_kind == AttachedAuditTargetKind.SOURCE:
+        return CompiledObjectKey(
+            resource_type=CompiledResourceType.SOURCE,
+            name=audit.attached_target_name,
+        )
+    return None
 
 
 def _function_scope_deps_for_test(*, test: CompiledSqlTest) -> tuple[CompiledObjectKey, ...]:

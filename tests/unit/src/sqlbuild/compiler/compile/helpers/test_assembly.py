@@ -93,6 +93,8 @@ SELECT 1
         expected_model_target_names=("orders",),
         expected_model_target_schemas=("analytics",),
         expected_source_names=("raw_orders",),
+        expected_source_databases=(None,),
+        expected_source_schemas=("public",),
         expected_seed_names=("country_codes",),
         expected_seed_target_schemas=("analytics",),
         expected_seed_target_databases=(None,),
@@ -264,6 +266,50 @@ SELECT 1
         expected_tested_macro_names=(("normalize_status",),),
     ),
     AssembleCompiledProjectTestCase(
+        description="applies environment namespace to managed source loader targets",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "bigquery"
+default_environment = "dev"
+
+[environments.dev]
+database = "project_id"
+schema = "analytics_dev"
+""".strip()
+            + "\n",
+            "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    loader: raw_orders_loader
+    write_strategy: table
+""".strip()
+            + "\n",
+            "loaders/raw_orders.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_orders_loader(ctx):
+    return [{"id": 1}]
+""".strip()
+            + "\n",
+        },
+        expected_model_names=(),
+        expected_model_deps=(),
+        expected_model_target_names=(),
+        expected_model_target_schemas=(),
+        expected_source_names=("raw_orders",),
+        expected_source_databases=("project_id",),
+        expected_source_schemas=("analytics_dev",),
+        expected_seed_names=(),
+        expected_audit_names=(),
+        expected_audit_scope_deps=(),
+        expected_test_names=(),
+        expected_test_scope_deps=(),
+        expected_test_expected_model_names=(),
+    ),
+    AssembleCompiledProjectTestCase(
         description="assembles udf test scope from models using inferred udf deps",
         repo_files=base_repo_files()
         | {
@@ -392,6 +438,13 @@ def test_given_compile_inputs_when_assembling_compiled_project_then_returns_expe
         tuple(m.target.schema for m in compiled.models) == test_case.expected_model_target_schemas
     )
     assert tuple(s.name for s in compiled.sources) == test_case.expected_source_names
+    assert (
+        tuple(s.source_entry.database for s in compiled.sources)
+        == test_case.expected_source_databases
+    )
+    assert (
+        tuple(s.source_entry.schema for s in compiled.sources) == test_case.expected_source_schemas
+    )
     assert tuple(s.name for s in compiled.seeds) == test_case.expected_seed_names
     assert tuple(s.target.schema for s in compiled.seeds) == test_case.expected_seed_target_schemas
     assert (

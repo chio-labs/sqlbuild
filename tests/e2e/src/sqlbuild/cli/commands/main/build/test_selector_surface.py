@@ -29,7 +29,9 @@ TEST_CASES: list[SelectorSurfaceBuildE2ETestCase] = [
         command=("--no-color", "build", "--select", "+fact_orders~daily_activity_rollup+"),
         expected_exit_code=0,
         expected_fragments=(
-            "Plan ready (9 selected)",
+            "Plan ready (9 selected, 1 source to load)",
+            "Sources to load (1)",
+            "raw_orders",
             "waffle_types",
             "stg_orders",
             "stg_payments",
