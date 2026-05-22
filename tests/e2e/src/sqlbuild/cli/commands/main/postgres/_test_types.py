@@ -90,3 +90,12 @@ class PostgresScenarioLocalReplayE2ETestCase:
     expected_local_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
     local_rows_sql: str = ""
     corrupt_capture_dialect: bool = False
+
+
+@dataclass(frozen=True)
+class PostgresSourceDeferralE2ETestCase:
+    description: str
+    expected_model_rows: tuple[tuple[object, ...], ...]
+    expected_loader_rows: tuple[tuple[object, ...], ...]
+    command: tuple[str, ...] = ("--no-color", "build", "--select", "stg_orders")
+    expected_return_code: int = 0

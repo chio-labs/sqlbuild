@@ -127,3 +127,12 @@ class BigQuerySnapshotApplyE2ETestCase:
     expected_current_delete_rows: tuple[tuple[object, ...], ...]
     expected_historical_timestamp_rows: tuple[tuple[object, ...], ...]
     expected_historical_check_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class BigQuerySourceDeferralE2ETestCase:
+    description: str
+    expected_model_rows: tuple[tuple[object, ...], ...]
+    expected_loader_rows: tuple[tuple[object, ...], ...]
+    command: tuple[str, ...] = ("--no-color", "build", "--select", "stg_orders")
+    expected_return_code: int = 0

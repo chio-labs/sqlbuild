@@ -192,6 +192,55 @@ class BuildRunAutoLoadTestCase:
 
 
 @dataclass(frozen=True)
+class SourceDeferralBuildTestCase:
+    description: str
+    command: str
+    project_files: dict[str, str]
+    defer_sources_to: str | None
+    setup_sql: tuple[str, ...]
+    expected_model_rows: tuple[tuple[object, ...], ...]
+    expected_loaded_source_rows: tuple[tuple[object, ...], ...]
+    expected_exit_code: int = 0
+
+
+@dataclass(frozen=True)
+class SourceDeferralErrorTestCase:
+    description: str
+    project_files: dict[str, str]
+    expected_error_fragment: str
+    defer_sources_to: str | None = None
+    select: tuple[str, ...] = ("stg_orders",)
+
+
+@dataclass(frozen=True)
+class SourceDeferralNoErrorTestCase:
+    description: str
+    project_files: dict[str, str]
+    setup_sql: tuple[str, ...]
+    select: tuple[str, ...]
+    result_sql: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_exit_code: int = 0
+    defer_sources_to: str | None = None
+    command: str = "build"
+    load_sources: bool | None = None
+
+
+@dataclass(frozen=True)
+class SourceDeferralArtifactTestCase:
+    description: str
+    command: str
+    project_files: dict[str, str]
+    setup_sql: tuple[str, ...]
+    select: tuple[str, ...]
+    compiled_relative_paths: tuple[str, ...]
+    runtime_relative_paths: tuple[str, ...]
+    expected_sql_fragments: tuple[str, ...]
+    unexpected_sql_fragments: tuple[str, ...] = ()
+    defer_sources_to: str | None = None
+
+
+@dataclass(frozen=True)
 class BuildRunAutoLoadFlagTestCase:
     description: str
     command: str

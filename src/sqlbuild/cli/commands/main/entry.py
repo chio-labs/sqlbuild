@@ -83,6 +83,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     plan_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PLAN)
     plan_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     plan_parser.add_argument("--defer-to", default=None)
+    plan_parser.add_argument("--defer-sources-to", default=None)
     plan_parser.add_argument("--json", action="store_true", default=False)
     plan_parser.add_argument("--full-refresh", action="store_true", default=False)
     plan_parser.add_argument("--verbose", "-v", action="store_true", default=False)
@@ -97,6 +98,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     build_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.BUILD)
     build_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     build_parser.add_argument("--defer-to", default=None)
+    build_parser.add_argument("--defer-sources-to", default=None)
     build_parser.add_argument("--json", action="store_true", default=False)
     add_execution_json_output_arg(build_parser)
     add_cursor_override_args(build_parser)
@@ -112,6 +114,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     run_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.RUN)
     run_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     run_parser.add_argument("--defer-to", default=None)
+    run_parser.add_argument("--defer-sources-to", default=None)
     run_parser.add_argument("--json", action="store_true", default=False)
     add_execution_json_output_arg(run_parser)
     add_cursor_override_args(run_parser)
@@ -430,6 +433,7 @@ def _main_with_dependencies(
                 project_dir,
                 args.no_sql_validation,
                 args.defer_to,
+                args.defer_sources_to,
                 cursor_overrides,
                 args.json,
                 args.full_refresh,
@@ -463,6 +467,7 @@ def _main_with_dependencies(
                 project_dir,
                 args.no_sql_validation,
                 args.defer_to,
+                args.defer_sources_to,
                 cursor_overrides,
                 args.no_color,
                 args.fail_fast,
@@ -491,6 +496,7 @@ def _main_with_dependencies(
                 project_dir,
                 args.no_sql_validation,
                 args.defer_to,
+                args.defer_sources_to,
                 cursor_overrides,
                 args.no_color,
                 args.fail_fast,

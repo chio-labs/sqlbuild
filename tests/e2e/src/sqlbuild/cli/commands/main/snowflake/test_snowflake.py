@@ -37,6 +37,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake._test_types import (
     SnowflakeScenarioRemoteE2ETestCase,
     SnowflakeSnapshotApplyE2ETestCase,
     SnowflakeSnapshotE2ETestCase,
+    SnowflakeSourceDeferralE2ETestCase,
     SnowflakeSourceLoaderSchemaEvolutionE2ETestCase,
     SnowflakeSourceLoaderStrategiesE2ETestCase,
 )
@@ -44,7 +45,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake.helpers import (
     assert_current_snowflake_snapshot_rows,
     assert_snowflake_snapshot_apply_rows,
     assert_snowflake_snapshot_matrix_rows,
+    build_snowflake_local_config,
     build_snowflake_project_toml,
+    build_snowflake_source_deferral_project_toml,
     cleanup_snowflake_schema,
     ensure_query_schema_ready,
     execute_snowflake_sql,
@@ -213,6 +216,97 @@ def test_given_snowflake_local_config_when_running_query_then_outputs_expected_r
         assert test_case.expected_schema_fragment in result.stdout
     finally:
         cleanup_snowflake_schema(schema_name=schema_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeSourceDeferralE2ETestCase(
+            description="snowflake loader writes dev while model reads prod deferred source",
+            expected_model_rows=(("99", "prod-source"),),
+            expected_loader_rows=(("7", "loaded-dev"),),
+        )
+    ],
+    ids=["snowflake loader writes dev while model reads prod deferred source"],
+)
+def test_given_source_deferral_env_when_building_on_snowflake_then_reads_prod_and_writes_dev(
+    tmp_path: Path,
+    test_case: SnowflakeSourceDeferralE2ETestCase,
+) -> None:
+    dev_schema_name: str = build_unique_schema_name(prefix="sqlbuild_e2e_defer_dev")
+    prod_schema_name: str = build_unique_schema_name(prefix="sqlbuild_e2e_defer_prod")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="snowflake_source_deferral",
+        repo_files={
+            "sqlbuild_project.toml": build_snowflake_source_deferral_project_toml(
+                project_name="snowflake_source_deferral",
+                dev_schema_name=dev_schema_name,
+                prod_schema_name=prod_schema_name,
+            ),
+            "sqlbuild_local.toml": build_snowflake_local_config(schema_name=dev_schema_name),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    loader: raw_orders_loader\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+                "      - name: status\n"
+                "        type: VARCHAR\n"
+            ),
+            "loaders/raw_orders.py": (
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader\n"
+                "def raw_orders_loader(ctx):\n"
+                "    return [{'order_id': 7, 'status': 'loaded-dev'}]\n"
+            ),
+            "models/stg_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT order_id, status FROM __source("raw_orders")'
+            ),
+        },
+    )
+    ensure_query_schema_ready(schema_name=dev_schema_name)
+    ensure_query_schema_ready(schema_name=prod_schema_name)
+
+    try:
+        execute_snowflake_sql(
+            schema_name=prod_schema_name,
+            sql=(
+                "CREATE OR REPLACE TABLE "
+                f"{relation_name(schema_name=prod_schema_name, name='raw_orders')} "
+                "AS SELECT 99 AS order_id, 'prod-source' AS status"
+            ),
+        )
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "build", "--select", "stg_orders"),
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        model_rows: tuple[tuple[object, ...], ...] = fetch_snowflake_rows(
+            schema_name=dev_schema_name,
+            sql=(
+                "SELECT order_id, status FROM "
+                f"{relation_name(schema_name=dev_schema_name, name='stg_orders')} "
+                "ORDER BY order_id"
+            ),
+        )
+        loader_rows: tuple[tuple[object, ...], ...] = fetch_snowflake_rows(
+            schema_name=dev_schema_name,
+            sql=(
+                "SELECT order_id, status FROM "
+                f"{relation_name(schema_name=dev_schema_name, name='raw_orders')} "
+                "ORDER BY order_id"
+            ),
+        )
+        assert stringify_warehouse_rows(model_rows) == test_case.expected_model_rows
+        assert stringify_warehouse_rows(loader_rows) == test_case.expected_loader_rows
+    finally:
+        cleanup_snowflake_schema(schema_name=dev_schema_name)
+        cleanup_snowflake_schema(schema_name=prod_schema_name)
 
 
 @pytest.mark.parametrize(

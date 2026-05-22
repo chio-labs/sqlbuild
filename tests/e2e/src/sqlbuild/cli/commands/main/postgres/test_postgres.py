@@ -16,6 +16,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.postgres._test_types import (
     PostgresScenarioLocalReplayE2ETestCase,
     PostgresSnapshotApplyE2ETestCase,
     PostgresSnapshotE2ETestCase,
+    PostgresSourceDeferralE2ETestCase,
     PostgresSourceLoaderDagE2ETestCase,
     PostgresSourceLoaderStrategiesE2ETestCase,
 )
@@ -24,9 +25,11 @@ from tests.e2e.src.sqlbuild.cli.commands.main.postgres.helpers import (
     assert_postgres_snapshot_apply_rows,
     assert_postgres_snapshot_matrix_rows,
     build_postgres_project_toml,
+    build_postgres_source_deferral_project_toml,
     build_unique_schema_name,
     cleanup_postgres_schema,
     ensure_postgres_schema_ready,
+    execute_postgres_sql,
     fetch_postgres_rows,
     prepare_postgres_source_loader_strategies,
     prepare_postgres_waffle_shop,
@@ -97,6 +100,104 @@ def test_given_waffle_shop_when_running_full_build_on_postgres_then_expected_tab
         assert row_count == test_case.expected_row_count
     finally:
         cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresSourceDeferralE2ETestCase(
+            description="postgres loader writes dev while model reads prod deferred source",
+            expected_model_rows=(("99", "prod-source"),),
+            expected_loader_rows=(("7", "loaded-dev"),),
+        )
+    ],
+    ids=["postgres loader writes dev while model reads prod deferred source"],
+)
+def test_given_source_deferral_env_when_building_on_postgres_then_reads_prod_and_writes_dev(
+    tmp_path: Path,
+    test_case: PostgresSourceDeferralE2ETestCase,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    dev_schema_name: str = build_unique_schema_name(prefix="sqlbuild_defer_dev")
+    prod_schema_name: str = build_unique_schema_name(prefix="sqlbuild_defer_prod")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_source_deferral",
+        repo_files={
+            "sqlbuild_project.toml": build_postgres_source_deferral_project_toml(
+                project_name="postgres_source_deferral",
+                dev_schema_name=dev_schema_name,
+                prod_schema_name=prod_schema_name,
+                config=postgres_e2e_config,
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    loader: raw_orders_loader\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+                "      - name: status\n"
+                "        type: VARCHAR\n"
+            ),
+            "loaders/raw_orders.py": (
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader\n"
+                "def raw_orders_loader(ctx):\n"
+                "    return [{'order_id': 7, 'status': 'loaded-dev'}]\n"
+            ),
+            "models/stg_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT order_id, status FROM __source("raw_orders")'
+            ),
+        },
+    )
+    ensure_postgres_schema_ready(schema_name=dev_schema_name, config=postgres_e2e_config)
+    ensure_postgres_schema_ready(schema_name=prod_schema_name, config=postgres_e2e_config)
+
+    try:
+        execute_postgres_sql(
+            config=postgres_e2e_config,
+            sql=(
+                f"CREATE TABLE {relation_name(schema_name=prod_schema_name, name='raw_orders')} "
+                "(order_id INTEGER, status VARCHAR)"
+            ),
+        )
+        execute_postgres_sql(
+            config=postgres_e2e_config,
+            sql=(
+                f"INSERT INTO {relation_name(schema_name=prod_schema_name, name='raw_orders')} "
+                "VALUES (99, 'prod-source')"
+            ),
+        )
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "build", "--select", "stg_orders"),
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        model_rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
+            config=postgres_e2e_config,
+            sql=(
+                "SELECT order_id, status FROM "
+                f"{relation_name(schema_name=dev_schema_name, name='stg_orders')} "
+                "ORDER BY order_id"
+            ),
+        )
+        loader_rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
+            config=postgres_e2e_config,
+            sql=(
+                "SELECT order_id, status FROM "
+                f"{relation_name(schema_name=dev_schema_name, name='raw_orders')} "
+                "ORDER BY order_id"
+            ),
+        )
+        assert stringify_warehouse_rows(model_rows) == test_case.expected_model_rows
+        assert stringify_warehouse_rows(loader_rows) == test_case.expected_loader_rows
+    finally:
+        cleanup_postgres_schema(schema_name=dev_schema_name, config=postgres_e2e_config)
+        cleanup_postgres_schema(schema_name=prod_schema_name, config=postgres_e2e_config)
 
 
 @pytest.mark.parametrize(

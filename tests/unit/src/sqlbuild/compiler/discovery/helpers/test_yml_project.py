@@ -134,6 +134,7 @@ environment = "dev"
 [environments.dev]
 database = "local_db"
 schema = "local_schema"
+defer_sources_to = "prod"
 
 [environments.dev.connection]
 warehouse = "local_wh"
@@ -160,6 +161,7 @@ allow_as_target = false
                 "vars": {"user": "local_user"},
                 "database": "local_db",
                 "schema": "local_schema",
+                "defer_sources_to": "prod",
                 "allow_as_source": True,
                 "allow_as_target": False,
             }
@@ -566,6 +568,7 @@ user = "kevin"
 
 [environments.dev]
 schema = "dev_${user}"
+defer_sources_to = "prod"
 
 [environments.dev.connection]
 warehouse = "dev_wh"
@@ -631,6 +634,7 @@ target_path = "target/dbt"
             expected_dev_connection={"warehouse": "dev_wh"},
             expected_dev_vars={"schema_prefix": "dev"},
             expected_dev_schema="dev_${user}",
+            expected_dev_defer_sources_to="prod",
             expected_allow_as_source=True,
             expected_janitor_enabled=True,
             expected_retention_days=14,
@@ -686,6 +690,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.environments["dev"].connection == test_case.expected_dev_connection
     assert config.environments["dev"].vars == test_case.expected_dev_vars
     assert config.environments["dev"].schema == test_case.expected_dev_schema
+    assert config.environments["dev"].defer_sources_to == test_case.expected_dev_defer_sources_to
     assert config.environments["dev"].clone.allow_as_source is test_case.expected_allow_as_source
     assert config.janitor.enabled is test_case.expected_janitor_enabled
     assert config.janitor.retention_days == test_case.expected_retention_days
@@ -753,6 +758,7 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
             "vars": environment_config.vars,
             "database": environment_config.database,
             "schema": environment_config.schema,
+            "defer_sources_to": environment_config.defer_sources_to,
             "allow_as_source": environment_config.clone.allow_as_source,
             "allow_as_target": environment_config.clone.allow_as_target,
         }
