@@ -27,6 +27,10 @@ def validate_discovered_inputs(discovered_inputs: DiscoveredProjectInputs) -> No
     _validate_unique_scenario_file_names(discovered_inputs.scenario_files)
     _validate_unique_source_names(discovered_inputs.source_files)
     _validate_unique_loader_names(discovered_inputs.loader_functions)
+    _validate_source_loader_name_collisions(
+        source_files=discovered_inputs.source_files,
+        loader_functions=discovered_inputs.loader_functions,
+    )
     _validate_loader_dependencies(discovered_inputs.loader_functions)
     _validate_source_loader_references(
         source_files=discovered_inputs.source_files,
@@ -113,6 +117,28 @@ def _validate_unique_loader_names(loader_functions: tuple[DiscoveredLoaderFuncti
                 f"{existing_path} and {loader_function.relative_path}"
             )
         seen_names[loader_function.name] = str(loader_function.relative_path)
+
+
+def _validate_source_loader_name_collisions(
+    *,
+    source_files: tuple[DiscoveredSourceFile, ...],
+    loader_functions: tuple[DiscoveredLoaderFunction, ...],
+) -> None:
+    loader_paths_by_name: dict[str, str] = {
+        loader.name: str(loader.relative_path) for loader in loader_functions
+    }
+    source_file: DiscoveredSourceFile
+    for source_file in source_files:
+        source_entry: SourceEntry
+        for source_entry in source_file.source_entries:
+            loader_path: str | None = loader_paths_by_name.get(source_entry.name)
+            if loader_path is None:
+                continue
+            raise DiscoveryConflictError(
+                f"Source '{source_entry.name}' in {source_file.relative_path} conflicts with "
+                f"loader '{source_entry.name}' in {loader_path}; source and loader names must "
+                "be globally unique for unambiguous load selectors"
+            )
 
 
 def _validate_source_loader_references(

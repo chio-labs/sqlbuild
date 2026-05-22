@@ -44,17 +44,19 @@ def select_load_entries(
 
     selected_sources: set[str] = set()
     selected_loaders: set[str] = set()
-    raw_selectors: tuple[str, ...] = select or tuple(managed_sources)
+    directly_selected_loaders: set[str] = set()
+    raw_selectors: tuple[str, ...] = select or tuple(f"+{name}" for name in managed_sources)
     _apply_selectors(
         raw_selectors=raw_selectors,
         selected_sources=selected_sources,
         selected_loaders=selected_loaders,
+        directly_selected_loaders=directly_selected_loaders,
         managed_sources=managed_sources,
         loaders=loaders,
         source_by_loader=source_by_loader,
         upstream_loaders=upstream_loaders,
     )
-    _apply_excludes(
+    excluded_loaders: set[str] = _apply_excludes(
         exclude=exclude,
         selected_sources=selected_sources,
         selected_loaders=selected_loaders,
@@ -67,6 +69,14 @@ def select_load_entries(
     selected_loaders, selected_sources = _prune_missing_dependencies(
         selected_loaders=selected_loaders,
         selected_sources=selected_sources,
+        managed_sources=managed_sources,
+        upstream_loaders=upstream_loaders,
+        excluded_loaders=excluded_loaders,
+    )
+    selected_loaders = _prune_unneeded_loaders(
+        selected_loaders=selected_loaders,
+        selected_sources=selected_sources,
+        directly_selected_loaders=directly_selected_loaders,
         managed_sources=managed_sources,
         upstream_loaders=upstream_loaders,
     )
@@ -110,6 +120,7 @@ def _apply_selectors(
     raw_selectors: tuple[str, ...],
     selected_sources: set[str],
     selected_loaders: set[str],
+    directly_selected_loaders: set[str],
     managed_sources: dict[str, SourceEntry],
     loaders: dict[str, DiscoveredLoaderFunction],
     source_by_loader: dict[str, tuple[str, ...]],
@@ -117,13 +128,16 @@ def _apply_selectors(
 ) -> None:
     selector: str
     for selector in raw_selectors:
-        name, include_downstream = _parse_load_selector(selector)
+        name, include_upstream, include_downstream = _parse_load_selector(selector)
         _validate_load_selector(name=name, managed_sources=managed_sources, loaders=loaders)
         _select_name(
             name=name,
+            include_upstream=include_upstream,
             selected_sources=selected_sources,
             selected_loaders=selected_loaders,
+            directly_selected_loaders=directly_selected_loaders,
             managed_sources=managed_sources,
+            loaders=loaders,
             source_by_loader=source_by_loader,
             upstream_loaders=upstream_loaders,
         )
@@ -148,17 +162,20 @@ def _apply_excludes(
     loaders: dict[str, DiscoveredLoaderFunction],
     source_by_loader: dict[str, tuple[str, ...]],
     upstream_loaders: dict[str, tuple[str, ...]],
-) -> None:
+) -> set[str]:
+    excluded_loaders: set[str] = set()
     selector: str
     for selector in exclude:
-        name, include_downstream = _parse_load_selector(selector)
+        name, _, include_downstream = _parse_load_selector(selector)
         _validate_load_selector(name=name, managed_sources=managed_sources, loaders=loaders)
         _exclude_name(
             name=name,
             selected_sources=selected_sources,
             selected_loaders=selected_loaders,
             managed_sources=managed_sources,
+            loaders=loaders,
             source_by_loader=source_by_loader,
+            excluded_loaders=excluded_loaders,
         )
         if include_downstream:
             _exclude_downstream(
@@ -170,29 +187,41 @@ def _apply_excludes(
                 source_by_loader=source_by_loader,
                 upstream_loaders=upstream_loaders,
             )
+    return excluded_loaders
 
 
 def _select_name(
     *,
     name: str,
+    include_upstream: bool,
     selected_sources: set[str],
     selected_loaders: set[str],
+    directly_selected_loaders: set[str],
     managed_sources: dict[str, SourceEntry],
+    loaders: dict[str, DiscoveredLoaderFunction],
     source_by_loader: dict[str, tuple[str, ...]],
     upstream_loaders: dict[str, tuple[str, ...]],
 ) -> None:
     if name in managed_sources:
         selected_sources.add(name)
-        selected_loaders.update(
-            _upstream_loader_closure(managed_sources[name].loader, upstream_loaders)
-        )
+        loader_name: str | None = managed_sources[name].loader
+        if loader_name is not None:
+            selected_loaders.add(loader_name)
+            if include_upstream:
+                selected_loaders.update(_upstream_loader_closure(loader_name, upstream_loaders))
         return
     if name in source_by_loader:
         selected_sources.update(source_by_loader[name])
-        selected_loaders.update(_upstream_loader_closure(name, upstream_loaders))
+        selected_loaders.add(name)
+        if include_upstream:
+            selected_loaders.update(_upstream_loader_closure(name, upstream_loaders))
         return
-    selected_loaders.add(name)
-    selected_loaders.update(_upstream_loader_closure(name, upstream_loaders))
+    if name in loaders:
+        selected_loaders.add(name)
+        directly_selected_loaders.add(name)
+        if include_upstream:
+            selected_loaders.update(_upstream_loader_closure(name, upstream_loaders))
+        return
 
 
 def _select_downstream(
@@ -224,18 +253,28 @@ def _exclude_name(
     selected_sources: set[str],
     selected_loaders: set[str],
     managed_sources: dict[str, SourceEntry],
+    loaders: dict[str, DiscoveredLoaderFunction],
     source_by_loader: dict[str, tuple[str, ...]],
+    excluded_loaders: set[str],
 ) -> None:
     if name in managed_sources:
         selected_sources.discard(name)
+        loader_name: str | None = managed_sources[name].loader
+        if loader_name is not None and not any(
+            source_name in selected_sources for source_name in source_by_loader.get(loader_name, ())
+        ):
+            selected_loaders.discard(loader_name)
         return
     if name in source_by_loader:
         source_name: str
         for source_name in source_by_loader[name]:
             selected_sources.discard(source_name)
         selected_loaders.discard(name)
+        excluded_loaders.add(name)
         return
-    selected_loaders.discard(name)
+    if name in loaders:
+        selected_loaders.discard(name)
+        excluded_loaders.add(name)
 
 
 def _exclude_downstream(
@@ -321,11 +360,12 @@ def _loader_to_source_entry(
     )
 
 
-def _parse_load_selector(selector: str) -> tuple[str, bool]:
+def _parse_load_selector(selector: str) -> tuple[str, bool, bool]:
     stripped: str = selector.strip()
+    include_upstream: bool = stripped.startswith("+")
     include_downstream: bool = stripped.endswith("+")
     name: str = stripped.strip("+")
-    return name, include_downstream
+    return name, include_upstream, include_downstream
 
 
 def _validate_load_selector(
@@ -387,9 +427,11 @@ def _prune_missing_dependencies(
     selected_sources: set[str],
     managed_sources: dict[str, SourceEntry],
     upstream_loaders: dict[str, tuple[str, ...]],
+    excluded_loaders: set[str],
 ) -> tuple[set[str], set[str]]:
     pruned_loaders: set[str] = set(selected_loaders)
     pruned_sources: set[str] = set(selected_sources)
+    blocked_loaders: set[str] = set(excluded_loaders)
     changed: bool = True
     while changed:
         changed = False
@@ -399,8 +441,10 @@ def _prune_missing_dependencies(
                 loader_name=loader_name,
                 selected_loaders=pruned_loaders,
                 upstream_loaders=upstream_loaders,
+                blocked_loaders=blocked_loaders,
             ):
                 pruned_loaders.remove(loader_name)
+                blocked_loaders.add(loader_name)
                 changed = True
         source_name: str
         for source_name in tuple(pruned_sources):
@@ -416,9 +460,42 @@ def _has_missing_loader_dependency(
     loader_name: str,
     selected_loaders: set[str],
     upstream_loaders: dict[str, tuple[str, ...]],
+    blocked_loaders: set[str],
 ) -> bool:
     dependencies: tuple[str, ...] = upstream_loaders[loader_name]
-    return any(dependency not in selected_loaders for dependency in dependencies)
+    return any(
+        dependency not in selected_loaders and dependency in blocked_loaders
+        for dependency in dependencies
+    )
+
+
+def _prune_unneeded_loaders(
+    *,
+    selected_loaders: set[str],
+    selected_sources: set[str],
+    directly_selected_loaders: set[str],
+    managed_sources: dict[str, SourceEntry],
+    upstream_loaders: dict[str, tuple[str, ...]],
+) -> set[str]:
+    needed_loaders: set[str] = set(directly_selected_loaders)
+    source_name: str
+    for source_name in selected_sources:
+        source_loader: str | None = managed_sources[source_name].loader
+        if source_loader is not None and source_loader in selected_loaders:
+            needed_loaders.add(source_loader)
+
+    changed: bool = True
+    while changed:
+        changed = False
+        loader_name: str
+        for loader_name in tuple(needed_loaders):
+            dependency_name: str
+            for dependency_name in upstream_loaders.get(loader_name, ()):
+                if dependency_name in selected_loaders and dependency_name not in needed_loaders:
+                    needed_loaders.add(dependency_name)
+                    changed = True
+
+    return selected_loaders.intersection(needed_loaders)
 
 
 def _topological_loader_order(

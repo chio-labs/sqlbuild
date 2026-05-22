@@ -1170,7 +1170,9 @@ sources:
         },
         select=("missing_source",),
         exclude=(),
-        expected_error_fragment="selector 'missing_source' does not match any source",
+        expected_error_fragment=(
+            "selector 'missing_source' does not match any managed source or loader"
+        ),
     ),
     LoadCommandSelectionErrorTestCase(
         description="raises when selected source is unmanaged",
@@ -1185,7 +1187,9 @@ sources:
         },
         select=("raw_customers",),
         exclude=(),
-        expected_error_fragment="selector 'raw_customers' matches a source with no loader",
+        expected_error_fragment=(
+            "selector 'raw_customers' does not match any managed source or loader"
+        ),
     ),
     LoadCommandSelectionErrorTestCase(
         description="raises when excluded source does not exist",
@@ -1202,7 +1206,9 @@ sources:
         },
         select=(),
         exclude=("missing_source",),
-        expected_error_fragment="selector 'missing_source' does not match any source",
+        expected_error_fragment=(
+            "selector 'missing_source' does not match any managed source or loader"
+        ),
     ),
     LoadCommandSelectionErrorTestCase(
         description="raises when excluded source is unmanaged",
@@ -1221,7 +1227,9 @@ sources:
         },
         select=(),
         exclude=("raw_customers",),
-        expected_error_fragment="selector 'raw_customers' matches a source with no loader",
+        expected_error_fragment=(
+            "selector 'raw_customers' does not match any managed source or loader"
+        ),
     ),
 ]
 
@@ -2242,7 +2250,8 @@ WRITE_STRATEGY_LIFECYCLE_TEST_CASES: list[LoadCommandWriteStrategyLifecycleTestC
             "CREATE OR REPLACE TABLE raw_append_events AS SELECT * FROM raw_append_events__staging",
         ),
         expected_second_run_fragments=(
-            "INSERT INTO raw_append_events SELECT * FROM raw_append_events__staging",
+            "INSERT INTO raw_append_events (event_id, cursor_seen) "
+            "SELECT * FROM raw_append_events__staging",
         ),
         absent_second_run_fragments=(
             "CREATE OR REPLACE TABLE raw_append_events AS SELECT * FROM raw_append_events__staging",
@@ -2630,6 +2639,7 @@ def test_given_source_loader_write_strategy_when_rerunning_then_calls_expected_a
         *,
         target: str,
         sql: str,
+        columns: tuple[str, ...] | None = None,
         statement_recorder: object,
     ) -> None:
         calls.append(("append", sql, ()))
@@ -2989,9 +2999,25 @@ def test_given_loader_dag_when_running_pipeline_then_independent_branches_overla
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection_starts: list[int] = []
 
-    selected_sources: tuple[SourceEntry, ...] = select_load_entries(
+    plain_selected_sources: tuple[SourceEntry, ...] = select_load_entries(
         discovered_inputs=discovered_inputs,
         select=("raw_join",),
+        exclude=(),
+        environment_config=None,
+    )
+    assert tuple(source.name for source in plain_selected_sources) == ("raw_join",)
+
+    terminal_loader_selected_sources: tuple[SourceEntry, ...] = select_load_entries(
+        discovered_inputs=discovered_inputs,
+        select=("raw_join_loader",),
+        exclude=(),
+        environment_config=None,
+    )
+    assert tuple(source.name for source in terminal_loader_selected_sources) == ("raw_join",)
+
+    selected_sources: tuple[SourceEntry, ...] = select_load_entries(
+        discovered_inputs=discovered_inputs,
+        select=("+raw_join",),
         exclude=(),
         environment_config=None,
     )
