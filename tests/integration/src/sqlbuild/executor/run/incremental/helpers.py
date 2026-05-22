@@ -117,6 +117,7 @@ def build_test_audit(
     name: str,
     unresolved_sql: str,
     attached_target_name: str,
+    resolved_target_name: str,
     severity: str = "warn",
     run_scope: AuditRunScope = AuditRunScope.FINAL,
 ) -> AuditPlanEntry:
@@ -126,7 +127,9 @@ def build_test_audit(
         key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name=name),
         name=name,
         resolved_sql=_resolve_audit_sql(
-            unresolved_sql=unresolved_sql, attached_target_name=attached_target_name
+            unresolved_sql=unresolved_sql,
+            attached_target_name=attached_target_name,
+            resolved_target_name=resolved_target_name,
         ),
         unresolved_sql=unresolved_sql,
         attachment_kind=AuditAttachmentKind.MODEL,
@@ -137,8 +140,10 @@ def build_test_audit(
     )
 
 
-def _resolve_audit_sql(*, unresolved_sql: str, attached_target_name: str) -> str:
-    return unresolved_sql.replace(f'__ref("{attached_target_name}")', attached_target_name)
+def _resolve_audit_sql(
+    *, unresolved_sql: str, attached_target_name: str, resolved_target_name: str
+) -> str:
+    return unresolved_sql.replace(f'__ref("{attached_target_name}")', resolved_target_name)
 
 
 def build_declared_columns(
@@ -286,10 +291,13 @@ def _execute_test(
         post_hook=test_case.post_hook,
     )
 
-    model_audits: tuple[AuditPlanEntry, ...] = _build_model_audits(test_case)
     declared_columns: tuple[ColumnInfo, ...] = build_declared_columns(test_case.declared_columns)
     target_qualified: str = _build_target_qualified(
         target_schema=test_case.target_schema, target_name=test_case.target_name
+    )
+    model_audits: tuple[AuditPlanEntry, ...] = _build_model_audits(
+        test_case=test_case,
+        resolved_target_name=target_qualified,
     )
     model_targets: dict[str, CompiledRelationTarget] = {
         "orders": CompiledRelationTarget(
@@ -319,7 +327,7 @@ def _execute_test(
 
 
 def _build_model_audits(
-    test_case: IncrementalSuccessTestCase | IncrementalFailureTestCase,
+    *, test_case: IncrementalSuccessTestCase | IncrementalFailureTestCase, resolved_target_name: str
 ) -> tuple[AuditPlanEntry, ...]:
     """Build model audits from test case audit config."""
 
@@ -330,6 +338,7 @@ def _build_model_audits(
             name="test_audit",
             unresolved_sql=test_case.audit_sql,
             attached_target_name="orders",
+            resolved_target_name=resolved_target_name,
             severity=test_case.audit_severity,
             run_scope=test_case.audit_run_scope,
         ),
