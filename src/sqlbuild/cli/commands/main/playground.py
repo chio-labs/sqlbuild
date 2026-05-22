@@ -36,9 +36,14 @@ def run_playground(
     print()
     print(f"  {project_label}: {display_path}")
     print(f"  {adapter_label}: DuckDB")
-    print(
-        f"  {example_label}: {'waffle shop + Dagster' if template == 'dagster' else 'waffle shop'}"
+    example_name: str = (
+        "waffle shop + Dagster"
+        if template == "dagster"
+        else "loader-focused waffle shop"
+        if template == "loader_waffle_shop"
+        else "waffle shop"
     )
+    print(f"  {example_label}: {example_name}")
     print()
     print(f"{try_label}:")
     print(f"{command_prefix}cd {display_path}")

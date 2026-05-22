@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import queue
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -168,3 +169,17 @@ class LoadExecutionIndexes:
     loader_ref_entries: dict[Callable[..., object], SourceEntry]
     loader_name_by_function: dict[Callable[..., object], str]
     has_loader_dependencies: bool
+
+
+@dataclass
+class LoadDagState:
+    """Mutable scheduling state for concurrent source loader DAG execution."""
+
+    results: list[LoadExecutionResult | None]
+    in_degree: dict[str, int]
+    ready: list[str]
+    in_flight: set[str]
+    failed_or_skipped: set[str]
+    source_index_by_name: dict[str, int]
+    downstream_names: dict[str, tuple[str, ...]]
+    completion_queue: queue.Queue[tuple[str, LoadExecutionResult]]

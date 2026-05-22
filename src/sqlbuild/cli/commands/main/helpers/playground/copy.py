@@ -11,6 +11,7 @@ from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 
 _TEMPLATE_PACKAGE: str = "sqlbuild.playground"
 _WAFFLE_SHOP_TEMPLATE: str = "templates/waffle_shop"
+_LOADER_WAFFLE_SHOP_TEMPLATE: str = "templates/loader_waffle_shop"
 
 _DAGSTER_DEFINITIONS: str = '''"""Dagster definitions for the SQLBuild waffle shop playground."""
 
@@ -91,7 +92,10 @@ def create_playground_project(*, target_dir: Path, template: str = "waffle_shop"
             help=f"choose one of: {', '.join(PLAYGROUND_TEMPLATE_VALUES)}",
         )
 
-    template_root: Traversable = files(_TEMPLATE_PACKAGE).joinpath(_WAFFLE_SHOP_TEMPLATE)
+    template_path: str = (
+        _LOADER_WAFFLE_SHOP_TEMPLATE if template == "loader_waffle_shop" else _WAFFLE_SHOP_TEMPLATE
+    )
+    template_root: Traversable = files(_TEMPLATE_PACKAGE).joinpath(template_path)
     if not template_root.is_dir():
         raise CliUserError(
             "packaged playground template is missing",

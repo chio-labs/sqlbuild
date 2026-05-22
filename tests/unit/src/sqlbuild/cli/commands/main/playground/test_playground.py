@@ -52,6 +52,20 @@ CREATE_PLAYGROUND_PROJECT_TEST_CASES: list[CreatePlaygroundProjectTestCase] = [
         ),
         unexpected_paths=(Path("target"),),
     ),
+    CreatePlaygroundProjectTestCase(
+        description="creates loader-focused waffle shop playground from packaged template",
+        target_relative_path=Path("loader_waffle_shop_playground"),
+        template="loader_waffle_shop",
+        expected_files=(
+            Path("README.md"),
+            Path("sqlbuild_project.toml"),
+            Path("models/fact_waffle_orders.sql"),
+            Path("models/customer_revenue.sql"),
+            Path("sources/raw.yml"),
+            Path("loaders/waffle_loaders.py"),
+        ),
+        unexpected_paths=(Path("target"), Path("sqlbuild_local.toml")),
+    ),
 ]
 
 RUN_PLAYGROUND_TEST_CASES: list[RunPlaygroundTestCase] = [
@@ -75,6 +89,17 @@ RUN_PLAYGROUND_TEST_CASES: list[RunPlaygroundTestCase] = [
             "Project: demo_dagster_shop",
             "Example: waffle shop + Dagster",
             "dagster dev -f dagster/definitions.py",
+        ),
+    ),
+    RunPlaygroundTestCase(
+        description="prints loader-focused waffle shop next steps",
+        target_path="demo_loader_shop",
+        template="loader_waffle_shop",
+        expected_stdout_fragments=(
+            "SQLBuild playground created",
+            "Project: demo_loader_shop",
+            "Example: loader-focused waffle shop",
+            "sqb build",
         ),
     ),
 ]

@@ -13,6 +13,7 @@ from _pytest.monkeypatch import MonkeyPatch
 from duckdb import DuckDBPyConnection
 
 from sqlbuild.cli.commands.main.build import run_build
+from sqlbuild.cli.commands.main.helpers.load_selection import select_load_entries
 from sqlbuild.cli.commands.main.load import run_load
 from sqlbuild.cli.commands.main.plan import run_plan
 from sqlbuild.cli.commands.main.run import run_run
@@ -24,6 +25,7 @@ from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.executor.load.main.run import run_load_pipeline
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
+from sqlbuild.spec.models.source import SourceEntry
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     BuildRunAutoLoadFailureTestCase,
     BuildRunAutoLoadFlagTestCase,
@@ -2105,6 +2107,107 @@ def test_given_multiple_source_loaders_when_running_pipeline_then_uses_concurren
     first_connection_id: int = first_row[0]
     second_connection_id: int = second_row[0]
     assert first_connection_id != second_connection_id
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadCommandConcurrencyTestCase(
+            description="runs independent loader branches concurrently before dependent source",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
+sources:
+  - name: raw_join
+    loader: raw_join_loader
+    write_strategy: table
+    columns:
+      - name: upstream_count
+        type: INTEGER
+""".strip()
+                + "\n",
+                "loaders/raw.py": """
+import threading
+import time
+
+from sqlbuild.loaders import loader
+
+barrier = threading.Barrier(2)
+finished = set()
+lock = threading.Lock()
+
+@loader(write_strategy='table', columns=[{'name': 'id', 'type': 'INTEGER'}])
+def fetch_a(ctx):
+    barrier.wait(timeout=1)
+    time.sleep(0.05)
+    with lock:
+        finished.add('a')
+    return [{'id': 1}]
+
+@loader(write_strategy='table', columns=[{'name': 'id', 'type': 'INTEGER'}])
+def fetch_b(ctx):
+    barrier.wait(timeout=1)
+    with lock:
+        finished.add('b')
+    return [{'id': 2}]
+
+@loader(depends_on=[fetch_a, fetch_b])
+def raw_join_loader(ctx):
+    return [{'upstream_count': len(finished)}]
+""",
+            },
+            max_concurrency=2,
+            expected_connection_count=2,
+            expected_source_order=("fetch_a", "fetch_b", "raw_join"),
+            expected_json_asset_order=("fetch_a", "fetch_b", "raw_join"),
+        )
+    ],
+    ids=["runs independent loader branches concurrently before dependent source"],
+)
+def test_given_loader_dag_when_running_pipeline_then_independent_branches_overlap(
+    test_case: LoadCommandConcurrencyTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection_starts: list[int] = []
+
+    selected_sources: tuple[SourceEntry, ...] = select_load_entries(
+        discovered_inputs=discovered_inputs,
+        select=("raw_join",),
+        exclude=(),
+        environment_config=None,
+    )
+    results: tuple[LoadExecutionResult, ...] = run_load_pipeline(
+        sources=selected_sources,
+        loader_functions=discovered_inputs.loader_functions,
+        connection_config={"database": str(tmp_path / "demo.duckdb")},
+        adapter=adapter,
+        run_id="test_run",
+        environment="dev",
+        vars={},
+        is_reload=False,
+        max_concurrency=test_case.max_concurrency,
+        on_connection_start=connection_starts.append,
+    )
+
+    assert connection_starts == [test_case.expected_connection_count]
+    assert tuple(result.source_name for result in results) == test_case.expected_source_order
+    payload: dict[str, Any] = cast(
+        dict[str, Any], json.loads(format_load_execution_json(results=results))
+    )
+    assets: list[dict[str, Any]] = cast(list[dict[str, Any]], payload["assets"])
+    assert tuple(asset["name"] for asset in assets) == test_case.expected_json_asset_order
+    connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
+    try:
+        row: tuple[int] | None = connection.execute(
+            "SELECT upstream_count FROM raw_join"
+        ).fetchone()
+    finally:
+        connection.close()
+    assert row == (2,)
 
 
 @pytest.mark.parametrize(
