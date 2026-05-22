@@ -277,11 +277,15 @@ def _build_model_audits(
 
     if test_case.audit_sql is None:
         return ()
+    resolved_target_name: str = _build_target_qualified(
+        target_schema=test_case.target_schema,
+        target_name=test_case.target_name,
+    )
     return (
         AuditPlanEntry(
             key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name="test_audit"),
             name="test_audit",
-            resolved_sql=test_case.audit_sql.replace('__ref("orders")', "orders"),
+            resolved_sql=test_case.audit_sql.replace('__ref("orders")', resolved_target_name),
             unresolved_sql=test_case.audit_sql,
             attachment_kind=AuditAttachmentKind.MODEL,
             severity=AuditSeverity(test_case.audit_severity),
