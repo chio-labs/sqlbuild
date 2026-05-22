@@ -2,8 +2,18 @@
 
 from __future__ import annotations
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.helpers.builtins import builtin_adapter_classes
 from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
 from sqlbuild.spec.models.source import SourceEntry
+
+
+def build_render_adapter(adapter_name: str | None) -> BaseAdapter | None:
+    """Build an optional adapter for audit render tests."""
+
+    if adapter_name is None:
+        return None
+    return builtin_adapter_classes()[adapter_name]()
 
 
 def build_render_model_targets(

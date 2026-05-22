@@ -115,7 +115,7 @@ def build_rows_sql(
     column_names: tuple[str, ...] | None = None,
     inferred_types: dict[str, LoaderLogicalType] | None = None,
 ) -> str:
-    """Build a VALUES-backed SELECT for framework-managed loader rows."""
+    """Build an adapter-rendered SELECT for framework-managed loader rows."""
 
     resolved_column_names: tuple[str, ...] = column_names or _resolve_column_names(
         rows=rows, columns=columns
@@ -126,63 +126,29 @@ def build_rows_sql(
     resolved_inferred_types: dict[str, LoaderLogicalType] = inferred_types or _infer_column_types(
         rows=rows
     )
-    if not rows:
-        projections: str = ", ".join(
-            _empty_projection_sql(
+    column_sql_types: dict[str, str] = {
+        column_name: sql_type
+        for column_name in resolved_column_names
+        if (
+            sql_type := _column_sql_type(
                 adapter=adapter,
                 column_name=column_name,
                 declared_types=declared_types,
                 inferred_types=resolved_inferred_types,
             )
-            for column_name in resolved_column_names
         )
-        return f"SELECT {projections} WHERE 1 = 0"
-    values_sql: str = ", ".join(
-        "("
-        + ", ".join(
-            adapter.render_loader_value_literal(
-                value=row.get(column_name),
-                logical_type=resolved_inferred_types.get(column_name),
-            )
-            for column_name in resolved_column_names
-        )
-        + ")"
-        for row in rows
+        is not None
+    }
+    return adapter.render_loader_rows_select(
+        rows=rows,
+        column_names=resolved_column_names,
+        column_sql_types=column_sql_types,
+        inferred_types=resolved_inferred_types,
     )
-    column_sql: str = ", ".join(resolved_column_names)
-    select_sql: str = ", ".join(
-        _projection_sql(
-            adapter=adapter,
-            column_name=column_name,
-            declared_types=declared_types,
-            inferred_types=resolved_inferred_types,
-        )
-        for column_name in resolved_column_names
-    )
-    return f"SELECT {select_sql} FROM (VALUES {values_sql}) AS __loader_rows({column_sql})"
 
 
 def _declared_types(*, columns: tuple[SourceColumnEntry, ...]) -> dict[str, str]:
     return {column.name: column.type for column in columns if column.type is not None}
-
-
-def _empty_projection_sql(
-    *,
-    adapter: BaseAdapter,
-    column_name: str,
-    declared_types: dict[str, str],
-    inferred_types: dict[str, LoaderLogicalType],
-) -> str:
-    sql_type: str = (
-        _column_sql_type(
-            adapter=adapter,
-            column_name=column_name,
-            declared_types=declared_types,
-            inferred_types=inferred_types,
-        )
-        or "VARCHAR"
-    )
-    return f"CAST(NULL AS {sql_type}) AS {column_name}"
 
 
 def _resolve_column_names(
@@ -196,24 +162,6 @@ def _resolve_column_names(
             if key not in names:
                 names.append(key)
     return tuple(names)
-
-
-def _projection_sql(
-    *,
-    adapter: BaseAdapter,
-    column_name: str,
-    declared_types: dict[str, str],
-    inferred_types: dict[str, LoaderLogicalType],
-) -> str:
-    sql_type: str | None = _column_sql_type(
-        adapter=adapter,
-        column_name=column_name,
-        declared_types=declared_types,
-        inferred_types=inferred_types,
-    )
-    if sql_type is None:
-        return column_name
-    return f"CAST({column_name} AS {sql_type}) AS {column_name}"
 
 
 def _column_sql_type(

@@ -383,6 +383,7 @@ def build_execution_plan(
                 model_targets=model_targets,
                 seed_targets=seed_targets,
                 source_map=source_map,
+                adapter=adapter,
                 upstream_deps=upstream_deps,
                 downstream_deps=downstream_deps,
                 model_materializations=model_materializations,

@@ -170,6 +170,7 @@ def plan_model(
     if not suppress_runtime_cursor_bounds:
         cursor_input_relations = _build_cursor_input_relations(
             model=model,
+            adapter=adapter,
             model_targets=model_targets,
             models_by_name=models_by_name,
             seed_targets=seed_targets,
@@ -716,6 +717,7 @@ def _build_logical_ddl_from_adapter(
 def _build_cursor_input_relations(
     *,
     model: CompiledModel,
+    adapter: BaseAdapter,
     model_targets: dict[str, CompiledRelationTarget],
     models_by_name: dict[str, CompiledModel],
     seed_targets: dict[str, CompiledRelationTarget],
@@ -737,6 +739,7 @@ def _build_cursor_input_relations(
             continue
         relation: str | None = _resolve_cursor_input_relation(
             ref=ref,
+            adapter=adapter,
             model_targets=model_targets,
             seed_targets=seed_targets,
             source_map=source_map,
@@ -849,6 +852,7 @@ def _build_runtime_placeholder_bounds() -> CursorBounds:
 def _resolve_cursor_input_relation(
     *,
     ref: CompileSqlReference,
+    adapter: BaseAdapter,
     model_targets: dict[str, CompiledRelationTarget],
     seed_targets: dict[str, CompiledRelationTarget],
     source_map: dict[str, SourceEntry],
@@ -864,7 +868,7 @@ def _resolve_cursor_input_relation(
         source: SourceEntry | None = source_map.get(ref.ref_name)
         if source is None:
             return None
-        return render_source_relation(source)
+        return render_source_relation(source, adapter=adapter)
     return None
 
 

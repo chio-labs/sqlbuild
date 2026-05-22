@@ -10,9 +10,11 @@ from sqlbuild.compiler.planner.helpers.resolve.sources import (
     resolve_source_references,
 )
 from sqlbuild.compiler.planner.models import CursorBounds
+from sqlbuild.integrations.bigquery.client import BigQueryAdapter
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers.resolve._test_types import (
+    AdapterSourceResolutionTestCase,
     SourceResolutionErrorTestCase,
     SourceResolutionTestCase,
 )
@@ -129,7 +131,7 @@ TEST_CASES: list[SourceResolutionTestCase] = [
         expected_sql=(
             "SELECT * FROM (SELECT CAST(order_id AS INTEGER) AS order_id, "
             "CAST(amount AS DECIMAL) AS amount "
-            "FROM (SELECT '1' AS order_id, 12 AS amount))"
+            "FROM (SELECT '1' AS order_id, 12 AS amount) AS __source_expression)"
         ),
     ),
     SourceResolutionTestCase(
@@ -154,7 +156,8 @@ TEST_CASES: list[SourceResolutionTestCase] = [
         expected_sql=(
             "SELECT * FROM (SELECT id, "
             "CAST(amount_cents AS INTEGER) AS amount_cents, status "
-            "FROM (SELECT 1 AS id, '1700' AS amount_cents, 'success' AS status))"
+            "FROM (SELECT 1 AS id, '1700' AS amount_cents, 'success' AS status) "
+            "AS __source_expression)"
         ),
     ),
     SourceResolutionTestCase(
@@ -180,7 +183,7 @@ TEST_CASES: list[SourceResolutionTestCase] = [
         },
         expected_sql=(
             "SELECT * FROM (SELECT CAST(ID AS INTEGER) AS id, FIRST_NAME "
-            "FROM (SELECT 1 AS id, 'Leslie' AS first_name))"
+            "FROM (SELECT 1 AS id, 'Leslie' AS first_name) AS __source_expression)"
         ),
     ),
     SourceResolutionTestCase(
@@ -197,13 +200,13 @@ TEST_CASES: list[SourceResolutionTestCase] = [
         ),
     ),
     SourceResolutionTestCase(
-        description="uses EXCEPT keyword for bigquery-style dialects",
+        description="uses adapter-owned star exclusion keyword",
         query_sql='SELECT * FROM __source("raw_orders")',
         star_exclude_keyword="EXCEPT",
         source_map={"raw_orders": _ENFORCED_SOURCE},
         source_warehouse_columns=_ENFORCED_WAREHOUSE_COLUMNS,
         expected_sql=(
-            "SELECT * FROM (SELECT * EXCEPT (order_id, status), "
+            "SELECT * FROM (SELECT * EXCLUDE (order_id, status), "
             "CAST(order_id AS VARCHAR) AS order_id, "
             "CAST(status AS INTEGER) AS status "
             "FROM raw.public.orders)"
@@ -463,6 +466,54 @@ ERROR_TEST_CASES: list[SourceResolutionErrorTestCase] = [
     ),
 ]
 
+ADAPTER_SOURCE_RESOLUTION_TEST_CASES: list[AdapterSourceResolutionTestCase] = [
+    AdapterSourceResolutionTestCase(
+        description="bigquery expression source casts use adapter-normalized types",
+        query_sql='SELECT * FROM __source("raw_payments")',
+        source_map={
+            "raw_payments": SourceEntry(
+                name="raw_payments",
+                expression="SELECT '1700' AS amount_cents, 'success' AS status",
+                type_enforcement=True,
+                columns=(SourceColumnEntry(name="amount_cents", type="INTEGER"),),
+            ),
+        },
+        source_warehouse_columns={
+            "raw_payments": (
+                ColumnInfo(name="amount_cents", type=""),
+                ColumnInfo(name="status", type=""),
+            ),
+        },
+        expected_sql_fragment="CAST(amount_cents AS INT64) AS amount_cents",
+        forbidden_sql_fragment="CAST(amount_cents AS INTEGER)",
+    ),
+    AdapterSourceResolutionTestCase(
+        description="bigquery relation source casts use adapter-normalized types",
+        query_sql='SELECT * FROM __source("raw_customers")',
+        source_map={
+            "raw_customers": SourceEntry(
+                name="raw_customers",
+                database="project-with-hyphens",
+                schema="raw_dataset",
+                table="customers",
+                type_enforcement=True,
+                columns=(SourceColumnEntry(name="first_name", type="VARCHAR"),),
+            ),
+        },
+        source_warehouse_columns={
+            "raw_customers": (
+                ColumnInfo(name="id", type=""),
+                ColumnInfo(name="first_name", type=""),
+            ),
+        },
+        expected_sql_fragment=(
+            "CAST(first_name AS STRING) AS first_name FROM "
+            "`project-with-hyphens.raw_dataset.customers`"
+        ),
+        forbidden_sql_fragment="CAST(first_name AS VARCHAR)",
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -485,6 +536,30 @@ def test_given_source_references_when_resolving_then_returns_expected_sql(
     )
 
     assert result == test_case.expected_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    ADAPTER_SOURCE_RESOLUTION_TEST_CASES,
+    ids=[case.description for case in ADAPTER_SOURCE_RESOLUTION_TEST_CASES],
+)
+def test_given_adapter_specific_source_references_when_resolving_then_returns_adapter_sql(
+    test_case: AdapterSourceResolutionTestCase,
+) -> None:
+    result: str = resolve_source_references(
+        query_sql=test_case.query_sql,
+        source_map=test_case.source_map,
+        source_warehouse_columns=test_case.source_warehouse_columns,
+        star_exclude_keyword="EXCEPT",
+        cursor_bounds=None,
+        cursor_inputs={},
+        adapter=BigQueryAdapter(),
+        cursor_type=None,
+        lower_bound_inclusive=True,
+    )
+
+    assert test_case.expected_sql_fragment in result
+    assert test_case.forbidden_sql_fragment not in result
 
 
 @pytest.mark.parametrize(

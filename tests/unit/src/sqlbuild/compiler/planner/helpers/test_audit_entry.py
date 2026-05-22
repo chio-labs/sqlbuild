@@ -13,6 +13,7 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     PlanAuditTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
+    PlannerTestAdapter,
     build_audit_from_test_case,
     build_audit_model_targets,
     build_audit_source_map,
@@ -79,6 +80,7 @@ def test_given_audit_when_planning_then_resolves_sql(
         model_targets=model_targets,
         seed_targets={},
         source_map=source_map,
+        adapter=PlannerTestAdapter(),
         upstream_deps={},
         downstream_deps={},
         model_materializations={},
@@ -116,6 +118,7 @@ def test_given_audit_with_unresolved_marker_when_planning_then_it_raises_clear_e
             model_targets=model_targets,
             seed_targets={},
             source_map=source_map,
+            adapter=PlannerTestAdapter(),
             upstream_deps={},
             downstream_deps={},
             model_materializations={},
