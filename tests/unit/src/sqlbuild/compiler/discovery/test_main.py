@@ -365,6 +365,50 @@ def raw_orders(ctx):
         expected_error_fragment="Duplicate source loader found for 'raw_orders'",
     ),
     DiscoverProjectInputsErrorTestCase(
+        description="raises when source name collides with intermediate loader name",
+        repo_files=base_repo_files()
+        | {
+            "sources/raw.yml": """
+sources:
+  - name: fetch_orders
+    loader: raw_orders_loader
+""".strip()
+            + "\n",
+            "loaders/raw_orders.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def fetch_orders(ctx):
+    return []
+
+@loader(depends_on=[fetch_orders])
+def raw_orders_loader(ctx):
+    return []
+""",
+        },
+        expected_error_fragment="Source 'fetch_orders' in sources/raw.yml conflicts with loader",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when source name collides with terminal loader name",
+        repo_files=base_repo_files()
+        | {
+            "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    loader: raw_orders
+""".strip()
+            + "\n",
+            "loaders/raw_orders.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_orders(ctx):
+    return []
+""",
+        },
+        expected_error_fragment="Source 'raw_orders' in sources/raw.yml conflicts with loader",
+    ),
+    DiscoverProjectInputsErrorTestCase(
         description="raises when loader dependency is not decorated",
         repo_files=base_repo_files()
         | {
@@ -407,7 +451,7 @@ fetch_events = loader(depends_on=[enriched_events])(fetch_events)
             "sources/raw.yml": """
 sources:
   - name: raw_orders
-    loader: raw_orders
+    loader: raw_orders_loader
     write_strategy: table
 """.strip()
             + "\n",
@@ -415,7 +459,7 @@ sources:
 from sqlbuild.loaders import loader
 
 @loader(write_strategy="table", columns=[{"name": "id", "type": "INTEGER"}])
-def raw_orders(ctx):
+def raw_orders_loader(ctx):
     return []
 """,
         },

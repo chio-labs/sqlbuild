@@ -827,7 +827,7 @@ def test_given_loader_schema_evolution_project_when_loading_twice_on_snowflake_t
             source_yaml=(
                 "sources:\n"
                 "  - name: raw_events\n"
-                "    loader: raw_events\n"
+                "    loader: load_raw_events\n"
                 "    write_strategy: append\n"
                 "    cursor_column: load_seq\n"
                 "    columns:\n"
@@ -839,7 +839,7 @@ def test_given_loader_schema_evolution_project_when_loading_twice_on_snowflake_t
             loader_py=(
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader\n"
-                "def raw_events(ctx):\n"
+                "def load_raw_events(ctx):\n"
                 "    if ctx.current_cursor_value is None:\n"
                 "        return [{'event_id': 1, 'load_seq': 1}]\n"
                 "    return [{'event_id': 2, 'load_seq': 2, 'note': 'late-note'}]\n"
@@ -888,7 +888,7 @@ def test_given_loader_schema_evolution_project_when_loading_twice_on_snowflake_t
     [
         SnowflakeSourceLoaderSchemaEvolutionE2ETestCase(
             description="chained source loader runs on snowflake",
-            command=("--no-color", "load", "--select", "raw_events"),
+            command=("--no-color", "load", "--select", "+raw_events"),
             expected_rows=(("1", "loaded"), ("2", "loaded")),
         )
     ],
@@ -906,7 +906,7 @@ def test_given_chained_loader_project_when_loading_on_snowflake_then_runs_loader
             source_yaml=(
                 "sources:\n"
                 "  - name: raw_events\n"
-                "    loader: raw_events\n"
+                "    loader: load_raw_events\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
                 "      - name: event_id\n"
@@ -922,7 +922,7 @@ def test_given_chained_loader_project_when_loading_on_snowflake_then_runs_loader
                 "def fetch_events(ctx):\n"
                 "    return [{'event_id': 1}, {'event_id': 2}]\n\n"
                 "@loader(depends_on=[fetch_events])\n"
-                "def raw_events(ctx):\n"
+                "def load_raw_events(ctx):\n"
                 "    events = ctx.loader(fetch_events)\n"
                 "    cursor = ctx.query(\n"
                 "        f'SELECT event_id FROM {events.target} ORDER BY event_id'\n"
@@ -986,7 +986,7 @@ SNOWFLAKE_INTERMEDIATE_DAG_STRATEGY_TEST_CASES: list[
             "        {'event_id': next_seq, 'amount': next_seq * 100, 'load_seq': next_seq}\n"
             "    ]\n\n"
             "@loader(depends_on=[fetch_events])\n"
-            "def raw_events(ctx):\n"
+            "def load_raw_events(ctx):\n"
             "    events = ctx.loader(fetch_events)\n"
             "    cursor = ctx.query(\n"
             "        f'SELECT event_id, amount FROM {events.target} ORDER BY event_id, amount'\n"
@@ -1022,7 +1022,7 @@ SNOWFLAKE_INTERMEDIATE_DAG_STRATEGY_TEST_CASES: list[
             "        {'event_id': 3, 'amount': 300, 'load_seq': 2},\n"
             "    ]\n\n"
             "@loader(depends_on=[fetch_events])\n"
-            "def raw_events(ctx):\n"
+            "def load_raw_events(ctx):\n"
             "    events = ctx.loader(fetch_events)\n"
             "    cursor = ctx.query(\n"
             "        f'SELECT event_id, amount FROM {events.target} ORDER BY event_id, amount'\n"
@@ -1053,7 +1053,7 @@ SNOWFLAKE_INTERMEDIATE_DAG_STRATEGY_TEST_CASES: list[
             "        {'event_id': 3, 'amount': 300, 'load_seq': 1},\n"
             "    ]\n\n"
             "@loader(depends_on=[fetch_events])\n"
-            "def raw_events(ctx):\n"
+            "def load_raw_events(ctx):\n"
             "    events = ctx.loader(fetch_events)\n"
             "    cursor = ctx.query(\n"
             "        f'SELECT event_id, amount FROM {events.target} ORDER BY event_id, amount'\n"
@@ -1084,7 +1084,7 @@ def test_given_intermediate_strategy_project_when_loading_twice_on_snowflake_the
             source_yaml=(
                 "sources:\n"
                 "  - name: raw_events\n"
-                "    loader: raw_events\n"
+                "    loader: load_raw_events\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
                 "      - name: event_id\n"
