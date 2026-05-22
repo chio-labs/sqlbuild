@@ -5,6 +5,9 @@ from pathlib import Path
 
 import pytest
 
+from tests.e2e.src.sqlbuild.cli.commands.main.load.helpers import (
+    build_schema_behavior_project_files,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     assert_optional_local_replay_rows,
     build_real_warehouse_local_replay_project_files,
@@ -32,6 +35,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake._test_types import (
     SnowflakeScenarioRemoteE2ETestCase,
     SnowflakeSnapshotApplyE2ETestCase,
     SnowflakeSnapshotE2ETestCase,
+    SnowflakeSourceLoaderSchemaEvolutionE2ETestCase,
     SnowflakeSourceLoaderStrategiesE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.snowflake.helpers import (
@@ -700,6 +704,85 @@ def test_given_loader_strategy_project_when_loading_twice_on_snowflake_then_writ
         assert stringify_warehouse_rows(order_events) == test_case.expected_order_events
         assert stringify_warehouse_rows(customers) == test_case.expected_customers
         assert stringify_warehouse_rows(loader_status) == test_case.expected_loader_status
+    finally:
+        cleanup_snowflake_schema(schema_name=schema_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeSourceLoaderSchemaEvolutionE2ETestCase(
+            description="source loader schema evolution adds late columns on snowflake",
+            command=("--no-color", "load"),
+            expected_rows=(("1", None), ("2", "late-note")),
+        )
+    ],
+    ids=["source loader schema evolution adds late columns on snowflake"],
+)
+def test_given_loader_schema_evolution_project_when_loading_twice_on_snowflake_then_target_evolves(
+    tmp_path: Path,
+    test_case: SnowflakeSourceLoaderSchemaEvolutionE2ETestCase,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_e2e_load_schema")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="source_loader_schema_behavior",
+        repo_files=build_schema_behavior_project_files(
+            source_yaml=(
+                "sources:\n"
+                "  - name: raw_events\n"
+                "    loader: raw_events\n"
+                "    write_strategy: append\n"
+                "    cursor_column: load_seq\n"
+                "    columns:\n"
+                "      - name: event_id\n"
+                "        type: INTEGER\n"
+                "      - name: load_seq\n"
+                "        type: INTEGER\n"
+            ),
+            loader_py=(
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader\n"
+                "def raw_events(ctx):\n"
+                "    if ctx.current_cursor_value is None:\n"
+                "        return [{'event_id': 1, 'load_seq': 1}]\n"
+                "    return [{'event_id': 2, 'load_seq': 2, 'note': 'late-note'}]\n"
+            ),
+        ),
+    )
+    (project_dir / "sqlbuild_project.toml").write_text(
+        build_snowflake_project_toml(
+            project_name="source_loader_schema_behavior",
+            schema_name=schema_name,
+        ),
+        encoding="utf-8",
+    )
+
+    try:
+        first_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=test_case.command,
+            project_dir=project_dir,
+        )
+        second_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=test_case.command,
+            project_dir=project_dir,
+        )
+
+        assert first_result.returncode == test_case.expected_return_code, (
+            first_result.stdout + first_result.stderr
+        )
+        assert second_result.returncode == test_case.expected_return_code, (
+            second_result.stdout + second_result.stderr
+        )
+        rows: tuple[tuple[object, ...], ...] = fetch_snowflake_rows(
+            schema_name=schema_name,
+            sql=(
+                "SELECT event_id, note FROM "
+                f"{relation_name(schema_name=schema_name, name='raw_events')} "
+                "ORDER BY event_id"
+            ),
+        )
+        assert stringify_warehouse_rows(rows) == test_case.expected_rows
     finally:
         cleanup_snowflake_schema(schema_name=schema_name)
 

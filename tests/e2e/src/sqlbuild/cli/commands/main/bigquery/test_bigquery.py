@@ -16,6 +16,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery._test_types import (
     BigQueryScenarioRemoteE2ETestCase,
     BigQuerySnapshotApplyE2ETestCase,
     BigQuerySnapshotE2ETestCase,
+    BigQuerySourceLoaderSchemaEvolutionE2ETestCase,
     BigQuerySourceLoaderStrategiesE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.bigquery.helpers import (
@@ -35,6 +36,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery.helpers import (
     prepare_bigquery_waffle_shop,
     relation_name,
     write_local_environment_override,
+)
+from tests.e2e.src.sqlbuild.cli.commands.main.load.helpers import (
+    build_schema_behavior_project_files,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     assert_optional_local_replay_rows,
@@ -787,6 +791,86 @@ def test_given_loader_strategy_project_when_loading_twice_on_bigquery_then_write
         assert stringify_warehouse_rows(order_events) == test_case.expected_order_events
         assert stringify_warehouse_rows(customers) == test_case.expected_customers
         assert stringify_warehouse_rows(loader_status) == test_case.expected_loader_status
+    finally:
+        cleanup_bigquery_dataset(dataset_name=dataset_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQuerySourceLoaderSchemaEvolutionE2ETestCase(
+            description="source loader schema evolution adds late columns on bigquery",
+            command=("--no-color", "load"),
+            expected_rows=(("1", None), ("2", "late-note")),
+        )
+    ],
+    ids=["source loader schema evolution adds late columns on bigquery"],
+)
+def test_given_loader_schema_evolution_project_when_loading_twice_on_bigquery_then_target_evolves(
+    tmp_path: Path,
+    test_case: BigQuerySourceLoaderSchemaEvolutionE2ETestCase,
+) -> None:
+    dataset_name: str = build_unique_dataset_name(prefix="sqlbuild_e2e_load_schema")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="source_loader_schema_behavior",
+        repo_files=build_schema_behavior_project_files(
+            source_yaml=(
+                "sources:\n"
+                "  - name: raw_events\n"
+                "    loader: raw_events\n"
+                "    write_strategy: append\n"
+                "    cursor_column: load_seq\n"
+                "    columns:\n"
+                "      - name: event_id\n"
+                "        type: INTEGER\n"
+                "      - name: load_seq\n"
+                "        type: INTEGER\n"
+            ),
+            loader_py=(
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader\n"
+                "def raw_events(ctx):\n"
+                "    if ctx.current_cursor_value is None:\n"
+                "        return [{'event_id': 1, 'load_seq': 1}]\n"
+                "    return [{'event_id': 2, 'load_seq': 2, 'note': 'late-note'}]\n"
+            ),
+        ),
+    )
+    (project_dir / "sqlbuild_project.toml").write_text(
+        build_bigquery_project_toml(
+            project_name="source_loader_schema_behavior",
+            dataset_name=dataset_name,
+        ),
+        encoding="utf-8",
+    )
+    ensure_bigquery_dataset_ready(dataset_name=dataset_name)
+
+    try:
+        first_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=test_case.command,
+            project_dir=project_dir,
+        )
+        second_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=test_case.command,
+            project_dir=project_dir,
+        )
+
+        assert first_result.returncode == test_case.expected_return_code, (
+            first_result.stdout + first_result.stderr
+        )
+        assert second_result.returncode == test_case.expected_return_code, (
+            second_result.stdout + second_result.stderr
+        )
+        rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
+            dataset_name=dataset_name,
+            sql=(
+                "SELECT event_id, note FROM "
+                f"{relation_name(dataset_name=dataset_name, name='raw_events')} "
+                "ORDER BY event_id"
+            ),
+        )
+        assert stringify_warehouse_rows(rows) == test_case.expected_rows
     finally:
         cleanup_bigquery_dataset(dataset_name=dataset_name)
 

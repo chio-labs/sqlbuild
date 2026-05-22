@@ -36,6 +36,14 @@ class SnowflakeSourceLoaderStrategiesE2ETestCase:
 
 
 @dataclass(frozen=True)
+class SnowflakeSourceLoaderSchemaEvolutionE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
 class SnowflakeDiffE2ETestCase:
     description: str
     mutation_sql: tuple[str, ...]

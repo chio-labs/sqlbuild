@@ -1215,6 +1215,23 @@ class BigQueryAdapter(BaseAdapter):
                 location=connection.location,
             ).result()
 
+    def add_columns(
+        self,
+        connection: _BigQueryConnection,
+        *,
+        target: str,
+        columns: tuple[ColumnInfo, ...],
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = tuple(
+            f"ALTER TABLE {target} ADD COLUMN {column.name} {self._to_bigquery_type(column.type)}"
+            for column in columns
+        )
+        statement_recorder.record_many(statements)
+        statement: str
+        for statement in statements:
+            self.execute(connection, statement)
+
     def merge(
         self,
         connection: Any,
