@@ -11,12 +11,12 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery._test_types import (
     BigQueryCloneE2ETestCase,
     BigQueryDiffE2ETestCase,
     BigQueryErrorE2ETestCase,
+    BigQueryIntermediateDagStrategyE2ETestCase,
     BigQueryModelBuildE2ETestCase,
     BigQueryScenarioLocalReplayE2ETestCase,
     BigQueryScenarioRemoteE2ETestCase,
     BigQuerySnapshotApplyE2ETestCase,
     BigQuerySnapshotE2ETestCase,
-    BigQueryIntermediateDagStrategyE2ETestCase,
     BigQuerySourceLoaderSchemaEvolutionE2ETestCase,
     BigQuerySourceLoaderStrategiesE2ETestCase,
 )
@@ -976,7 +976,9 @@ BIGQUERY_INTERMEDIATE_DAG_STRATEGY_TEST_CASES: list[BigQueryIntermediateDagStrat
             "        next_seq = 1\n"
             "    else:\n"
             "        next_seq = ctx.current_cursor_value + 1\n"
-            "    return [{'event_id': next_seq, 'amount': next_seq * 100, 'load_seq': next_seq}]\n\n"
+            "    return [\n"
+            "        {'event_id': next_seq, 'amount': next_seq * 100, 'load_seq': next_seq}\n"
+            "    ]\n\n"
             "@loader(depends_on=[fetch_events])\n"
             "def raw_events(ctx):\n"
             "    events = ctx.loader(fetch_events)\n"
