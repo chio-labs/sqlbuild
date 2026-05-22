@@ -5,12 +5,11 @@ from __future__ import annotations
 import sys
 import time
 from collections.abc import Callable
-from dataclasses import replace
 from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
+from sqlbuild.cli.commands.main.helpers.load_selection import select_load_entries
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
@@ -27,7 +26,7 @@ from sqlbuild.compiler.compile.main.effective_environment import build_effective
 from sqlbuild.compiler.compile.main.effective_runtime import build_effective_runtime_config
 from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.executor.load.main.run import run_load_pipeline
 from sqlbuild.executor.load.models import LoadExecutionResult
@@ -38,7 +37,7 @@ from sqlbuild.shared.helpers.colors import (
     green_bold,
     supports_color,
 )
-from sqlbuild.spec.models.project import EnvironmentConfig, resolve_effective_adapter_name
+from sqlbuild.spec.models.project import resolve_effective_adapter_name
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -60,7 +59,7 @@ def run_load(
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
-    selected_sources: tuple[SourceEntry, ...] = _select_managed_sources(
+    selected_sources: tuple[SourceEntry, ...] = select_load_entries(
         discovered_inputs=discovered_inputs,
         select=select,
         exclude=exclude,
@@ -108,11 +107,24 @@ def run_load(
         cli_vars=cli_vars,
     )
     effective_cursor_overrides: CursorOverrides = cursor_overrides or CursorOverrides()
-    sources_header: str = f"Sources ({len(selected_sources)})"
+    loader_entries: tuple[SourceEntry, ...] = tuple(
+        source for source in selected_sources if _is_loader_node(source)
+    )
+    source_entries: tuple[SourceEntry, ...] = tuple(
+        source for source in selected_sources if not _is_loader_node(source)
+    )
+    if loader_entries:
+        loaders_header: str = f"Loaders ({len(loader_entries)})"
+        styled_loaders_header: str = green_bold(loaders_header) if use_color else loaders_header
+        progress_stream.write(f"{styled_loaders_header}\n")
+        for source in loader_entries:
+            progress_stream.write(f"  {source.name}\n")
+        progress_stream.write("\n")
+    sources_header: str = f"Sources ({len(source_entries)})"
     styled_sources_header: str = green_bold(sources_header) if use_color else sources_header
     progress_stream.write(f"{styled_sources_header}\n")
     source: SourceEntry
-    for source in selected_sources:
+    for source in source_entries:
         progress_stream.write(f"  {source.name}\n")
     progress_stream.write("\n")
     progress_stream.flush()
@@ -164,12 +176,13 @@ def run_load(
     elapsed: float = time.monotonic() - start
     success_count: int = sum(1 for result in results if result.status.value == "success")
     fail_count: int = sum(1 for result in results if result.status.value == "failed")
+    skip_count: int = sum(1 for result in results if result.status.value == "skipped")
     completion_message: str = (
         "Completed successfully." if fail_count == 0 else "Completed with errors."
     )
     progress_stream.write(f"\n{completion_message}\n")
     progress_stream.write(
-        f"PASS={success_count}  WARN=0  FAIL={fail_count}  SKIP=0  "
+        f"PASS={success_count}  WARN=0  FAIL={fail_count}  SKIP={skip_count}  "
         f"TOTAL={len(results)}  ({elapsed:.2f}s)\n"
     )
     progress_stream.flush()
@@ -181,54 +194,6 @@ def run_load(
     return 0 if fail_count == 0 else 1
 
 
-def _select_managed_sources(
-    *,
-    discovered_inputs: DiscoveredProjectInputs,
-    select: tuple[str, ...],
-    exclude: tuple[str, ...],
-    environment_config: EnvironmentConfig | None,
-) -> tuple[SourceEntry, ...]:
-    sources: list[SourceEntry] = []
-    source_file: DiscoveredSourceFile
-    for source_file in discovered_inputs.source_files:
-        sources.extend(source_file.source_entries)
-    source_names: frozenset[str] = frozenset(source.name for source in sources)
-    managed_names: frozenset[str] = frozenset(
-        source.name for source in sources if source.loader is not None
-    )
-    selector: str
-    for selector in (*select, *exclude):
-        if selector not in source_names:
-            raise CliUserError(
-                f"sqb load selector '{selector}' does not match any source",
-                code="C901",
-                help="Use exact source names declared in sources/*.yml.",
-            )
-        if selector not in managed_names:
-            raise CliUserError(
-                f"sqb load selector '{selector}' matches a source with no loader",
-                code="C902",
-                help="Add a loader to the source or remove it from the load selection.",
-            )
-    selected_names: frozenset[str] = frozenset(select)
-    excluded_names: frozenset[str] = frozenset(exclude)
-    return tuple(
-        replace(
-            source,
-            database=source.database
-            if source.database is not None or environment_config is None
-            else environment_config.database,
-            schema=source.schema
-            if source.schema is not None or environment_config is None
-            else environment_config.schema,
-        )
-        for source in sources
-        if source.loader is not None
-        if (not selected_names or source.name in selected_names)
-        and source.name not in excluded_names
-    )
-
-
 def _build_on_complete(
     *,
     stream: TextIO,
@@ -237,7 +202,13 @@ def _build_on_complete(
     total_count: int,
 ) -> Callable[[LoadExecutionResult], None]:
     def _on_complete(result: LoadExecutionResult) -> None:
-        status_text: str = "OK" if result.status.value == "success" else "FAIL"
+        status_text: str = (
+            "OK"
+            if result.status.value == "success"
+            else "SKIP"
+            if result.status.value == "skipped"
+            else "FAIL"
+        )
         status: str = colorize_status(status_text, use_color=use_color)
         duration: str = ""
         if result.duration_ms is not None:
@@ -245,7 +216,7 @@ def _build_on_complete(
         rows_loaded: str = f"rows={result.rows_loaded:,}"
         ordinal: int = source_order[result.source_name]
         stream.write(
-            f"  {ordinal}/{total_count}  source    "
+            f"  {ordinal}/{total_count}  {result.resource_kind.value:<10}"
             f"{result.source_name:<30} {status:<6} {duration}  {rows_loaded}\n"
         )
         if result.error_message is not None:
@@ -253,3 +224,7 @@ def _build_on_complete(
         stream.flush()
 
     return _on_complete
+
+
+def _is_loader_node(source: SourceEntry) -> bool:
+    return source.meta.get("sqlbuild_loader_node") is True

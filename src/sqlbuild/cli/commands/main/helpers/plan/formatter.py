@@ -36,6 +36,7 @@ from sqlbuild.shared.helpers.colors import (
 )
 from sqlbuild.shared.helpers.display import DisplayOptions, append_overflow_line, visible_entries
 from sqlbuild.shared.helpers.materialization_labels import model_materialization_label
+from sqlbuild.shared.types import ExecutionResourceKind
 
 _REASON_GROUP_ORDER: tuple[PlanReason, ...] = (
     PlanReason.QUERY_CHANGED,
@@ -284,17 +285,50 @@ def _format_source_loads(
 
     if not plan.source_load_entries:
         return
-    label: str = (
-        "Sources to reload"
-        if any(e.is_reload for e in plan.source_load_entries)
-        else "Sources to load"
+    loader_entries: tuple[SourceLoadPlanEntry, ...] = tuple(
+        entry
+        for entry in plan.source_load_entries
+        if entry.resource_kind == ExecutionResourceKind.LOADER
     )
+    source_entries: tuple[SourceLoadPlanEntry, ...] = tuple(
+        entry
+        for entry in plan.source_load_entries
+        if entry.resource_kind == ExecutionResourceKind.SOURCE
+    )
+    _format_load_entry_group(
+        lines=lines,
+        entries=loader_entries,
+        label="Loaders",
+        name_column_width=name_column_width,
+        display_options=display_options,
+        section_header_style=section_header_style,
+    )
+    _format_load_entry_group(
+        lines=lines,
+        entries=source_entries,
+        label="Sources",
+        name_column_width=name_column_width,
+        display_options=display_options,
+        section_header_style=section_header_style,
+    )
+
+
+def _format_load_entry_group(
+    *,
+    lines: list[str],
+    entries: tuple[SourceLoadPlanEntry, ...],
+    label: str,
+    name_column_width: int,
+    display_options: DisplayOptions,
+    section_header_style: Callable[[str], str],
+) -> None:
+    if not entries:
+        return
+    action: str = "reload" if any(entry.is_reload for entry in entries) else "load"
     lines.append("")
-    lines.append(section_header_style(f"{label} ({len(plan.source_load_entries)})"))
+    lines.append(section_header_style(f"{label} to {action} ({len(entries)})"))
+    visible: Sequence[SourceLoadPlanEntry] = visible_entries(entries, options=display_options)
     source_load_entry: SourceLoadPlanEntry
-    visible: Sequence[SourceLoadPlanEntry] = visible_entries(
-        plan.source_load_entries, options=display_options
-    )
     for source_load_entry in visible:
         lines.append(
             _format_name_value_line(
@@ -305,7 +339,7 @@ def _format_source_loads(
         )
     append_overflow_line(
         lines,
-        total_count=len(plan.source_load_entries),
+        total_count=len(entries),
         visible_count=len(visible),
         indent="  ",
         options=display_options,

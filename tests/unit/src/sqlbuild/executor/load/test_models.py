@@ -7,7 +7,7 @@ import logging
 import pytest
 
 from sqlbuild.adapter.shared.models import LifeCycleEvent, StatementRecorder
-from sqlbuild.executor.load.models import LoaderContext
+from sqlbuild.executor.load.models import LoaderContext, LoaderRelationRef
 from tests.unit.src.sqlbuild.executor.load._test_types import LoaderContextHelperTestCase
 from tests.unit.src.sqlbuild.executor.load.helpers import LoaderContextTestAdapter
 
@@ -72,5 +72,80 @@ def test_given_loader_context_when_using_helpers_then_records_and_qualifies_name
     assert target_schema_name == test_case.expected_target_schema_name
     assert already_qualified_name == "custom.schema.table"
     assert context.logger.name == test_case.expected_logger_name
+    events: tuple[LifeCycleEvent, ...] = statement_recorder.snapshot()
+    assert tuple(event.content for event in events) == test_case.expected_recorded_events
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoaderContextHelperTestCase(
+            description="resolves loader and source relation refs",
+            raw_name="scratch_orders",
+            database=None,
+            schema=None,
+            expected_qualified_name="target_db.target_schema.scratch_orders",
+            expected_target_schema_name="target_db.target_schema.scratch_orders",
+            expected_execute_result="max-value",
+            expected_query_result="max-value",
+            expected_recorded_events=(
+                "SELECT MAX(event_at) FROM target_db.target_schema.fetch_events",
+                "SELECT MAX(loaded_at) FROM target_db.target_schema.raw_events",
+            ),
+            expected_logger_name="sqlbuild.loader.raw_orders_loader",
+        )
+    ],
+    ids=["resolves loader and source relation refs"],
+)
+def test_given_loader_context_when_resolving_relation_refs_then_returns_cursor_values(
+    test_case: LoaderContextHelperTestCase,
+) -> None:
+    def fetch_events(ctx: object) -> object:
+        return ctx
+
+    adapter: LoaderContextTestAdapter = LoaderContextTestAdapter()
+    statement_recorder: StatementRecorder = StatementRecorder()
+    loader_ref: LoaderRelationRef = LoaderRelationRef(
+        name="fetch_events",
+        target="target_db.target_schema.fetch_events",
+        database="target_db",
+        schema="target_schema",
+        table_name="fetch_events",
+        cursor_column="event_at",
+        adapter=adapter,
+        connection=object(),
+        statement_recorder=statement_recorder,
+    )
+    source_ref: LoaderRelationRef = LoaderRelationRef(
+        name="raw_events",
+        target="target_db.target_schema.raw_events",
+        database="target_db",
+        schema="target_schema",
+        table_name="raw_events",
+        cursor_column="event_at",
+        adapter=adapter,
+        connection=object(),
+        statement_recorder=statement_recorder,
+    )
+    context: LoaderContext = LoaderContext(
+        adapter=adapter,
+        connection=object(),
+        target="target_db.target_schema.raw_orders",
+        target_database="target_db",
+        target_schema="target_schema",
+        target_name="raw_orders",
+        run_id="test_run",
+        environment="dev",
+        vars={},
+        is_reload=False,
+        current_cursor_value=None,
+        logger=logging.getLogger(test_case.expected_logger_name),
+        statement_recorder=statement_recorder,
+        loader_refs={fetch_events: loader_ref},
+        source_refs={"raw_events": source_ref},
+    )
+
+    assert context.loader(fetch_events).current_cursor_value == test_case.expected_execute_result
+    assert context.source("raw_events").max("loaded_at") == test_case.expected_query_result
     events: tuple[LifeCycleEvent, ...] = statement_recorder.snapshot()
     assert tuple(event.content for event in events) == test_case.expected_recorded_events

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from typing import Any
 
@@ -15,12 +16,21 @@ from sqlbuild.executor.load.helpers.cursors import (
     format_cursor_bound,
     load_staging_cursor_bounds,
 )
+from sqlbuild.executor.load.helpers.relation_refs import (
+    build_loader_relation_refs,
+    build_source_relation_refs,
+)
 from sqlbuild.executor.load.helpers.schema import validate_and_evolve_existing_target
 from sqlbuild.executor.load.helpers.staging import write_loader_rows_to_staging
 from sqlbuild.executor.load.models import LoaderContext, LoadExecutionResult
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.executor.shared.helpers.load_execution import (
+    is_untargeted_self_managed_intermediate,
+    load_resource_kind,
+)
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
+from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy
 
@@ -40,6 +50,8 @@ def execute_source_load(
     start_cursor_int: int | None = None,
     end_cursor_int: int | None = None,
     statement_recorder: StatementRecorder,
+    loader_ref_entries: Mapping[Callable[..., object], SourceEntry] | None = None,
+    source_ref_entries: Mapping[str, SourceEntry] | None = None,
 ) -> LoadExecutionResult:
     """Run one source loader and write returned rows using the table strategy."""
 
@@ -59,11 +71,7 @@ def execute_source_load(
     )
     start: float = time.monotonic()
     try:
-        if loader_function.depends_on:
-            raise ExecutorInputError(
-                f"Source loader '{loader_function.name}' has dependencies, which sqb load does "
-                "not support yet"
-            )
+        resource_kind: ExecutionResourceKind = load_resource_kind(source_entry)
         supported_write_strategies: frozenset[SourceWriteStrategy] = frozenset(
             {
                 SourceWriteStrategy.APPEND,
@@ -113,9 +121,28 @@ def execute_source_load(
             end_cursor_ts=end_cursor_ts,
             start_cursor_int=start_cursor_int,
             end_cursor_int=end_cursor_int,
+            loader_refs=build_loader_relation_refs(
+                adapter=adapter,
+                connection=connection,
+                entries=loader_ref_entries or {},
+                statement_recorder=statement_recorder,
+            ),
+            source_refs=build_source_relation_refs(
+                adapter=adapter,
+                connection=connection,
+                entries=source_ref_entries or {},
+                statement_recorder=statement_recorder,
+            ),
         )
         raw_rows: object = loader_function.function(context)
         if raw_rows is None:
+            if is_untargeted_self_managed_intermediate(
+                source_entry=source_entry,
+                loader_function=loader_function,
+            ):
+                raise ExecutorInputError(
+                    f"Loader '{loader_function.name}' returned no rows and has no target declared"
+                )
             if source_entry.write_strategy is not None:
                 raise ExecutorInputError(
                     f"Source '{source_entry.name}' defines write_strategy but loader "
@@ -127,6 +154,7 @@ def execute_source_load(
                 loader_name=loader_function.name,
                 status=ExecutionStatus.SUCCESS,
                 target=target,
+                resource_kind=resource_kind,
                 staging_relation=None,
                 rows_loaded=rows_loaded,
                 duration_ms=int((time.monotonic() - start) * 1000),
@@ -175,6 +203,7 @@ def execute_source_load(
             loader_name=loader_function.name,
             status=ExecutionStatus.FAILED,
             target=target,
+            resource_kind=resource_kind,
             staging_relation=staging,
             duration_ms=int((time.monotonic() - start) * 1000),
             lifecycle_events=statement_recorder.snapshot(),
@@ -185,6 +214,7 @@ def execute_source_load(
         loader_name=loader_function.name,
         status=ExecutionStatus.SUCCESS,
         target=target,
+        resource_kind=resource_kind,
         staging_relation=staging,
         rows_loaded=rows_loaded,
         duration_ms=int((time.monotonic() - start) * 1000),

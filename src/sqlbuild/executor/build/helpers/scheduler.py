@@ -60,6 +60,10 @@ from sqlbuild.executor.run.main.execute import (
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.seed.constants import SEED_ENTRY_MISSING_CODE
 from sqlbuild.executor.seed.main.execute import execute_seed
+from sqlbuild.executor.shared.helpers.load_execution import (
+    build_load_execution_indexes,
+    skipped_load_result,
+)
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.executor.testing.constants import SQL_TEST_ENTRY_MISSING_CODE
 from sqlbuild.executor.testing.main.execute import execute_sql_test
@@ -129,6 +133,12 @@ class BuildScheduler:
         self._loader_functions_by_name: dict[str, DiscoveredLoaderFunction] = {
             loader.name: loader for loader in loader_functions
         }
+        self._loader_ref_entries: dict[Callable[..., object], SourceEntry] = (
+            build_load_execution_indexes(
+                sources=tuple(plan.source_map.values()),
+                loader_functions=loader_functions,
+            ).loader_ref_entries
+        )
         self._loader_is_reload: bool = loader_is_reload
         self._start_cursor_ts: datetime | None = start_cursor_ts
         self._end_cursor_ts: datetime | None = end_cursor_ts
@@ -422,6 +432,8 @@ class BuildScheduler:
             start_cursor_int=self._start_cursor_int,
             end_cursor_int=self._end_cursor_int,
             statement_recorder=StatementRecorder(),
+            loader_ref_entries=self._loader_ref_entries,
+            source_ref_entries=self._plan.source_map,
         )
         duration: int = int((time.monotonic() - start) * 1000)
         return dataclasses.replace(result, duration_ms=duration)
@@ -715,14 +727,7 @@ class BuildScheduler:
         elif key.resource_type == CompiledResourceType.SOURCE:
             source_entry: SourceEntry | None = self._plan.source_map.get(key.name)
             if source_entry is not None and source_entry.loader is not None:
-                self._load_results.append(
-                    LoadExecutionResult(
-                        source_name=source_entry.name,
-                        loader_name=source_entry.loader,
-                        status=ExecutionStatus.SKIPPED,
-                        target=source_entry.table or source_entry.name,
-                    )
-                )
+                self._load_results.append(skipped_load_result(source_entry))
 
     def _skip_remaining(self) -> None:
         """Skip all nodes that were never dispatched."""

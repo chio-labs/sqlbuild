@@ -198,6 +198,7 @@ def _serialize_source_load_entry(entry: SourceLoadPlanEntry) -> dict[str, object
     source_load: dict[str, object] = {
         "name": entry.name,
         "loader": entry.loader,
+        "kind": entry.resource_kind.value,
         "target": entry.target,
         "is_reload": entry.is_reload,
     }

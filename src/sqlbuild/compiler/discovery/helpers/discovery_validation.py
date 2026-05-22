@@ -27,7 +27,12 @@ def validate_discovered_inputs(discovered_inputs: DiscoveredProjectInputs) -> No
     _validate_unique_scenario_file_names(discovered_inputs.scenario_files)
     _validate_unique_source_names(discovered_inputs.source_files)
     _validate_unique_loader_names(discovered_inputs.loader_functions)
+    _validate_loader_dependencies(discovered_inputs.loader_functions)
     _validate_source_loader_references(
+        source_files=discovered_inputs.source_files,
+        loader_functions=discovered_inputs.loader_functions,
+    )
+    _validate_terminal_loader_config_ownership(
         source_files=discovered_inputs.source_files,
         loader_functions=discovered_inputs.loader_functions,
     )
@@ -126,6 +131,78 @@ def _validate_source_loader_references(
                 f"Source '{source_entry.name}' in {source_file.relative_path} references "
                 f"unknown loader '{source_entry.loader}'"
             )
+
+
+def _validate_terminal_loader_config_ownership(
+    *,
+    source_files: tuple[DiscoveredSourceFile, ...],
+    loader_functions: tuple[DiscoveredLoaderFunction, ...],
+) -> None:
+    loader_by_name: dict[str, DiscoveredLoaderFunction] = {
+        loader.name: loader for loader in loader_functions
+    }
+    source_file: DiscoveredSourceFile
+    for source_file in source_files:
+        source_entry: SourceEntry
+        for source_entry in source_file.source_entries:
+            if source_entry.loader is None:
+                continue
+            loader_function: DiscoveredLoaderFunction | None = loader_by_name.get(
+                source_entry.loader
+            )
+            if loader_function is None or not _loader_has_decorator_config(loader_function):
+                continue
+            raise DiscoveryConflictError(
+                f"Source '{source_entry.name}' references loader '{source_entry.loader}', "
+                "but terminal source loader write and schema config must be declared in "
+                "source YAML, not the @loader decorator"
+            )
+
+
+def _loader_has_decorator_config(loader_function: DiscoveredLoaderFunction) -> bool:
+    return any(
+        (
+            loader_function.target is not None,
+            loader_function.write_strategy is not None,
+            loader_function.cursor_column is not None,
+            bool(loader_function.unique_key),
+            bool(loader_function.columns),
+            loader_function.contract is not None,
+        )
+    )
+
+
+def _validate_loader_dependencies(loader_functions: tuple[DiscoveredLoaderFunction, ...]) -> None:
+    loader_by_function: dict[object, DiscoveredLoaderFunction] = {
+        loader.function: loader for loader in loader_functions
+    }
+    loader_function: DiscoveredLoaderFunction
+    for loader_function in loader_functions:
+        dependency: object
+        for dependency in loader_function.depends_on:
+            if dependency not in loader_by_function:
+                raise DiscoveryConflictError(
+                    f"Loader '{loader_function.name}' depends on an unknown loader; "
+                    "use function references to loaders decorated with @loader"
+                )
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(loader_function: DiscoveredLoaderFunction, path: tuple[str, ...]) -> None:
+        if loader_function.name in visited:
+            return
+        if loader_function.name in visiting:
+            cycle_path: str = " -> ".join((*path, loader_function.name))
+            raise DiscoveryConflictError(f"Loader dependency cycle detected: {cycle_path}")
+        visiting.add(loader_function.name)
+        dependency: object
+        for dependency in loader_function.depends_on:
+            visit(loader_by_function[dependency], (*path, loader_function.name))
+        visiting.remove(loader_function.name)
+        visited.add(loader_function.name)
+
+    for loader_function in loader_functions:
+        visit(loader_function, ())
 
 
 def _validate_unique_schema_model_names(schema_files: tuple[DiscoveredSchemaFile, ...]) -> None:
