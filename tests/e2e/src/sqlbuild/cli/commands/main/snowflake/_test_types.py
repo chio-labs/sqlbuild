@@ -44,6 +44,16 @@ class SnowflakeSourceLoaderSchemaEvolutionE2ETestCase:
 
 
 @dataclass(frozen=True)
+class SnowflakeIntermediateDagStrategyE2ETestCase:
+    description: str
+    loader_py: str
+    expected_intermediate_rows: tuple[tuple[object, ...], ...]
+    expected_terminal_rows: tuple[tuple[object, ...], ...]
+    command: tuple[str, ...] = ("--no-color", "load", "--select", "raw_events")
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
 class SnowflakeDiffE2ETestCase:
     description: str
     mutation_sql: tuple[str, ...]
