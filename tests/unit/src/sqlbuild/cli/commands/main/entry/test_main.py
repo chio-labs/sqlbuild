@@ -1516,6 +1516,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         project_dir: Path | None,
         no_sql_validation: bool,
         defer_to: str | None,
+        defer_sources_to: str | None,
         cursor_overrides: object,
         no_color: bool,
         fail_fast: bool,
@@ -1536,6 +1537,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         del project_dir
         del no_sql_validation
         del defer_to
+        del defer_sources_to
         del cursor_overrides
         del concurrency
         del select
@@ -1620,6 +1622,7 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
         project_dir: Path | None,
         no_sql_validation: bool,
         defer_to: str | None,
+        defer_sources_to: str | None,
         cursor_overrides: object,
         no_color: bool,
         fail_fast: bool,
@@ -1640,6 +1643,7 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
         del project_dir
         del no_sql_validation
         del defer_to
+        del defer_sources_to
         del cursor_overrides
         del no_color
         del fail_fast
@@ -1700,6 +1704,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
             Path | None,
             bool,
             str | None,
+            str | None,
             object,
             bool,
             bool,
@@ -1716,6 +1721,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
         project_dir: Path | None,
         no_sql_validation: bool,
         defer_to: str | None,
+        defer_sources_to: str | None,
         cursor_overrides: object,
         json_output: bool,
         full_refresh: bool,
@@ -1731,6 +1737,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
                 project_dir,
                 no_sql_validation,
                 defer_to,
+                defer_sources_to,
                 cursor_overrides,
                 json_output,
                 full_refresh,
@@ -1751,7 +1758,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
 
     assert exit_code == test_case.expected_exit_code
     assert len(received_args) == 1
-    assert received_args[0][4:] == (
+    assert received_args[0][5:] == (
         False,
         False,
         None,
@@ -1784,6 +1791,7 @@ def test_given_plan_load_flag_when_running_then_dispatches_expected_argument(
         project_dir: Path | None,
         no_sql_validation: bool,
         defer_to: str | None,
+        defer_sources_to: str | None,
         cursor_overrides: object,
         json_output: bool,
         full_refresh: bool,
@@ -1798,6 +1806,7 @@ def test_given_plan_load_flag_when_running_then_dispatches_expected_argument(
             project_dir,
             no_sql_validation,
             defer_to,
+            defer_sources_to,
             cursor_overrides,
             json_output,
             full_refresh,
@@ -1842,6 +1851,7 @@ def test_given_select_file_when_running_then_dispatches_file_selectors(
         project_dir: Path | None,
         no_sql_validation: bool,
         defer_to: str | None,
+        defer_sources_to: str | None,
         cursor_overrides: object,
         json_output: bool,
         full_refresh: bool,
@@ -1856,6 +1866,7 @@ def test_given_select_file_when_running_then_dispatches_file_selectors(
             project_dir,
             no_sql_validation,
             defer_to,
+            defer_sources_to,
             cursor_overrides,
             json_output,
             full_refresh,
