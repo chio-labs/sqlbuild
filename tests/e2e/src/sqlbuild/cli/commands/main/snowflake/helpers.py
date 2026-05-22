@@ -61,6 +61,34 @@ def build_snowflake_project_toml(*, project_name: str, schema_name: str) -> str:
     )
 
 
+def build_snowflake_source_deferral_project_toml(
+    *, project_name: str, dev_schema_name: str, prod_schema_name: str
+) -> str:
+    database_name: str = str(build_snowflake_connection_config(schema=dev_schema_name)["database"])
+    return (
+        f'name = "{project_name}"\n'
+        'adapter = "snowflake"\n'
+        'default_environment = "dev"\n\n'
+        "[connection]\n"
+        'account = "${ENV:SQB_TEST_SNOWFLAKE_ACCOUNT}"\n'
+        'user = "${ENV:SQB_TEST_SNOWFLAKE_USER}"\n'
+        'authenticator = "${ENV:SQB_TEST_SNOWFLAKE_AUTHENTICATOR}"\n'
+        'token = "${ENV:SQB_TEST_SNOWFLAKE_PAT}"\n'
+        'role = "${ENV:SQB_TEST_SNOWFLAKE_ROLE}"\n'
+        'warehouse = "${ENV:SQB_TEST_SNOWFLAKE_WAREHOUSE}"\n'
+        'database = "${ENV:SQB_TEST_SNOWFLAKE_DATABASE}"\n\n'
+        "[environments.dev]\n"
+        f'database = "{database_name}"\n'
+        f'schema = "{dev_schema_name}"\n'
+        'defer_sources_to = "prod"\n\n'
+        "[environments.prod]\n"
+        f'database = "{database_name}"\n'
+        f'schema = "{prod_schema_name}"\n\n'
+        "[defaults]\n"
+        'materialized = "table"\n'
+    )
+
+
 def prepare_snowflake_waffle_shop(*, tmp_path: Path) -> tuple[Path, str]:
     """Prepare a Waffle Shop project wired to a unique Snowflake schema."""
 

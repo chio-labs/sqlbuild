@@ -21,6 +21,7 @@ class LoadProjectConfigTestCase:
     expected_dev_connection: dict[str, object]
     expected_dev_vars: dict[str, str]
     expected_dev_schema: str
+    expected_dev_defer_sources_to: str | None
     expected_allow_as_source: bool
     expected_janitor_enabled: bool
     expected_retention_days: int

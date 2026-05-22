@@ -37,6 +37,8 @@ def run_compile_pipeline(
     adapter: BaseAdapter,
     no_sql_validation: bool = False,
     defer_to: str | None = None,
+    defer_sources_to: str | None = None,
+    source_deferral_enabled: bool = True,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     cursor_overrides: CursorOverrides | None = None,
@@ -79,6 +81,8 @@ def run_compile_pipeline(
             connection=connection,
             no_sql_validation=no_sql_validation,
             defer_to=defer_to,
+            defer_sources_to=defer_sources_to,
+            source_deferral_enabled=source_deferral_enabled,
             select=select,
             exclude=exclude,
             cursor_overrides=cursor_overrides,
@@ -100,6 +104,8 @@ def _build_result(
     connection: Any,
     no_sql_validation: bool,
     defer_to: str | None = None,
+    defer_sources_to: str | None = None,
+    source_deferral_enabled: bool = True,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     cursor_overrides: CursorOverrides | None = None,
@@ -153,6 +159,10 @@ def _build_result(
         auto_load_sources=auto_load_sources,
         reload_sources=reload_sources,
         on_progress=on_progress,
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+        defer_sources_to=defer_sources_to,
+        source_deferral_enabled=source_deferral_enabled,
     )
     loaded_macros: dict[str, LoadedMacro] = load_macros(discovered_inputs.macro_files)
     manifest: dict[str, object] = build_manifest(

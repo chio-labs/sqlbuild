@@ -12,15 +12,19 @@ from _pytest.capture import CaptureFixture, CaptureResult
 from _pytest.monkeypatch import MonkeyPatch
 from duckdb import DuckDBPyConnection
 
+from sqlbuild.cli.commands.main.audit import run_audit
 from sqlbuild.cli.commands.main.build import run_build
 from sqlbuild.cli.commands.main.helpers.load_selection import select_load_entries
 from sqlbuild.cli.commands.main.load import run_load
 from sqlbuild.cli.commands.main.plan import run_plan
 from sqlbuild.cli.commands.main.run import run_run
+from sqlbuild.cli.commands.main.scenario import run_scenario
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.execution_json import format_load_execution_json
+from sqlbuild.cli.commands.main.test import run_test
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.executor.load.main.run import run_load_pipeline
 from sqlbuild.executor.load.models import LoadExecutionResult
@@ -53,6 +57,10 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     LoadCommandWriteStrategyTestCase,
     PlanAutoLoadJsonTestCase,
     PlanAutoLoadOutputTestCase,
+    SourceDeferralArtifactTestCase,
+    SourceDeferralBuildTestCase,
+    SourceDeferralErrorTestCase,
+    SourceDeferralNoErrorTestCase,
 )
 
 _PROJECT_FILE: str = 'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabase = "demo.duckdb"\n'
@@ -97,6 +105,300 @@ _BUILD_RUN_AUTO_LOAD_CONFIG_FALSE_PROJECT_FILES: dict[str, str] = {
         'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabase = "demo.duckdb"\n\n'
         "[settings]\nauto_load_sources = false\n"
     ),
+}
+
+_SOURCE_DEFERRAL_PROJECT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "dev"
+
+[connection]
+database = "demo.duckdb"
+
+[environments.dev]
+schema = "dev"
+defer_sources_to = "prod"
+
+[environments.prod]
+schema = "prod"
+""".strip()
+    + "\n",
+    "sources/raw.yml": _BUILD_RUN_AUTO_LOAD_PROJECT_FILES["sources/raw.yml"],
+    "loaders/raw_orders.py": _BUILD_RUN_AUTO_LOAD_PROJECT_FILES["loaders/raw_orders.py"],
+    "models/stg_orders.sql": _BUILD_RUN_AUTO_LOAD_PROJECT_FILES["models/stg_orders.sql"],
+}
+
+_SOURCE_DEFERRAL_MISSING_PROJECT_FILES: dict[str, str] = {
+    **_SOURCE_DEFERRAL_PROJECT_FILES,
+    "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "dev"
+
+[connection]
+database = "demo.duckdb"
+
+[environments.dev]
+schema = "dev"
+
+[environments.prod]
+schema = "prod"
+""".strip()
+    + "\n",
+}
+
+_SOURCE_DEFERRAL_LOCAL_OVERRIDE_PROJECT_FILES: dict[str, str] = {
+    **_SOURCE_DEFERRAL_PROJECT_FILES,
+    "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "dev"
+
+[connection]
+database = "demo.duckdb"
+
+[environments.dev]
+schema = "dev"
+defer_sources_to = "dev"
+
+[environments.prod]
+schema = "prod"
+""".strip()
+    + "\n",
+    "sqlbuild_local.toml": """
+[environments.dev]
+defer_sources_to = "prod"
+""".strip()
+    + "\n",
+}
+
+_SOURCE_DEFERRAL_UNMANAGED_PROJECT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "dev"
+
+[connection]
+database = "demo.duckdb"
+
+[environments.dev]
+schema = "dev"
+""".strip()
+    + "\n",
+    "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    columns:
+      - name: order_id
+        type: INTEGER
+      - name: status
+        type: VARCHAR
+""".strip()
+    + "\n",
+    "models/stg_orders.sql": _BUILD_RUN_AUTO_LOAD_PROJECT_FILES["models/stg_orders.sql"],
+}
+
+_SOURCE_DEFERRAL_UNSELECTED_MANAGED_PROJECT_FILES: dict[str, str] = {
+    **_SOURCE_DEFERRAL_MISSING_PROJECT_FILES,
+    "models/fact_orders.sql": (
+        'MODEL (materialized table);\n\nSELECT order_id, status FROM __ref("stg_orders")'
+    ),
+}
+
+_SOURCE_DEFERRAL_AUTO_LOAD_FALSE_PROJECT_FILES: dict[str, str] = {
+    **_SOURCE_DEFERRAL_PROJECT_FILES,
+    "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "dev"
+
+[connection]
+database = "demo.duckdb"
+
+[settings]
+auto_load_sources = false
+
+[environments.dev]
+schema = "dev"
+defer_sources_to = "prod"
+
+[environments.prod]
+schema = "prod"
+""".strip()
+    + "\n",
+}
+
+_SOURCE_DEFERRAL_LOADER_DAG_PROJECT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": _SOURCE_DEFERRAL_PROJECT_FILES["sqlbuild_project.toml"],
+    "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    loader: raw_orders_loader
+    write_strategy: table
+    columns:
+      - name: order_id
+        type: INTEGER
+      - name: status
+        type: VARCHAR
+""".strip()
+    + "\n",
+    "loaders/raw_orders.py": """
+from sqlbuild.loaders import loader
+
+@loader(
+    write_strategy="table",
+    columns=[
+        {"name": "order_id", "type": "INTEGER"},
+        {"name": "status", "type": "VARCHAR"},
+    ],
+)
+def fetch_orders(ctx):
+    return [{"order_id": 7, "status": "intermediate"}]
+
+@loader(depends_on=[fetch_orders])
+def raw_orders_loader(ctx):
+    rows = ctx.query(f"SELECT order_id, status FROM {ctx.loader(fetch_orders).target}").fetchall()
+    return [{"order_id": row[0], "status": "loaded-" + row[1]} for row in rows]
+""",
+    "models/stg_orders.sql": _BUILD_RUN_AUTO_LOAD_PROJECT_FILES["models/stg_orders.sql"],
+}
+
+_SOURCE_DEFERRAL_EXPLICIT_SCHEMA_PROJECT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": _SOURCE_DEFERRAL_PROJECT_FILES["sqlbuild_project.toml"],
+    "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    schema: external_raw
+    table: raw_orders
+    loader: raw_orders_loader
+    write_strategy: table
+    columns:
+      - name: order_id
+        type: INTEGER
+      - name: status
+        type: VARCHAR
+""".strip()
+    + "\n",
+    "loaders/raw_orders.py": _BUILD_RUN_AUTO_LOAD_PROJECT_FILES["loaders/raw_orders.py"],
+    "models/stg_orders.sql": _BUILD_RUN_AUTO_LOAD_PROJECT_FILES["models/stg_orders.sql"],
+}
+
+_SOURCE_DEFERRAL_EXPRESSION_PROJECT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": _SOURCE_DEFERRAL_PROJECT_FILES["sqlbuild_project.toml"],
+    "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    loader: raw_orders_loader
+    write_strategy: table
+    expression: |
+      SELECT 22 AS order_id, 'expression' AS status
+    columns:
+      - name: order_id
+        type: INTEGER
+      - name: status
+        type: VARCHAR
+""".strip()
+    + "\n",
+    "loaders/raw_orders.py": _BUILD_RUN_AUTO_LOAD_PROJECT_FILES["loaders/raw_orders.py"],
+    "models/stg_orders.sql": _BUILD_RUN_AUTO_LOAD_PROJECT_FILES["models/stg_orders.sql"],
+}
+
+_SOURCE_DEFERRAL_SQL_FUNCTION_PROJECT_FILES: dict[str, str] = {
+    **_SOURCE_DEFERRAL_PROJECT_FILES,
+    "functions/sql/order_statuses.sql": """
+FUNCTION (
+  returns table (
+    order_id INTEGER,
+    status VARCHAR
+  ),
+);
+
+SELECT order_id, status FROM __source("raw_orders")
+""".strip()
+    + "\n",
+}
+
+_SOURCE_DEFERRAL_TEMPLATED_ENV_PROJECT_FILES: dict[str, str] = {
+    **_SOURCE_DEFERRAL_PROJECT_FILES,
+    "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_environment = "dev"
+
+[connection]
+database = "demo.duckdb"
+
+[vars]
+source_prefix = "prod"
+
+[environments.dev]
+schema = "dev"
+defer_sources_to = "prod"
+
+[environments.prod]
+schema = "${source_prefix}_raw"
+""".strip()
+    + "\n",
+}
+
+_SOURCE_DEFERRAL_AUDIT_PROJECT_FILES: dict[str, str] = {
+    **_SOURCE_DEFERRAL_PROJECT_FILES,
+    "audits/singular/source_status.sql": """
+AUDIT ();
+
+SELECT order_id FROM __source("raw_orders") WHERE status != 'prod-audit'
+""".strip()
+    + "\n",
+}
+
+_SOURCE_DEFERRAL_BUILD_WITH_FUNCTION_PROJECT_FILES: dict[str, str] = {
+    **_SOURCE_DEFERRAL_PROJECT_FILES,
+    "functions/sql/order_statuses.sql": """
+FUNCTION (
+  returns table (
+    order_id INTEGER,
+    status VARCHAR
+  ),
+);
+
+SELECT order_id, status FROM __source("raw_orders")
+""".strip()
+    + "\n",
+}
+
+_SOURCE_DEFERRAL_TEST_PROJECT_FILES: dict[str, str] = {
+    **_SOURCE_DEFERRAL_MISSING_PROJECT_FILES,
+    "tests/unit/test_stg_orders.sql": """
+TEST ();
+
+WITH
+__source__raw_orders AS (
+  SELECT 21 AS order_id, 'mocked' AS status
+),
+__expected__stg_orders AS (
+  SELECT 21 AS order_id, 'mocked' AS status
+)
+SELECT 1
+""".strip()
+    + "\n",
+}
+
+_SOURCE_DEFERRAL_SCENARIO_PROJECT_FILES: dict[str, str] = {
+    **_SOURCE_DEFERRAL_MISSING_PROJECT_FILES,
+    "tests/scenarios/source_mock_pass.sql": """
+SCENARIO ();
+
+WITH
+__source__raw_orders AS (
+  SELECT 31 AS order_id, 'scenario-mock' AS status
+),
+__expected__stg_orders AS (
+  SELECT 31 AS order_id, 'scenario-mock' AS status
+)
+SELECT 1
+""".strip()
+    + "\n",
 }
 
 _BUILD_RUN_AUTO_LOAD_SELECTION_PROJECT_FILES: dict[str, str] = {
@@ -355,6 +657,7 @@ PLAN_AUTO_LOAD_JSON_TEST_CASES: list[PlanAutoLoadJsonTestCase] = [
             {
                 "name": "raw_orders",
                 "loader": "raw_orders_loader",
+                "kind": "source",
                 "target": "raw_orders",
                 "is_reload": False,
                 "write_strategy": "table",
@@ -370,6 +673,326 @@ PLAN_AUTO_LOAD_JSON_TEST_CASES: list[PlanAutoLoadJsonTestCase] = [
         expected_source_loads=(),
         expected_selected_count=1,
         expected_source_load_count=0,
+    ),
+    PlanAutoLoadJsonTestCase(
+        description="plan json keeps source loads when source reads defer to prod",
+        project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
+        load_sources=None,
+        expected_source_loads=(
+            {
+                "name": "raw_orders",
+                "loader": "raw_orders_loader",
+                "kind": "source",
+                "target": "raw_orders",
+                "is_reload": False,
+                "write_strategy": "table",
+            },
+        ),
+        expected_selected_count=1,
+        expected_source_load_count=1,
+    ),
+]
+
+SOURCE_DEFERRAL_BUILD_TEST_CASES: list[SourceDeferralBuildTestCase] = [
+    SourceDeferralBuildTestCase(
+        description="build configured environment defers managed source reads to prod",
+        command="build",
+        project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
+        defer_sources_to=None,
+        setup_sql=(
+            "CREATE SCHEMA prod",
+            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+            "INSERT INTO prod.raw_orders VALUES (99, 'prod-existing')",
+        ),
+        expected_model_rows=((99, "prod-existing"),),
+        expected_loaded_source_rows=((7, "loaded"),),
+    ),
+    SourceDeferralBuildTestCase(
+        description="build cli override reads managed sources from active environment",
+        command="build",
+        project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
+        defer_sources_to="dev",
+        setup_sql=(),
+        expected_model_rows=((7, "loaded"),),
+        expected_loaded_source_rows=((7, "loaded"),),
+    ),
+    SourceDeferralBuildTestCase(
+        description="run cli override reads managed sources from active environment",
+        command="run",
+        project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
+        defer_sources_to="dev",
+        setup_sql=(),
+        expected_model_rows=((7, "loaded"),),
+        expected_loaded_source_rows=((7, "loaded"),),
+    ),
+    SourceDeferralBuildTestCase(
+        description="run configured environment defers managed source reads to prod",
+        command="run",
+        project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
+        defer_sources_to=None,
+        setup_sql=(
+            "CREATE SCHEMA prod",
+            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+            "INSERT INTO prod.raw_orders VALUES (100, 'prod-run')",
+        ),
+        expected_model_rows=((100, "prod-run"),),
+        expected_loaded_source_rows=((7, "loaded"),),
+    ),
+    SourceDeferralBuildTestCase(
+        description="local environment override defers managed source reads to prod",
+        command="build",
+        project_files=_SOURCE_DEFERRAL_LOCAL_OVERRIDE_PROJECT_FILES,
+        defer_sources_to=None,
+        setup_sql=(
+            "CREATE SCHEMA prod",
+            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+            "INSERT INTO prod.raw_orders VALUES (101, 'local-override-prod')",
+        ),
+        expected_model_rows=((101, "local-override-prod"),),
+        expected_loaded_source_rows=((7, "loaded"),),
+    ),
+    SourceDeferralBuildTestCase(
+        description="loader dag writes active env while model reads deferred source env",
+        command="build",
+        project_files=_SOURCE_DEFERRAL_LOADER_DAG_PROJECT_FILES,
+        defer_sources_to=None,
+        setup_sql=(
+            "CREATE SCHEMA prod",
+            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+            "INSERT INTO prod.raw_orders VALUES (102, 'prod-dag')",
+        ),
+        expected_model_rows=((102, "prod-dag"),),
+        expected_loaded_source_rows=((7, "loaded-intermediate"),),
+    ),
+    SourceDeferralBuildTestCase(
+        description="expression managed source remains unchanged by source deferral",
+        command="build",
+        project_files=_SOURCE_DEFERRAL_EXPRESSION_PROJECT_FILES,
+        defer_sources_to=None,
+        setup_sql=(
+            "CREATE SCHEMA prod",
+            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+            "INSERT INTO prod.raw_orders VALUES (103, 'prod-expression')",
+        ),
+        expected_model_rows=((22, "expression"),),
+        expected_loaded_source_rows=((7, "loaded"),),
+    ),
+]
+
+SOURCE_DEFERRAL_NO_ERROR_TEST_CASES: list[SourceDeferralNoErrorTestCase] = [
+    SourceDeferralNoErrorTestCase(
+        description="unmanaged source read does not require source deferral config",
+        project_files=_SOURCE_DEFERRAL_UNMANAGED_PROJECT_FILES,
+        setup_sql=(
+            "CREATE TABLE raw_orders(order_id INTEGER, status VARCHAR)",
+            "INSERT INTO raw_orders VALUES (12, 'unmanaged')",
+        ),
+        select=("stg_orders",),
+        result_sql="SELECT order_id, status FROM dev.stg_orders ORDER BY order_id",
+        expected_rows=((12, "unmanaged"),),
+    ),
+    SourceDeferralNoErrorTestCase(
+        description="unselected managed source read does not require source deferral config",
+        project_files=_SOURCE_DEFERRAL_UNSELECTED_MANAGED_PROJECT_FILES,
+        setup_sql=(
+            "CREATE SCHEMA dev",
+            "CREATE TABLE dev.stg_orders(order_id INTEGER, status VARCHAR)",
+            "INSERT INTO dev.stg_orders VALUES (13, 'prebuilt')",
+        ),
+        select=("fact_orders",),
+        result_sql="SELECT order_id, status FROM dev.fact_orders ORDER BY order_id",
+        expected_rows=((13, "prebuilt"),),
+    ),
+    SourceDeferralNoErrorTestCase(
+        description="no-load still reads managed source from deferred environment",
+        project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
+        setup_sql=(
+            "CREATE SCHEMA prod",
+            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+            "INSERT INTO prod.raw_orders VALUES (14, 'prod-no-load')",
+        ),
+        select=("stg_orders",),
+        result_sql="SELECT order_id, status FROM dev.stg_orders ORDER BY order_id",
+        expected_rows=((14, "prod-no-load"),),
+        load_sources=False,
+    ),
+    SourceDeferralNoErrorTestCase(
+        description="auto load disabled still reads managed source from deferred environment",
+        project_files=_SOURCE_DEFERRAL_AUTO_LOAD_FALSE_PROJECT_FILES,
+        setup_sql=(
+            "CREATE SCHEMA prod",
+            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+            "INSERT INTO prod.raw_orders VALUES (15, 'prod-auto-disabled')",
+        ),
+        select=("stg_orders",),
+        result_sql="SELECT order_id, status FROM dev.stg_orders ORDER BY order_id",
+        expected_rows=((15, "prod-auto-disabled"),),
+    ),
+    SourceDeferralNoErrorTestCase(
+        description="explicit source schema is preserved instead of deferred environment schema",
+        project_files=_SOURCE_DEFERRAL_EXPLICIT_SCHEMA_PROJECT_FILES,
+        setup_sql=(
+            "CREATE SCHEMA external_raw",
+            "CREATE TABLE external_raw.raw_orders(order_id INTEGER, status VARCHAR)",
+            "INSERT INTO external_raw.raw_orders VALUES (16, 'external-explicit')",
+            "CREATE SCHEMA prod",
+            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+            "INSERT INTO prod.raw_orders VALUES (116, 'prod-ignored')",
+        ),
+        select=("stg_orders",),
+        result_sql="SELECT order_id, status FROM dev.stg_orders ORDER BY order_id",
+        expected_rows=((16, "external-explicit"),),
+        load_sources=False,
+    ),
+    SourceDeferralNoErrorTestCase(
+        description="templated source deferral environment schema resolves project vars",
+        project_files=_SOURCE_DEFERRAL_TEMPLATED_ENV_PROJECT_FILES,
+        setup_sql=(
+            "CREATE SCHEMA prod_raw",
+            "CREATE TABLE prod_raw.raw_orders(order_id INTEGER, status VARCHAR)",
+            "INSERT INTO prod_raw.raw_orders VALUES (17, 'templated-prod')",
+        ),
+        select=("stg_orders",),
+        result_sql="SELECT order_id, status FROM dev.stg_orders ORDER BY order_id",
+        expected_rows=((17, "templated-prod"),),
+        load_sources=False,
+    ),
+    SourceDeferralNoErrorTestCase(
+        description="audit reads managed source from deferred environment",
+        project_files=_SOURCE_DEFERRAL_AUDIT_PROJECT_FILES,
+        setup_sql=(
+            "CREATE SCHEMA dev",
+            "CREATE TABLE dev.raw_orders(order_id INTEGER, status VARCHAR)",
+            "INSERT INTO dev.raw_orders VALUES (18, 'dev-would-fail')",
+            "CREATE SCHEMA prod",
+            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+            "INSERT INTO prod.raw_orders VALUES (18, 'prod-audit')",
+        ),
+        select=(),
+        result_sql="SELECT 1",
+        expected_rows=((1,),),
+        command="audit",
+    ),
+    SourceDeferralNoErrorTestCase(
+        description="sql test with source mock does not require source deferral",
+        project_files=_SOURCE_DEFERRAL_TEST_PROJECT_FILES,
+        setup_sql=(),
+        select=("stg_orders",),
+        result_sql="SELECT 1",
+        expected_rows=((1,),),
+        command="test",
+    ),
+    SourceDeferralNoErrorTestCase(
+        description="scenario with source mock does not require source deferral",
+        project_files=_SOURCE_DEFERRAL_SCENARIO_PROJECT_FILES,
+        setup_sql=(),
+        select=("source_mock_pass",),
+        result_sql="SELECT 1",
+        expected_rows=((1,),),
+        command="scenario",
+    ),
+]
+
+SOURCE_DEFERRAL_PLAN_SUCCESS_TEST_CASES: list[SourceDeferralNoErrorTestCase] = [
+    SourceDeferralNoErrorTestCase(
+        description="plan configured environment accepts deferred source reads",
+        project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
+        setup_sql=(),
+        select=("stg_orders",),
+        result_sql="",
+        expected_rows=(),
+    ),
+    SourceDeferralNoErrorTestCase(
+        description="plan cli override accepts active source environment",
+        project_files=_SOURCE_DEFERRAL_MISSING_PROJECT_FILES,
+        setup_sql=(),
+        select=("stg_orders",),
+        result_sql="",
+        expected_rows=(),
+        defer_sources_to="dev",
+    ),
+    SourceDeferralNoErrorTestCase(
+        description="selected sql function managed source read uses configured deferral",
+        project_files=_SOURCE_DEFERRAL_SQL_FUNCTION_PROJECT_FILES,
+        setup_sql=(),
+        select=("order_statuses",),
+        result_sql="",
+        expected_rows=(),
+    ),
+]
+
+SOURCE_DEFERRAL_ARTIFACT_TEST_CASES: list[SourceDeferralArtifactTestCase] = [
+    SourceDeferralArtifactTestCase(
+        description=(
+            "build artifacts write deferred source relation into compiled and runtime model sql"
+        ),
+        command="build",
+        project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
+        setup_sql=(
+            "CREATE SCHEMA prod",
+            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+            "INSERT INTO prod.raw_orders VALUES (19, 'artifact-prod')",
+        ),
+        select=("stg_orders",),
+        compiled_relative_paths=("target/compiled/models/stg_orders.sql",),
+        runtime_relative_paths=("target/run/models/stg_orders.sql",),
+        expected_sql_fragments=("prod.raw_orders",),
+        unexpected_sql_fragments=("dev.raw_orders",),
+    ),
+    SourceDeferralArtifactTestCase(
+        description="build artifacts write deferred source relation into compiled function sql",
+        command="build",
+        project_files=_SOURCE_DEFERRAL_BUILD_WITH_FUNCTION_PROJECT_FILES,
+        setup_sql=(
+            "CREATE SCHEMA prod",
+            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+            "INSERT INTO prod.raw_orders VALUES (20, 'function-artifact')",
+        ),
+        select=("order_statuses",),
+        compiled_relative_paths=("target/compiled/functions/sql/order_statuses.sql",),
+        runtime_relative_paths=("target/run/functions/sql/order_statuses.sql",),
+        expected_sql_fragments=("prod.raw_orders",),
+        unexpected_sql_fragments=("dev.raw_orders",),
+    ),
+    SourceDeferralArtifactTestCase(
+        description="audit compiled artifact writes deferred source relation",
+        command="build",
+        project_files=_SOURCE_DEFERRAL_AUDIT_PROJECT_FILES,
+        setup_sql=(
+            "CREATE SCHEMA prod",
+            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+            "INSERT INTO prod.raw_orders VALUES (21, 'prod-audit')",
+        ),
+        select=("stg_orders",),
+        compiled_relative_paths=("target/compiled/audits/generic/raw_orders/source_status.sql",),
+        runtime_relative_paths=(),
+        expected_sql_fragments=("prod.raw_orders",),
+        unexpected_sql_fragments=("dev.raw_orders",),
+    ),
+]
+
+SOURCE_DEFERRAL_ERROR_TEST_CASES: list[SourceDeferralErrorTestCase] = [
+    SourceDeferralErrorTestCase(
+        description="managed source read without source deferral config errors",
+        project_files=_SOURCE_DEFERRAL_MISSING_PROJECT_FILES,
+        expected_error_fragment="Missing source deferral config for environment 'dev'",
+    ),
+    SourceDeferralErrorTestCase(
+        description="managed source read with unknown cli deferral environment errors",
+        project_files=_SOURCE_DEFERRAL_MISSING_PROJECT_FILES,
+        defer_sources_to="missing_env",
+        expected_error_fragment="Unknown source deferral environment 'missing_env'",
+    ),
+    SourceDeferralErrorTestCase(
+        description="selected sql function managed source read without deferral config errors",
+        project_files={
+            **_SOURCE_DEFERRAL_SQL_FUNCTION_PROJECT_FILES,
+            "sqlbuild_project.toml": _SOURCE_DEFERRAL_MISSING_PROJECT_FILES[
+                "sqlbuild_project.toml"
+            ],
+        },
+        select=("order_statuses",),
+        expected_error_fragment="Missing source deferral config for environment 'dev'",
     ),
 ]
 
@@ -726,6 +1349,198 @@ def test_given_self_managed_source_when_running_build_then_auto_loads_before_mod
     finally:
         connection.close()
     assert rows == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SOURCE_DEFERRAL_BUILD_TEST_CASES,
+    ids=[case.description for case in SOURCE_DEFERRAL_BUILD_TEST_CASES],
+)
+def test_given_managed_source_environment_when_building_or_running_then_reads_configured_source_env(
+    test_case: SourceDeferralBuildTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+    setup_connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
+    try:
+        setup_statement: str
+        for setup_statement in test_case.setup_sql:
+            setup_connection.execute(setup_statement)
+    finally:
+        setup_connection.close()
+
+    command_runners: dict[str, Callable[..., int]] = {"build": run_build, "run": run_run}
+    exit_code: int = command_runners[test_case.command](
+        project_dir=tmp_path,
+        no_color=True,
+        select=("stg_orders",),
+        defer_sources_to=test_case.defer_sources_to,
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
+    try:
+        model_rows: tuple[tuple[object, ...], ...] = tuple(
+            connection.execute(
+                "SELECT order_id, status FROM dev.stg_orders ORDER BY order_id"
+            ).fetchall()
+        )
+        source_rows: tuple[tuple[object, ...], ...] = tuple(
+            connection.execute(
+                "SELECT order_id, status FROM dev.raw_orders ORDER BY order_id"
+            ).fetchall()
+        )
+    finally:
+        connection.close()
+    assert model_rows == test_case.expected_model_rows
+    assert source_rows == test_case.expected_loaded_source_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SOURCE_DEFERRAL_PLAN_SUCCESS_TEST_CASES,
+    ids=[case.description for case in SOURCE_DEFERRAL_PLAN_SUCCESS_TEST_CASES],
+)
+def test_given_plan_source_deferral_override_when_planning_then_succeeds(
+    test_case: SourceDeferralNoErrorTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    exit_code: int = run_plan(
+        project_dir=tmp_path,
+        no_color=True,
+        select=test_case.select,
+        defer_sources_to=test_case.defer_sources_to,
+    )
+
+    assert exit_code == test_case.expected_exit_code
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SOURCE_DEFERRAL_NO_ERROR_TEST_CASES,
+    ids=[case.description for case in SOURCE_DEFERRAL_NO_ERROR_TEST_CASES],
+)
+def test_given_no_managed_source_read_ambiguity_when_building_then_source_deferral_not_required(
+    test_case: SourceDeferralNoErrorTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+    setup_connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
+    try:
+        setup_statement: str
+        for setup_statement in test_case.setup_sql:
+            setup_connection.execute(setup_statement)
+    finally:
+        setup_connection.close()
+
+    command_runners: dict[str, Callable[..., int]] = {
+        "audit": run_audit,
+        "build": run_build,
+        "run": run_run,
+        "scenario": run_scenario,
+        "test": run_test,
+    }
+    exit_code: int = command_runners[test_case.command](
+        project_dir=tmp_path,
+        no_color=True,
+        **(
+            {"selectors": test_case.select}
+            if test_case.command == "scenario"
+            else {"select": test_case.select}
+        ),
+        **(
+            {
+                "defer_sources_to": test_case.defer_sources_to,
+                "load_sources": test_case.load_sources,
+            }
+            if test_case.command in ("build", "run")
+            else {}
+        ),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
+    try:
+        rows: tuple[tuple[object, ...], ...] = tuple(
+            connection.execute(test_case.result_sql).fetchall()
+        )
+    finally:
+        connection.close()
+    assert rows == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SOURCE_DEFERRAL_ERROR_TEST_CASES,
+    ids=[case.description for case in SOURCE_DEFERRAL_ERROR_TEST_CASES],
+)
+def test_given_managed_source_without_source_deferral_when_planning_then_errors(
+    test_case: SourceDeferralErrorTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    with pytest.raises(PlannerInputError) as exc_info:
+        run_plan(
+            project_dir=tmp_path,
+            no_color=True,
+            select=test_case.select,
+            defer_sources_to=test_case.defer_sources_to,
+        )
+
+    assert test_case.expected_error_fragment in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SOURCE_DEFERRAL_ARTIFACT_TEST_CASES,
+    ids=[case.description for case in SOURCE_DEFERRAL_ARTIFACT_TEST_CASES],
+)
+def test_given_source_deferral_when_writing_artifacts_then_sql_uses_deferred_relations(
+    test_case: SourceDeferralArtifactTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+    setup_connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
+    try:
+        setup_statement: str
+        for setup_statement in test_case.setup_sql:
+            setup_connection.execute(setup_statement)
+    finally:
+        setup_connection.close()
+
+    command_runners: dict[str, Callable[..., int]] = {
+        "audit": run_audit,
+        "build": run_build,
+    }
+    exit_code: int = command_runners[test_case.command](
+        project_dir=tmp_path,
+        no_color=True,
+        select=test_case.select,
+    )
+
+    assert exit_code == 0
+    artifact_relative_path: str
+    artifact_contents: str = ""
+    for artifact_relative_path in (
+        *test_case.compiled_relative_paths,
+        *test_case.runtime_relative_paths,
+    ):
+        artifact_contents += (tmp_path / artifact_relative_path).read_text(encoding="utf-8")
+        artifact_contents += "\n"
+    expected_fragment: str
+    for expected_fragment in test_case.expected_sql_fragments:
+        assert expected_fragment in artifact_contents
+    unexpected_fragment: str
+    for unexpected_fragment in test_case.unexpected_sql_fragments:
+        assert unexpected_fragment not in artifact_contents
 
 
 @pytest.mark.parametrize(

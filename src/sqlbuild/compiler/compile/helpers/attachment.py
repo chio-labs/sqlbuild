@@ -2234,6 +2234,11 @@ def resolve_environment_config(
             if local_environment.schema is not None
             else project_environment.schema
         ),
+        defer_sources_to=(
+            local_environment.defer_sources_to
+            if local_environment.defer_sources_to is not None
+            else project_environment.defer_sources_to
+        ),
         clone=_merge_clone_policy(
             project_clone=project_environment.clone,
             local_clone=local_environment.clone,

@@ -92,6 +92,7 @@ def run_test(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         no_sql_validation=no_sql_validation,
+        source_deferral_enabled=False,
         select=select,
         exclude=exclude,
         connection_config=connection_config,

@@ -17,6 +17,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery._test_types import (
     BigQueryScenarioRemoteE2ETestCase,
     BigQuerySnapshotApplyE2ETestCase,
     BigQuerySnapshotE2ETestCase,
+    BigQuerySourceDeferralE2ETestCase,
     BigQuerySourceLoaderSchemaEvolutionE2ETestCase,
     BigQuerySourceLoaderStrategiesE2ETestCase,
 )
@@ -25,7 +26,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery.helpers import (
     assert_bigquery_snapshot_matrix_rows,
     assert_current_bigquery_snapshot_rows,
     bigquery_relation_row_count,
+    build_bigquery_local_config,
     build_bigquery_project_toml,
+    build_bigquery_source_deferral_project_toml,
     cleanup_bigquery_dataset,
     ensure_bigquery_dataset_ready,
     execute_bigquery_sql,
@@ -60,7 +63,10 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     run_sqb,
     stringify_warehouse_rows,
 )
-from tests.integration.src.sqlbuild.integrations.bigquery.helpers import build_unique_dataset_name
+from tests.integration.src.sqlbuild.integrations.bigquery.helpers import (
+    build_bigquery_connection_config,
+    build_unique_dataset_name,
+)
 
 BIGQUERY_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES: list[BigQueryScenarioLocalReplayE2ETestCase] = [
     BigQueryScenarioLocalReplayE2ETestCase(
@@ -310,6 +316,98 @@ def test_given_bigquery_scenario_capture_when_replaying_locally_then_transpilabl
         )
     finally:
         cleanup_bigquery_dataset(dataset_name=dataset_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQuerySourceDeferralE2ETestCase(
+            description="bigquery loader writes dev while model reads prod deferred source",
+            expected_model_rows=(("99", "prod-source"),),
+            expected_loader_rows=(("7", "loaded-dev"),),
+        )
+    ],
+    ids=["bigquery loader writes dev while model reads prod deferred source"],
+)
+def test_given_source_deferral_env_when_building_on_bigquery_then_reads_prod_and_writes_dev(
+    tmp_path: Path,
+    test_case: BigQuerySourceDeferralE2ETestCase,
+) -> None:
+    dev_dataset_name: str = build_unique_dataset_name(prefix="sqlbuild_e2e_defer_dev")
+    prod_dataset_name: str = build_unique_dataset_name(prefix="sqlbuild_e2e_defer_prod")
+    location: str = str(build_bigquery_connection_config(schema=dev_dataset_name)["location"])
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="bigquery_source_deferral",
+        repo_files={
+            "sqlbuild_project.toml": build_bigquery_source_deferral_project_toml(
+                project_name="bigquery_source_deferral",
+                dev_dataset_name=dev_dataset_name,
+                prod_dataset_name=prod_dataset_name,
+            ),
+            "sqlbuild_local.toml": build_bigquery_local_config(location=location),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    loader: raw_orders_loader\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+                "      - name: status\n"
+                "        type: STRING\n"
+            ),
+            "loaders/raw_orders.py": (
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader\n"
+                "def raw_orders_loader(ctx):\n"
+                "    return [{'order_id': 7, 'status': 'loaded-dev'}]\n"
+            ),
+            "models/stg_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT order_id, status FROM __source("raw_orders")'
+            ),
+        },
+    )
+    ensure_bigquery_dataset_ready(dataset_name=dev_dataset_name)
+    ensure_bigquery_dataset_ready(dataset_name=prod_dataset_name)
+
+    try:
+        execute_bigquery_sql(
+            dataset_name=prod_dataset_name,
+            sql=(
+                "CREATE OR REPLACE TABLE "
+                f"{relation_name(dataset_name=prod_dataset_name, name='raw_orders')} "
+                "AS SELECT 99 AS order_id, 'prod-source' AS status"
+            ),
+        )
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "build", "--select", "stg_orders"),
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        model_rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
+            dataset_name=dev_dataset_name,
+            sql=(
+                "SELECT order_id, status FROM "
+                f"{relation_name(dataset_name=dev_dataset_name, name='stg_orders')} "
+                "ORDER BY order_id"
+            ),
+        )
+        loader_rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
+            dataset_name=dev_dataset_name,
+            sql=(
+                "SELECT order_id, status FROM "
+                f"{relation_name(dataset_name=dev_dataset_name, name='raw_orders')} "
+                "ORDER BY order_id"
+            ),
+        )
+        assert stringify_warehouse_rows(model_rows) == test_case.expected_model_rows
+        assert stringify_warehouse_rows(loader_rows) == test_case.expected_loader_rows
+    finally:
+        cleanup_bigquery_dataset(dataset_name=dev_dataset_name)
+        cleanup_bigquery_dataset(dataset_name=prod_dataset_name)
 
 
 @pytest.mark.parametrize(

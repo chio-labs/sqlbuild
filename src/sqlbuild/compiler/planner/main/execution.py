@@ -57,6 +57,7 @@ from sqlbuild.compiler.planner.helpers.resolve.refs import (
 )
 from sqlbuild.compiler.planner.helpers.resolve.resolve import resolve_function_sql
 from sqlbuild.compiler.planner.helpers.selectors import resolve_selectors
+from sqlbuild.compiler.planner.helpers.source_deferral import build_source_read_map
 from sqlbuild.compiler.planner.helpers.sql_test_assembly import plan_test
 from sqlbuild.compiler.planner.helpers.warehouse_snapshot import gather_warehouse_snapshot
 from sqlbuild.compiler.planner.models import (
@@ -75,7 +76,11 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, PlanReason
-from sqlbuild.shared.types import ExecutionResourceKind, ExternalSqlReferenceResolver
+from sqlbuild.shared.types import (
+    ExecutionResourceKind,
+    ExternalSqlReferenceResolver,
+)
+from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -95,6 +100,10 @@ def build_execution_plan(
     on_progress: Callable[[str], None] | None = None,
     deferred_targets: dict[str, CompiledRelationTarget] | None = None,
     deferred_relations: dict[str, RelationInfo] | None = None,
+    project_config: ProjectConfig | None = None,
+    local_config: LocalConfig | None = None,
+    defer_sources_to: str | None = None,
+    source_deferral_enabled: bool = True,
 ) -> PlanOutput:
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_upstream_deps(
         project
@@ -178,9 +187,24 @@ def build_execution_plan(
         s.source_entry.name: s.source_entry for s in project.sources
     }
     source_map.update(build_intermediate_source_map(project=project, selected_keys=selected_keys))
+    source_read_map: dict[str, SourceEntry] = (
+        build_source_read_map(
+            project=project,
+            source_map=source_map,
+            selected_keys=selected_keys,
+            project_config=project_config,
+            local_config=local_config,
+            defer_sources_to=defer_sources_to,
+        )
+        if source_deferral_enabled
+        else source_map
+    )
     star_exclude_keyword: str = adapter.star_exclude_keyword()
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]] = gather_source_columns(
-        project=project, adapter=adapter, connection=connection
+        project=project,
+        adapter=adapter,
+        connection=connection,
+        source_entries=tuple(source_read_map.values()),
     )
     if on_progress is not None:
         on_progress(f"Inspected warehouse state. ({time.monotonic() - warehouse_start:.2f}s)")
@@ -250,7 +274,7 @@ def build_execution_plan(
             models_by_name=models_by_name,
             seed_targets=seed_targets,
             function_targets=function_targets,
-            source_map=source_map,
+            source_map=source_read_map,
             source_warehouse_columns=source_warehouse_columns,
             star_exclude_keyword=star_exclude_keyword,
             sqlglot_enabled=sqlglot_enabled,
@@ -279,7 +303,7 @@ def build_execution_plan(
                 models_by_name=models_by_name,
                 seed_targets=seed_targets,
                 function_targets=function_targets,
-                source_map=source_map,
+                source_map=source_read_map,
                 source_warehouse_columns=source_warehouse_columns,
                 star_exclude_keyword=star_exclude_keyword,
                 sqlglot_enabled=sqlglot_enabled,
@@ -360,7 +384,7 @@ def build_execution_plan(
                 model_targets=model_targets,
                 seed_targets=seed_targets,
                 function_targets=function_targets,
-                source_map=source_map,
+                source_map=source_read_map,
                 source_warehouse_columns=source_warehouse_columns,
                 star_exclude_keyword=star_exclude_keyword,
             ),
@@ -398,7 +422,7 @@ def build_execution_plan(
                 audit=audit,
                 model_targets=model_targets,
                 seed_targets=seed_targets,
-                source_map=source_map,
+                source_map=source_read_map,
                 adapter=adapter,
                 upstream_deps=upstream_deps,
                 downstream_deps=downstream_deps,

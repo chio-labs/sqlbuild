@@ -23,6 +23,7 @@ class CliNamespace:
     dbt_target_path: str | None = None
     no_sql_validation: bool = False
     defer_to: str | None = None
+    defer_sources_to: str | None = None
     environment_range: str | None = None
     from_environment: str | None = None
     to_environment: str | None = None
@@ -113,6 +114,7 @@ class CliEntrypointHandlers:
             Path | None,
             bool,
             str | None,
+            str | None,
             CursorOverrides | None,
             bool,
             bool,
@@ -134,6 +136,7 @@ class CliEntrypointHandlers:
         [
             Path | None,
             bool,
+            str | None,
             str | None,
             CursorOverrides | None,
             bool,
@@ -158,6 +161,7 @@ class CliEntrypointHandlers:
         [
             Path | None,
             bool,
+            str | None,
             str | None,
             CursorOverrides | None,
             bool,

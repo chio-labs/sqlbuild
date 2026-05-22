@@ -432,6 +432,7 @@ def _load_environments(*, payload: object, file_path: Path) -> dict[str, Environ
             vars=_load_string_mapping(payload=env_mapping.get("vars"), file_path=file_path),
             database=_optional_str(payload=env_mapping, key="database"),
             schema=_optional_str(payload=env_mapping, key="schema"),
+            defer_sources_to=_optional_str(payload=env_mapping, key="defer_sources_to"),
             clone=ClonePolicy(
                 allow_as_source=_optional_bool(
                     mapping=clone_mapping,
@@ -473,6 +474,7 @@ def _load_local_environments(
             vars=_load_string_mapping(payload=env_mapping.get("vars"), file_path=file_path),
             database=_optional_str(payload=env_mapping, key="database"),
             schema=_optional_str(payload=env_mapping, key="schema"),
+            defer_sources_to=_optional_str(payload=env_mapping, key="defer_sources_to"),
             clone=LocalClonePolicy(
                 allow_as_source=_optional_nullable_bool(
                     mapping=clone_mapping,

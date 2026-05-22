@@ -14,7 +14,6 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
     CompiledRelationTarget,
     CompiledSeed,
-    CompiledSource,
     CompileSqlReference,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
@@ -408,14 +407,19 @@ def gather_source_columns(
     project: CompiledProject,
     adapter: BaseAdapter,
     connection: Any,
+    source_entries: tuple[SourceEntry, ...] | None = None,
 ) -> dict[str, tuple[ColumnInfo, ...]]:
     """Gather warehouse columns for all declared sources."""
 
     result: dict[str, tuple[ColumnInfo, ...]] = {}
     source_schemas: dict[str, set[str]] = {}
-    source: CompiledSource
-    for source in project.sources:
-        entry: SourceEntry = source.source_entry
+    entries: tuple[SourceEntry, ...] = (
+        source_entries
+        if source_entries is not None
+        else tuple(source.source_entry for source in project.sources)
+    )
+    entry: SourceEntry
+    for entry in entries:
         if entry.expression is not None:
             if entry.type_enforcement:
                 column_names: tuple[str, ...] = adapter.query_column_names(
@@ -438,6 +442,7 @@ def gather_source_columns(
             project=project,
             database=database,
             schemas=schemas,
+            source_entries=entries,
         )
         all_columns: dict[str, tuple[ColumnInfo, ...]] = adapter.get_all_columns(
             connection,
@@ -445,9 +450,8 @@ def gather_source_columns(
             schemas=tuple(sorted(schemas)),
             names=names,
         )
-        source_iter: CompiledSource
-        for source_iter in project.sources:
-            entry_iter: SourceEntry = source_iter.source_entry
+        entry_iter: SourceEntry
+        for entry_iter in entries:
             if entry_iter.expression is not None:
                 continue
             table_name: str = entry_iter.table if entry_iter.table is not None else entry_iter.name
@@ -463,11 +467,16 @@ def _build_source_table_name_filter(
     project: CompiledProject,
     database: str | None,
     schemas: set[str],
+    source_entries: tuple[SourceEntry, ...] | None = None,
 ) -> tuple[str, ...] | None:
     names: set[str] = set()
-    source: CompiledSource
-    for source in project.sources:
-        entry: SourceEntry = source.source_entry
+    entries: tuple[SourceEntry, ...] = (
+        source_entries
+        if source_entries is not None
+        else tuple(source.source_entry for source in project.sources)
+    )
+    entry: SourceEntry
+    for entry in entries:
         if entry.expression is not None or entry.schema not in schemas:
             continue
         if (entry.database or None) != database:

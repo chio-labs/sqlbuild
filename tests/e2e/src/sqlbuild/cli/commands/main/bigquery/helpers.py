@@ -52,6 +52,30 @@ def build_bigquery_project_toml(*, project_name: str, dataset_name: str) -> str:
     )
 
 
+def build_bigquery_source_deferral_project_toml(
+    *, project_name: str, dev_dataset_name: str, prod_dataset_name: str
+) -> str:
+    project_id: str = str(build_bigquery_connection_config(schema=dev_dataset_name)["project"])
+    location: str = str(build_bigquery_connection_config(schema=dev_dataset_name)["location"])
+    return (
+        f'name = "{project_name}"\n'
+        'adapter = "bigquery"\n'
+        'default_environment = "dev"\n\n'
+        "[connection]\n"
+        'project = "${ENV:SQB_TEST_BIGQUERY_PROJECT}"\n'
+        f'location = "{location}"\n\n'
+        "[environments.dev]\n"
+        f'database = "{project_id}"\n'
+        f'schema = "{dev_dataset_name}"\n'
+        'defer_sources_to = "prod"\n\n'
+        "[environments.prod]\n"
+        f'database = "{project_id}"\n'
+        f'schema = "{prod_dataset_name}"\n\n'
+        "[defaults]\n"
+        'materialized = "table"\n'
+    )
+
+
 def prepare_bigquery_waffle_shop(*, tmp_path: Path) -> tuple[Path, str]:
     """Prepare the e2e waffle shop project wired to a unique BigQuery dataset."""
 
