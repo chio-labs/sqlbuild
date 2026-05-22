@@ -47,6 +47,7 @@ def write_loader_rows_to_staging(
             columns=source_entry.columns,
             column_names=column_names,
             inferred_types=inferred_types,
+            contract_enforced=source_entry.contract == "enforced",
         )
         column_names = schema.column_names
         inferred_types = schema.inferred_types

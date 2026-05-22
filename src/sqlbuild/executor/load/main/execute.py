@@ -8,13 +8,14 @@ from datetime import datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.executor.load.helpers.cursors import (
     exclusive_cursor_end,
     format_cursor_bound,
     load_staging_cursor_bounds,
 )
+from sqlbuild.executor.load.helpers.schema import validate_and_evolve_existing_target
 from sqlbuild.executor.load.helpers.staging import write_loader_rows_to_staging
 from sqlbuild.executor.load.models import LoaderContext, LoadExecutionResult
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
@@ -201,6 +202,22 @@ def _apply_source_write_strategy(
     staging: str,
     statement_recorder: StatementRecorder,
 ) -> None:
+    target_exists: bool = adapter.relation_exists(
+        connection,
+        database=source_entry.database,
+        schema=source_entry.schema,
+        name=target_name,
+    )
+    staging_columns: tuple[ColumnInfo, ...] = adapter.describe_relation(connection, staging)
+    if target_exists:
+        validate_and_evolve_existing_target(
+            adapter=adapter,
+            connection=connection,
+            source_entry=source_entry,
+            target=target,
+            staging_columns=staging_columns,
+            statement_recorder=statement_recorder,
+        )
     if source_entry.write_strategy == SourceWriteStrategy.TABLE:
         adapter.replace_table_from_relation(
             connection,
@@ -209,12 +226,6 @@ def _apply_source_write_strategy(
             statement_recorder=statement_recorder,
         )
         return
-    target_exists: bool = adapter.relation_exists(
-        connection,
-        database=source_entry.database,
-        schema=source_entry.schema,
-        name=target_name,
-    )
     if not target_exists:
         adapter.replace_table_from_relation(
             connection,
@@ -229,6 +240,7 @@ def _apply_source_write_strategy(
             connection,
             target=target,
             sql=staging_sql,
+            columns=tuple(column.name for column in staging_columns),
             statement_recorder=statement_recorder,
         )
         return

@@ -57,6 +57,7 @@ def update_loader_rows_schema(
     columns: tuple[SourceColumnEntry, ...],
     column_names: tuple[str, ...],
     inferred_types: dict[str, LoaderLogicalType],
+    contract_enforced: bool = False,
 ) -> LoaderRowsSchema:
     """Merge one loader row batch into the tracked staging schema."""
 
@@ -66,6 +67,11 @@ def update_loader_rows_schema(
     added_column_names: list[str] = []
     row: dict[str, object]
     for row in rows:
+        if contract_enforced:
+            _validate_contract_row(
+                row=row,
+                declared_names=tuple(column.name for column in columns),
+            )
         column_name: str
         value: object
         for column_name, value in row.items():
@@ -105,6 +111,20 @@ def update_loader_rows_schema(
         inferred_types=next_inferred_types,
         added_columns=added_columns,
     )
+
+
+def _validate_contract_row(*, row: dict[str, object], declared_names: tuple[str, ...]) -> None:
+    declared_name_set: frozenset[str] = frozenset(declared_names)
+    extra_names: tuple[str, ...] = tuple(name for name in row if name not in declared_name_set)
+    if extra_names:
+        raise ExecutorInputError(
+            f"Source loader contract has extra columns: {', '.join(extra_names)}"
+        )
+    missing_names: tuple[str, ...] = tuple(name for name in declared_names if name not in row)
+    if missing_names:
+        raise ExecutorInputError(
+            f"Source loader contract missing columns: {', '.join(missing_names)}"
+        )
 
 
 def build_rows_sql(
