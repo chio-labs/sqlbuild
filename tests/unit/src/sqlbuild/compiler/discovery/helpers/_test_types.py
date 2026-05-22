@@ -249,4 +249,9 @@ class DiscoverLoaderFunctionsTestCase:
     expected_names: tuple[str, ...]
     expected_targets: tuple[str | None, ...]
     expected_dependency_counts: tuple[int, ...]
+    expected_write_strategies: tuple[str | None, ...] = ()
+    expected_cursor_columns: tuple[str | None, ...] = ()
+    expected_unique_keys: tuple[tuple[str, ...], ...] = ()
+    expected_column_names: tuple[tuple[str, ...], ...] = ()
+    expected_contracts: tuple[str | None, ...] = ()
     expected_error_fragment: str = ""

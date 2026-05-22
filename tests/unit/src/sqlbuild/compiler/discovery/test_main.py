@@ -365,6 +365,63 @@ def raw_orders(ctx):
         expected_error_fragment="Duplicate source loader found for 'raw_orders'",
     ),
     DiscoverProjectInputsErrorTestCase(
+        description="raises when loader dependency is not decorated",
+        repo_files=base_repo_files()
+        | {
+            "loaders/events.py": """
+from sqlbuild.loaders import loader
+
+def fetch_events(ctx):
+    return []
+
+@loader(depends_on=[fetch_events])
+def enriched_events(ctx):
+    return []
+""",
+        },
+        expected_error_fragment="Loader 'enriched_events' depends on an unknown loader",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when loader dependencies contain a cycle",
+        repo_files=base_repo_files()
+        | {
+            "loaders/events.py": """
+from sqlbuild.loaders import loader
+
+def fetch_events(ctx):
+    return []
+
+@loader(depends_on=[fetch_events])
+def enriched_events(ctx):
+    return []
+
+fetch_events = loader(depends_on=[enriched_events])(fetch_events)
+""",
+        },
+        expected_error_fragment="Loader dependency cycle detected",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when terminal loader owns source config",
+        repo_files=base_repo_files()
+        | {
+            "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    loader: raw_orders
+    write_strategy: table
+""".strip()
+            + "\n",
+            "loaders/raw_orders.py": """
+from sqlbuild.loaders import loader
+
+@loader(write_strategy="table", columns=[{"name": "id", "type": "INTEGER"}])
+def raw_orders(ctx):
+    return []
+""",
+        },
+        expected_error_fragment="terminal source loader write and schema config must be declared",
+    ),
+    DiscoverProjectInputsErrorTestCase(
         description="raises when seeds are declared outside seeds directory",
         repo_files=base_repo_files()
         | {

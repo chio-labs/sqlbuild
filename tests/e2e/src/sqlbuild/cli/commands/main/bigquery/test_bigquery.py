@@ -38,6 +38,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery.helpers import (
     write_local_environment_override,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.load.helpers import (
+    build_loader_waffle_shop_project_files,
     build_schema_behavior_project_files,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
@@ -871,6 +872,151 @@ def test_given_loader_schema_evolution_project_when_loading_twice_on_bigquery_th
             ),
         )
         assert stringify_warehouse_rows(rows) == test_case.expected_rows
+    finally:
+        cleanup_bigquery_dataset(dataset_name=dataset_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQuerySourceLoaderSchemaEvolutionE2ETestCase(
+            description="chained source loader runs on bigquery",
+            command=("--no-color", "load", "--select", "raw_events"),
+            expected_rows=(("1", "loaded"), ("2", "loaded")),
+        )
+    ],
+    ids=["chained source loader runs on bigquery"],
+)
+def test_given_chained_loader_project_when_loading_on_bigquery_then_runs_loader_dag(
+    tmp_path: Path,
+    test_case: BigQuerySourceLoaderSchemaEvolutionE2ETestCase,
+) -> None:
+    dataset_name: str = build_unique_dataset_name(prefix="sqlbuild_e2e_load_dag")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="source_loader_dag_behavior",
+        repo_files=build_schema_behavior_project_files(
+            source_yaml=(
+                "sources:\n"
+                "  - name: raw_events\n"
+                "    loader: raw_events\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: event_id\n"
+                "        type: INTEGER\n"
+                "      - name: status\n"
+                "        type: VARCHAR\n"
+            ),
+            loader_py=(
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(write_strategy='table', columns=[\n"
+                "    {'name': 'event_id', 'type': 'INTEGER'},\n"
+                "])\n"
+                "def fetch_events(ctx):\n"
+                "    return [{'event_id': 1}, {'event_id': 2}]\n\n"
+                "@loader(depends_on=[fetch_events])\n"
+                "def raw_events(ctx):\n"
+                "    events = ctx.loader(fetch_events)\n"
+                "    cursor = ctx.query(\n"
+                "        f'SELECT event_id FROM {events.target} ORDER BY event_id'\n"
+                "    )\n"
+                "    rows = cursor.fetchall()\n"
+                "    return [{'event_id': row[0], 'status': 'loaded'} for row in rows]\n"
+            ),
+        ),
+    )
+    (project_dir / "sqlbuild_project.toml").write_text(
+        build_bigquery_project_toml(
+            project_name="source_loader_dag_behavior",
+            dataset_name=dataset_name,
+        ),
+        encoding="utf-8",
+    )
+    ensure_bigquery_dataset_ready(dataset_name=dataset_name)
+
+    try:
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=test_case.command,
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
+        rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
+            dataset_name=dataset_name,
+            sql=(
+                "SELECT event_id, status FROM "
+                f"{relation_name(dataset_name=dataset_name, name='raw_events')} "
+                "ORDER BY event_id"
+            ),
+        )
+        assert stringify_warehouse_rows(rows) == test_case.expected_rows
+        assert (
+            bigquery_relation_row_count(
+                dataset_name=dataset_name, relation="__loader__fetch_events"
+            )
+            == 2
+        )
+    finally:
+        cleanup_bigquery_dataset(dataset_name=dataset_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQuerySourceLoaderSchemaEvolutionE2ETestCase(
+            description="loader focused waffle shop grows across repeated bigquery builds",
+            command=("--no-color", "build", "--select", "+customer_revenue"),
+            expected_rows=(
+                ("1", "pro", "650", "1"),
+                ("2", "plus", "3750", "2"),
+                ("3", "enterprise", "1300", "1"),
+            ),
+        )
+    ],
+    ids=["loader focused waffle shop grows across repeated bigquery builds"],
+)
+def test_given_loader_waffle_shop_when_building_on_bigquery_then_dag_grows_models(
+    tmp_path: Path,
+    test_case: BigQuerySourceLoaderSchemaEvolutionE2ETestCase,
+) -> None:
+    dataset_name: str = build_unique_dataset_name(prefix="sqlbuild_e2e_load_waffle")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="loader_waffle_shop",
+        repo_files=build_loader_waffle_shop_project_files(
+            project_toml=build_bigquery_project_toml(
+                project_name="loader_waffle_shop",
+                dataset_name=dataset_name,
+            )
+        ),
+    )
+    ensure_bigquery_dataset_ready(dataset_name=dataset_name)
+
+    try:
+        for _ in range(2):
+            result: subprocess.CompletedProcess[str] = run_sqb(
+                command=test_case.command,
+                project_dir=project_dir,
+            )
+            assert result.returncode == test_case.expected_return_code, (
+                result.stdout + result.stderr
+            )
+            assert "loader    fetch_order_events" in result.stdout
+            assert "source    raw_orders" in result.stdout
+
+        rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
+            dataset_name=dataset_name,
+            sql=(
+                "SELECT customer_id, plan_name, revenue_cents, order_count FROM "
+                f"{relation_name(dataset_name=dataset_name, name='customer_revenue')} "
+                "ORDER BY customer_id"
+            ),
+        )
+        event_count: int = bigquery_relation_row_count(
+            dataset_name=dataset_name, relation="__loader__fetch_order_events"
+        )
+        assert stringify_warehouse_rows(rows) == test_case.expected_rows
+        assert event_count == 4
     finally:
         cleanup_bigquery_dataset(dataset_name=dataset_name)
 

@@ -5,11 +5,17 @@ from pathlib import Path
 
 import pytest
 
+from tests.e2e.src.sqlbuild.cli.commands.main.load.helpers import (
+    build_loader_waffle_shop_project_files,
+    build_schema_behavior_project_files,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.postgres._test_types import (
     PostgresBuildE2ETestCase,
+    PostgresLoaderWaffleShopE2ETestCase,
     PostgresScenarioLocalReplayE2ETestCase,
     PostgresSnapshotApplyE2ETestCase,
     PostgresSnapshotE2ETestCase,
+    PostgresSourceLoaderDagE2ETestCase,
     PostgresSourceLoaderStrategiesE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.postgres.helpers import (
@@ -88,6 +94,74 @@ def test_given_waffle_shop_when_running_full_build_on_postgres_then_expected_tab
         row_count: object = rows[0][0]
         assert isinstance(row_count, int)
         assert row_count == test_case.expected_row_count
+    finally:
+        cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresLoaderWaffleShopE2ETestCase(
+            description="loader focused waffle shop grows across repeated postgres builds",
+            command=("--no-color", "build", "--select", "+customer_revenue"),
+            expected_rows=(
+                ("1", "pro", "650", "1"),
+                ("2", "plus", "3750", "2"),
+                ("3", "enterprise", "1300", "1"),
+            ),
+            expected_event_count=4,
+        )
+    ],
+    ids=["loader focused waffle shop grows across repeated postgres builds"],
+)
+def test_given_loader_waffle_shop_when_building_on_postgres_then_dag_grows_models(
+    tmp_path: Path,
+    test_case: PostgresLoaderWaffleShopE2ETestCase,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqb_load_waffle")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="loader_waffle_shop",
+        repo_files=build_loader_waffle_shop_project_files(
+            project_toml=build_postgres_project_toml(
+                project_name="loader_waffle_shop",
+                schema_name=schema_name,
+                config=postgres_e2e_config,
+            )
+        ),
+    )
+    ensure_postgres_schema_ready(schema_name=schema_name, config=postgres_e2e_config)
+
+    try:
+        for _ in range(2):
+            result: subprocess.CompletedProcess[str] = run_sqb(
+                command=test_case.command,
+                project_dir=project_dir,
+            )
+            assert result.returncode == test_case.expected_return_code, (
+                result.stdout + result.stderr
+            )
+            assert "loader    fetch_order_events" in result.stdout
+            assert "source    raw_orders" in result.stdout
+
+        rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
+            config=postgres_e2e_config,
+            sql=(
+                "SELECT customer_id, plan_name, revenue_cents, order_count FROM "
+                f"{relation_name(schema_name=schema_name, name='customer_revenue')} "
+                "ORDER BY customer_id"
+            ),
+        )
+        event_count_rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
+            config=postgres_e2e_config,
+            sql=(
+                "SELECT COUNT(*) FROM "
+                f"{relation_name(schema_name=schema_name, name='__loader__fetch_order_events')}"
+            ),
+        )
+        assert stringify_warehouse_rows(rows) == test_case.expected_rows
+        assert int(str(event_count_rows[0][0])) == test_case.expected_event_count
     finally:
         cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
 
@@ -320,6 +394,94 @@ def test_given_postgres_scenario_capture_when_replaying_locally_then_transpilabl
             local_rows_sql=test_case.local_rows_sql,
             expected_local_rows=test_case.expected_local_rows,
         )
+    finally:
+        cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresSourceLoaderDagE2ETestCase(
+            description="chained source loader runs on postgres",
+            command=("--no-color", "load", "--select", "raw_events"),
+            expected_rows=(("1", "loaded"), ("2", "loaded")),
+        )
+    ],
+    ids=["chained source loader runs on postgres"],
+)
+def test_given_chained_loader_project_when_loading_on_postgres_then_runs_loader_dag(
+    tmp_path: Path,
+    test_case: PostgresSourceLoaderDagE2ETestCase,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqb_load_dag")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="source_loader_dag_behavior",
+        repo_files=build_schema_behavior_project_files(
+            source_yaml=(
+                "sources:\n"
+                "  - name: raw_events\n"
+                "    loader: raw_events\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: event_id\n"
+                "        type: INTEGER\n"
+                "      - name: status\n"
+                "        type: VARCHAR\n"
+            ),
+            loader_py=(
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(write_strategy='table', columns=[\n"
+                "    {'name': 'event_id', 'type': 'INTEGER'},\n"
+                "])\n"
+                "def fetch_events(ctx):\n"
+                "    return [{'event_id': 1}, {'event_id': 2}]\n\n"
+                "@loader(depends_on=[fetch_events])\n"
+                "def raw_events(ctx):\n"
+                "    events = ctx.loader(fetch_events)\n"
+                "    cursor = ctx.query(\n"
+                "        f'SELECT event_id FROM {events.target} ORDER BY event_id'\n"
+                "    )\n"
+                "    rows = cursor.fetchall()\n"
+                "    return [{'event_id': row[0], 'status': 'loaded'} for row in rows]\n"
+            ),
+        ),
+    )
+    (project_dir / "sqlbuild_project.toml").write_text(
+        build_postgres_project_toml(
+            project_name="source_loader_dag_behavior",
+            schema_name=schema_name,
+            config=postgres_e2e_config,
+        ),
+        encoding="utf-8",
+    )
+    ensure_postgres_schema_ready(schema_name=schema_name, config=postgres_e2e_config)
+
+    try:
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=test_case.command,
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
+        rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
+            config=postgres_e2e_config,
+            sql=(
+                "SELECT event_id, status FROM "
+                f"{relation_name(schema_name=schema_name, name='raw_events')} "
+                "ORDER BY event_id"
+            ),
+        )
+        intermediate_rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
+            config=postgres_e2e_config,
+            sql=(
+                "SELECT COUNT(*) FROM "
+                f"{relation_name(schema_name=schema_name, name='__loader__fetch_events')}"
+            ),
+        )
+        assert stringify_warehouse_rows(rows) == test_case.expected_rows
+        assert int(str(intermediate_rows[0][0])) == 2
     finally:
         cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
 

@@ -350,6 +350,11 @@ def discover_loader_functions(*, project_dir: Path) -> tuple[DiscoveredLoaderFun
                     function=value,
                     depends_on=definition.depends_on,
                     target=definition.target,
+                    write_strategy=definition.write_strategy,
+                    cursor_column=definition.cursor_column,
+                    unique_key=definition.unique_key,
+                    columns=definition.columns,
+                    contract=definition.contract,
                 )
             )
     return tuple(discovered)

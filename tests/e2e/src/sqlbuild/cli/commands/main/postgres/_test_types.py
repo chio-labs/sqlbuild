@@ -25,6 +25,23 @@ class PostgresSourceLoaderStrategiesE2ETestCase:
 
 
 @dataclass(frozen=True)
+class PostgresSourceLoaderDagE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class PostgresLoaderWaffleShopE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_event_count: int
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
 class PostgresDiffE2ETestCase:
     description: str
     mutation_sql: tuple[str, ...]

@@ -80,6 +80,12 @@ def assemble_compiled_project(
         effective_environment_name=inputs.effective_environment_name,
         effective_connection=inputs.effective_connection,
         effective_vars=inputs.effective_vars,
+        effective_environment_database=inputs.effective_environment.database
+        if inputs.effective_environment is not None
+        else None,
+        effective_environment_schema=inputs.effective_environment.schema
+        if inputs.effective_environment is not None
+        else None,
         settings=inputs.effective_settings,
         scenario=resolve_effective_scenario_config(
             project_config=inputs.project_config,
@@ -124,6 +130,7 @@ def assemble_compiled_project(
             _assemble_compiled_sql_scenario(scenario_input)
             for scenario_input in inputs.scenario_inputs
         ),
+        loader_functions=inputs.discovered_inputs.loader_functions,
         diagnostics=inputs.diagnostics,
         external_sql_reference_resolver=inputs.external_sql_reference_resolver,
     )

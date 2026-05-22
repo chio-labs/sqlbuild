@@ -12,7 +12,13 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.executor.load.main.execute import execute_source_load
-from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.load.models import LoadExecutionIndexes, LoadExecutionResult
+from sqlbuild.executor.shared.helpers.load_execution import (
+    build_load_execution_indexes,
+    should_skip_due_to_failed_dependency,
+    skipped_load_result,
+)
+from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -38,9 +44,10 @@ def run_load_pipeline(
 ) -> tuple[LoadExecutionResult, ...]:
     """Execute selected source loaders."""
 
-    loader_map: dict[str, DiscoveredLoaderFunction] = {
-        loader.name: loader for loader in loader_functions
-    }
+    indexes: LoadExecutionIndexes = build_load_execution_indexes(
+        sources=sources,
+        loader_functions=loader_functions,
+    )
     source_count: int = sum(1 for source in sources if source.loader is not None)
     if source_count == 0:
         return ()
@@ -64,6 +71,48 @@ def run_load_pipeline(
 
     results: list[LoadExecutionResult | None] = [None] * len(sources)
     try:
+        if indexes.has_loader_dependencies:
+            sequential_connection: Any = connections[0]
+            failed_or_skipped: set[str] = set()
+            source_index: int
+            source: SourceEntry
+            for source_index, source in enumerate(sources):
+                if source.loader is None:
+                    continue
+                if should_skip_due_to_failed_dependency(
+                    source=source,
+                    failed_or_skipped=failed_or_skipped,
+                    indexes=indexes,
+                ):
+                    result: LoadExecutionResult = skipped_load_result(source)
+                    failed_or_skipped.add(source.name)
+                    results[source_index] = result
+                    if on_load_complete is not None:
+                        on_load_complete(result)
+                    continue
+                result: LoadExecutionResult = execute_source_load(
+                    source_entry=source,
+                    loader_function=indexes.loader_by_name[source.loader],
+                    adapter=adapter,
+                    connection=sequential_connection,
+                    run_id=run_id,
+                    environment=environment,
+                    vars=vars,
+                    is_reload=is_reload,
+                    start_cursor_ts=start_cursor_ts,
+                    end_cursor_ts=end_cursor_ts,
+                    start_cursor_int=start_cursor_int,
+                    end_cursor_int=end_cursor_int,
+                    statement_recorder=StatementRecorder(),
+                    loader_ref_entries=indexes.loader_ref_entries,
+                    source_ref_entries=indexes.source_by_name,
+                )
+                results[source_index] = result
+                if result.status != ExecutionStatus.SUCCESS:
+                    failed_or_skipped.add(source.name)
+                if on_load_complete is not None:
+                    on_load_complete(result)
+            return tuple(result for result in results if result is not None)
 
         def run_worker(worker_index: int) -> None:
             source_index: int
@@ -75,7 +124,7 @@ def run_load_pipeline(
                     continue
                 result: LoadExecutionResult = execute_source_load(
                     source_entry=source,
-                    loader_function=loader_map[source.loader],
+                    loader_function=indexes.loader_by_name[source.loader],
                     adapter=adapter,
                     connection=connections[worker_index],
                     run_id=run_id,
@@ -87,6 +136,8 @@ def run_load_pipeline(
                     start_cursor_int=start_cursor_int,
                     end_cursor_int=end_cursor_int,
                     statement_recorder=StatementRecorder(),
+                    loader_ref_entries=indexes.loader_ref_entries,
+                    source_ref_entries=indexes.source_by_name,
                 )
                 results[source_index] = result
                 if on_load_complete is not None:

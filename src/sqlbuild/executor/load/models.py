@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -10,8 +11,12 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, LifeCycleEvent, StatementRecorder
 from sqlbuild.adapter.shared.types import LoaderLogicalType
+from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
+from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.spec.models.source import SourceEntry
 
 
 @dataclass(frozen=True)
@@ -21,6 +26,43 @@ class LoaderRowsSchema:
     column_names: tuple[str, ...]
     inferred_types: dict[str, LoaderLogicalType]
     added_columns: tuple[ColumnInfo, ...]
+
+
+@dataclass(frozen=True)
+class LoaderRelationRef:
+    """A loader-visible relation reference with cursor helpers."""
+
+    name: str
+    target: str
+    database: str | None
+    schema: str | None
+    table_name: str
+    cursor_column: str | None
+    adapter: BaseAdapter
+    connection: Any
+    statement_recorder: StatementRecorder
+
+    @property
+    def current_cursor_value(self) -> object | None:
+        if self.cursor_column is None:
+            return None
+        return self.max(self.cursor_column)
+
+    def max(self, column: str) -> object | None:
+        if not self.adapter.relation_exists(
+            self.connection,
+            database=self.database,
+            schema=self.schema,
+            name=self.table_name,
+        ):
+            return None
+        sql: str = f"SELECT MAX({column}) FROM {self.target}"
+        self.statement_recorder.record(sql)
+        cursor: Any = self.adapter.execute(self.connection, sql)
+        row: object | None = cursor.fetchone()
+        if row is None:
+            return None
+        return row[0]
 
 
 @dataclass(frozen=True)
@@ -44,6 +86,8 @@ class LoaderContext:
     end_cursor_ts: datetime | None = None
     start_cursor_int: int | None = None
     end_cursor_int: int | None = None
+    loader_refs: Mapping[Callable[..., object], LoaderRelationRef] = field(default_factory=dict)
+    source_refs: Mapping[str, LoaderRelationRef] = field(default_factory=dict)
 
     def execute_sql(self, sql: str) -> Any:
         self.statement_recorder.record(sql)
@@ -79,6 +123,24 @@ class LoaderContext:
 
         return self.qualify_name(name)
 
+    def loader(self, loader_fn: Callable[..., object]) -> LoaderRelationRef:
+        """Return a relation reference for an upstream loader function."""
+
+        relation_ref: LoaderRelationRef | None = self.loader_refs.get(loader_fn)
+        if relation_ref is None:
+            raise ExecutorInputError("Unknown loader reference passed to ctx.loader(...)")
+        return relation_ref
+
+    def source(self, source_name: str) -> LoaderRelationRef:
+        """Return a relation reference for a project source by YAML source name."""
+
+        relation_ref: LoaderRelationRef | None = self.source_refs.get(source_name)
+        if relation_ref is None:
+            raise ExecutorInputError(
+                f"Unknown source reference passed to ctx.source(...): {source_name}"
+            )
+        return relation_ref
+
 
 @dataclass(frozen=True)
 class LoadExecutionResult:
@@ -88,8 +150,21 @@ class LoadExecutionResult:
     loader_name: str
     status: ExecutionStatus
     target: str
+    resource_kind: ExecutionResourceKind = ExecutionResourceKind.SOURCE
     staging_relation: str | None = None
     rows_loaded: int = 0
     duration_ms: int | None = None
     lifecycle_events: tuple[LifeCycleEvent, ...] = field(default_factory=tuple)
     error_message: str | None = None
+
+
+@dataclass(frozen=True)
+class LoadExecutionIndexes:
+    """Resolved loader/source indexes used during load execution."""
+
+    loader_by_name: dict[str, DiscoveredLoaderFunction]
+    source_by_name: dict[str, SourceEntry]
+    source_by_loader_name: dict[str, SourceEntry]
+    loader_ref_entries: dict[Callable[..., object], SourceEntry]
+    loader_name_by_function: dict[Callable[..., object], str]
+    has_loader_dependencies: bool

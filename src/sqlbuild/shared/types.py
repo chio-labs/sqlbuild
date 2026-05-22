@@ -4,7 +4,17 @@ from __future__ import annotations
 
 from enum import StrEnum
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Literal, NotRequired, Protocol, TypedDict
+
+
+class LoaderColumnSpec(TypedDict):
+    """Column declaration accepted by the public loader decorator."""
+
+    name: str
+    type: NotRequired[str]
+    nullable: NotRequired[bool]
+    description: NotRequired[str]
+    meta: NotRequired[dict[str, object]]
 
 
 class SqlReferenceKind(StrEnum):
@@ -37,6 +47,7 @@ class ExecutionResourceKind(StrEnum):
     """Top-level resource kind displayed during execution."""
 
     SOURCE = "source"
+    LOADER = "loader"
     SEED = "seed"
     FUNCTION = "function"
     VIEW = "view"

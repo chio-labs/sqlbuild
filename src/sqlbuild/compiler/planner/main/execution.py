@@ -35,6 +35,10 @@ from sqlbuild.compiler.planner.helpers.graph import (
     build_upstream_deps,
     topologically_order_keys,
 )
+from sqlbuild.compiler.planner.helpers.loader_dag import (
+    build_intermediate_source_map,
+    expand_selected_loader_dependencies,
+)
 from sqlbuild.compiler.planner.helpers.plan_entry import (
     build_model_materializations,
     build_path_index,
@@ -71,7 +75,7 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, PlanReason
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.shared.types import ExecutionResourceKind, ExternalSqlReferenceResolver
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -118,6 +122,12 @@ def build_execution_plan(
             upstream_deps=upstream_deps,
             project=project,
         )
+        selected_keys, upstream_deps = expand_selected_loader_dependencies(
+            project=project,
+            selected_keys=selected_keys,
+            upstream_deps=upstream_deps,
+        )
+        downstream_deps = build_downstream_deps(upstream_deps)
 
     execution_order: tuple[CompiledObjectKey, ...] = topologically_order_keys(upstream_deps)
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = (
@@ -167,6 +177,7 @@ def build_execution_plan(
     source_map: dict[str, SourceEntry] = {
         s.source_entry.name: s.source_entry for s in project.sources
     }
+    source_map.update(build_intermediate_source_map(project=project, selected_keys=selected_keys))
     star_exclude_keyword: str = adapter.star_exclude_keyword()
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]] = gather_source_columns(
         project=project, adapter=adapter, connection=connection
@@ -323,6 +334,11 @@ def build_execution_plan(
                 name=source_entry.name,
                 loader=source_entry.loader,
                 target=source_entry.table or source_entry.name,
+                resource_kind=(
+                    ExecutionResourceKind.LOADER
+                    if source_entry.meta.get("sqlbuild_loader_node") is True
+                    else ExecutionResourceKind.SOURCE
+                ),
                 write_strategy=source_entry.write_strategy,
                 cursor_column=source_entry.cursor_column,
                 unique_key=source_entry.unique_key,

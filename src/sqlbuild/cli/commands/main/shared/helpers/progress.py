@@ -326,7 +326,7 @@ class BuildProgressCallbacks:
             detail: str = f"  rows={node_result.rows_loaded:,}"
             self._write_top_level_result_line(
                 ctr=ctr,
-                resource_type=ExecutionResourceKind.SOURCE.value,
+                resource_type=node_result.resource_kind.value,
                 name=source_name,
                 status=status,
                 duration=duration,

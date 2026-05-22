@@ -134,6 +134,9 @@ def format_load_execution_json(*, results: tuple[LoadExecutionResult, ...]) -> s
                 1 for result in results if result.status == ExecutionStatus.SUCCESS
             ),
             "failure_count": fail_count,
+            "skipped_count": sum(
+                1 for result in results if result.status == ExecutionStatus.SKIPPED
+            ),
             "total_count": len(results),
         },
     )
@@ -299,7 +302,7 @@ def _format_load_assets(
     return tuple(
         _drop_none(
             {
-                "kind": CompiledResourceType.SOURCE.value,
+                "kind": result.resource_kind.value,
                 "name": result.source_name,
                 "status": result.status.value,
                 "duration_ms": result.duration_ms,

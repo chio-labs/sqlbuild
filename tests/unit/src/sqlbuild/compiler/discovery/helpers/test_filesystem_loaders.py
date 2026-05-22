@@ -35,6 +35,41 @@ def stripe_customers(ctx):
         expected_names=("github_events", "stripe_customers"),
         expected_targets=(None, "raw.customers"),
         expected_dependency_counts=(0, 0),
+        expected_write_strategies=(None, None),
+        expected_cursor_columns=(None, None),
+        expected_unique_keys=((), ()),
+        expected_column_names=((), ()),
+        expected_contracts=(None, None),
+    ),
+    DiscoverLoaderFunctionsTestCase(
+        description="discovers intermediate loader write and schema metadata",
+        files={
+            "loaders/events.py": """
+from sqlbuild.loaders import loader
+
+@loader(
+    target="staging.events",
+    write_strategy="merge",
+    cursor_column="updated_at",
+    unique_key=["event_id", "updated_at"],
+    columns=[
+        {"name": "event_id", "type": "BIGINT"},
+        {"name": "updated_at", "type": "TIMESTAMP"},
+    ],
+    contract="enforced",
+)
+def events(ctx):
+    return []
+""",
+        },
+        expected_names=("events",),
+        expected_targets=("staging.events",),
+        expected_dependency_counts=(0,),
+        expected_write_strategies=("merge",),
+        expected_cursor_columns=("updated_at",),
+        expected_unique_keys=(("event_id", "updated_at"),),
+        expected_column_names=(("event_id", "updated_at"),),
+        expected_contracts=("enforced",),
     ),
     DiscoverLoaderFunctionsTestCase(
         description="discovers loader dependencies from decorator metadata",
@@ -54,6 +89,11 @@ def enriched_events(ctx):
         expected_names=("enriched_events", "fetch_events"),
         expected_targets=(None, None),
         expected_dependency_counts=(1, 0),
+        expected_write_strategies=(None, None),
+        expected_cursor_columns=(None, None),
+        expected_unique_keys=((), ()),
+        expected_column_names=((), ()),
+        expected_contracts=(None, None),
     ),
     DiscoverLoaderFunctionsTestCase(
         description="returns empty tuple when loaders directory does not exist",
@@ -61,6 +101,11 @@ def enriched_events(ctx):
         expected_names=(),
         expected_targets=(),
         expected_dependency_counts=(),
+        expected_write_strategies=(),
+        expected_cursor_columns=(),
+        expected_unique_keys=(),
+        expected_column_names=(),
+        expected_contracts=(),
     ),
     DiscoverLoaderFunctionsTestCase(
         description="ignores undecorated functions and init files",
@@ -78,6 +123,11 @@ def orders(ctx):
         expected_names=("orders",),
         expected_targets=(None,),
         expected_dependency_counts=(0,),
+        expected_write_strategies=(None,),
+        expected_cursor_columns=(None,),
+        expected_unique_keys=((),),
+        expected_column_names=((),),
+        expected_contracts=(None,),
     ),
 ]
 
@@ -105,6 +155,19 @@ def test_given_project_dir_when_discovering_loaders_then_returns_expected(
     assert (
         tuple(len(loader.depends_on) for loader in result) == test_case.expected_dependency_counts
     )
+    assert (
+        tuple(
+            None if loader.write_strategy is None else loader.write_strategy.value
+            for loader in result
+        )
+        == test_case.expected_write_strategies
+    )
+    assert tuple(loader.cursor_column for loader in result) == test_case.expected_cursor_columns
+    assert tuple(loader.unique_key for loader in result) == test_case.expected_unique_keys
+    assert tuple(tuple(column.name for column in loader.columns) for loader in result) == (
+        test_case.expected_column_names
+    )
+    assert tuple(loader.contract for loader in result) == test_case.expected_contracts
 
 
 @pytest.mark.parametrize(
@@ -116,6 +179,11 @@ def test_given_project_dir_when_discovering_loaders_then_returns_expected(
             expected_names=(),
             expected_targets=(),
             expected_dependency_counts=(),
+            expected_write_strategies=(),
+            expected_cursor_columns=(),
+            expected_unique_keys=(),
+            expected_column_names=(),
+            expected_contracts=(),
             expected_error_fragment="Failed to import source loader file",
         )
     ],

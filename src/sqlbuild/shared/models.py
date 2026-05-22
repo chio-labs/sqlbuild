@@ -6,6 +6,8 @@ from pathlib import Path
 
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.shared.constants import DEFAULT_MAX_DISPLAY_ENTRIES
+from sqlbuild.spec.models.source import SourceColumnEntry
+from sqlbuild.spec.models.types import SourceWriteStrategy
 
 
 @dataclass(frozen=True)
@@ -32,6 +34,11 @@ class LoaderDefinition:
     name: str
     depends_on: tuple[Callable[..., object], ...] = ()
     target: str | None = None
+    write_strategy: SourceWriteStrategy | None = None
+    cursor_column: str | None = None
+    unique_key: tuple[str, ...] = ()
+    columns: tuple[SourceColumnEntry, ...] = ()
+    contract: str | None = None
 
 
 @dataclass(frozen=True)

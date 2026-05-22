@@ -10,7 +10,8 @@ from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry, SourceLocation
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
+from sqlbuild.spec.models.types import SourceWriteStrategy
 
 
 @dataclass(frozen=True)
@@ -167,6 +168,11 @@ class DiscoveredLoaderFunction:
     function: Callable[..., object]
     depends_on: tuple[Callable[..., object], ...] = field(default_factory=tuple)
     target: str | None = None
+    write_strategy: SourceWriteStrategy | None = None
+    cursor_column: str | None = None
+    unique_key: tuple[str, ...] = field(default_factory=tuple)
+    columns: tuple[SourceColumnEntry, ...] = field(default_factory=tuple)
+    contract: str | None = None
 
 
 @dataclass(frozen=True)

@@ -36,6 +36,7 @@ from sqlbuild.compiler.planner.types import (
     SelectorKind,
     WarningSeverity,
 )
+from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.schema import SeedCsvSettings
 from sqlbuild.spec.models.source import SourceEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy
@@ -295,6 +296,7 @@ class SourceLoadPlanEntry:
     name: str
     loader: str
     target: str
+    resource_kind: ExecutionResourceKind = ExecutionResourceKind.SOURCE
     write_strategy: SourceWriteStrategy | None = None
     cursor_column: str | None = None
     unique_key: tuple[str, ...] = field(default_factory=tuple)
