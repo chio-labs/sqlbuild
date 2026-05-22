@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import queue
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -9,16 +10,19 @@ from datetime import datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.executor.load.main.execute import execute_source_load
-from sqlbuild.executor.load.models import LoadExecutionIndexes, LoadExecutionResult
+from sqlbuild.executor.load.helpers.dag_runtime import (
+    build_load_dag_state,
+    complete_dag_source,
+    execute_ready_dag_source,
+    load_dag_worker,
+)
+from sqlbuild.executor.load.models import LoadDagState, LoadExecutionIndexes, LoadExecutionResult
 from sqlbuild.executor.shared.helpers.load_execution import (
     build_load_execution_indexes,
-    should_skip_due_to_failed_dependency,
-    skipped_load_result,
+    build_source_downstream_names,
+    build_source_upstream_names,
 )
-from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -69,82 +73,91 @@ def run_load_pipeline(
     if on_connection_complete is not None:
         on_connection_complete(effective_concurrency, time.monotonic() - start)
 
+    source_by_name: dict[str, SourceEntry] = {source.name: source for source in sources}
+    source_index_by_name: dict[str, int] = {
+        source.name: index for index, source in enumerate(sources)
+    }
+    upstream_names: dict[str, tuple[str, ...]] = build_source_upstream_names(
+        sources=sources,
+        indexes=indexes,
+    )
+    downstream_names: dict[str, tuple[str, ...]] = build_source_downstream_names(
+        upstream_names=upstream_names
+    )
     results: list[LoadExecutionResult | None] = [None] * len(sources)
     try:
-        if indexes.has_loader_dependencies:
+        state: LoadDagState = build_load_dag_state(
+            sources=sources,
+            results=results,
+            source_index_by_name=source_index_by_name,
+            upstream_names=upstream_names,
+            downstream_names=downstream_names,
+        )
+        connection_pool: queue.Queue[Any] = queue.Queue()
+        connection: Any
+        for connection in connections:
+            connection_pool.put(connection)
+
+        if effective_concurrency == 1:
             sequential_connection: Any = connections[0]
-            failed_or_skipped: set[str] = set()
-            source_index: int
-            source: SourceEntry
-            for source_index, source in enumerate(sources):
-                if source.loader is None:
-                    continue
-                if should_skip_due_to_failed_dependency(
-                    source=source,
-                    failed_or_skipped=failed_or_skipped,
-                    indexes=indexes,
-                ):
-                    result: LoadExecutionResult = skipped_load_result(source)
-                    failed_or_skipped.add(source.name)
-                    results[source_index] = result
-                    if on_load_complete is not None:
-                        on_load_complete(result)
-                    continue
-                result: LoadExecutionResult = execute_source_load(
-                    source_entry=source,
-                    loader_function=indexes.loader_by_name[source.loader],
-                    adapter=adapter,
-                    connection=sequential_connection,
-                    run_id=run_id,
-                    environment=environment,
-                    vars=vars,
-                    is_reload=is_reload,
-                    start_cursor_ts=start_cursor_ts,
-                    end_cursor_ts=end_cursor_ts,
-                    start_cursor_int=start_cursor_int,
-                    end_cursor_int=end_cursor_int,
-                    statement_recorder=StatementRecorder(),
-                    loader_ref_entries=indexes.loader_ref_entries,
-                    source_ref_entries=indexes.source_by_name,
+            while state.ready:
+                source_name: str = state.ready.pop(0)
+                complete_dag_source(
+                    source_name=source_name,
+                    result=execute_ready_dag_source(
+                        source_name=source_name,
+                        source_by_name=source_by_name,
+                        indexes=indexes,
+                        failed_or_skipped=state.failed_or_skipped,
+                        adapter=adapter,
+                        connection=sequential_connection,
+                        run_id=run_id,
+                        environment=environment,
+                        vars=vars,
+                        is_reload=is_reload,
+                        start_cursor_ts=start_cursor_ts,
+                        end_cursor_ts=end_cursor_ts,
+                        start_cursor_int=start_cursor_int,
+                        end_cursor_int=end_cursor_int,
+                    ),
+                    state=state,
+                    on_load_complete=on_load_complete,
                 )
-                results[source_index] = result
-                if result.status != ExecutionStatus.SUCCESS:
-                    failed_or_skipped.add(source.name)
-                if on_load_complete is not None:
-                    on_load_complete(result)
             return tuple(result for result in results if result is not None)
 
-        def run_worker(worker_index: int) -> None:
-            source_index: int
-            source: SourceEntry
-            for source_index, source in enumerate(sources):
-                if source_index % effective_concurrency != worker_index:
-                    continue
-                if source.loader is None:
-                    continue
-                result: LoadExecutionResult = execute_source_load(
-                    source_entry=source,
-                    loader_function=indexes.loader_by_name[source.loader],
-                    adapter=adapter,
-                    connection=connections[worker_index],
-                    run_id=run_id,
-                    environment=environment,
-                    vars=vars,
-                    is_reload=is_reload,
-                    start_cursor_ts=start_cursor_ts,
-                    end_cursor_ts=end_cursor_ts,
-                    start_cursor_int=start_cursor_int,
-                    end_cursor_int=end_cursor_int,
-                    statement_recorder=StatementRecorder(),
-                    loader_ref_entries=indexes.loader_ref_entries,
-                    source_ref_entries=indexes.source_by_name,
-                )
-                results[source_index] = result
-                if on_load_complete is not None:
-                    on_load_complete(result)
-
         with ThreadPoolExecutor(max_workers=effective_concurrency) as pool:
-            list(pool.map(run_worker, range(effective_concurrency)))
+            while state.ready or state.in_flight:
+                while state.ready and len(state.in_flight) < effective_concurrency:
+                    source_name = state.ready.pop(0)
+                    state.in_flight.add(source_name)
+                    pool.submit(
+                        load_dag_worker,
+                        source_name,
+                        source_by_name,
+                        indexes,
+                        state.failed_or_skipped,
+                        adapter,
+                        connection_pool,
+                        run_id,
+                        environment,
+                        vars,
+                        is_reload,
+                        start_cursor_ts,
+                        end_cursor_ts,
+                        start_cursor_int,
+                        end_cursor_int,
+                        state.completion_queue,
+                    )
+                if not state.in_flight:
+                    break
+                completed_source_name, result = state.completion_queue.get()
+                state.in_flight.discard(completed_source_name)
+                complete_dag_source(
+                    source_name=completed_source_name,
+                    result=result,
+                    state=state,
+                    on_load_complete=on_load_complete,
+                )
         return tuple(result for result in results if result is not None)
     finally:
         connection = None

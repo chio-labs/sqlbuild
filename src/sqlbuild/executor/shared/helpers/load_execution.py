@@ -82,6 +82,38 @@ def dependency_node_names(*, source: SourceEntry, indexes: LoadExecutionIndexes)
     return tuple(names)
 
 
+def build_source_upstream_names(
+    *, sources: tuple[SourceEntry, ...], indexes: LoadExecutionIndexes
+) -> dict[str, tuple[str, ...]]:
+    """Return source-node upstream dependency names for selected load nodes."""
+
+    source_names: frozenset[str] = frozenset(source.name for source in sources)
+    upstream_names: dict[str, tuple[str, ...]] = {}
+    source: SourceEntry
+    for source in sources:
+        upstream_names[source.name] = tuple(
+            dependency_name
+            for dependency_name in dependency_node_names(source=source, indexes=indexes)
+            if dependency_name in source_names
+        )
+    return upstream_names
+
+
+def build_source_downstream_names(
+    *, upstream_names: dict[str, tuple[str, ...]]
+) -> dict[str, tuple[str, ...]]:
+    """Return source-node downstream dependency names for selected load nodes."""
+
+    downstream_names: dict[str, list[str]] = {name: [] for name in upstream_names}
+    source_name: str
+    dependencies: tuple[str, ...]
+    for source_name, dependencies in upstream_names.items():
+        dependency_name: str
+        for dependency_name in dependencies:
+            downstream_names.setdefault(dependency_name, []).append(source_name)
+    return {name: tuple(dependents) for name, dependents in downstream_names.items()}
+
+
 def should_skip_due_to_failed_dependency(
     *,
     source: SourceEntry,
