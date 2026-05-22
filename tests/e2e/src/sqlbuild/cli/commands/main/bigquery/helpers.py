@@ -9,6 +9,7 @@ from typing import Any
 from sqlbuild.integrations.bigquery.client import BigQueryAdapter
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     WAFFLE_SHOP_DIR,
+    prepare_source_loader_strategies,
     stringify_warehouse_rows,
 )
 from tests.integration.src.sqlbuild.integrations.bigquery.helpers import (
@@ -83,6 +84,20 @@ def prepare_bigquery_waffle_shop(*, tmp_path: Path) -> tuple[Path, str]:
     (project_dir / "sqlbuild_local.toml").write_text(
         build_bigquery_local_config(location=location),
         encoding="utf-8",
+    )
+    return project_dir, dataset_name
+
+
+def prepare_bigquery_source_loader_strategies(*, tmp_path: Path) -> tuple[Path, str]:
+    """Prepare source-loader strategy fixture wired to a unique BigQuery dataset."""
+
+    dataset_name: str = build_unique_dataset_name(prefix="sqlbuild_e2e_load")
+    project_dir: Path = prepare_source_loader_strategies(
+        tmp_path=tmp_path,
+        project_toml=build_bigquery_project_toml(
+            project_name="source_loader_strategies",
+            dataset_name=dataset_name,
+        ),
     )
     return project_dir, dataset_name
 

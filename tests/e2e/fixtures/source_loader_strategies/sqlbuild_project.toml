@@ -1,0 +1,11 @@
+name = "source_loader_strategies"
+adapter = "duckdb"
+
+[connection]
+database = "source_loader_strategies.duckdb"
+
+[settings]
+default_audit_severity = "warn"
+
+[defaults]
+materialized = "table"
