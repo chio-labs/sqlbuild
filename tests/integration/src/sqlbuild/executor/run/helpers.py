@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,13 @@ from tests.integration.src.sqlbuild.executor.run._test_types import (
     TableFailureTestCase,
     TableSuccessTestCase,
 )
+
+
+@dataclass(frozen=True)
+class ExtraAuditDefinition:
+    name: str
+    audit_sql: str
+    severity: str
 
 
 def build_table_plan_entry(
@@ -254,15 +262,17 @@ def _build_model_audits(
                 severity=test_case.audit_severity,
             )
         )
-    extra: tuple[str, str, str]
+    extra: object
     for extra in test_case.extra_audits:
+        if not isinstance(extra, ExtraAuditDefinition):
+            raise TypeError("extra_audits must contain ExtraAuditDefinition values")
         audits.append(
             build_test_audit_plan_entry(
-                name=extra[0],
-                unresolved_sql=extra[1],
+                name=extra.name,
+                unresolved_sql=extra.audit_sql,
                 attached_target_name="orders",
                 resolved_target_name=resolved_target_name,
-                severity=extra[2],
+                severity=extra.severity,
             )
         )
     return tuple(audits)

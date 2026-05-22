@@ -22,7 +22,7 @@ class TableSuccessTestCase:
     post_hook: object = None
     audit_sql: str | None = None
     audit_severity: str = "warn"
-    extra_audits: tuple[tuple[str, str, str], ...] = field(default_factory=tuple)
+    extra_audits: tuple[object, ...] = field(default_factory=tuple)
     query_change_tracking: bool = True
     expected_column_names: tuple[str, ...] = field(default_factory=tuple)
     expected_column_types: tuple[str, ...] = field(default_factory=tuple)
@@ -51,4 +51,13 @@ class TableFailureTestCase:
     post_hook: object = None
     audit_sql: str | None = None
     audit_severity: str = "warn"
-    extra_audits: tuple[tuple[str, str, str], ...] = field(default_factory=tuple)
+    extra_audits: tuple[object, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class AuditSqlResolutionTestCase:
+    description: str
+    unresolved_sql: str
+    attached_target_name: str
+    resolved_target_name: str
+    expected_resolved_sql: str
