@@ -125,7 +125,9 @@ def build_test_audit(
     return AuditPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name=name),
         name=name,
-        resolved_sql=unresolved_sql,
+        resolved_sql=_resolve_audit_sql(
+            unresolved_sql=unresolved_sql, attached_target_name=attached_target_name
+        ),
         unresolved_sql=unresolved_sql,
         attachment_kind=AuditAttachmentKind.MODEL,
         severity=AuditSeverity(severity),
@@ -133,6 +135,10 @@ def build_test_audit(
         effective_run_scope=run_scope,
         attached_target_name=attached_target_name,
     )
+
+
+def _resolve_audit_sql(*, unresolved_sql: str, attached_target_name: str) -> str:
+    return unresolved_sql.replace(f'__ref("{attached_target_name}")', attached_target_name)
 
 
 def build_declared_columns(

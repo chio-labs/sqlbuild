@@ -281,7 +281,7 @@ def _build_model_audits(
         AuditPlanEntry(
             key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name="test_audit"),
             name="test_audit",
-            resolved_sql=test_case.audit_sql,
+            resolved_sql=test_case.audit_sql.replace('__ref("orders")', "orders"),
             unresolved_sql=test_case.audit_sql,
             attachment_kind=AuditAttachmentKind.MODEL,
             severity=AuditSeverity(test_case.audit_severity),
