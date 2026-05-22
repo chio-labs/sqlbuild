@@ -871,7 +871,9 @@ def test_given_chained_loader_project_when_loading_on_snowflake_then_runs_loader
         cleanup_snowflake_schema(schema_name=schema_name)
 
 
-SNOWFLAKE_INTERMEDIATE_DAG_STRATEGY_TEST_CASES: list[SnowflakeIntermediateDagStrategyE2ETestCase] = [
+SNOWFLAKE_INTERMEDIATE_DAG_STRATEGY_TEST_CASES: list[
+    SnowflakeIntermediateDagStrategyE2ETestCase
+] = [
     SnowflakeIntermediateDagStrategyE2ETestCase(
         description="snowflake append intermediate accumulates rows across DAG loads",
         loader_py=(
@@ -886,7 +888,9 @@ SNOWFLAKE_INTERMEDIATE_DAG_STRATEGY_TEST_CASES: list[SnowflakeIntermediateDagStr
             "        next_seq = 1\n"
             "    else:\n"
             "        next_seq = ctx.current_cursor_value + 1\n"
-            "    return [{'event_id': next_seq, 'amount': next_seq * 100, 'load_seq': next_seq}]\n\n"
+            "    return [\n"
+            "        {'event_id': next_seq, 'amount': next_seq * 100, 'load_seq': next_seq}\n"
+            "    ]\n\n"
             "@loader(depends_on=[fetch_events])\n"
             "def raw_events(ctx):\n"
             "    events = ctx.loader(fetch_events)\n"
