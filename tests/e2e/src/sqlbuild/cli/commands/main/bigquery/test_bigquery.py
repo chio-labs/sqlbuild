@@ -16,6 +16,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery._test_types import (
     BigQueryScenarioRemoteE2ETestCase,
     BigQuerySnapshotApplyE2ETestCase,
     BigQuerySnapshotE2ETestCase,
+    BigQuerySourceLoaderStrategiesE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.bigquery.helpers import (
     assert_bigquery_snapshot_apply_rows,
@@ -30,6 +31,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery.helpers import (
     list_bigquery_scenario_relation_names,
     prepare_bigquery_diff_project,
     prepare_bigquery_query_source,
+    prepare_bigquery_source_loader_strategies,
     prepare_bigquery_waffle_shop,
     relation_name,
     write_local_environment_override,
@@ -50,6 +52,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     build_real_warehouse_snapshot_project_files,
     prepare_inline_project,
     run_sqb,
+    stringify_warehouse_rows,
 )
 from tests.integration.src.sqlbuild.integrations.bigquery.helpers import build_unique_dataset_name
 
@@ -688,6 +691,102 @@ def test_given_waffle_shop_when_running_full_build_on_bigquery_then_expected_tab
         assert f"{project_prefix}._sqlbuild_fingerprints`" in log_sql
         assert "__delta`" in log_sql
         assert "TIMESTAMP '" in log_sql
+    finally:
+        cleanup_bigquery_dataset(dataset_name=dataset_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQuerySourceLoaderStrategiesE2ETestCase(
+            description="source loader strategies apply expected rows on bigquery",
+            command=("--no-color", "load", "--concurrency", "4"),
+            expected_countries=(("1", "US", "United States"), ("2", "CA", "Canada")),
+            expected_webhook_event_counts=(("101", "signup", "2"), ("102", "checkout", "2")),
+            expected_order_events=(("201", "1000"), ("202", "2500"), ("203", "3000")),
+            expected_customers=(("1", "pro"), ("2", "trial"), ("3", "enterprise")),
+            expected_loader_status=(("1", "loaded", "self_managed"),),
+            expected_stdout_fragments=("raw_countries", "raw_webhook_events", "raw_customers"),
+        )
+    ],
+    ids=["source loader strategies apply expected rows on bigquery"],
+)
+def test_given_loader_strategy_project_when_loading_twice_on_bigquery_then_write_modes_apply(
+    tmp_path: Path,
+    test_case: BigQuerySourceLoaderStrategiesE2ETestCase,
+) -> None:
+    project_dir: Path
+    dataset_name: str
+    project_dir, dataset_name = prepare_bigquery_source_loader_strategies(tmp_path=tmp_path)
+    ensure_bigquery_dataset_ready(dataset_name=dataset_name)
+
+    try:
+        first_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=test_case.command,
+            project_dir=project_dir,
+        )
+        second_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=test_case.command,
+            project_dir=project_dir,
+        )
+
+        assert first_result.returncode == test_case.expected_return_code, (
+            first_result.stdout + first_result.stderr
+        )
+        assert second_result.returncode == test_case.expected_return_code, (
+            second_result.stdout + second_result.stderr
+        )
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in second_result.stdout
+
+        countries: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
+            dataset_name=dataset_name,
+            sql=(
+                "SELECT country_id, country_code, country_name FROM "
+                f"{relation_name(dataset_name=dataset_name, name='raw_countries')} "
+                "ORDER BY country_id"
+            ),
+        )
+        webhook_event_counts: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
+            dataset_name=dataset_name,
+            sql=(
+                "SELECT event_id, event_name, COUNT(*) FROM "
+                f"{relation_name(dataset_name=dataset_name, name='raw_webhook_events')} "
+                "GROUP BY event_id, event_name ORDER BY event_id"
+            ),
+        )
+        order_events: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
+            dataset_name=dataset_name,
+            sql=(
+                "SELECT event_id, amount_cents FROM "
+                f"{relation_name(dataset_name=dataset_name, name='raw_order_events')} "
+                "ORDER BY event_id"
+            ),
+        )
+        customers: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
+            dataset_name=dataset_name,
+            sql=(
+                "SELECT customer_id, plan_name FROM "
+                f"{relation_name(dataset_name=dataset_name, name='raw_customers')} "
+                "ORDER BY customer_id"
+            ),
+        )
+        loader_status: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
+            dataset_name=dataset_name,
+            sql=(
+                "SELECT status_id, status_name, loaded_by FROM "
+                f"{relation_name(dataset_name=dataset_name, name='raw_loader_status')} "
+                "ORDER BY status_id"
+            ),
+        )
+
+        assert stringify_warehouse_rows(countries) == test_case.expected_countries
+        assert stringify_warehouse_rows(webhook_event_counts) == (
+            test_case.expected_webhook_event_counts
+        )
+        assert stringify_warehouse_rows(order_events) == test_case.expected_order_events
+        assert stringify_warehouse_rows(customers) == test_case.expected_customers
+        assert stringify_warehouse_rows(loader_status) == test_case.expected_loader_status
     finally:
         cleanup_bigquery_dataset(dataset_name=dataset_name)
 

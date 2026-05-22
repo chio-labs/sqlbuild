@@ -15,6 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.databricks._test_types import (
     DatabricksScenarioRemoteE2ETestCase,
     DatabricksSnapshotApplyE2ETestCase,
     DatabricksSnapshotE2ETestCase,
+    DatabricksSourceLoaderStrategiesE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.databricks.helpers import (
     assert_current_databricks_snapshot_rows,
@@ -30,6 +31,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.databricks.helpers import (
     list_databricks_scenario_relation_names,
     prepare_databricks_diff_project,
     prepare_databricks_query_source,
+    prepare_databricks_source_loader_strategies,
     prepare_databricks_waffle_shop,
     relation_name,
     write_local_environment_override,
@@ -50,6 +52,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     build_real_warehouse_snapshot_project_files,
     prepare_inline_project,
     run_sqb,
+    stringify_warehouse_rows,
 )
 from tests.integration.src.sqlbuild.integrations.databricks.helpers import build_unique_schema_name
 
@@ -641,6 +644,106 @@ def test_given_waffle_shop_when_running_full_build_on_databricks_then_expected_v
             assert daily_revenue_rows == test_case.expected_daily_revenue_rows
     finally:
         with databricks_e2e_timing("cleanup schema"):
+            cleanup_databricks_schema(schema_name=schema_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksSourceLoaderStrategiesE2ETestCase(
+            description="source loader strategies apply expected rows on databricks",
+            command=("--no-color", "load", "--concurrency", "4"),
+            expected_countries=(("1", "US", "United States"), ("2", "CA", "Canada")),
+            expected_webhook_event_counts=(("101", "signup", "2"), ("102", "checkout", "2")),
+            expected_order_events=(("201", "1000"), ("202", "2500"), ("203", "3000")),
+            expected_customers=(("1", "pro"), ("2", "trial"), ("3", "enterprise")),
+            expected_loader_status=(("1", "loaded", "self_managed"),),
+            expected_stdout_fragments=("raw_countries", "raw_webhook_events", "raw_customers"),
+        )
+    ],
+    ids=["source loader strategies apply expected rows on databricks"],
+)
+def test_given_loader_strategy_project_when_loading_twice_on_databricks_then_write_modes_apply(
+    tmp_path: Path,
+    test_case: DatabricksSourceLoaderStrategiesE2ETestCase,
+) -> None:
+    project_dir: Path
+    schema_name: str
+    with databricks_e2e_timing("prepare source loader strategy fixture"):
+        project_dir, schema_name = prepare_databricks_source_loader_strategies(tmp_path=tmp_path)
+        ensure_databricks_schema_ready(schema_name=schema_name)
+
+    try:
+        with databricks_e2e_timing("first sqb load"):
+            first_result: subprocess.CompletedProcess[str] = run_sqb(
+                command=test_case.command,
+                project_dir=project_dir,
+            )
+        with databricks_e2e_timing("second sqb load"):
+            second_result: subprocess.CompletedProcess[str] = run_sqb(
+                command=test_case.command,
+                project_dir=project_dir,
+            )
+
+        assert first_result.returncode == test_case.expected_return_code, (
+            first_result.stdout + first_result.stderr
+        )
+        assert second_result.returncode == test_case.expected_return_code, (
+            second_result.stdout + second_result.stderr
+        )
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in second_result.stdout
+
+        countries: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+            schema_name=schema_name,
+            sql=(
+                "SELECT country_id, country_code, country_name FROM "
+                f"{relation_name(schema_name=schema_name, name='raw_countries')} "
+                "ORDER BY country_id"
+            ),
+        )
+        webhook_event_counts: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+            schema_name=schema_name,
+            sql=(
+                "SELECT event_id, event_name, COUNT(*) FROM "
+                f"{relation_name(schema_name=schema_name, name='raw_webhook_events')} "
+                "GROUP BY event_id, event_name ORDER BY event_id"
+            ),
+        )
+        order_events: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+            schema_name=schema_name,
+            sql=(
+                "SELECT event_id, amount_cents FROM "
+                f"{relation_name(schema_name=schema_name, name='raw_order_events')} "
+                "ORDER BY event_id"
+            ),
+        )
+        customers: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+            schema_name=schema_name,
+            sql=(
+                "SELECT customer_id, plan_name FROM "
+                f"{relation_name(schema_name=schema_name, name='raw_customers')} "
+                "ORDER BY customer_id"
+            ),
+        )
+        loader_status: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+            schema_name=schema_name,
+            sql=(
+                "SELECT status_id, status_name, loaded_by FROM "
+                f"{relation_name(schema_name=schema_name, name='raw_loader_status')} "
+                "ORDER BY status_id"
+            ),
+        )
+
+        assert stringify_warehouse_rows(countries) == test_case.expected_countries
+        assert stringify_warehouse_rows(webhook_event_counts) == (
+            test_case.expected_webhook_event_counts
+        )
+        assert stringify_warehouse_rows(order_events) == test_case.expected_order_events
+        assert stringify_warehouse_rows(customers) == test_case.expected_customers
+        assert stringify_warehouse_rows(loader_status) == test_case.expected_loader_status
+    finally:
+        with databricks_e2e_timing("cleanup source loader strategy schema"):
             cleanup_databricks_schema(schema_name=schema_name)
 
 

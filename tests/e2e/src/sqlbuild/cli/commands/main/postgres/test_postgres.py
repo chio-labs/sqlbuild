@@ -10,6 +10,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.postgres._test_types import (
     PostgresScenarioLocalReplayE2ETestCase,
     PostgresSnapshotApplyE2ETestCase,
     PostgresSnapshotE2ETestCase,
+    PostgresSourceLoaderStrategiesE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.postgres.helpers import (
     assert_current_postgres_snapshot_rows_from_case,
@@ -20,6 +21,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.postgres.helpers import (
     cleanup_postgres_schema,
     ensure_postgres_schema_ready,
     fetch_postgres_rows,
+    prepare_postgres_source_loader_strategies,
     prepare_postgres_waffle_shop,
     relation_name,
 )
@@ -38,6 +40,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     build_real_warehouse_snapshot_project_files,
     prepare_inline_project,
     run_sqb,
+    stringify_warehouse_rows,
 )
 
 
@@ -85,6 +88,106 @@ def test_given_waffle_shop_when_running_full_build_on_postgres_then_expected_tab
         row_count: object = rows[0][0]
         assert isinstance(row_count, int)
         assert row_count == test_case.expected_row_count
+    finally:
+        cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresSourceLoaderStrategiesE2ETestCase(
+            description="source loader strategies apply expected rows on postgres",
+            command=("--no-color", "load", "--concurrency", "4"),
+            expected_countries=(("1", "US", "United States"), ("2", "CA", "Canada")),
+            expected_webhook_event_counts=(("101", "signup", "2"), ("102", "checkout", "2")),
+            expected_order_events=(("201", "1000"), ("202", "2500"), ("203", "3000")),
+            expected_customers=(("1", "pro"), ("2", "trial"), ("3", "enterprise")),
+            expected_loader_status=(("1", "loaded", "self_managed"),),
+            expected_stdout_fragments=("raw_countries", "raw_webhook_events", "raw_customers"),
+        )
+    ],
+    ids=["source loader strategies apply expected rows on postgres"],
+)
+def test_given_loader_strategy_project_when_loading_twice_on_postgres_then_write_modes_apply(
+    tmp_path: Path,
+    test_case: PostgresSourceLoaderStrategiesE2ETestCase,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    project_dir: Path
+    schema_name: str
+    project_dir, schema_name = prepare_postgres_source_loader_strategies(
+        tmp_path=tmp_path,
+        config=postgres_e2e_config,
+    )
+    ensure_postgres_schema_ready(schema_name=schema_name, config=postgres_e2e_config)
+
+    try:
+        first_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=test_case.command,
+            project_dir=project_dir,
+        )
+        second_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=test_case.command,
+            project_dir=project_dir,
+        )
+
+        assert first_result.returncode == test_case.expected_return_code, (
+            first_result.stdout + first_result.stderr
+        )
+        assert second_result.returncode == test_case.expected_return_code, (
+            second_result.stdout + second_result.stderr
+        )
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in second_result.stdout
+
+        countries: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
+            config=postgres_e2e_config,
+            sql=(
+                "SELECT country_id, country_code, country_name FROM "
+                f"{relation_name(schema_name=schema_name, name='raw_countries')} "
+                "ORDER BY country_id"
+            ),
+        )
+        webhook_event_counts: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
+            config=postgres_e2e_config,
+            sql=(
+                "SELECT event_id, event_name, COUNT(*) FROM "
+                f"{relation_name(schema_name=schema_name, name='raw_webhook_events')} "
+                "GROUP BY event_id, event_name ORDER BY event_id"
+            ),
+        )
+        order_events: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
+            config=postgres_e2e_config,
+            sql=(
+                "SELECT event_id, amount_cents FROM "
+                f"{relation_name(schema_name=schema_name, name='raw_order_events')} "
+                "ORDER BY event_id"
+            ),
+        )
+        customers: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
+            config=postgres_e2e_config,
+            sql=(
+                "SELECT customer_id, plan_name FROM "
+                f"{relation_name(schema_name=schema_name, name='raw_customers')} "
+                "ORDER BY customer_id"
+            ),
+        )
+        loader_status: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
+            config=postgres_e2e_config,
+            sql=(
+                "SELECT status_id, status_name, loaded_by FROM "
+                f"{relation_name(schema_name=schema_name, name='raw_loader_status')} "
+                "ORDER BY status_id"
+            ),
+        )
+
+        assert stringify_warehouse_rows(countries) == test_case.expected_countries
+        assert stringify_warehouse_rows(webhook_event_counts) == (
+            test_case.expected_webhook_event_counts
+        )
+        assert stringify_warehouse_rows(order_events) == test_case.expected_order_events
+        assert stringify_warehouse_rows(customers) == test_case.expected_customers
+        assert stringify_warehouse_rows(loader_status) == test_case.expected_loader_status
     finally:
         cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
 

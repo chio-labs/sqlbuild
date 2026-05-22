@@ -293,19 +293,23 @@ class PostgresAdapter(BaseAdapter):
         source_columns: tuple[str, ...] = self.query_column_names(connection, sql)
         non_key_columns: tuple[str, ...] = tuple(col for col in source_columns if col not in keys)
         col_list: str = ", ".join(source_columns)
-        conflict_keys: str = ", ".join(keys)
+        key_match_sql: str = " AND ".join(f"__target.{key} = __source.{key}" for key in keys)
+        source_select_sql: str = f"({sql}) AS __source"
         if non_key_columns:
-            update_set: str = ", ".join(f"{col} = EXCLUDED.{col}" for col in non_key_columns)
-            do_clause: str = f"DO UPDATE SET {update_set}"
-        else:
-            do_clause = "DO NOTHING"
-        merge_sql: str = (
+            update_set: str = ", ".join(f"{col} = __source.{col}" for col in non_key_columns)
+            update_sql: str = (
+                f"UPDATE {target} AS __target SET {update_set} "
+                f"FROM {source_select_sql} WHERE {key_match_sql}"
+            )
+            statement_recorder.record(update_sql)
+            self.execute(connection, update_sql)
+        insert_sql: str = (
             f"INSERT INTO {target} ({col_list}) "
-            f"SELECT {col_list} FROM ({sql}) AS __source "
-            f"ON CONFLICT ({conflict_keys}) {do_clause}"
+            f"SELECT {col_list} FROM {source_select_sql} "
+            f"WHERE NOT EXISTS (SELECT 1 FROM {target} AS __target WHERE {key_match_sql})"
         )
-        statement_recorder.record(merge_sql)
-        self.execute(connection, merge_sql)
+        statement_recorder.record(insert_sql)
+        self.execute(connection, insert_sql)
 
     def add_columns(
         self,

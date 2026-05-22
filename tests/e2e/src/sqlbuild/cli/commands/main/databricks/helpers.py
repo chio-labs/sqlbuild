@@ -11,6 +11,7 @@ from typing import Any
 
 from sqlbuild.integrations.databricks.client import DatabricksAdapter
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    prepare_source_loader_strategies,
     prepare_waffle_shop,
     stringify_warehouse_rows,
 )
@@ -92,6 +93,20 @@ def prepare_databricks_waffle_shop(*, tmp_path: Path) -> tuple[Path, str]:
     (project_dir / "sqlbuild_local.toml").write_text(
         build_databricks_local_config(schema_name=schema_name),
         encoding="utf-8",
+    )
+    return project_dir, schema_name
+
+
+def prepare_databricks_source_loader_strategies(*, tmp_path: Path) -> tuple[Path, str]:
+    """Prepare source-loader strategy fixture wired to a unique Databricks schema."""
+
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_e2e_load")
+    project_dir: Path = prepare_source_loader_strategies(
+        tmp_path=tmp_path,
+        project_toml=build_databricks_project_toml(
+            project_name="source_loader_strategies",
+            schema_name=schema_name,
+        ),
     )
     return project_dir, schema_name
 

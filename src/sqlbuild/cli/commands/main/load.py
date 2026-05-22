@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import TextIO
 
@@ -22,6 +23,7 @@ from sqlbuild.cli.commands.main.shared.helpers.parsers import (
     parse_cursor_timestamp,
 )
 from sqlbuild.cli.commands.main.shared.helpers.progress import format_build_header
+from sqlbuild.compiler.compile.main.effective_environment import build_effective_environment_config
 from sqlbuild.compiler.compile.main.effective_runtime import build_effective_runtime_config
 from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -36,7 +38,7 @@ from sqlbuild.shared.helpers.colors import (
     green_bold,
     supports_color,
 )
-from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.models.project import EnvironmentConfig, resolve_effective_adapter_name
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -62,6 +64,9 @@ def run_load(
         discovered_inputs=discovered_inputs,
         select=select,
         exclude=exclude,
+        environment_config=build_effective_environment_config(
+            discovered_inputs=discovered_inputs,
+        ),
     )
     use_color: bool = not no_color and supports_color()
     progress_stream: TextIO = sys.stderr if json_output else sys.stdout
@@ -181,6 +186,7 @@ def _select_managed_sources(
     discovered_inputs: DiscoveredProjectInputs,
     select: tuple[str, ...],
     exclude: tuple[str, ...],
+    environment_config: EnvironmentConfig | None,
 ) -> tuple[SourceEntry, ...]:
     sources: list[SourceEntry] = []
     source_file: DiscoveredSourceFile
@@ -207,7 +213,15 @@ def _select_managed_sources(
     selected_names: frozenset[str] = frozenset(select)
     excluded_names: frozenset[str] = frozenset(exclude)
     return tuple(
-        source
+        replace(
+            source,
+            database=source.database
+            if source.database is not None or environment_config is None
+            else environment_config.database,
+            schema=source.schema
+            if source.schema is not None or environment_config is None
+            else environment_config.schema,
+        )
         for source in sources
         if source.loader is not None
         if (not selected_names or source.name in selected_names)
