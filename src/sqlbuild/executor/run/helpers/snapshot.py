@@ -444,10 +444,12 @@ def _validate_unique_snapshot_keys(
         identity_columns = (*identity_columns, entry.observed_at_column)
     key_list: str = ", ".join(identity_columns)
     duplicate_sql: str = (
-        f"SELECT 1 FROM {delta_qualified} GROUP BY {key_list} HAVING COUNT(*) > 1 LIMIT 1"
+        f"SELECT COUNT(*) FROM (SELECT {key_list} FROM {delta_qualified} "
+        f"GROUP BY {key_list} HAVING COUNT(*) > 1) AS __snapshot_duplicate_keys"
     )
     cursor: Any = adapter.execute(connection, duplicate_sql)
-    if cursor.fetchone() is not None:
+    row: tuple[Any, ...] | None = cursor.fetchone()
+    if row is not None and int(row[0]) > 0:
         identity_label: str = (
             "snapshot identity" if entry.observed_at_column is not None else "unique_key"
         )

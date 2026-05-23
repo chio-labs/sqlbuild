@@ -585,8 +585,23 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def requires_derived_table_aliases(self) -> bool:
+        """Return whether derived table factors need explicit aliases."""
+        ...
+
+    @abstractmethod
     def render_set_difference_operator(self) -> str:
         """Render the set-difference operator keyword for this adapter."""
+        ...
+
+    @abstractmethod
+    def render_create_fingerprint_table_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        """Render DDL that creates the fingerprint table when missing."""
         ...
 
     @abstractmethod

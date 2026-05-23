@@ -157,6 +157,7 @@ def _try_write_function_fingerprint(
             fingerprint=fingerprint,
             render_qualified_name=adapter.render_qualified_name,
             render_framework_type=adapter.render_framework_type,
+            render_create_table_sql=adapter.render_create_fingerprint_table_sql,
         )
     except Exception as exc:
         warnings.append(

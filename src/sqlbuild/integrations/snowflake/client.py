@@ -1307,10 +1307,30 @@ class SnowflakeAdapter(BaseAdapter):
         exclude_list: str = ", ".join(cast_column_names)
         return f"(SELECT * EXCLUDE ({exclude_list}), {cast_clause} FROM {source_relation})"
 
+    def requires_derived_table_aliases(self) -> bool:
+        """Snowflake does not require aliases for derived table factors."""
+
+        return False
+
     def render_set_difference_operator(self) -> str:
         """Render Snowflake set-difference operator explicitly."""
 
         return "EXCEPT"
+
+    def render_create_fingerprint_table_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        from sqlbuild.compiler.fingerprints.main.create_table_sql import build_create_table_sql
+
+        return build_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        )
 
     def render_table_function_call(self, *, target: str, call_suffix_sql: str) -> str:
         return f"TABLE({target}{call_suffix_sql})"
