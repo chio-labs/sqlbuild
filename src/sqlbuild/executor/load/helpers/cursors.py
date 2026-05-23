@@ -18,7 +18,8 @@ def load_staging_cursor_bounds(
     cursor_column: str,
     statement_recorder: StatementRecorder,
 ) -> tuple[object | None, object | None]:
-    sql: str = f"SELECT MIN({cursor_column}), MAX({cursor_column}) FROM {staging}"
+    quoted_cursor_column: str = adapter.render_identifier(cursor_column)
+    sql: str = f"SELECT MIN({quoted_cursor_column}), MAX({quoted_cursor_column}) FROM {staging}"
     statement_recorder.record(sql)
     cursor: Any = adapter.execute(connection, sql)
     row: object | None = cursor.fetchone()

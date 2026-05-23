@@ -2250,7 +2250,7 @@ WRITE_STRATEGY_LIFECYCLE_TEST_CASES: list[LoadCommandWriteStrategyLifecycleTestC
             "CREATE OR REPLACE TABLE raw_append_events AS SELECT * FROM raw_append_events__staging",
         ),
         expected_second_run_fragments=(
-            "INSERT INTO raw_append_events (event_id, cursor_seen) "
+            'INSERT INTO raw_append_events ("event_id", "cursor_seen") '
             "SELECT * FROM raw_append_events__staging",
         ),
         absent_second_run_fragments=(
@@ -2279,8 +2279,8 @@ WRITE_STRATEGY_LIFECYCLE_TEST_CASES: list[LoadCommandWriteStrategyLifecycleTestC
         ),
         expected_second_run_fragments=(
             "MERGE INTO raw_merge_composite",
-            "__target.entity_id = __source.entity_id",
-            "__target.source = __source.source",
+            '__target."entity_id" = __source."entity_id"',
+            '__target."source" = __source."source"',
         ),
     ),
     LoadCommandWriteStrategyLifecycleTestCase(
@@ -2291,8 +2291,8 @@ WRITE_STRATEGY_LIFECYCLE_TEST_CASES: list[LoadCommandWriteStrategyLifecycleTestC
             "raw_delete_insert_events__staging",
         ),
         expected_second_run_fragments=(
-            "SELECT MIN(event_id), MAX(event_id) FROM raw_delete_insert_events__staging",
-            "DELETE FROM raw_delete_insert_events WHERE event_id >= '2' AND event_id < '4'",
+            'SELECT MIN("event_id"), MAX("event_id") FROM raw_delete_insert_events__staging',
+            "DELETE FROM raw_delete_insert_events WHERE \"event_id\" >= '2' AND \"event_id\" < '4'",
             "INSERT INTO raw_delete_insert_events SELECT * FROM raw_delete_insert_events__staging",
         ),
         absent_second_run_fragments=(
@@ -2402,7 +2402,7 @@ CURSOR_LIFECYCLE_TEST_CASES: list[LoadCommandLifecycleSqlTestCase] = [
         description="records cursor max query only when target exists",
         project_files=WRITE_STRATEGY_TEST_CASES[0].project_files,
         run_count=2,
-        expected_lifecycle_sql_fragments=("SELECT MAX(event_id) FROM raw_append_events",),
+        expected_lifecycle_sql_fragments=('SELECT MAX("event_id") FROM raw_append_events',),
     ),
     LoadCommandLifecycleSqlTestCase(
         description="does not query cursor when source has no cursor column",
@@ -3232,8 +3232,8 @@ def raw_batched_yield_loader(ctx):
             expected_column_types={"id": "INTEGER", "status": "VARCHAR", "late_flag": "BOOLEAN"},
             expected_lifecycle_sql_fragments=(
                 "CREATE OR REPLACE TABLE raw_batched_yield__staging",
-                "ALTER TABLE raw_batched_yield__staging ADD COLUMN late_flag BOOLEAN",
-                "INSERT INTO raw_batched_yield__staging (id, status, late_flag)",
+                'ALTER TABLE raw_batched_yield__staging ADD COLUMN "late_flag" BOOLEAN',
+                'INSERT INTO raw_batched_yield__staging ("id", "status", "late_flag")',
                 "CREATE OR REPLACE TABLE raw_batched_yield AS SELECT * "
                 "FROM raw_batched_yield__staging",
                 "DROP TABLE IF EXISTS raw_batched_yield__staging",

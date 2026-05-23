@@ -15,7 +15,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.helpers.load_selection.helpers im
 
 LOAD_SELECTION_TEST_CASES: list[LoadSelectionTestCase] = [
     LoadSelectionTestCase(
-        description="source selector wins over same-named intermediate loader",
+        description="source selector selects terminal source load only",
         select=("raw_orders",),
         expected_entry_names=("raw_orders",),
         expected_loader_node_flags=(False,),

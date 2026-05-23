@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 
+import duckdb
 import pytest
 
 from sqlbuild.executor.load.helpers.rows import (
@@ -15,10 +16,12 @@ from sqlbuild.executor.load.helpers.rows import (
 )
 from sqlbuild.executor.load.models import LoaderRowsSchema
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from sqlbuild.spec.models.source import SourceColumnEntry
 from tests.unit.src.sqlbuild.executor.load._test_types import (
     LoaderRowsBatchTestCase,
     LoaderRowsErrorTestCase,
+    LoaderRowsExecutableSqlTestCase,
     LoaderRowsNormalizeErrorTestCase,
     LoaderRowsNormalizeTestCase,
     LoaderRowsSchemaTestCase,
@@ -45,22 +48,24 @@ LOADER_ROWS_SQL_TEST_CASES: list[LoaderRowsSqlTestCase] = [
             {"nullable_then_string": "resolved"},
         ),
         expected_sql_fragments=(
-            "CAST(extra_bool AS BOOLEAN) AS extra_bool",
-            "CAST(extra_int AS BIGINT) AS extra_int",
-            "CAST(extra_float AS DOUBLE) AS extra_float",
-            "CAST(extra_decimal AS DOUBLE) AS extra_decimal",
-            "CAST(extra_string AS VARCHAR) AS extra_string",
-            "CAST(extra_timestamp AS TIMESTAMP) AS extra_timestamp",
-            "CAST(extra_date AS DATE) AS extra_date",
-            "CAST(extra_json AS JSON) AS extra_json",
-            "CAST(extra_json_list AS JSON) AS extra_json_list",
-            "CAST(nullable_then_string AS VARCHAR) AS nullable_then_string",
+            'CAST("extra_bool" AS BOOLEAN) AS "extra_bool"',
+            'CAST("extra_int" AS BIGINT) AS "extra_int"',
+            'CAST("extra_float" AS DOUBLE) AS "extra_float"',
+            'CAST("extra_decimal" AS DOUBLE) AS "extra_decimal"',
+            'CAST("extra_string" AS VARCHAR) AS "extra_string"',
+            'CAST("extra_timestamp" AS TIMESTAMP) AS "extra_timestamp"',
+            'CAST("extra_date" AS DATE) AS "extra_date"',
+            'CAST("extra_json" AS JSON) AS "extra_json"',
+            'CAST("extra_json_list" AS JSON) AS "extra_json_list"',
+            'CAST("nullable_then_string" AS VARCHAR) AS "nullable_then_string"',
         ),
     ),
     LoaderRowsSqlTestCase(
         description="falls back all null inferred column to uncast projection",
         rows=({"all_null": None},),
-        expected_sql_fragments=("SELECT all_null FROM (VALUES (NULL)) AS __loader_rows(all_null)",),
+        expected_sql_fragments=(
+            'SELECT "all_null" FROM (VALUES (NULL)) AS __loader_rows("all_null")',
+        ),
     ),
     LoaderRowsSqlTestCase(
         description="creates empty declared row query with declared types and order",
@@ -70,7 +75,7 @@ LOADER_ROWS_SQL_TEST_CASES: list[LoaderRowsSqlTestCase] = [
             SourceColumnEntry(name="status", type="VARCHAR"),
         ),
         expected_sql_fragments=(
-            "CAST(NULL AS INTEGER) AS id, CAST(NULL AS VARCHAR) AS status",
+            'CAST(NULL AS INTEGER) AS "id", CAST(NULL AS VARCHAR) AS "status"',
             "WHERE 1 = 0",
         ),
     ),
@@ -78,13 +83,35 @@ LOADER_ROWS_SQL_TEST_CASES: list[LoaderRowsSqlTestCase] = [
         description="preserves declared order before extra first-seen order",
         rows=({"z_extra": 1, "a_extra": 2, "id": 3},),
         columns=(SourceColumnEntry(name="id", type="INTEGER"),),
-        expected_sql_fragments=("AS __loader_rows(id, z_extra, a_extra)",),
+        expected_sql_fragments=('AS __loader_rows("id", "z_extra", "a_extra")',),
     ),
     LoaderRowsSqlTestCase(
         description="uses declared source column type before inferred value type",
         rows=({"declared_text": 123},),
         columns=(SourceColumnEntry(name="declared_text", type="VARCHAR"),),
-        expected_sql_fragments=("CAST(declared_text AS VARCHAR) AS declared_text",),
+        expected_sql_fragments=('CAST("declared_text" AS VARCHAR) AS "declared_text"',),
+    ),
+]
+
+LOADER_ROWS_EXECUTABLE_SQL_TEST_CASES: list[LoaderRowsExecutableSqlTestCase] = [
+    LoaderRowsExecutableSqlTestCase(
+        description="quotes reserved and special column names in DuckDB loader SQL",
+        rows=({"order": 1, "customer id": "c1"},),
+        expected_rows=((1, "c1"),),
+        expected_sql_fragments=(
+            'CAST("order" AS BIGINT) AS "order"',
+            'CAST("customer id" AS VARCHAR) AS "customer id"',
+            'AS __loader_rows("order", "customer id")',
+        ),
+    ),
+    LoaderRowsExecutableSqlTestCase(
+        description="escapes embedded identifier quotes in DuckDB loader SQL",
+        rows=({'quote "col"': 2},),
+        expected_rows=((2,),),
+        expected_sql_fragments=(
+            'CAST("quote ""col""" AS BIGINT) AS "quote ""col"""',
+            'AS __loader_rows("quote ""col""")',
+        ),
     ),
 ]
 
@@ -149,6 +176,24 @@ def test_given_loader_rows_when_building_sql_then_infers_adapter_sql_types(
         columns=test_case.columns,
     )
 
+    assert all(fragment in sql for fragment in test_case.expected_sql_fragments)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    LOADER_ROWS_EXECUTABLE_SQL_TEST_CASES,
+    ids=[case.description for case in LOADER_ROWS_EXECUTABLE_SQL_TEST_CASES],
+)
+def test_given_reserved_loader_row_columns_when_executing_sql_then_quotes_identifiers(
+    test_case: LoaderRowsExecutableSqlTestCase,
+) -> None:
+    sql: str = build_rows_sql(adapter=DuckDbAdapter(), rows=test_case.rows, columns=())
+
+    result: tuple[tuple[object, ...], ...] = tuple(
+        duckdb.connect(":memory:").execute(sql).fetchall()
+    )
+
+    assert result == test_case.expected_rows
     assert all(fragment in sql for fragment in test_case.expected_sql_fragments)
 
 

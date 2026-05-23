@@ -146,7 +146,7 @@ class BigQueryAdapter(BaseAdapter):
             projections: str = ", ".join(
                 "CAST(NULL AS "
                 f"{self._loader_row_sql_type(column_sql_types.get(column_name))}) "
-                f"AS {column_name}"
+                f"AS {self.render_identifier(column_name)}"
                 for column_name in column_names
             )
             return f"SELECT {projections} WHERE 1 = 0"
@@ -154,7 +154,7 @@ class BigQueryAdapter(BaseAdapter):
         row: dict[str, object]
         for row in rows:
             projections = ", ".join(
-                self._loader_rows_projection_sql(
+                self._bigquery_loader_rows_projection_sql(
                     column_name=column_name,
                     literal=self.render_loader_value_literal(
                         value=row.get(column_name),
@@ -172,7 +172,7 @@ class BigQueryAdapter(BaseAdapter):
             return "STRING"
         return self._to_bigquery_type(column_type)
 
-    def _loader_rows_projection_sql(
+    def _bigquery_loader_rows_projection_sql(
         self,
         *,
         literal: str,
@@ -180,9 +180,13 @@ class BigQueryAdapter(BaseAdapter):
         column_sql_types: dict[str, str],
     ) -> str:
         sql_type: str | None = column_sql_types.get(column_name)
+        quoted_column: str = self.render_identifier(column_name)
         if sql_type is None:
-            return f"{literal} AS {column_name}"
-        return f"CAST({literal} AS {self._loader_row_sql_type(sql_type)}) AS {column_name}"
+            return f"{literal} AS {quoted_column}"
+        return f"CAST({literal} AS {self._loader_row_sql_type(sql_type)}) AS {quoted_column}"
+
+    def render_identifier(self, name: str) -> str:
+        return "`" + name.replace("`", "``") + "`"
 
     def _quote_sql_string(self, value: str) -> str:
         return "'" + value.replace("'", "''") + "'"
@@ -892,7 +896,7 @@ class BigQueryAdapter(BaseAdapter):
     ) -> tuple[str, ...]:
         quoted_target: str = self._quote_identifier_path(target)
         if columns is not None:
-            col_list: str = ", ".join(columns)
+            col_list: str = ", ".join(self.render_identifier(column) for column in columns)
             return (f"INSERT INTO {quoted_target} ({col_list}) {sql}",)
         return (f"INSERT INTO {quoted_target} {sql}",)
 
@@ -908,12 +912,16 @@ class BigQueryAdapter(BaseAdapter):
     ) -> tuple[str, ...]:
         insert_clause: str = "INSERT ROW"
         if columns is not None:
-            column_list: str = ", ".join(columns)
-            values_list: str = ", ".join(f"__source.{column}" for column in columns)
+            column_list: str = ", ".join(self.render_identifier(column) for column in columns)
+            values_list: str = ", ".join(
+                f"__source.{self.render_identifier(column)}" for column in columns
+            )
             insert_clause = f"INSERT ({column_list}) VALUES ({values_list})"
         cursor_filter: str = (
-            f"__target.{cursor_column} >= {self._render_cursor_bound_string(cursor_start)} "
-            f"AND __target.{cursor_column} < {self._render_cursor_bound_string(cursor_end)}"
+            f"__target.{self.render_identifier(cursor_column)} >= "
+            f"{self._render_cursor_bound_string(cursor_start)} "
+            f"AND __target.{self.render_identifier(cursor_column)} < "
+            f"{self._render_cursor_bound_string(cursor_end)}"
         )
         return (
             f"MERGE {self._quote_identifier_path(target)} AS __target "
@@ -1224,7 +1232,9 @@ class BigQueryAdapter(BaseAdapter):
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = tuple(
-            f"ALTER TABLE {target} ADD COLUMN {column.name} {self._to_bigquery_type(column.type)}"
+            "ALTER TABLE "
+            f"{self._quote_identifier_path(target)} ADD COLUMN "
+            f"{self.render_identifier(column.name)} {self._to_bigquery_type(column.type)}"
             for column in columns
         )
         statement_recorder.record_many(statements)

@@ -519,10 +519,10 @@ def test_given_bigquery_adapter_when_rendering_drop_view_then_quotes_target(
             expected_fragments=(
                 "MERGE `example-project.dev.events` AS __target",
                 "USING (SELECT id, event_time FROM delta_events) AS __source ON FALSE",
-                "WHEN NOT MATCHED BY TARGET THEN INSERT (id, event_time)",
-                "WHEN NOT MATCHED BY SOURCE AND __target.event_time >= "
+                "WHEN NOT MATCHED BY TARGET THEN INSERT (`id`, `event_time`)",
+                "WHEN NOT MATCHED BY SOURCE AND __target.`event_time` >= "
                 "TIMESTAMP '2026-01-01T00:00:00'",
-                "AND __target.event_time < TIMESTAMP '2026-01-02T00:00:00' THEN DELETE",
+                "AND __target.`event_time` < TIMESTAMP '2026-01-02T00:00:00' THEN DELETE",
             ),
             unexpected_fragments=(
                 "DELETE FROM",

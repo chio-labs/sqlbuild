@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.spec.models.source import SourceColumnEntry
 
 
@@ -32,6 +33,16 @@ class LoaderRowsSqlTestCase:
     rows: tuple[dict[str, object], ...]
     expected_sql_fragments: tuple[str, ...]
     columns: tuple[SourceColumnEntry, ...] = ()
+
+
+@dataclass(frozen=True)
+class LoaderRowsExecutableSqlTestCase:
+    """One executable loader row SQL rendering case."""
+
+    description: str
+    rows: tuple[dict[str, object], ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_sql_fragments: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -80,4 +91,15 @@ class LoaderRowsErrorTestCase:
 
     description: str
     rows: tuple[dict[str, object], ...]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class LoadDagWorkerFailureTestCase:
+    """One load DAG worker failure handling case."""
+
+    description: str
+    source_name: str
+    loader_name: str
+    expected_status: ExecutionStatus
     expected_error_fragment: str

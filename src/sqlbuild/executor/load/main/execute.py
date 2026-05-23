@@ -330,7 +330,7 @@ def _load_current_cursor_value(
     )
     if not target_exists:
         return None
-    sql: str = f"SELECT MAX({source_entry.cursor_column}) FROM {target}"
+    sql: str = f"SELECT MAX({adapter.render_identifier(source_entry.cursor_column)}) FROM {target}"
     statement_recorder.record(sql)
     cursor: Any = adapter.execute(connection, sql)
     row: object | None = cursor.fetchone()

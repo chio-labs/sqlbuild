@@ -520,6 +520,11 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_identifier(self, name: str) -> str:
+        """Render one SQL identifier for this adapter."""
+        ...
+
+    @abstractmethod
     def render_framework_type(self, type_name: FrameworkType) -> str:
         """Render one framework-internal logical type for this adapter."""
         ...
