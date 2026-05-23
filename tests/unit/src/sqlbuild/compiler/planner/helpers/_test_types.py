@@ -19,6 +19,7 @@ from sqlbuild.compiler.planner.models import (
     ScenarioRelationMap,
     SchemaAction,
     SchemaFinding,
+    SourceLoadPlanEntry,
 )
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
@@ -56,6 +57,13 @@ class SourceColumnsTestCase:
     adapter_column_names: tuple[str, ...]
     expected_queried_sql: tuple[str, ...]
     expected_source_column_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SourceLoadNodesTestCase:
+    description: str
+    expected_map_names: tuple[str, ...]
+    expected_entries: tuple[SourceLoadPlanEntry, ...]
 
 
 @dataclass(frozen=True)

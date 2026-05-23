@@ -37,6 +37,7 @@ from sqlbuild.compiler.compile.types import (
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
+    DiscoveredLoaderFunction,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
@@ -61,6 +62,7 @@ from sqlbuild.compiler.shared.helpers.hashing import compute_query_hash
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
+from sqlbuild.spec.models.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     BuildModelWarningsTestCase,
     IncrementalStrategyErrorTestCase,
@@ -97,6 +99,62 @@ def source_key(name: str) -> CompiledObjectKey:
     """Build a source object key."""
 
     return CompiledObjectKey(resource_type=CompiledResourceType.SOURCE, name=name)
+
+
+def fetch_orders(_ctx: object) -> list[dict[str, object]]:
+    return []
+
+
+def load_orders(_ctx: object) -> list[dict[str, object]]:
+    return []
+
+
+def build_source_load_nodes_project() -> CompiledProject:
+    raw_orders_entry: SourceEntry = SourceEntry(
+        name="raw_orders",
+        table="orders",
+        loader="load_orders",
+        write_strategy=SourceWriteStrategy.MERGE,
+        cursor_column="updated_at",
+        unique_key=("order_id",),
+    )
+    return CompiledProject(
+        run_id="test_run",
+        effective_environment_name=None,
+        effective_connection={},
+        effective_vars={},
+        sources=(
+            CompiledSource(
+                key=source_key("raw_orders"),
+                deps=(),
+                name="raw_orders",
+                source_entry=raw_orders_entry,
+                source_file=DiscoveredSourceFile(
+                    file_path=Path("sources/raw.yml"),
+                    relative_path=Path("sources/raw.yml"),
+                    contents="",
+                    source_entries=(raw_orders_entry,),
+                ),
+            ),
+        ),
+        loader_functions=(
+            DiscoveredLoaderFunction(
+                file_path=Path("loaders/raw.py"),
+                relative_path=Path("loaders/raw.py"),
+                name="fetch_orders",
+                function=fetch_orders,
+                target="staging_fetch_orders",
+                write_strategy=SourceWriteStrategy.TABLE,
+            ),
+            DiscoveredLoaderFunction(
+                file_path=Path("loaders/raw.py"),
+                relative_path=Path("loaders/raw.py"),
+                name="load_orders",
+                function=load_orders,
+                depends_on=(fetch_orders,),
+            ),
+        ),
+    )
 
 
 def seed_key(name: str) -> CompiledObjectKey:

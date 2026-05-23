@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.shared.types import ExecutionResourceKind
 from tests.unit.src.sqlbuild.executor.build.helpers.helpers import ModelPlanOverride
 
 
@@ -28,3 +29,15 @@ class BuildSchedulerSourceLoadTestCase:
     expected_load_status: ExecutionStatus
     expected_model_status: ExecutionStatus
     expected_execution_order: tuple[str, ...] = ()
+    expected_model_rows: tuple[tuple[object, ...], ...] = ()
+
+
+@dataclass(frozen=True)
+class BuildSourceNodeExecutionTestCase:
+    description: str
+    source_name: str
+    loader_name: str
+    expected_progress_event: str
+    expected_start_event: tuple[str, ExecutionResourceKind]
+    expected_status: ExecutionStatus
+    expected_rows: tuple[tuple[object, ...], ...]
