@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import inspect
 from pathlib import Path
 
 from scripts.structure.structure_conventions.constants import (
@@ -853,6 +854,62 @@ def check_client_module_shape(
     return violations
 
 
+def check_adapter_contract_implementation_shortcuts(
+    repo_root: Path,
+    file_path: Path,
+    module: ast.Module,
+    contract_class_names: frozenset[str] | None = None,
+) -> list[Violation]:
+    """Reject fake adapter contract implementations that hide BaseAdapter inheritance."""
+
+    checked_class_names: frozenset[str] = contract_class_names or _adapter_contract_class_names(
+        repo_root=repo_root,
+        file_path=file_path,
+        module=module,
+    )
+    if not checked_class_names:
+        return []
+
+    contract_methods: frozenset[str] = _strict_adapter_contract_method_names()
+    violations: list[Violation] = []
+    class_node: ast.ClassDef
+    for class_node in (node for node in module.body if isinstance(node, ast.ClassDef)):
+        if class_node.name not in checked_class_names:
+            continue
+        child: ast.stmt
+        for child in class_node.body:
+            if _is_base_adapter_method_alias(child):
+                violations.append(
+                    Violation(
+                        code="SC037",
+                        path=file_path,
+                        line=getattr(child, "lineno", class_node.lineno),
+                        message=(
+                            "first-class adapter contract methods must copy implementations; "
+                            "do not alias BaseAdapter methods"
+                        ),
+                    )
+                )
+                continue
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if child.name not in contract_methods:
+                    continue
+                if any(_is_super_call(descendant) for descendant in ast.walk(child)):
+                    violations.append(
+                        Violation(
+                            code="SC038",
+                            path=file_path,
+                            line=child.lineno,
+                            message=(
+                                "first-class adapter contract methods must copy implementations; "
+                                "do not delegate to super()"
+                            ),
+                        )
+                    )
+
+    return violations
+
+
 def check_no_sibling_package_imports(
     repo_root: Path,
     file_path: Path,
@@ -1083,6 +1140,86 @@ def _has_deep_internal_segment(parts: tuple[str, ...], internal_segments: frozen
     """Check whether any segment in the import path is a deep internal boundary."""
 
     return any(seg in internal_segments for seg in parts)
+
+
+def _adapter_contract_class_names(
+    *, repo_root: Path, file_path: Path, module: ast.Module
+) -> frozenset[str]:
+    indexed_names: frozenset[str] = _builtin_adapter_contract_class_names_by_path(
+        repo_root=repo_root
+    ).get(file_path.resolve(), frozenset())
+    if indexed_names:
+        return indexed_names
+
+    relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
+    if relative_parts[:3] != ("src", "sqlbuild", "integrations"):
+        return frozenset()
+    if file_path.name != "client.py" and relative_parts[-3:] != (
+        "shared",
+        "classes",
+        "duckdb.py",
+    ):
+        return frozenset()
+    return frozenset(
+        node.name
+        for node in module.body
+        if isinstance(node, ast.ClassDef) and node.name.endswith("Adapter")
+    )
+
+
+def _builtin_adapter_contract_class_names_by_path(*, repo_root: Path) -> dict[Path, frozenset[str]]:
+    try:
+        from sqlbuild.adapter.base.base_adapter import BaseAdapter
+        from sqlbuild.adapter.shared.helpers.builtins import builtin_adapter_classes
+    except Exception:
+        return {}
+
+    repo_root = repo_root.resolve()
+    names_by_path: dict[Path, set[str]] = {}
+    adapter_cls: type[object]
+    for adapter_cls in builtin_adapter_classes().values():
+        for cls in adapter_cls.__mro__:
+            if cls is BaseAdapter or cls is object:
+                break
+            source_path_text: str | None = inspect.getsourcefile(cls)
+            if source_path_text is None:
+                continue
+            source_path: Path = Path(source_path_text).resolve()
+            try:
+                source_path.relative_to(repo_root)
+            except ValueError:
+                continue
+            names_by_path.setdefault(source_path, set()).add(cls.__name__)
+    return {path: frozenset(names) for path, names in names_by_path.items()}
+
+
+def _strict_adapter_contract_method_names() -> frozenset[str]:
+    try:
+        from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
+    except Exception:
+        return frozenset()
+
+    return frozenset(getattr(StrictAdapter, "__abstractmethods__", frozenset()))
+
+
+def _is_base_adapter_method_alias(node: ast.stmt) -> bool:
+    if isinstance(node, ast.Assign):
+        return isinstance(node.value, ast.Attribute) and _is_name(node.value.value, "BaseAdapter")
+    if isinstance(node, ast.AnnAssign):
+        return (
+            node.value is not None
+            and isinstance(node.value, ast.Attribute)
+            and _is_name(node.value.value, "BaseAdapter")
+        )
+    return False
+
+
+def _is_super_call(node: ast.AST) -> bool:
+    return isinstance(node, ast.Call) and _is_name(node.func, "super")
+
+
+def _is_name(node: ast.AST, name: str) -> bool:
+    return isinstance(node, ast.Name) and node.id == name
 
 
 def check_entry_module_shape(file_path: Path, module: ast.Module) -> list[Violation]:

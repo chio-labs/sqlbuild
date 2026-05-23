@@ -32,7 +32,13 @@ from sqlbuild.adapter.shared.models import (
     StatementRecorder,
 )
 from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
-from sqlbuild.adapter.shared.types import CursorKind, FrameworkType, LoaderLogicalType
+from sqlbuild.adapter.shared.types import (
+    CursorKind,
+    FrameworkType,
+    LoaderLogicalType,
+    PromotionStrategy,
+    TablePromotionMode,
+)
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.shared.helpers.diagnostics_logging import log_sql
 from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
@@ -42,6 +48,131 @@ class DuckDbBackedAdapter(BaseAdapter):
     """Shared adapter implementation for DuckDB-backed connections."""
 
     sqlglot_dialect_name: ClassVar[str | None] = "duckdb"
+
+    def supports_zero_copy_clone(self) -> bool:
+        return False
+
+    def supports_relation_age_metadata(self) -> bool:
+        return False
+
+    def maximum_identifier_length(self) -> int:
+        """Return the maximum unqualified identifier length supported by the adapter."""
+
+        return self.max_identifier_length
+
+    def schema_exists(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> bool:
+        """Return whether the named schema exists in the warehouse."""
+
+        query: str = f"SELECT 1 FROM information_schema.schemata WHERE schema_name = '{schema}'"
+        if database is not None:
+            query += f" AND catalog_name = '{database}'"
+        cursor: Any = self.execute(connection, query)
+        return cursor.fetchone() is not None
+
+    def render_create_schema(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> tuple[str, ...]:
+        target: str = f"{database}.{schema}" if database is not None else schema
+        return (f"CREATE SCHEMA IF NOT EXISTS {target}",)
+
+    def ensure_schema(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schema: str | None,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        if schema is None:
+            return
+        statements: tuple[str, ...] = self.render_create_schema(
+            database=database,
+            schema=schema,
+        )
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def render_drop_view(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+        exists_clause: str = " IF EXISTS" if if_exists else ""
+        return (f"DROP VIEW{exists_clause} {target}",)
+
+    def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:
+        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+
+    def render_current_timestamp(self) -> str:
+        return "CURRENT_TIMESTAMP"
+
+    def drop_view(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        if_exists: bool = True,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_drop_view(target=target, if_exists=if_exists)
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def replace_table_from_relation(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        source: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_replace_table_from_relation(
+            target=target,
+            source=source,
+        )
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def default_database(self) -> str | None:
+        """Return None; DuckDB-backed adapters default only schema."""
+
+        return None
+
+    def star_exclude_keyword(self) -> str:
+        """Return the SQL keyword for SELECT * EXCLUDE/EXCEPT syntax."""
+
+        return "EXCLUDE"
+
+    def sqlglot_dialect(self) -> str | None:
+        """Return the SQLGlot dialect name for this adapter, if any."""
+
+        return self.sqlglot_dialect_name
+
+    def default_table_promotion_mode(self) -> TablePromotionMode:
+        """Return staged as the generic default promotion mode."""
+
+        return TablePromotionMode.STAGED
+
+    def default_promotion_strategy(self) -> PromotionStrategy:
+        """Return atomic swap as the generic staged promotion strategy."""
+
+        return PromotionStrategy.ATOMIC_SWAP
+
+    def render_identifier(self, name: str) -> str:
+        """Render one DuckDB identifier using double-quote escaping."""
+
+        return '"' + name.replace('"', '""') + '"'
 
     def render_loader_logical_type(self, type_name: LoaderLogicalType) -> str:
         match type_name:
@@ -710,11 +841,12 @@ class DuckDbBackedAdapter(BaseAdapter):
     ) -> str:
         """Build a DuckDB cursor filter clause."""
 
-        return super().build_cursor_filter(
-            cursor_column=cursor_column,
-            start_cursor=start_cursor,
-            end_cursor=end_cursor,
-        )
+        if cursor_column is None or start_cursor is None:
+            return ""
+        clauses: list[str] = [f"{cursor_column} >= '{start_cursor.value}'"]
+        if end_cursor is not None:
+            clauses.append(f"{cursor_column} < '{end_cursor.value}'")
+        return " AND ".join(clauses)
 
     def duckdb_build_attach_sql(self, attach_entry: dict[str, object]) -> str:
         """Build a DuckDB ATTACH statement from one attach config entry."""
@@ -935,8 +1067,8 @@ class DuckDbBackedAdapter(BaseAdapter):
         statement_recorder: StatementRecorder,
     ) -> None:
         if language != FunctionLanguage.PYTHON:
-            return super().create_function(
-                connection,
+            del source_file_path
+            statements: tuple[str, ...] = self.render_create_function(
                 target=target,
                 arguments=arguments,
                 returns=returns,
@@ -946,9 +1078,12 @@ class DuckDbBackedAdapter(BaseAdapter):
                 runtime_version=runtime_version,
                 entry_point=entry_point,
                 packages=packages,
-                source_file_path=source_file_path,
-                statement_recorder=statement_recorder,
             )
+            statement_recorder.record_many(statements)
+            stmt: str
+            for stmt in statements:
+                self.execute(connection, stmt)
+            return
         del body_sql, runtime_version, packages
         if source_file_path is None or entry_point is None:
             raise AdapterUserError("DuckDB Python UDFs require source_file_path and entry_point")

@@ -19,6 +19,13 @@ class DuckDbRenderCursorBoundLiteralTestCase:
 
 
 @dataclass(frozen=True)
+class DuckDbRenderIdentifierTestCase:
+    description: str
+    name: str
+    expected_identifier: str
+
+
+@dataclass(frozen=True)
 class DuckDbRenderTableFunctionTestCase:
     description: str
     expected_statements: tuple[str, ...]

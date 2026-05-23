@@ -134,7 +134,30 @@ class MotherDuckAdapter(DuckDbBackedAdapter):
 
         duckdb_config: dict[str, Any] = dict(config)
         duckdb_config["database"] = self._connection_database(config)
-        return super().connect(duckdb_config)
+
+        import duckdb
+
+        database: str = str(duckdb_config.get("database", ":memory:"))
+        connection: duckdb.DuckDBPyConnection = duckdb.connect(database=database)
+
+        extensions: list[str] | tuple[str, ...] = duckdb_config.get("extensions", ())
+        extension_name: str
+        for extension_name in extensions:
+            self.execute(connection, f"INSTALL '{extension_name}'")
+            self.execute(connection, f"LOAD '{extension_name}'")
+
+        settings: dict[str, object] = duckdb_config.get("settings", {})
+        setting_key: str
+        setting_value: object
+        for setting_key, setting_value in settings.items():
+            self.execute(connection, f"SET {setting_key} = '{setting_value}'")
+
+        attach_entries: list[dict[str, object]] = duckdb_config.get("attach", [])
+        attach_entry: dict[str, object]
+        for attach_entry in attach_entries:
+            self.execute(connection, self.duckdb_build_attach_sql(attach_entry))
+
+        return connection
 
     def default_schema(self) -> str:
         """MotherDuck uses DuckDB's main schema by default."""

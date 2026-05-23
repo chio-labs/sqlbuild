@@ -13,6 +13,7 @@ from scripts.structure.structure_conventions.filesystem import (
 from scripts.structure.structure_conventions.models import Violation
 from scripts.structure.structure_conventions.rules import (
     check_adapter_class_entry_module_shape,
+    check_adapter_contract_implementation_shortcuts,
     check_banned_generic_filename,
     check_classes_module_name,
     check_client_module_shape,
@@ -88,6 +89,9 @@ def check_paths(paths: list[Path], repo_root: Path | None = None) -> list[Violat
         violations.extend(check_client_module_shape(actual_repo_root, file_path, module))
         violations.extend(
             check_adapter_class_entry_module_shape(actual_repo_root, file_path, module)
+        )
+        violations.extend(
+            check_adapter_contract_implementation_shortcuts(actual_repo_root, file_path, module)
         )
         violations.extend(check_no_sibling_package_imports(actual_repo_root, file_path, module))
         violations.extend(check_shared_package_imports(actual_repo_root, file_path, module))

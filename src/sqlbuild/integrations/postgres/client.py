@@ -12,13 +12,25 @@ from typing import Any, ClassVar
 
 from sqlbuild.adapter.base.base_adapter import (
     BaseAdapter,
+    _build_names_filter,
+    _build_schemas_filter,
+    _historical_check_snapshot_select_sql,
     _historical_hard_deleted_at_sql,
     _historical_snapshot_combined_close_sql,
+    _historical_timestamp_changes_select_sql,
+    _historical_timestamp_snapshot_select_sql,
+    _snapshot_hard_delete_close_sql,
+    _snapshot_initial_valid_from_expr,
     _snapshot_key_condition,
 )
 from sqlbuild.adapter.shared.exceptions import AdapterUserError
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
+    CursorValue,
+    ExpressionInferenceProfile,
+    FunctionInfo,
+    QueryResult,
+    RelationInfo,
     RowDiffColumnResult,
     RowDiffResult,
     RowDiffSampleCell,
@@ -29,7 +41,14 @@ from sqlbuild.adapter.shared.models import (
     StatementRecorder,
 )
 from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
-from sqlbuild.adapter.shared.types import LoaderLogicalType
+from sqlbuild.adapter.shared.types import (
+    CursorKind,
+    FrameworkType,
+    LoaderLogicalType,
+    PromotionStrategy,
+    TablePromotionMode,
+)
+from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.shared.helpers.diagnostics_logging import log_sql
 from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
 
@@ -62,6 +81,1060 @@ class PostgresAdapter(BaseAdapter):
 
     sqlglot_dialect_name: ClassVar[str | None] = "postgres"
     max_identifier_length: ClassVar[int] = 63
+
+    def supports_zero_copy_clone(self) -> bool:
+        return False
+
+    def supports_relation_age_metadata(self) -> bool:
+        return False
+
+    def supports_python_functions(self) -> bool:
+        return False
+
+    def persists_python_functions(self) -> bool:
+        return True
+
+    def python_functions_inherit_default_namespace(self) -> bool:
+        return True
+
+    def supports_unqualified_function_fingerprints(self) -> bool:
+        return False
+
+    def supports_table_functions(self) -> bool:
+        return False
+
+    def recommended_max_sql_length(self) -> int | None:
+        """Return the recommended maximum SQL length for lightweight unit-test queries."""
+
+        return 256_000
+
+    def maximum_identifier_length(self) -> int:
+        """Return the maximum unqualified identifier length supported by the adapter."""
+
+        return self.max_identifier_length
+
+    def query_column_names(self, connection: Any, sql: str) -> tuple[str, ...]:
+        """Return column names produced by a SQL query without materializing full rows."""
+
+        cursor: Any = self.execute(
+            connection, f"SELECT * FROM ({sql}) AS __describe_source LIMIT 0"
+        )
+        description: Any | None = getattr(cursor, "description", None)
+        if description is None:
+            return ()
+        return tuple(str(column[0]) for column in description)
+
+    def build_cursor_filter(
+        self,
+        *,
+        cursor_column: str | None,
+        start_cursor: CursorValue | None,
+        end_cursor: CursorValue | None,
+    ) -> str:
+        """Build a WHERE clause fragment for cursor-bounded queries."""
+
+        if cursor_column is None or start_cursor is None:
+            return ""
+        clauses: list[str] = [f"{cursor_column} >= '{start_cursor.value}'"]
+        if end_cursor is not None:
+            clauses.append(f"{cursor_column} < '{end_cursor.value}'")
+        return " AND ".join(clauses)
+
+    def schema_exists(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> bool:
+        """Return whether the named schema exists in the warehouse."""
+
+        query: str = f"SELECT 1 FROM information_schema.schemata WHERE schema_name = '{schema}'"
+        if database is not None:
+            query += f" AND catalog_name = '{database}'"
+        cursor: Any = self.execute(connection, query)
+        return cursor.fetchone() is not None
+
+    def query(self, connection: Any, sql: str, *, limit: int | None) -> QueryResult:
+        """Execute SQL and return normalized rows for ad hoc query output."""
+
+        cursor: Any = self.execute(connection, sql)
+        description: Any | None = getattr(cursor, "description", None)
+        if description is None:
+            return QueryResult()
+        columns: tuple[str, ...] = tuple(str(column[0]) for column in description)
+        rows: tuple[tuple[object, ...], ...]
+        truncated: bool = False
+        if limit is None:
+            rows = tuple(tuple(row) for row in cursor.fetchall())
+        else:
+            fetched_rows: list[tuple[object, ...]] = [
+                tuple(row) for row in cursor.fetchmany(limit + 1)
+            ]
+            truncated = len(fetched_rows) > limit
+            rows = tuple(fetched_rows[:limit])
+        return QueryResult(columns=columns, rows=rows, truncated=truncated)
+
+    def relation_exists(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> bool:
+        cursor: Any = connection.execute(
+            "SELECT 1 FROM information_schema.tables "
+            f"WHERE table_name = '{name}'"
+            + (f" AND table_schema = '{schema}'" if schema else "")
+            + (f" AND table_catalog = '{database}'" if database else "")
+        )
+        return cursor.fetchone() is not None
+
+    def list_relations(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> tuple[RelationInfo, ...]:
+        query: str = (
+            "SELECT table_name, table_schema, table_type "
+            "FROM information_schema.tables WHERE 1=1"
+            + _build_schemas_filter(schemas)
+            + _build_names_filter(names)
+            + (f" AND table_catalog = '{database}'" if database else "")
+        )
+        cursor: Any = connection.execute(query)
+        return tuple(
+            RelationInfo(
+                database=database,
+                schema=row[1],
+                name=row[0],
+                relation_type=row[2],
+            )
+            for row in cursor.fetchall()
+        )
+
+    def list_functions(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> tuple[FunctionInfo, ...]:
+        query: str = (
+            "SELECT routine_name, routine_schema, routine_type "
+            "FROM information_schema.routines WHERE 1=1"
+            + _build_schemas_filter(schemas, column_name="routine_schema")
+            + _build_names_filter(names, column_name="routine_name")
+            + (f" AND routine_catalog = '{database}'" if database else "")
+        )
+        cursor: Any = connection.execute(query)
+        return tuple(
+            FunctionInfo(
+                database=database,
+                schema=row[1],
+                name=row[0],
+                function_type=row[2],
+            )
+            for row in cursor.fetchall()
+        )
+
+    def get_columns(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> tuple[ColumnInfo, ...]:
+        query: str = (
+            "SELECT column_name, data_type FROM information_schema.columns "
+            f"WHERE table_name = '{name}'"
+            + (f" AND table_schema = '{schema}'" if schema else "")
+            + (f" AND table_catalog = '{database}'" if database else "")
+            + " ORDER BY ordinal_position"
+        )
+        cursor: Any = connection.execute(query)
+        return tuple(ColumnInfo(name=row[0], type=row[1]) for row in cursor.fetchall())
+
+    def get_all_columns(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> dict[str, tuple[ColumnInfo, ...]]:
+        query: str = (
+            "SELECT table_name, column_name, data_type "
+            "FROM information_schema.columns WHERE 1=1"
+            + _build_schemas_filter(schemas)
+            + _build_names_filter(names)
+            + (f" AND table_catalog = '{database}'" if database else "")
+            + " ORDER BY table_name, ordinal_position"
+        )
+        cursor: Any = connection.execute(query)
+        result: dict[str, list[ColumnInfo]] = {}
+        row: Any
+        for row in cursor.fetchall():
+            table_name: str = row[0]
+            if table_name not in result:
+                result[table_name] = []
+            result[table_name].append(ColumnInfo(name=row[1], type=row[2]))
+        return {k: tuple(v) for k, v in result.items()}
+
+    def render_create_schema(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> tuple[str, ...]:
+        target: str = f"{database}.{schema}" if database is not None else schema
+        return (f"CREATE SCHEMA IF NOT EXISTS {target}",)
+
+    def ensure_schema(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schema: str | None,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        if schema is None:
+            return
+        statements: tuple[str, ...] = self.render_create_schema(
+            database=database,
+            schema=schema,
+        )
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def render_create_view_as(self, *, target: str, sql: str) -> tuple[str, ...]:
+        return (f"CREATE OR REPLACE VIEW {target} AS {sql}",)
+
+    def render_table_function_call(self, *, target: str, call_suffix_sql: str) -> str:
+        return f"{target}{call_suffix_sql}"
+
+    def render_udf_call(self, *, target: str, call_suffix_sql: str) -> str:
+        return f"{target}{call_suffix_sql}"
+
+    def render_create_function(
+        self,
+        *,
+        target: str,
+        arguments: tuple[Any, ...],
+        returns: str,
+        body_sql: str,
+        return_columns: tuple[Any, ...] = (),
+        language: FunctionLanguage = FunctionLanguage.SQL,
+        runtime_version: str | None = None,
+        entry_point: str | None = None,
+        packages: tuple[str, ...] = (),
+    ) -> tuple[str, ...]:
+        del runtime_version, entry_point, packages
+        arg_sql: str = ", ".join(f"{arg.name} {arg.type}" for arg in arguments)
+        if language != FunctionLanguage.SQL:
+            raise AdapterUserError("Python functions require an engine-specific implementation")
+        if returns.upper() == "TABLE":
+            if return_columns:
+                return_sql: str = ", ".join(f"{col.name} {col.type}" for col in return_columns)
+                returns_clause: str = f"RETURNS TABLE ({return_sql})"
+            else:
+                returns_clause = "RETURNS TABLE"
+        else:
+            returns_clause = f"RETURNS {returns}"
+        return (
+            f"CREATE OR REPLACE FUNCTION {target}({arg_sql})\n"
+            f"{returns_clause}\n"
+            f"AS $$\n{body_sql}\n$$",
+        )
+
+    def render_append(
+        self, *, target: str, sql: str, columns: tuple[str, ...] | None = None
+    ) -> tuple[str, ...]:
+        column_sql: str = ""
+        if columns is not None:
+            column_sql = (
+                " (" + ", ".join(self.render_identifier(column) for column in columns) + ")"
+            )
+        return (f"INSERT INTO {target}{column_sql} {sql}",)
+
+    def render_delete_insert(
+        self,
+        *,
+        target: str,
+        sql: str,
+        unique_key: tuple[str, ...],
+        columns: tuple[str, ...] | None = None,
+    ) -> tuple[str, ...]:
+        staged: str = f"{target}__delete_insert"
+        key_condition: str = " AND ".join(
+            f"{target}.{self.render_identifier(k)} = {staged}.{self.render_identifier(k)}"
+            for k in unique_key
+        )
+        create_staged: tuple[str, ...] = self.render_create_table_as(target=staged, sql=sql)
+        delete_sql: str = f"DELETE FROM {target} USING {staged} WHERE {key_condition}"
+        insert_stmts: tuple[str, ...] = self.render_append(
+            target=target,
+            sql=f"SELECT * FROM {staged}",
+            columns=columns,
+        )
+        drop_staged: tuple[str, ...] = self.render_drop(target=staged, if_exists=True)
+        return (*create_staged, delete_sql, *insert_stmts, *drop_staged)
+
+    def render_delete_insert_cursor(
+        self,
+        *,
+        target: str,
+        sql: str,
+        cursor_column: str,
+        cursor_start: str,
+        cursor_end: str,
+        columns: tuple[str, ...] | None = None,
+    ) -> tuple[str, ...]:
+        quoted_cursor_column: str = self.render_identifier(cursor_column)
+        delete_sql: str = (
+            f"DELETE FROM {target} WHERE {quoted_cursor_column} >= '{cursor_start}' "
+            f"AND {quoted_cursor_column} < '{cursor_end}'"
+        )
+        insert_stmts: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
+        return (delete_sql, *insert_stmts)
+
+    def render_drop(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+        exists_clause: str = " IF EXISTS" if if_exists else ""
+        return (f"DROP TABLE{exists_clause} {target}",)
+
+    def render_drop_view(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+        exists_clause: str = " IF EXISTS" if if_exists else ""
+        return (f"DROP VIEW{exists_clause} {target}",)
+
+    def render_swap(self, *, left: str, right: str) -> tuple[str, ...]:
+        staging: str = f"{left}__swap_staging"
+        return (
+            *self.render_rename(source=left, target=staging),
+            *self.render_rename(source=right, target=left),
+            *self.render_rename(source=staging, target=right),
+        )
+
+    def render_clone(
+        self,
+        *,
+        source: str,
+        target: str,
+        hard_copy: bool = False,
+    ) -> tuple[str, ...]:
+        del hard_copy
+        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+
+    def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:
+        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+
+    def render_add_columns(
+        self, *, target: str, columns: tuple[ColumnInfo, ...]
+    ) -> tuple[str, ...]:
+        return tuple(
+            f"ALTER TABLE {target} ADD COLUMN {self.render_identifier(col.name)} {col.type}"
+            for col in columns
+        )
+
+    def render_drop_columns(self, *, target: str, column_names: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(
+            f"ALTER TABLE {target} DROP COLUMN {self.render_identifier(col_name)}"
+            for col_name in column_names
+        )
+
+    def render_alter_column_types(
+        self, *, target: str, columns: tuple[ColumnInfo, ...]
+    ) -> tuple[str, ...]:
+        return tuple(
+            f"ALTER TABLE {target} ALTER COLUMN {self.render_identifier(col.name)} TYPE {col.type}"
+            for col in columns
+        )
+
+    def render_merge(
+        self,
+        *,
+        target: str,
+        sql: str,
+        unique_key: tuple[str, ...],
+        source_columns: tuple[str, ...] = (),
+    ) -> tuple[str, ...]:
+        join_condition: str = " AND ".join(
+            f"__target.{self.render_identifier(k)} = __source.{self.render_identifier(k)}"
+            for k in unique_key
+        )
+        update_assignments: str = ", ".join(
+            f"{self.render_identifier(col)} = __source.{self.render_identifier(col)}"
+            for col in source_columns
+            if col not in unique_key
+        )
+        insert_columns: str = ", ".join(self.render_identifier(col) for col in source_columns)
+        insert_values: str = ", ".join(
+            f"__source.{self.render_identifier(col)}" for col in source_columns
+        )
+        merge_sql: str = (
+            f"MERGE INTO {target} AS __target USING ({sql}) AS __source ON {join_condition} "
+        )
+        if update_assignments:
+            merge_sql += f"WHEN MATCHED THEN UPDATE SET {update_assignments} "
+        merge_sql += f"WHEN NOT MATCHED THEN INSERT ({insert_columns}) VALUES ({insert_values})"
+        return (merge_sql,)
+
+    def render_current_timestamp(self) -> str:
+        return "CURRENT_TIMESTAMP"
+
+    def create_table_as(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        sql: str,
+        config: dict[str, Any] | None = None,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_create_table_as(target=target, sql=sql)
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def create_view_as(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        sql: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_create_view_as(target=target, sql=sql)
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def create_function(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        arguments: tuple[Any, ...],
+        returns: str,
+        body_sql: str,
+        return_columns: tuple[Any, ...] = (),
+        language: FunctionLanguage = FunctionLanguage.SQL,
+        runtime_version: str | None = None,
+        entry_point: str | None = None,
+        packages: tuple[str, ...] = (),
+        source_file_path: Path | None = None,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        del source_file_path
+        statements: tuple[str, ...] = self.render_create_function(
+            target=target,
+            arguments=arguments,
+            returns=returns,
+            body_sql=body_sql,
+            return_columns=return_columns,
+            language=language,
+            runtime_version=runtime_version,
+            entry_point=entry_point,
+            packages=packages,
+        )
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def drop(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        if_exists: bool = True,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_drop(target=target, if_exists=if_exists)
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def drop_view(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        if_exists: bool = True,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_drop_view(target=target, if_exists=if_exists)
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def rename(
+        self,
+        connection: Any,
+        *,
+        source: str,
+        target: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_rename(source=source, target=target)
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            connection.execute(stmt)
+
+    def swap(
+        self,
+        connection: Any,
+        *,
+        left: str,
+        right: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_swap(left=left, right=right)
+        statement_recorder.record_many(statements)
+        with self.transaction(connection):
+            stmt: str
+            for stmt in statements:
+                self.execute(connection, stmt)
+
+    def clone(
+        self,
+        connection: Any,
+        *,
+        source: str,
+        target: str,
+        hard_copy: bool = False,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_clone(
+            source=source,
+            target=target,
+            hard_copy=hard_copy,
+        )
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def replace_table_from_relation(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        source: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_replace_table_from_relation(
+            target=target,
+            source=source,
+        )
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def append(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        sql: str,
+        columns: tuple[str, ...] | None = None,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def delete_insert(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        sql: str,
+        unique_key: str | tuple[str, ...],
+        columns: tuple[str, ...] | None = None,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
+        statements: tuple[str, ...] = self.render_delete_insert(
+            target=target, sql=sql, unique_key=keys, columns=columns
+        )
+        statement_recorder.record_many(statements)
+        with self.transaction(connection):
+            stmt: str
+            for stmt in statements:
+                self.execute(connection, stmt)
+
+    def delete_insert_cursor(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        sql: str,
+        cursor_column: str,
+        cursor_start: str,
+        cursor_end: str,
+        columns: tuple[str, ...] | None = None,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_delete_insert_cursor(
+            target=target,
+            sql=sql,
+            cursor_column=cursor_column,
+            cursor_start=cursor_start,
+            cursor_end=cursor_end,
+            columns=columns,
+        )
+        statement_recorder.record_many(statements)
+        with self.transaction(connection):
+            stmt: str
+            for stmt in statements:
+                self.execute(connection, stmt)
+
+    def count_rows(
+        self,
+        connection: Any,
+        *,
+        relation: str,
+        cursor_column: str | None = None,
+        start_cursor: CursorValue | None = None,
+        end_cursor: CursorValue | None = None,
+    ) -> int:
+        where_clause: str = ""
+        if cursor_column and start_cursor:
+            where_clause = f" WHERE {cursor_column} >= '{start_cursor.value}'"
+            if end_cursor:
+                where_clause += f" AND {cursor_column} < '{end_cursor.value}'"
+        cursor: Any = connection.execute(f"SELECT COUNT(*) FROM {relation}{where_clause}")
+        result: Any = cursor.fetchone()
+        return int(result[0])
+
+    def validate_row_diff_keys(
+        self,
+        connection: Any,
+        *,
+        relation_sql: str,
+        relation_label: str,
+        keys: tuple[str, ...],
+    ) -> None:
+        if not keys:
+            raise AdapterUserError("row diff requires at least one unique_key column")
+        null_condition: str = " OR ".join(f"{key} IS NULL" for key in keys)
+        null_count_sql: str = (
+            f"SELECT COUNT(*) FROM ({relation_sql}) AS __key_check WHERE {null_condition}"
+        )
+        null_row: tuple[Any, ...] = self.execute(connection, null_count_sql).fetchone()
+        if int(null_row[0]) > 0:
+            raise AdapterUserError(
+                f"row diff {relation_label} relation contains null unique_key values"
+            )
+
+        key_list: str = ", ".join(keys)
+        duplicate_count_sql: str = (
+            f"SELECT COUNT(*) FROM ("
+            f"SELECT {key_list} FROM ({relation_sql}) AS __key_check "
+            f"GROUP BY {key_list} HAVING COUNT(*) > 1"
+            f") AS __duplicates"
+        )
+        duplicate_row: tuple[Any, ...] = self.execute(connection, duplicate_count_sql).fetchone()
+        if int(duplicate_row[0]) > 0:
+            raise AdapterUserError(
+                f"row diff {relation_label} relation contains duplicate unique_key values"
+            )
+
+    def build_row_diff_equal_expression(
+        self,
+        *,
+        column: str,
+        column_info: ColumnInfo,
+        tolerances: RowDiffTolerances | None,
+    ) -> str:
+        tolerance: RowDiffTolerance | None = self.resolve_row_diff_tolerance(
+            column=column,
+            column_type=column_info.type,
+            tolerances=tolerances,
+        )
+        left_expression: str = f"__left.{column}"
+        right_expression: str = f"__right.{column}"
+        if tolerance is None:
+            return f"{left_expression} IS NOT DISTINCT FROM {right_expression}"
+        threshold_parts: list[str] = []
+        if tolerance.absolute is not None:
+            threshold_parts.append(self.format_row_diff_decimal_sql(tolerance.absolute))
+        if tolerance.relative is not None:
+            threshold_parts.append(
+                f"{self.format_row_diff_decimal_sql(tolerance.relative)} * "
+                f"GREATEST(ABS({left_expression}), ABS({right_expression}))"
+            )
+        threshold_sql: str = threshold_parts[0]
+        if len(threshold_parts) > 1:
+            threshold_sql = f"GREATEST({', '.join(threshold_parts)})"
+        return (
+            f"(({left_expression} IS NULL AND {right_expression} IS NULL) OR "
+            f"({left_expression} IS NOT NULL AND {right_expression} IS NOT NULL AND "
+            f"ABS({left_expression} - {right_expression}) <= {threshold_sql}))"
+        )
+
+    def resolve_row_diff_tolerance(
+        self,
+        *,
+        column: str,
+        column_type: str,
+        tolerances: RowDiffTolerances | None,
+    ) -> RowDiffTolerance | None:
+        if tolerances is None:
+            return None
+        column_tolerance: RowDiffTolerance | None = tolerances.by_column.get(column)
+        if column_tolerance is not None:
+            if self.normalize_row_diff_numeric_type(column_type) is None:
+                raise AdapterUserError(
+                    f"row diff tolerance for non-numeric column '{column}' is invalid"
+                )
+            self.validate_row_diff_tolerance(
+                column=column,
+                tolerance=column_tolerance,
+            )
+            return column_tolerance
+        normalized_type: str | None = self.normalize_row_diff_numeric_type(column_type)
+        if normalized_type is None:
+            return None
+        type_tolerance: RowDiffTolerance | None = tolerances.by_type.get(normalized_type)
+        if type_tolerance is not None:
+            self.validate_row_diff_tolerance(
+                column=column,
+                tolerance=type_tolerance,
+            )
+        return type_tolerance
+
+    def validate_row_diff_tolerance(self, *, column: str, tolerance: RowDiffTolerance) -> None:
+        if tolerance.absolute is None and tolerance.relative is None:
+            raise AdapterUserError(
+                f"row diff tolerance for column '{column}' must define absolute or relative"
+            )
+
+    def format_row_diff_decimal_sql(self, value: Decimal) -> str:
+        return format(value, "f")
+
+    def render_create_initial_snapshot_target(
+        self,
+        *,
+        target: str,
+        source: str,
+        snapshot_strategy: str | None,
+        updated_at_column: str | None,
+        observed_at_column: str | None,
+        valid_from_column: str,
+        valid_to_column: str,
+        initial_valid_from: str | None,
+    ) -> tuple[str, ...]:
+        valid_from_expr: str = _snapshot_initial_valid_from_expr(
+            snapshot_strategy=snapshot_strategy,
+            updated_at_column=updated_at_column,
+            observed_at_column=observed_at_column,
+            initial_valid_from=initial_valid_from,
+            source_alias=None,
+            current_timestamp=self.render_current_timestamp(),
+        )
+        return self.render_create_table_as(
+            target=target,
+            sql=(
+                f"SELECT *, {valid_from_expr} AS {valid_from_column}, "
+                f"CAST(NULL AS TIMESTAMP) AS {valid_to_column} FROM {source}"
+            ),
+        )
+
+    def render_apply_timestamp_snapshot_changes(
+        self,
+        *,
+        target: str,
+        source: str,
+        unique_key: tuple[str, ...],
+        updated_at_column: str,
+        observed_at_column: str | None,
+        valid_from_column: str,
+        valid_to_column: str,
+        initial_valid_from: str | None,
+        output_columns: tuple[str, ...],
+        invalidate_hard_deletes: bool,
+    ) -> tuple[str, ...]:
+        current_timestamp: str = self.render_current_timestamp()
+        initial_valid_from_expr: str = _snapshot_initial_valid_from_expr(
+            snapshot_strategy="timestamp",
+            updated_at_column=updated_at_column,
+            observed_at_column=observed_at_column,
+            initial_valid_from=initial_valid_from,
+            source_alias="__source",
+            current_timestamp=current_timestamp,
+        )
+        key_condition: str = _snapshot_key_condition(
+            left_alias="__target", right_alias="__source", unique_key=unique_key
+        )
+        close_sql: str = (
+            f"UPDATE {target} AS __target "
+            f"SET {valid_to_column} = __source.{updated_at_column} "
+            f"FROM {source} AS __source "
+            f"WHERE {key_condition} "
+            f"AND __target.{valid_to_column} IS NULL "
+            f"AND __source.{updated_at_column} > __target.{updated_at_column}"
+        )
+        insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
+        output_select_sql: str = ", ".join(f"__source.{column}" for column in output_columns)
+        active_join_condition: str = _snapshot_key_condition(
+            left_alias="__active", right_alias="__source", unique_key=unique_key
+        )
+        first_key: str = unique_key[0]
+        version_valid_from_expr: str = (
+            f"CASE WHEN __active.{first_key} IS NULL THEN {initial_valid_from_expr} "
+            f"ELSE __source.{updated_at_column} END"
+        )
+        insert_sql: str = (
+            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"SELECT {output_select_sql}, {version_valid_from_expr}, CAST(NULL AS TIMESTAMP) "
+            f"FROM {source} AS __source "
+            f"LEFT JOIN {target} AS __active "
+            f"ON {active_join_condition} AND __active.{valid_to_column} IS NULL "
+            f"WHERE __active.{first_key} IS NULL "
+            f"OR __source.{updated_at_column} > __active.{updated_at_column}"
+        )
+        statements: tuple[str, ...] = (close_sql, insert_sql)
+        if invalidate_hard_deletes:
+            statements = (
+                *statements,
+                _snapshot_hard_delete_close_sql(
+                    target=target,
+                    source=source,
+                    unique_key=unique_key,
+                    valid_to_column=valid_to_column,
+                    current_timestamp=current_timestamp,
+                ),
+            )
+        return statements
+
+    def render_apply_check_snapshot_changes(
+        self,
+        *,
+        target: str,
+        source: str,
+        unique_key: tuple[str, ...],
+        check_columns: tuple[str, ...],
+        updated_at_column: str | None,
+        observed_at_column: str | None,
+        valid_from_column: str,
+        valid_to_column: str,
+        initial_valid_from: str | None,
+        output_columns: tuple[str, ...],
+        invalidate_hard_deletes: bool,
+    ) -> tuple[str, ...]:
+        current_timestamp: str = self.render_current_timestamp()
+        initial_valid_from_expr: str = _snapshot_initial_valid_from_expr(
+            snapshot_strategy="check",
+            updated_at_column=updated_at_column,
+            observed_at_column=observed_at_column,
+            initial_valid_from=initial_valid_from,
+            source_alias="__source",
+            current_timestamp=current_timestamp,
+        )
+        key_condition: str = _snapshot_key_condition(
+            left_alias="__target", right_alias="__source", unique_key=unique_key
+        )
+        change_condition: str = " OR ".join(
+            f"__source.{column} IS DISTINCT FROM __target.{column}" for column in check_columns
+        )
+        close_sql: str = (
+            f"UPDATE {target} AS __target "
+            f"SET {valid_to_column} = {current_timestamp} "
+            f"FROM {source} AS __source "
+            f"WHERE {key_condition} "
+            f"AND __target.{valid_to_column} IS NULL "
+            f"AND ({change_condition})"
+        )
+        insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
+        output_select_sql: str = ", ".join(f"__source.{column}" for column in output_columns)
+        active_join_condition: str = _snapshot_key_condition(
+            left_alias="__active", right_alias="__source", unique_key=unique_key
+        )
+        active_change_condition: str = " OR ".join(
+            f"__source.{column} IS DISTINCT FROM __active.{column}" for column in check_columns
+        )
+        first_key: str = unique_key[0]
+        version_valid_from_expr: str = (
+            f"CASE WHEN __active.{first_key} IS NULL THEN {initial_valid_from_expr} "
+            f"ELSE {current_timestamp} END"
+        )
+        insert_sql: str = (
+            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"SELECT {output_select_sql}, {version_valid_from_expr}, CAST(NULL AS TIMESTAMP) "
+            f"FROM {source} AS __source "
+            f"LEFT JOIN {target} AS __active "
+            f"ON {active_join_condition} AND __active.{valid_to_column} IS NULL "
+            f"WHERE __active.{first_key} IS NULL OR ({active_change_condition})"
+        )
+        statements: tuple[str, ...] = (close_sql, insert_sql)
+        if invalidate_hard_deletes:
+            statements = (
+                *statements,
+                _snapshot_hard_delete_close_sql(
+                    target=target,
+                    source=source,
+                    unique_key=unique_key,
+                    valid_to_column=valid_to_column,
+                    current_timestamp=current_timestamp,
+                ),
+            )
+        return statements
+
+    def render_create_initial_historical_timestamp_snapshot_target(
+        self,
+        *,
+        target: str,
+        source: str,
+        unique_key: tuple[str, ...],
+        updated_at_column: str,
+        observed_at_column: str,
+        valid_from_column: str,
+        valid_to_column: str,
+        output_columns: tuple[str, ...],
+        invalidate_hard_deletes: bool,
+    ) -> tuple[str, ...]:
+        historical_sql: str = _historical_timestamp_snapshot_select_sql(
+            source=source,
+            unique_key=unique_key,
+            updated_at_column=updated_at_column,
+            observed_at_column=observed_at_column,
+            valid_from_column=valid_from_column,
+            valid_to_column=valid_to_column,
+            output_columns=output_columns,
+            invalidate_hard_deletes=invalidate_hard_deletes,
+        )
+        return self.render_create_table_as(target=target, sql=historical_sql)
+
+    def render_create_initial_historical_timestamp_changes_target(
+        self,
+        *,
+        target: str,
+        source: str,
+        unique_key: tuple[str, ...],
+        updated_at_column: str,
+        valid_from_column: str,
+        valid_to_column: str,
+        output_columns: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        historical_sql: str = _historical_timestamp_changes_select_sql(
+            source=source,
+            unique_key=unique_key,
+            updated_at_column=updated_at_column,
+            valid_from_column=valid_from_column,
+            valid_to_column=valid_to_column,
+            output_columns=output_columns,
+        )
+        return self.render_create_table_as(target=target, sql=historical_sql)
+
+    def render_create_initial_historical_check_snapshot_target(
+        self,
+        *,
+        target: str,
+        source: str,
+        unique_key: tuple[str, ...],
+        check_columns: tuple[str, ...],
+        observed_at_column: str,
+        valid_from_column: str,
+        valid_to_column: str,
+        output_columns: tuple[str, ...],
+        invalidate_hard_deletes: bool,
+    ) -> tuple[str, ...]:
+        historical_sql: str = _historical_check_snapshot_select_sql(
+            source=source,
+            unique_key=unique_key,
+            check_columns=check_columns,
+            observed_at_column=observed_at_column,
+            valid_from_column=valid_from_column,
+            valid_to_column=valid_to_column,
+            output_columns=output_columns,
+            invalidate_hard_deletes=invalidate_hard_deletes,
+        )
+        return self.render_create_table_as(target=target, sql=historical_sql)
+
+    def star_exclude_keyword(self) -> str:
+        """Return the SQL keyword for SELECT * EXCLUDE/EXCEPT syntax."""
+
+        return "EXCLUDE"
+
+    def render_qualified_name(
+        self,
+        *,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> str | None:
+        """Render a dot-separated qualified relation name from resolved parts."""
+
+        if database is not None and schema is not None:
+            return f"{database}.{schema}.{name}"
+        if schema is not None:
+            return f"{schema}.{name}"
+        return None
+
+    def render_framework_type(self, type_name: FrameworkType) -> str:
+        """Render one framework-internal logical type using generic SQL defaults."""
+
+        match type_name:
+            case FrameworkType.STRING:
+                return "VARCHAR"
+            case FrameworkType.TIMESTAMP:
+                return "TIMESTAMP"
+
+    def render_set_difference_operator(self) -> str:
+        """Render the generic SQL set-difference operator."""
+
+        return "EXCEPT"
+
+    def sqlglot_dialect(self) -> str | None:
+        """Return the configured SQLGlot dialect name, if any."""
+
+        return self.sqlglot_dialect_name
+
+    def expression_inference_profile(self) -> ExpressionInferenceProfile:
+        """Return portable static expression inference behavior by default."""
+
+        return ExpressionInferenceProfile(sqlglot_dialect=self.sqlglot_dialect())
+
+    def render_cursor_bound_literal(self, value: str, cursor_type: str | None) -> str:
+        """Render one generic cursor bound literal from a normalized string value."""
+
+        if cursor_type == CursorKind.INTEGER:
+            return value
+        if cursor_type == CursorKind.TIMESTAMP:
+            return f"TIMESTAMP '{value}'"
+        return f"'{value}'"
+
+    def default_table_promotion_mode(self) -> TablePromotionMode:
+        """Return staged as the generic default promotion mode."""
+
+        return TablePromotionMode.STAGED
+
+    def default_promotion_strategy(self) -> PromotionStrategy:
+        """Return atomic swap as the generic staged promotion strategy."""
+
+        return PromotionStrategy.ATOMIC_SWAP
+
+    def render_identifier(self, name: str) -> str:
+        """Render one PostgreSQL identifier using double-quote escaping."""
+
+        return '"' + name.replace('"', '""') + '"'
 
     def render_loader_logical_type(self, type_name: LoaderLogicalType) -> str:
         match type_name:

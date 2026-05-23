@@ -45,6 +45,13 @@ class PostgresAdapterDefaultsTestCase:
 
 
 @dataclass(frozen=True)
+class PostgresRenderIdentifierTestCase:
+    description: str
+    name: str
+    expected_identifier: str
+
+
+@dataclass(frozen=True)
 class PostgresLoadSeedTestCase:
     description: str
     csv_text: str
