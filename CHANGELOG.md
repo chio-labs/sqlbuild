@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.18.0](https://github.com/chio-labs/sqlbuild/compare/v0.17.0...v0.18.0) (2026-05-23)
+
+
+### Features
+
+* add sqlserver adapter ([89086bc](https://github.com/chio-labs/sqlbuild/commit/89086bc49c4a91a0e7cdb18c332abf4df4a59603))
+* add sqlserver adapter ([8eb0f87](https://github.com/chio-labs/sqlbuild/commit/8eb0f8729be77b00962789845a3b6cf1bfa3e54f))
+* expose loaders as dagster assets ([44bf2fc](https://github.com/chio-labs/sqlbuild/commit/44bf2fcf2346e51ff9d946f7226997a56ad39757))
+
+
+### Bug Fixes
+
+* align snowflake loader identifiers ([aef8920](https://github.com/chio-labs/sqlbuild/commit/aef89209a78b88e468e700beb4a69352adb7a472))
+* configure databricks source deferral fixtures ([99c8540](https://github.com/chio-labs/sqlbuild/commit/99c85400245a2c3f3e00c0cb112cf5d0f8b42137))
+* configure snowflake waffle source deferral ([31c64fc](https://github.com/chio-labs/sqlbuild/commit/31c64fc5550db211005c98043893b6991bde1745))
+* restore portable fingerprint ddl ([9fadc15](https://github.com/chio-labs/sqlbuild/commit/9fadc15ca4331197b7d4f6696c2399ce9703aaff))
+* restore postgres real warehouse tests ([ad6f04a](https://github.com/chio-labs/sqlbuild/commit/ad6f04ab09c5208a98a2152cf860a0abde6dc4c5))
+
+
+### Documentation
+
+* document source loaders ([65f3d6e](https://github.com/chio-labs/sqlbuild/commit/65f3d6e19cd68916c508238f22deb08b98597911))
+* refresh sqlbuild skill ([52a28a6](https://github.com/chio-labs/sqlbuild/commit/52a28a69919a2183ed4afbae86edd347babe072a))
+
 ## [0.17.0](https://github.com/chio-labs/sqlbuild/compare/v0.16.2...v0.17.0) (2026-05-23)
 
 
