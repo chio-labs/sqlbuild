@@ -63,3 +63,26 @@ class DagsterSqlBuildStreamingE2ETestCase:
     description: str
     selected_asset_key: tuple[str, ...]
     expected_stdout_fragment: str
+
+
+@dataclass(frozen=True)
+class DagsterSqlBuildLoaderE2ETestCase:
+    """Test case for SQLBuild source loaders through Dagster assets."""
+
+    description: str
+    selected_asset_key: tuple[str, ...]
+    expected_success: bool
+    expected_selector_file_contents: str
+    expected_table_names: tuple[str, ...]
+    expected_metadata_asset_key: tuple[str, ...]
+    expected_metadata_keys: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DagsterPlaygroundE2ETestCase:
+    """Test case for generated Dagster playground execution."""
+
+    description: str
+    expected_success: bool
+    expected_table_names: tuple[str, ...]
+    expected_schema: str

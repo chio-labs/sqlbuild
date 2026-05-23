@@ -252,7 +252,7 @@ def _with_selected_asset_args(
         return args, (), None
     if len(args) >= 2 and args[0] == "scenario" and args[1] == "test":
         return _with_selected_scenario_args(args=args, context=context, dag=dag)
-    if args[0] not in {"build", "run", "test", "audit", "seed"}:
+    if args[0] not in {"build", "run", "test", "audit", "seed", "load"}:
         return args, (), None
     if "--select" in args or "-s" in args or "--select-file" in args:
         return args, (), None
@@ -263,6 +263,8 @@ def _with_selected_asset_args(
     selectors: list[str] = []
     for node in _sort_nodes_topologically(dag=dag):
         if tuple(str(part) for part in node["asset_key"]) not in selected_paths:
+            continue
+        if str(node.get("kind")) not in _selectable_kinds_for_command(args[0]):
             continue
         selector: object = node.get("name")
         if selector is not None:
@@ -364,7 +366,7 @@ def _with_json_output_args(
 ) -> tuple[tuple[str, ...], Path | None]:
     if dag is None or context is None or not args or "--json" in args or "--json-output" in args:
         return args, None
-    if args[0] in {"build", "run", "test", "audit", "seed"}:
+    if args[0] in {"build", "run", "test", "audit", "seed", "load"}:
         path: Path = _create_execution_json_path()
         return (*args, "--json-output", str(path)), path
     if len(args) >= 2 and args[0] == "scenario" and args[1] == "test":
@@ -441,8 +443,14 @@ def _build_results_for_selected_assets(
             metadata={"command": " ".join(command), "sqlbuild_id": node.get("id")},
         )
         for node in nodes
-        if str(node.get("kind")) in {"source", "seed", "model", "function"}
+        if str(node.get("kind")) in {"source", "loader", "seed", "model", "function"}
     )
+
+
+def _selectable_kinds_for_command(command: str) -> frozenset[str]:
+    if command == "load":
+        return frozenset({"source", "loader"})
+    return frozenset({"source", "seed", "model", "function"})
 
 
 def _load_execution_payload(stdout: str) -> Mapping[str, Any] | None:
@@ -492,6 +500,14 @@ def _build_results_from_execution_payload(
         if node is None:
             continue
         asset_results_by_id[str(node.get("id"))] = payload_asset
+        if str(node.get("kind")) == "source":
+            asset_results_by_id.update(
+                _loader_results_for_source_payload(
+                    dag=dag,
+                    source_node=node,
+                    payload_asset=payload_asset,
+                )
+            )
     results: list[Any] = []
     for node in _sort_nodes_topologically(dag=dag):
         node_id: str = str(node.get("id"))
@@ -576,6 +592,32 @@ def _build_check_results_from_execution_check(
             )
         )
     return tuple(results)
+
+
+def _loader_results_for_source_payload(
+    *,
+    dag: Mapping[str, Any],
+    source_node: Mapping[str, Any],
+    payload_asset: Mapping[str, Any],
+) -> dict[str, Mapping[str, Any]]:
+    nodes_by_id: dict[str, Mapping[str, Any]] = {
+        str(node.get("id")): node for node in dag.get("nodes", ())
+    }
+    source_id: str = str(source_node.get("id"))
+    results: dict[str, Mapping[str, Any]] = {}
+    for edge in dag.get("edges", ()):  # type: ignore[assignment]
+        if str(edge.get("to_id")) != source_id:
+            continue
+        upstream_node: Mapping[str, Any] | None = nodes_by_id.get(str(edge.get("from_id")))
+        if upstream_node is None or str(upstream_node.get("kind")) != "loader":
+            continue
+        results[str(upstream_node.get("id"))] = {
+            **payload_asset,
+            "kind": "loader",
+            "name": upstream_node.get("name"),
+            "source": source_node.get("name"),
+        }
+    return results
 
 
 def _selected_asset_paths(*, context: Any) -> set[tuple[str, ...]]:
