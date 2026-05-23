@@ -11,6 +11,7 @@ from sqlbuild.compiler.planner.models import (
     FunctionPlanEntry,
     ModelPlanEntry,
     SeedPlanEntry,
+    SourceLoadPlanEntry,
     SqlTestPlanEntry,
 )
 from sqlbuild.executor.auditing.models import AuditExecutionResult
@@ -55,6 +56,9 @@ class BuildIndexes:
     model_entries_by_key: dict[CompiledObjectKey, ModelPlanEntry] = field(default_factory=dict)
     seed_entries_by_key: dict[CompiledObjectKey, SeedPlanEntry] = field(default_factory=dict)
     function_entries_by_key: dict[CompiledObjectKey, FunctionPlanEntry] = field(
+        default_factory=dict
+    )
+    source_load_entries_by_key: dict[CompiledObjectKey, SourceLoadPlanEntry] = field(
         default_factory=dict
     )
     test_entries_by_key: dict[CompiledObjectKey, SqlTestPlanEntry] = field(default_factory=dict)

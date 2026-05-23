@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
@@ -16,7 +17,13 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledRelationTarget,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput, SeedPlanEntry
+from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
+from sqlbuild.compiler.planner.models import (
+    ModelPlanEntry,
+    PlanOutput,
+    SeedPlanEntry,
+    SourceLoadPlanEntry,
+)
 from sqlbuild.compiler.planner.types import (
     MaterializationType,
     PlanAction,
@@ -25,6 +32,8 @@ from sqlbuild.compiler.planner.types import (
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.spec.models.schema import SeedCsvSettings
+from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
+from sqlbuild.spec.models.types import SourceWriteStrategy
 
 
 @dataclass(frozen=True)
@@ -90,6 +99,7 @@ def build_model_plan_entry(
     name: str,
     materialization_type: MaterializationType = MaterializationType.TABLE,
     action: PlanAction = PlanAction.CREATE_TABLE,
+    resolved_sql: str = "SELECT 1",
     incremental_strategy: str | None = None,
     snapshot_strategy: str | None = None,
     observed_at_column: str | None = None,
@@ -106,7 +116,7 @@ def build_model_plan_entry(
             database=None, schema="main", name=name, qualified_name=f"main.{name}"
         ),
         fingerprint_query_sql="SELECT 1",
-        resolved_sql="SELECT 1",
+        resolved_sql=resolved_sql,
         logical_ddl=f"CREATE TABLE main.{name} AS SELECT 1",
         incremental_strategy=incremental_strategy,
         snapshot_strategy=snapshot_strategy,
@@ -126,6 +136,67 @@ def build_seed_plan_entry(*, name: str) -> SeedPlanEntry:
         columns=(),
         csv_settings=SeedCsvSettings(),
     )
+
+
+def build_source_load_plan_output(*, source_name: str, loader_name: str) -> PlanOutput:
+    source_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.SOURCE,
+        name=source_name,
+    )
+    return PlanOutput(
+        source_load_entries=(
+            SourceLoadPlanEntry(
+                key=source_key,
+                name=source_name,
+                loader=loader_name,
+                target=source_name,
+            ),
+        ),
+        source_map={
+            source_name: SourceEntry(
+                name=source_name,
+                loader=loader_name,
+                write_strategy=SourceWriteStrategy.TABLE,
+                columns=(
+                    SourceColumnEntry(name="id", type="INTEGER"),
+                    SourceColumnEntry(name="status", type="VARCHAR"),
+                ),
+            )
+        },
+    )
+
+
+def source_node_test_loader(_ctx: object) -> list[dict[str, object]]:
+    return [{"id": 1, "status": "loaded"}]
+
+
+def failing_source_node_test_loader(_ctx: object) -> list[dict[str, object]]:
+    raise RuntimeError("loader failed intentionally")
+
+
+def build_discovered_source_loader(*, loader_name: str) -> DiscoveredLoaderFunction:
+    return DiscoveredLoaderFunction(
+        file_path=Path("loaders/raw.py"),
+        relative_path=Path("loaders/raw.py"),
+        name=loader_name,
+        function=source_node_test_loader,
+    )
+
+
+def build_failing_discovered_source_loader(*, loader_name: str) -> DiscoveredLoaderFunction:
+    return DiscoveredLoaderFunction(
+        file_path=Path("loaders/raw.py"),
+        relative_path=Path("loaders/raw.py"),
+        name=loader_name,
+        function=failing_source_node_test_loader,
+    )
+
+
+def fetch_rows_or_empty(connection: Any, sql: str) -> tuple[tuple[object, ...], ...]:
+    try:
+        return tuple(connection.execute(sql).fetchall())
+    except Exception:
+        return ()
 
 
 def build_plan_output(
