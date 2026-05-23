@@ -46,7 +46,7 @@ test-real-databricks:
 
 
 test-real-postgres:
-	uv run pytest tests -m "real_warehouse and postgres" -vv
+	TESTCONTAINERS_RYUK_DISABLED=true uv run pytest tests -m "real_warehouse and postgres" -vv
 
 
 test-real-motherduck:

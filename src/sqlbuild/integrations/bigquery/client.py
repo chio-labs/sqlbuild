@@ -7,7 +7,7 @@ import logging
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.exceptions import AdapterUserError
@@ -101,6 +101,353 @@ class BigQueryAdapter(BaseAdapter):
 
     sqlglot_dialect_name: ClassVar[str | None] = "bigquery"
     max_identifier_length: ClassVar[int] = 1024
+
+    def supports_relation_age_metadata(self) -> bool:
+        return False
+
+    def persists_python_functions(self) -> bool:
+        return True
+
+    def python_functions_inherit_default_namespace(self) -> bool:
+        return True
+
+    def supports_unqualified_function_fingerprints(self) -> bool:
+        return False
+
+    def recommended_max_sql_length(self) -> int | None:
+        """Return the recommended maximum SQL length for lightweight unit-test queries."""
+
+        return 256_000
+
+    def maximum_identifier_length(self) -> int:
+        """Return the maximum unqualified identifier length supported by the adapter."""
+
+        return self.max_identifier_length
+
+    def ensure_schema(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schema: str | None,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        if schema is None:
+            return
+        statements: tuple[str, ...] = self.render_create_schema(
+            database=database,
+            schema=schema,
+        )
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def create_table_as(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        sql: str,
+        config: dict[str, Any] | None = None,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_create_table_as(target=target, sql=sql)
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def create_view_as(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        sql: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_create_view_as(target=target, sql=sql)
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def create_function(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        arguments: tuple[Any, ...],
+        returns: str,
+        body_sql: str,
+        return_columns: tuple[Any, ...] = (),
+        language: FunctionLanguage = FunctionLanguage.SQL,
+        runtime_version: str | None = None,
+        entry_point: str | None = None,
+        packages: tuple[str, ...] = (),
+        source_file_path: Path | None = None,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        del source_file_path
+        statements: tuple[str, ...] = self.render_create_function(
+            target=target,
+            arguments=arguments,
+            returns=returns,
+            body_sql=body_sql,
+            return_columns=return_columns,
+            language=language,
+            runtime_version=runtime_version,
+            entry_point=entry_point,
+            packages=packages,
+        )
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def drop(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        if_exists: bool = True,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_drop(target=target, if_exists=if_exists)
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def drop_view(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        if_exists: bool = True,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_drop_view(target=target, if_exists=if_exists)
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def rename(
+        self,
+        connection: Any,
+        *,
+        source: str,
+        target: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_rename(source=source, target=target)
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            connection.execute(stmt)
+
+    def swap(
+        self,
+        connection: Any,
+        *,
+        left: str,
+        right: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_swap(left=left, right=right)
+        statement_recorder.record_many(statements)
+        with self.transaction(connection):
+            stmt: str
+            for stmt in statements:
+                self.execute(connection, stmt)
+
+    def clone(
+        self,
+        connection: Any,
+        *,
+        source: str,
+        target: str,
+        hard_copy: bool = False,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_clone(
+            source=source,
+            target=target,
+            hard_copy=hard_copy,
+        )
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def append(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        sql: str,
+        columns: tuple[str, ...] | None = None,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def drop_columns(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        column_names: tuple[str, ...],
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        raise AdapterUserError("drop_columns requires an engine-specific implementation")
+
+    def alter_column_types(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        columns: tuple[ColumnInfo, ...],
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        raise AdapterUserError("alter_column_types requires an engine-specific implementation")
+
+    def validate_row_diff_keys(
+        self,
+        connection: Any,
+        *,
+        relation_sql: str,
+        relation_label: str,
+        keys: tuple[str, ...],
+    ) -> None:
+        if not keys:
+            raise AdapterUserError("row diff requires at least one unique_key column")
+        null_condition: str = " OR ".join(f"{key} IS NULL" for key in keys)
+        null_count_sql: str = (
+            f"SELECT COUNT(*) FROM ({relation_sql}) AS __key_check WHERE {null_condition}"
+        )
+        null_row: tuple[Any, ...] = cast(
+            tuple[Any, ...], self.execute(connection, null_count_sql).fetchone()
+        )
+        if int(null_row[0]) > 0:
+            raise AdapterUserError(
+                f"row diff {relation_label} relation contains null unique_key values"
+            )
+
+        key_list: str = ", ".join(keys)
+        duplicate_count_sql: str = (
+            f"SELECT COUNT(*) FROM ("
+            f"SELECT {key_list} FROM ({relation_sql}) AS __key_check "
+            f"GROUP BY {key_list} HAVING COUNT(*) > 1"
+            f") AS __duplicates"
+        )
+        duplicate_row: tuple[Any, ...] = cast(
+            tuple[Any, ...], self.execute(connection, duplicate_count_sql).fetchone()
+        )
+        if int(duplicate_row[0]) > 0:
+            raise AdapterUserError(
+                f"row diff {relation_label} relation contains duplicate unique_key values"
+            )
+
+    def resolve_row_diff_tolerance(
+        self,
+        *,
+        column: str,
+        column_type: str,
+        tolerances: RowDiffTolerances | None,
+    ) -> RowDiffTolerance | None:
+        if tolerances is None:
+            return None
+        column_tolerance: RowDiffTolerance | None = tolerances.by_column.get(column)
+        if column_tolerance is not None:
+            if self.normalize_row_diff_numeric_type(column_type) is None:
+                raise AdapterUserError(
+                    f"row diff tolerance for non-numeric column '{column}' is invalid"
+                )
+            self.validate_row_diff_tolerance(
+                column=column,
+                tolerance=column_tolerance,
+            )
+            return column_tolerance
+        normalized_type: str | None = self.normalize_row_diff_numeric_type(column_type)
+        if normalized_type is None:
+            return None
+        type_tolerance: RowDiffTolerance | None = tolerances.by_type.get(normalized_type)
+        if type_tolerance is not None:
+            self.validate_row_diff_tolerance(
+                column=column,
+                tolerance=type_tolerance,
+            )
+        return type_tolerance
+
+    def validate_row_diff_tolerance(self, *, column: str, tolerance: RowDiffTolerance) -> None:
+        if tolerance.absolute is None and tolerance.relative is None:
+            raise AdapterUserError(
+                f"row diff tolerance for column '{column}' must define absolute or relative"
+            )
+
+    def sqlglot_dialect(self) -> str | None:
+        """Return the SQLGlot dialect name for this adapter, if any."""
+
+        return self.sqlglot_dialect_name
+
+    def render_add_columns(
+        self, *, target: str, columns: tuple[ColumnInfo, ...]
+    ) -> tuple[str, ...]:
+        return tuple(
+            f"ALTER TABLE {target} ADD COLUMN {self.render_identifier(col.name)} {col.type}"
+            for col in columns
+        )
+
+    def render_drop_columns(self, *, target: str, column_names: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(
+            f"ALTER TABLE {target} DROP COLUMN {self.render_identifier(col_name)}"
+            for col_name in column_names
+        )
+
+    def render_alter_column_types(
+        self, *, target: str, columns: tuple[ColumnInfo, ...]
+    ) -> tuple[str, ...]:
+        return tuple(
+            f"ALTER TABLE {target} ALTER COLUMN {self.render_identifier(col.name)} TYPE {col.type}"
+            for col in columns
+        )
+
+    def render_merge(
+        self,
+        *,
+        target: str,
+        sql: str,
+        unique_key: tuple[str, ...],
+        source_columns: tuple[str, ...] = (),
+    ) -> tuple[str, ...]:
+        join_condition: str = " AND ".join(
+            f"__target.{self.render_identifier(k)} = __source.{self.render_identifier(k)}"
+            for k in unique_key
+        )
+        update_assignments: str = ", ".join(
+            f"{self.render_identifier(col)} = __source.{self.render_identifier(col)}"
+            for col in source_columns
+            if col not in unique_key
+        )
+        insert_columns: str = ", ".join(self.render_identifier(col) for col in source_columns)
+        insert_values: str = ", ".join(
+            f"__source.{self.render_identifier(col)}" for col in source_columns
+        )
+        merge_sql: str = (
+            f"MERGE INTO {target} AS __target USING ({sql}) AS __source ON {join_condition} "
+        )
+        if update_assignments:
+            merge_sql += f"WHEN MATCHED THEN UPDATE SET {update_assignments} "
+        merge_sql += f"WHEN NOT MATCHED THEN INSERT ({insert_columns}) VALUES ({insert_values})"
+        return (merge_sql,)
+
+    def render_current_timestamp(self) -> str:
+        return "CURRENT_TIMESTAMP"
 
     def render_loader_logical_type(self, type_name: LoaderLogicalType) -> str:
         match type_name:
@@ -939,12 +1286,22 @@ class BigQueryAdapter(BaseAdapter):
         columns: tuple[str, ...] | None = None,
     ) -> tuple[str, ...]:
         if columns is None:
-            return super().render_delete_insert(
-                target=self._quote_identifier_path(target),
-                sql=sql,
-                unique_key=unique_key,
+            quoted_target: str = self._quote_identifier_path(target)
+            staged: str = f"{quoted_target}__delete_insert"
+            key_condition: str = " AND ".join(
+                f"{quoted_target}.{self.render_identifier(k)} = "
+                f"{staged}.{self.render_identifier(k)}"
+                for k in unique_key
+            )
+            create_staged: tuple[str, ...] = self.render_create_table_as(target=staged, sql=sql)
+            delete_sql: str = f"DELETE FROM {quoted_target} USING {staged} WHERE {key_condition}"
+            insert_stmts: tuple[str, ...] = self.render_append(
+                target=quoted_target,
+                sql=f"SELECT * FROM {staged}",
                 columns=columns,
             )
+            drop_staged: tuple[str, ...] = self.render_drop(target=staged, if_exists=True)
+            return (*create_staged, delete_sql, *insert_stmts, *drop_staged)
         return self.render_merge(
             target=target,
             sql=sql,

@@ -69,6 +69,79 @@ class DatabricksAdapter(BaseAdapter):
     sqlglot_dialect_name: ClassVar[str | None] = "databricks"
     max_identifier_length: ClassVar[int] = 255
 
+    def maximum_identifier_length(self) -> int:
+        """Return the maximum unqualified identifier length supported by the adapter."""
+
+        return self.max_identifier_length
+
+    def persists_python_functions(self) -> bool:
+        return True
+
+    def python_functions_inherit_default_namespace(self) -> bool:
+        return True
+
+    def supports_unqualified_function_fingerprints(self) -> bool:
+        return False
+
+    def render_drop_view(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+        exists_clause: str = " IF EXISTS" if if_exists else ""
+        return (f"DROP VIEW{exists_clause} {target}",)
+
+    def drop_view(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        if_exists: bool = True,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_drop_view(target=target, if_exists=if_exists)
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def create_function(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        arguments: tuple[Any, ...],
+        returns: str,
+        body_sql: str,
+        return_columns: tuple[Any, ...] = (),
+        language: FunctionLanguage = FunctionLanguage.SQL,
+        runtime_version: str | None = None,
+        entry_point: str | None = None,
+        packages: tuple[str, ...] = (),
+        source_file_path: Path | None = None,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        del source_file_path
+        statements: tuple[str, ...] = self.render_create_function(
+            target=target,
+            arguments=arguments,
+            returns=returns,
+            body_sql=body_sql,
+            return_columns=return_columns,
+            language=language,
+            runtime_version=runtime_version,
+            entry_point=entry_point,
+            packages=packages,
+        )
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def render_current_timestamp(self) -> str:
+        return "CURRENT_TIMESTAMP"
+
+    def sqlglot_dialect(self) -> str | None:
+        """Return the SQLGlot dialect name for this adapter, if any."""
+
+        return self.sqlglot_dialect_name
+
     def render_identifier(self, name: str) -> str:
         return "`" + name.replace("`", "``") + "`"
 
