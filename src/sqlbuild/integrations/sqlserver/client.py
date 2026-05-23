@@ -361,6 +361,32 @@ class SqlServerAdapter(BaseAdapter):
             f"'{escaped_schema}') EXEC('CREATE SCHEMA {self.render_identifier(schema)}')",
         )
 
+    def render_create_fingerprint_table_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+        from sqlbuild.compiler.fingerprints.main.create_table_sql import build_create_table_sql
+
+        create_sql: str = build_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        ).replace("CREATE TABLE IF NOT EXISTS", "CREATE TABLE", 1)
+        escaped_schema: str = schema.replace("'", "''")
+        escaped_table: str = FINGERPRINT_TABLE_NAME.replace("'", "''")
+        exists_sql: str = (
+            "SELECT 1 FROM information_schema.tables "
+            f"WHERE table_schema = '{escaped_schema}' AND table_name = '{escaped_table}'"
+        )
+        if database is not None:
+            escaped_database: str = database.replace("'", "''")
+            exists_sql += f" AND table_catalog = '{escaped_database}'"
+        return f"IF NOT EXISTS ({exists_sql}) {create_sql}"
+
     def render_create_table_as(self, *, target: str, sql: str) -> tuple[str, ...]:
         return (
             f"DROP TABLE IF EXISTS {target}",
