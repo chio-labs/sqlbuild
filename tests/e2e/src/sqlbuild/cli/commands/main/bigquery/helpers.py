@@ -46,7 +46,8 @@ def build_bigquery_project_toml(*, project_name: str, dataset_name: str) -> str:
         f'location = "{location}"\n\n'
         "[environments.dev]\n"
         f'database = "{project_id}"\n'
-        f'schema = "{dataset_name}"\n\n'
+        f'schema = "{dataset_name}"\n'
+        'defer_sources_to = "dev"\n\n'
         "[defaults]\n"
         'materialized = "table"\n'
     )
@@ -97,7 +98,8 @@ def prepare_bigquery_waffle_shop(*, tmp_path: Path) -> tuple[Path, str]:
         'materialized = "table"\n\n'
         "[environments.dev]\n"
         f'database = "{project_name}"\n'
-        f'schema = "{dataset_name}"\n\n'
+        f'schema = "{dataset_name}"\n'
+        'defer_sources_to = "dev"\n\n'
         "[environments.prod]\n"
         f'database = "{project_name}"\n'
         f'schema = "{dataset_name}"\n\n'

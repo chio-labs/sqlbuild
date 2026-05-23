@@ -36,7 +36,8 @@ def build_postgres_project_toml(
         f'user = "{config["user"]}"\n'
         f'password = "{config["password"]}"\n\n'
         "[environments.dev]\n"
-        f'schema = "{schema_name}"\n\n'
+        f'schema = "{schema_name}"\n'
+        'defer_sources_to = "dev"\n\n'
         "[defaults]\n"
         'materialized = "table"\n'
     )
@@ -312,7 +313,8 @@ def prepare_postgres_waffle_shop(*, tmp_path: Path, config: dict[str, object]) -
         "[defaults]\n"
         'materialized = "table"\n\n'
         "[environments.dev]\n"
-        f'schema = "{schema_name}"\n\n'
+        f'schema = "{schema_name}"\n'
+        'defer_sources_to = "dev"\n\n'
         "[path_defaults.staging]\n"
         'materialized = "view"\n',
         encoding="utf-8",

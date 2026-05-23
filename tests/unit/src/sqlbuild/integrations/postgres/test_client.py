@@ -5,11 +5,13 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.adapter.shared.models import ColumnInfo, SchemaDiffResult, StatementRecorder
+from sqlbuild.compiler.compile.models.core import FunctionArgument
 from sqlbuild.integrations.postgres.client import PostgresAdapter
 from tests.unit.src.sqlbuild.integrations.postgres._test_types import (
     PostgresAdapterDefaultsTestCase,
     PostgresDescribeRelationTestCase,
     PostgresLoadSeedTestCase,
+    PostgresRenderCreateFunctionTestCase,
     PostgresRenderCreateTableAsTestCase,
     PostgresRenderIdentifierTestCase,
     PostgresRenderRenameTestCase,
@@ -56,6 +58,37 @@ def test_given_table_target_when_rendering_create_then_postgres_drops_before_cre
     statements: tuple[str, ...] = adapter.render_create_table_as(
         target=test_case.target,
         sql=test_case.sql,
+    )
+
+    assert statements == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresRenderCreateFunctionTestCase(
+            description="renders SQL function with explicit language",
+            expected_statements=(
+                "CREATE OR REPLACE FUNCTION public.is_completed_order(order_status TEXT)\n"
+                "RETURNS BOOLEAN\n"
+                "LANGUAGE SQL AS $$\n"
+                "SELECT order_status = 'completed'\n"
+                "$$",
+            ),
+        )
+    ],
+    ids=["renders SQL function with explicit language"],
+)
+def test_given_sql_function_when_rendering_create_then_postgres_declares_language(
+    test_case: PostgresRenderCreateFunctionTestCase,
+) -> None:
+    adapter: PostgresAdapter = PostgresAdapter()
+
+    statements: tuple[str, ...] = adapter.render_create_function(
+        target="public.is_completed_order",
+        arguments=(FunctionArgument(name="order_status", type="TEXT"),),
+        returns="BOOLEAN",
+        body_sql="SELECT order_status = 'completed'",
     )
 
     assert statements == test_case.expected_statements
