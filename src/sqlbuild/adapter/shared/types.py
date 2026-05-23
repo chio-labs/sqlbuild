@@ -17,6 +17,7 @@ class BuiltinAdapter(StrEnum):
     BIGQUERY = "bigquery"
     DATABRICKS = "databricks"
     POSTGRES = "postgres"
+    SQLSERVER = "sqlserver"
 
 
 class CursorKind(StrEnum):

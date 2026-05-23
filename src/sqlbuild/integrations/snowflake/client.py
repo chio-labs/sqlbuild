@@ -1307,6 +1307,11 @@ class SnowflakeAdapter(BaseAdapter):
         exclude_list: str = ", ".join(cast_column_names)
         return f"(SELECT * EXCLUDE ({exclude_list}), {cast_clause} FROM {source_relation})"
 
+    def requires_derived_table_aliases(self) -> bool:
+        """Snowflake does not require aliases for derived table factors."""
+
+        return False
+
     def render_set_difference_operator(self) -> str:
         """Render Snowflake set-difference operator explicitly."""
 

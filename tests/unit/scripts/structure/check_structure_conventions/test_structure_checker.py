@@ -956,6 +956,22 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC025",),
     ),
     CheckPathsTestCase(
+        description="reports adapter-local integrations helpers module",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/integrations/__init__.py": '"""Integrations."""\n',
+            "src/sqlbuild/integrations/clickhouse/__init__.py": '"""ClickHouse integration."""\n',
+            "src/sqlbuild/integrations/clickhouse/helpers.py": dedent(
+                """
+                def render_clickhouse_sql() -> str:
+                    return "SELECT 1"
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("SC003", "SC004", "SC040"),
+    ),
+    CheckPathsTestCase(
         description="reports private dataclass after function definition",
         repo_files=compliant_repo_files()
         | {

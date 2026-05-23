@@ -32,7 +32,10 @@ def write_fingerprint(
         render_qualified_name=render_qualified_name,
         render_framework_type=render_framework_type,
     )
-    execute(connection, create_sql)
+    try:
+        execute(connection, create_sql)
+    except Exception:
+        pass
     migration_sql: str
     for migration_sql in build_add_target_columns_sql(
         database=database,

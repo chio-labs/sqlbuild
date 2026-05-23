@@ -1248,6 +1248,35 @@ class PostgresAdapter(BaseAdapter):
         exclude_list: str = ", ".join(cast_column_names)
         return f"(SELECT * EXCLUDE ({exclude_list}), {cast_clause} FROM {source_relation})"
 
+    def _render_source_relation_cast_subquery_with_columns(
+        self,
+        *,
+        source_relation: str,
+        cast_projections: tuple[str, ...],
+        cast_column_names: tuple[str, ...],
+        warehouse_column_names: tuple[str, ...],
+        all_columns_cast: bool,
+    ) -> str:
+        """Render Postgres source casts without relying on unsupported star exclusion."""
+
+        cast_clause: str = ", ".join(cast_projections)
+        if all_columns_cast:
+            return f"(SELECT {cast_clause} FROM {source_relation})"
+        projection_names: set[str] = set(cast_column_names)
+        passthrough_columns: tuple[str, ...] = tuple(
+            column for column in warehouse_column_names if column not in projection_names
+        )
+        passthrough_clause: str = ", ".join(passthrough_columns)
+        projection_clause: str = cast_clause
+        if passthrough_clause:
+            projection_clause = f"{passthrough_clause}, {cast_clause}"
+        return f"(SELECT {projection_clause} FROM {source_relation})"
+
+    def requires_derived_table_aliases(self) -> bool:
+        """Postgres does not require aliases for derived table factors."""
+
+        return False
+
     def connect(self, config: dict[str, Any]) -> _PostgresConnection:
         try:
             import psycopg

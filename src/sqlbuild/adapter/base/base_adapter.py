@@ -1503,6 +1503,30 @@ class BaseAdapter(StrictAdapter):
             f"FROM {source_relation})"
         )
 
+    def _render_source_relation_cast_subquery_with_columns(
+        self,
+        *,
+        source_relation: str,
+        cast_projections: tuple[str, ...],
+        cast_column_names: tuple[str, ...],
+        warehouse_column_names: tuple[str, ...],
+        all_columns_cast: bool,
+    ) -> str:
+        """Render a type-enforced source relation with warehouse column context."""
+
+        del warehouse_column_names
+        return self.render_source_relation_cast_subquery(
+            source_relation=source_relation,
+            cast_projections=cast_projections,
+            cast_column_names=cast_column_names,
+            all_columns_cast=all_columns_cast,
+        )
+
+    def requires_derived_table_aliases(self) -> bool:
+        """Return whether derived table factors need explicit aliases."""
+
+        return False
+
     def render_set_difference_operator(self) -> str:
         """Render the generic SQL set-difference operator."""
 

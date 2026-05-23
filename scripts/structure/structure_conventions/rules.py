@@ -854,6 +854,29 @@ def check_client_module_shape(
     return violations
 
 
+def check_integration_adapter_helpers_module(repo_root: Path, file_path: Path) -> list[Violation]:
+    """Reject adapter-local helper modules that hide overrideable adapter behavior."""
+
+    relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
+    if (
+        file_path.name != "helpers.py"
+        or len(relative_parts) != 5
+        or relative_parts[:3] != ("src", "sqlbuild", "integrations")
+    ):
+        return []
+    return [
+        Violation(
+            code="SC040",
+            path=file_path,
+            line=1,
+            message=(
+                "adapter integration helpers.py modules hide overrideable adapter behavior; "
+                "put adapter-specific behavior on the adapter class"
+            ),
+        )
+    ]
+
+
 def check_adapter_contract_implementation_shortcuts(
     repo_root: Path,
     file_path: Path,

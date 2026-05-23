@@ -58,7 +58,12 @@ def resolve_runtime_cursor_bounds(
         cursor_column=cursor_column,
     )
 
-    sql: str = "SELECT MIN(_min), MAX(_max) FROM (" + " UNION ALL ".join(upstream_parts) + ")"
+    derived_alias: str = " AS __cursor_bounds" if adapter.requires_derived_table_aliases() else ""
+    sql: str = (
+        "SELECT MIN(_min), MAX(_max) FROM ("
+        + " UNION ALL ".join(upstream_parts)
+        + f"){derived_alias}"
+    )
     cursor: Any = adapter.execute(connection, sql)
     row: Any = cursor.fetchone()
     if row is None or row[1] is None:
