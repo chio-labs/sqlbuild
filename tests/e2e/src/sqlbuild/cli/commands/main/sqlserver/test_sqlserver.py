@@ -9,33 +9,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.load.helpers import (
     build_loader_waffle_shop_project_files,
     build_schema_behavior_project_files,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.postgres._test_types import (
-    PostgresBuildE2ETestCase,
-    PostgresIntermediateDagStrategyE2ETestCase,
-    PostgresLoaderWaffleShopE2ETestCase,
-    PostgresPartialSourceTypeEnforcementE2ETestCase,
-    PostgresScenarioLocalReplayE2ETestCase,
-    PostgresSnapshotApplyE2ETestCase,
-    PostgresSnapshotE2ETestCase,
-    PostgresSourceDeferralE2ETestCase,
-    PostgresSourceLoaderDagE2ETestCase,
-    PostgresSourceLoaderStrategiesE2ETestCase,
-)
-from tests.e2e.src.sqlbuild.cli.commands.main.postgres.helpers import (
-    assert_current_postgres_snapshot_rows_from_case,
-    assert_postgres_snapshot_apply_rows,
-    assert_postgres_snapshot_matrix_rows,
-    build_postgres_project_toml,
-    build_postgres_source_deferral_project_toml,
-    build_unique_schema_name,
-    cleanup_postgres_schema,
-    ensure_postgres_schema_ready,
-    execute_postgres_sql,
-    fetch_postgres_rows,
-    prepare_postgres_source_loader_strategies,
-    prepare_postgres_waffle_shop,
-    relation_name,
-)
 from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     assert_optional_local_replay_rows,
     build_real_warehouse_local_replay_project_files,
@@ -53,32 +26,60 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     run_sqb,
     stringify_warehouse_rows,
 )
+from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver._test_types import (
+    SqlServerBuildE2ETestCase,
+    SqlServerIntermediateDagStrategyE2ETestCase,
+    SqlServerLoaderWaffleShopE2ETestCase,
+    SqlServerScenarioLocalReplayE2ETestCase,
+    SqlServerSnapshotApplyE2ETestCase,
+    SqlServerSnapshotE2ETestCase,
+    SqlServerSourceDeferralE2ETestCase,
+    SqlServerSourceLoaderDagE2ETestCase,
+    SqlServerSourceLoaderE2ETestCase,
+    SqlServerSourceLoaderStrategiesE2ETestCase,
+)
+from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver.helpers import (
+    adapt_sqlserver_project_files,
+    adapt_sqlserver_sql,
+    assert_current_sqlserver_snapshot_rows_from_case,
+    assert_sqlserver_snapshot_apply_rows,
+    assert_sqlserver_snapshot_matrix_rows,
+    build_sqlserver_config,
+    build_sqlserver_project_toml,
+    build_sqlserver_source_deferral_project_toml,
+    build_unique_schema_name,
+    cleanup_sqlserver_schema,
+    ensure_sqlserver_schema_ready,
+    execute_sqlserver_sql,
+    fetch_sqlserver_rows,
+    prepare_sqlserver_source_loader_strategies,
+    prepare_sqlserver_waffle_shop,
+    relation_name,
+)
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
-        PostgresBuildE2ETestCase(
-            description="waffle shop full build succeeds on postgres",
+        SqlServerBuildE2ETestCase(
+            description="waffle shop full build succeeds on SQL Server",
             command=("--no-color", "build", "--concurrency", "4"),
             expected_table_name="fact_orders",
             expected_row_count=10,
             expected_stdout_fragments=("Execution", "OK"),
         )
     ],
-    ids=["waffle shop full build succeeds on postgres"],
+    ids=["waffle shop full build succeeds on SQL Server"],
 )
-def test_given_waffle_shop_when_running_full_build_on_postgres_then_expected_table_exists(
+def test_given_waffle_shop_when_running_full_build_on_sqlserver_then_expected_table_exists(
     tmp_path: Path,
-    test_case: PostgresBuildE2ETestCase,
-    postgres_e2e_config: dict[str, object],
+    test_case: SqlServerBuildE2ETestCase,
 ) -> None:
+    config: dict[str, object] = build_sqlserver_config()
     project_dir: Path
     schema_name: str
-    project_dir, schema_name = prepare_postgres_waffle_shop(
-        tmp_path=tmp_path, config=postgres_e2e_config
-    )
-    ensure_postgres_schema_ready(schema_name=schema_name, config=postgres_e2e_config)
+    project_dir, schema_name = prepare_sqlserver_waffle_shop(tmp_path=tmp_path, config=config)
+    ensure_sqlserver_schema_ready(schema_name=schema_name, config=config)
 
     try:
         result: subprocess.CompletedProcess[str] = run_sqb(
@@ -89,390 +90,45 @@ def test_given_waffle_shop_when_running_full_build_on_postgres_then_expected_tab
         assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
         for fragment in test_case.expected_stdout_fragments:
             assert fragment in result.stdout
-        rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
-            sql=(
-                f"SELECT COUNT(*) FROM "
-                f"{relation_name(schema_name=schema_name, name=test_case.expected_table_name)}"
-            ),
-            config=postgres_e2e_config,
-        )
-        row_count: object = rows[0][0]
-        assert isinstance(row_count, int)
-        assert row_count == test_case.expected_row_count
-    finally:
-        cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        PostgresSourceDeferralE2ETestCase(
-            description="postgres loader writes dev while model reads prod deferred source",
-            expected_model_rows=(("99", "prod-source"),),
-            expected_loader_rows=(("7", "loaded-dev"),),
-        )
-    ],
-    ids=["postgres loader writes dev while model reads prod deferred source"],
-)
-def test_given_source_deferral_env_when_building_on_postgres_then_reads_prod_and_writes_dev(
-    tmp_path: Path,
-    test_case: PostgresSourceDeferralE2ETestCase,
-    postgres_e2e_config: dict[str, object],
-) -> None:
-    dev_schema_name: str = build_unique_schema_name(prefix="sqlbuild_defer_dev")
-    prod_schema_name: str = build_unique_schema_name(prefix="sqlbuild_defer_prod")
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="postgres_source_deferral",
-        repo_files={
-            "sqlbuild_project.toml": build_postgres_source_deferral_project_toml(
-                project_name="postgres_source_deferral",
-                dev_schema_name=dev_schema_name,
-                prod_schema_name=prod_schema_name,
-                config=postgres_e2e_config,
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_orders\n"
-                "    loader: raw_orders_loader\n"
-                "    write_strategy: table\n"
-                "    columns:\n"
-                "      - name: order_id\n"
-                "        type: INTEGER\n"
-                "      - name: status\n"
-                "        type: VARCHAR\n"
-            ),
-            "loaders/raw_orders.py": (
-                "from sqlbuild.loaders import loader\n\n"
-                "@loader\n"
-                "def raw_orders_loader(ctx):\n"
-                "    return [{'order_id': 7, 'status': 'loaded-dev'}]\n"
-            ),
-            "models/stg_orders.sql": (
-                'MODEL (materialized table);\n\nSELECT order_id, status FROM __source("raw_orders")'
-            ),
-        },
-    )
-    ensure_postgres_schema_ready(schema_name=dev_schema_name, config=postgres_e2e_config)
-    ensure_postgres_schema_ready(schema_name=prod_schema_name, config=postgres_e2e_config)
-
-    try:
-        execute_postgres_sql(
-            config=postgres_e2e_config,
-            sql=(
-                f"CREATE TABLE {relation_name(schema_name=prod_schema_name, name='raw_orders')} "
-                "(order_id INTEGER, status VARCHAR)"
-            ),
-        )
-        execute_postgres_sql(
-            config=postgres_e2e_config,
-            sql=(
-                f"INSERT INTO {relation_name(schema_name=prod_schema_name, name='raw_orders')} "
-                "VALUES (99, 'prod-source')"
-            ),
-        )
-
-        result: subprocess.CompletedProcess[str] = run_sqb(
-            command=("--no-color", "build", "--select", "stg_orders"),
-            project_dir=project_dir,
-        )
-
-        assert result.returncode == 0, result.stdout + result.stderr
-        model_rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
-            config=postgres_e2e_config,
-            sql=(
-                "SELECT order_id, status FROM "
-                f"{relation_name(schema_name=dev_schema_name, name='stg_orders')} "
-                "ORDER BY order_id"
-            ),
-        )
-        loader_rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
-            config=postgres_e2e_config,
-            sql=(
-                "SELECT order_id, status FROM "
-                f"{relation_name(schema_name=dev_schema_name, name='raw_orders')} "
-                "ORDER BY order_id"
-            ),
-        )
-        assert stringify_warehouse_rows(model_rows) == test_case.expected_model_rows
-        assert stringify_warehouse_rows(loader_rows) == test_case.expected_loader_rows
-    finally:
-        cleanup_postgres_schema(schema_name=dev_schema_name, config=postgres_e2e_config)
-        cleanup_postgres_schema(schema_name=prod_schema_name, config=postgres_e2e_config)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        PostgresPartialSourceTypeEnforcementE2ETestCase(
-            description="postgres partial source type enforcement preserves extra columns",
-            expected_rows=(("7", "loaded-dev", "99"),),
-        )
-    ],
-    ids=["postgres partial source type enforcement preserves extra columns"],
-)
-def test_given_partial_source_type_enforcement_when_building_on_postgres_then_casts_columns(
-    tmp_path: Path,
-    test_case: PostgresPartialSourceTypeEnforcementE2ETestCase,
-    postgres_e2e_config: dict[str, object],
-) -> None:
-    schema_name: str = build_unique_schema_name(prefix="sqlbuild_src_cast")
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="postgres_partial_source_type_enforcement",
-        repo_files={
-            "sqlbuild_project.toml": build_postgres_project_toml(
-                project_name="postgres_partial_source_type_enforcement",
-                schema_name=schema_name,
-                config=postgres_e2e_config,
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_orders\n"
-                f"    schema: {schema_name}\n"
-                "    type_enforcement: true\n"
-                "    columns:\n"
-                "      - name: order_id\n"
-                "        type: INTEGER\n"
-            ),
-            "models/stg_orders.sql": (
-                "MODEL (materialized table);\n\n"
-                'SELECT order_id, status, amount_cents FROM __source("raw_orders")'
-            ),
-        },
-    )
-    ensure_postgres_schema_ready(schema_name=schema_name, config=postgres_e2e_config)
-
-    try:
-        execute_postgres_sql(
-            config=postgres_e2e_config,
-            sql=(
-                f"CREATE TABLE {relation_name(schema_name=schema_name, name='raw_orders')} "
-                "(order_id TEXT, status VARCHAR, amount_cents INTEGER)"
-            ),
-        )
-        execute_postgres_sql(
-            config=postgres_e2e_config,
-            sql=(
-                f"INSERT INTO {relation_name(schema_name=schema_name, name='raw_orders')} "
-                "VALUES ('7', 'loaded-dev', 99)"
-            ),
-        )
-
-        result: subprocess.CompletedProcess[str] = run_sqb(
-            command=test_case.command,
-            project_dir=project_dir,
-        )
-
-        assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
-        rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
-            config=postgres_e2e_config,
-            sql=(
-                "SELECT order_id, status, amount_cents FROM "
-                f"{relation_name(schema_name=schema_name, name='stg_orders')} "
-                "ORDER BY order_id"
-            ),
-        )
-        assert stringify_warehouse_rows(rows) == test_case.expected_rows
-    finally:
-        cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        PostgresLoaderWaffleShopE2ETestCase(
-            description="loader focused waffle shop grows across repeated postgres builds",
-            command=("--no-color", "build", "--select", "+customer_revenue"),
-            expected_rows=(
-                ("1", "pro", "650", "1"),
-                ("2", "plus", "3750", "2"),
-                ("3", "enterprise", "1300", "1"),
-            ),
-            expected_event_count=4,
-        )
-    ],
-    ids=["loader focused waffle shop grows across repeated postgres builds"],
-)
-def test_given_loader_waffle_shop_when_building_on_postgres_then_dag_grows_models(
-    tmp_path: Path,
-    test_case: PostgresLoaderWaffleShopE2ETestCase,
-    postgres_e2e_config: dict[str, object],
-) -> None:
-    schema_name: str = build_unique_schema_name(prefix="sqb_load_waffle")
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="loader_waffle_shop",
-        repo_files=build_loader_waffle_shop_project_files(
-            project_toml=build_postgres_project_toml(
-                project_name="loader_waffle_shop",
-                schema_name=schema_name,
-                config=postgres_e2e_config,
-            )
-        ),
-    )
-    ensure_postgres_schema_ready(schema_name=schema_name, config=postgres_e2e_config)
-
-    try:
-        for _ in range(2):
-            result: subprocess.CompletedProcess[str] = run_sqb(
-                command=test_case.command,
-                project_dir=project_dir,
-            )
-            assert result.returncode == test_case.expected_return_code, (
-                result.stdout + result.stderr
-            )
-            assert "loader    fetch_order_events" in result.stdout
-            assert "source    raw_orders" in result.stdout
-
-        rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
-            config=postgres_e2e_config,
-            sql=(
-                "SELECT customer_id, plan_name, revenue_cents, order_count FROM "
-                f"{relation_name(schema_name=schema_name, name='customer_revenue')} "
-                "ORDER BY customer_id"
-            ),
-        )
-        event_count_rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
-            config=postgres_e2e_config,
+        rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
             sql=(
                 "SELECT COUNT(*) FROM "
-                f"{relation_name(schema_name=schema_name, name='__loader__fetch_order_events')}"
+                f"{relation_name(schema_name=schema_name, name=test_case.expected_table_name)}"
             ),
+            config=config,
         )
-        assert stringify_warehouse_rows(rows) == test_case.expected_rows
-        assert int(str(event_count_rows[0][0])) == test_case.expected_event_count
+        assert int(str(rows[0][0])) == test_case.expected_row_count
     finally:
-        cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
+        cleanup_sqlserver_schema(schema_name=schema_name, config=config)
 
 
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        PostgresSourceLoaderStrategiesE2ETestCase(
-            description="source loader strategies apply expected rows on postgres",
-            command=("--no-color", "load", "--concurrency", "4"),
-            expected_countries=(("1", "US", "United States"), ("2", "CA", "Canada")),
-            expected_webhook_event_counts=(("101", "signup", "2"), ("102", "checkout", "2")),
-            expected_order_events=(("201", "1000"), ("202", "2500"), ("203", "3000")),
-            expected_customers=(("1", "pro"), ("2", "trial"), ("3", "enterprise")),
-            expected_loader_status=(("1", "loaded", "self_managed"),),
-            expected_stdout_fragments=("raw_countries", "raw_webhook_events", "raw_customers"),
-        )
-    ],
-    ids=["source loader strategies apply expected rows on postgres"],
-)
-def test_given_loader_strategy_project_when_loading_twice_on_postgres_then_write_modes_apply(
-    tmp_path: Path,
-    test_case: PostgresSourceLoaderStrategiesE2ETestCase,
-    postgres_e2e_config: dict[str, object],
-) -> None:
-    project_dir: Path
-    schema_name: str
-    project_dir, schema_name = prepare_postgres_source_loader_strategies(
-        tmp_path=tmp_path,
-        config=postgres_e2e_config,
-    )
-    ensure_postgres_schema_ready(schema_name=schema_name, config=postgres_e2e_config)
-
-    try:
-        first_result: subprocess.CompletedProcess[str] = run_sqb(
-            command=test_case.command,
-            project_dir=project_dir,
-        )
-        second_result: subprocess.CompletedProcess[str] = run_sqb(
-            command=test_case.command,
-            project_dir=project_dir,
-        )
-
-        assert first_result.returncode == test_case.expected_return_code, (
-            first_result.stdout + first_result.stderr
-        )
-        assert second_result.returncode == test_case.expected_return_code, (
-            second_result.stdout + second_result.stderr
-        )
-        for fragment in test_case.expected_stdout_fragments:
-            assert fragment in second_result.stdout
-
-        countries: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
-            config=postgres_e2e_config,
-            sql=(
-                "SELECT country_id, country_code, country_name FROM "
-                f"{relation_name(schema_name=schema_name, name='raw_countries')} "
-                "ORDER BY country_id"
-            ),
-        )
-        webhook_event_counts: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
-            config=postgres_e2e_config,
-            sql=(
-                "SELECT event_id, event_name, COUNT(*) FROM "
-                f"{relation_name(schema_name=schema_name, name='raw_webhook_events')} "
-                "GROUP BY event_id, event_name ORDER BY event_id"
-            ),
-        )
-        order_events: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
-            config=postgres_e2e_config,
-            sql=(
-                "SELECT event_id, amount_cents FROM "
-                f"{relation_name(schema_name=schema_name, name='raw_order_events')} "
-                "ORDER BY event_id"
-            ),
-        )
-        customers: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
-            config=postgres_e2e_config,
-            sql=(
-                "SELECT customer_id, plan_name FROM "
-                f"{relation_name(schema_name=schema_name, name='raw_customers')} "
-                "ORDER BY customer_id"
-            ),
-        )
-        loader_status: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
-            config=postgres_e2e_config,
-            sql=(
-                "SELECT status_id, status_name, loaded_by FROM "
-                f"{relation_name(schema_name=schema_name, name='raw_loader_status')} "
-                "ORDER BY status_id"
-            ),
-        )
-
-        assert stringify_warehouse_rows(countries) == test_case.expected_countries
-        assert stringify_warehouse_rows(webhook_event_counts) == (
-            test_case.expected_webhook_event_counts
-        )
-        assert stringify_warehouse_rows(order_events) == test_case.expected_order_events
-        assert stringify_warehouse_rows(customers) == test_case.expected_customers
-        assert stringify_warehouse_rows(loader_status) == test_case.expected_loader_status
-    finally:
-        cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
-
-
-POSTGRES_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES: list[PostgresScenarioLocalReplayE2ETestCase] = [
-    PostgresScenarioLocalReplayE2ETestCase(
-        description="captures postgres fixtures and replays transpilable SQL locally",
+SQLSERVER_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES: list[SqlServerScenarioLocalReplayE2ETestCase] = [
+    SqlServerScenarioLocalReplayE2ETestCase(
+        description="captures SQL Server fixtures and replays transpilable SQL locally",
         model_sql=(
             "MODEL (materialized table);\n\n"
             "SELECT\n"
             "  customer_id,\n"
-            "  DATE_TRUNC('day', event_ts) AS event_day,\n"
+            "  CAST(CAST(event_ts AS DATE) AS DATETIME2) AS event_day,\n"
             "  SUM(CASE WHEN amount_cents >= 1000 THEN amount_cents ELSE 0 END)"
             " AS large_amount_cents,\n"
             "  COUNT(*) AS event_count\n"
             'FROM __source("raw_events")\n'
-            "GROUP BY customer_id, DATE_TRUNC('day', event_ts)\n"
+            "GROUP BY customer_id, CAST(CAST(event_ts AS DATE) AS DATETIME2)\n"
         ),
         scenario_sql=(
             "SCENARIO ();\n\n"
             "WITH\n"
             "__source__raw_events AS (\n"
-            "  SELECT 10 AS customer_id, CAST('2026-01-01 08:15:00' AS TIMESTAMP)"
+            "  SELECT 10 AS customer_id, CAST('2026-01-01 08:15:00' AS DATETIME2)"
             " AS event_ts, 1500 AS amount_cents\n"
             "  UNION ALL\n"
-            "  SELECT 10 AS customer_id, CAST('2026-01-01 10:30:00' AS TIMESTAMP)"
+            "  SELECT 10 AS customer_id, CAST('2026-01-01 10:30:00' AS DATETIME2)"
             " AS event_ts, 500 AS amount_cents\n"
             "),\n"
             "__expected__event_rollup AS (\n"
             "  SELECT 10 AS customer_id,"
-            " DATE_TRUNC('day', CAST('2026-01-01 00:00:00' AS TIMESTAMP)) AS event_day,"
+            " CAST(CAST('2026-01-01 00:00:00' AS DATE) AS DATETIME2) AS event_day,"
             " 1500 AS large_amount_cents, 2 AS event_count\n"
             ")\n"
             "SELECT 1\n"
@@ -488,8 +144,8 @@ POSTGRES_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES: list[PostgresScenarioLocalReplayE
             "FROM __sqb_local__model__event_rollup ORDER BY customer_id"
         ),
     ),
-    PostgresScenarioLocalReplayE2ETestCase(
-        description="reports postgres local transpilation failures as X607",
+    SqlServerScenarioLocalReplayE2ETestCase(
+        description="reports SQL Server local transpilation failures as X607",
         scenario_name="local_transpile_error",
         model_sql=(
             "MODEL (materialized table);\n\n"
@@ -521,30 +177,30 @@ POSTGRES_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES: list[PostgresScenarioLocalReplayE
 
 @pytest.mark.parametrize(
     "test_case",
-    POSTGRES_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES,
-    ids=[case.description for case in POSTGRES_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES],
+    SQLSERVER_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES,
+    ids=[case.description for case in SQLSERVER_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES],
 )
-def test_given_postgres_scenario_capture_when_replaying_locally_then_transpilable_sql_passes(
+def test_given_sqlserver_scenario_capture_when_replaying_locally_then_transpilable_sql_passes(
     tmp_path: Path,
-    test_case: PostgresScenarioLocalReplayE2ETestCase,
-    postgres_e2e_config: dict[str, object],
+    test_case: SqlServerScenarioLocalReplayE2ETestCase,
 ) -> None:
+    config: dict[str, object] = build_sqlserver_config()
     schema_name: str = build_unique_schema_name(prefix="sqb_scenario_local")
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
-        project_name="postgres_scenario_local_replay",
+        project_name="sqlserver_scenario_local_replay",
         repo_files=build_real_warehouse_local_replay_project_files(
-            project_toml=build_postgres_project_toml(
-                project_name="postgres_scenario_local_replay",
+            project_toml=build_sqlserver_project_toml(
+                project_name="sqlserver_scenario_local_replay",
                 schema_name=schema_name,
-                config=postgres_e2e_config,
+                config=config,
             ),
             model_sql=test_case.model_sql,
             scenario_sql=test_case.scenario_sql,
             scenario_name=test_case.scenario_name,
         ),
     )
-    ensure_postgres_schema_ready(schema_name=schema_name, config=postgres_e2e_config)
+    ensure_sqlserver_schema_ready(schema_name=schema_name, config=config)
 
     try:
         capture_result: subprocess.CompletedProcess[str] = run_sqb(
@@ -575,25 +231,351 @@ def test_given_postgres_scenario_capture_when_replaying_locally_then_transpilabl
             expected_local_rows=test_case.expected_local_rows,
         )
     finally:
-        cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
+        cleanup_sqlserver_schema(schema_name=schema_name, config=config)
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
-        PostgresSourceLoaderDagE2ETestCase(
-            description="chained source loader runs on postgres",
+        SqlServerSourceLoaderE2ETestCase(
+            description="source loader build writes and reads SQL Server rows",
+            expected_rows=(("7", "loaded-dev"),),
+        )
+    ],
+    ids=["source loader build writes and reads SQL Server rows"],
+)
+def test_given_source_loader_project_when_building_on_sqlserver_then_model_reads_loaded_rows(
+    tmp_path: Path,
+    test_case: SqlServerSourceLoaderE2ETestCase,
+) -> None:
+    config: dict[str, object] = build_sqlserver_config()
+    schema_name: str = build_unique_schema_name(prefix="sqb_e2e_loader")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="sqlserver_source_loader",
+        repo_files={
+            "sqlbuild_project.toml": build_sqlserver_project_toml(
+                project_name="sqlserver_source_loader",
+                schema_name=schema_name,
+                config=config,
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    loader: raw_orders_loader\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+                "      - name: status\n"
+                "        type: NVARCHAR(100)\n"
+            ),
+            "loaders/raw_orders.py": (
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader\n"
+                "def raw_orders_loader(ctx):\n"
+                "    return [{'order_id': 7, 'status': 'loaded-dev'}]\n"
+            ),
+            "models/stg_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT order_id, status FROM __source("raw_orders")'
+            ),
+        },
+    )
+    ensure_sqlserver_schema_ready(schema_name=schema_name, config=config)
+
+    try:
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "build", "--select", "stg_orders"),
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
+        rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
+            config=config,
+            sql=(
+                "SELECT order_id, status FROM "
+                f"{relation_name(schema_name=schema_name, name='stg_orders')} "
+                "ORDER BY order_id"
+            ),
+        )
+        assert stringify_warehouse_rows(rows) == test_case.expected_rows
+    finally:
+        cleanup_sqlserver_schema(schema_name=schema_name, config=config)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerSourceDeferralE2ETestCase(
+            description="SQL Server loader writes dev while model reads prod deferred source",
+            expected_model_rows=(("99", "prod-source"),),
+            expected_loader_rows=(("7", "loaded-dev"),),
+        )
+    ],
+    ids=["SQL Server loader writes dev while model reads prod deferred source"],
+)
+def test_given_source_deferral_env_when_building_on_sqlserver_then_reads_prod_and_writes_dev(
+    tmp_path: Path,
+    test_case: SqlServerSourceDeferralE2ETestCase,
+) -> None:
+    config: dict[str, object] = build_sqlserver_config()
+    dev_schema_name: str = build_unique_schema_name(prefix="sqlbuild_defer_dev")
+    prod_schema_name: str = build_unique_schema_name(prefix="sqlbuild_defer_prod")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="sqlserver_source_deferral",
+        repo_files={
+            "sqlbuild_project.toml": build_sqlserver_source_deferral_project_toml(
+                project_name="sqlserver_source_deferral",
+                dev_schema_name=dev_schema_name,
+                prod_schema_name=prod_schema_name,
+                config=config,
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    loader: raw_orders_loader\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+                "      - name: status\n"
+                "        type: NVARCHAR(100)\n"
+            ),
+            "loaders/raw_orders.py": (
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader\n"
+                "def raw_orders_loader(ctx):\n"
+                "    return [{'order_id': 7, 'status': 'loaded-dev'}]\n"
+            ),
+            "models/stg_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT order_id, status FROM __source("raw_orders")'
+            ),
+        },
+    )
+    ensure_sqlserver_schema_ready(schema_name=dev_schema_name, config=config)
+    ensure_sqlserver_schema_ready(schema_name=prod_schema_name, config=config)
+
+    try:
+        execute_sqlserver_sql(
+            config=config,
+            sql=(
+                f"CREATE TABLE {relation_name(schema_name=prod_schema_name, name='raw_orders')} "
+                "(order_id INT, status NVARCHAR(100))"
+            ),
+        )
+        execute_sqlserver_sql(
+            config=config,
+            sql=(
+                f"INSERT INTO {relation_name(schema_name=prod_schema_name, name='raw_orders')} "
+                "VALUES (99, 'prod-source')"
+            ),
+        )
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "build", "--select", "stg_orders"),
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
+        model_rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
+            config=config,
+            sql=(
+                "SELECT order_id, status FROM "
+                f"{relation_name(schema_name=dev_schema_name, name='stg_orders')} "
+                "ORDER BY order_id"
+            ),
+        )
+        loader_rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
+            config=config,
+            sql=(
+                "SELECT order_id, status FROM "
+                f"{relation_name(schema_name=dev_schema_name, name='raw_orders')} "
+                "ORDER BY order_id"
+            ),
+        )
+        assert stringify_warehouse_rows(model_rows) == test_case.expected_model_rows
+        assert stringify_warehouse_rows(loader_rows) == test_case.expected_loader_rows
+    finally:
+        cleanup_sqlserver_schema(schema_name=dev_schema_name, config=config)
+        cleanup_sqlserver_schema(schema_name=prod_schema_name, config=config)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerLoaderWaffleShopE2ETestCase(
+            description="loader focused waffle shop grows across repeated SQL Server builds",
+            expected_rows=(
+                ("1", "pro", "650", "1"),
+                ("2", "plus", "3750", "2"),
+                ("3", "enterprise", "1300", "1"),
+            ),
+            expected_event_count=4,
+        )
+    ],
+    ids=["loader focused waffle shop grows across repeated SQL Server builds"],
+)
+def test_given_loader_waffle_shop_when_building_on_sqlserver_then_dag_grows_models(
+    tmp_path: Path,
+    test_case: SqlServerLoaderWaffleShopE2ETestCase,
+) -> None:
+    config: dict[str, object] = build_sqlserver_config()
+    schema_name: str = build_unique_schema_name(prefix="sqb_load_waffle")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="loader_waffle_shop",
+        repo_files=build_loader_waffle_shop_project_files(
+            project_toml=build_sqlserver_project_toml(
+                project_name="loader_waffle_shop",
+                schema_name=schema_name,
+                config=config,
+            )
+        ),
+    )
+    ensure_sqlserver_schema_ready(schema_name=schema_name, config=config)
+
+    try:
+        for _ in range(2):
+            result: subprocess.CompletedProcess[str] = run_sqb(
+                command=("--no-color", "build", "--select", "+customer_revenue"),
+                project_dir=project_dir,
+            )
+            assert result.returncode == test_case.expected_return_code, (
+                result.stdout + result.stderr
+            )
+
+        rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
+            config=config,
+            sql=(
+                "SELECT customer_id, plan_name, revenue_cents, order_count FROM "
+                f"{relation_name(schema_name=schema_name, name='customer_revenue')} "
+                "ORDER BY customer_id"
+            ),
+        )
+        event_count_rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
+            config=config,
+            sql=(
+                "SELECT COUNT(*) FROM "
+                f"{relation_name(schema_name=schema_name, name='__loader__fetch_order_events')}"
+            ),
+        )
+        assert stringify_warehouse_rows(rows) == test_case.expected_rows
+        assert int(str(event_count_rows[0][0])) == test_case.expected_event_count
+    finally:
+        cleanup_sqlserver_schema(schema_name=schema_name, config=config)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerSourceLoaderStrategiesE2ETestCase(
+            description="source loader strategies apply expected rows on SQL Server",
+            expected_countries=(("1", "US", "United States"), ("2", "CA", "Canada")),
+            expected_webhook_event_counts=(("101", "signup", "2"), ("102", "checkout", "2")),
+            expected_order_events=(("201", "1000"), ("202", "2500"), ("203", "3000")),
+            expected_customers=(("1", "pro"), ("2", "trial"), ("3", "enterprise")),
+            expected_loader_status=(("1", "loaded", "self_managed"),),
+        )
+    ],
+    ids=["source loader strategies apply expected rows on SQL Server"],
+)
+def test_given_loader_strategy_project_when_loading_twice_on_sqlserver_then_write_modes_apply(
+    tmp_path: Path,
+    test_case: SqlServerSourceLoaderStrategiesE2ETestCase,
+) -> None:
+    config: dict[str, object] = build_sqlserver_config()
+    project_dir: Path
+    schema_name: str
+    project_dir, schema_name = prepare_sqlserver_source_loader_strategies(
+        tmp_path=tmp_path,
+        config=config,
+    )
+    ensure_sqlserver_schema_ready(schema_name=schema_name, config=config)
+
+    try:
+        first_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "load", "--concurrency", "4"),
+            project_dir=project_dir,
+        )
+        second_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "load", "--concurrency", "4"),
+            project_dir=project_dir,
+        )
+
+        assert first_result.returncode == test_case.expected_return_code, (
+            first_result.stdout + first_result.stderr
+        )
+        assert second_result.returncode == test_case.expected_return_code, (
+            second_result.stdout + second_result.stderr
+        )
+        countries: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
+            config=config,
+            sql=(
+                "SELECT country_id, country_code, country_name FROM "
+                f"{relation_name(schema_name=schema_name, name='raw_countries')} "
+                "ORDER BY country_id"
+            ),
+        )
+        webhook_event_counts: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
+            config=config,
+            sql=(
+                "SELECT event_id, event_name, COUNT(*) FROM "
+                f"{relation_name(schema_name=schema_name, name='raw_webhook_events')} "
+                "GROUP BY event_id, event_name ORDER BY event_id"
+            ),
+        )
+        order_events: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
+            config=config,
+            sql=(
+                "SELECT event_id, amount_cents FROM "
+                f"{relation_name(schema_name=schema_name, name='raw_order_events')} "
+                "ORDER BY event_id"
+            ),
+        )
+        customers: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
+            config=config,
+            sql=(
+                "SELECT customer_id, plan_name FROM "
+                f"{relation_name(schema_name=schema_name, name='raw_customers')} "
+                "ORDER BY customer_id"
+            ),
+        )
+        loader_status: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
+            config=config,
+            sql=(
+                "SELECT status_id, status_name, loaded_by FROM "
+                f"{relation_name(schema_name=schema_name, name='raw_loader_status')} "
+                "ORDER BY status_id"
+            ),
+        )
+        assert stringify_warehouse_rows(countries) == test_case.expected_countries
+        assert stringify_warehouse_rows(webhook_event_counts) == (
+            test_case.expected_webhook_event_counts
+        )
+        assert stringify_warehouse_rows(order_events) == test_case.expected_order_events
+        assert stringify_warehouse_rows(customers) == test_case.expected_customers
+        assert stringify_warehouse_rows(loader_status) == test_case.expected_loader_status
+    finally:
+        cleanup_sqlserver_schema(schema_name=schema_name, config=config)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerSourceLoaderDagE2ETestCase(
+            description="chained source loader runs on SQL Server",
             command=("--no-color", "load", "--select", "+raw_events"),
             expected_rows=(("1", "loaded"), ("2", "loaded")),
         )
     ],
-    ids=["chained source loader runs on postgres"],
+    ids=["chained source loader runs on SQL Server"],
 )
-def test_given_chained_loader_project_when_loading_on_postgres_then_runs_loader_dag(
+def test_given_chained_loader_project_when_loading_on_sqlserver_then_runs_loader_dag(
     tmp_path: Path,
-    test_case: PostgresSourceLoaderDagE2ETestCase,
-    postgres_e2e_config: dict[str, object],
+    test_case: SqlServerSourceLoaderDagE2ETestCase,
 ) -> None:
+    config: dict[str, object] = build_sqlserver_config()
     schema_name: str = build_unique_schema_name(prefix="sqb_load_dag")
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
@@ -608,7 +590,7 @@ def test_given_chained_loader_project_when_loading_on_postgres_then_runs_loader_
                 "      - name: event_id\n"
                 "        type: INTEGER\n"
                 "      - name: status\n"
-                "        type: VARCHAR\n"
+                "        type: NVARCHAR(100)\n"
             ),
             loader_py=(
                 "from sqlbuild.loaders import loader\n\n"
@@ -629,14 +611,14 @@ def test_given_chained_loader_project_when_loading_on_postgres_then_runs_loader_
         ),
     )
     (project_dir / "sqlbuild_project.toml").write_text(
-        build_postgres_project_toml(
+        build_sqlserver_project_toml(
             project_name="source_loader_dag_behavior",
             schema_name=schema_name,
-            config=postgres_e2e_config,
+            config=config,
         ),
         encoding="utf-8",
     )
-    ensure_postgres_schema_ready(schema_name=schema_name, config=postgres_e2e_config)
+    ensure_sqlserver_schema_ready(schema_name=schema_name, config=config)
 
     try:
         result: subprocess.CompletedProcess[str] = run_sqb(
@@ -645,16 +627,16 @@ def test_given_chained_loader_project_when_loading_on_postgres_then_runs_loader_
         )
 
         assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
-        rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
-            config=postgres_e2e_config,
+        rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
+            config=config,
             sql=(
                 "SELECT event_id, status FROM "
                 f"{relation_name(schema_name=schema_name, name='raw_events')} "
                 "ORDER BY event_id"
             ),
         )
-        intermediate_rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
-            config=postgres_e2e_config,
+        intermediate_rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
+            config=config,
             sql=(
                 "SELECT COUNT(*) FROM "
                 f"{relation_name(schema_name=schema_name, name='__loader__fetch_events')}"
@@ -663,12 +645,14 @@ def test_given_chained_loader_project_when_loading_on_postgres_then_runs_loader_
         assert stringify_warehouse_rows(rows) == test_case.expected_rows
         assert int(str(intermediate_rows[0][0])) == 2
     finally:
-        cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
+        cleanup_sqlserver_schema(schema_name=schema_name, config=config)
 
 
-POSTGRES_INTERMEDIATE_DAG_STRATEGY_TEST_CASES: list[PostgresIntermediateDagStrategyE2ETestCase] = [
-    PostgresIntermediateDagStrategyE2ETestCase(
-        description="postgres append intermediate accumulates rows across DAG loads",
+SQLSERVER_INTERMEDIATE_DAG_STRATEGY_TEST_CASES: list[
+    SqlServerIntermediateDagStrategyE2ETestCase
+] = [
+    SqlServerIntermediateDagStrategyE2ETestCase(
+        description="SQL Server append intermediate accumulates rows across DAG loads",
         loader_py=(
             "from sqlbuild.loaders import loader\n\n"
             "@loader(write_strategy='append', cursor_column='load_seq', columns=[\n"
@@ -696,8 +680,8 @@ POSTGRES_INTERMEDIATE_DAG_STRATEGY_TEST_CASES: list[PostgresIntermediateDagStrat
         expected_intermediate_rows=(("1", "100"), ("2", "200")),
         expected_terminal_rows=(("1", "100"), ("2", "200")),
     ),
-    PostgresIntermediateDagStrategyE2ETestCase(
-        description="postgres merge intermediate updates and adds rows across DAG loads",
+    SqlServerIntermediateDagStrategyE2ETestCase(
+        description="SQL Server merge intermediate updates and adds rows across DAG loads",
         loader_py=(
             "from sqlbuild.loaders import loader\n\n"
             "@loader(\n"
@@ -732,8 +716,8 @@ POSTGRES_INTERMEDIATE_DAG_STRATEGY_TEST_CASES: list[PostgresIntermediateDagStrat
         expected_intermediate_rows=(("1", "150"), ("2", "200"), ("3", "300")),
         expected_terminal_rows=(("1", "150"), ("2", "200"), ("3", "300")),
     ),
-    PostgresIntermediateDagStrategyE2ETestCase(
-        description="postgres delete insert intermediate replaces cursor window across DAG loads",
+    SqlServerIntermediateDagStrategyE2ETestCase(
+        description="SQL Server delete insert intermediate replaces cursor window across DAG loads",
         loader_py=(
             "from sqlbuild.loaders import loader\n\n"
             "@loader(write_strategy='delete_insert', cursor_column='load_seq', columns=[\n"
@@ -768,14 +752,14 @@ POSTGRES_INTERMEDIATE_DAG_STRATEGY_TEST_CASES: list[PostgresIntermediateDagStrat
 
 @pytest.mark.parametrize(
     "test_case",
-    POSTGRES_INTERMEDIATE_DAG_STRATEGY_TEST_CASES,
-    ids=[case.description for case in POSTGRES_INTERMEDIATE_DAG_STRATEGY_TEST_CASES],
+    SQLSERVER_INTERMEDIATE_DAG_STRATEGY_TEST_CASES,
+    ids=[case.description for case in SQLSERVER_INTERMEDIATE_DAG_STRATEGY_TEST_CASES],
 )
-def test_given_intermediate_strategy_project_when_loading_twice_on_postgres_then_strategy_applies(
+def test_given_intermediate_strategy_project_when_loading_twice_on_sqlserver_then_strategy_applies(
     tmp_path: Path,
-    test_case: PostgresIntermediateDagStrategyE2ETestCase,
-    postgres_e2e_config: dict[str, object],
+    test_case: SqlServerIntermediateDagStrategyE2ETestCase,
 ) -> None:
+    config: dict[str, object] = build_sqlserver_config()
     schema_name: str = build_unique_schema_name(prefix="sqb_load_dag_strategy")
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
@@ -796,14 +780,14 @@ def test_given_intermediate_strategy_project_when_loading_twice_on_postgres_then
         ),
     )
     (project_dir / "sqlbuild_project.toml").write_text(
-        build_postgres_project_toml(
+        build_sqlserver_project_toml(
             project_name="source_loader_dag_strategy_behavior",
             schema_name=schema_name,
-            config=postgres_e2e_config,
+            config=config,
         ),
         encoding="utf-8",
     )
-    ensure_postgres_schema_ready(schema_name=schema_name, config=postgres_e2e_config)
+    ensure_sqlserver_schema_ready(schema_name=schema_name, config=config)
 
     try:
         first_result: subprocess.CompletedProcess[str] = run_sqb(
@@ -821,16 +805,16 @@ def test_given_intermediate_strategy_project_when_loading_twice_on_postgres_then
         assert second_result.returncode == test_case.expected_return_code, (
             second_result.stdout + second_result.stderr
         )
-        intermediate_rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
-            config=postgres_e2e_config,
+        intermediate_rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
+            config=config,
             sql=(
                 "SELECT event_id, amount FROM "
                 f"{relation_name(schema_name=schema_name, name='__loader__fetch_events')} "
                 "ORDER BY event_id, amount"
             ),
         )
-        terminal_rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
-            config=postgres_e2e_config,
+        terminal_rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
+            config=config,
             sql=(
                 "SELECT event_id, amount FROM "
                 f"{relation_name(schema_name=schema_name, name='raw_events')} "
@@ -840,14 +824,14 @@ def test_given_intermediate_strategy_project_when_loading_twice_on_postgres_then
         assert stringify_warehouse_rows(intermediate_rows) == test_case.expected_intermediate_rows
         assert stringify_warehouse_rows(terminal_rows) == test_case.expected_terminal_rows
     finally:
-        cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
+        cleanup_sqlserver_schema(schema_name=schema_name, config=config)
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
-        PostgresSnapshotE2ETestCase(
-            description="executes snapshot scd2 matrix on postgres",
+        SqlServerSnapshotE2ETestCase(
+            description="executes snapshot scd2 matrix on SQL Server",
             expected_current_rows_after_initial_build=(("1", "10", "basic", "2026-01-01", None),),
             expected_current_rows_after_recovery=(
                 ("1", "10", "basic", "2026-01-01", "2026-01-02"),
@@ -869,26 +853,28 @@ def test_given_intermediate_strategy_project_when_loading_twice_on_postgres_then
             ),
         )
     ],
-    ids=["executes snapshot scd2 matrix on postgres"],
+    ids=["executes snapshot scd2 matrix on SQL Server"],
 )
-def test_given_snapshot_project_when_building_on_postgres_then_scd2_history_is_valid(
+def test_given_snapshot_project_when_building_on_sqlserver_then_scd2_history_is_valid(
     tmp_path: Path,
-    test_case: PostgresSnapshotE2ETestCase,
-    postgres_e2e_config: dict[str, object],
+    test_case: SqlServerSnapshotE2ETestCase,
 ) -> None:
+    config: dict[str, object] = build_sqlserver_config()
     schema_name: str = build_unique_schema_name(prefix="sqb_snapshot")
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
-        project_name="postgres_snapshot_project",
-        repo_files=build_real_warehouse_snapshot_project_files(
-            project_toml=build_postgres_project_toml(
-                project_name="postgres_snapshot_project",
-                schema_name=schema_name,
-                config=postgres_e2e_config,
-            ),
+        project_name="sqlserver_snapshot_project",
+        repo_files=adapt_sqlserver_project_files(
+            build_real_warehouse_snapshot_project_files(
+                project_toml=build_sqlserver_project_toml(
+                    project_name="sqlserver_snapshot_project",
+                    schema_name=schema_name,
+                    config=config,
+                ),
+            )
         ),
     )
-    ensure_postgres_schema_ready(schema_name=schema_name, config=postgres_e2e_config)
+    ensure_sqlserver_schema_ready(schema_name=schema_name, config=config)
 
     try:
         initial_result: subprocess.CompletedProcess[str] = run_sqb(
@@ -896,16 +882,18 @@ def test_given_snapshot_project_when_building_on_postgres_then_scd2_history_is_v
             project_dir=project_dir,
         )
         assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
-        assert_postgres_snapshot_matrix_rows(
+        assert_sqlserver_snapshot_matrix_rows(
             schema_name=schema_name,
-            config=postgres_e2e_config,
+            config=config,
             expected_current_rows=test_case.expected_current_rows_after_initial_build,
             expected_historical_timestamp_rows=test_case.expected_historical_timestamp_rows,
             expected_historical_check_rows=test_case.expected_historical_check_rows,
         )
 
         (project_dir / "models" / "current_customers.sql").write_text(
-            build_current_customers_model_sql(plan="blocked", updated_at="2026-01-02 00:00:00"),
+            adapt_sqlserver_sql(
+                build_current_customers_model_sql(plan="blocked", updated_at="2026-01-02 00:00:00")
+            ),
             encoding="utf-8",
         )
         failure_result: subprocess.CompletedProcess[str] = run_sqb(
@@ -922,14 +910,16 @@ def test_given_snapshot_project_when_building_on_postgres_then_scd2_history_is_v
         assert failure_result.returncode == 1, failure_result.stdout + failure_result.stderr
         for fragment in test_case.expected_failure_fragments:
             assert fragment in failure_result.stdout + failure_result.stderr
-        assert_current_postgres_snapshot_rows_from_case(
+        assert_current_sqlserver_snapshot_rows_from_case(
             schema_name=schema_name,
-            config=postgres_e2e_config,
+            config=config,
             expected_rows=test_case.expected_current_rows_after_initial_build,
         )
 
         (project_dir / "models" / "current_customers.sql").write_text(
-            build_current_customers_model_sql(plan="pro", updated_at="2026-01-02 00:00:00"),
+            adapt_sqlserver_sql(
+                build_current_customers_model_sql(plan="pro", updated_at="2026-01-02 00:00:00")
+            ),
             encoding="utf-8",
         )
         recovery_result: subprocess.CompletedProcess[str] = run_sqb(
@@ -944,29 +934,29 @@ def test_given_snapshot_project_when_building_on_postgres_then_scd2_history_is_v
             project_dir=project_dir,
         )
         assert recovery_result.returncode == 0, recovery_result.stdout + recovery_result.stderr
-        assert_current_postgres_snapshot_rows_from_case(
+        assert_current_sqlserver_snapshot_rows_from_case(
             schema_name=schema_name,
-            config=postgres_e2e_config,
+            config=config,
             expected_rows=test_case.expected_current_rows_after_recovery,
         )
     finally:
-        cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
+        cleanup_sqlserver_schema(schema_name=schema_name, config=config)
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
-        PostgresSnapshotApplyE2ETestCase(
-            description="applies existing-target snapshot changes on postgres",
+        SqlServerSnapshotApplyE2ETestCase(
+            description="applies existing-target snapshot changes on SQL Server",
             expected_current_check_rows=(
-                ("1", "active", "False"),
-                ("1", "paused", "True"),
-                ("2", "active", "True"),
+                ("1", "active", "0"),
+                ("1", "paused", "1"),
+                ("2", "active", "1"),
             ),
             expected_current_delete_rows=(
-                ("1", "basic", "False"),
-                ("1", "pro", "True"),
-                ("2", "trial", "False"),
+                ("1", "basic", "0"),
+                ("1", "pro", "1"),
+                ("2", "trial", "0"),
             ),
             expected_historical_timestamp_rows=(
                 ("1", "basic", "2026-01-01", "2026-01-03"),
@@ -980,26 +970,28 @@ def test_given_snapshot_project_when_building_on_postgres_then_scd2_history_is_v
             ),
         )
     ],
-    ids=["applies existing-target snapshot changes on postgres"],
+    ids=["applies existing-target snapshot changes on SQL Server"],
 )
-def test_given_existing_snapshot_targets_when_building_on_postgres_then_apply_sql_succeeds(
+def test_given_existing_snapshot_targets_when_building_on_sqlserver_then_apply_sql_succeeds(
     tmp_path: Path,
-    test_case: PostgresSnapshotApplyE2ETestCase,
-    postgres_e2e_config: dict[str, object],
+    test_case: SqlServerSnapshotApplyE2ETestCase,
 ) -> None:
+    config: dict[str, object] = build_sqlserver_config()
     schema_name: str = build_unique_schema_name(prefix="sqb_snapshot_apply")
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
-        project_name="postgres_snapshot_apply_project",
-        repo_files=build_real_warehouse_existing_snapshot_project_files(
-            project_toml=build_postgres_project_toml(
-                project_name="postgres_snapshot_apply_project",
-                schema_name=schema_name,
-                config=postgres_e2e_config,
-            ),
+        project_name="sqlserver_snapshot_apply_project",
+        repo_files=adapt_sqlserver_project_files(
+            build_real_warehouse_existing_snapshot_project_files(
+                project_toml=build_sqlserver_project_toml(
+                    project_name="sqlserver_snapshot_apply_project",
+                    schema_name=schema_name,
+                    config=config,
+                ),
+            )
         ),
     )
-    ensure_postgres_schema_ready(schema_name=schema_name, config=postgres_e2e_config)
+    ensure_sqlserver_schema_ready(schema_name=schema_name, config=config)
 
     try:
         initial_result: subprocess.CompletedProcess[str] = run_sqb(
@@ -1012,13 +1004,16 @@ def test_given_existing_snapshot_targets_when_building_on_postgres_then_apply_sq
             build_current_check_customers_model_sql(changed=True), encoding="utf-8"
         )
         (project_dir / "models" / "current_delete_customers.sql").write_text(
-            build_current_delete_customers_model_sql(changed=True), encoding="utf-8"
+            adapt_sqlserver_sql(build_current_delete_customers_model_sql(changed=True)),
+            encoding="utf-8",
         )
         (project_dir / "models" / "historical_timestamp_extracts.sql").write_text(
-            build_historical_timestamp_extracts_model_sql(changed=True), encoding="utf-8"
+            adapt_sqlserver_sql(build_historical_timestamp_extracts_model_sql(changed=True)),
+            encoding="utf-8",
         )
         (project_dir / "models" / "historical_check_daily.sql").write_text(
-            build_historical_check_daily_model_sql(changed=True), encoding="utf-8"
+            adapt_sqlserver_sql(build_historical_check_daily_model_sql(changed=True)),
+            encoding="utf-8",
         )
 
         apply_result: subprocess.CompletedProcess[str] = run_sqb(
@@ -1026,13 +1021,13 @@ def test_given_existing_snapshot_targets_when_building_on_postgres_then_apply_sq
             project_dir=project_dir,
         )
         assert apply_result.returncode == 0, apply_result.stdout + apply_result.stderr
-        assert_postgres_snapshot_apply_rows(
+        assert_sqlserver_snapshot_apply_rows(
             schema_name=schema_name,
-            config=postgres_e2e_config,
+            config=config,
             expected_current_check_rows=test_case.expected_current_check_rows,
             expected_current_delete_rows=test_case.expected_current_delete_rows,
             expected_historical_timestamp_rows=test_case.expected_historical_timestamp_rows,
             expected_historical_check_rows=test_case.expected_historical_check_rows,
         )
     finally:
-        cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
+        cleanup_sqlserver_schema(schema_name=schema_name, config=config)

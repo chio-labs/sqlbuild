@@ -55,7 +55,7 @@ def _table_exists(*, connection: Any, execute: Any, qualified_name: str) -> bool
     """Check whether the fingerprint table exists without raising on missing."""
 
     try:
-        execute(connection, f"SELECT 1 FROM {qualified_name} LIMIT 0")
+        execute(connection, f"SELECT COUNT(*) FROM {qualified_name} WHERE 1 = 0")
         return True
     except Exception:
         return False

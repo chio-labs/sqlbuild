@@ -10,6 +10,7 @@ from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.scenario.constants import FAILED_STATUS, SUCCESS_STATUS
+from sqlbuild.cli.commands.main.helpers.scenario.dialect import require_scenario_capture_dialect
 from sqlbuild.cli.commands.main.helpers.scenario.selection import select_scenarios
 from sqlbuild.cli.commands.main.helpers.scenario.snapshot_limits import (
     build_scenario_snapshot_capture_limits,
@@ -135,6 +136,11 @@ def run_scenario(
         project_adapter_name,
         project_dir=effective_project_dir,
     )
+    local_capture_dialect: str = ""
+    if local:
+        local_capture_dialect = require_scenario_capture_dialect(
+            adapter=project_adapter, adapter_name=project_adapter_name
+        )
     connection_config: dict[str, object] = (
         {"database": ":memory:"}
         if local
@@ -195,6 +201,7 @@ def run_scenario(
             local_adapter=adapter,
             project_adapter=project_adapter,
             project_adapter_name=project_adapter_name,
+            capture_dialect=local_capture_dialect,
             project_connection_config=resolve_project_connection_config(
                 discovered_inputs=discovered_inputs,
                 project_dir=effective_project_dir,
@@ -242,7 +249,7 @@ def run_scenario(
             project_name=discovered_inputs.project_config.name,
             strict=strict,
             capture_adapter=project_adapter_name,
-            capture_dialect=project_adapter.sqlglot_dialect(),
+            capture_dialect=local_capture_dialect,
             on_scenario_start=lambda _scenario: (
                 scenario_status.start("Running scenarios...") if status_is_tty else None
             ),
@@ -345,6 +352,7 @@ def _sync_local_snapshots(
     local_adapter: BaseAdapter,
     project_adapter: BaseAdapter,
     project_adapter_name: str,
+    capture_dialect: str,
     project_connection_config: dict[str, object],
     project_name: str,
     no_sql_validation: bool,
@@ -358,7 +366,6 @@ def _sync_local_snapshots(
     use_color: bool,
     capture_results_out: list[ScenarioSnapshotCaptureRunResult] | None = None,
 ) -> int:
-    capture_dialect: str = project_adapter.sqlglot_dialect() or project_adapter_name
     capture_names: tuple[str, ...] = select_scenario_snapshot_capture_candidates(
         project_dir=project_dir,
         pipeline_result=local_pipeline_result,
