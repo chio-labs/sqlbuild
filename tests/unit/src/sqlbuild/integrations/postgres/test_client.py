@@ -11,6 +11,7 @@ from tests.unit.src.sqlbuild.integrations.postgres._test_types import (
     PostgresDescribeRelationTestCase,
     PostgresLoadSeedTestCase,
     PostgresRenderCreateTableAsTestCase,
+    PostgresRenderIdentifierTestCase,
     PostgresRenderRenameTestCase,
     PostgresRenderSwapTestCase,
     PostgresSchemaDiffTestCase,
@@ -198,6 +199,34 @@ LOAD_SEED_TEST_CASES: list[PostgresLoadSeedTestCase] = [
         expected_rows=[],
     ),
 ]
+
+POSTGRES_RENDER_IDENTIFIER_TEST_CASES: list[PostgresRenderIdentifierTestCase] = [
+    PostgresRenderIdentifierTestCase(
+        description="quotes lowercase identifiers without changing case",
+        name="event_id",
+        expected_identifier='"event_id"',
+    ),
+    PostgresRenderIdentifierTestCase(
+        description="escapes embedded double quotes",
+        name='event"id',
+        expected_identifier='"event""id"',
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    POSTGRES_RENDER_IDENTIFIER_TEST_CASES,
+    ids=[case.description for case in POSTGRES_RENDER_IDENTIFIER_TEST_CASES],
+)
+def test_given_identifier_when_rendering_then_postgres_quotes_identifier(
+    test_case: PostgresRenderIdentifierTestCase,
+) -> None:
+    adapter: PostgresAdapter = PostgresAdapter()
+
+    identifier: str = adapter.render_identifier(test_case.name)
+
+    assert identifier == test_case.expected_identifier
 
 
 @pytest.mark.parametrize(
