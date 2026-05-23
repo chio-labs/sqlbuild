@@ -12,6 +12,12 @@ class PostgresRenderCreateTableAsTestCase:
 
 
 @dataclass(frozen=True)
+class PostgresRenderCreateFunctionTestCase:
+    description: str
+    expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class PostgresRenderRenameTestCase:
     description: str
     source: str

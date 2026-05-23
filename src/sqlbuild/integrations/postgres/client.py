@@ -352,7 +352,7 @@ class PostgresAdapter(BaseAdapter):
         return (
             f"CREATE OR REPLACE FUNCTION {target}({arg_sql})\n"
             f"{returns_clause}\n"
-            f"AS $$\n{body_sql}\n$$",
+            f"LANGUAGE SQL AS $$\n{body_sql}\n$$",
         )
 
     def render_append(
