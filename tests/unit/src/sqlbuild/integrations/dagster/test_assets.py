@@ -37,6 +37,8 @@ dg: Any = pytest.importorskip("dagster")
             description="builds materializable specs and check specs from dag artifact",
             expected_asset_keys=(
                 ("raw", "orders"),
+                ("shared_order_feed",),
+                ("raw_orders_loader",),
                 ("analytics", "waffle_types"),
                 ("analytics", "normalize_email"),
                 ("analytics", "orders"),
@@ -53,6 +55,8 @@ dg: Any = pytest.importorskip("dagster")
             expected_check_selector="audit:not_null:model:orders:order_id",
             expected_kinds_by_asset_key=(
                 (("raw", "orders"), frozenset({"sqlbuild", "source"})),
+                (("shared_order_feed",), frozenset({"sqlbuild", "loader"})),
+                (("raw_orders_loader",), frozenset({"sqlbuild", "loader"})),
                 (("analytics", "waffle_types"), frozenset({"sqlbuild", "seed"})),
                 (("analytics", "normalize_email"), frozenset({"sqlbuild", "function"})),
                 (("analytics", "customers"), frozenset({"sqlbuild", "view"})),
@@ -97,6 +101,8 @@ def test_given_sqlbuild_dag_when_building_specs_then_maps_assets_deps_and_checks
             description="decorates user function as dagster assets definition",
             expected_asset_keys=(
                 ("raw", "orders"),
+                ("shared_order_feed",),
+                ("raw_orders_loader",),
                 ("analytics", "waffle_types"),
                 ("analytics", "normalize_email"),
                 ("analytics", "customers"),

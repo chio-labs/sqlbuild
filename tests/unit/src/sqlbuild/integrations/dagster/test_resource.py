@@ -78,6 +78,22 @@ CLI_SELECTION_TEST_CASES: list[DagsterCliSelectionTestCase] = [
         expected_uses_select_file=False,
         expected_uses_json_output=True,
     ),
+    DagsterCliSelectionTestCase(
+        description="selected loader asset appends load selector",
+        selected_asset_keys=(("shared_order_feed",),),
+        command_args=("load",),
+        expected_selectors=("shared_order_feed",),
+        expected_uses_select_file=True,
+        expected_uses_json_output=True,
+    ),
+    DagsterCliSelectionTestCase(
+        description="selected model asset is ignored for load selector",
+        selected_asset_keys=(("analytics", "orders"),),
+        command_args=("load",),
+        expected_selectors=(),
+        expected_uses_select_file=False,
+        expected_uses_json_output=True,
+    ),
 ]
 
 
@@ -117,10 +133,12 @@ def test_given_sqlbuild_cli_resource_when_waiting_invocation_then_captures_proce
             command_stdout="built ok\n",
             command_exit_code=0,
             expected_asset_keys=(
-                ("raw", "orders"),
+                ("shared_order_feed",),
                 ("analytics", "waffle_types"),
                 ("analytics", "normalize_email"),
                 ("analytics", "customers"),
+                ("raw_orders_loader",),
+                ("raw", "orders"),
                 ("analytics", "orders"),
             ),
         )

@@ -19,6 +19,20 @@ def build_dagster_test_dag() -> Mapping[str, Any]:
                 "path": "sources/raw.yml",
             },
             {
+                "id": "loader:shared_order_feed",
+                "kind": "loader",
+                "name": "shared_order_feed",
+                "asset_key": ["shared_order_feed"],
+                "path": "loaders/orders.py",
+            },
+            {
+                "id": "loader:raw_orders_loader",
+                "kind": "loader",
+                "name": "raw_orders_loader",
+                "asset_key": ["raw_orders_loader"],
+                "path": "loaders/orders.py",
+            },
+            {
                 "id": "seed:waffle_types",
                 "kind": "seed",
                 "name": "waffle_types",
@@ -53,6 +67,8 @@ def build_dagster_test_dag() -> Mapping[str, Any]:
             },
         ],
         "edges": [
+            {"from_id": "loader:shared_order_feed", "to_id": "loader:raw_orders_loader"},
+            {"from_id": "loader:raw_orders_loader", "to_id": "source:raw_orders"},
             {"from_id": "source:raw_orders", "to_id": "model:orders"},
             {"from_id": "function:normalize_email", "to_id": "model:orders"},
         ],
