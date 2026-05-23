@@ -56,13 +56,13 @@ ORDERS: list[tuple[int, int, int, int, datetime, str]] = [
 
 
 @loader
-def waffle_customers(ctx: object) -> list[dict[str, object]]:
+def load__waffle_customers(ctx: object) -> list[dict[str, object]]:
     _ = ctx
     return CUSTOMERS
 
 
 @loader
-def waffle_orders(ctx: object) -> Iterator[dict[str, object]]:
+def load__waffle_orders(ctx: object) -> Iterator[dict[str, object]]:
     _ = ctx
     for order_id, customer_id, waffle_type_id, quantity, ordered_at, status in ORDERS:
         yield {

@@ -20,12 +20,16 @@ from tests.unit.src.sqlbuild.compiler.dag.main.helpers import build_dag_artifact
             description="builds static dag nodes edges and checks",
             expected_node_ids=(
                 "source:raw_orders",
+                "loader:shared_order_feed",
+                "loader:raw_orders_loader",
                 "seed:country_codes",
                 "function:normalize_email",
                 "model:orders",
             ),
             expected_edge_pairs=(
                 ("function:normalize_email", "model:orders"),
+                ("loader:raw_orders_loader", "source:raw_orders"),
+                ("loader:shared_order_feed", "loader:raw_orders_loader"),
                 ("seed:country_codes", "model:orders"),
                 ("source:raw_orders", "model:orders"),
             ),
@@ -36,6 +40,7 @@ from tests.unit.src.sqlbuild.compiler.dag.main.helpers import build_dag_artifact
             ),
             expected_function_asset_key=("analytics", "normalize_email"),
             expected_source_asset_key=("raw", "orders"),
+            expected_loader_asset_key=("shared_order_feed",),
         )
     ],
     ids=["builds static dag nodes edges and checks"],
@@ -62,7 +67,11 @@ def test_given_project_graph_when_building_dag_artifact_then_includes_assets_edg
     assert tuple(cast(list[str], nodes_by_id["source:raw_orders"]["asset_key"])) == (
         test_case.expected_source_asset_key
     )
+    assert tuple(cast(list[str], nodes_by_id["loader:shared_order_feed"]["asset_key"])) == (
+        test_case.expected_loader_asset_key
+    )
     assert nodes_by_id["model:orders"]["materialization_type"] == "table"
+    assert nodes_by_id["loader:shared_order_feed"]["kind"] == "loader"
     assert tuple(checks[0]["checked_asset_ids"]) == ("model:orders",)
 
 
@@ -73,7 +82,7 @@ def test_given_project_graph_when_building_dag_artifact_then_includes_assets_edg
             description="serializes dag artifact as compact public json",
             expected_version=1,
             expected_project_name="dag_project",
-            expected_node_count=4,
+            expected_node_count=6,
             expected_absent_fragments=(
                 '"description": null',
                 '"tags": []',

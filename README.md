@@ -19,6 +19,7 @@ SQLBuild is a SQL pipeline framework that validates SQL at compile time, blocks 
 - **User-defined functions** - SQL and Python UDFs managed as project resources, with table functions for predicate-pushdown-friendly alternatives to final-layer views.
 - **Environment diffs** - Compare schemas and row-level data between environments with `sqb diff prod:dev`.
 - **Zero-copy cloning** - Branch environments instantly with `sqb clone` without duplicating data. No `manifest.json` required.
+- **Source loaders** - Load external data into source tables with Python functions. Supports incremental write strategies (table, append, delete\_insert, merge), cursor-based loading, loader-to-loader dependencies, and concurrent execution. Loaders run automatically during builds.
 - **Custom materializations** - Write materialization logic in Python with full framework integration, including audit hooks, schema change signals, and query change detection.
 - **Path-between selectors** - `--select fact_orders~daily_activity_rollup` selects every model on the shortest path between two nodes.
 
@@ -157,6 +158,34 @@ sqb scenario test --local --refresh
 ```
 
 Snapshots are committable test data. Review them for sensitive values before committing.
+
+A source loader:
+
+```python
+from sqlbuild.loaders import loader
+from sqlbuild.executor.load.models import LoaderContext
+
+@loader
+def raw_orders(ctx: LoaderContext):
+    if ctx.current_cursor_value is None:
+        return fetch_all_orders()
+    return fetch_orders_since(ctx.current_cursor_value)
+```
+
+Bound to a source in `sources/*.yml`:
+
+```yaml
+sources:
+  - name: raw_orders
+    loader: raw_orders
+    write_strategy: delete_insert
+    cursor_column: ordered_at
+    columns:
+      - name: id
+        type: INTEGER
+      - name: ordered_at
+        type: TIMESTAMP
+```
 
 ## Documentation
 

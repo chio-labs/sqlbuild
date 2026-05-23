@@ -54,6 +54,7 @@ class DagNode:
     language: str | None = None
     return_kind: str | None = None
     returns: str | None = None
+    loader: str | None = None
     arguments: tuple[DagFunctionArgument, ...] = field(default_factory=tuple)
 
 

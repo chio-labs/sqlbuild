@@ -16,6 +16,7 @@ schema = "prod"
 
 [environments.dev]
 schema = "dev"
+defer_sources_to = "dev"
 
 [path_defaults.staging]
 materialized = "view"
