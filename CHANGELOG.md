@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.17.0](https://github.com/chio-labs/sqlbuild/compare/v0.16.2...v0.17.0) (2026-05-23)
+
+
+### Features
+
+* add concurrent load and seed execution ([0efa072](https://github.com/chio-labs/sqlbuild/commit/0efa072d3193a5f9ff3503ad25b11ef41aa2421b))
+* add concurrent loader dag scheduling ([2bb66e9](https://github.com/chio-labs/sqlbuild/commit/2bb66e976d040ba481ea75eb7aea78ff25cf1c77))
+* add incremental source loader writes ([d4a598b](https://github.com/chio-labs/sqlbuild/commit/d4a598bbe316f4f4d1132ffc0e2a20bb46067029))
+* add loader cursor override context ([44abb1b](https://github.com/chio-labs/sqlbuild/commit/44abb1b9af224153011bc78fb8fa6ebd4374cd2e))
+* add source deferral for managed sources ([ad03aa8](https://github.com/chio-labs/sqlbuild/commit/ad03aa888f3f7da25187829abc044544a0c1a78d))
+* add source load command ([039ab0a](https://github.com/chio-labs/sqlbuild/commit/039ab0a9624fae8625eea60f817d9d2b64dc8523))
+* add source loader dag execution ([96fa268](https://github.com/chio-labs/sqlbuild/commit/96fa268102c6907f3b5f93c220f047bf8b45f8fc))
+* add source loader delete insert writes ([6aed601](https://github.com/chio-labs/sqlbuild/commit/6aed60105b966ba4f95f394cdeaf9f57ba059d98))
+* auto-load sources during builds ([58bc22c](https://github.com/chio-labs/sqlbuild/commit/58bc22c60f06cdc49c3a2932a4b282c2f567672c))
+* batch source loader staging writes ([b28e22b](https://github.com/chio-labs/sqlbuild/commit/b28e22bd134a7b34f997bd74f916613a465570e4))
+* complete loader context helpers ([66d7836](https://github.com/chio-labs/sqlbuild/commit/66d783603ef5ff6e4976a4f9f111cbd8eab665bf))
+* discover source loaders ([963fcf4](https://github.com/chio-labs/sqlbuild/commit/963fcf4ead4adae297cbe7a98b316a75a66d4d46))
+* enforce source loader schema changes ([feb4820](https://github.com/chio-labs/sqlbuild/commit/feb4820ec182f6016c7c0e09f2a7d2b7fbf33bcd))
+* infer source loader row types ([a345d15](https://github.com/chio-labs/sqlbuild/commit/a345d151a0a3277b92c6fda988f25be93007027e))
+* move source SQL rendering behind adapters ([3e57e0b](https://github.com/chio-labs/sqlbuild/commit/3e57e0bf9670de6e380c880a7ff66ab04550463b))
+* stage source loader table writes ([5b2c9d6](https://github.com/chio-labs/sqlbuild/commit/5b2c9d6af09325e14e88c7f1ac5f8095a8a59ea8))
+
+
+### Bug Fixes
+
+* disambiguate source loader selection ([f79424a](https://github.com/chio-labs/sqlbuild/commit/f79424a01823be92d09810bbe62d5da18f10cd03))
+* harden source loader runtime ([a0c9f46](https://github.com/chio-labs/sqlbuild/commit/a0c9f469b312ba533a36232b2c11fd806bdad607))
+* pass effective config to source loaders ([689f0df](https://github.com/chio-labs/sqlbuild/commit/689f0dff2d4d2fb7e4edd90b035c1428bf8e4d1f))
+
 ## [0.16.2](https://github.com/chio-labs/sqlbuild/compare/v0.16.1...v0.16.2) (2026-05-18)
 
 
