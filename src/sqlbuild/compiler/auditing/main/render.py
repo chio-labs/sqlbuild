@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.auditing.constants import REF_PATTERN, SEED_PATTERN, SOURCE_PATTERN
 from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
 from sqlbuild.compiler.shared.helpers.sources import render_source_relation
@@ -16,6 +17,7 @@ def render_audit_sql(
     model_targets: dict[str, CompiledRelationTarget],
     seed_targets: dict[str, CompiledRelationTarget],
     source_map: dict[str, SourceEntry],
+    adapter: BaseAdapter | None = None,
     relation_overrides: dict[str, str] | None = None,
 ) -> str:
     """Render audit SQL from unresolved markers with optional relation overrides.
@@ -36,6 +38,7 @@ def render_audit_sql(
     resolved = _render_sources(
         sql=resolved,
         source_map=source_map,
+        adapter=adapter,
     )
     return resolved
 
@@ -76,6 +79,7 @@ def _render_sources(
     *,
     sql: str,
     source_map: dict[str, SourceEntry],
+    adapter: BaseAdapter | None,
 ) -> str:
     """Replace __source() calls with qualified source names."""
 
@@ -84,6 +88,6 @@ def _render_sources(
         entry: SourceEntry | None = source_map.get(source_name)
         if entry is None:
             return match.group(0)
-        return render_source_relation(entry)
+        return render_source_relation(entry, adapter=adapter)
 
     return SOURCE_PATTERN.sub(_replace, sql)

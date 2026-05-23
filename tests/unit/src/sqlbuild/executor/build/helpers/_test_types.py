@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 
 from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.executor.shared.types import ExecutionStatus
 from tests.unit.src.sqlbuild.executor.build.helpers.helpers import ModelPlanOverride
 
 
@@ -18,3 +19,12 @@ class BuildOutputTestCase:
     elapsed_seconds: float = 1.5
     verbose: bool = False
     use_color: bool = False
+
+
+@dataclass(frozen=True)
+class BuildSchedulerSourceLoadTestCase:
+    description: str
+    source_status: ExecutionStatus
+    expected_load_status: ExecutionStatus
+    expected_model_status: ExecutionStatus
+    expected_execution_order: tuple[str, ...] = ()

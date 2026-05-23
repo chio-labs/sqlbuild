@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import csv
+import json
 import logging
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar
@@ -29,7 +31,7 @@ from sqlbuild.adapter.shared.models import (
     StatementRecorder,
 )
 from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
-from sqlbuild.adapter.shared.types import CursorKind, FrameworkType
+from sqlbuild.adapter.shared.types import CursorKind, FrameworkType, LoaderLogicalType
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.shared.helpers.diagnostics_logging import log_sql
 from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
@@ -57,6 +59,84 @@ class SnowflakeAdapter(BaseAdapter):
 
     sqlglot_dialect_name: ClassVar[str | None] = "snowflake"
     max_identifier_length: ClassVar[int] = 255
+
+    def render_loader_logical_type(self, type_name: LoaderLogicalType) -> str:
+        match type_name:
+            case LoaderLogicalType.BOOLEAN:
+                return "BOOLEAN"
+            case LoaderLogicalType.INTEGER:
+                return "BIGINT"
+            case LoaderLogicalType.FLOAT:
+                return "DOUBLE"
+            case LoaderLogicalType.STRING:
+                return "VARCHAR"
+            case LoaderLogicalType.TIMESTAMP:
+                return "TIMESTAMP"
+            case LoaderLogicalType.DATE:
+                return "DATE"
+            case LoaderLogicalType.JSON:
+                return "VARIANT"
+
+    def render_loader_value_literal(
+        self, *, value: object, logical_type: LoaderLogicalType | None
+    ) -> str:
+        if value is not None and logical_type == LoaderLogicalType.JSON:
+            return f"PARSE_JSON({self._quote_sql_string(json.dumps(value, sort_keys=True))})"
+        if value is None:
+            return "NULL"
+        if isinstance(value, bool):
+            return "TRUE" if value else "FALSE"
+        if isinstance(value, int | float | Decimal):
+            return str(value)
+        if isinstance(value, datetime | date):
+            return self._quote_sql_string(value.isoformat())
+        return self._quote_sql_string(str(value))
+
+    def render_loader_rows_select(
+        self,
+        *,
+        rows: tuple[dict[str, object], ...],
+        column_names: tuple[str, ...],
+        column_sql_types: dict[str, str],
+        inferred_types: dict[str, LoaderLogicalType],
+    ) -> str:
+        if not rows:
+            projections: str = ", ".join(
+                "CAST(NULL AS "
+                f"{column_sql_types.get(column_name, 'VARCHAR')}) AS "
+                f"{self.render_identifier(column_name)}"
+                for column_name in column_names
+            )
+            return f"SELECT {projections} WHERE 1 = 0"
+        values_sql: str = ", ".join(
+            "("
+            + ", ".join(
+                self.render_loader_value_literal(
+                    value=row.get(column_name),
+                    logical_type=inferred_types.get(column_name),
+                )
+                for column_name in column_names
+            )
+            + ")"
+            for row in rows
+        )
+        column_sql: str = ", ".join(
+            self.render_identifier(column_name) for column_name in column_names
+        )
+        select_sql: str = ", ".join(
+            (
+                self.render_identifier(column_name)
+                if column_name not in column_sql_types
+                else "CAST("
+                f"{self.render_identifier(column_name)} AS {column_sql_types[column_name]}) "
+                f"AS {self.render_identifier(column_name)}"
+            )
+            for column_name in column_names
+        )
+        return f"SELECT {select_sql} FROM (VALUES {values_sql}) AS __loader_rows({column_sql})"
+
+    def _quote_sql_string(self, value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
 
     def render_create_initial_snapshot_target(
         self,
@@ -787,6 +867,35 @@ class SnowflakeAdapter(BaseAdapter):
         """Render Snowflake source expression type-enforcement casts explicitly."""
 
         return f"CAST({expression} AS {target_type}) AS {alias}"
+
+    def render_source_expression_relation(self, *, expression: str) -> str:
+        stripped_expression: str = expression.strip().removesuffix(";").strip()
+        if stripped_expression.startswith("("):
+            return stripped_expression
+        lowered: str = stripped_expression.lower()
+        if lowered.startswith(("select", "with", "values")):
+            return f"({stripped_expression})"
+        return stripped_expression
+
+    def render_source_expression_cast_subquery(
+        self, *, source_relation: str, projections: tuple[str, ...]
+    ) -> str:
+        projection_clause: str = ", ".join(projections)
+        return f"(SELECT {projection_clause} FROM {source_relation} AS __source_expression)"
+
+    def render_source_relation_cast_subquery(
+        self,
+        *,
+        source_relation: str,
+        cast_projections: tuple[str, ...],
+        cast_column_names: tuple[str, ...],
+        all_columns_cast: bool,
+    ) -> str:
+        cast_clause: str = ", ".join(cast_projections)
+        if all_columns_cast:
+            return f"(SELECT {cast_clause} FROM {source_relation})"
+        exclude_list: str = ", ".join(cast_column_names)
+        return f"(SELECT * EXCLUDE ({exclude_list}), {cast_clause} FROM {source_relation})"
 
     def render_set_difference_operator(self) -> str:
         """Render Snowflake set-difference operator explicitly."""

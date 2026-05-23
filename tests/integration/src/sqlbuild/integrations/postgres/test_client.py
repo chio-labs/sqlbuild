@@ -135,7 +135,7 @@ def test_given_model_sql_when_building_then_postgres_creates_and_promotes_table(
     "test_case",
     [
         PostgresMergeTestCase(
-            description="upserts rows on unique key conflict using ON CONFLICT DO UPDATE",
+            description="upserts rows without requiring a database unique constraint",
             table_name="customers",
             initial_sql="SELECT 1 AS id, 'Alice' AS name",
             merge_sql="SELECT 1 AS id, 'Alice Updated' AS name UNION ALL SELECT 2, 'Bob'",
@@ -143,9 +143,9 @@ def test_given_model_sql_when_building_then_postgres_creates_and_promotes_table(
             expected_rows=((1, "Alice Updated"), (2, "Bob")),
         )
     ],
-    ids=["upserts rows on unique key conflict using ON CONFLICT DO UPDATE"],
+    ids=["upserts rows without requiring a database unique constraint"],
 )
-def test_given_merge_sql_when_merging_then_postgres_upserts_via_on_conflict(
+def test_given_merge_sql_when_merging_then_postgres_upserts_without_constraint(
     test_case: PostgresMergeTestCase,
     adapter: PostgresAdapter,
     connection: Any,
@@ -155,7 +155,7 @@ def test_given_merge_sql_when_merging_then_postgres_upserts_via_on_conflict(
     target: str = qualified_name(schema=postgres_schema, name=test_case.table_name)
     adapter.execute(
         connection,
-        f"CREATE TABLE {target} (id INTEGER PRIMARY KEY, name VARCHAR)",
+        f"CREATE TABLE {target} (id INTEGER, name VARCHAR)",
     )
     adapter.execute(connection, f"INSERT INTO {target} {test_case.initial_sql}")
 

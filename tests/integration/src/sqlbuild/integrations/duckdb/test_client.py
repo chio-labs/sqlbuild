@@ -830,7 +830,7 @@ def test_given_statement_recorder_when_creating_table_then_records_expected_sql(
             expected_recorded_statements=(
                 "DELETE FROM recorded_delete_insert WHERE EXISTS "
                 "(SELECT 1 FROM (SELECT * FROM (VALUES (1, 'new')) AS t(id, val)) "
-                "AS __source WHERE recorded_delete_insert.id = __source.id)",
+                'AS __source WHERE recorded_delete_insert."id" = __source."id")',
                 "INSERT INTO recorded_delete_insert SELECT * FROM "
                 "(VALUES (1, 'new')) AS t(id, val)",
             ),

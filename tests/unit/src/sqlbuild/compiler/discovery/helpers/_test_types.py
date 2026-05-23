@@ -21,6 +21,7 @@ class LoadProjectConfigTestCase:
     expected_dev_connection: dict[str, object]
     expected_dev_vars: dict[str, str]
     expected_dev_schema: str
+    expected_dev_defer_sources_to: str | None
     expected_allow_as_source: bool
     expected_janitor_enabled: bool
     expected_retention_days: int
@@ -43,6 +44,7 @@ class LoadProjectConfigTestCase:
     expected_dbt_profiles_dir: str | None = None
     expected_dbt_target: str | None = None
     expected_dbt_target_path: str | None = None
+    expected_auto_load_sources: bool = True
 
 
 @dataclass(frozen=True)
@@ -57,6 +59,7 @@ class LoadLocalConfigTestCase:
     expected_max_concurrency: int
     expected_setting_overrides: frozenset[str]
     expected_vars: dict[str, str]
+    expected_auto_load_sources: bool = True
     expected_environments: dict[str, dict[str, object]] = field(default_factory=dict)
     expected_missing_attributes: tuple[str, ...] = ()
     expected_scenario_local_type_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
@@ -216,6 +219,11 @@ class ParseSourcesYamlTestCase:
     expected_type_enforcement_values: tuple[bool | None, ...]
     expected_contract_values: tuple[str | None, ...]
     expected_expressions: tuple[str | None, ...]
+    expected_loaders: tuple[str | None, ...] | None = None
+    expected_write_strategies: tuple[str | None, ...] | None = None
+    expected_load_batch_sizes: tuple[int | None, ...] | None = None
+    expected_cursor_columns: tuple[str | None, ...] | None = None
+    expected_unique_keys: tuple[tuple[str, ...], ...] | None = None
     expected_source_audit_names: tuple[tuple[str, ...], ...] = ()
     expected_column_audit_names: tuple[tuple[tuple[str, ...], ...], ...] = ()
     expected_column_nullables: tuple[tuple[bool | None, ...], ...] | None = None
@@ -233,3 +241,18 @@ class DiscoverMaterializationFilesTestCase:
     description: str
     files: dict[str, str]
     expected_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DiscoverLoaderFunctionsTestCase:
+    description: str
+    files: dict[str, str]
+    expected_names: tuple[str, ...]
+    expected_targets: tuple[str | None, ...]
+    expected_dependency_counts: tuple[int, ...]
+    expected_write_strategies: tuple[str | None, ...] = ()
+    expected_cursor_columns: tuple[str | None, ...] = ()
+    expected_unique_keys: tuple[tuple[str, ...], ...] = ()
+    expected_column_names: tuple[tuple[str, ...], ...] = ()
+    expected_contracts: tuple[str | None, ...] = ()
+    expected_error_fragment: str = ""

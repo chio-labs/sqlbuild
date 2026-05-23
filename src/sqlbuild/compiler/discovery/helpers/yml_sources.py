@@ -18,6 +18,11 @@ from sqlbuild.compiler.discovery.helpers.yml_primitives import (
 )
 from sqlbuild.spec.models.schema import SchemaAuditInstance
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
+from sqlbuild.spec.models.types import SourceWriteStrategy
+
+_SOURCE_WRITE_STRATEGIES: frozenset[str] = frozenset(
+    strategy.value for strategy in SourceWriteStrategy
+)
 
 
 def parse_sources_yml(contents: str, file_path: Path) -> tuple[SourceEntry, ...]:
@@ -109,6 +114,27 @@ def _parse_source_entry(*, entry: dict[str, object], file_path: Path) -> SourceE
             label="source",
             error_class=SourceParseError,
         ),
+        loader=optional_non_empty_string(
+            entry=entry,
+            key="loader",
+            file_path=file_path,
+            label="source",
+            error_class=SourceParseError,
+        ),
+        write_strategy=_optional_write_strategy(entry=entry, file_path=file_path),
+        load_batch_size=_optional_positive_int(
+            entry=entry,
+            key="load_batch_size",
+            file_path=file_path,
+        ),
+        cursor_column=optional_non_empty_string(
+            entry=entry,
+            key="cursor_column",
+            file_path=file_path,
+            label="source",
+            error_class=SourceParseError,
+        ),
+        unique_key=_optional_unique_key(entry=entry, file_path=file_path),
         expression=expression,
         description=optional_non_empty_string(
             entry=entry,
@@ -159,6 +185,102 @@ def _validate_source_entry(entry: SourceEntry, file_path: Path) -> None:
                 f"{file_path} source '{entry.name}' uses expression with type_enforcement "
                 "but has no typed columns"
             )
+    if entry.write_strategy is not None and entry.loader is None:
+        raise SourceParseError(
+            f"{file_path} source '{entry.name}' defines write_strategy but has no loader"
+        )
+    if entry.write_strategy == SourceWriteStrategy.APPEND and entry.unique_key:
+        raise SourceParseError(
+            f"{file_path} source '{entry.name}' unique_key is not supported with "
+            "write_strategy append"
+        )
+    if entry.write_strategy == SourceWriteStrategy.MERGE and not entry.unique_key:
+        raise SourceParseError(
+            f"{file_path} source '{entry.name}' write_strategy merge requires unique_key"
+        )
+    if entry.write_strategy == SourceWriteStrategy.TABLE and entry.cursor_column is not None:
+        raise SourceParseError(
+            f"{file_path} source '{entry.name}' cursor_column is not supported with "
+            "write_strategy table"
+        )
+    if entry.write_strategy == SourceWriteStrategy.TABLE and entry.unique_key:
+        raise SourceParseError(
+            f"{file_path} source '{entry.name}' unique_key is not supported with "
+            "write_strategy table"
+        )
+    if entry.write_strategy == SourceWriteStrategy.DELETE_INSERT and entry.cursor_column is None:
+        raise SourceParseError(
+            f"{file_path} source '{entry.name}' write_strategy delete_insert requires cursor_column"
+        )
+    if entry.write_strategy == SourceWriteStrategy.DELETE_INSERT and entry.unique_key:
+        raise SourceParseError(
+            f"{file_path} source '{entry.name}' unique_key is not supported with "
+            "write_strategy delete_insert"
+        )
+    if entry.cursor_column is not None and entry.write_strategy not in {
+        SourceWriteStrategy.APPEND,
+        SourceWriteStrategy.DELETE_INSERT,
+        SourceWriteStrategy.MERGE,
+    }:
+        raise SourceParseError(
+            f"{file_path} source '{entry.name}' cursor_column requires write_strategy "
+            "append, delete_insert, or merge"
+        )
+    if entry.unique_key and entry.write_strategy != SourceWriteStrategy.MERGE:
+        raise SourceParseError(
+            f"{file_path} source '{entry.name}' unique_key requires write_strategy merge"
+        )
+
+
+def _optional_unique_key(*, entry: dict[str, object], file_path: Path) -> tuple[str, ...]:
+    value: object | None = entry.get("unique_key")
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        stripped: str = value.strip()
+        if not stripped:
+            raise SourceParseError(f"{file_path} source 'unique_key' must be non-empty")
+        return (stripped,)
+    if isinstance(value, list):
+        keys: list[str] = []
+        item: object
+        for item in value:
+            if not isinstance(item, str) or not item.strip():
+                raise SourceParseError(
+                    f"{file_path} source 'unique_key' must contain only non-empty strings"
+                )
+            keys.append(item.strip())
+        if not keys:
+            raise SourceParseError(f"{file_path} source 'unique_key' must be non-empty")
+        return tuple(keys)
+    raise SourceParseError(f"{file_path} source 'unique_key' must be a string or list")
+
+
+def _optional_write_strategy(
+    *, entry: dict[str, object], file_path: Path
+) -> SourceWriteStrategy | None:
+    value: str | None = optional_non_empty_string(
+        entry=entry,
+        key="write_strategy",
+        file_path=file_path,
+        label="source",
+        error_class=SourceParseError,
+    )
+    if value is None:
+        return None
+    if value not in _SOURCE_WRITE_STRATEGIES:
+        strategies: str = ", ".join(sorted(_SOURCE_WRITE_STRATEGIES))
+        raise SourceParseError(f"{file_path} source write_strategy must be one of: {strategies}")
+    return SourceWriteStrategy(value)
+
+
+def _optional_positive_int(*, entry: dict[str, object], key: str, file_path: Path) -> int | None:
+    value: object | None = entry.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise SourceParseError(f"{file_path} source '{key}' must be a positive integer")
+    return value
 
 
 def _parse_columns(*, entry: dict[str, object], file_path: Path) -> tuple[SourceColumnEntry, ...]:

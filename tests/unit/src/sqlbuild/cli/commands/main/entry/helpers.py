@@ -28,6 +28,7 @@ def build_handlers(**overrides: Any) -> CliEntrypointHandlers:
         run_test=overrides.get("run_test", noop_handler),
         run_audit=overrides.get("run_audit", noop_handler),
         run_seed=overrides.get("run_seed", noop_handler),
+        run_load=overrides.get("run_load", noop_handler),
         run_clone=overrides.get("run_clone", noop_handler),
         run_diff=overrides.get("run_diff", noop_handler),
         run_query=overrides.get("run_query", noop_handler),

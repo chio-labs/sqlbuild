@@ -10,6 +10,8 @@ class CreatePlaygroundProjectTestCase:
     unexpected_paths: tuple[Path, ...]
     template: str = "waffle_shop"
     expected_error_fragment: str = ""
+    expected_file_fragments: tuple[tuple[Path, tuple[str, ...]], ...] = ()
+    unexpected_file_fragments: tuple[tuple[Path, tuple[str, ...]], ...] = ()
 
 
 @dataclass(frozen=True)

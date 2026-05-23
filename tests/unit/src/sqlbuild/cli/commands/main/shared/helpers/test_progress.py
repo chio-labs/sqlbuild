@@ -18,7 +18,6 @@ from sqlbuild.cli.commands.main.shared.helpers.progress import (
 from sqlbuild.cli.commands.main.shared.models import NestedProgressChildRow
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
     FunctionExecutionResult,
@@ -29,6 +28,7 @@ from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.shared.types import ExecutionResourceKind
 from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import (
     AuditAggregationTestCase,
     BuildFooterTestCase,
@@ -382,21 +382,21 @@ BUILD_PROGRESS_ACTIVE_SPINNER_TEST_CASES: list[BuildProgressActiveSpinnerTestCas
     BuildProgressActiveSpinnerTestCase(
         description="active function row uses spinner glyph instead of ellipsis",
         node_name="is_completed_order",
-        node_type="function",
+        node_type=ExecutionResourceKind.FUNCTION,
         expected_fragments=("function", "is_completed_order", "⠋"),
         unexpected_fragments=("...",),
     ),
     BuildProgressActiveSpinnerTestCase(
         description="active view row uses spinner glyph instead of ellipsis",
         node_name="stg_customers",
-        node_type=MaterializationType.VIEW,
+        node_type=ExecutionResourceKind.VIEW,
         expected_fragments=("view", "stg_customers", "⠋"),
         unexpected_fragments=("...",),
     ),
     BuildProgressActiveSpinnerTestCase(
         description="active snapshot row uses snapshot resource type",
         node_name="customer_snapshot",
-        node_type=MaterializationType.SNAPSHOT,
+        node_type=ExecutionResourceKind.SNAPSHOT,
         expected_fragments=("snapshot", "customer_snapshot", "⠋"),
         unexpected_fragments=("table",),
     ),
@@ -678,7 +678,7 @@ def test_given_active_top_level_node_when_reporting_progress_then_uses_spinner_g
         BuildProgressSpinnerLifecycleTestCase(
             description="active spinner advances frames over time before completion",
             node_name="stg_orders",
-            node_type=MaterializationType.VIEW,
+            node_type=ExecutionResourceKind.VIEW,
             sleep_seconds=0.22,
             completion_duration_ms=1200,
             expected_fragments=("view", "stg_orders", "OK", "\033[?25l", "\033[?25h"),

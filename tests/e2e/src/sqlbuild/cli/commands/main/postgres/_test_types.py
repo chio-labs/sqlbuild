@@ -12,6 +12,46 @@ class PostgresBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class PostgresSourceLoaderStrategiesE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_countries: tuple[tuple[object, ...], ...]
+    expected_webhook_event_counts: tuple[tuple[object, ...], ...]
+    expected_order_events: tuple[tuple[object, ...], ...]
+    expected_customers: tuple[tuple[object, ...], ...]
+    expected_loader_status: tuple[tuple[object, ...], ...]
+    expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class PostgresSourceLoaderDagE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class PostgresIntermediateDagStrategyE2ETestCase:
+    description: str
+    loader_py: str
+    expected_intermediate_rows: tuple[tuple[object, ...], ...]
+    expected_terminal_rows: tuple[tuple[object, ...], ...]
+    command: tuple[str, ...] = ("--no-color", "load", "--select", "+raw_events")
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class PostgresLoaderWaffleShopE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_event_count: int
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
 class PostgresDiffE2ETestCase:
     description: str
     mutation_sql: tuple[str, ...]
@@ -50,3 +90,12 @@ class PostgresScenarioLocalReplayE2ETestCase:
     expected_local_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
     local_rows_sql: str = ""
     corrupt_capture_dialect: bool = False
+
+
+@dataclass(frozen=True)
+class PostgresSourceDeferralE2ETestCase:
+    description: str
+    expected_model_rows: tuple[tuple[object, ...], ...]
+    expected_loader_rows: tuple[tuple[object, ...], ...]
+    command: tuple[str, ...] = ("--no-color", "build", "--select", "stg_orders")
+    expected_return_code: int = 0

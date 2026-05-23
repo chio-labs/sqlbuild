@@ -571,10 +571,14 @@ def check_type_declarations_outside_types(file_path: Path, module: ast.Module) -
             )
             continue
 
-        if isinstance(node, ast.TypeAlias) and not _is_local_model_union_alias(
-            file_path=file_path,
-            module=module,
-            node=node,
+        if (
+            isinstance(node, ast.TypeAlias)
+            and not _is_private_type_alias(node)
+            and not _is_local_model_union_alias(
+                file_path=file_path,
+                module=module,
+                node=node,
+            )
         ):
             violations.append(
                 Violation(
@@ -1238,6 +1242,10 @@ def _is_local_model_union_alias(
     if len(union_member_names) < 2:
         return False
     return all(name in model_class_names for name in union_member_names)
+
+
+def _is_private_type_alias(node: ast.TypeAlias) -> bool:
+    return isinstance(node.name, ast.Name) and node.name.id.startswith("_")
 
 
 def _local_union_member_names(node: ast.expr) -> tuple[str, ...] | None:

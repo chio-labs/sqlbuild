@@ -1,0 +1,55 @@
+sources:
+  - name: raw_countries
+    loader: countries
+    write_strategy: table
+    columns:
+      - name: country_id
+        type: INTEGER
+      - name: country_code
+        type: VARCHAR
+      - name: country_name
+        type: VARCHAR
+
+  - name: raw_webhook_events
+    loader: webhook_events
+    write_strategy: append
+    columns:
+      - name: event_id
+        type: INTEGER
+      - name: event_name
+        type: VARCHAR
+
+  - name: raw_order_events
+    loader: order_events
+    write_strategy: delete_insert
+    cursor_column: event_at
+    columns:
+      - name: event_id
+        type: INTEGER
+      - name: event_at
+        type: TIMESTAMP
+      - name: amount_cents
+        type: INTEGER
+
+  - name: raw_customers
+    loader: customers
+    write_strategy: merge
+    unique_key: customer_id
+    cursor_column: updated_at
+    columns:
+      - name: customer_id
+        type: INTEGER
+      - name: plan_name
+        type: VARCHAR
+      - name: updated_at
+        type: TIMESTAMP
+
+  - name: raw_loader_status
+    loader: loader_status
+    columns:
+      - name: status_id
+        type: INTEGER
+      - name: status_name
+        type: VARCHAR
+      - name: loaded_by
+        type: VARCHAR

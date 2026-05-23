@@ -22,6 +22,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers.helpers import (
     build_model_entry,
     build_plan_output,
     build_seed_entry,
+    build_source_load_entry,
     build_warning,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import (
@@ -103,6 +104,19 @@ PLAN_JSON_TEST_CASES: list[JsonOutputTestCase] = [
             '"country_codes"',
             '"type change detected"',
             '"severity": "warning"',
+        ),
+    ),
+    JsonOutputTestCase(
+        description="plan json includes source load count",
+        plan_output=build_plan_output(
+            model_entries=(build_model_entry(name="orders", action=PlanAction.CREATE_TABLE),),
+            source_load_entries=(build_source_load_entry(name="raw_orders"),),
+        ),
+        expected_keys=("selected_count", "source_load_count", "source_loads"),
+        expected_fragments=(
+            '"selected_count": 1',
+            '"source_load_count": 1',
+            '"name": "raw_orders"',
         ),
     ),
 ]

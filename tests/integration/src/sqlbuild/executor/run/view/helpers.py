@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,13 @@ from tests.integration.src.sqlbuild.executor.run.view._test_types import (
     ViewFailureTestCase,
     ViewSuccessTestCase,
 )
+
+
+@dataclass(frozen=True)
+class ViewExtraAuditDefinition:
+    name: str
+    audit_sql: str
+    severity: str
 
 
 def build_view_plan_entry(
@@ -69,6 +77,7 @@ def build_view_audit_plan_entry(
     name: str,
     unresolved_sql: str,
     attached_target_name: str,
+    resolved_target_name: str,
     severity: str = "warn",
 ) -> AuditPlanEntry:
     """Build a minimal AuditPlanEntry for view execution tests."""
@@ -76,7 +85,11 @@ def build_view_audit_plan_entry(
     return AuditPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name=name),
         name=name,
-        resolved_sql=unresolved_sql,
+        resolved_sql=_resolve_audit_sql(
+            unresolved_sql=unresolved_sql,
+            attached_target_name=attached_target_name,
+            resolved_target_name=resolved_target_name,
+        ),
         unresolved_sql=unresolved_sql,
         attachment_kind=AuditAttachmentKind.MODEL,
         severity=AuditSeverity(severity),
@@ -84,6 +97,12 @@ def build_view_audit_plan_entry(
         effective_run_scope=AuditRunScope.FINAL,
         attached_target_name=attached_target_name,
     )
+
+
+def _resolve_audit_sql(
+    *, unresolved_sql: str, attached_target_name: str, resolved_target_name: str
+) -> str:
+    return unresolved_sql.replace(f'__ref("{attached_target_name}")', resolved_target_name)
 
 
 def run_view_success_test(
@@ -168,9 +187,12 @@ def _execute_view_test(
         post_hook=test_case.post_hook,
     )
 
-    model_audits: tuple[AuditPlanEntry, ...] = _build_model_audits(test_case)
     target_qualified: str = _build_target_qualified(
         target_schema=test_case.target_schema, target_name=test_case.target_name
+    )
+    model_audits: tuple[AuditPlanEntry, ...] = _build_model_audits(
+        test_case=test_case,
+        resolved_target_name=target_qualified,
     )
     model_targets: dict[str, CompiledRelationTarget] = {
         "dim_view": CompiledRelationTarget(
@@ -197,7 +219,7 @@ def _execute_view_test(
 
 
 def _build_model_audits(
-    test_case: ViewSuccessTestCase | ViewFailureTestCase,
+    *, test_case: ViewSuccessTestCase | ViewFailureTestCase, resolved_target_name: str
 ) -> tuple[AuditPlanEntry, ...]:
     """Build model audits from test case audit config."""
 
@@ -208,17 +230,21 @@ def _build_model_audits(
                 name="not_null",
                 unresolved_sql=test_case.audit_sql,
                 attached_target_name="dim_view",
+                resolved_target_name=resolved_target_name,
                 severity=test_case.audit_severity,
             )
         )
-    extra: tuple[str, str, str]
+    extra: object
     for extra in test_case.extra_audits:
+        if not isinstance(extra, ViewExtraAuditDefinition):
+            raise TypeError("extra_audits must contain ViewExtraAuditDefinition values")
         audits.append(
             build_view_audit_plan_entry(
-                name=extra[0],
-                unresolved_sql=extra[1],
+                name=extra.name,
+                unresolved_sql=extra.audit_sql,
                 attached_target_name="dim_view",
-                severity=extra[2],
+                resolved_target_name=resolved_target_name,
+                severity=extra.severity,
             )
         )
     return tuple(audits)

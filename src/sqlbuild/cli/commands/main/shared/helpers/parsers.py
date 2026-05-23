@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +27,18 @@ def parse_cli_vars(value: str) -> dict[str, object]:
             raise argparse.ArgumentTypeError("--vars keys must be strings")
         result[key] = item_value
     return result
+
+
+def parse_cursor_timestamp(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    return datetime.fromisoformat(value)
+
+
+def parse_cursor_integer(value: str | None) -> int | None:
+    if value is None:
+        return None
+    return int(Decimal(value))
 
 
 def add_vars_args(parser: argparse.ArgumentParser) -> None:

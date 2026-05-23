@@ -73,3 +73,9 @@ class SqlScenarioParseError(DiscoveryError):
     """Raised when an authored SQL scenario file has an invalid shape."""
 
     code: str = "D009"
+
+
+class LoaderDiscoveryError(DiscoveryError):
+    """Raised when project source loaders cannot be discovered."""
+
+    code: str = "D010"

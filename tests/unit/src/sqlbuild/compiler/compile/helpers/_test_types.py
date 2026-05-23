@@ -152,6 +152,8 @@ class AssembleCompiledProjectTestCase:
     expected_seed_target_schemas: tuple[str | None, ...] = field(default_factory=tuple)
     expected_seed_target_databases: tuple[str | None, ...] = field(default_factory=tuple)
     expected_seed_target_qualified_names: tuple[str | None, ...] = field(default_factory=tuple)
+    expected_source_databases: tuple[str | None, ...] = field(default_factory=tuple)
+    expected_source_schemas: tuple[str | None, ...] = field(default_factory=tuple)
     expected_audit_attached_target_kinds: tuple[AttachedAuditTargetKind | None, ...] = ()
 
 

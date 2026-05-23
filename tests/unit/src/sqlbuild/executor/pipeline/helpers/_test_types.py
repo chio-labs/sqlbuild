@@ -42,3 +42,15 @@ class ScenarioLocalPipelineTestCase:
     expected_retained: bool
     expected_duckdb_exists: bool
     expected_error_code: str | None
+
+
+@dataclass(frozen=True)
+class SeedPipelineConcurrencyTestCase:
+    """One seed pipeline concurrency orchestration case."""
+
+    description: str
+    seed_names: tuple[str, ...]
+    max_concurrency: int
+    expected_connection_count: int
+    expected_seed_order: tuple[str, ...]
+    expected_json_asset_order: tuple[str, ...]

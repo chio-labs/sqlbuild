@@ -84,6 +84,20 @@ TYPE_EQUALITY_TEST_CASES: list[TypeEqualityTestCase] = [
         right_type="TEXT",
         expected_equal=False,
     ),
+    TypeEqualityTestCase(
+        description="treats snowflake timestamp alias as timestamp_ntz",
+        dialect="snowflake",
+        left_type="TIMESTAMP",
+        right_type="TIMESTAMP_NTZ",
+        expected_equal=True,
+    ),
+    TypeEqualityTestCase(
+        description="keeps snowflake timestamp time zone variants distinct",
+        dialect="snowflake",
+        left_type="TIMESTAMP_NTZ",
+        right_type="TIMESTAMP_TZ",
+        expected_equal=False,
+    ),
 ]
 
 FALLBACK_TYPE_EQUALITY_TEST_CASES: list[TypeEqualityTestCase] = [
@@ -100,6 +114,13 @@ FALLBACK_TYPE_EQUALITY_TEST_CASES: list[TypeEqualityTestCase] = [
         left_type="NUMBER(10,2)",
         right_type="NUMBER(10,3)",
         expected_equal=False,
+    ),
+    TypeEqualityTestCase(
+        description="fallback treats snowflake timestamp alias as timestamp_ntz",
+        dialect="snowflake",
+        left_type="TIMESTAMP",
+        right_type="TIMESTAMP_NTZ",
+        expected_equal=True,
     ),
 ]
 

@@ -6,18 +6,57 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.planner.models import ModelPlanEntry
-from sqlbuild.executor.run.helpers.snapshot import execute_snapshot_entry
+from sqlbuild.executor.run.helpers.snapshot import (
+    _apply_snapshot_schema_change,
+    execute_snapshot_entry,
+)
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
+from sqlbuild.integrations.snowflake.client import SnowflakeAdapter
+from sqlbuild.spec.models.project import SnapshotsConfig
 from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
     SnapshotLifecycleTestCase,
     SnapshotRuntimeContractErrorTestCase,
+    SnapshotSchemaChangeTestCase,
 )
 from tests.unit.src.sqlbuild.executor.run.helpers.helpers import build_snapshot_execution_plan_entry
+
+COMPATIBLE_SNOWFLAKE_SNAPSHOT_SCHEMA_CHANGE_TEST_CASES: list[SnapshotSchemaChangeTestCase] = [
+    SnapshotSchemaChangeTestCase(
+        description="snowflake timestamp alias is not a snapshot type change",
+        target_columns=(ColumnInfo(name="updated_at", type="TIMESTAMP"),),
+        delta_columns=(ColumnInfo(name="updated_at", type="TIMESTAMP_NTZ"),),
+        expected_valid=True,
+    ),
+    SnapshotSchemaChangeTestCase(
+        description="snowflake narrower varchar delta is not a snapshot type change",
+        target_columns=(ColumnInfo(name="plan", type="VARCHAR(5)"),),
+        delta_columns=(ColumnInfo(name="plan", type="VARCHAR(3)"),),
+        expected_valid=True,
+    ),
+]
+
+INCOMPATIBLE_SNOWFLAKE_SNAPSHOT_SCHEMA_CHANGE_TEST_CASES: list[SnapshotSchemaChangeTestCase] = [
+    SnapshotSchemaChangeTestCase(
+        description="snowflake timestamp time zone variant remains a type change",
+        target_columns=(ColumnInfo(name="updated_at", type="TIMESTAMP_NTZ"),),
+        delta_columns=(ColumnInfo(name="updated_at", type="TIMESTAMP_TZ"),),
+        expected_valid=False,
+        expected_error_fragment="type changes: updated_at",
+    ),
+    SnapshotSchemaChangeTestCase(
+        description="snowflake wider varchar delta remains a type change",
+        target_columns=(ColumnInfo(name="plan", type="VARCHAR(3)"),),
+        delta_columns=(ColumnInfo(name="plan", type="VARCHAR(5)"),),
+        expected_valid=False,
+        expected_error_fragment="type changes: plan",
+    ),
+]
 
 
 @pytest.mark.parametrize(
@@ -94,6 +133,57 @@ def test_given_successful_snapshot_when_executing_then_runs_lifecycle_side_effec
         assert expected_hook_event in lifecycle_sql
 
     adapter.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    COMPATIBLE_SNOWFLAKE_SNAPSHOT_SCHEMA_CHANGE_TEST_CASES,
+    ids=[case.description for case in COMPATIBLE_SNOWFLAKE_SNAPSHOT_SCHEMA_CHANGE_TEST_CASES],
+)
+def test_given_snapshot_schema_change_when_checking_compatible_snowflake_types_then_it_is_valid(
+    test_case: SnapshotSchemaChangeTestCase,
+) -> None:
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+    entry: ModelPlanEntry = build_snapshot_execution_plan_entry()
+
+    _apply_snapshot_schema_change(
+        adapter=adapter,
+        connection=object(),
+        entry=entry,
+        snapshots=SnapshotsConfig(),
+        target_qualified="analytics.customer_snapshot",
+        target_columns=test_case.target_columns,
+        delta_columns=test_case.delta_columns,
+        allow_snapshot_schema_change=False,
+        statement_recorder=StatementRecorder(),
+    )
+
+    assert test_case.expected_valid is True
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    INCOMPATIBLE_SNOWFLAKE_SNAPSHOT_SCHEMA_CHANGE_TEST_CASES,
+    ids=[case.description for case in INCOMPATIBLE_SNOWFLAKE_SNAPSHOT_SCHEMA_CHANGE_TEST_CASES],
+)
+def test_given_snapshot_schema_change_when_checking_incompatible_snowflake_types_then_it_raises(
+    test_case: SnapshotSchemaChangeTestCase,
+) -> None:
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+    entry: ModelPlanEntry = build_snapshot_execution_plan_entry()
+
+    with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
+        _apply_snapshot_schema_change(
+            adapter=adapter,
+            connection=object(),
+            entry=entry,
+            snapshots=SnapshotsConfig(),
+            target_qualified="analytics.customer_snapshot",
+            target_columns=test_case.target_columns,
+            delta_columns=test_case.delta_columns,
+            allow_snapshot_schema_change=False,
+            statement_recorder=StatementRecorder(),
+        )
 
 
 @pytest.mark.parametrize(

@@ -29,6 +29,7 @@ class EnvironmentConfig:
     vars: dict[str, str] = field(default_factory=dict)
     database: str | None = None
     schema: str | None = None
+    defer_sources_to: str | None = None
     clone: ClonePolicy = field(default_factory=ClonePolicy)
 
 
@@ -40,6 +41,7 @@ class LocalEnvironmentConfig:
     vars: dict[str, str] = field(default_factory=dict)
     database: str | None = None
     schema: str | None = None
+    defer_sources_to: str | None = None
     clone: LocalClonePolicy = field(default_factory=LocalClonePolicy)
 
 
@@ -51,6 +53,7 @@ class SettingsConfig:
     query_change_tracking: bool = True
     sql_validation: bool = True
     concurrency: int = 1
+    auto_load_sources: bool = True
     table_promotion_mode: str | None = None
     default_audit_severity: str | None = None
     default_audit_run_scope: str | None = None

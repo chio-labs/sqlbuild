@@ -6,14 +6,12 @@ SCENARIO (
 WITH
 __ref__stg_orders AS (
   SELECT
-    id AS order_id,
-    customer_id,
-    waffle_type_id,
-    quantity,
-    ordered_at,
-    status
-  FROM __source("raw_orders")
-  WHERE id = 1
+    1 AS order_id,
+    1 AS customer_id,
+    1 AS waffle_type_id,
+    2 AS quantity,
+    CAST('2026-04-01 09:15:00' AS TIMESTAMP) AS ordered_at,
+    'completed' AS status
 ),
 
 __ref__stg_payments AS (

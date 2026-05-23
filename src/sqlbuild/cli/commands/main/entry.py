@@ -83,9 +83,13 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     plan_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PLAN)
     plan_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     plan_parser.add_argument("--defer-to", default=None)
+    plan_parser.add_argument("--defer-sources-to", default=None)
     plan_parser.add_argument("--json", action="store_true", default=False)
     plan_parser.add_argument("--full-refresh", action="store_true", default=False)
     plan_parser.add_argument("--verbose", "-v", action="store_true", default=False)
+    plan_load_group: argparse._MutuallyExclusiveGroup = plan_parser.add_mutually_exclusive_group()
+    plan_load_group.add_argument("--load", dest="load_sources", action="store_true", default=None)
+    plan_load_group.add_argument("--no-load", dest="load_sources", action="store_false")
     add_cursor_override_args(plan_parser)
     add_select_args(plan_parser)
     add_vars_args(plan_parser)
@@ -94,9 +98,14 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     build_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.BUILD)
     build_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     build_parser.add_argument("--defer-to", default=None)
+    build_parser.add_argument("--defer-sources-to", default=None)
     build_parser.add_argument("--json", action="store_true", default=False)
     add_execution_json_output_arg(build_parser)
     add_cursor_override_args(build_parser)
+    build_load_group: argparse._MutuallyExclusiveGroup = build_parser.add_mutually_exclusive_group()
+    build_load_group.add_argument("--load", dest="load_sources", action="store_true", default=None)
+    build_load_group.add_argument("--no-load", dest="load_sources", action="store_false")
+    build_load_group.add_argument("--reload", dest="reload", action="store_true", default=False)
     add_execution_args(build_parser)
     add_select_args(build_parser)
     add_vars_args(build_parser)
@@ -105,9 +114,14 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     run_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.RUN)
     run_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     run_parser.add_argument("--defer-to", default=None)
+    run_parser.add_argument("--defer-sources-to", default=None)
     run_parser.add_argument("--json", action="store_true", default=False)
     add_execution_json_output_arg(run_parser)
     add_cursor_override_args(run_parser)
+    run_load_group: argparse._MutuallyExclusiveGroup = run_parser.add_mutually_exclusive_group()
+    run_load_group.add_argument("--load", dest="load_sources", action="store_true", default=None)
+    run_load_group.add_argument("--no-load", dest="load_sources", action="store_false")
+    run_load_group.add_argument("--reload", dest="reload", action="store_true", default=False)
     add_execution_args(run_parser)
     add_select_args(run_parser)
     add_vars_args(run_parser)
@@ -130,8 +144,18 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     add_vars_args(audit_parser)
     add_dbt_config_args(audit_parser)
 
+    load_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.LOAD)
+    load_parser.add_argument("--reload", action="store_true", default=False)
+    load_parser.add_argument("--json", action="store_true", default=False)
+    load_parser.add_argument("--concurrency", type=int, default=None)
+    add_execution_json_output_arg(load_parser)
+    add_select_args(load_parser)
+    add_cursor_override_args(load_parser)
+    add_vars_args(load_parser)
+
     seed_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.SEED)
     seed_parser.add_argument("--json", action="store_true", default=False)
+    seed_parser.add_argument("--concurrency", type=int, default=None)
     add_execution_json_output_arg(seed_parser)
     add_select_args(seed_parser)
     add_vars_args(seed_parser)
@@ -274,6 +298,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.helpers.scenario.capture import run_scenario_capture
     from sqlbuild.cli.commands.main.janitor import run_janitor
     from sqlbuild.cli.commands.main.lineage import run_lineage
+    from sqlbuild.cli.commands.main.load import run_load
     from sqlbuild.cli.commands.main.plan import run_plan
     from sqlbuild.cli.commands.main.playground import run_playground
     from sqlbuild.cli.commands.main.query import run_query
@@ -322,6 +347,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_test=run_test,
         run_audit=run_audit,
         run_seed=run_seed,
+        run_load=run_load,
         run_clone=run_clone,
         run_diff=run_diff,
         run_query=run_query,
@@ -407,9 +433,11 @@ def _main_with_dependencies(
                 project_dir,
                 args.no_sql_validation,
                 args.defer_to,
+                args.defer_sources_to,
                 cursor_overrides,
                 args.json,
                 args.full_refresh,
+                args.load_sources,
                 args.no_color,
                 select,
                 tuple(args.exclude),
@@ -430,7 +458,7 @@ def _main_with_dependencies(
             raise CliUserError("dbt requires a subcommand such as 'plan'", code="C237")
         if args.command == CliCommand.BUILD:
             cursor_overrides = CursorOverrides(
-                start_ts=args.start_cursor_ts,
+                start_ts=None,
                 end_ts=args.end_cursor_ts,
                 start_int=args.start_cursor_int,
                 end_int=args.end_cursor_int,
@@ -439,10 +467,13 @@ def _main_with_dependencies(
                 project_dir,
                 args.no_sql_validation,
                 args.defer_to,
+                args.defer_sources_to,
                 cursor_overrides,
                 args.no_color,
                 args.fail_fast,
                 args.full_refresh,
+                args.load_sources,
+                args.reload,
                 args.allow_snapshot_full_refresh,
                 args.allow_snapshot_schema_change,
                 args.concurrency,
@@ -465,10 +496,13 @@ def _main_with_dependencies(
                 project_dir,
                 args.no_sql_validation,
                 args.defer_to,
+                args.defer_sources_to,
                 cursor_overrides,
                 args.no_color,
                 args.fail_fast,
                 args.full_refresh,
+                args.load_sources,
+                args.reload,
                 args.allow_snapshot_full_refresh,
                 args.allow_snapshot_schema_change,
                 args.concurrency,
@@ -503,12 +537,32 @@ def _main_with_dependencies(
                 args.json,
                 args.json_output,
             )
+        if args.command == CliCommand.LOAD:
+            cursor_overrides = CursorOverrides(
+                start_ts=args.start_cursor_ts,
+                end_ts=args.end_cursor_ts,
+                start_int=args.start_cursor_int,
+                end_int=args.end_cursor_int,
+            )
+            return handlers.run_load(
+                project_dir,
+                args.no_color,
+                select,
+                tuple(args.exclude),
+                args.reload,
+                args.concurrency,
+                cursor_overrides,
+                args.vars,
+                args.json,
+                args.json_output,
+            )
         if args.command == CliCommand.SEED:
             return handlers.run_seed(
                 project_dir,
                 args.no_color,
                 select,
                 tuple(args.exclude),
+                args.concurrency,
                 args.vars,
                 args.json,
                 args.json_output,

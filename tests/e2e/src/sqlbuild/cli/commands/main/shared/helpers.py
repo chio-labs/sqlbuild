@@ -12,6 +12,9 @@ from typing import Any
 
 REPO_ROOT: Path = Path(__file__).resolve().parents[8]
 WAFFLE_SHOP_DIR: Path = REPO_ROOT / "tests" / "e2e" / "fixtures" / "waffle_shop"
+SOURCE_LOADER_STRATEGIES_DIR: Path = (
+    REPO_ROOT / "tests" / "e2e" / "fixtures" / "source_loader_strategies"
+)
 
 
 def prepare_waffle_shop(tmp_path: Path) -> Path:
@@ -23,6 +26,26 @@ def prepare_waffle_shop(tmp_path: Path) -> Path:
     db_path: Path = project_dir / "waffle_shop.duckdb"
     if db_path.exists():
         db_path.unlink()
+
+    return project_dir
+
+
+def prepare_source_loader_strategies(
+    *,
+    tmp_path: Path,
+    project_toml: str | None = None,
+) -> Path:
+    """Copy source-loader strategy fixture to tmp dir with optional warehouse config."""
+
+    project_dir: Path = tmp_path / "source_loader_strategies"
+    copytree(SOURCE_LOADER_STRATEGIES_DIR, project_dir)
+
+    db_path: Path = project_dir / "source_loader_strategies.duckdb"
+    if db_path.exists():
+        db_path.unlink()
+
+    if project_toml is not None:
+        (project_dir / "sqlbuild_project.toml").write_text(project_toml, encoding="utf-8")
 
     return project_dir
 

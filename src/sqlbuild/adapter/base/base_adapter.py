@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar
@@ -24,6 +26,7 @@ from sqlbuild.adapter.shared.models import (
 from sqlbuild.adapter.shared.types import (
     CursorKind,
     FrameworkType,
+    LoaderLogicalType,
     PromotionStrategy,
     TablePromotionMode,
 )
@@ -323,7 +326,7 @@ class BaseAdapter(StrictAdapter):
         self, *, target: str, sql: str, columns: tuple[str, ...] | None = None
     ) -> tuple[str, ...]:
         if columns is not None:
-            col_list: str = ", ".join(columns)
+            col_list: str = ", ".join(self.render_identifier(column) for column in columns)
             return (f"INSERT INTO {target} ({col_list}) {sql}",)
         return (f"INSERT INTO {target} {sql}",)
 
@@ -335,7 +338,10 @@ class BaseAdapter(StrictAdapter):
         unique_key: tuple[str, ...],
         columns: tuple[str, ...] | None = None,
     ) -> tuple[str, ...]:
-        key_condition: str = " AND ".join(f"{target}.{k} = __source.{k}" for k in unique_key)
+        key_condition: str = " AND ".join(
+            f"{target}.{self.render_identifier(k)} = __source.{self.render_identifier(k)}"
+            for k in unique_key
+        )
         delete_sql: str = (
             f"DELETE FROM {target} WHERE EXISTS "
             f"(SELECT 1 FROM ({sql}) AS __source WHERE {key_condition})"
@@ -355,8 +361,8 @@ class BaseAdapter(StrictAdapter):
     ) -> tuple[str, ...]:
         delete_sql: str = (
             f"DELETE FROM {target} "
-            f"WHERE {cursor_column} >= '{cursor_start}' "
-            f"AND {cursor_column} < '{cursor_end}'"
+            f"WHERE {self.render_identifier(cursor_column)} >= '{cursor_start}' "
+            f"AND {self.render_identifier(cursor_column)} < '{cursor_end}'"
         )
         insert_stmts: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
         return (delete_sql, *insert_stmts)
@@ -396,16 +402,23 @@ class BaseAdapter(StrictAdapter):
     def render_add_columns(
         self, *, target: str, columns: tuple[ColumnInfo, ...]
     ) -> tuple[str, ...]:
-        return tuple(f"ALTER TABLE {target} ADD COLUMN {col.name} {col.type}" for col in columns)
+        return tuple(
+            f"ALTER TABLE {target} ADD COLUMN {self.render_identifier(col.name)} {col.type}"
+            for col in columns
+        )
 
     def render_drop_columns(self, *, target: str, column_names: tuple[str, ...]) -> tuple[str, ...]:
-        return tuple(f"ALTER TABLE {target} DROP COLUMN {col_name}" for col_name in column_names)
+        return tuple(
+            f"ALTER TABLE {target} DROP COLUMN {self.render_identifier(col_name)}"
+            for col_name in column_names
+        )
 
     def render_alter_column_types(
         self, *, target: str, columns: tuple[ColumnInfo, ...]
     ) -> tuple[str, ...]:
         return tuple(
-            f"ALTER TABLE {target} ALTER COLUMN {col.name} TYPE {col.type}" for col in columns
+            f"ALTER TABLE {target} ALTER COLUMN {self.render_identifier(col.name)} TYPE {col.type}"
+            for col in columns
         )
 
     def render_merge(
@@ -416,12 +429,19 @@ class BaseAdapter(StrictAdapter):
         unique_key: tuple[str, ...],
         source_columns: tuple[str, ...] = (),
     ) -> tuple[str, ...]:
-        join_condition: str = " AND ".join(f"__target.{k} = __source.{k}" for k in unique_key)
-        update_assignments: str = ", ".join(
-            f"{col} = __source.{col}" for col in source_columns if col not in unique_key
+        join_condition: str = " AND ".join(
+            f"__target.{self.render_identifier(k)} = __source.{self.render_identifier(k)}"
+            for k in unique_key
         )
-        insert_columns: str = ", ".join(source_columns)
-        insert_values: str = ", ".join(f"__source.{col}" for col in source_columns)
+        update_assignments: str = ", ".join(
+            f"{self.render_identifier(col)} = __source.{self.render_identifier(col)}"
+            for col in source_columns
+            if col not in unique_key
+        )
+        insert_columns: str = ", ".join(self.render_identifier(col) for col in source_columns)
+        insert_values: str = ", ".join(
+            f"__source.{self.render_identifier(col)}" for col in source_columns
+        )
         merge_sql: str = (
             f"MERGE INTO {target} AS __target USING ({sql}) AS __source ON {join_condition} "
         )
@@ -1336,6 +1356,11 @@ class BaseAdapter(StrictAdapter):
             return f"{schema}.{name}"
         return None
 
+    def render_identifier(self, name: str) -> str:
+        """Render one SQL identifier using standard double-quote escaping."""
+
+        return '"' + name.replace('"', '""') + '"'
+
     def render_framework_type(self, type_name: FrameworkType) -> str:
         """Render one framework-internal logical type using generic SQL defaults."""
 
@@ -1345,12 +1370,138 @@ class BaseAdapter(StrictAdapter):
             case FrameworkType.TIMESTAMP:
                 return "TIMESTAMP"
 
+    def render_loader_logical_type(self, type_name: LoaderLogicalType) -> str:
+        """Render one source-loader logical type using generic SQL defaults."""
+
+        match type_name:
+            case LoaderLogicalType.BOOLEAN:
+                return "BOOLEAN"
+            case LoaderLogicalType.INTEGER:
+                return "BIGINT"
+            case LoaderLogicalType.FLOAT:
+                return "DOUBLE"
+            case LoaderLogicalType.STRING:
+                return "VARCHAR"
+            case LoaderLogicalType.TIMESTAMP:
+                return "TIMESTAMP"
+            case LoaderLogicalType.DATE:
+                return "DATE"
+            case LoaderLogicalType.JSON:
+                return "JSON"
+
+    def render_loader_value_literal(
+        self, *, value: object, logical_type: LoaderLogicalType | None
+    ) -> str:
+        """Render one generic source-loader value literal."""
+
+        del logical_type
+        if value is None:
+            return "NULL"
+        if isinstance(value, bool):
+            return "TRUE" if value else "FALSE"
+        if isinstance(value, int | float | Decimal):
+            return str(value)
+        if isinstance(value, datetime | date):
+            return _quote_sql_string(value.isoformat())
+        if isinstance(value, dict | list):
+            return _quote_sql_string(json.dumps(value, sort_keys=True))
+        return _quote_sql_string(str(value))
+
+    def render_loader_rows_select(
+        self,
+        *,
+        rows: tuple[dict[str, object], ...],
+        column_names: tuple[str, ...],
+        column_sql_types: dict[str, str],
+        inferred_types: dict[str, LoaderLogicalType],
+    ) -> str:
+        """Render generic VALUES-backed source-loader rows as a SELECT."""
+
+        if not rows:
+            projections: str = ", ".join(
+                "CAST(NULL AS "
+                f"{column_sql_types.get(column_name, 'VARCHAR')}) AS "
+                f"{self.render_identifier(column_name)}"
+                for column_name in column_names
+            )
+            return f"SELECT {projections} WHERE 1 = 0"
+        values_sql: str = ", ".join(
+            "("
+            + ", ".join(
+                self.render_loader_value_literal(
+                    value=row.get(column_name),
+                    logical_type=inferred_types.get(column_name),
+                )
+                for column_name in column_names
+            )
+            + ")"
+            for row in rows
+        )
+        column_sql: str = ", ".join(
+            self.render_identifier(column_name) for column_name in column_names
+        )
+        select_sql: str = ", ".join(
+            self._loader_rows_projection_sql(
+                column_name=column_name,
+                column_sql_types=column_sql_types,
+            )
+            for column_name in column_names
+        )
+        return f"SELECT {select_sql} FROM (VALUES {values_sql}) AS __loader_rows({column_sql})"
+
+    def _loader_rows_projection_sql(
+        self, *, column_name: str, column_sql_types: dict[str, str]
+    ) -> str:
+        quoted_column: str = self.render_identifier(column_name)
+        sql_type: str | None = column_sql_types.get(column_name)
+        if sql_type is None:
+            return quoted_column
+        return f"CAST({quoted_column} AS {sql_type}) AS {quoted_column}"
+
     def render_source_expression_cast(
         self, *, expression: str, target_type: str, alias: str
     ) -> str:
         """Render a generic cast projection for source expression type enforcement."""
 
         return f"CAST({expression} AS {target_type}) AS {alias}"
+
+    def render_source_expression_relation(self, *, expression: str) -> str:
+        """Render a generic source expression as a SQL table factor."""
+
+        stripped_expression: str = expression.strip().removesuffix(";").strip()
+        if stripped_expression.startswith("("):
+            return stripped_expression
+        lowered: str = stripped_expression.lower()
+        if lowered.startswith(("select", "with", "values")):
+            return f"({stripped_expression})"
+        return stripped_expression
+
+    def render_source_expression_cast_subquery(
+        self, *, source_relation: str, projections: tuple[str, ...]
+    ) -> str:
+        """Render a generic type-enforced source expression table factor."""
+
+        projection_clause: str = ", ".join(projections)
+        return f"(SELECT {projection_clause} FROM {source_relation} AS __source_expression)"
+
+    def render_source_relation_cast_subquery(
+        self,
+        *,
+        source_relation: str,
+        cast_projections: tuple[str, ...],
+        cast_column_names: tuple[str, ...],
+        all_columns_cast: bool,
+    ) -> str:
+        """Render a generic type-enforced source relation table factor."""
+
+        cast_clause: str = ", ".join(cast_projections)
+        if all_columns_cast:
+            return f"(SELECT {cast_clause} FROM {source_relation})"
+        exclude_list: str = ", ".join(cast_column_names)
+        return (
+            f"(SELECT * {self.star_exclude_keyword()} ({exclude_list}), {cast_clause} "
+            f"FROM {source_relation})"
+        )
 
     def render_set_difference_operator(self) -> str:
         """Render the generic SQL set-difference operator."""
@@ -1409,6 +1560,10 @@ def _build_names_filter(
         return ""
     quoted: str = ", ".join(f"'{name}'" for name in names)
     return f" AND {column_name} IN ({quoted})"
+
+
+def _quote_sql_string(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
 
 
 def _snapshot_initial_valid_from_expr(

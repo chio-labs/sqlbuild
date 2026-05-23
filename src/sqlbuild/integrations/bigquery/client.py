@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar
@@ -33,6 +35,7 @@ from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family,
 from sqlbuild.adapter.shared.types import (
     CursorKind,
     FrameworkType,
+    LoaderLogicalType,
     PromotionStrategy,
     TablePromotionMode,
 )
@@ -98,6 +101,95 @@ class BigQueryAdapter(BaseAdapter):
 
     sqlglot_dialect_name: ClassVar[str | None] = "bigquery"
     max_identifier_length: ClassVar[int] = 1024
+
+    def render_loader_logical_type(self, type_name: LoaderLogicalType) -> str:
+        match type_name:
+            case LoaderLogicalType.BOOLEAN:
+                return "BOOL"
+            case LoaderLogicalType.INTEGER:
+                return "INT64"
+            case LoaderLogicalType.FLOAT:
+                return "FLOAT64"
+            case LoaderLogicalType.STRING:
+                return "STRING"
+            case LoaderLogicalType.TIMESTAMP:
+                return "TIMESTAMP"
+            case LoaderLogicalType.DATE:
+                return "DATE"
+            case LoaderLogicalType.JSON:
+                return "JSON"
+
+    def render_loader_value_literal(
+        self, *, value: object, logical_type: LoaderLogicalType | None
+    ) -> str:
+        if value is None:
+            return "NULL"
+        if logical_type == LoaderLogicalType.JSON:
+            return f"JSON {self._quote_sql_string(json.dumps(value, sort_keys=True))}"
+        if isinstance(value, bool):
+            return "TRUE" if value else "FALSE"
+        if isinstance(value, int | float | Decimal):
+            return str(value)
+        if isinstance(value, datetime | date):
+            return self._quote_sql_string(value.isoformat())
+        return self._quote_sql_string(str(value))
+
+    def render_loader_rows_select(
+        self,
+        *,
+        rows: tuple[dict[str, object], ...],
+        column_names: tuple[str, ...],
+        column_sql_types: dict[str, str],
+        inferred_types: dict[str, LoaderLogicalType],
+    ) -> str:
+        if not rows:
+            projections: str = ", ".join(
+                "CAST(NULL AS "
+                f"{self._loader_row_sql_type(column_sql_types.get(column_name))}) "
+                f"AS {self.render_identifier(column_name)}"
+                for column_name in column_names
+            )
+            return f"SELECT {projections} WHERE 1 = 0"
+        selects: list[str] = []
+        row: dict[str, object]
+        for row in rows:
+            projections = ", ".join(
+                self._bigquery_loader_rows_projection_sql(
+                    column_name=column_name,
+                    literal=self.render_loader_value_literal(
+                        value=row.get(column_name),
+                        logical_type=inferred_types.get(column_name),
+                    ),
+                    column_sql_types=column_sql_types,
+                )
+                for column_name in column_names
+            )
+            selects.append(f"SELECT {projections}")
+        return " UNION ALL ".join(selects)
+
+    def _loader_row_sql_type(self, column_type: str | None) -> str:
+        if column_type is None:
+            return "STRING"
+        return self._to_bigquery_type(column_type)
+
+    def _bigquery_loader_rows_projection_sql(
+        self,
+        *,
+        literal: str,
+        column_name: str,
+        column_sql_types: dict[str, str],
+    ) -> str:
+        sql_type: str | None = column_sql_types.get(column_name)
+        quoted_column: str = self.render_identifier(column_name)
+        if sql_type is None:
+            return f"{literal} AS {quoted_column}"
+        return f"CAST({literal} AS {self._loader_row_sql_type(sql_type)}) AS {quoted_column}"
+
+    def render_identifier(self, name: str) -> str:
+        return "`" + name.replace("`", "``") + "`"
+
+    def _quote_sql_string(self, value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
 
     def render_create_initial_snapshot_target(
         self,
@@ -665,7 +757,36 @@ class BigQueryAdapter(BaseAdapter):
     ) -> str:
         """Render BigQuery source expression type-enforcement casts explicitly."""
 
-        return f"CAST({expression} AS {target_type}) AS {alias}"
+        return f"CAST({expression} AS {self._to_bigquery_type(target_type)}) AS {alias}"
+
+    def render_source_expression_relation(self, *, expression: str) -> str:
+        stripped_expression: str = expression.strip().removesuffix(";").strip()
+        if stripped_expression.startswith("("):
+            return stripped_expression
+        lowered: str = stripped_expression.lower()
+        if lowered.startswith(("select", "with", "values")):
+            return f"({stripped_expression})"
+        return stripped_expression
+
+    def render_source_expression_cast_subquery(
+        self, *, source_relation: str, projections: tuple[str, ...]
+    ) -> str:
+        projection_clause: str = ", ".join(projections)
+        return f"(SELECT {projection_clause} FROM {source_relation} AS __source_expression)"
+
+    def render_source_relation_cast_subquery(
+        self,
+        *,
+        source_relation: str,
+        cast_projections: tuple[str, ...],
+        cast_column_names: tuple[str, ...],
+        all_columns_cast: bool,
+    ) -> str:
+        cast_clause: str = ", ".join(cast_projections)
+        if all_columns_cast:
+            return f"(SELECT {cast_clause} FROM {source_relation})"
+        exclude_list: str = ", ".join(cast_column_names)
+        return f"(SELECT * EXCEPT ({exclude_list}), {cast_clause} FROM {source_relation})"
 
     def render_set_difference_operator(self) -> str:
         """Render the BigQuery set-difference operator explicitly."""
@@ -775,7 +896,7 @@ class BigQueryAdapter(BaseAdapter):
     ) -> tuple[str, ...]:
         quoted_target: str = self._quote_identifier_path(target)
         if columns is not None:
-            col_list: str = ", ".join(columns)
+            col_list: str = ", ".join(self.render_identifier(column) for column in columns)
             return (f"INSERT INTO {quoted_target} ({col_list}) {sql}",)
         return (f"INSERT INTO {quoted_target} {sql}",)
 
@@ -791,12 +912,16 @@ class BigQueryAdapter(BaseAdapter):
     ) -> tuple[str, ...]:
         insert_clause: str = "INSERT ROW"
         if columns is not None:
-            column_list: str = ", ".join(columns)
-            values_list: str = ", ".join(f"__source.{column}" for column in columns)
+            column_list: str = ", ".join(self.render_identifier(column) for column in columns)
+            values_list: str = ", ".join(
+                f"__source.{self.render_identifier(column)}" for column in columns
+            )
             insert_clause = f"INSERT ({column_list}) VALUES ({values_list})"
         cursor_filter: str = (
-            f"__target.{cursor_column} >= {self._render_cursor_bound_string(cursor_start)} "
-            f"AND __target.{cursor_column} < {self._render_cursor_bound_string(cursor_end)}"
+            f"__target.{self.render_identifier(cursor_column)} >= "
+            f"{self._render_cursor_bound_string(cursor_start)} "
+            f"AND __target.{self.render_identifier(cursor_column)} < "
+            f"{self._render_cursor_bound_string(cursor_end)}"
         )
         return (
             f"MERGE {self._quote_identifier_path(target)} AS __target "
@@ -1097,6 +1222,25 @@ class BigQueryAdapter(BaseAdapter):
                 job_config=job_config,
                 location=connection.location,
             ).result()
+
+    def add_columns(
+        self,
+        connection: _BigQueryConnection,
+        *,
+        target: str,
+        columns: tuple[ColumnInfo, ...],
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = tuple(
+            "ALTER TABLE "
+            f"{self._quote_identifier_path(target)} ADD COLUMN "
+            f"{self.render_identifier(column.name)} {self._to_bigquery_type(column.type)}"
+            for column in columns
+        )
+        statement_recorder.record_many(statements)
+        statement: str
+        for statement in statements:
+            self.execute(connection, statement)
 
     def merge(
         self,

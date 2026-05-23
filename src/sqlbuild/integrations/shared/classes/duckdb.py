@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import logging
+from datetime import date, datetime
 from decimal import Decimal
 from importlib.machinery import ModuleSpec
 from pathlib import Path
@@ -30,7 +32,7 @@ from sqlbuild.adapter.shared.models import (
     StatementRecorder,
 )
 from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
-from sqlbuild.adapter.shared.types import CursorKind, FrameworkType
+from sqlbuild.adapter.shared.types import CursorKind, FrameworkType, LoaderLogicalType
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.shared.helpers.diagnostics_logging import log_sql
 from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
@@ -40,6 +42,84 @@ class DuckDbBackedAdapter(BaseAdapter):
     """Shared adapter implementation for DuckDB-backed connections."""
 
     sqlglot_dialect_name: ClassVar[str | None] = "duckdb"
+
+    def render_loader_logical_type(self, type_name: LoaderLogicalType) -> str:
+        match type_name:
+            case LoaderLogicalType.BOOLEAN:
+                return "BOOLEAN"
+            case LoaderLogicalType.INTEGER:
+                return "BIGINT"
+            case LoaderLogicalType.FLOAT:
+                return "DOUBLE"
+            case LoaderLogicalType.STRING:
+                return "VARCHAR"
+            case LoaderLogicalType.TIMESTAMP:
+                return "TIMESTAMP"
+            case LoaderLogicalType.DATE:
+                return "DATE"
+            case LoaderLogicalType.JSON:
+                return "JSON"
+
+    def render_loader_value_literal(
+        self, *, value: object, logical_type: LoaderLogicalType | None
+    ) -> str:
+        if value is None:
+            return "NULL"
+        if isinstance(value, bool):
+            return "TRUE" if value else "FALSE"
+        if isinstance(value, int | float | Decimal):
+            return str(value)
+        if isinstance(value, datetime | date):
+            return self._quote_sql_string(value.isoformat())
+        if isinstance(value, dict | list):
+            return self._quote_sql_string(json.dumps(value, sort_keys=True))
+        return self._quote_sql_string(str(value))
+
+    def render_loader_rows_select(
+        self,
+        *,
+        rows: tuple[dict[str, object], ...],
+        column_names: tuple[str, ...],
+        column_sql_types: dict[str, str],
+        inferred_types: dict[str, LoaderLogicalType],
+    ) -> str:
+        if not rows:
+            projections: str = ", ".join(
+                "CAST(NULL AS "
+                f"{column_sql_types.get(column_name, 'VARCHAR')}) AS "
+                f"{self.render_identifier(column_name)}"
+                for column_name in column_names
+            )
+            return f"SELECT {projections} WHERE 1 = 0"
+        values_sql: str = ", ".join(
+            "("
+            + ", ".join(
+                self.render_loader_value_literal(
+                    value=row.get(column_name),
+                    logical_type=inferred_types.get(column_name),
+                )
+                for column_name in column_names
+            )
+            + ")"
+            for row in rows
+        )
+        column_sql: str = ", ".join(
+            self.render_identifier(column_name) for column_name in column_names
+        )
+        select_sql: str = ", ".join(
+            (
+                self.render_identifier(column_name)
+                if column_name not in column_sql_types
+                else "CAST("
+                f"{self.render_identifier(column_name)} AS {column_sql_types[column_name]}) "
+                f"AS {self.render_identifier(column_name)}"
+            )
+            for column_name in column_names
+        )
+        return f"SELECT {select_sql} FROM (VALUES {values_sql}) AS __loader_rows({column_sql})"
+
+    def _quote_sql_string(self, value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
 
     def render_create_initial_snapshot_target(
         self,
@@ -504,6 +584,35 @@ class DuckDbBackedAdapter(BaseAdapter):
 
         return f"CAST({expression} AS {target_type}) AS {alias}"
 
+    def render_source_expression_relation(self, *, expression: str) -> str:
+        stripped_expression: str = expression.strip().removesuffix(";").strip()
+        if stripped_expression.startswith("("):
+            return stripped_expression
+        lowered: str = stripped_expression.lower()
+        if lowered.startswith(("select", "with", "values")):
+            return f"({stripped_expression})"
+        return stripped_expression
+
+    def render_source_expression_cast_subquery(
+        self, *, source_relation: str, projections: tuple[str, ...]
+    ) -> str:
+        projection_clause: str = ", ".join(projections)
+        return f"(SELECT {projection_clause} FROM {source_relation} AS __source_expression)"
+
+    def render_source_relation_cast_subquery(
+        self,
+        *,
+        source_relation: str,
+        cast_projections: tuple[str, ...],
+        cast_column_names: tuple[str, ...],
+        all_columns_cast: bool,
+    ) -> str:
+        cast_clause: str = ", ".join(cast_projections)
+        if all_columns_cast:
+            return f"(SELECT {cast_clause} FROM {source_relation})"
+        exclude_list: str = ", ".join(cast_column_names)
+        return f"(SELECT * EXCLUDE ({exclude_list}), {cast_clause} FROM {source_relation})"
+
     def render_set_difference_operator(self) -> str:
         """Render DuckDB set-difference operator explicitly."""
 
@@ -885,7 +994,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         self, *, target: str, sql: str, columns: tuple[str, ...] | None = None
     ) -> tuple[str, ...]:
         if columns is not None:
-            col_list: str = ", ".join(columns)
+            col_list: str = ", ".join(self.render_identifier(column) for column in columns)
             return (f"INSERT INTO {target} ({col_list}) {sql}",)
         return (f"INSERT INTO {target} {sql}",)
 
@@ -897,7 +1006,10 @@ class DuckDbBackedAdapter(BaseAdapter):
         unique_key: tuple[str, ...],
         columns: tuple[str, ...] | None = None,
     ) -> tuple[str, ...]:
-        key_condition: str = " AND ".join(f"{target}.{k} = __source.{k}" for k in unique_key)
+        key_condition: str = " AND ".join(
+            f"{target}.{self.render_identifier(k)} = __source.{self.render_identifier(k)}"
+            for k in unique_key
+        )
         delete_sql: str = (
             f"DELETE FROM {target} WHERE EXISTS "
             f"(SELECT 1 FROM ({sql}) AS __source WHERE {key_condition})"
@@ -917,8 +1029,8 @@ class DuckDbBackedAdapter(BaseAdapter):
     ) -> tuple[str, ...]:
         delete_sql: str = (
             f"DELETE FROM {target} "
-            f"WHERE {cursor_column} >= '{cursor_start}' "
-            f"AND {cursor_column} < '{cursor_end}'"
+            f"WHERE {self.render_identifier(cursor_column)} >= '{cursor_start}' "
+            f"AND {self.render_identifier(cursor_column)} < '{cursor_end}'"
         )
         insert_stmts: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
         return (delete_sql, *insert_stmts)
@@ -1170,12 +1282,19 @@ class DuckDbBackedAdapter(BaseAdapter):
         unique_key: tuple[str, ...],
         source_columns: tuple[str, ...] = (),
     ) -> tuple[str, ...]:
-        join_condition: str = " AND ".join(f"__target.{k} = __source.{k}" for k in unique_key)
-        update_assignments: str = ", ".join(
-            f"{col} = __source.{col}" for col in source_columns if col not in unique_key
+        join_condition: str = " AND ".join(
+            f"__target.{self.render_identifier(k)} = __source.{self.render_identifier(k)}"
+            for k in unique_key
         )
-        insert_columns: str = ", ".join(source_columns)
-        insert_values: str = ", ".join(f"__source.{col}" for col in source_columns)
+        update_assignments: str = ", ".join(
+            f"{self.render_identifier(col)} = __source.{self.render_identifier(col)}"
+            for col in source_columns
+            if col not in unique_key
+        )
+        insert_columns: str = ", ".join(self.render_identifier(col) for col in source_columns)
+        insert_values: str = ", ".join(
+            f"__source.{self.render_identifier(col)}" for col in source_columns
+        )
         merge_sql: str = (
             f"MERGE INTO {target} AS __target USING ({sql}) AS __source ON {join_condition} "
         )
@@ -1187,16 +1306,23 @@ class DuckDbBackedAdapter(BaseAdapter):
     def render_add_columns(
         self, *, target: str, columns: tuple[ColumnInfo, ...]
     ) -> tuple[str, ...]:
-        return tuple(f"ALTER TABLE {target} ADD COLUMN {col.name} {col.type}" for col in columns)
+        return tuple(
+            f"ALTER TABLE {target} ADD COLUMN {self.render_identifier(col.name)} {col.type}"
+            for col in columns
+        )
 
     def render_drop_columns(self, *, target: str, column_names: tuple[str, ...]) -> tuple[str, ...]:
-        return tuple(f"ALTER TABLE {target} DROP COLUMN {col_name}" for col_name in column_names)
+        return tuple(
+            f"ALTER TABLE {target} DROP COLUMN {self.render_identifier(col_name)}"
+            for col_name in column_names
+        )
 
     def render_alter_column_types(
         self, *, target: str, columns: tuple[ColumnInfo, ...]
     ) -> tuple[str, ...]:
         return tuple(
-            f"ALTER TABLE {target} ALTER COLUMN {col.name} TYPE {col.type}" for col in columns
+            f"ALTER TABLE {target} ALTER COLUMN {self.render_identifier(col.name)} TYPE {col.type}"
+            for col in columns
         )
 
     def add_columns(
