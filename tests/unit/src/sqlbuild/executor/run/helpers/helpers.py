@@ -99,6 +99,9 @@ class FakeCursorAdapter:
     def execute(self, connection: Any, sql: str) -> Any:
         return connection.execute(sql)
 
+    def requires_derived_table_aliases(self) -> bool:
+        return False
+
 
 def build_name_test_adapter(adapter_name: str) -> DuckDbAdapter | BigQueryAdapter:
     if adapter_name == "bigquery":

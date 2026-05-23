@@ -171,7 +171,7 @@ ADAPTER_IDENTIFIER_RENDERING_TEST_CASES: list[AdapterIdentifierRenderingTestCase
         description="snowflake renders double-quoted loader identifiers",
         adapter_name=BuiltinAdapter.SNOWFLAKE.value,
         raw_identifier='order "id"',
-        expected_identifier='"order ""id"""',
+        expected_identifier='"ORDER ""ID"""',
     ),
     AdapterIdentifierRenderingTestCase(
         description="bigquery renders backtick-quoted loader identifiers",
@@ -241,7 +241,7 @@ ADAPTER_LOADER_ROWS_SELECT_TEST_CASES: list[AdapterLoaderRowsSelectTestCase] = [
     AdapterLoaderRowsSelectTestCase(
         description="snowflake renders values row select",
         adapter_name=BuiltinAdapter.SNOWFLAKE.value,
-        expected_fragments=("FROM (VALUES", 'AS __loader_rows("id", "status")'),
+        expected_fragments=("FROM (VALUES", 'AS __loader_rows("ID", "STATUS")'),
     ),
     AdapterLoaderRowsSelectTestCase(
         description="databricks renders values row select",

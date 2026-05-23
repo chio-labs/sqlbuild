@@ -1145,6 +1145,21 @@ class BigQueryAdapter(BaseAdapter):
 
         return "EXCEPT DISTINCT"
 
+    def render_create_fingerprint_table_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        from sqlbuild.compiler.fingerprints.main.create_table_sql import build_create_table_sql
+
+        return build_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        )
+
     def expression_inference_profile(self) -> ExpressionInferenceProfile:
         return ExpressionInferenceProfile(
             sqlglot_dialect=self.sqlglot_dialect(),

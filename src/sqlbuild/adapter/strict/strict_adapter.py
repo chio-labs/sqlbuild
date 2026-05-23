@@ -595,6 +595,16 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_create_fingerprint_table_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        """Render DDL that creates the fingerprint table when missing."""
+        ...
+
+    @abstractmethod
     def sqlglot_dialect(self) -> str | None:
         """Return the SQLGlot dialect name for this adapter, if any."""
         ...

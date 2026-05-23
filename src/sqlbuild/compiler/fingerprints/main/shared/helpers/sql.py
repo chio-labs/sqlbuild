@@ -57,7 +57,7 @@ def build_create_table_sql(
     string_type: str = render_framework_type(FrameworkType.STRING)
     timestamp_type: str = render_framework_type(FrameworkType.TIMESTAMP)
     return (
-        f"CREATE TABLE {qualified_name} ("
+        f"CREATE TABLE IF NOT EXISTS {qualified_name} ("
         f"{COLUMN_MODEL_NAME} {string_type} NOT NULL, "
         f"{COLUMN_TARGET_DATABASE} {string_type}, "
         f"{COLUMN_TARGET_SCHEMA} {string_type}, "
