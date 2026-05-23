@@ -38,16 +38,17 @@ from sqlbuild.executor.build.constants import (
 from sqlbuild.executor.build.helpers.blocking import block_downstream
 from sqlbuild.executor.build.helpers.end_audits import run_end_audits
 from sqlbuild.executor.build.helpers.source_audits import run_pending_source_audits
+from sqlbuild.executor.build.helpers.source_node import execute_build_source_node
 from sqlbuild.executor.build.models import (
     BuildIndexes,
     FunctionExecutionResult,
     NodeCompletion,
     SeedExecutionResult,
+    SourceLoadPlanEntry,
 )
 from sqlbuild.executor.custom.models import MaterializationResult
 from sqlbuild.executor.functions.constants import FUNCTION_ENTRY_MISSING_CODE
 from sqlbuild.executor.functions.main.execute import execute_function
-from sqlbuild.executor.load.main.execute import execute_source_load
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.run.main.execute import (
     execute_custom_entry,
@@ -335,8 +336,7 @@ class BuildScheduler:
             return True
 
         if key.resource_type == CompiledResourceType.SOURCE:
-            source_entry: SourceEntry | None = self._plan.source_map.get(key.name)
-            return source_entry is not None and source_entry.loader is not None
+            return key in self._indexes.source_load_entries_by_key
 
         if key.resource_type == CompiledResourceType.MODEL:
             if not self._run_audits:
@@ -403,33 +403,24 @@ class BuildScheduler:
         )
 
     def _execute_source_node(self, key: CompiledObjectKey, connection: Any) -> LoadExecutionResult:
-        source_entry: SourceEntry = self._plan.source_map[key.name]
-        loader_name: str = source_entry.loader or ""
-        loader_function: DiscoveredLoaderFunction = self._loader_functions_by_name[loader_name]
-        if self._on_progress is not None:
-            self._on_progress(f"source: {source_entry.name}")
-        if self._on_node_start is not None:
-            self._on_node_start(source_entry.name, ExecutionResourceKind.SOURCE)
-        start: float = time.monotonic()
-        result: LoadExecutionResult = execute_source_load(
-            source_entry=source_entry,
-            loader_function=loader_function,
+        return execute_build_source_node(
+            key=key,
+            plan=self._plan,
+            loader_functions_by_name=self._loader_functions_by_name,
+            loader_ref_entries=self._loader_ref_entries,
             adapter=self._adapter,
             connection=connection,
             run_id=self._run_id,
             environment=self._environment,
-            vars=self._effective_vars,
+            effective_vars=self._effective_vars,
             is_reload=self._loader_is_reload,
             start_cursor_ts=self._start_cursor_ts,
             end_cursor_ts=self._end_cursor_ts,
             start_cursor_int=self._start_cursor_int,
             end_cursor_int=self._end_cursor_int,
-            statement_recorder=StatementRecorder(),
-            loader_ref_entries=self._loader_ref_entries,
-            source_ref_entries=self._plan.source_map,
+            on_progress=self._on_progress,
+            on_node_start=self._on_node_start,
         )
-        duration: int = int((time.monotonic() - start) * 1000)
-        return dataclasses.replace(result, duration_ms=duration)
 
     def _execute_seed_node(self, key: CompiledObjectKey, connection: Any) -> SeedExecutionResult:
         seed_entry: SeedPlanEntry | None = self._indexes.seed_entries_by_key.get(key)
@@ -718,9 +709,13 @@ class BuildScheduler:
                     )
                 )
         elif key.resource_type == CompiledResourceType.SOURCE:
-            source_entry: SourceEntry | None = self._plan.source_map.get(key.name)
-            if source_entry is not None and source_entry.loader is not None:
-                self._load_results.append(skipped_load_result(source_entry))
+            load_entry: SourceLoadPlanEntry | None = self._indexes.source_load_entries_by_key.get(
+                key
+            )
+            if load_entry is not None:
+                self._load_results.append(
+                    skipped_load_result(self._plan.source_map[load_entry.name])
+                )
 
     def _skip_remaining(self) -> None:
         """Skip all nodes that were never dispatched."""

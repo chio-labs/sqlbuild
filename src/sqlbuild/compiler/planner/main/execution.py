@@ -35,10 +35,7 @@ from sqlbuild.compiler.planner.helpers.graph import (
     build_upstream_deps,
     topologically_order_keys,
 )
-from sqlbuild.compiler.planner.helpers.loader_dag import (
-    build_intermediate_source_map,
-    expand_selected_loader_dependencies,
-)
+from sqlbuild.compiler.planner.helpers.loader_dag import expand_selected_loader_dependencies
 from sqlbuild.compiler.planner.helpers.plan_entry import (
     build_model_materializations,
     build_path_index,
@@ -58,6 +55,10 @@ from sqlbuild.compiler.planner.helpers.resolve.refs import (
 from sqlbuild.compiler.planner.helpers.resolve.resolve import resolve_function_sql
 from sqlbuild.compiler.planner.helpers.selectors import resolve_selectors
 from sqlbuild.compiler.planner.helpers.source_deferral import build_source_read_map
+from sqlbuild.compiler.planner.helpers.source_load_nodes import (
+    build_source_load_entries,
+    build_source_load_map,
+)
 from sqlbuild.compiler.planner.helpers.sql_test_assembly import plan_test
 from sqlbuild.compiler.planner.helpers.warehouse_snapshot import gather_warehouse_snapshot
 from sqlbuild.compiler.planner.models import (
@@ -76,10 +77,7 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, PlanReason
-from sqlbuild.shared.types import (
-    ExecutionResourceKind,
-    ExternalSqlReferenceResolver,
-)
+from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -183,10 +181,10 @@ def build_execution_plan(
             deferred_targets=deferred_targets,
             selected_keys=selected_keys,
         )
-    source_map: dict[str, SourceEntry] = {
-        s.source_entry.name: s.source_entry for s in project.sources
-    }
-    source_map.update(build_intermediate_source_map(project=project, selected_keys=selected_keys))
+    source_map: dict[str, SourceEntry] = build_source_load_map(
+        project=project,
+        selected_keys=selected_keys,
+    )
     source_read_map: dict[str, SourceEntry] = (
         build_source_read_map(
             project=project,
@@ -342,33 +340,12 @@ def build_execution_plan(
         if seed.key in selected_keys
     ]
 
-    source_load_entries: list[SourceLoadPlanEntry] = []
-    key_for_source_load: CompiledObjectKey
-    for key_for_source_load in execution_order:
-        if key_for_source_load not in selected_keys:
-            continue
-        if key_for_source_load.resource_type != CompiledResourceType.SOURCE:
-            continue
-        source_entry: SourceEntry | None = source_map.get(key_for_source_load.name)
-        if source_entry is None or source_entry.loader is None:
-            continue
-        source_load_entries.append(
-            SourceLoadPlanEntry(
-                key=key_for_source_load,
-                name=source_entry.name,
-                loader=source_entry.loader,
-                target=source_entry.table or source_entry.name,
-                resource_kind=(
-                    ExecutionResourceKind.LOADER
-                    if source_entry.meta.get("sqlbuild_loader_node") is True
-                    else ExecutionResourceKind.SOURCE
-                ),
-                write_strategy=source_entry.write_strategy,
-                cursor_column=source_entry.cursor_column,
-                unique_key=source_entry.unique_key,
-                is_reload=reload_sources,
-            )
-        )
+    source_load_entries: tuple[SourceLoadPlanEntry, ...] = build_source_load_entries(
+        execution_order=execution_order,
+        selected_keys=selected_keys,
+        source_map=source_map,
+        is_reload=reload_sources,
+    )
 
     function_entries: list[FunctionPlanEntry] = [
         FunctionPlanEntry(
