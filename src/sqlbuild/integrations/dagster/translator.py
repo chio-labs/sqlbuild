@@ -35,7 +35,15 @@ class SqlBuildDagsterTranslator:
             "sqlbuild_kind": node.get("kind"),
             "sqlbuild_selector": node.get("name"),
         }
-        for key in ("path", "target", "description", "columns", "language", "return_kind"):
+        for key in (
+            "path",
+            "target",
+            "description",
+            "columns",
+            "language",
+            "return_kind",
+            "loader",
+        ):
             if key in node:
                 metadata[key] = node[key]
         return metadata

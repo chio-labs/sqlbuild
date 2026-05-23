@@ -24,6 +24,7 @@ from sqlbuild.compiler.compile.types import (
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
+    DiscoveredLoaderFunction,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
@@ -37,6 +38,12 @@ from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 
 
 def build_dag_artifact_test_graph() -> ProjectGraph:
+    def shared_order_feed() -> list[dict[str, object]]:
+        return []
+
+    def raw_orders_loader() -> list[dict[str, object]]:
+        return []
+
     source_key: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.SOURCE, "raw_orders")
     seed_key: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.SEED, "country_codes")
     function_key: CompiledObjectKey = CompiledObjectKey(
@@ -53,6 +60,7 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
         name="raw_orders",
         schema="raw",
         table="orders",
+        loader="raw_orders_loader",
         description="Raw order events",
         columns=(SourceColumnEntry(name="order_id", type="INTEGER"),),
     )
@@ -90,6 +98,22 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
         effective_environment_name="dev",
         effective_connection={},
         effective_vars={},
+        effective_environment_schema="raw",
+        loader_functions=(
+            DiscoveredLoaderFunction(
+                file_path=Path("loaders/orders.py"),
+                relative_path=Path("loaders/orders.py"),
+                name="shared_order_feed",
+                function=shared_order_feed,
+            ),
+            DiscoveredLoaderFunction(
+                file_path=Path("loaders/orders.py"),
+                relative_path=Path("loaders/orders.py"),
+                name="raw_orders_loader",
+                function=raw_orders_loader,
+                depends_on=(shared_order_feed,),
+            ),
+        ),
         sources=(
             CompiledSource(
                 key=source_key,

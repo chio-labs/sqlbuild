@@ -10,6 +10,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
+    CompiledProject,
     CompiledRelationTarget,
     CompiledSeed,
     CompiledSource,
@@ -26,6 +27,7 @@ from sqlbuild.compiler.dag.models import (
     DagNode,
     DagTarget,
 )
+from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.spec.models.schema import SchemaColumn
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
@@ -38,6 +40,10 @@ def build_dag_artifact(*, graph: ProjectGraph, project_name: str) -> DagArtifact
 
     nodes: tuple[DagNode, ...] = (
         *(_build_source_node(source) for source in graph.project.sources),
+        *(
+            _build_loader_node(graph.project, loader, source_by_loader=_source_by_loader(graph))
+            for loader in graph.project.loader_functions
+        ),
         *(_build_seed_node(seed) for seed in graph.project.seeds),
         *(_build_function_node(function) for function in graph.project.functions),
         *(_build_model_node(model) for model in graph.project.models),
@@ -75,6 +81,34 @@ def _build_source_node(source: CompiledSource) -> DagNode:
         description=entry.description,
         meta=entry.meta,
         columns=tuple(_source_column(column) for column in entry.columns),
+    )
+
+
+def _build_loader_node(
+    project: CompiledProject,
+    loader: DiscoveredLoaderFunction,
+    *,
+    source_by_loader: dict[str, SourceEntry],
+) -> DagNode:
+    entry: SourceEntry = source_by_loader.get(loader.name) or _loader_to_source_entry(
+        project=project, loader=loader
+    )
+    target: DagTarget = DagTarget(
+        database=entry.database,
+        schema=entry.schema,
+        name=entry.table or entry.name,
+        qualified_name=_qualified_name(entry.database, entry.schema, entry.table or entry.name),
+    )
+    return DagNode(
+        id=_loader_node_id(loader.name),
+        kind="loader",
+        name=loader.name,
+        asset_key=(loader.name,),
+        target=target,
+        path=str(loader.relative_path),
+        meta=entry.meta,
+        columns=tuple(_source_column(column) for column in entry.columns),
+        loader=loader.name,
     )
 
 
@@ -137,7 +171,39 @@ def _build_edges(graph: ProjectGraph) -> tuple[DagEdge, ...]:
         dep_key: CompiledObjectKey
         for dep_key in dep_keys:
             edges.append(DagEdge(from_id=_node_id(dep_key), to_id=_node_id(key)))
+    edges.extend(_build_loader_edges(graph))
     return tuple(sorted(edges, key=lambda edge: (edge.from_id, edge.to_id)))
+
+
+def _build_loader_edges(graph: ProjectGraph) -> tuple[DagEdge, ...]:
+    source_by_loader: dict[str, SourceEntry] = _source_by_loader(graph)
+    loader_name_by_function: dict[object, str] = {
+        loader.function: loader.name for loader in graph.project.loader_functions
+    }
+    edges: list[DagEdge] = []
+    loader: DiscoveredLoaderFunction
+    for loader in graph.project.loader_functions:
+        for dependency in loader.depends_on:
+            dependency_name: str = loader_name_by_function[dependency]
+            edges.append(
+                DagEdge(
+                    from_id=_loader_node_id(dependency_name),
+                    to_id=_loader_node_id(loader.name),
+                )
+            )
+        if loader.name in source_by_loader:
+            edges.append(
+                DagEdge(
+                    from_id=_loader_node_id(loader.name),
+                    to_id=_node_id(
+                        CompiledObjectKey(
+                            CompiledResourceType.SOURCE,
+                            source_by_loader[loader.name].name,
+                        )
+                    ),
+                )
+            )
+    return tuple(edges)
 
 
 def _build_checks(graph: ProjectGraph) -> tuple[DagCheck, ...]:
@@ -252,6 +318,49 @@ def _source_asset_key(entry: SourceEntry) -> tuple[str, ...]:
 
 def _node_id(key: CompiledObjectKey) -> str:
     return f"{key.resource_type}:{key.name}"
+
+
+def _loader_node_id(loader_name: str) -> str:
+    return f"loader:{loader_name}"
+
+
+def _source_by_loader(graph: ProjectGraph) -> dict[str, SourceEntry]:
+    return {
+        source.source_entry.loader: source.source_entry
+        for source in graph.project.sources
+        if source.source_entry.loader is not None
+    }
+
+
+def _loader_to_source_entry(
+    *, project: CompiledProject, loader: DiscoveredLoaderFunction
+) -> SourceEntry:
+    database: str | None = project.effective_environment_database
+    schema: str | None = project.effective_environment_schema
+    table: str = f"__loader__{loader.name}"
+    if loader.target is not None:
+        parts: tuple[str, ...] = tuple(part for part in loader.target.split(".") if part)
+        if len(parts) == 1:
+            table = parts[0]
+        elif len(parts) == 2:
+            schema, table = parts
+        elif len(parts) == 3:
+            database, schema, table = parts
+        else:
+            table = loader.target
+    return SourceEntry(
+        name=loader.name,
+        database=database,
+        schema=schema,
+        table=table,
+        loader=loader.name,
+        write_strategy=loader.write_strategy,
+        cursor_column=loader.cursor_column,
+        unique_key=loader.unique_key,
+        contract=loader.contract,
+        meta={"sqlbuild_loader_node": True},
+        columns=loader.columns,
+    )
 
 
 def _schema_column(column: SchemaColumn) -> DagColumn:
