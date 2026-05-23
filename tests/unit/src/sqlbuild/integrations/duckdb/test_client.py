@@ -13,6 +13,7 @@ from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.unit.src.sqlbuild.integrations.duckdb._test_types import (
     DuckDbExpressionInferenceProfileTestCase,
     DuckDbRenderCursorBoundLiteralTestCase,
+    DuckDbRenderIdentifierTestCase,
     DuckDbRenderTableFunctionTestCase,
 )
 
@@ -56,6 +57,34 @@ TEST_CASES: list[DuckDbRenderCursorBoundLiteralTestCase] = [
         expected_literal="42",
     ),
 ]
+
+DUCKDB_RENDER_IDENTIFIER_TEST_CASES: list[DuckDbRenderIdentifierTestCase] = [
+    DuckDbRenderIdentifierTestCase(
+        description="quotes lowercase identifiers without changing case",
+        name="event_id",
+        expected_identifier='"event_id"',
+    ),
+    DuckDbRenderIdentifierTestCase(
+        description="escapes embedded double quotes",
+        name='event"id',
+        expected_identifier='"event""id"',
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    DUCKDB_RENDER_IDENTIFIER_TEST_CASES,
+    ids=[case.description for case in DUCKDB_RENDER_IDENTIFIER_TEST_CASES],
+)
+def test_given_identifier_when_rendering_then_duckdb_quotes_identifier(
+    test_case: DuckDbRenderIdentifierTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+
+    identifier: str = adapter.render_identifier(test_case.name)
+
+    assert identifier == test_case.expected_identifier
 
 
 @pytest.mark.parametrize(

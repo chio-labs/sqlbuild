@@ -1,12 +1,22 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from sqlbuild.integrations.postgres.client import PostgresAdapter
 from tests.integration.src.sqlbuild.integrations.postgres.helpers import build_unique_schema_name
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    test_dir: Path = Path(__file__).resolve().parent
+    for item in items:
+        if not Path(str(item.path)).resolve().is_relative_to(test_dir):
+            continue
+        item.add_marker(pytest.mark.real_warehouse)
+        item.add_marker(pytest.mark.postgres)
 
 
 @pytest.fixture(scope="session")

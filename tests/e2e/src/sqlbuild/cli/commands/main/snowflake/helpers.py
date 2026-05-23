@@ -55,7 +55,8 @@ def build_snowflake_project_toml(*, project_name: str, schema_name: str) -> str:
         'database = "${ENV:SQB_TEST_SNOWFLAKE_DATABASE}"\n\n'
         "[environments.dev]\n"
         f'database = "{database_name}"\n'
-        f'schema = "{schema_name}"\n\n'
+        f'schema = "{schema_name}"\n'
+        'defer_sources_to = "dev"\n\n'
         "[defaults]\n"
         'materialized = "table"\n'
     )

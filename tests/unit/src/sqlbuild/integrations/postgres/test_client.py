@@ -5,12 +5,15 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.adapter.shared.models import ColumnInfo, SchemaDiffResult, StatementRecorder
+from sqlbuild.compiler.compile.models.core import FunctionArgument
 from sqlbuild.integrations.postgres.client import PostgresAdapter
 from tests.unit.src.sqlbuild.integrations.postgres._test_types import (
     PostgresAdapterDefaultsTestCase,
     PostgresDescribeRelationTestCase,
     PostgresLoadSeedTestCase,
+    PostgresRenderCreateFunctionTestCase,
     PostgresRenderCreateTableAsTestCase,
+    PostgresRenderIdentifierTestCase,
     PostgresRenderRenameTestCase,
     PostgresRenderSwapTestCase,
     PostgresSchemaDiffTestCase,
@@ -55,6 +58,37 @@ def test_given_table_target_when_rendering_create_then_postgres_drops_before_cre
     statements: tuple[str, ...] = adapter.render_create_table_as(
         target=test_case.target,
         sql=test_case.sql,
+    )
+
+    assert statements == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresRenderCreateFunctionTestCase(
+            description="renders SQL function with explicit language",
+            expected_statements=(
+                "CREATE OR REPLACE FUNCTION public.is_completed_order(order_status TEXT)\n"
+                "RETURNS BOOLEAN\n"
+                "LANGUAGE SQL AS $$\n"
+                "SELECT order_status = 'completed'\n"
+                "$$",
+            ),
+        )
+    ],
+    ids=["renders SQL function with explicit language"],
+)
+def test_given_sql_function_when_rendering_create_then_postgres_declares_language(
+    test_case: PostgresRenderCreateFunctionTestCase,
+) -> None:
+    adapter: PostgresAdapter = PostgresAdapter()
+
+    statements: tuple[str, ...] = adapter.render_create_function(
+        target="public.is_completed_order",
+        arguments=(FunctionArgument(name="order_status", type="TEXT"),),
+        returns="BOOLEAN",
+        body_sql="SELECT order_status = 'completed'",
     )
 
     assert statements == test_case.expected_statements
@@ -198,6 +232,34 @@ LOAD_SEED_TEST_CASES: list[PostgresLoadSeedTestCase] = [
         expected_rows=[],
     ),
 ]
+
+POSTGRES_RENDER_IDENTIFIER_TEST_CASES: list[PostgresRenderIdentifierTestCase] = [
+    PostgresRenderIdentifierTestCase(
+        description="quotes lowercase identifiers without changing case",
+        name="event_id",
+        expected_identifier='"event_id"',
+    ),
+    PostgresRenderIdentifierTestCase(
+        description="escapes embedded double quotes",
+        name='event"id',
+        expected_identifier='"event""id"',
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    POSTGRES_RENDER_IDENTIFIER_TEST_CASES,
+    ids=[case.description for case in POSTGRES_RENDER_IDENTIFIER_TEST_CASES],
+)
+def test_given_identifier_when_rendering_then_postgres_quotes_identifier(
+    test_case: PostgresRenderIdentifierTestCase,
+) -> None:
+    adapter: PostgresAdapter = PostgresAdapter()
+
+    identifier: str = adapter.render_identifier(test_case.name)
+
+    assert identifier == test_case.expected_identifier
 
 
 @pytest.mark.parametrize(

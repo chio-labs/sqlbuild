@@ -1029,6 +1029,41 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC036",),
     ),
     CheckPathsTestCase(
+        description="reports first class adapter BaseAdapter method alias",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/integrations/example/client.py": dedent(
+                """
+                from sqlbuild.adapter.base.base_adapter import BaseAdapter
+
+
+                class ExampleAdapter(BaseAdapter):
+                    render_identifier = BaseAdapter.render_identifier
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("SC037",),
+    ),
+    CheckPathsTestCase(
+        description="reports first class adapter super delegation in contract method",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/integrations/example/client.py": dedent(
+                """
+                from sqlbuild.adapter.base.base_adapter import BaseAdapter
+
+
+                class ExampleAdapter(BaseAdapter):
+                    def render_identifier(self, name: str) -> str:
+                        return super().render_identifier(name)
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("SC038",),
+    ),
+    CheckPathsTestCase(
         description="allows raw built-in names outside raise and assert contexts",
         repo_files=compliant_repo_files()
         | {
