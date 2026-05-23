@@ -31,6 +31,13 @@ class SnowflakeRenderCloneTestCase:
 
 
 @dataclass(frozen=True)
+class SnowflakeRenderIdentifierTestCase:
+    description: str
+    name: str
+    expected_identifier: str
+
+
+@dataclass(frozen=True)
 class SnowflakeSchemaDiffTestCase:
     description: str
     expected_result: SchemaDiffResult

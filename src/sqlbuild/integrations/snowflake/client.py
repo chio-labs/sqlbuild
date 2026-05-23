@@ -60,6 +60,11 @@ class SnowflakeAdapter(BaseAdapter):
     sqlglot_dialect_name: ClassVar[str | None] = "snowflake"
     max_identifier_length: ClassVar[int] = 255
 
+    def render_identifier(self, name: str) -> str:
+        """Render a logical identifier using Snowflake's unquoted uppercase semantics."""
+
+        return '"' + name.upper().replace('"', '""') + '"'
+
     def render_loader_logical_type(self, type_name: LoaderLogicalType) -> str:
         match type_name:
             case LoaderLogicalType.BOOLEAN:
