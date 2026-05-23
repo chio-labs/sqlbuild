@@ -24,6 +24,7 @@ from tests.unit.src.sqlbuild.integrations.snowflake._test_types import (
     SnowflakeQueryColumnNamesTestCase,
     SnowflakeRenderCloneTestCase,
     SnowflakeRenderCursorBoundLiteralTestCase,
+    SnowflakeRenderIdentifierTestCase,
     SnowflakeRenderPythonFunctionTestCase,
     SnowflakeRenderTableFunctionTestCase,
     SnowflakeSchemaDiffTestCase,
@@ -111,6 +112,19 @@ SNOWFLAKE_RENDER_CLONE_TEST_CASES: list[SnowflakeRenderCloneTestCase] = [
     ),
 ]
 
+SNOWFLAKE_RENDER_IDENTIFIER_TEST_CASES: list[SnowflakeRenderIdentifierTestCase] = [
+    SnowflakeRenderIdentifierTestCase(
+        description="uppercases logical lowercase identifiers before quoting",
+        name="event_id",
+        expected_identifier='"EVENT_ID"',
+    ),
+    SnowflakeRenderIdentifierTestCase(
+        description="escapes quotes after applying Snowflake uppercase semantics",
+        name='event"id',
+        expected_identifier='"EVENT""ID"',
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -145,6 +159,21 @@ def test_given_clone_request_when_rendering_then_snowflake_uses_expected_clone_s
 
     assert adapter.supports_zero_copy_clone() is test_case.expected_supports_zero_copy
     assert statements == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SNOWFLAKE_RENDER_IDENTIFIER_TEST_CASES,
+    ids=[case.description for case in SNOWFLAKE_RENDER_IDENTIFIER_TEST_CASES],
+)
+def test_given_identifier_when_rendering_then_snowflake_quotes_uppercase_identifier(
+    test_case: SnowflakeRenderIdentifierTestCase,
+) -> None:
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+
+    identifier: str = adapter.render_identifier(test_case.name)
+
+    assert identifier == test_case.expected_identifier
 
 
 @pytest.mark.parametrize(
