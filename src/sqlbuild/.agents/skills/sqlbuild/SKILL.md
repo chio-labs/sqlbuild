@@ -24,6 +24,7 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/adapters/databricks`
 - `concepts/adapters/postgres`
 - `concepts/sources`
+- `concepts/loaders`
 - `concepts/seeds`
 - `concepts/models`
 - `concepts/interpolation`
@@ -39,12 +40,14 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/environment-diffs`
 - `integrations/dagster`
 - `integrations/dagster-reference`
+- `integrations/dlt`
 - `cli/compile`
 - `cli/plan`
 - `cli/build`
 - `cli/run`
 - `cli/test`
 - `cli/audit`
+- `cli/load`
 - `cli/seed`
 - `cli/clone`
 - `cli/diff`
@@ -167,6 +170,18 @@ def grant_target(target):
 
 #### Extensibility
 
+- **Source loaders:** Load external data into source tables with Python functions. Supports incremental write strategies (table, append, delete_insert, merge), cursor-based loading, loader-to-loader dependencies, and concurrent execution. Loaders run automatically during builds.
+
+```python
+from sqlbuild.loaders import loader
+from sqlbuild.executor.load.models import LoaderContext
+
+@loader
+def raw_orders(ctx: LoaderContext):
+    if ctx.current_cursor_value is None:
+        return fetch_all_orders()
+    return fetch_orders_since(ctx.current_cursor_value)
+```
 - **User-defined functions:** SQL and Python UDFs managed as part of your project. Functions participate in the DAG - definition changes trigger rebuilds of dependent models. Table functions provide predicate-pushdown-friendly alternatives to final-layer views.
 - **Custom materializations:** Write materialization logic in Python with full framework integration - including audit hooks, schema change signals, and query change detection.
 
@@ -185,7 +200,10 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
 
 ### What's next
 
+- **Virtual environments** - Pointer-based environment promotion without recomputing models
+- **Stateful execution** - First-party partition state tracking and interval-aware scheduling
 - **Python models** - Define models in Python using Pandas, PySpark, Snowpark, or BigFrames for transformations that don't fit naturally in SQL, with the same testing and audit guarantees as SQL models
+- **Broader adapter support** - ClickHouse and Microsoft SQL Server
 
 ### Quick links
 
@@ -693,6 +711,10 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | Custom materializations | Python with full framework hooks | Jinja-based | Python-based custom model kinds |
 | **dbt** | | | |
 | dbt interop | Run alongside dbt - reads manifest, no migration | N/A | Jinja compatibility layer plus own macro system |
+| **Sources** | | | |
+| Source loaders | Python `@loader` functions with table/append/delete_insert/merge strategies | No (external to dbt) | No (external to SQLMesh) |
+| Auto-load during builds | Managed sources loaded before dependent models | No | No |
+| Source deferral | `defer_sources_to` reads source data from another environment | No | No |
 | **Other** | | | |
 | Reference syntax | `__ref()` - parses as valid SQL | `{{ ref() }}` - Jinja template | `model_name` with dependency tracking |
 | Adapters | DuckDB, MotherDuck, Snowflake, BigQuery, Databricks, PostgreSQL | 30+ (community adapters) | DuckDB, Snowflake, BigQuery, Databricks, Spark, Redshift, Postgres, Trino, MySQL |
@@ -710,9 +732,10 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 
 ### Not yet in SQLBuild
 
-- **Python models** - Pandas, PySpark, Snowpark, BigFrames (in active development)
-- **First-party partition state tracking** - opt-in stateful partition tracking (currently possible via custom materializations, first-party support coming soon)
-- **Broader adapter support** - ClickHouse and Microsoft SQL Server are coming soon
+- **Virtual environments** - pointer-based environment promotion without recomputing models
+- **Stateful execution** - first-party partition state tracking and interval-aware scheduling (currently possible via custom materializations)
+- **Python models** - Pandas, PySpark, Snowpark, BigFrames
+- **Broader adapter support** - ClickHouse and Microsoft SQL Server
 
 ## Project Configuration
 
@@ -795,6 +818,7 @@ Environments let you build to different schemas, databases, or connections from 
 | `database` | Target database for all models in this environment |
 | `connection` | Override the base connection config |
 | `vars` | Environment-specific project variables |
+| `defer_sources_to` | Environment name to read managed source data from (see [Loaders](/concepts/loaders#source-deferral)) |
 | `clone` | Clone policy (see below) |
 
 ```toml
@@ -896,6 +920,7 @@ sqlglot = true
 query_change_tracking = true
 sql_validation = true
 concurrency = 1
+auto_load_sources = true
 table_promotion_mode = "staged"
 default_audit_severity = "warn"
 default_audit_run_scope = "final"
@@ -907,6 +932,7 @@ default_audit_run_scope = "final"
 | `query_change_tracking` | `true` | Track query fingerprints for change detection |
 | `sql_validation` | `true` | Validate SQL syntax during compilation |
 | `concurrency` | `1` | Maximum parallel model execution (currently serial only) |
+| `auto_load_sources` | `true` | Automatically run source loaders before building dependent models during `sqb build` and `sqb run`. See [Loaders](/concepts/loaders). |
 | `table_promotion_mode` | adapter default | `staged` (CTAS to staging, audit, then promote) or `direct` (CTAS directly to target) |
 | `default_audit_severity` | `warn` | Default severity for audits: `warn` or `error` |
 | `default_audit_run_scope` | `final` | Default run scope for audits: `final` or `delta_and_final` |
@@ -1572,6 +1598,26 @@ For expression sources, SQLBuild probes the expression's output columns and buil
 
 You can explicitly set `type_enforcement: false` on a source to disable casting even when column types are declared.
 
+### Managed sources (loaders)
+
+Sources can be loaded by Python functions instead of pointing at existing tables or inline expressions. Add a `loader` field to bind a source to a loader function, and SQLBuild will call it to populate the source table:
+
+```yaml
+sources:
+  - name: raw_customers
+    loader: raw_customers
+    write_strategy: table
+    columns:
+      - name: id
+        type: INTEGER
+      - name: name
+        type: VARCHAR
+```
+
+Managed sources support incremental write strategies (`table`, `append`, `delete_insert`, `merge`), cursor-based loading, and concurrent execution.
+
+See [Loaders](/concepts/loaders) for the full guide on writing loader functions, write strategies, the loader context API, and auto-load behavior during builds.
+
 ### Config reference
 
 | Field | Description |
@@ -1581,11 +1627,356 @@ You can explicitly set `type_enforcement: false` on a source to disable casting 
 | `schema` | Target schema (optional) |
 | `table` | Target table name (defaults to `name` if omitted) |
 | `expression` | Inline SQL expression (alternative to table reference) |
+| `loader` | Name of a loader function to bind (see [Loaders](/concepts/loaders)) |
+| `write_strategy` | How the loader writes data: `table`, `append`, `delete_insert`, or `merge` |
+| `cursor_column` | Column for incremental cursor tracking (required for `delete_insert` and `merge`) |
+| `unique_key` | Merge key column(s) (required for `merge`) |
 | `description` | Human-readable description |
 | `type_enforcement` | Override implicit type enforcement (`true`/`false`). Defaults to `true` when any column declares a type. |
 | `contract` | `enforced` or `none`. When enforced, downstream models validate configured column references against source columns. |
 | `columns` | Column declarations with optional types and audits |
 | `audits` | Source-level audits |
+
+## Loaders
+
+Source: `concepts/loaders.mdx`
+
+Load external data into source tables with Python functions.
+
+Loaders are Python functions that load data into source tables. They replace expression sources and manual ETL scripts with code that lives inside your project, runs as part of the build, and supports incremental write strategies.
+
+### How it works
+
+1. Write a Python function under `loaders/` decorated with `@loader`
+2. Bind it to a source in `sources/*.yml` with the `loader` field
+3. SQLBuild calls the function, writes returned rows to a staging table, then applies the configured write strategy to the target
+
+Loaders participate in the build lifecycle. When `sqb build` runs, managed sources are loaded before any dependent model is materialized.
+
+### Defining a loader
+
+Place Python files under `loaders/` in your project directory. Each file can contain one or more loader functions:
+
+```python
+# loaders/raw_sources.py
+from sqlbuild.loaders import loader
+from sqlbuild.executor.load.models import LoaderContext
+
+@loader
+def raw_customers(ctx: LoaderContext):
+    return [
+        {"id": 1, "name": "Leslie Knope", "email": "leslie@pawnee.gov"},
+        {"id": 2, "name": "Ron Swanson", "email": "ron@pawnee.gov"},
+    ]
+```
+
+The function receives a `LoaderContext` and returns rows as a list of dicts, an iterator of dicts, or `None` for self-managed loaders.
+
+### Binding to a source
+
+Connect the loader to a source in `sources/*.yml`:
+
+```yaml
+sources:
+  - name: raw_customers
+    loader: raw_customers
+    write_strategy: table
+    columns:
+      - name: id
+        type: INTEGER
+      - name: name
+        type: VARCHAR
+      - name: email
+        type: VARCHAR
+```
+
+The `loader` field references the function name. The source is now a **managed source** - SQLBuild owns both the loading and the schema.
+
+Models reference managed sources the same way as any other source:
+
+```sql
+SELECT id, name FROM __source("raw_customers")
+```
+
+### Write strategies
+
+The `write_strategy` field controls how returned rows are written to the target table.
+
+#### table
+
+Full replace. The target is dropped and recreated from the loader output on every run.
+
+```yaml
+sources:
+  - name: raw_countries
+    loader: countries
+    write_strategy: table
+    columns:
+      - name: country_id
+        type: INTEGER
+      - name: country_code
+        type: VARCHAR
+```
+
+#### append
+
+Insert all returned rows into the target. No deduplication.
+
+```yaml
+sources:
+  - name: raw_webhook_events
+    loader: webhook_events
+    write_strategy: append
+    columns:
+      - name: event_id
+        type: INTEGER
+      - name: event_name
+        type: VARCHAR
+```
+
+#### delete_insert
+
+Delete rows in the cursor range, then insert replacements. Requires `cursor_column`.
+
+```yaml
+sources:
+  - name: raw_order_events
+    loader: order_events
+    write_strategy: delete_insert
+    cursor_column: event_at
+    columns:
+      - name: event_id
+        type: INTEGER
+      - name: event_at
+        type: TIMESTAMP
+      - name: amount_cents
+        type: INTEGER
+```
+
+The loader receives `ctx.current_cursor_value` with the current `MAX(cursor_column)` from the target, so it can fetch only new or updated data:
+
+```python
+@loader
+def order_events(ctx: LoaderContext):
+    if ctx.current_cursor_value is None:
+        return fetch_all_events()
+    return fetch_events_since(ctx.current_cursor_value)
+```
+
+#### merge
+
+Upsert based on `unique_key`. Requires both `unique_key` and `cursor_column`.
+
+```yaml
+sources:
+  - name: raw_customers
+    loader: customers
+    write_strategy: merge
+    unique_key: customer_id
+    cursor_column: updated_at
+    columns:
+      - name: customer_id
+        type: INTEGER
+      - name: plan_name
+        type: VARCHAR
+      - name: updated_at
+        type: TIMESTAMP
+```
+
+Existing rows matching the unique key are updated; new rows are inserted.
+
+### Self-managed loaders
+
+If a loader returns `None`, SQLBuild skips its row-writing pipeline. The loader is responsible for writing data to the target itself, using whatever approach makes sense - `ctx.execute_sql()`, an external library, a subprocess, or anything else:
+
+```python
+@loader
+def raw_status(ctx: LoaderContext):
+    ctx.execute_sql(f"DROP TABLE IF EXISTS {ctx.target}")
+    ctx.execute_sql(
+        f"CREATE TABLE {ctx.target} AS "
+        "SELECT 1 AS status_id, 'loaded' AS status_name"
+    )
+```
+
+Self-managed loaders must not declare a `write_strategy` in the source YAML. They are useful when you want to use adapter-specific SQL (e.g. `COPY INTO`, external tables), call an external ingestion tool like [dlt](/integrations/dlt), or handle writes in a way that doesn't fit the dict-return pattern.
+
+### Loader context
+
+Every loader function receives a `LoaderContext` as its first argument. It provides access to the target relation, cursor state, environment, and helper methods.
+
+#### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `target` | `str` | Fully-qualified target relation name |
+| `target_database` | `str \| None` | Target database |
+| `target_schema` | `str \| None` | Target schema |
+| `target_name` | `str` | Unqualified target table name |
+| `current_cursor_value` | `object \| None` | Current `MAX(cursor_column)` from the target, or `None` if the table does not exist or has no cursor column |
+| `run_id` | `str` | Unique identifier for this execution run |
+| `environment` | `str \| None` | Active environment name |
+| `vars` | `dict` | Project variables (merged from project, environment, and local config) |
+| `is_reload` | `bool` | `True` when `--reload` was passed |
+| `start_cursor_ts` | `datetime \| None` | Timestamp cursor start override from `--start-cursor-ts` |
+| `end_cursor_ts` | `datetime \| None` | Timestamp cursor end override from `--end-cursor-ts` |
+| `start_cursor_int` | `int \| None` | Integer cursor start override from `--start-cursor-int` |
+| `end_cursor_int` | `int \| None` | Integer cursor end override from `--end-cursor-int` |
+| `adapter` | `BaseAdapter` | The database adapter instance |
+| `connection` | `object` | The active database connection |
+| `logger` | `Logger` | Python logger scoped to the loader |
+
+#### Methods
+
+| Method | Description |
+|--------|-------------|
+| `execute_sql(sql)` | Execute a SQL statement against the connection |
+| `query(sql)` | Execute a SQL query and return the cursor |
+| `log(message)` | Log a message to the execution lifecycle output |
+| `qualify_name(name)` | Return a fully-qualified relation name in the target database/schema |
+| `loader(loader_fn)` | Return a `LoaderRelationRef` for an upstream loader dependency |
+| `source(source_name)` | Return a `LoaderRelationRef` for a project source by YAML name |
+
+#### LoaderRelationRef
+
+Returned by `ctx.loader()` and `ctx.source()`. Provides access to an upstream relation:
+
+| Property / Method | Description |
+|-------------------|-------------|
+| `target` | Fully-qualified relation name |
+| `current_cursor_value` | Current `MAX(cursor_column)` from the relation |
+| `max(column)` | Return the `MAX` of any column from the relation |
+
+### Loader dependencies
+
+Loaders can depend on other loaders using `depends_on`. Dependencies are executed first, and their target relations are available via `ctx.loader()`:
+
+```python
+from sqlbuild.loaders import loader
+from sqlbuild.executor.load.models import LoaderContext
+
+@loader
+def raw_accounts(ctx: LoaderContext):
+    return [
+        {"account_id": 1, "account_name": "Pawnee Parks"},
+        {"account_id": 2, "account_name": "Eagleton"},
+    ]
+
+@loader(depends_on=[raw_accounts])
+def raw_account_metrics(ctx: LoaderContext):
+    accounts = ctx.loader(raw_accounts)
+    rows = ctx.query(f"SELECT account_id FROM {accounts.target}")
+    return [
+        {"account_id": row[0], "metric": "active"}
+        for row in rows.fetchall()
+    ]
+```
+
+Dependencies form a DAG. SQLBuild schedules loaders in topological order and executes independent loaders concurrently when `--concurrency` is set.
+
+Intermediate loaders (those referenced only via `depends_on` without a source binding) are given synthetic source entries and write to `__loader__<name>` tables by default. Use the `target` parameter on the decorator to override:
+
+```python
+@loader(target="staging.shared_accounts")
+def raw_accounts(ctx: LoaderContext):
+    ...
+```
+
+### Decorator parameters
+
+The `@loader` decorator accepts optional parameters that can also be set in the source YAML. When both are specified, the YAML takes precedence.
+
+| Parameter | Description |
+|-----------|-------------|
+| `depends_on` | List of loader functions this loader depends on |
+| `target` | Override the target relation name (can include schema or database) |
+| `write_strategy` | `table`, `append`, `delete_insert`, or `merge` |
+| `cursor_column` | Column used for incremental cursor tracking |
+| `unique_key` | Column(s) used as the merge key (string or list of strings) |
+| `columns` | Column specifications with name, type, nullable, and description |
+| `contract` | `enforced` or `none` |
+
+### Auto-load during builds
+
+By default, `sqb build` and `sqb run` automatically load managed sources before building dependent models. This is controlled by the `auto_load_sources` setting:
+
+```toml
+[settings]
+auto_load_sources = true   # default
+```
+
+You can also control this per-run with CLI flags:
+
+```bash
+# Explicitly load sources before building
+sqb build --load
+
+# Skip source loading
+sqb build --no-load
+
+# Reload sources (passes is_reload=True to loaders)
+sqb build --reload
+```
+
+When `--reload` is passed, `ctx.is_reload` is `True` in the loader function. This lets loaders implement different behavior for full reloads versus normal incremental loads.
+
+### Source deferral
+
+When using environments, loaders write data into the active environment. But models may need to read source data from a different environment (e.g. reading production data while developing in dev). The `defer_sources_to` field controls this:
+
+```toml
+[environments.dev]
+schema = "dev"
+defer_sources_to = "prod"
+
+[environments.prod]
+schema = "prod"
+```
+
+With this config, models in the `dev` environment read managed source data from `prod` schema, even though `sqb load` writes to `dev`. This prevents accidentally reading empty or partial source tables during development.
+
+If an environment uses managed sources but does not declare `defer_sources_to`, SQLBuild raises an error rather than guessing.
+
+### Schema evolution
+
+When a loader returns rows with columns not present in the existing target table, SQLBuild detects the schema change and adds the new columns automatically. Type mismatches between the staging table and the existing target raise an error.
+
+### Project structure
+
+```
+my-project/
+  loaders/
+    raw_sources.py          # loader functions
+    api_sources.py           # more loader functions
+  sources/
+    raw.yml                  # source declarations with loader bindings
+  models/
+    staging/
+      stg_customers.sql      # __source("raw_customers")
+```
+
+SQLBuild discovers all `.py` files under `loaders/` recursively (excluding `__init__.py` and files starting with `_`). Each file is scanned for functions decorated with `@loader`.
+
+### Config reference
+
+#### Source YAML fields for managed sources
+
+| Field | Description |
+|-------|-------------|
+| `loader` | Name of the loader function to bind |
+| `write_strategy` | `table`, `append`, `delete_insert`, or `merge` |
+| `cursor_column` | Column for incremental cursor tracking (required for `delete_insert` and `merge`) |
+| `unique_key` | Merge key column(s) (required for `merge`) |
+| `columns` | Column declarations with types |
+| `contract` | `enforced` or `none` |
+
+#### Validation rules
+
+- `append` cannot have `unique_key`
+- `merge` requires `unique_key`
+- `table` cannot have `cursor_column` or `unique_key`
+- `delete_insert` requires `cursor_column` and cannot have `unique_key`
+- `cursor_column` requires one of `append`, `delete_insert`, or `merge`
 
 ## Seeds
 
@@ -4860,6 +5251,201 @@ Scenario checks include additional fields:
 }
 ```
 
+## dlt
+
+Source: `integrations/dlt.mdx`
+
+Use dlt pipelines inside SQLBuild source loaders.
+
+[dlt](https://dlthub.com) is an open-source Python library for loading data from APIs, databases, cloud storage, and other sources. You can use dlt inside a SQLBuild [source loader](/concepts/loaders) to ingest data as part of your build lifecycle.
+
+### Install
+
+```bash
+pip install 'dlt[duckdb]'
+# or for Snowflake
+pip install 'dlt[snowflake]'
+```
+
+Install dlt with the extras matching your SQLBuild adapter.
+
+### How it works
+
+A self-managed loader calls `dlt.pipeline(...).run(...)` to load data into the same database that SQLBuild manages. The loader returns `None` - dlt handles the writes, and SQLBuild treats the source as loaded.
+
+```
+loaders/               # dlt pipelines wrapped as loaders
+  github_sources.py
+sources/
+  github.yml           # source declarations bound to loaders
+models/
+  staging/
+    stg_issues.sql     # __source("raw_github_issues")
+```
+
+### Example: REST API source
+
+Load GitHub issues into a source table using dlt's REST API source:
+
+```python
+# loaders/github_sources.py
+import dlt
+from dlt.sources.rest_api import rest_api_source
+from sqlbuild.loaders import loader
+from sqlbuild.executor.load.models import LoaderContext
+
+@loader
+def raw_github_issues(ctx: LoaderContext):
+    source = rest_api_source({
+        "client": {
+            "base_url": "https://api.github.com/",
+            "headers": {"Authorization": f"Bearer {ctx.vars['github_token']}"},
+            "paginator": {"type": "header_link"},
+        },
+        "resources": [
+            {
+                "name": "issues",
+                "endpoint": {
+                    "path": "repos/{owner}/{repo}/issues",
+                    "params": {
+                        "owner": ctx.vars["github_owner"],
+                        "repo": ctx.vars["github_repo"],
+                        "state": "all",
+                        "per_page": 100,
+                    },
+                },
+            },
+        ],
+    })
+
+    pipeline = dlt.pipeline(
+        pipeline_name="github_issues",
+        destination=dlt.destinations.duckdb(ctx.connection),
+        dataset_name=ctx.target_schema or "main",
+    )
+    pipeline.run(source)
+```
+
+Bind it to a source:
+
+```yaml
+# sources/github.yml
+sources:
+  - name: raw_github_issues
+    loader: raw_github_issues
+    table: issues
+    columns:
+      - name: id
+        type: INTEGER
+      - name: title
+        type: VARCHAR
+      - name: state
+        type: VARCHAR
+      - name: created_at
+        type: TIMESTAMP
+```
+
+Reference it in models:
+
+```sql
+SELECT id, title, state FROM __source("raw_github_issues")
+```
+
+### Example: SQL database source
+
+Replicate a table from a PostgreSQL database:
+
+```python
+# loaders/postgres_sources.py
+import dlt
+from dlt.sources.sql_database import sql_database
+from sqlbuild.loaders import loader
+from sqlbuild.executor.load.models import LoaderContext
+
+@loader
+def raw_pg_customers(ctx: LoaderContext):
+    source = sql_database(
+        ctx.vars["postgres_connection_string"],
+        table_names=["customers"],
+    )
+
+    pipeline = dlt.pipeline(
+        pipeline_name="pg_customers",
+        destination=dlt.destinations.duckdb(ctx.connection),
+        dataset_name=ctx.target_schema or "main",
+    )
+    pipeline.run(source)
+```
+
+### Passing credentials
+
+Use SQLBuild [project variables](/concepts/project-configuration#project-variables) to pass credentials to dlt without hardcoding them:
+
+```toml
+# sqlbuild_local.toml (gitignored)
+[vars]
+github_token = "ghp_..."
+postgres_connection_string = "postgresql://user:pass@host:5432/db"
+```
+
+Access them in the loader via `ctx.vars["github_token"]`.
+
+For production, set variables via environment variables or per-environment config:
+
+```toml
+# sqlbuild_project.toml
+[environments.prod.vars]
+github_token = "${GITHUB_TOKEN}"
+```
+
+### DuckDB connection sharing
+
+When using the DuckDB adapter, you can pass `ctx.connection` directly to dlt's DuckDB destination. This reuses SQLBuild's open connection, so dlt writes into the same database file without needing a separate connection string:
+
+```python
+pipeline = dlt.pipeline(
+    pipeline_name="my_pipeline",
+    destination=dlt.destinations.duckdb(ctx.connection),
+    dataset_name=ctx.target_schema or "main",
+)
+```
+
+### Warehouse destinations
+
+For Snowflake, BigQuery, or Databricks, configure dlt with its own connection credentials. dlt writes directly to the warehouse, and SQLBuild reads the resulting tables as sources:
+
+```python
+@loader
+def raw_api_data(ctx: LoaderContext):
+    source = rest_api_source({...})
+
+    pipeline = dlt.pipeline(
+        pipeline_name="api_data",
+        destination="snowflake",
+        dataset_name=ctx.target_schema or "public",
+    )
+    pipeline.run(source)
+```
+
+Configure dlt credentials via its own `secrets.toml` or environment variables as described in the [dlt documentation](https://dlthub.com/docs/general-usage/credentials/setup).
+
+### Build integration
+
+Loaders run automatically during `sqb build` (when `auto_load_sources` is enabled). This means dlt pipelines execute as part of the normal build lifecycle:
+
+```bash
+# dlt loaders run, then models build
+sqb build
+
+# skip loading (use existing source data)
+sqb build --no-load
+
+# run loaders standalone
+sqb load
+```
+
+See [Loaders](/concepts/loaders) for details on write strategies, the loader context API, auto-load behavior, and source deferral.
+
 ## compile
 
 Source: `cli/compile.mdx`
@@ -5105,13 +5691,18 @@ sqb --project-dir <path> build [flags]
 | `--end-cursor-ts` | Override end cursor for timestamp incremental models (ISO format) |
 | `--start-cursor-int` | Override start cursor for integer incremental models |
 | `--end-cursor-int` | Override end cursor for integer incremental models |
+| `--load` | Explicitly load managed sources before building |
+| `--no-load` | Skip automatic source loading |
+| `--reload` | Reload managed sources (passes `is_reload=True` to loaders) |
+| `--defer-sources-to` | Read managed source data from another environment |
 | `--select`, `-s` | Select specific models |
 | `--exclude` | Exclude specific models |
 
 ### Execution order
 
-1. Seeds are loaded first
-2. Source audits run before their dependent models
+1. Managed sources are loaded (unless `--no-load`)
+2. Seeds are loaded
+3. Source audits run before their dependent models
 3. SQL unit tests run before their target model
 4. Models are materialized in DAG topological order
 5. Error-severity audits run against the staging table before promotion to the target
@@ -5194,6 +5785,10 @@ sqb --project-dir <path> run [flags]
 | `--end-cursor-ts` | Override end cursor for timestamp incremental models (ISO format) |
 | `--start-cursor-int` | Override start cursor for integer incremental models |
 | `--end-cursor-int` | Override end cursor for integer incremental models |
+| `--load` | Explicitly load managed sources before running |
+| `--no-load` | Skip automatic source loading |
+| `--reload` | Reload managed sources (passes `is_reload=True` to loaders) |
+| `--defer-sources-to` | Read managed source data from another environment |
 | `--select`, `-s` | Select specific models |
 | `--exclude` | Exclude specific models |
 
@@ -5265,6 +5860,100 @@ sqb audit
 # Run audits for marts only
 sqb audit --select path:marts
 ```
+
+## load
+
+Source: `cli/load.mdx`
+
+Load managed sources into the warehouse.
+
+## sqb load
+
+Runs source loader functions and writes data into their target tables using the configured write strategy.
+
+### Usage
+
+```bash
+sqb --project-dir <path> load [flags]
+```
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--select`, `-s` | Select specific sources or loaders by name |
+| `--exclude` | Exclude specific sources or loaders |
+| `--reload` | Pass `is_reload=True` to loader functions |
+| `--concurrency` | Number of worker connections (default: from settings or 1) |
+| `--start-cursor-ts` | Override start cursor for timestamp-based loaders (ISO format) |
+| `--end-cursor-ts` | Override end cursor for timestamp-based loaders (ISO format) |
+| `--start-cursor-int` | Override start cursor for integer-based loaders |
+| `--end-cursor-int` | Override end cursor for integer-based loaders |
+| `--json` | Output results as JSON |
+| `--json-output` | Write JSON results to a file path |
+| `--var` | Set project variables (`--var key=value`) |
+
+### Examples
+
+```bash
+# Load all managed sources
+sqb load
+
+# Load a specific source
+sqb load --select raw_customers
+
+# Load with concurrency
+sqb load --concurrency 4
+
+# Reload all sources (full refresh behavior)
+sqb load --reload
+
+# Override cursor bounds
+sqb load --start-cursor-ts "2026-05-01T00:00:00"
+```
+
+### Execution order
+
+Loaders are executed in DAG topological order based on `depends_on` declarations. Independent loaders run concurrently when `--concurrency` is greater than 1.
+
+Intermediate loaders (those referenced only via `depends_on` without a direct source binding) run first, followed by the source-bound loaders that depend on them.
+
+### Output
+
+```
+Load ready (3 selected)
+
+Sources (3)
+  raw_customers
+  raw_orders
+  raw_payments
+
+Execution  sqb load  (concurrency: 1)
+
+  1/3  source    raw_customers                  OK     0.05s  rows=5
+  2/3  source    raw_orders                     OK     0.03s  rows=10
+  3/3  source    raw_payments                   OK     0.02s  rows=8
+
+Completed successfully.
+PASS=3  WARN=0  FAIL=0  SKIP=0  TOTAL=3  (0.12s)
+```
+
+### Auto-load during builds
+
+`sqb build` and `sqb run` automatically load managed sources before building dependent models. This is controlled by the `auto_load_sources` setting (default: `true`) and the `--load` / `--no-load` / `--reload` flags:
+
+```bash
+# Default: auto-load is on
+sqb build
+
+# Explicitly skip loading
+sqb build --no-load
+
+# Force reload
+sqb build --reload
+```
+
+See [Loaders](/concepts/loaders) for full documentation on write strategies, the loader context API, and source deferral.
 
 ## seed
 
