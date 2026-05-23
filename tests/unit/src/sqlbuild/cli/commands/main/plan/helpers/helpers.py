@@ -19,6 +19,7 @@ from sqlbuild.compiler.planner.models import (
     PlanWarning,
     SchemaFinding,
     SeedPlanEntry,
+    SourceLoadPlanEntry,
 )
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
@@ -30,6 +31,7 @@ from sqlbuild.compiler.planner.types import (
     WarningSeverity,
 )
 from sqlbuild.spec.models.schema import SeedCsvSettings
+from sqlbuild.spec.models.types import SourceWriteStrategy
 
 
 def build_model_entry(
@@ -89,6 +91,7 @@ def build_plan_output(
     model_entries: tuple[ModelPlanEntry, ...] = (),
     seed_entries: tuple[SeedPlanEntry, ...] = (),
     function_entries: tuple[FunctionPlanEntry, ...] = (),
+    source_load_entries: tuple[SourceLoadPlanEntry, ...] = (),
     warnings: tuple[PlanWarning, ...] = (),
 ) -> PlanOutput:
     """Build a minimal PlanOutput for formatter tests."""
@@ -101,8 +104,31 @@ def build_plan_output(
         model_entries=model_entries,
         seed_entries=seed_entries,
         function_entries=function_entries,
+        source_load_entries=source_load_entries,
         selected_keys=selected_keys,
         warnings=warnings,
+    )
+
+
+def build_source_load_entry(
+    *,
+    name: str,
+    write_strategy: SourceWriteStrategy | None = SourceWriteStrategy.TABLE,
+    cursor_column: str | None = None,
+    unique_key: tuple[str, ...] = (),
+    is_reload: bool = False,
+) -> SourceLoadPlanEntry:
+    """Build a minimal SourceLoadPlanEntry for formatter tests."""
+
+    return SourceLoadPlanEntry(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.SOURCE, name=name),
+        name=name,
+        loader=f"{name}_loader",
+        target=name,
+        write_strategy=write_strategy,
+        cursor_column=cursor_column,
+        unique_key=unique_key,
+        is_reload=is_reload,
     )
 
 

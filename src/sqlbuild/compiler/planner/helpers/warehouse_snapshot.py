@@ -117,6 +117,7 @@ def gather_warehouse_snapshot(
     if not skip_cursors:
         cursor_snapshots = _gather_cursor_snapshots(
             project=project,
+            adapter=adapter,
             connection=connection,
             execute=execute,
             existing_relations=relations,
@@ -304,6 +305,7 @@ def _gather_fingerprints(
 def _gather_cursor_snapshots(
     *,
     project: CompiledProject,
+    adapter: BaseAdapter,
     connection: Any,
     execute: Any,
     existing_relations: dict[str, RelationInfo],
@@ -318,6 +320,7 @@ def _gather_cursor_snapshots(
 
     cursor_models: list[_CursorModelInfo] = _collect_cursor_models(
         project=project,
+        adapter=adapter,
         model_map=model_map,
         source_map=source_map,
         existing_relations=existing_relations,
@@ -347,6 +350,7 @@ def _gather_cursor_snapshots(
 def _collect_cursor_models(
     *,
     project: CompiledProject,
+    adapter: BaseAdapter,
     model_map: dict[str, CompiledModel],
     source_map: dict[str, CompiledSource],
     existing_relations: dict[str, RelationInfo],
@@ -389,6 +393,7 @@ def _collect_cursor_models(
                 continue
             upstream_relation: str | None = _resolve_upstream_qualified_name(
                 ref=ref,
+                adapter=adapter,
                 model_map=model_map,
                 source_map=source_map,
                 deferred_targets=deferred_targets,
@@ -582,6 +587,7 @@ def _get_cursor_inputs(model: CompiledModel, cursor_column: str) -> dict[str, st
 def _resolve_upstream_qualified_name(
     *,
     ref: CompileSqlReference,
+    adapter: BaseAdapter,
     model_map: dict[str, CompiledModel],
     source_map: dict[str, CompiledSource],
     deferred_targets: dict[str, CompiledRelationTarget] | None = None,
@@ -600,7 +606,7 @@ def _resolve_upstream_qualified_name(
         source: CompiledSource | None = source_map.get(ref.ref_name)
         if source is not None:
             entry: SourceEntry = source.source_entry
-            return render_source_relation(entry)
+            return render_source_relation(entry, adapter=adapter)
     return None
 
 

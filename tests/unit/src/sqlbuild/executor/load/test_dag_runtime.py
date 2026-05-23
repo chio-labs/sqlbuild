@@ -1,0 +1,84 @@
+"""Tests for source loader DAG runtime helpers."""
+
+from __future__ import annotations
+
+import queue
+
+import pytest
+
+from sqlbuild.executor.load.helpers.dag_runtime import load_dag_worker
+from sqlbuild.executor.load.models import LoadExecutionIndexes, LoadExecutionResult
+from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.spec.models.source import SourceEntry
+from tests.unit.src.sqlbuild.executor.load._test_types import LoadDagWorkerFailureTestCase
+from tests.unit.src.sqlbuild.executor.load.helpers import LoaderContextTestAdapter
+
+LOAD_DAG_WORKER_FAILURE_TEST_CASES: list[LoadDagWorkerFailureTestCase] = [
+    LoadDagWorkerFailureTestCase(
+        description="publishes failed completion when ready source execution raises",
+        source_name="raw_orders",
+        loader_name="missing_loader",
+        expected_status=ExecutionStatus.FAILED,
+        expected_error_fragment="missing_loader",
+    ),
+    LoadDagWorkerFailureTestCase(
+        description="returns connection when ready source execution raises",
+        source_name="raw_customers",
+        loader_name="missing_customer_loader",
+        expected_status=ExecutionStatus.FAILED,
+        expected_error_fragment="missing_customer_loader",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    LOAD_DAG_WORKER_FAILURE_TEST_CASES,
+    ids=[case.description for case in LOAD_DAG_WORKER_FAILURE_TEST_CASES],
+)
+def test_given_ready_source_execution_raises_when_worker_runs_then_publishes_failed_completion(
+    test_case: LoadDagWorkerFailureTestCase,
+) -> None:
+    connection: object = object()
+    connection_pool: queue.Queue[object] = queue.Queue()
+    connection_pool.put(connection)
+    completion_queue: queue.Queue[tuple[str, LoadExecutionResult]] = queue.Queue()
+    source_entry: SourceEntry = SourceEntry(
+        name=test_case.source_name,
+        loader=test_case.loader_name,
+    )
+
+    load_dag_worker(
+        source_name=test_case.source_name,
+        source_by_name={test_case.source_name: source_entry},
+        indexes=LoadExecutionIndexes(
+            loader_by_name={},
+            source_by_name={test_case.source_name: source_entry},
+            source_by_loader_name={},
+            loader_ref_entries={},
+            loader_name_by_function={},
+            has_loader_dependencies=False,
+        ),
+        failed_or_skipped=set(),
+        adapter=LoaderContextTestAdapter(),
+        connection_pool=connection_pool,
+        run_id="run-1",
+        environment=None,
+        vars={},
+        is_reload=False,
+        start_cursor_ts=None,
+        end_cursor_ts=None,
+        start_cursor_int=None,
+        end_cursor_int=None,
+        completion_queue=completion_queue,
+    )
+
+    completed_source_name, result = completion_queue.get_nowait()
+
+    assert completed_source_name == test_case.source_name
+    assert result.source_name == test_case.source_name
+    assert result.loader_name == test_case.loader_name
+    assert result.status == test_case.expected_status
+    assert result.error_message is not None
+    assert test_case.expected_error_fragment in result.error_message
+    assert connection_pool.get_nowait() is connection

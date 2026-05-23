@@ -16,6 +16,7 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     CursorUpstreamResolutionTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
+    PlannerTestAdapter,
     build_cursor_deferred_targets,
     build_cursor_model_map,
     build_cursor_ref,
@@ -77,6 +78,7 @@ def test_given_ref_and_deferred_targets_when_resolving_upstream_then_returns_exp
 
     result: str | None = _resolve_upstream_qualified_name(
         ref=ref,
+        adapter=PlannerTestAdapter(),
         model_map=model_map,
         source_map={},
         deferred_targets=deferred_targets,

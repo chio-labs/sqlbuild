@@ -40,6 +40,7 @@ class BuildUpstreamDepsTestCase:
     source_names: tuple[str, ...]
     seed_names: tuple[str, ...]
     expected_upstream_keys: dict[str, tuple[str, ...]]
+    audit_model_source_deps: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

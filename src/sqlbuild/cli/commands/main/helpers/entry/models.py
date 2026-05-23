@@ -23,6 +23,7 @@ class CliNamespace:
     dbt_target_path: str | None = None
     no_sql_validation: bool = False
     defer_to: str | None = None
+    defer_sources_to: str | None = None
     environment_range: str | None = None
     from_environment: str | None = None
     to_environment: str | None = None
@@ -39,6 +40,8 @@ class CliNamespace:
     no_color: bool = False
     fail_fast: bool = False
     full_refresh: bool = False
+    load_sources: bool | None = None
+    reload: bool = False
     allow_snapshot_full_refresh: bool = False
     allow_snapshot_schema_change: bool = False
     concurrency: int | None = None
@@ -111,9 +114,11 @@ class CliEntrypointHandlers:
             Path | None,
             bool,
             str | None,
+            str | None,
             CursorOverrides | None,
             bool,
             bool,
+            bool | None,
             bool,
             tuple[str, ...],
             tuple[str, ...],
@@ -132,9 +137,12 @@ class CliEntrypointHandlers:
             Path | None,
             bool,
             str | None,
+            str | None,
             CursorOverrides | None,
             bool,
             bool,
+            bool,
+            bool | None,
             bool,
             bool,
             bool,
@@ -154,9 +162,12 @@ class CliEntrypointHandlers:
             Path | None,
             bool,
             str | None,
+            str | None,
             CursorOverrides | None,
             bool,
             bool,
+            bool,
+            bool | None,
             bool,
             bool,
             bool,
@@ -204,6 +215,22 @@ class CliEntrypointHandlers:
             bool,
             tuple[str, ...],
             tuple[str, ...],
+            int | None,
+            dict[str, object],
+            bool,
+            Path | None,
+        ],
+        int,
+    ]
+    run_load: Callable[
+        [
+            Path | None,
+            bool,
+            tuple[str, ...],
+            tuple[str, ...],
+            bool,
+            int | None,
+            CursorOverrides | None,
             dict[str, object],
             bool,
             Path | None,

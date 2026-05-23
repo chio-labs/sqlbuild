@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 
 from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.helpers.deps import (
@@ -57,7 +58,7 @@ from sqlbuild.spec.models.project import (
     resolve_effective_scenario_config,
 )
 from sqlbuild.spec.models.schema import SchemaAuditInstance, SchemaColumn, SchemaSeedEntry
-from sqlbuild.spec.models.source import SourceColumnEntry
+from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 
 
 def assemble_compiled_project(
@@ -79,6 +80,12 @@ def assemble_compiled_project(
         effective_environment_name=inputs.effective_environment_name,
         effective_connection=inputs.effective_connection,
         effective_vars=inputs.effective_vars,
+        effective_environment_database=inputs.effective_environment.database
+        if inputs.effective_environment is not None
+        else None,
+        effective_environment_schema=inputs.effective_environment.schema
+        if inputs.effective_environment is not None
+        else None,
         settings=inputs.effective_settings,
         scenario=resolve_effective_scenario_config(
             project_config=inputs.project_config,
@@ -95,7 +102,11 @@ def assemble_compiled_project(
             for model_input in inputs.model_inputs
         ),
         sources=tuple(
-            _assemble_compiled_source(source_input) for source_input in inputs.source_inputs
+            _assemble_compiled_source(
+                source_input,
+                environment_config=inputs.effective_environment,
+            )
+            for source_input in inputs.source_inputs
         ),
         seeds=tuple(
             _assemble_compiled_seed(
@@ -119,6 +130,7 @@ def assemble_compiled_project(
             _assemble_compiled_sql_scenario(scenario_input)
             for scenario_input in inputs.scenario_inputs
         ),
+        loader_functions=inputs.discovered_inputs.loader_functions,
         diagnostics=inputs.diagnostics,
         external_sql_reference_resolver=inputs.external_sql_reference_resolver,
     )
@@ -214,15 +226,41 @@ def _declared_column_nullability(
     return InferredNullability.UNKNOWN
 
 
-def _assemble_compiled_source(source_input: CompileSourceInput) -> CompiledSource:
-    return CompiledSource(
-        key=CompiledObjectKey(
-            resource_type=CompiledResourceType.SOURCE, name=source_input.source_entry.name
-        ),
-        deps=(),
-        name=source_input.source_entry.name,
+def _assemble_compiled_source(
+    source_input: CompileSourceInput,
+    *,
+    environment_config: EnvironmentConfig | None,
+) -> CompiledSource:
+    source_entry: SourceEntry = _build_source_relation_entry(
         source_entry=source_input.source_entry,
+        environment_config=environment_config,
+    )
+    return CompiledSource(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.SOURCE, name=source_entry.name),
+        deps=(),
+        name=source_entry.name,
+        source_entry=source_entry,
         source_file=source_input.source_file,
+    )
+
+
+def _build_source_relation_entry(
+    *,
+    source_entry: SourceEntry,
+    environment_config: EnvironmentConfig | None,
+) -> SourceEntry:
+    if source_entry.loader is None or environment_config is None:
+        return source_entry
+    return replace(
+        source_entry,
+        database=(
+            source_entry.database
+            if source_entry.database is not None
+            else environment_config.database
+        ),
+        schema=source_entry.schema
+        if source_entry.schema is not None
+        else environment_config.schema,
     )
 
 

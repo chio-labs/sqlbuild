@@ -63,6 +63,15 @@ class SnapshotRuntimeContractErrorTestCase:
 
 
 @dataclass(frozen=True)
+class SnapshotSchemaChangeTestCase:
+    description: str
+    target_columns: tuple[ColumnInfo, ...]
+    delta_columns: tuple[ColumnInfo, ...]
+    expected_valid: bool
+    expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
 class RuntimeContractValidationTestCase:
     description: str
     contract_enforced: bool

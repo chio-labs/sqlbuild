@@ -36,8 +36,10 @@ from sqlbuild.compiler.planner.types import (
     SelectorKind,
     WarningSeverity,
 )
+from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.schema import SeedCsvSettings
 from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.models.types import SourceWriteStrategy
 
 
 @dataclass(frozen=True)
@@ -287,6 +289,21 @@ class SeedPlanEntry:
 
 
 @dataclass(frozen=True)
+class SourceLoadPlanEntry:
+    """Per-managed-source loader execution plan entry."""
+
+    key: CompiledObjectKey
+    name: str
+    loader: str
+    target: str
+    resource_kind: ExecutionResourceKind = ExecutionResourceKind.SOURCE
+    write_strategy: SourceWriteStrategy | None = None
+    cursor_column: str | None = None
+    unique_key: tuple[str, ...] = field(default_factory=tuple)
+    is_reload: bool = False
+
+
+@dataclass(frozen=True)
 class FunctionPlanEntry:
     """Per-SQL-function execution plan entry."""
 
@@ -479,6 +496,7 @@ class PlanOutput:
     execution_order: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
     model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
     seed_entries: tuple[SeedPlanEntry, ...] = field(default_factory=tuple)
+    source_load_entries: tuple[SourceLoadPlanEntry, ...] = field(default_factory=tuple)
     function_entries: tuple[FunctionPlanEntry, ...] = field(default_factory=tuple)
     audit_entries: tuple[AuditPlanEntry, ...] = field(default_factory=tuple)
     test_entries: tuple[SqlTestPlanEntry, ...] = field(default_factory=tuple)

@@ -662,6 +662,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 |---------|----------|-----|---------|
 | **Testing** | | | |
 | Unit tests with model chaining | Chain across multiple models | YAML-stub, single model | CTE-based, single model |
+| Macros as test helpers | Tests are SQL - macros work as reusable fixture generators | No (YAML stubs) | No |
 | E2E scenario tests | Fixture worlds with real graph execution | No | No |
 | Local E2E replay | Capture from warehouse, replay in DuckDB | No | No |
 | Macro / UDF / table function tests | `TEST(mode: macro/udf/table_fn)` | No | No |
@@ -678,7 +679,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | Python macros | `@macro()` syntax | No (Jinja only) | SQLMesh macro syntax |
 | Jinja support | No (Python macros instead) | Yes (core templating) | Yes |
 | **Incremental** | | | |
-| Incremental strategies | append, delete_insert, merge | append, delete+insert, merge | time-range, unique-key, partition, SCD Type 2, append |
+| Incremental strategies | append, delete_insert, merge, SCD Type 2 | append, delete+insert, merge, snapshots | append, delete_insert (time-range), merge (unique-key), SCD Type 2, partition (stateful) |
 | Microbatch execution | Configurable batch sizes with per-batch audits | Microbatch (recent addition) | Batch size support |
 | Stateful interval tracking | No - cursor-based (no external state) | No | Yes - tracks which intervals ran |
 | SCD Type 2 models | Timestamp and check strategies, historical input, hard deletes | Snapshots (limited) | Built-in |
@@ -711,7 +712,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 
 - **Python models** - Pandas, PySpark, Snowpark, BigFrames (in active development)
 - **First-party partition state tracking** - opt-in stateful partition tracking (currently possible via custom materializations, first-party support coming soon)
-- **Broader adapter support** - PostgreSQL, ClickHouse, and Microsoft SQL Server are coming soon
+- **Broader adapter support** - ClickHouse and Microsoft SQL Server are coming soon
 
 ## Project Configuration
 
@@ -4205,10 +4206,10 @@ This is useful for rebuilding a specific slice of the DAG without manually listi
 Use commas to intersect selector results:
 
 ```bash
-sqb build --select "tag:staging,stg_orders"
+sqb build --select "tag:staging,path:finance"
 ```
 
-This selects only models that match *both* conditions - in this case, models tagged `staging` that are also named `stg_orders`.
+This selects only models that match *both* conditions - in this case, models tagged `staging` that are also under the `finance` directory.
 
 ### Combining select and exclude
 
@@ -4498,17 +4499,6 @@ Orchestrate SQLBuild pipelines with Dagster scheduling, retries, and asset UI.
 
 SQLBuild includes a Dagster integration that maps your project's models, sources, seeds, functions, tests, audits, and scenarios into Dagster assets and asset checks. SQLBuild handles the SQL transformation layer. Dagster handles scheduling, retries, alerting, and the asset-centric UI.
 
-### Try it
-
-```bash
-sqb playground dagster my-dagster-project
-cd my-dagster-project
-uv pip install 'sqlbuild[dagster]'
-DAGSTER_IS_DEV_CLI=1 dagster dev -f dagster/definitions.py
-```
-
-This creates the waffle shop project with a `dagster/definitions.py` that includes asset definitions, scenario checks, and a configured resource. Open the Dagster UI, materialize the assets, then run the scenario checks.
-
 ### Install
 
 ```bash
@@ -4518,6 +4508,16 @@ pip install 'sqlbuild[dagster]'
 ```
 
 This installs `dagster` and `dagster-webserver` alongside SQLBuild.
+
+### Try it
+
+```bash
+sqb playground --template dagster
+cd sqlbuild-playground
+dagster dev -f dagster/definitions.py
+```
+
+This creates the waffle shop project with a `dagster/definitions.py` that includes asset definitions, scenario checks, and a configured resource. Open the Dagster UI, materialize the assets, then run the scenario checks.
 
 ### How it works
 
@@ -4530,16 +4530,6 @@ SQLBuild tests and audits become Dagster asset checks. Scenarios become asset ch
 
 ### Quickstart
 
-#### 1. Generate the DAG artifact
-
-```bash
-sqb compile --dag
-```
-
-This writes `target/sqlbuild_dag.json`. The artifact is static and can be committed to version control or generated in CI.
-
-#### 2. Define assets and resource
-
 ```python
 # definitions.py
 from sqlbuild.integrations.dagster import (
@@ -4550,6 +4540,7 @@ from sqlbuild.integrations.dagster import (
 import dagster as dg
 
 project = SqlBuildProject(project_dir=".")
+project.prepare_if_dev()  # auto-generates DAG artifact in dagster dev
 
 @sqlbuild_assets(project=project)
 def my_sqlbuild_assets(context: dg.AssetExecutionContext, sqb: SqlBuildCliResource):
@@ -4561,13 +4552,13 @@ defs = dg.Definitions(
 )
 ```
 
-#### 3. Launch
-
 ```bash
 dagster dev -f definitions.py
 ```
 
 Dagster discovers every SQLBuild model as an asset. Selecting a subset of assets in the Dagster UI automatically scopes the `sqb build` invocation to those models via `--select`.
+
+For production deployments, use `project.prepare()` or `sqb compile --dag` to generate the DAG artifact explicitly in your CI pipeline.
 
 ### Asset selection
 
@@ -6410,10 +6401,10 @@ Creates a self-contained waffle shop project with DuckDB. No warehouse credentia
 ### Usage
 
 ```bash
-sqb playground [template] [path]
+sqb playground [name]
 ```
 
-If `path` is omitted, the project is created at `sqlbuild-playground` in the current directory.
+The argument is used as both the template name and the directory name. If omitted, the default `waffle_shop` template is used and the project is created in a directory matching the template name.
 
 ### Templates
 
@@ -6444,15 +6435,15 @@ The `dagster` template adds:
 
 ```bash
 # Default waffle shop
-sqb playground my-project
-cd my-project
+sqb playground waffle-shop
+cd waffle-shop
 sqb build
 
 # With Dagster integration
-sqb playground dagster my-dagster-project
-cd my-dagster-project
+sqb playground --template dagster
+cd sqlbuild-playground
 uv pip install 'sqlbuild[dagster]'
-DAGSTER_IS_DEV_CLI=1 dagster dev -f dagster/definitions.py
+dagster dev -f dagster/definitions.py
 ```
 
 ### Notes

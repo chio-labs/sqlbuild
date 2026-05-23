@@ -18,7 +18,12 @@ from sqlbuild.adapter.shared.models import (
     RowDiffTolerances,
     StatementRecorder,
 )
-from sqlbuild.adapter.shared.types import FrameworkType, PromotionStrategy, TablePromotionMode
+from sqlbuild.adapter.shared.types import (
+    FrameworkType,
+    LoaderLogicalType,
+    PromotionStrategy,
+    TablePromotionMode,
+)
 from sqlbuild.compiler.compile.types import FunctionLanguage
 
 
@@ -515,8 +520,37 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_identifier(self, name: str) -> str:
+        """Render one SQL identifier for this adapter."""
+        ...
+
+    @abstractmethod
     def render_framework_type(self, type_name: FrameworkType) -> str:
         """Render one framework-internal logical type for this adapter."""
+        ...
+
+    @abstractmethod
+    def render_loader_logical_type(self, type_name: LoaderLogicalType) -> str:
+        """Render one source-loader logical type for this adapter."""
+        ...
+
+    @abstractmethod
+    def render_loader_value_literal(
+        self, *, value: object, logical_type: LoaderLogicalType | None
+    ) -> str:
+        """Render one source-loader row value as a SQL literal/expression."""
+        ...
+
+    @abstractmethod
+    def render_loader_rows_select(
+        self,
+        *,
+        rows: tuple[dict[str, object], ...],
+        column_names: tuple[str, ...],
+        column_sql_types: dict[str, str],
+        inferred_types: dict[str, LoaderLogicalType],
+    ) -> str:
+        """Render source-loader rows as a SELECT statement for staging writes."""
         ...
 
     @abstractmethod
@@ -524,6 +558,30 @@ class StrictAdapter(
         self, *, expression: str, target_type: str, alias: str
     ) -> str:
         """Render a cast projection for source expression type enforcement."""
+        ...
+
+    @abstractmethod
+    def render_source_expression_relation(self, *, expression: str) -> str:
+        """Render a source expression as a SQL table factor."""
+        ...
+
+    @abstractmethod
+    def render_source_expression_cast_subquery(
+        self, *, source_relation: str, projections: tuple[str, ...]
+    ) -> str:
+        """Render a type-enforced source expression as a SQL table factor."""
+        ...
+
+    @abstractmethod
+    def render_source_relation_cast_subquery(
+        self,
+        *,
+        source_relation: str,
+        cast_projections: tuple[str, ...],
+        cast_column_names: tuple[str, ...],
+        all_columns_cast: bool,
+    ) -> str:
+        """Render a type-enforced source relation as a SQL table factor."""
         ...
 
     @abstractmethod

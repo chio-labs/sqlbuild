@@ -13,3 +13,4 @@ class SeedE2ETestCase:
     expected_exit_code: int
     expected_seed_name: str
     expected_data: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
+    expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)

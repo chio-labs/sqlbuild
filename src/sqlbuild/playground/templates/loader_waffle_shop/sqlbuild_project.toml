@@ -1,0 +1,8 @@
+name = "loader_waffle_shop"
+adapter = "duckdb"
+
+[connection]
+database = "loader_waffle_shop.duckdb"
+
+[defaults]
+materialized = "table"

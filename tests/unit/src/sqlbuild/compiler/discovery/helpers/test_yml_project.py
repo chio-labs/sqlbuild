@@ -42,6 +42,7 @@ database = "local.duckdb"
 sqlglot = false
 sql_validation = false
 concurrency = 4
+auto_load_sources = false
 
 [vars]
 user = "kevin"
@@ -63,7 +64,10 @@ max_total_bytes = 78
         expected_sqlglot=False,
         expected_sql_validation=False,
         expected_max_concurrency=4,
-        expected_setting_overrides=frozenset({"sqlglot", "sql_validation", "concurrency"}),
+        expected_auto_load_sources=False,
+        expected_setting_overrides=frozenset(
+            {"sqlglot", "sql_validation", "concurrency", "auto_load_sources"}
+        ),
         expected_vars={"user": "kevin"},
         expected_scenario_local_type_overrides={
             "snowflake": {
@@ -130,6 +134,7 @@ environment = "dev"
 [environments.dev]
 database = "local_db"
 schema = "local_schema"
+defer_sources_to = "prod"
 
 [environments.dev.connection]
 warehouse = "local_wh"
@@ -156,6 +161,7 @@ allow_as_target = false
                 "vars": {"user": "local_user"},
                 "database": "local_db",
                 "schema": "local_schema",
+                "defer_sources_to": "prod",
                 "allow_as_source": True,
                 "allow_as_target": False,
             }
@@ -540,6 +546,7 @@ path = "data.db"
 sqlglot = false
 query_change_tracking = true
 concurrency = 8
+auto_load_sources = false
 
 [defaults]
 materialized = "table"
@@ -561,6 +568,7 @@ user = "kevin"
 
 [environments.dev]
 schema = "dev_${user}"
+defer_sources_to = "prod"
 
 [environments.dev.connection]
 warehouse = "dev_wh"
@@ -609,6 +617,7 @@ target_path = "target/dbt"
             expected_connection={"path": "data.db"},
             expected_sqlglot=False,
             expected_max_concurrency=8,
+            expected_auto_load_sources=False,
             expected_materialized="table",
             expected_row_diff_exclude_columns=("loaded_at",),
             expected_row_diff_tolerances={
@@ -625,6 +634,7 @@ target_path = "target/dbt"
             expected_dev_connection={"warehouse": "dev_wh"},
             expected_dev_vars={"schema_prefix": "dev"},
             expected_dev_schema="dev_${user}",
+            expected_dev_defer_sources_to="prod",
             expected_allow_as_source=True,
             expected_janitor_enabled=True,
             expected_retention_days=14,
@@ -670,6 +680,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.connection == test_case.expected_connection
     assert config.settings.sqlglot is test_case.expected_sqlglot
     assert config.settings.concurrency == test_case.expected_max_concurrency
+    assert config.settings.auto_load_sources is test_case.expected_auto_load_sources
     assert config.defaults.materialized == test_case.expected_materialized
     assert config.defaults.row_diff_exclude_columns == test_case.expected_row_diff_exclude_columns
     assert config.defaults.row_diff_tolerances == test_case.expected_row_diff_tolerances
@@ -679,6 +690,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.environments["dev"].connection == test_case.expected_dev_connection
     assert config.environments["dev"].vars == test_case.expected_dev_vars
     assert config.environments["dev"].schema == test_case.expected_dev_schema
+    assert config.environments["dev"].defer_sources_to == test_case.expected_dev_defer_sources_to
     assert config.environments["dev"].clone.allow_as_source is test_case.expected_allow_as_source
     assert config.janitor.enabled is test_case.expected_janitor_enabled
     assert config.janitor.retention_days == test_case.expected_retention_days
@@ -730,6 +742,7 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
     assert config.settings.sqlglot is test_case.expected_sqlglot
     assert config.settings.sql_validation is test_case.expected_sql_validation
     assert config.settings.concurrency == test_case.expected_max_concurrency
+    assert config.settings.auto_load_sources is test_case.expected_auto_load_sources
     assert config.setting_overrides == test_case.expected_setting_overrides
     assert config.vars == test_case.expected_vars
     assert config.scenario.local_type_overrides == test_case.expected_scenario_local_type_overrides
@@ -745,6 +758,7 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
             "vars": environment_config.vars,
             "database": environment_config.database,
             "schema": environment_config.schema,
+            "defer_sources_to": environment_config.defer_sources_to,
             "allow_as_source": environment_config.clone.allow_as_source,
             "allow_as_target": environment_config.clone.allow_as_target,
         }

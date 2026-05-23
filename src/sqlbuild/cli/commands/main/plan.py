@@ -18,6 +18,7 @@ from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
 )
 from sqlbuild.cli.commands.main.shared.helpers.json_output import format_plan_json
 from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
+from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
@@ -32,9 +33,11 @@ def run_plan(
     project_dir: Path | None,
     no_sql_validation: bool = False,
     defer_to: str | None = None,
+    defer_sources_to: str | None = None,
     cursor_overrides: CursorOverrides | None = None,
     json_output: bool = False,
     full_refresh: bool = False,
+    load_sources: bool | None = None,
     no_color: bool = False,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
@@ -71,6 +74,11 @@ def run_plan(
         stream=progress_stream,
         use_color=use_color,
     )
+    should_load_sources: bool = (
+        load_sources
+        if load_sources is not None
+        else build_effective_settings_config(discovered_inputs=discovered_inputs).auto_load_sources
+    )
     if not json_output:
         progress_stream.write("\n")
         progress_stream.flush()
@@ -79,8 +87,10 @@ def run_plan(
         adapter=adapter,
         no_sql_validation=no_sql_validation,
         defer_to=defer_to,
+        defer_sources_to=defer_sources_to,
         cursor_overrides=cursor_overrides,
         full_refresh=full_refresh,
+        auto_load_sources=should_load_sources,
         select=select,
         exclude=exclude,
         connection_config=connection_config,

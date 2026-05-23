@@ -23,6 +23,37 @@ class SnowflakeBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class SnowflakeSourceLoaderStrategiesE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_countries: tuple[tuple[object, ...], ...]
+    expected_webhook_event_counts: tuple[tuple[object, ...], ...]
+    expected_order_events: tuple[tuple[object, ...], ...]
+    expected_customers: tuple[tuple[object, ...], ...]
+    expected_loader_status: tuple[tuple[object, ...], ...]
+    expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class SnowflakeSourceLoaderSchemaEvolutionE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class SnowflakeIntermediateDagStrategyE2ETestCase:
+    description: str
+    loader_py: str
+    expected_intermediate_rows: tuple[tuple[object, ...], ...]
+    expected_terminal_rows: tuple[tuple[object, ...], ...]
+    command: tuple[str, ...] = ("--no-color", "load", "--select", "+raw_events")
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
 class SnowflakeDiffE2ETestCase:
     description: str
     mutation_sql: tuple[str, ...]
@@ -79,3 +110,12 @@ class SnowflakeSnapshotApplyE2ETestCase:
     expected_current_delete_rows: tuple[tuple[object, ...], ...]
     expected_historical_timestamp_rows: tuple[tuple[object, ...], ...]
     expected_historical_check_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SnowflakeSourceDeferralE2ETestCase:
+    description: str
+    expected_model_rows: tuple[tuple[object, ...], ...]
+    expected_loader_rows: tuple[tuple[object, ...], ...]
+    command: tuple[str, ...] = ("--no-color", "build", "--select", "stg_orders")
+    expected_return_code: int = 0

@@ -73,7 +73,7 @@ def resolve_source_references(
                     qualified_name=resolved_source,
                     declared_columns=source_entry.columns,
                     warehouse_columns=warehouse_cols,
-                    star_exclude_keyword=star_exclude_keyword,
+                    adapter=adapter,
                 )
         if cursor_bounds is None:
             return resolved_source
@@ -94,7 +94,7 @@ def resolve_source_references(
 
 def _render_source_relation(*, adapter: BaseAdapter, source_entry: SourceEntry) -> str:
     if source_entry.expression is not None:
-        return render_source_relation(source_entry)
+        return render_source_relation(source_entry, adapter=adapter)
     table_name: str = source_entry.table if source_entry.table is not None else source_entry.name
     rendered: str | None = adapter.render_qualified_name(
         database=source_entry.database,
@@ -111,9 +111,9 @@ def _build_relation_cast_subquery(
     qualified_name: str,
     declared_columns: tuple[SourceColumnEntry, ...],
     warehouse_columns: tuple[ColumnInfo, ...],
-    star_exclude_keyword: str,
+    adapter: BaseAdapter,
 ) -> str:
-    """Build a CAST subquery using SELECT * EXCLUDE for type-enforced sources."""
+    """Build a CAST subquery for type-enforced sources."""
 
     enforced_map: dict[str, str] = {
         col.name: col.type for col in declared_columns if col.type is not None
@@ -126,18 +126,20 @@ def _build_relation_cast_subquery(
     if not cast_names:
         return qualified_name
 
-    cast_expressions: list[str] = [
-        f"CAST({name} AS {enforced_map[name]}) AS {name}" for name in cast_names
-    ]
-    cast_clause: str = ", ".join(cast_expressions)
-
+    cast_expressions: tuple[str, ...] = tuple(
+        adapter.render_source_expression_cast(
+            expression=name,
+            target_type=enforced_map[name],
+            alias=name,
+        )
+        for name in cast_names
+    )
     all_enforced: bool = len(cast_names) == len(warehouse_names)
-    if all_enforced:
-        return f"(SELECT {cast_clause} FROM {qualified_name})"
-
-    exclude_list: str = ", ".join(cast_names)
-    return (
-        f"(SELECT * {star_exclude_keyword} ({exclude_list}), {cast_clause} FROM {qualified_name})"
+    return adapter.render_source_relation_cast_subquery(
+        source_relation=qualified_name,
+        cast_projections=cast_expressions,
+        cast_column_names=tuple(cast_names),
+        all_columns_cast=all_enforced,
     )
 
 
@@ -223,8 +225,10 @@ def _build_expression_cast_subquery(
         expression_name_map=expression_name_map,
         adapter=adapter,
     )
-    projection_clause: str = ", ".join(projections)
-    return f"(SELECT {projection_clause} FROM {source_relation})"
+    return adapter.render_source_expression_cast_subquery(
+        source_relation=source_relation,
+        projections=tuple(projections),
+    )
 
 
 def _build_expression_source_projections(

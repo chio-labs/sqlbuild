@@ -16,6 +16,7 @@ from sqlbuild.executor.build.models import (
     SeedExecutionResult,
 )
 from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
+from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario.models import (
     ScenarioAssertionCheckExecutionResult,
@@ -55,6 +56,7 @@ def format_build_execution_json(*, result: BuildExecutionResult, plan: PlanOutpu
             *_format_model_assets(results=result.model_results, plan=plan),
             *_format_seed_assets(results=result.seed_results, plan=plan),
             *_format_function_assets(results=result.function_results, plan=plan),
+            *_format_load_assets(results=result.load_results),
         ),
         checks=(
             *_format_sql_test_checks(result.test_results),
@@ -85,6 +87,7 @@ def format_run_execution_json(*, result: BuildExecutionResult, plan: PlanOutput)
             *_format_model_assets(results=result.model_results, plan=plan),
             *_format_seed_assets(results=result.seed_results, plan=plan),
             *_format_function_assets(results=result.function_results, plan=plan),
+            *_format_load_assets(results=result.load_results),
         ),
         checks=(),
         summary={
@@ -112,6 +115,28 @@ def format_seed_execution_json(
                 1 for result in results if result.status == ExecutionStatus.SUCCESS
             ),
             "failure_count": fail_count,
+            "total_count": len(results),
+        },
+    )
+
+
+def format_load_execution_json(*, results: tuple[LoadExecutionResult, ...]) -> str:
+    """Format load command execution results as JSON."""
+
+    fail_count: int = sum(1 for result in results if result.status == ExecutionStatus.FAILED)
+    return _format_execution_json(
+        command="load",
+        status=BuildStatus.SUCCESS.value if fail_count == 0 else BuildStatus.FAILED.value,
+        assets=_format_load_assets(results=results),
+        checks=(),
+        summary={
+            "success_count": sum(
+                1 for result in results if result.status == ExecutionStatus.SUCCESS
+            ),
+            "failure_count": fail_count,
+            "skipped_count": sum(
+                1 for result in results if result.status == ExecutionStatus.SKIPPED
+            ),
             "total_count": len(results),
         },
     )
@@ -264,6 +289,27 @@ def _format_seed_assets(
                 "target": targets.get(result.seed_name),
                 "error_code": result.error_code,
                 "error_help": result.error_help,
+                "error_message": result.error_message,
+            }
+        )
+        for result in results
+    )
+
+
+def _format_load_assets(
+    *, results: tuple[LoadExecutionResult, ...]
+) -> tuple[dict[str, object], ...]:
+    return tuple(
+        _drop_none(
+            {
+                "kind": result.resource_kind.value,
+                "name": result.source_name,
+                "status": result.status.value,
+                "duration_ms": result.duration_ms,
+                "target": result.target,
+                "staging_relation": result.staging_relation,
+                "loader": result.loader_name,
+                "rows_loaded": result.rows_loaded,
                 "error_message": result.error_message,
             }
         )

@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlbuild.integrations.postgres.client import PostgresAdapter
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    prepare_source_loader_strategies,
     prepare_waffle_shop,
     stringify_warehouse_rows,
 )
@@ -36,6 +37,29 @@ def build_postgres_project_toml(
         f'password = "{config["password"]}"\n\n'
         "[environments.dev]\n"
         f'schema = "{schema_name}"\n\n'
+        "[defaults]\n"
+        'materialized = "table"\n'
+    )
+
+
+def build_postgres_source_deferral_project_toml(
+    *, project_name: str, dev_schema_name: str, prod_schema_name: str, config: dict[str, object]
+) -> str:
+    return (
+        f'name = "{project_name}"\n'
+        'adapter = "postgres"\n'
+        'default_environment = "dev"\n\n'
+        "[connection]\n"
+        f'host = "{config["host"]}"\n'
+        f"port = {config['port']}\n"
+        f'dbname = "{config["dbname"]}"\n'
+        f'user = "{config["user"]}"\n'
+        f'password = "{config["password"]}"\n\n'
+        "[environments.dev]\n"
+        f'schema = "{dev_schema_name}"\n'
+        'defer_sources_to = "prod"\n\n'
+        "[environments.prod]\n"
+        f'schema = "{prod_schema_name}"\n\n'
         "[defaults]\n"
         'materialized = "table"\n'
     )
@@ -292,5 +316,22 @@ def prepare_postgres_waffle_shop(*, tmp_path: Path, config: dict[str, object]) -
         "[path_defaults.staging]\n"
         'materialized = "view"\n',
         encoding="utf-8",
+    )
+    return project_dir, schema_name
+
+
+def prepare_postgres_source_loader_strategies(
+    *, tmp_path: Path, config: dict[str, object]
+) -> tuple[Path, str]:
+    """Prepare source-loader strategy fixture wired to a unique Postgres schema."""
+
+    schema_name: str = build_unique_schema_name(prefix="sqb_load")
+    project_dir: Path = prepare_source_loader_strategies(
+        tmp_path=tmp_path,
+        project_toml=build_postgres_project_toml(
+            project_name="source_loader_strategies",
+            schema_name=schema_name,
+            config=config,
+        ),
     )
     return project_dir, schema_name

@@ -28,6 +28,7 @@ CREATE_PLAYGROUND_PROJECT_TEST_CASES: list[CreatePlaygroundProjectTestCase] = [
             Path("audits/generic/expression_is_true.sql"),
             Path("functions/sql/udf__is_completed_order.sql"),
             Path("functions/sql/table_fn__customer_orders.sql"),
+            Path("loaders/waffle_sources.py"),
             Path("macros/currency.py"),
             Path("materializations/partition_tracked.py"),
         ),
@@ -50,6 +51,34 @@ CREATE_PLAYGROUND_PROJECT_TEST_CASES: list[CreatePlaygroundProjectTestCase] = [
             Path("dagster/README.md"),
         ),
         unexpected_paths=(Path("target"),),
+    ),
+    CreatePlaygroundProjectTestCase(
+        description="creates loader-focused waffle shop playground from packaged template",
+        target_relative_path=Path("loader_waffle_shop_playground"),
+        template="loader_waffle_shop",
+        expected_files=(
+            Path("README.md"),
+            Path("sqlbuild_project.toml"),
+            Path("models/fact_waffle_orders.sql"),
+            Path("models/customer_revenue.sql"),
+            Path("sources/raw.yml"),
+            Path("loaders/waffle_loaders.py"),
+        ),
+        unexpected_paths=(Path("target"), Path("sqlbuild_local.toml")),
+        expected_file_fragments=(
+            (Path("sources/raw.yml"), ("loader: load_raw_orders", "loader: load_raw_customers")),
+            (
+                Path("loaders/waffle_loaders.py"),
+                ("def load_raw_orders(ctx):", "def load_raw_customers(ctx):"),
+            ),
+        ),
+        unexpected_file_fragments=(
+            (Path("sources/raw.yml"), ("loader: raw_orders", "loader: raw_customers")),
+            (
+                Path("loaders/waffle_loaders.py"),
+                ("def raw_orders(ctx):", "def raw_customers(ctx):"),
+            ),
+        ),
     ),
 ]
 
@@ -76,6 +105,17 @@ RUN_PLAYGROUND_TEST_CASES: list[RunPlaygroundTestCase] = [
             "dagster dev -f dagster/definitions.py",
         ),
     ),
+    RunPlaygroundTestCase(
+        description="prints loader-focused waffle shop next steps",
+        target_path="demo_loader_shop",
+        template="loader_waffle_shop",
+        expected_stdout_fragments=(
+            "SQLBuild playground created",
+            "Project: demo_loader_shop",
+            "Example: loader-focused waffle shop",
+            "sqb build",
+        ),
+    ),
 ]
 
 
@@ -98,6 +138,20 @@ def test_given_missing_target_when_creating_playground_then_it_copies_clean_temp
     unexpected_path: Path
     for unexpected_path in test_case.unexpected_paths:
         assert not (target_dir / unexpected_path).exists()
+    expected_file: Path
+    expected_fragments: tuple[str, ...]
+    for expected_file, expected_fragments in test_case.expected_file_fragments:
+        file_text: str = (target_dir / expected_file).read_text(encoding="utf-8")
+        expected_fragment: str
+        for expected_fragment in expected_fragments:
+            assert expected_fragment in file_text
+    unexpected_file: Path
+    unexpected_fragments: tuple[str, ...]
+    for unexpected_file, unexpected_fragments in test_case.unexpected_file_fragments:
+        file_text = (target_dir / unexpected_file).read_text(encoding="utf-8")
+        unexpected_fragment: str
+        for unexpected_fragment in unexpected_fragments:
+            assert unexpected_fragment not in file_text
 
 
 @pytest.mark.parametrize(

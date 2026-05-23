@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
+from sqlbuild.adapter.shared.models import ColumnInfo, NormalizedType, StatementRecorder
+from sqlbuild.adapter.shared.type_normalization import normalize_type, types_equal
+from sqlbuild.adapter.shared.types import TypeFamily
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
@@ -720,7 +722,11 @@ def _apply_snapshot_schema_change(
         column.name
         for column in delta_columns
         if column.name.lower() in target_map
-        and target_map[column.name.lower()].type.upper() != column.type.upper()
+        and not _snapshot_types_compatible(
+            target_type=target_map[column.name.lower()].type,
+            delta_type=column.type,
+            dialect=adapter.sqlglot_dialect(),
+        )
     )
 
     if type_changed:
@@ -761,6 +767,20 @@ def _apply_snapshot_schema_change(
         columns=added,
         statement_recorder=statement_recorder,
     )
+
+
+def _snapshot_types_compatible(*, target_type: str, delta_type: str, dialect: str | None) -> bool:
+    if types_equal(left=target_type, right=delta_type, dialect=dialect):
+        return True
+    target: NormalizedType = normalize_type(type_sql=target_type, dialect=dialect)
+    delta: NormalizedType = normalize_type(type_sql=delta_type, dialect=dialect)
+    if target.family != TypeFamily.STRING or delta.family != TypeFamily.STRING:
+        return False
+    if target.length is None:
+        return True
+    if delta.length is None:
+        return False
+    return delta.length <= target.length
 
 
 def _effective_snapshot_schema_change_policy(

@@ -1,0 +1,81 @@
+from dataclasses import dataclass, field
+
+
+@dataclass(frozen=True)
+class SourceLoaderStrategiesE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_countries: tuple[tuple[object, ...], ...]
+    expected_webhook_event_counts: tuple[tuple[object, ...], ...]
+    expected_order_events: tuple[tuple[object, ...], ...]
+    expected_customers: tuple[tuple[object, ...], ...]
+    expected_loader_status: tuple[tuple[object, ...], ...]
+    expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class SourceLoaderSchemaEvolutionE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class ChainedLoaderSelectionE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_raw_events_exists: bool
+    expected_intermediate_rows: tuple[tuple[object, ...], ...]
+    expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class ChainedLoaderPruningE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_raw_events_exists: bool
+    expected_intermediate_exists: bool
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class ChainedLoaderFailureE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_ok_rows: tuple[tuple[object, ...], ...]
+    expected_error_fragment: str
+    expected_skip_fragment: str
+    expected_return_code: int = 1
+
+
+@dataclass(frozen=True)
+class IntermediateLoaderStrategyE2ETestCase:
+    description: str
+    loader_py: str
+    expected_intermediate_rows: tuple[tuple[object, ...], ...]
+    expected_terminal_rows: tuple[tuple[object, ...], ...]
+    command: tuple[str, ...] = ("--no-color", "load", "--select", "+raw_events")
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class LoaderWaffleShopE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    run_count: int
+    expected_order_count: int
+    expected_customer_revenue_rows: tuple[tuple[object, ...], ...]
+    expected_intermediate_counts: tuple[tuple[str, int], ...]
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class SourceLoaderErrorE2ETestCase:
+    description: str
+    repo_files: dict[str, str]
+    command: tuple[str, ...]
+    expected_error_fragment: str
+    expected_return_code: int = 1

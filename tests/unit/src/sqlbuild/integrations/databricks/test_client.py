@@ -73,8 +73,8 @@ TEST_CASES: list[DatabricksRenderDeleteInsertCursorTestCase] = [
         columns=None,
         expected_statements=(
             "INSERT INTO `workspace`.`test`.`orders` REPLACE WHERE "
-            "ordered_at >= TIMESTAMP '2026-01-01 00:00:00' AND "
-            "ordered_at < TIMESTAMP '2026-01-02 00:00:00' "
+            "`ordered_at` >= TIMESTAMP '2026-01-01 00:00:00' AND "
+            "`ordered_at` < TIMESTAMP '2026-01-02 00:00:00' "
             "SELECT * FROM `workspace`.`test`.`orders__delta`",
         ),
     ),
@@ -87,8 +87,8 @@ TEST_CASES: list[DatabricksRenderDeleteInsertCursorTestCase] = [
         cursor_end="10",
         columns=("id", "status"),
         expected_statements=(
-            "INSERT INTO `workspace`.`test`.`orders` (id, status) REPLACE WHERE "
-            "id >= 1 AND id < 10 "
+            "INSERT INTO `workspace`.`test`.`orders` (`id`, `status`) REPLACE WHERE "
+            "`id` >= 1 AND `id` < 10 "
             "SELECT id, status FROM `workspace`.`test`.`orders__delta`",
         ),
     ),

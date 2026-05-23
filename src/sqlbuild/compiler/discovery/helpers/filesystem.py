@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import importlib.util
+import inspect
+import sys
+from importlib.machinery import ModuleSpec
 from pathlib import Path
+from types import ModuleType
 
-from sqlbuild.compiler.discovery.exceptions import SchemaParseError
+from sqlbuild.compiler.discovery.exceptions import LoaderDiscoveryError, SchemaParseError
 from sqlbuild.compiler.discovery.helpers.python_functions import parse_python_function
 from sqlbuild.compiler.discovery.helpers.sql_audits import parse_sql_audit_file
 from sqlbuild.compiler.discovery.helpers.sql_functions import parse_function_sql
@@ -20,6 +25,7 @@ from sqlbuild.compiler.discovery.helpers.yml_sources import parse_sources_yml
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAdapterFile,
     DiscoveredAuditFile,
+    DiscoveredLoaderFunction,
     DiscoveredMacroFile,
     DiscoveredMaterializationFile,
     DiscoveredPythonFunctionFile,
@@ -36,6 +42,7 @@ from sqlbuild.compiler.shared.constants import (
     SEED_FILE_SUFFIX,
     YAML_FILE_SUFFIXES,
 )
+from sqlbuild.loaders import LoaderDefinition, get_loader_definition
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -314,6 +321,65 @@ def discover_materialization_files(
         for file_path in sorted(materializations_root.rglob("*.py"))
         if file_path.stem != "__init__"
     )
+
+
+def discover_loader_functions(*, project_dir: Path) -> tuple[DiscoveredLoaderFunction, ...]:
+    """Discover decorated source loader functions under loaders/."""
+
+    loaders_root: Path = project_dir / "loaders"
+    if not loaders_root.is_dir():
+        return ()
+
+    discovered: list[DiscoveredLoaderFunction] = []
+    file_path: Path
+    for file_path in sorted(loaders_root.rglob("*.py")):
+        if file_path.stem == "__init__":
+            continue
+        module: ModuleType = _load_loader_module(file_path=file_path, project_dir=project_dir)
+        for _, value in inspect.getmembers(module, inspect.isfunction):
+            if value.__module__ != module.__name__:
+                continue
+            definition: LoaderDefinition | None = get_loader_definition(value)
+            if definition is None:
+                continue
+            discovered.append(
+                DiscoveredLoaderFunction(
+                    file_path=file_path,
+                    relative_path=file_path.relative_to(project_dir),
+                    name=definition.name,
+                    function=value,
+                    depends_on=definition.depends_on,
+                    target=definition.target,
+                    write_strategy=definition.write_strategy,
+                    cursor_column=definition.cursor_column,
+                    unique_key=definition.unique_key,
+                    columns=definition.columns,
+                    contract=definition.contract,
+                )
+            )
+    return tuple(discovered)
+
+
+def _load_loader_module(*, file_path: Path, project_dir: Path) -> ModuleType:
+    module_name: str = "sqlbuild_project_loader_" + "_".join(
+        file_path.relative_to(project_dir).with_suffix("").parts
+    )
+    spec: ModuleSpec | None = importlib.util.spec_from_file_location(module_name, file_path)
+    if spec is None or spec.loader is None:
+        raise LoaderDiscoveryError(f"Could not load source loader file {file_path}")
+    module: ModuleType = importlib.util.module_from_spec(spec)
+    old_path: list[str] = list(sys.path)
+    sys.path.insert(0, str(project_dir))
+    try:
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+    except Exception as error:
+        raise LoaderDiscoveryError(
+            f"Failed to import source loader file {file_path.relative_to(project_dir)}: {error}"
+        ) from error
+    finally:
+        sys.path = old_path
+    return module
 
 
 def discover_adapter_file(*, project_dir: Path) -> DiscoveredAdapterFile | None:

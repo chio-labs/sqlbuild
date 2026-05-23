@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -9,7 +10,8 @@ from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry, SourceLocation
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
+from sqlbuild.spec.models.types import SourceWriteStrategy
 
 
 @dataclass(frozen=True)
@@ -157,6 +159,23 @@ class DiscoveredMaterializationFile:
 
 
 @dataclass(frozen=True)
+class DiscoveredLoaderFunction:
+    """A discovered project source loader function."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    function: Callable[..., object]
+    depends_on: tuple[Callable[..., object], ...] = field(default_factory=tuple)
+    target: str | None = None
+    write_strategy: SourceWriteStrategy | None = None
+    cursor_column: str | None = None
+    unique_key: tuple[str, ...] = field(default_factory=tuple)
+    columns: tuple[SourceColumnEntry, ...] = field(default_factory=tuple)
+    contract: str | None = None
+
+
+@dataclass(frozen=True)
 class DiscoveredProjectInputs:
     """All raw project inputs discovered from disk before semantic resolution."""
 
@@ -173,4 +192,5 @@ class DiscoveredProjectInputs:
     audit_files: tuple[DiscoveredAuditFile, ...] = field(default_factory=tuple)
     macro_files: tuple[DiscoveredMacroFile, ...] = field(default_factory=tuple)
     materialization_files: tuple[DiscoveredMaterializationFile, ...] = field(default_factory=tuple)
+    loader_functions: tuple[DiscoveredLoaderFunction, ...] = field(default_factory=tuple)
     adapter_file: DiscoveredAdapterFile | None = None

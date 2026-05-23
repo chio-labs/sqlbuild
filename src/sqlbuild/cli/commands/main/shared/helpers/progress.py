@@ -14,6 +14,7 @@ from sqlbuild.cli.commands.main.helpers.sql_test_progress import (
     format_check_name,
 )
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import (
@@ -22,6 +23,7 @@ from sqlbuild.executor.build.models import (
     SeedExecutionResult,
 )
 from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
+from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
@@ -40,6 +42,7 @@ from sqlbuild.shared.helpers.materialization_labels import (
     model_execution_annotation,
     model_resource_type,
 )
+from sqlbuild.shared.types import ExecutionResourceKind
 
 _TYPE_WIDTH: int = 10
 _MAX_NAME_WIDTH: int = 60
@@ -92,7 +95,16 @@ class BuildProgressCallbacks:
         }
         self._test_results_by_model: dict[str, SqlTestExecutionResult] = {}
         self._total: int = (
-            len(plan.model_entries) + len(plan.seed_entries) + len(plan.function_entries)
+            len(plan.model_entries)
+            + len(plan.seed_entries)
+            + len(plan.function_entries)
+            + sum(
+                1
+                for key in plan.execution_order
+                if key.resource_type == CompiledResourceType.SOURCE
+                and plan.source_map.get(key.name) is not None
+                and plan.source_map[key.name].loader is not None
+            )
         )
         self._counter: int = 0
         self._use_color: bool = use_color
@@ -102,7 +114,7 @@ class BuildProgressCallbacks:
         self._stream = sys.stderr if debug else sys.stdout
         self._start_time: float = time.monotonic()
         self._current_node_name: str = ""
-        self._current_node_type: str = ""
+        self._current_node_type: ExecutionResourceKind = ExecutionResourceKind.TABLE
         self._current_sub_message: str = ""
         self._spinner_frame_index: int = 0
         self._write_lock: threading.Lock = threading.Lock()
@@ -167,9 +179,9 @@ class BuildProgressCallbacks:
         styled: str = blue_dim(f"    log  {message}") if self._use_color else f"    log  {message}"
         self._stream.write(f"\n{styled}\n")
 
-    def on_node_start(self, name: str, materialization_type: str) -> None:
+    def on_node_start(self, name: str, resource_kind: ExecutionResourceKind) -> None:
         self._current_node_name = name
-        self._current_node_type = materialization_type
+        self._current_node_type = resource_kind
         self._current_sub_message = ""
         if self._is_tty:
             self._hide_cursor()
@@ -290,7 +302,7 @@ class BuildProgressCallbacks:
             function_name: str = _truncate_name(node_result.function_name, self._name_width)
             self._write_top_level_result_line(
                 ctr=ctr,
-                resource_type="function",
+                resource_type=ExecutionResourceKind.FUNCTION.value,
                 name=function_name,
                 status=status,
                 duration=duration,
@@ -300,6 +312,31 @@ class BuildProgressCallbacks:
                     error_code=node_result.error_code,
                     error_message=node_result.error_message,
                     error_help=node_result.error_help,
+                )
+            self._stream.flush()
+            return
+
+        if isinstance(node_result, LoadExecutionResult):
+            status = colorize_status(
+                _execution_status_display(node_result.status),
+                use_color=self._use_color,
+            )
+            duration = _format_duration(node_result.duration_ms)
+            source_name: str = _truncate_name(node_result.source_name, self._name_width)
+            detail: str = f"  rows={node_result.rows_loaded:,}"
+            self._write_top_level_result_line(
+                ctr=ctr,
+                resource_type=node_result.resource_kind.value,
+                name=source_name,
+                status=status,
+                duration=duration,
+                detail=detail,
+            )
+            if node_result.status == ExecutionStatus.FAILED and node_result.error_message:
+                self._write_error_detail(
+                    error_code=None,
+                    error_message=node_result.error_message,
+                    error_help=None,
                 )
             self._stream.flush()
             return

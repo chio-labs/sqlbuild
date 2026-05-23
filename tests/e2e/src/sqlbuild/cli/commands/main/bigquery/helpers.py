@@ -9,6 +9,7 @@ from typing import Any
 from sqlbuild.integrations.bigquery.client import BigQueryAdapter
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     WAFFLE_SHOP_DIR,
+    prepare_source_loader_strategies,
     stringify_warehouse_rows,
 )
 from tests.integration.src.sqlbuild.integrations.bigquery.helpers import (
@@ -51,6 +52,30 @@ def build_bigquery_project_toml(*, project_name: str, dataset_name: str) -> str:
     )
 
 
+def build_bigquery_source_deferral_project_toml(
+    *, project_name: str, dev_dataset_name: str, prod_dataset_name: str
+) -> str:
+    project_id: str = str(build_bigquery_connection_config(schema=dev_dataset_name)["project"])
+    location: str = str(build_bigquery_connection_config(schema=dev_dataset_name)["location"])
+    return (
+        f'name = "{project_name}"\n'
+        'adapter = "bigquery"\n'
+        'default_environment = "dev"\n\n'
+        "[connection]\n"
+        'project = "${ENV:SQB_TEST_BIGQUERY_PROJECT}"\n'
+        f'location = "{location}"\n\n'
+        "[environments.dev]\n"
+        f'database = "{project_id}"\n'
+        f'schema = "{dev_dataset_name}"\n'
+        'defer_sources_to = "prod"\n\n'
+        "[environments.prod]\n"
+        f'database = "{project_id}"\n'
+        f'schema = "{prod_dataset_name}"\n\n'
+        "[defaults]\n"
+        'materialized = "table"\n'
+    )
+
+
 def prepare_bigquery_waffle_shop(*, tmp_path: Path) -> tuple[Path, str]:
     """Prepare the e2e waffle shop project wired to a unique BigQuery dataset."""
 
@@ -83,6 +108,20 @@ def prepare_bigquery_waffle_shop(*, tmp_path: Path) -> tuple[Path, str]:
     (project_dir / "sqlbuild_local.toml").write_text(
         build_bigquery_local_config(location=location),
         encoding="utf-8",
+    )
+    return project_dir, dataset_name
+
+
+def prepare_bigquery_source_loader_strategies(*, tmp_path: Path) -> tuple[Path, str]:
+    """Prepare source-loader strategy fixture wired to a unique BigQuery dataset."""
+
+    dataset_name: str = build_unique_dataset_name(prefix="sqlbuild_e2e_load")
+    project_dir: Path = prepare_source_loader_strategies(
+        tmp_path=tmp_path,
+        project_toml=build_bigquery_project_toml(
+            project_name="source_loader_strategies",
+            dataset_name=dataset_name,
+        ),
     )
     return project_dir, dataset_name
 

@@ -55,6 +55,13 @@ SELECT 1
 """,
                 "audits/generic/not_null.sql": "AUDIT ();\nSELECT 1\n",
                 "macros/name_helpers.py": "def slug() -> str:\n    return 'slug'\n",
+                "loaders/raw_orders.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_orders_loader(ctx):
+    return []
+""",
                 "target/manifest.json": '{"metadata": {"dbt_schema_version": "v12"}}\n',
                 "adapter.py": "class ExampleAdapter:\n    pass\n",
                 "sqlbuild_local.toml": 'environment = "dev"\n',
@@ -85,6 +92,7 @@ SELECT 1
             expected_audit_block_names=(None,),
             expected_audit_block_sql_bodies=("SELECT 1",),
             expected_macro_paths=("macros/name_helpers.py",),
+            expected_loader_names=("raw_orders_loader",),
             expected_adapter_path="adapter.py",
         )
     ],
@@ -197,6 +205,10 @@ def test_given_project_repo_slice_when_discovering_inputs_then_it_returns_expect
     assert (
         tuple(str(macro_file.relative_path) for macro_file in discovered_inputs.macro_files)
         == test_case.expected_macro_paths
+    )
+    assert (
+        tuple(loader_function.name for loader_function in discovered_inputs.loader_functions)
+        == test_case.expected_loader_names
     )
     assert (
         None
@@ -317,6 +329,141 @@ seeds:
             + "\n",
         },
         expected_error_fragment="Logical relation name 'country_codes' is declared as both source",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when a source references an unknown loader",
+        repo_files=base_repo_files()
+        | {
+            "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    loader: missing_loader
+""".strip()
+            + "\n",
+        },
+        expected_error_fragment="Source 'raw_orders' in sources/raw.yml references unknown loader",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when loader names are duplicated",
+        repo_files=base_repo_files()
+        | {
+            "loaders/a.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_orders(ctx):
+    return []
+""",
+            "loaders/b.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_orders(ctx):
+    return []
+""",
+        },
+        expected_error_fragment="Duplicate source loader found for 'raw_orders'",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when source name collides with intermediate loader name",
+        repo_files=base_repo_files()
+        | {
+            "sources/raw.yml": """
+sources:
+  - name: fetch_orders
+    loader: raw_orders_loader
+""".strip()
+            + "\n",
+            "loaders/raw_orders.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def fetch_orders(ctx):
+    return []
+
+@loader(depends_on=[fetch_orders])
+def raw_orders_loader(ctx):
+    return []
+""",
+        },
+        expected_error_fragment="Source 'fetch_orders' in sources/raw.yml conflicts with loader",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when source name collides with terminal loader name",
+        repo_files=base_repo_files()
+        | {
+            "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    loader: raw_orders
+""".strip()
+            + "\n",
+            "loaders/raw_orders.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_orders(ctx):
+    return []
+""",
+        },
+        expected_error_fragment="Source 'raw_orders' in sources/raw.yml conflicts with loader",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when loader dependency is not decorated",
+        repo_files=base_repo_files()
+        | {
+            "loaders/events.py": """
+from sqlbuild.loaders import loader
+
+def fetch_events(ctx):
+    return []
+
+@loader(depends_on=[fetch_events])
+def enriched_events(ctx):
+    return []
+""",
+        },
+        expected_error_fragment="Loader 'enriched_events' depends on an unknown loader",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when loader dependencies contain a cycle",
+        repo_files=base_repo_files()
+        | {
+            "loaders/events.py": """
+from sqlbuild.loaders import loader
+
+def fetch_events(ctx):
+    return []
+
+@loader(depends_on=[fetch_events])
+def enriched_events(ctx):
+    return []
+
+fetch_events = loader(depends_on=[enriched_events])(fetch_events)
+""",
+        },
+        expected_error_fragment="Loader dependency cycle detected",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when terminal loader owns source config",
+        repo_files=base_repo_files()
+        | {
+            "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    loader: raw_orders_loader
+    write_strategy: table
+""".strip()
+            + "\n",
+            "loaders/raw_orders.py": """
+from sqlbuild.loaders import loader
+
+@loader(write_strategy="table", columns=[{"name": "id", "type": "INTEGER"}])
+def raw_orders_loader(ctx):
+    return []
+""",
+        },
+        expected_error_fragment="terminal source loader write and schema config must be declared",
     ),
     DiscoverProjectInputsErrorTestCase(
         description="raises when seeds are declared outside seeds directory",

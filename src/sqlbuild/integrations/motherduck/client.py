@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import json
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Any, ClassVar
 from urllib.parse import urlencode
 
+from sqlbuild.adapter.shared.types import LoaderLogicalType
 from sqlbuild.integrations.shared.classes.duckdb import DuckDbBackedAdapter
 
 
@@ -12,6 +16,118 @@ class MotherDuckAdapter(DuckDbBackedAdapter):
     """MotherDuck adapter backed by DuckDB's MotherDuck connection support."""
 
     sqlglot_dialect_name: ClassVar[str | None] = "duckdb"
+
+    def render_loader_logical_type(self, type_name: LoaderLogicalType) -> str:
+        match type_name:
+            case LoaderLogicalType.BOOLEAN:
+                return "BOOLEAN"
+            case LoaderLogicalType.INTEGER:
+                return "BIGINT"
+            case LoaderLogicalType.FLOAT:
+                return "DOUBLE"
+            case LoaderLogicalType.STRING:
+                return "VARCHAR"
+            case LoaderLogicalType.TIMESTAMP:
+                return "TIMESTAMP"
+            case LoaderLogicalType.DATE:
+                return "DATE"
+            case LoaderLogicalType.JSON:
+                return "JSON"
+
+    def render_loader_value_literal(
+        self, *, value: object, logical_type: LoaderLogicalType | None
+    ) -> str:
+        if value is None:
+            return "NULL"
+        if isinstance(value, bool):
+            return "TRUE" if value else "FALSE"
+        if isinstance(value, int | float | Decimal):
+            return str(value)
+        if isinstance(value, datetime | date):
+            return self._quote_sql_string(value.isoformat())
+        if isinstance(value, dict | list):
+            return self._quote_sql_string(json.dumps(value, sort_keys=True))
+        return self._quote_sql_string(str(value))
+
+    def render_loader_rows_select(
+        self,
+        *,
+        rows: tuple[dict[str, object], ...],
+        column_names: tuple[str, ...],
+        column_sql_types: dict[str, str],
+        inferred_types: dict[str, LoaderLogicalType],
+    ) -> str:
+        if not rows:
+            projections: str = ", ".join(
+                "CAST(NULL AS "
+                f"{column_sql_types.get(column_name, 'VARCHAR')}) AS "
+                f"{self.render_identifier(column_name)}"
+                for column_name in column_names
+            )
+            return f"SELECT {projections} WHERE 1 = 0"
+        values_sql: str = ", ".join(
+            "("
+            + ", ".join(
+                self.render_loader_value_literal(
+                    value=row.get(column_name),
+                    logical_type=inferred_types.get(column_name),
+                )
+                for column_name in column_names
+            )
+            + ")"
+            for row in rows
+        )
+        column_sql: str = ", ".join(
+            self.render_identifier(column_name) for column_name in column_names
+        )
+        select_sql: str = ", ".join(
+            (
+                self.render_identifier(column_name)
+                if column_name not in column_sql_types
+                else "CAST("
+                f"{self.render_identifier(column_name)} AS {column_sql_types[column_name]}) "
+                f"AS {self.render_identifier(column_name)}"
+            )
+            for column_name in column_names
+        )
+        return f"SELECT {select_sql} FROM (VALUES {values_sql}) AS __loader_rows({column_sql})"
+
+    def _quote_sql_string(self, value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
+
+    def render_source_expression_cast(
+        self, *, expression: str, target_type: str, alias: str
+    ) -> str:
+        return f"CAST({expression} AS {target_type}) AS {alias}"
+
+    def render_source_expression_relation(self, *, expression: str) -> str:
+        stripped_expression: str = expression.strip().removesuffix(";").strip()
+        if stripped_expression.startswith("("):
+            return stripped_expression
+        lowered: str = stripped_expression.lower()
+        if lowered.startswith(("select", "with", "values")):
+            return f"({stripped_expression})"
+        return stripped_expression
+
+    def render_source_expression_cast_subquery(
+        self, *, source_relation: str, projections: tuple[str, ...]
+    ) -> str:
+        projection_clause: str = ", ".join(projections)
+        return f"(SELECT {projection_clause} FROM {source_relation} AS __source_expression)"
+
+    def render_source_relation_cast_subquery(
+        self,
+        *,
+        source_relation: str,
+        cast_projections: tuple[str, ...],
+        cast_column_names: tuple[str, ...],
+        all_columns_cast: bool,
+    ) -> str:
+        cast_clause: str = ", ".join(cast_projections)
+        if all_columns_cast:
+            return f"(SELECT {cast_clause} FROM {source_relation})"
+        exclude_list: str = ", ".join(cast_column_names)
+        return f"(SELECT * EXCLUDE ({exclude_list}), {cast_clause} FROM {source_relation})"
 
     def connect(self, config: dict[str, Any]) -> Any:
         """Open a MotherDuck connection using DuckDB's md: connection string."""

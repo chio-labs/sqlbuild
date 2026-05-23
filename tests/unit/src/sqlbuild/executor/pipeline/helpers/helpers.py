@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
+    CompiledRelationTarget,
     CompiledSqlScenario,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -20,6 +24,7 @@ from sqlbuild.compiler.planner.models import (
     ScenarioGraphPlan,
     ScenarioRelationMap,
     ScenarioRelationPlan,
+    SeedPlanEntry,
 )
 from sqlbuild.executor.scenario.models import (
     ScenarioLocalSnapshotLoadResult,
@@ -27,6 +32,7 @@ from sqlbuild.executor.scenario.models import (
 )
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.shared.constants import SCENARIO_LOCAL_JSONL_INVALID
+from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
 from tests.unit.src.sqlbuild.executor.pipeline.helpers._test_types import (
     ScenarioLocalPipelineTestCase,
 )
@@ -61,6 +67,59 @@ class ScenarioLocalPipelineTestAdapter(ScenarioPipelineTestAdapter):
         if database:
             Path(str(database)).touch()
         return object()
+
+
+class SeedPipelineTestAdapter(BaseAdapter):
+    """Adapter that records seed pipeline connection and load calls."""
+
+    def __init__(self, *, barrier_targets: tuple[str, ...] = ()) -> None:
+        self.connections: list[object] = []
+        self.closed_connections: list[object] = []
+        self.loads: list[tuple[str, object]] = []
+        self.barrier_targets: frozenset[str] = frozenset(barrier_targets)
+        self.barrier: threading.Barrier | None = None
+        if self.barrier_targets:
+            self.barrier = threading.Barrier(len(self.barrier_targets))
+
+    def connect(self, config: dict[str, object]) -> object:
+        del config
+        connection: object = object()
+        self.connections.append(connection)
+        return connection
+
+    def execute(self, connection: object, sql: str) -> object:
+        del connection, sql
+        return object()
+
+    def close(self, connection: object) -> None:
+        self.closed_connections.append(connection)
+
+    def ensure_schema(
+        self,
+        connection: object,
+        *,
+        database: str | None,
+        schema: str | None,
+        statement_recorder: StatementRecorder | None = None,
+    ) -> None:
+        del connection, database, schema, statement_recorder
+
+    def load_seed(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        file_path: Path,
+        columns: tuple[ColumnInfo, ...],
+        csv_settings: SeedCsvSettings = default_seed_csv_settings,
+        replace: bool = True,
+        infer_types: bool = False,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        del file_path, columns, csv_settings, replace, infer_types, statement_recorder
+        if self.barrier is not None and target in self.barrier_targets:
+            self.barrier.wait(timeout=1)
+        self.loads.append((target, connection))
 
 
 class ScenarioPipelinePlanBuilder:
@@ -99,6 +158,32 @@ def build_scenario_pipeline_result(*, scenario_names: tuple[str, ...]) -> Compil
             sql_scenarios=scenarios,
         ),
         plan_output=PlanOutput(),
+    )
+
+
+def build_seed_plan(*, seed_names: tuple[str, ...]) -> PlanOutput:
+    """Build a minimal seed-only plan for pipeline tests."""
+
+    return PlanOutput(
+        seed_entries=tuple(build_seed_plan_entry(name=name) for name in seed_names),
+    )
+
+
+def build_seed_plan_entry(*, name: str) -> SeedPlanEntry:
+    """Build one minimal seed plan entry for pipeline tests."""
+
+    return SeedPlanEntry(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.SEED, name=name),
+        name=name,
+        target=CompiledRelationTarget(
+            database=None,
+            schema=None,
+            name=name,
+            qualified_name=name,
+        ),
+        file_path=Path(f"seeds/{name}.csv"),
+        columns=(),
+        csv_settings=default_seed_csv_settings,
     )
 
 

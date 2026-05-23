@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.compiler.auditing.types import AuditOutcome
+from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.helpers.indexes import build_execution_indexes
@@ -21,10 +23,12 @@ from sqlbuild.executor.build.models import (
 )
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.custom.models import MaterializationResult
+from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.project import SnapshotsConfig
 
 
@@ -43,9 +47,15 @@ def execute_build_plan(
     run_tests: bool = True,
     fail_fast: bool = False,
     on_progress: Callable[[str], None] | None = None,
-    on_node_start: Callable[[str, str], None] | None = None,
+    on_node_start: Callable[[str, ExecutionResourceKind], None] | None = None,
     on_node_complete: Callable[[object], None] | None = None,
     custom_materializations: dict[str, Callable[..., MaterializationResult]] | None = None,
+    loader_functions: tuple[DiscoveredLoaderFunction, ...] = (),
+    loader_is_reload: bool = False,
+    start_cursor_ts: datetime | None = None,
+    end_cursor_ts: datetime | None = None,
+    start_cursor_int: int | None = None,
+    end_cursor_int: int | None = None,
     environment: str = "",
     effective_vars: dict[str, object] | None = None,
     warehouse_relations: dict[str, RelationInfo] | None = None,
@@ -72,6 +82,12 @@ def execute_build_plan(
         on_node_complete=on_node_complete,
         on_progress=on_progress,
         custom_materializations=custom_materializations,
+        loader_functions=loader_functions,
+        loader_is_reload=loader_is_reload,
+        start_cursor_ts=start_cursor_ts,
+        end_cursor_ts=end_cursor_ts,
+        start_cursor_int=start_cursor_int,
+        end_cursor_int=end_cursor_int,
         environment=environment,
         effective_vars=effective_vars,
         warehouse_relations=warehouse_relations,
@@ -81,6 +97,7 @@ def execute_build_plan(
     model_results: tuple[ModelExecutionResult, ...]
     seed_results: tuple[SeedExecutionResult, ...]
     function_results: tuple[FunctionExecutionResult, ...]
+    load_results: tuple[LoadExecutionResult, ...]
     test_results: tuple[SqlTestExecutionResult, ...]
     source_audit_results: tuple[AuditExecutionResult, ...]
     end_audit_results: tuple[AuditExecutionResult, ...]
@@ -88,6 +105,7 @@ def execute_build_plan(
         model_results,
         seed_results,
         function_results,
+        load_results,
         test_results,
         source_audit_results,
         end_audit_results,
@@ -97,6 +115,7 @@ def execute_build_plan(
         model_results=model_results,
         seed_results=seed_results,
         function_results=function_results,
+        load_results=load_results,
         test_results=test_results,
         source_audit_results=source_audit_results,
         end_audit_results=end_audit_results,
@@ -108,6 +127,7 @@ def _aggregate_build_result(
     model_results: tuple[ModelExecutionResult, ...],
     seed_results: tuple[SeedExecutionResult, ...],
     function_results: tuple[FunctionExecutionResult, ...],
+    load_results: tuple[LoadExecutionResult, ...],
     test_results: tuple[SqlTestExecutionResult, ...],
     source_audit_results: tuple[AuditExecutionResult, ...],
     end_audit_results: tuple[AuditExecutionResult, ...],
@@ -152,6 +172,15 @@ def _aggregate_build_result(
             skipped_count += 1
         warning_count += len(function_result.warning_messages)
 
+    load_result: LoadExecutionResult
+    for load_result in load_results:
+        if load_result.status == ExecutionStatus.SUCCESS:
+            success_count += 1
+        elif load_result.status == ExecutionStatus.FAILED:
+            failure_count += 1
+        elif load_result.status == ExecutionStatus.SKIPPED:
+            skipped_count += 1
+
     test_result_entry: SqlTestExecutionResult
     for test_result_entry in test_results:
         if test_result_entry.outcome == SqlTestOutcome.PASS:
@@ -182,6 +211,7 @@ def _aggregate_build_result(
         model_results=model_results,
         seed_results=seed_results,
         function_results=function_results,
+        load_results=load_results,
         test_results=test_results,
         source_audit_results=source_audit_results,
         end_audit_results=end_audit_results,

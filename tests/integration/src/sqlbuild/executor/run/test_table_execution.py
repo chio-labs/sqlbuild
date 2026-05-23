@@ -15,6 +15,7 @@ from tests.integration.src.sqlbuild.executor.run._test_types import (
     TableSuccessTestCase,
 )
 from tests.integration.src.sqlbuild.executor.run.helpers import (
+    ExtraAuditDefinition,
     run_failure_test,
     run_success_test,
     verify_failure_warehouse_state,
@@ -112,7 +113,11 @@ STAGED_FAILURE_TEST_CASES: list[TableFailureTestCase] = [
         audit_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
         audit_severity="error",
         extra_audits=(
-            ("name_not_null", 'SELECT name FROM __ref("orders") WHERE name IS NULL', "error"),
+            ExtraAuditDefinition(
+                name="name_not_null",
+                audit_sql='SELECT name FROM __ref("orders") WHERE name IS NULL',
+                severity="error",
+            ),
         ),
         expected_failed_phase=ExecutionPhase.AUDIT,
         expected_staging_relation="staging.orders__staging",
