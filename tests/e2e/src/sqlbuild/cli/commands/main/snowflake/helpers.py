@@ -109,7 +109,8 @@ def prepare_snowflake_waffle_shop(*, tmp_path: Path) -> tuple[Path, str]:
         'materialized = "table"\n\n'
         "[environments.dev]\n"
         f'database = "{database_name}"\n'
-        f'schema = "{schema_name}"\n\n'
+        f'schema = "{schema_name}"\n'
+        'defer_sources_to = "dev"\n\n'
         "[environments.prod]\n"
         f'database = "{database_name}"\n'
         f'schema = "{schema_name}"\n\n'

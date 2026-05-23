@@ -16,6 +16,28 @@ from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 
 _SOURCE_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SOURCE)
+_DERIVED_TABLE_ALIAS_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "APPLY",
+        "CROSS",
+        "EXCEPT",
+        "FULL",
+        "GROUP",
+        "HAVING",
+        "INNER",
+        "INTERSECT",
+        "JOIN",
+        "LEFT",
+        "LIMIT",
+        "OFFSET",
+        "ON",
+        "ORDER",
+        "OUTER",
+        "RIGHT",
+        "UNION",
+        "WHERE",
+    }
+)
 
 
 def resolve_source_references(
@@ -32,64 +54,180 @@ def resolve_source_references(
 ) -> str:
     """Replace all __source() calls in query SQL with resolved names or CAST subqueries."""
 
-    def _replace_source(match: re.Match[str]) -> str:
+    def _replacement(match: re.Match[str]) -> str:
         source_name: str = match.group(1)
-        source_entry: SourceEntry | None = source_map.get(source_name)
-        if source_entry is None:
-            return match.group(0)
-        resolved_source: str = _render_source_relation(adapter=adapter, source_entry=source_entry)
-        warehouse_cols: tuple[ColumnInfo, ...] | None = source_warehouse_columns.get(source_name)
-        if source_entry.expression is None and warehouse_cols:
-            _validate_declared_columns(
-                qualified_name=resolved_source,
-                declared_columns=source_entry.columns,
-                available_columns=warehouse_cols,
-                contract_enforced=source_entry.contract == ContractPolicy.ENFORCED,
-                dialect=adapter.sqlglot_dialect_name,
-            )
-        if (
-            source_entry.expression is not None
-            and warehouse_cols
-            and source_entry.contract == ContractPolicy.ENFORCED
-        ):
-            _validate_declared_columns(
-                qualified_name=f"source expression '{source_name}'",
-                declared_columns=source_entry.columns,
-                available_columns=warehouse_cols,
-                contract_enforced=source_entry.contract == ContractPolicy.ENFORCED,
-                dialect=adapter.sqlglot_dialect_name,
-            )
-        if source_entry.type_enforcement:
-            if source_entry.expression is not None:
-                resolved_source = _build_expression_cast_subquery(
-                    source_name=source_entry.name,
-                    source_relation=resolved_source,
-                    declared_columns=source_entry.columns,
-                    expression_columns=warehouse_cols,
-                    adapter=adapter,
-                )
-            elif warehouse_cols is not None and warehouse_cols:
-                resolved_source = _build_relation_cast_subquery(
-                    qualified_name=resolved_source,
-                    declared_columns=source_entry.columns,
-                    warehouse_columns=warehouse_cols,
-                    adapter=adapter,
-                )
-        if cursor_bounds is None:
-            return resolved_source
-        cursor_column: str | None = cursor_inputs.get(source_name)
-        if cursor_column is None:
-            return resolved_source
-        return _build_cursor_subquery(
-            resolved_source=resolved_source,
-            cursor_column=cursor_column,
-            bounds=cursor_bounds,
+        return _resolve_source_reference(
+            source_name=source_name,
+            source_map=source_map,
+            source_warehouse_columns=source_warehouse_columns,
+            cursor_bounds=cursor_bounds,
+            cursor_inputs=cursor_inputs,
             adapter=adapter,
             cursor_type=cursor_type,
             lower_bound_inclusive=lower_bound_inclusive,
+            unknown_source_sql=match.group(0),
         )
 
-    return _SOURCE_PATTERN.sub(_replace_source, query_sql)
+    if not adapter.requires_derived_table_aliases():
+        return _SOURCE_PATTERN.sub(_replacement, query_sql)
+
+    resolved_chunks: list[str] = []
+    cursor: int = 0
+    for match in _SOURCE_PATTERN.finditer(query_sql):
+        source_name: str = match.group(1)
+        resolved_source: str = _resolve_source_reference(
+            source_name=source_name,
+            source_map=source_map,
+            source_warehouse_columns=source_warehouse_columns,
+            cursor_bounds=cursor_bounds,
+            cursor_inputs=cursor_inputs,
+            adapter=adapter,
+            cursor_type=cursor_type,
+            lower_bound_inclusive=lower_bound_inclusive,
+            unknown_source_sql=match.group(0),
+        )
+        alias_span: tuple[int, str | None] = (match.end(), None)
+        if _is_derived_table_factor(resolved_source):
+            alias_span = _consume_source_alias(query_sql=query_sql, start=match.end())
+            alias: str = alias_span[1] or _internal_source_alias(source_name)
+            resolved_source = f"{resolved_source} AS {alias}"
+        resolved_chunks.append(query_sql[cursor : match.start()])
+        resolved_chunks.append(resolved_source)
+        cursor = alias_span[0]
+    resolved_chunks.append(query_sql[cursor:])
+    return "".join(resolved_chunks)
+
+
+def _resolve_source_reference(
+    *,
+    source_name: str,
+    source_map: dict[str, SourceEntry],
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
+    cursor_bounds: CursorBounds | None,
+    cursor_inputs: dict[str, str],
+    adapter: BaseAdapter,
+    cursor_type: str | None,
+    lower_bound_inclusive: bool,
+    unknown_source_sql: str,
+) -> str:
+    source_entry: SourceEntry | None = source_map.get(source_name)
+    if source_entry is None:
+        return unknown_source_sql
+    resolved_source: str = _render_source_relation(adapter=adapter, source_entry=source_entry)
+    warehouse_cols: tuple[ColumnInfo, ...] | None = source_warehouse_columns.get(source_name)
+    if source_entry.expression is None and warehouse_cols:
+        _validate_declared_columns(
+            qualified_name=resolved_source,
+            declared_columns=source_entry.columns,
+            available_columns=warehouse_cols,
+            contract_enforced=source_entry.contract == ContractPolicy.ENFORCED,
+            dialect=adapter.sqlglot_dialect_name,
+        )
+    if (
+        source_entry.expression is not None
+        and warehouse_cols
+        and source_entry.contract == ContractPolicy.ENFORCED
+    ):
+        _validate_declared_columns(
+            qualified_name=f"source expression '{source_name}'",
+            declared_columns=source_entry.columns,
+            available_columns=warehouse_cols,
+            contract_enforced=source_entry.contract == ContractPolicy.ENFORCED,
+            dialect=adapter.sqlglot_dialect_name,
+        )
+    if source_entry.type_enforcement:
+        if source_entry.expression is not None:
+            resolved_source = _build_expression_cast_subquery(
+                source_name=source_entry.name,
+                source_relation=resolved_source,
+                declared_columns=source_entry.columns,
+                expression_columns=warehouse_cols,
+                adapter=adapter,
+            )
+        elif warehouse_cols is not None and warehouse_cols:
+            resolved_source = _build_relation_cast_subquery(
+                qualified_name=resolved_source,
+                declared_columns=source_entry.columns,
+                warehouse_columns=warehouse_cols,
+                adapter=adapter,
+            )
+    if cursor_bounds is None:
+        return resolved_source
+    cursor_column: str | None = cursor_inputs.get(source_name)
+    if cursor_column is None:
+        return resolved_source
+    return _build_cursor_subquery(
+        resolved_source=resolved_source,
+        cursor_column=cursor_column,
+        bounds=cursor_bounds,
+        adapter=adapter,
+        cursor_type=cursor_type,
+        lower_bound_inclusive=lower_bound_inclusive,
+    )
+
+
+def _is_derived_table_factor(source_sql: str) -> bool:
+    return source_sql.lstrip().startswith("(")
+
+
+def _consume_source_alias(*, query_sql: str, start: int) -> tuple[int, str | None]:
+    index: int = _skip_whitespace(query_sql, start)
+    token_end: int
+    token: str | None
+    token_end, token = _read_alias_token(query_sql, index)
+    if token is None:
+        return start, None
+    if token.upper() == "AS":
+        alias_start: int = _skip_whitespace(query_sql, token_end)
+        alias_end: int
+        alias: str | None
+        alias_end, alias = _read_alias_token(query_sql, alias_start)
+        if alias is None or _is_alias_keyword(alias):
+            return start, None
+        return alias_end, alias
+    if _is_alias_keyword(token):
+        return start, None
+    return token_end, token
+
+
+def _skip_whitespace(query_sql: str, start: int) -> int:
+    index: int = start
+    while index < len(query_sql) and query_sql[index].isspace():
+        index += 1
+    return index
+
+
+def _read_alias_token(query_sql: str, start: int) -> tuple[int, str | None]:
+    if start >= len(query_sql):
+        return start, None
+    first_char: str = query_sql[start]
+    if first_char in ",);":
+        return start, None
+    if first_char == "[":
+        end_bracket: int = query_sql.find("]", start + 1)
+        if end_bracket == -1:
+            return start, None
+        return end_bracket + 1, query_sql[start : end_bracket + 1]
+    if first_char in {'"', "`"}:
+        end_quote: int = query_sql.find(first_char, start + 1)
+        if end_quote == -1:
+            return start, None
+        return end_quote + 1, query_sql[start : end_quote + 1]
+    match: re.Match[str] | None = re.match(r"[A-Za-z_][A-Za-z0-9_$]*", query_sql[start:])
+    if match is None:
+        return start, None
+    return start + match.end(), match.group(0)
+
+
+def _is_alias_keyword(token: str) -> bool:
+    return token.upper() in _DERIVED_TABLE_ALIAS_KEYWORDS
+
+
+def _internal_source_alias(source_name: str) -> str:
+    alias_suffix: str = re.sub(r"[^A-Za-z0-9_]+", "_", source_name).strip("_").lower()
+    if not alias_suffix:
+        alias_suffix = "source"
+    return f"__sqb_source_{alias_suffix}"
 
 
 def _render_source_relation(*, adapter: BaseAdapter, source_entry: SourceEntry) -> str:
@@ -135,10 +273,11 @@ def _build_relation_cast_subquery(
         for name in cast_names
     )
     all_enforced: bool = len(cast_names) == len(warehouse_names)
-    return adapter.render_source_relation_cast_subquery(
+    return adapter._render_source_relation_cast_subquery_with_columns(
         source_relation=qualified_name,
         cast_projections=cast_expressions,
         cast_column_names=tuple(cast_names),
+        warehouse_column_names=tuple(col.name for col in warehouse_columns),
         all_columns_cast=all_enforced,
     )
 

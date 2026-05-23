@@ -1135,10 +1135,30 @@ class BigQueryAdapter(BaseAdapter):
         exclude_list: str = ", ".join(cast_column_names)
         return f"(SELECT * EXCEPT ({exclude_list}), {cast_clause} FROM {source_relation})"
 
+    def requires_derived_table_aliases(self) -> bool:
+        """BigQuery does not require aliases for derived table factors."""
+
+        return False
+
     def render_set_difference_operator(self) -> str:
         """Render the BigQuery set-difference operator explicitly."""
 
         return "EXCEPT DISTINCT"
+
+    def render_create_fingerprint_table_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        from sqlbuild.compiler.fingerprints.main.create_table_sql import build_create_table_sql
+
+        return build_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        )
 
     def expression_inference_profile(self) -> ExpressionInferenceProfile:
         return ExpressionInferenceProfile(

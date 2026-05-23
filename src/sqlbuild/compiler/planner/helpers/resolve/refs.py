@@ -32,6 +32,24 @@ _UDF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.U
 _TABLE_FUNCTION_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(
     SqlReferenceKind.TABLE_FUNCTION
 )
+_CLAUSE_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "WHERE",
+        "JOIN",
+        "INNER",
+        "LEFT",
+        "RIGHT",
+        "FULL",
+        "CROSS",
+        "ON",
+        "GROUP",
+        "ORDER",
+        "HAVING",
+        "LIMIT",
+        "UNION",
+        "QUALIFY",
+    }
+)
 
 
 def resolve_ref_references(
@@ -58,6 +76,7 @@ def resolve_ref_references(
         cursor_column: str | None = cursor_inputs.get(ref_name)
         if cursor_column is None:
             return qualified_name
+        has_user_alias: bool = _has_following_alias(sql=query_sql, start=match.end())
         return _build_cursor_subquery(
             qualified_name=qualified_name,
             cursor_column=cursor_column,
@@ -65,6 +84,7 @@ def resolve_ref_references(
             adapter=adapter,
             cursor_type=cursor_type,
             lower_bound_inclusive=lower_bound_inclusive,
+            inject_alias=not has_user_alias,
         )
 
     def _replace_seed(match: re.Match[str]) -> str:
@@ -200,17 +220,37 @@ def _build_cursor_subquery(
     adapter: BaseAdapter,
     cursor_type: str | None,
     lower_bound_inclusive: bool,
+    inject_alias: bool,
 ) -> str:
     """Wrap a qualified name in a cursor-filtered subquery."""
 
     lower_operator: str = ">=" if lower_bound_inclusive else ">"
     start_literal: str = adapter.render_cursor_bound_literal(bounds.start, cursor_type)
     end_literal: str = adapter.render_cursor_bound_literal(bounds.end, cursor_type)
+    derived_alias: str = (
+        " AS __cursor_ref" if inject_alias and adapter.requires_derived_table_aliases() else ""
+    )
     return (
         f"(SELECT * FROM {qualified_name}"
         f" WHERE {cursor_column} {lower_operator} {start_literal}"
-        f" AND {cursor_column} < {end_literal})"
+        f" AND {cursor_column} < {end_literal}){derived_alias}"
     )
+
+
+def _has_following_alias(*, sql: str, start: int) -> bool:
+    index: int = _skip_whitespace(sql=sql, start=start)
+    if index >= len(sql) or sql[index] in "),;":
+        return False
+    if sql[index : index + 2].upper() == "AS":
+        after_as: int = _skip_whitespace(sql=sql, start=index + 2)
+        return after_as < len(sql) and (sql[after_as].isalpha() or sql[after_as] in "[_")
+    if not (sql[index].isalpha() or sql[index] in "[_"):
+        return False
+    match: re.Match[str] | None = re.match(r"[A-Za-z_][A-Za-z0-9_]*|\[[^\]]+\]", sql[index:])
+    if match is None:
+        return False
+    token: str = match.group(0).strip("[]").upper()
+    return token not in _CLAUSE_KEYWORDS
 
 
 def build_model_targets(

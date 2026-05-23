@@ -10,6 +10,7 @@ from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.scenario.constants import SUCCESS_STATUS
+from sqlbuild.cli.commands.main.helpers.scenario.dialect import require_scenario_capture_dialect
 from sqlbuild.cli.commands.main.helpers.scenario.selection import select_scenarios
 from sqlbuild.cli.commands.main.helpers.scenario.snapshot_limits import (
     build_scenario_snapshot_capture_limits,
@@ -93,6 +94,9 @@ def run_scenario_capture(
         local_config=discovered_inputs.local_config,
     )
     adapter: BaseAdapter = resolve_adapter(adapter_name, project_dir=effective_project_dir)
+    capture_dialect: str = require_scenario_capture_dialect(
+        adapter=adapter, adapter_name=adapter_name
+    )
     connection_config: dict[str, object] = resolve_project_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
@@ -177,7 +181,7 @@ def run_scenario_capture(
         project_name=discovered_inputs.project_config.name,
         captured_at=_captured_at(),
         capture_adapter=adapter_name,
-        capture_dialect=adapter_name,
+        capture_dialect=capture_dialect,
         sqlbuild_version=_sqlbuild_version(),
         retain=retain,
         capture_limits=capture_limits,

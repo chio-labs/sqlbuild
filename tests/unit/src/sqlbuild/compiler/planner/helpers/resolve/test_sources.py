@@ -12,6 +12,8 @@ from sqlbuild.compiler.planner.helpers.resolve.sources import (
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.integrations.bigquery.client import BigQueryAdapter
 from sqlbuild.integrations.duckdb.client import DuckDbAdapter
+from sqlbuild.integrations.postgres.client import PostgresAdapter
+from sqlbuild.integrations.sqlserver.client import SqlServerAdapter
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers.resolve._test_types import (
     AdapterSourceResolutionTestCase,
@@ -514,6 +516,81 @@ ADAPTER_SOURCE_RESOLUTION_TEST_CASES: list[AdapterSourceResolutionTestCase] = [
     ),
 ]
 
+SQLSERVER_ALIAS_SOURCE_RESOLUTION_TEST_CASES: list[SourceResolutionTestCase] = [
+    SourceResolutionTestCase(
+        description="adds internal alias for type-enforced source without user alias",
+        query_sql='SELECT * FROM __source("raw_orders") WHERE status = 1',
+        star_exclude_keyword="EXCEPT",
+        source_map={"raw_orders": _ENFORCED_SOURCE},
+        source_warehouse_columns=_ENFORCED_WAREHOUSE_COLUMNS,
+        expected_sql=(
+            "SELECT * FROM (SELECT amount, "
+            "CAST(order_id AS VARCHAR) AS order_id, "
+            "CAST(status AS INTEGER) AS status "
+            "FROM raw.public.orders) AS __sqb_source_raw_orders WHERE status = 1"
+        ),
+    ),
+    SourceResolutionTestCase(
+        description="preserves implicit user alias for type-enforced source",
+        query_sql='SELECT o.order_id FROM __source("raw_orders") o WHERE o.status = 1',
+        star_exclude_keyword="EXCEPT",
+        source_map={"raw_orders": _ENFORCED_SOURCE},
+        source_warehouse_columns=_ENFORCED_WAREHOUSE_COLUMNS,
+        expected_sql=(
+            "SELECT o.order_id FROM (SELECT amount, "
+            "CAST(order_id AS VARCHAR) AS order_id, "
+            "CAST(status AS INTEGER) AS status "
+            "FROM raw.public.orders) AS o WHERE o.status = 1"
+        ),
+    ),
+    SourceResolutionTestCase(
+        description="preserves explicit as user alias for type-enforced source",
+        query_sql='SELECT o.order_id FROM __source("raw_orders") AS o WHERE o.status = 1',
+        star_exclude_keyword="EXCEPT",
+        source_map={"raw_orders": _ENFORCED_SOURCE},
+        source_warehouse_columns=_ENFORCED_WAREHOUSE_COLUMNS,
+        expected_sql=(
+            "SELECT o.order_id FROM (SELECT amount, "
+            "CAST(order_id AS VARCHAR) AS order_id, "
+            "CAST(status AS INTEGER) AS status "
+            "FROM raw.public.orders) AS o WHERE o.status = 1"
+        ),
+    ),
+    SourceResolutionTestCase(
+        description="preserves multiple user aliases in joins",
+        query_sql=(
+            'SELECT o.order_id, c.customer_id FROM __source("raw_orders") o '
+            'JOIN __source("raw_customers") c ON o.customer_id = c.customer_id'
+        ),
+        star_exclude_keyword="EXCEPT",
+        source_map={
+            "raw_orders": _ENFORCED_SOURCE,
+            "raw_customers": SourceEntry(
+                name="raw_customers",
+                database="raw",
+                schema="public",
+                table="customers",
+                type_enforcement=True,
+                columns=(SourceColumnEntry(name="customer_id", type="INTEGER"),),
+            ),
+        },
+        source_warehouse_columns={
+            **_ENFORCED_WAREHOUSE_COLUMNS,
+            "raw_customers": (
+                ColumnInfo(name="customer_id", type="VARCHAR"),
+                ColumnInfo(name="email", type="VARCHAR"),
+            ),
+        },
+        expected_sql=(
+            "SELECT o.order_id, c.customer_id FROM (SELECT amount, "
+            "CAST(order_id AS VARCHAR) AS order_id, "
+            "CAST(status AS INTEGER) AS status FROM raw.public.orders) AS o "
+            "JOIN (SELECT email, CAST(customer_id AS INTEGER) AS customer_id "
+            "FROM raw.public.customers) AS c ON o.customer_id = c.customer_id"
+        ),
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -560,6 +637,66 @@ def test_given_adapter_specific_source_references_when_resolving_then_returns_ad
 
     assert test_case.expected_sql_fragment in result
     assert test_case.forbidden_sql_fragment not in result
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SQLSERVER_ALIAS_SOURCE_RESOLUTION_TEST_CASES,
+    ids=[case.description for case in SQLSERVER_ALIAS_SOURCE_RESOLUTION_TEST_CASES],
+)
+def test_given_sqlserver_alias_required_sources_when_resolving_then_aliases_derived_tables(
+    test_case: SourceResolutionTestCase,
+) -> None:
+    result: str = resolve_source_references(
+        query_sql=test_case.query_sql,
+        source_map=test_case.source_map,
+        source_warehouse_columns=test_case.source_warehouse_columns,
+        star_exclude_keyword=test_case.star_exclude_keyword,
+        cursor_bounds=test_case.cursor_bounds,
+        cursor_inputs=test_case.cursor_inputs,
+        adapter=SqlServerAdapter(),
+        cursor_type=test_case.cursor_type,
+        lower_bound_inclusive=test_case.lower_bound_inclusive,
+    )
+
+    assert result == test_case.expected_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SourceResolutionTestCase(
+            description="renders partial source casts without unsupported star exclusion",
+            query_sql='SELECT order_id, status, amount FROM __source("raw_orders")',
+            star_exclude_keyword="EXCLUDE",
+            source_map={"raw_orders": _ENFORCED_SOURCE},
+            source_warehouse_columns=_ENFORCED_WAREHOUSE_COLUMNS,
+            expected_sql=(
+                "SELECT order_id, status, amount FROM (SELECT amount, "
+                "CAST(order_id AS VARCHAR) AS order_id, "
+                "CAST(status AS INTEGER) AS status "
+                "FROM raw.public.orders)"
+            ),
+        ),
+    ],
+    ids=["renders partial source casts without unsupported star exclusion"],
+)
+def test_given_postgres_sources_when_resolving_then_avoids_unsupported_star_exclusion(
+    test_case: SourceResolutionTestCase,
+) -> None:
+    result: str = resolve_source_references(
+        query_sql=test_case.query_sql,
+        source_map=test_case.source_map,
+        source_warehouse_columns=test_case.source_warehouse_columns,
+        star_exclude_keyword=test_case.star_exclude_keyword,
+        cursor_bounds=test_case.cursor_bounds,
+        cursor_inputs=test_case.cursor_inputs,
+        adapter=PostgresAdapter(),
+        cursor_type=test_case.cursor_type,
+        lower_bound_inclusive=test_case.lower_bound_inclusive,
+    )
+
+    assert result == test_case.expected_sql
 
 
 @pytest.mark.parametrize(

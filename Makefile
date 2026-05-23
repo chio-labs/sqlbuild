@@ -49,6 +49,10 @@ test-real-postgres:
 	TESTCONTAINERS_RYUK_DISABLED=true uv run pytest tests -m "real_warehouse and postgres" -vv
 
 
+test-real-sqlserver:
+	uv run pytest tests -m "real_warehouse and sqlserver" -vv
+
+
 test-real-motherduck:
 	uv run pytest tests -m "real_warehouse and motherduck" -vv
 
@@ -81,6 +85,7 @@ check:
 	uv run ruff format .
 	uv run ruff check --fix .
 	uv run ty check src tests
+	uv run pytest tests/unit/src/sqlbuild/adapter/strict/test_strict_adapter.py -q
 	uv run check-test-conventions tests
 	uv run check-structure-conventions src/sqlbuild scripts
 	uv run check-type-annotation-conventions src tests
@@ -100,6 +105,7 @@ check-ci:
 	uv run ruff format --check .
 	uv run ruff check .
 	uv run ty check src tests
+	uv run pytest tests/unit/src/sqlbuild/adapter/strict/test_strict_adapter.py -q
 	uv run check-test-conventions tests
 	uv run check-structure-conventions src/sqlbuild scripts
 	uv run check-type-annotation-conventions src tests

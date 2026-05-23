@@ -53,7 +53,8 @@ def build_databricks_project_toml(*, project_name: str, schema_name: str) -> str
         'catalog = "${ENV:SQB_TEST_DATABRICKS_CATALOG}"\n\n'
         "[environments.dev]\n"
         f'database = "{catalog_name}"\n'
-        f'schema = "{schema_name}"\n\n'
+        f'schema = "{schema_name}"\n'
+        'defer_sources_to = "dev"\n\n'
         "[defaults]\n"
         'materialized = "table"\n'
     )
@@ -82,7 +83,8 @@ def prepare_databricks_waffle_shop(*, tmp_path: Path) -> tuple[Path, str]:
         'materialized = "table"\n\n'
         "[environments.dev]\n"
         f'database = "{catalog_name}"\n'
-        f'schema = "{schema_name}"\n\n'
+        f'schema = "{schema_name}"\n'
+        'defer_sources_to = "dev"\n\n'
         "[environments.prod]\n"
         f'database = "{catalog_name}"\n'
         f'schema = "{schema_name}"\n\n'
