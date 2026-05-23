@@ -12,10 +12,13 @@ from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.executor.load.main.execute import execute_source_load
 from sqlbuild.executor.load.models import LoadDagState, LoadExecutionIndexes, LoadExecutionResult
 from sqlbuild.executor.shared.helpers.load_execution import (
+    load_resource_kind,
     should_skip_due_to_failed_dependency,
     skipped_load_result,
 )
+from sqlbuild.executor.shared.helpers.worker_completion import run_worker_with_completion
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -131,28 +134,61 @@ def load_dag_worker(
 ) -> None:
     """Worker wrapper for concurrent DAG source-loader execution."""
 
-    connection: Any = connection_pool.get()
-    try:
-        completion_queue.put(
-            (
-                source_name,
-                execute_ready_dag_source(
-                    source_name=source_name,
-                    source_by_name=source_by_name,
-                    indexes=indexes,
-                    failed_or_skipped=failed_or_skipped,
-                    adapter=adapter,
-                    connection=connection,
-                    run_id=run_id,
-                    environment=environment,
-                    vars=vars,
-                    is_reload=is_reload,
-                    start_cursor_ts=start_cursor_ts,
-                    end_cursor_ts=end_cursor_ts,
-                    start_cursor_int=start_cursor_int,
-                    end_cursor_int=end_cursor_int,
-                ),
-            )
+    def _execute(connection: Any) -> LoadExecutionResult:
+        return execute_ready_dag_source(
+            source_name=source_name,
+            source_by_name=source_by_name,
+            indexes=indexes,
+            failed_or_skipped=failed_or_skipped,
+            adapter=adapter,
+            connection=connection,
+            run_id=run_id,
+            environment=environment,
+            vars=vars,
+            is_reload=is_reload,
+            start_cursor_ts=start_cursor_ts,
+            end_cursor_ts=end_cursor_ts,
+            start_cursor_int=start_cursor_int,
+            end_cursor_int=end_cursor_int,
         )
-    finally:
-        connection_pool.put(connection)
+
+    run_worker_with_completion(
+        key=source_name,
+        connection_pool=connection_pool,
+        completion_queue=completion_queue,
+        execute=_execute,
+        build_success=_load_dag_success_completion,
+        build_failure=lambda failed_source_name, error: _load_dag_failure_completion(
+            source_name=failed_source_name,
+            source_by_name=source_by_name,
+            error=error,
+        ),
+    )
+
+
+def _load_dag_success_completion(
+    source_name: str, result: LoadExecutionResult
+) -> tuple[str, LoadExecutionResult]:
+    return (source_name, result)
+
+
+def _load_dag_failure_completion(
+    *, source_name: str, source_by_name: dict[str, SourceEntry], error: Exception
+) -> tuple[str, LoadExecutionResult]:
+    source: SourceEntry | None = source_by_name.get(source_name)
+    loader_name: str = (source.loader or "") if source is not None else ""
+    target: str = (source.table or source.name) if source is not None else source_name
+    resource_kind: ExecutionResourceKind = (
+        load_resource_kind(source) if source is not None else ExecutionResourceKind.SOURCE
+    )
+    return (
+        source_name,
+        LoadExecutionResult(
+            source_name=source.name if source is not None else source_name,
+            loader_name=loader_name,
+            status=ExecutionStatus.FAILED,
+            target=target,
+            resource_kind=resource_kind,
+            error_message=str(error),
+        ),
+    )

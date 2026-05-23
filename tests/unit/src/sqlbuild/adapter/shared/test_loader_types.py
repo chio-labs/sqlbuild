@@ -8,6 +8,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.helpers.builtins import builtin_adapter_classes
 from sqlbuild.adapter.shared.types import BuiltinAdapter, LoaderLogicalType
 from tests.unit.src.sqlbuild.adapter.shared._test_types import (
+    AdapterIdentifierRenderingTestCase,
     AdapterLoaderRowsEmptySelectTestCase,
     AdapterLoaderRowsSelectTestCase,
     AdapterLoaderTypeMappingTestCase,
@@ -147,6 +148,60 @@ ADAPTER_LOADER_VALUE_LITERAL_TEST_CASES: list[AdapterLoaderValueLiteralTestCase]
 ]
 
 
+ADAPTER_IDENTIFIER_RENDERING_TEST_CASES: list[AdapterIdentifierRenderingTestCase] = [
+    AdapterIdentifierRenderingTestCase(
+        description="duckdb renders double-quoted loader identifiers",
+        adapter_name=BuiltinAdapter.DUCKDB.value,
+        raw_identifier='order "id"',
+        expected_identifier='"order ""id"""',
+    ),
+    AdapterIdentifierRenderingTestCase(
+        description="motherduck renders double-quoted loader identifiers",
+        adapter_name=BuiltinAdapter.MOTHERDUCK.value,
+        raw_identifier='order "id"',
+        expected_identifier='"order ""id"""',
+    ),
+    AdapterIdentifierRenderingTestCase(
+        description="postgres renders double-quoted loader identifiers",
+        adapter_name=BuiltinAdapter.POSTGRES.value,
+        raw_identifier='order "id"',
+        expected_identifier='"order ""id"""',
+    ),
+    AdapterIdentifierRenderingTestCase(
+        description="snowflake renders double-quoted loader identifiers",
+        adapter_name=BuiltinAdapter.SNOWFLAKE.value,
+        raw_identifier='order "id"',
+        expected_identifier='"order ""id"""',
+    ),
+    AdapterIdentifierRenderingTestCase(
+        description="bigquery renders backtick-quoted loader identifiers",
+        adapter_name=BuiltinAdapter.BIGQUERY.value,
+        raw_identifier="order `id`",
+        expected_identifier="`order ``id```",
+    ),
+    AdapterIdentifierRenderingTestCase(
+        description="databricks renders backtick-quoted loader identifiers",
+        adapter_name=BuiltinAdapter.DATABRICKS.value,
+        raw_identifier="order `id`",
+        expected_identifier="`order ``id```",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    ADAPTER_IDENTIFIER_RENDERING_TEST_CASES,
+    ids=[case.description for case in ADAPTER_IDENTIFIER_RENDERING_TEST_CASES],
+)
+def test_given_builtin_adapter_when_rendering_identifier_then_uses_adapter_quotes(
+    test_case: AdapterIdentifierRenderingTestCase,
+) -> None:
+    adapter_class: type[BaseAdapter] = builtin_adapter_classes()[test_case.adapter_name]
+    adapter: BaseAdapter = adapter_class()
+
+    assert adapter.render_identifier(test_case.raw_identifier) == test_case.expected_identifier
+
+
 @pytest.mark.parametrize(
     "test_case",
     ADAPTER_LOADER_VALUE_LITERAL_TEST_CASES,
@@ -171,35 +226,35 @@ ADAPTER_LOADER_ROWS_SELECT_TEST_CASES: list[AdapterLoaderRowsSelectTestCase] = [
     AdapterLoaderRowsSelectTestCase(
         description="duckdb renders values row select",
         adapter_name=BuiltinAdapter.DUCKDB.value,
-        expected_fragments=("FROM (VALUES", "AS __loader_rows(id, status)"),
+        expected_fragments=("FROM (VALUES", 'AS __loader_rows("id", "status")'),
     ),
     AdapterLoaderRowsSelectTestCase(
         description="motherduck renders values row select",
         adapter_name=BuiltinAdapter.MOTHERDUCK.value,
-        expected_fragments=("FROM (VALUES", "AS __loader_rows(id, status)"),
+        expected_fragments=("FROM (VALUES", 'AS __loader_rows("id", "status")'),
     ),
     AdapterLoaderRowsSelectTestCase(
         description="postgres renders values row select",
         adapter_name=BuiltinAdapter.POSTGRES.value,
-        expected_fragments=("FROM (VALUES", "AS __loader_rows(id, status)"),
+        expected_fragments=("FROM (VALUES", 'AS __loader_rows("id", "status")'),
     ),
     AdapterLoaderRowsSelectTestCase(
         description="snowflake renders values row select",
         adapter_name=BuiltinAdapter.SNOWFLAKE.value,
-        expected_fragments=("FROM (VALUES", "AS __loader_rows(id, status)"),
+        expected_fragments=("FROM (VALUES", 'AS __loader_rows("id", "status")'),
     ),
     AdapterLoaderRowsSelectTestCase(
         description="databricks renders values row select",
         adapter_name=BuiltinAdapter.DATABRICKS.value,
-        expected_fragments=("FROM (VALUES", "AS __loader_rows(id, status)"),
+        expected_fragments=("FROM (VALUES", "AS __loader_rows(`id`, `status`)"),
     ),
     AdapterLoaderRowsSelectTestCase(
         description="bigquery renders union row select",
         adapter_name=BuiltinAdapter.BIGQUERY.value,
         expected_fragments=(
-            "SELECT CAST(1 AS INT64) AS id, CAST('placed' AS STRING) AS status",
+            "SELECT CAST(1 AS INT64) AS `id`, CAST('placed' AS STRING) AS `status`",
             "UNION ALL",
-            "SELECT CAST(2 AS INT64) AS id, CAST('shipped' AS STRING) AS status",
+            "SELECT CAST(2 AS INT64) AS `id`, CAST('shipped' AS STRING) AS `status`",
         ),
         forbidden_fragments=("FROM (VALUES", "__loader_rows"),
     ),
@@ -237,7 +292,7 @@ def test_given_builtin_adapter_when_rendering_loader_rows_then_returns_adapter_s
         AdapterLoaderRowsEmptySelectTestCase(
             description="bigquery renders empty loader rows with string default",
             adapter_name=BuiltinAdapter.BIGQUERY.value,
-            expected_sql="SELECT CAST(NULL AS STRING) AS all_null WHERE 1 = 0",
+            expected_sql="SELECT CAST(NULL AS STRING) AS `all_null` WHERE 1 = 0",
         )
     ],
     ids=["bigquery renders empty loader rows with string default"],

@@ -17,7 +17,7 @@ def fetch_orders(_ctx: object) -> list[dict[str, object]]:
     return []
 
 
-def raw_orders(_ctx: object) -> list[dict[str, object]]:
+def refresh_orders(_ctx: object) -> list[dict[str, object]]:
     return []
 
 
@@ -26,7 +26,7 @@ def load_raw_orders(_ctx: object) -> list[dict[str, object]]:
 
 
 def build_load_selection_inputs() -> DiscoveredProjectInputs:
-    """Build inputs with a source name that collides with an unrelated loader name."""
+    """Build reachable load-selection inputs with terminal and intermediate loaders."""
 
     return DiscoveredProjectInputs(
         project_config=ProjectConfig(name="demo", adapter="duckdb"),
@@ -49,8 +49,8 @@ def build_load_selection_inputs() -> DiscoveredProjectInputs:
             DiscoveredLoaderFunction(
                 file_path=Path("loaders/loaders.py"),
                 relative_path=Path("loaders/loaders.py"),
-                name="raw_orders",
-                function=raw_orders,
+                name="refresh_orders",
+                function=refresh_orders,
             ),
             DiscoveredLoaderFunction(
                 file_path=Path("loaders/loaders.py"),

@@ -102,7 +102,9 @@ class SnowflakeAdapter(BaseAdapter):
     ) -> str:
         if not rows:
             projections: str = ", ".join(
-                f"CAST(NULL AS {column_sql_types.get(column_name, 'VARCHAR')}) AS {column_name}"
+                "CAST(NULL AS "
+                f"{column_sql_types.get(column_name, 'VARCHAR')}) AS "
+                f"{self.render_identifier(column_name)}"
                 for column_name in column_names
             )
             return f"SELECT {projections} WHERE 1 = 0"
@@ -118,12 +120,16 @@ class SnowflakeAdapter(BaseAdapter):
             + ")"
             for row in rows
         )
-        column_sql: str = ", ".join(column_names)
+        column_sql: str = ", ".join(
+            self.render_identifier(column_name) for column_name in column_names
+        )
         select_sql: str = ", ".join(
             (
-                column_name
+                self.render_identifier(column_name)
                 if column_name not in column_sql_types
-                else f"CAST({column_name} AS {column_sql_types[column_name]}) AS {column_name}"
+                else "CAST("
+                f"{self.render_identifier(column_name)} AS {column_sql_types[column_name]}) "
+                f"AS {self.render_identifier(column_name)}"
             )
             for column_name in column_names
         )

@@ -46,6 +46,14 @@ class AdapterLoaderValueLiteralTestCase:
 
 
 @dataclass(frozen=True)
+class AdapterIdentifierRenderingTestCase:
+    description: str
+    adapter_name: str
+    raw_identifier: str
+    expected_identifier: str
+
+
+@dataclass(frozen=True)
 class AdapterLoaderRowsSelectTestCase:
     description: str
     adapter_name: str

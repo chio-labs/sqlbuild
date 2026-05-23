@@ -211,6 +211,40 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC027", "SC015"),
     ),
     CheckPathsTestCase(
+        description="allows private type alias outside types module",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/helpers/worker.py": dedent(
+                """
+                type _WorkerResult = str | int
+
+
+                def run_worker() -> _WorkerResult:
+                    return "demo"
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=(),
+    ),
+    CheckPathsTestCase(
+        description="reports public type alias outside types module",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/helpers/worker.py": dedent(
+                """
+                type WorkerResult = str | int
+
+
+                def run_worker() -> WorkerResult:
+                    return "demo"
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("SC015",),
+    ),
+    CheckPathsTestCase(
         description="reports uppercase constant outside constants module",
         repo_files=compliant_repo_files()
         | {

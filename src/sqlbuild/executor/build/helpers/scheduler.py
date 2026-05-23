@@ -64,6 +64,7 @@ from sqlbuild.executor.shared.helpers.load_execution import (
     build_load_execution_indexes,
     skipped_load_result,
 )
+from sqlbuild.executor.shared.helpers.worker_completion import run_worker_with_completion
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.executor.testing.constants import SQL_TEST_ENTRY_MISSING_CODE
 from sqlbuild.executor.testing.main.execute import execute_sql_test
@@ -75,6 +76,14 @@ from sqlbuild.spec.models.project import SnapshotsConfig
 from sqlbuild.spec.models.source import SourceEntry
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
+
+type _BuildWorkerResult = (
+    ModelExecutionResult
+    | SeedExecutionResult
+    | FunctionExecutionResult
+    | SqlTestExecutionResult
+    | LoadExecutionResult
+)
 
 
 class BuildScheduler:
@@ -308,30 +317,14 @@ class BuildScheduler:
                 self._handle_completion(completion.key, completion.result)
 
     def _worker(self, key: CompiledObjectKey) -> None:
-        connection: Any = self._connection_pool.get()
-        try:
-            result: (
-                ModelExecutionResult
-                | SeedExecutionResult
-                | FunctionExecutionResult
-                | SqlTestExecutionResult
-                | LoadExecutionResult
-            ) = self._execute_node(key, connection)
-            self._completion_queue.put(NodeCompletion(key=key, result=result))
-        except Exception as exc:
-            self._completion_queue.put(
-                NodeCompletion(
-                    key=key,
-                    result=ModelExecutionResult(
-                        model_name=key.name,
-                        status=ExecutionStatus.FAILED,
-                        error_code=BUILD_WORKER_FAILED_CODE,
-                        error_message=str(exc),
-                    ),
-                )
-            )
-        finally:
-            self._connection_pool.put(connection)
+        run_worker_with_completion(
+            key=key,
+            connection_pool=self._connection_pool,
+            completion_queue=self._completion_queue,
+            execute=lambda connection: self._execute_node(key, connection),
+            build_success=_build_worker_success_completion,
+            build_failure=_build_worker_failure_completion,
+        )
 
     def _pre_dispatch(self, key: CompiledObjectKey) -> bool:
         """Run pre-dispatch checks. Returns False if the node should be skipped."""
@@ -739,6 +732,24 @@ class BuildScheduler:
             if key in self._in_flight:
                 continue
             self._record_skipped(key)
+
+
+def _build_worker_success_completion(
+    key: CompiledObjectKey, result: _BuildWorkerResult
+) -> NodeCompletion:
+    return NodeCompletion(key=key, result=result)
+
+
+def _build_worker_failure_completion(key: CompiledObjectKey, error: Exception) -> NodeCompletion:
+    return NodeCompletion(
+        key=key,
+        result=ModelExecutionResult(
+            model_name=key.name,
+            status=ExecutionStatus.FAILED,
+            error_code=BUILD_WORKER_FAILED_CODE,
+            error_message=str(error),
+        ),
+    )
 
 
 def _dispatch_model(

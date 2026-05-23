@@ -105,7 +105,9 @@ class PostgresAdapter(BaseAdapter):
     ) -> str:
         if not rows:
             projections: str = ", ".join(
-                f"CAST(NULL AS {column_sql_types.get(column_name, 'TEXT')}) AS {column_name}"
+                "CAST(NULL AS "
+                f"{column_sql_types.get(column_name, 'TEXT')}) AS "
+                f"{self.render_identifier(column_name)}"
                 for column_name in column_names
             )
             return f"SELECT {projections} WHERE 1 = 0"
@@ -121,12 +123,16 @@ class PostgresAdapter(BaseAdapter):
             + ")"
             for row in rows
         )
-        column_sql: str = ", ".join(column_names)
+        column_sql: str = ", ".join(
+            self.render_identifier(column_name) for column_name in column_names
+        )
         select_sql: str = ", ".join(
             (
-                column_name
+                self.render_identifier(column_name)
                 if column_name not in column_sql_types
-                else f"CAST({column_name} AS {column_sql_types[column_name]}) AS {column_name}"
+                else "CAST("
+                f"{self.render_identifier(column_name)} AS {column_sql_types[column_name]}) "
+                f"AS {self.render_identifier(column_name)}"
             )
             for column_name in column_names
         )
@@ -292,11 +298,17 @@ class PostgresAdapter(BaseAdapter):
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         source_columns: tuple[str, ...] = self.query_column_names(connection, sql)
         non_key_columns: tuple[str, ...] = tuple(col for col in source_columns if col not in keys)
-        col_list: str = ", ".join(source_columns)
-        key_match_sql: str = " AND ".join(f"__target.{key} = __source.{key}" for key in keys)
+        col_list: str = ", ".join(self.render_identifier(column) for column in source_columns)
+        key_match_sql: str = " AND ".join(
+            f"__target.{self.render_identifier(key)} = __source.{self.render_identifier(key)}"
+            for key in keys
+        )
         source_select_sql: str = f"({sql}) AS __source"
         if non_key_columns:
-            update_set: str = ", ".join(f"{col} = __source.{col}" for col in non_key_columns)
+            update_set: str = ", ".join(
+                f"{self.render_identifier(col)} = __source.{self.render_identifier(col)}"
+                for col in non_key_columns
+            )
             update_sql: str = (
                 f"UPDATE {target} AS __target SET {update_set} "
                 f"FROM {source_select_sql} WHERE {key_match_sql}"
