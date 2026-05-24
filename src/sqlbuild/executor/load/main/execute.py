@@ -40,6 +40,7 @@ def execute_source_load(
     source_entry: SourceEntry,
     loader_function: DiscoveredLoaderFunction,
     adapter: BaseAdapter,
+    connection_config: dict[str, object],
     connection: Any,
     run_id: str,
     environment: str | None,
@@ -50,6 +51,7 @@ def execute_source_load(
     start_cursor_int: int | None = None,
     end_cursor_int: int | None = None,
     statement_recorder: StatementRecorder,
+    use_color: bool = False,
     loader_ref_entries: Mapping[Callable[..., object], SourceEntry] | None = None,
     source_ref_entries: Mapping[str, SourceEntry] | None = None,
 ) -> LoadExecutionResult:
@@ -98,6 +100,7 @@ def execute_source_load(
         )
         context: LoaderContext = LoaderContext(
             adapter=adapter,
+            connection_config=connection_config,
             connection=connection,
             target=target,
             target_database=source_entry.database,
@@ -107,6 +110,7 @@ def execute_source_load(
             environment=environment,
             vars=vars,
             is_reload=is_reload,
+            use_color=use_color,
             current_cursor_value=_load_current_cursor_value(
                 adapter=adapter,
                 connection=connection,

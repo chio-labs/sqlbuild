@@ -36,6 +36,7 @@ def execute_build_plan(
     *,
     plan: PlanOutput,
     adapter: BaseAdapter,
+    connection_config: dict[str, object],
     connections: tuple[Any, ...],
     scheduler_connection: Any,
     promotion_mode: TablePromotionMode,
@@ -60,6 +61,7 @@ def execute_build_plan(
     effective_vars: dict[str, object] | None = None,
     warehouse_relations: dict[str, RelationInfo] | None = None,
     on_sub_progress: Callable[[str], None] | None = None,
+    use_color: bool = False,
 ) -> BuildExecutionResult:
     """Execute a full build plan using the DAG scheduler."""
 
@@ -68,6 +70,7 @@ def execute_build_plan(
         plan=plan,
         indexes=indexes,
         adapter=adapter,
+        connection_config=connection_config,
         connections=connections,
         scheduler_connection=scheduler_connection,
         promotion_mode=promotion_mode,
@@ -92,6 +95,7 @@ def execute_build_plan(
         effective_vars=effective_vars,
         warehouse_relations=warehouse_relations,
         on_sub_progress=on_sub_progress,
+        use_color=use_color,
     )
 
     model_results: tuple[ModelExecutionResult, ...]

@@ -84,6 +84,7 @@ def execute_sqlbuild_build_work(
         on_connection_start=execution_connection_progress.on_connection_start,
         on_connection_complete=execution_connection_progress.on_connection_complete,
         on_connection_error=execution_connection_progress.on_connection_error,
+        use_color=use_color,
     )
     write_runtime_target(target_dir=project_dir / "target", plan_output=plan_output, result=result)
     footer: str = format_build_footer(result=result, elapsed=callbacks.elapsed, use_color=use_color)

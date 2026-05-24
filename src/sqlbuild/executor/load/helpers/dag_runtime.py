@@ -77,6 +77,7 @@ def execute_ready_dag_source(
     indexes: LoadExecutionIndexes,
     failed_or_skipped: set[str],
     adapter: BaseAdapter,
+    connection_config: dict[str, object],
     connection: Any,
     run_id: str,
     environment: str | None,
@@ -86,6 +87,7 @@ def execute_ready_dag_source(
     end_cursor_ts: datetime | None,
     start_cursor_int: int | None,
     end_cursor_int: int | None,
+    use_color: bool = False,
 ) -> LoadExecutionResult:
     """Execute one ready DAG node or return a skipped result."""
 
@@ -100,6 +102,7 @@ def execute_ready_dag_source(
         source_entry=source,
         loader_function=indexes.loader_by_name[source.loader or ""],
         adapter=adapter,
+        connection_config=connection_config,
         connection=connection,
         run_id=run_id,
         environment=environment,
@@ -110,6 +113,7 @@ def execute_ready_dag_source(
         start_cursor_int=start_cursor_int,
         end_cursor_int=end_cursor_int,
         statement_recorder=StatementRecorder(),
+        use_color=use_color,
         loader_ref_entries=indexes.loader_ref_entries,
         source_ref_entries=indexes.source_by_name,
     )
@@ -121,6 +125,7 @@ def load_dag_worker(
     indexes: LoadExecutionIndexes,
     failed_or_skipped: set[str],
     adapter: BaseAdapter,
+    connection_config: dict[str, object],
     connection_pool: queue.Queue[Any],
     run_id: str,
     environment: str | None,
@@ -130,6 +135,7 @@ def load_dag_worker(
     end_cursor_ts: datetime | None,
     start_cursor_int: int | None,
     end_cursor_int: int | None,
+    use_color: bool,
     completion_queue: queue.Queue[tuple[str, LoadExecutionResult]],
 ) -> None:
     """Worker wrapper for concurrent DAG source-loader execution."""
@@ -141,6 +147,7 @@ def load_dag_worker(
             indexes=indexes,
             failed_or_skipped=failed_or_skipped,
             adapter=adapter,
+            connection_config=connection_config,
             connection=connection,
             run_id=run_id,
             environment=environment,
@@ -150,6 +157,7 @@ def load_dag_worker(
             end_cursor_ts=end_cursor_ts,
             start_cursor_int=start_cursor_int,
             end_cursor_int=end_cursor_int,
+            use_color=use_color,
         )
 
     run_worker_with_completion(

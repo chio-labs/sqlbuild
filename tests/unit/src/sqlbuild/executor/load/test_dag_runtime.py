@@ -61,6 +61,7 @@ def test_given_ready_source_execution_raises_when_worker_runs_then_publishes_fai
         ),
         failed_or_skipped=set(),
         adapter=LoaderContextTestAdapter(),
+        connection_config={},
         connection_pool=connection_pool,
         run_id="run-1",
         environment=None,
@@ -70,6 +71,7 @@ def test_given_ready_source_execution_raises_when_worker_runs_then_publishes_fai
         end_cursor_ts=None,
         start_cursor_int=None,
         end_cursor_int=None,
+        use_color=False,
         completion_queue=completion_queue,
     )
 

@@ -9,6 +9,14 @@ from sqlbuild.spec.models.types import SourceWriteStrategy
 
 
 @dataclass(frozen=True)
+class IntegrationLoaderConfig:
+    """Typed configuration for one declarative integration loader."""
+
+    kind: str
+    config: object
+
+
+@dataclass(frozen=True)
 class SourceColumnEntry:
     """One source column entry from sources/*.yml."""
 
@@ -29,6 +37,7 @@ class SourceEntry:
     schema: str | None = None
     table: str | None = None
     loader: str | None = None
+    integration_loader: IntegrationLoaderConfig | None = None
     write_strategy: SourceWriteStrategy | None = None
     load_batch_size: int | None = None
     cursor_column: str | None = None

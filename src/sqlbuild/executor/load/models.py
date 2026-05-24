@@ -71,6 +71,7 @@ class LoaderContext:
     """Runtime context passed to a source loader function."""
 
     adapter: BaseAdapter
+    connection_config: dict[str, object]
     connection: Any
     target: str
     target_database: str | None
@@ -80,6 +81,7 @@ class LoaderContext:
     environment: str | None
     vars: dict[str, object]
     is_reload: bool
+    use_color: bool
     current_cursor_value: object | None
     logger: logging.Logger
     statement_recorder: StatementRecorder

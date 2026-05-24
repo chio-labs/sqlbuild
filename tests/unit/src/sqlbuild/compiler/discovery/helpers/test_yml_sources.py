@@ -5,10 +5,12 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.discovery.helpers.yml_sources import parse_sources_yml
+from sqlbuild.integrations.ingestr.models import IngestrSourceConfig
 from sqlbuild.spec.models.source import SourceEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
     ParseSourcesYamlErrorTestCase,
+    ParseSourcesYamlIngestrTestCase,
     ParseSourcesYamlTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.discovery.helpers.helpers import expected_or_actual
@@ -172,6 +174,30 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
         expected_column_audit_names=((), (), (), ()),
     ),
     ParseSourcesYamlTestCase(
+        description="parses ingestr integration loader metadata",
+        contents="""
+        sources:
+          - name: raw_orders
+            table: orders
+            ingestr:
+              source_uri: stripe://token
+              source_table: charges
+              strategy: merge
+              primary_key: [id, account_id]
+              incremental_key: updated_at
+              columns: id,account_id,updated_at
+              extra_args: [--debug]
+        """,
+        expected_source_names=("raw_orders",),
+        expected_column_names=((),),
+        expected_type_enforcement_values=(None,),
+        expected_contract_values=(None,),
+        expected_expressions=(None,),
+        expected_loaders=("ingestr__raw_orders",),
+        expected_source_audit_names=((),),
+        expected_column_audit_names=((),),
+    ),
+    ParseSourcesYamlTestCase(
         description="allows empty sources files with no declarations",
         contents="{}\n",
         expected_source_names=(),
@@ -257,6 +283,49 @@ def test_given_sources_yaml_variants_when_parsing_then_it_returns_expected_raw_m
         )
         == test_case.expected_column_audit_names
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParseSourcesYamlIngestrTestCase(
+            description="stores typed ingestr integration config",
+            contents="""
+            sources:
+              - name: raw_orders
+                table: orders
+                ingestr:
+                  source_uri: stripe://token
+                  source_table: charges
+                  strategy: merge
+                  primary_key: [id, account_id]
+                  incremental_key: updated_at
+                  columns: id,account_id,updated_at
+                  extra_args: [--debug]
+            """,
+            expected_loader="ingestr__raw_orders",
+            expected_kind="ingestr",
+            expected_primary_key=("id", "account_id"),
+            expected_extra_args=("--debug",),
+        )
+    ],
+    ids=["stores typed ingestr integration config"],
+)
+def test_given_ingestr_source_yaml_when_parsing_then_stores_typed_integration_config(
+    test_case: ParseSourcesYamlIngestrTestCase,
+) -> None:
+    source_entries: tuple[SourceEntry, ...] = parse_sources_yml(
+        test_case.contents,
+        Path("sources/raw.yml"),
+    )
+
+    assert source_entries[0].loader == test_case.expected_loader
+    assert source_entries[0].integration_loader is not None
+    assert source_entries[0].integration_loader.kind == test_case.expected_kind
+    ingestr_config: object = source_entries[0].integration_loader.config
+    assert isinstance(ingestr_config, IngestrSourceConfig)
+    assert ingestr_config.primary_key == test_case.expected_primary_key
+    assert ingestr_config.extra_args == test_case.expected_extra_args
 
 
 ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
@@ -379,6 +448,30 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
             loader: ""
         """,
         expected_error_fragment="source 'loader' must be a non-empty string",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source defines both loader and ingestr",
+        contents="""
+        sources:
+          - name: raw_orders
+            loader: custom_loader
+            ingestr:
+              source_uri: stripe://token
+              source_table: charges
+        """,
+        expected_error_fragment="cannot define both loader and ingestr",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when ingestr strategy is unknown",
+        contents="""
+        sources:
+          - name: raw_orders
+            ingestr:
+              source_uri: stripe://token
+              source_table: charges
+              strategy: nope
+        """,
+        expected_error_fragment="ingestr strategy must be one of",
     ),
     ParseSourcesYamlErrorTestCase(
         description="raises when write strategy is unknown",

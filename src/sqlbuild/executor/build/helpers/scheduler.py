@@ -96,6 +96,7 @@ class BuildScheduler:
         plan: PlanOutput,
         indexes: BuildIndexes,
         adapter: BaseAdapter,
+        connection_config: dict[str, object],
         connections: tuple[Any, ...],
         scheduler_connection: Any,
         promotion_mode: TablePromotionMode,
@@ -120,10 +121,12 @@ class BuildScheduler:
         effective_vars: dict[str, object] | None = None,
         warehouse_relations: dict[str, RelationInfo] | None = None,
         on_sub_progress: Callable[[str], None] | None = None,
+        use_color: bool = False,
     ) -> None:
         self._plan: PlanOutput = plan
         self._indexes: BuildIndexes = indexes
         self._adapter: BaseAdapter = adapter
+        self._connection_config: dict[str, object] = connection_config
         self._connections: tuple[Any, ...] = connections
         self._scheduler_connection: Any = scheduler_connection
         self._promotion_mode: TablePromotionMode = promotion_mode
@@ -158,6 +161,7 @@ class BuildScheduler:
         self._effective_vars: dict[str, object] = effective_vars or {}
         self._warehouse_relations: dict[str, RelationInfo] = warehouse_relations or {}
         self._on_sub_progress: Callable[[str], None] | None = on_sub_progress
+        self._use_color: bool = use_color
 
         self._max_concurrency: int = len(connections)
         self._blocked_keys: set[CompiledObjectKey] = set()
@@ -409,6 +413,7 @@ class BuildScheduler:
             loader_functions_by_name=self._loader_functions_by_name,
             loader_ref_entries=self._loader_ref_entries,
             adapter=self._adapter,
+            connection_config=self._connection_config,
             connection=connection,
             run_id=self._run_id,
             environment=self._environment,
@@ -420,6 +425,7 @@ class BuildScheduler:
             end_cursor_int=self._end_cursor_int,
             on_progress=self._on_progress,
             on_node_start=self._on_node_start,
+            use_color=self._use_color,
         )
 
     def _execute_seed_node(self, key: CompiledObjectKey, connection: Any) -> SeedExecutionResult:

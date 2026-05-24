@@ -198,6 +198,7 @@ def run_run(
         on_connection_start=execution_connection_progress.on_connection_start,
         on_connection_complete=execution_connection_progress.on_connection_complete,
         on_connection_error=execution_connection_progress.on_connection_error,
+        use_color=use_color,
     )
     write_runtime_target(
         target_dir=effective_project_dir / "target",

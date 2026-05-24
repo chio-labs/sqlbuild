@@ -410,6 +410,7 @@ def run_scheduler_build(
         result: BuildExecutionResult = execute_build_plan(
             plan=plan,
             adapter=adapter,
+            connection_config=config,
             connections=(connection,),
             scheduler_connection=connection,
             promotion_mode=TablePromotionMode.STAGED,
