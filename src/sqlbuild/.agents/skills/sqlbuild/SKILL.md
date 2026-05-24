@@ -23,6 +23,7 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/adapters/bigquery`
 - `concepts/adapters/databricks`
 - `concepts/adapters/postgres`
+- `concepts/adapters/sqlserver`
 - `concepts/sources`
 - `concepts/loaders`
 - `concepts/seeds`
@@ -41,6 +42,7 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `integrations/dagster`
 - `integrations/dagster-reference`
 - `integrations/dlt`
+- `integrations/ingestr`
 - `cli/compile`
 - `cli/plan`
 - `cli/build`
@@ -203,7 +205,7 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
 - **Virtual environments** - Pointer-based environment promotion without recomputing models
 - **Stateful execution** - First-party partition state tracking and interval-aware scheduling
 - **Python models** - Define models in Python using Pandas, PySpark, Snowpark, or BigFrames for transformations that don't fit naturally in SQL, with the same testing and audit guarantees as SQL models
-- **Broader adapter support** - ClickHouse and Microsoft SQL Server
+- **Broader adapter support** - ClickHouse
 
 ### Quick links
 
@@ -713,11 +715,12 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | dbt interop | Run alongside dbt - reads manifest, no migration | N/A | Jinja compatibility layer plus own macro system |
 | **Sources** | | | |
 | Source loaders | Python `@loader` functions with table/append/delete_insert/merge strategies | No (external to dbt) | No (external to SQLMesh) |
+| Declarative ingestion | ingestr integration - YAML-only config for 50+ sources | No | No |
 | Auto-load during builds | Managed sources loaded before dependent models | No | No |
 | Source deferral | `defer_sources_to` reads source data from another environment | No | No |
 | **Other** | | | |
 | Reference syntax | `__ref()` - parses as valid SQL | `{{ ref() }}` - Jinja template | `model_name` with dependency tracking |
-| Adapters | DuckDB, MotherDuck, Snowflake, BigQuery, Databricks, PostgreSQL | 30+ (community adapters) | DuckDB, Snowflake, BigQuery, Databricks, Spark, Redshift, Postgres, Trino, MySQL |
+| Adapters | DuckDB, MotherDuck, Snowflake, BigQuery, Databricks, PostgreSQL, SQL Server | 30+ (community adapters) | DuckDB, Snowflake, BigQuery, Databricks, Spark, Redshift, Postgres, Trino, MySQL |
 | State requirements | Stateless by default | manifest.json + target/ | Requires state store (local database or PostgreSQL for production) |
 | Playground | `sqb playground` | Clone example repo | Example project |
 | AI agent skills | `sqb skills update` | No | No |
@@ -735,7 +738,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 - **Virtual environments** - pointer-based environment promotion without recomputing models
 - **Stateful execution** - first-party partition state tracking and interval-aware scheduling (currently possible via custom materializations)
 - **Python models** - Pandas, PySpark, Snowpark, BigFrames
-- **Broader adapter support** - ClickHouse and Microsoft SQL Server
+- **Broader adapter support** - ClickHouse
 
 ## Project Configuration
 
@@ -781,7 +784,7 @@ materialized = "view"
 | Field | Description |
 |-------|-------------|
 | `name` | Project name. Used in fingerprint tracking and manifest generation. |
-| `adapter` | Database adapter. Currently `duckdb`, with `snowflake`, `bigquery`, and `databricks` coming soon. |
+| `adapter` | Database adapter: `duckdb`, `motherduck`, `snowflake`, `bigquery`, `databricks`, `postgres`, or `sqlserver`. See [Adapters](/concepts/adapters). |
 
 #### Connection
 
@@ -1092,8 +1095,8 @@ SQLBuild uses adapters to connect to different database engines.
 | [BigQuery](/concepts/adapters/bigquery) | Supported | `sqlbuild[bigquery]` |
 | [Databricks](/concepts/adapters/databricks) | Supported | `sqlbuild[databricks]` |
 | [PostgreSQL](/concepts/adapters/postgres) | Supported | `sqlbuild[postgres]` |
+| [SQL Server](/concepts/adapters/sqlserver) | Supported | `sqlbuild[sqlserver]` |
 | ClickHouse | Coming soon | |
-| Microsoft SQL Server | Coming soon | |
 
 Set the adapter in `sqlbuild_project.toml`:
 
@@ -1165,7 +1168,7 @@ For full control with no inherited defaults, subclass `StrictAdapter` instead. E
 - SQLBuild discovers all `.py` files under `adapters/` recursively (excluding `__init__.py` and files starting with `_`)
 - Each file is scanned for classes that define a string `adapter_name` and subclass `StrictAdapter` (or any of its subclasses like `BaseAdapter` or a built-in adapter)
 - Adapter names must be unique across all adapter files - duplicates raise an error
-- Custom adapter names cannot shadow built-in names (`duckdb`, `snowflake`, `bigquery`, `databricks`)
+- Custom adapter names cannot shadow built-in names (`duckdb`, `snowflake`, `bigquery`, `databricks`, `postgres`, `sqlserver`)
 
 #### Adapter class hierarchy
 
@@ -1175,7 +1178,9 @@ StrictAdapter          (fully abstract - all methods must be implemented)
         ├── DuckDbAdapter
         ├── SnowflakeAdapter
         ├── BigQueryAdapter
-        └── DatabricksAdapter
+        ├── DatabricksAdapter
+        ├── PostgresAdapter
+        └── SqlServerAdapter
 ```
 
 `StrictAdapter` composes four mixins that define the full adapter contract:
@@ -1516,6 +1521,67 @@ schema = "dev"
 
 [environments.dev.connection]
 dbname = "analytics_dev"
+```
+
+## SQL Server
+
+Source: `concepts/adapters/sqlserver.mdx`
+
+Microsoft SQL Server adapter configuration for SQLBuild.
+
+SQL Server requires the optional `pymssql` dependency:
+
+```bash
+pip install 'sqlbuild[sqlserver]'
+# or
+uv pip install 'sqlbuild[sqlserver]'
+```
+
+### Connection config
+
+```toml
+adapter = "sqlserver"
+
+[connection]
+host = "localhost"
+port = 1433
+user = "sa"
+password = "my_password"
+database = "my_database"
+```
+
+| Field | Description |
+|-------|-------------|
+| `host` | SQL Server hostname (default: `localhost`). Also accepts `server` as an alias. |
+| `port` | SQL Server port (default: `1433`) |
+| `user` | Database user (default: `sa`). Also accepts `username` as an alias. |
+| `password` | Database password |
+| `database` | Database name (default: `master`). Also accepts `dbname` as an alias. |
+
+All fields in `connection` are passed to `pymssql.connect()`. See the [pymssql documentation](https://pymssql.readthedocs.io/en/stable/ref/pymssql.html) for all available options.
+
+### Per-environment connections
+
+```toml
+adapter = "sqlserver"
+
+[connection]
+host = "localhost"
+user = "sa"
+password = "${ENV:MSSQL_PASSWORD}"
+
+[environments.prod]
+schema = "prod"
+
+[environments.prod.connection]
+host = "prod-sql.example.com"
+database = "analytics"
+
+[environments.dev]
+schema = "dev"
+
+[environments.dev.connection]
+database = "analytics_dev"
 ```
 
 ## Sources
@@ -5445,6 +5511,160 @@ sqb load
 ```
 
 See [Loaders](/concepts/loaders) for details on write strategies, the loader context API, auto-load behavior, and source deferral.
+
+## ingestr
+
+Source: `integrations/ingestr.mdx`
+
+Declarative data ingestion from 50+ sources using ingestr.
+
+[ingestr](https://github.com/bruin-data/ingestr) is an open-source CLI tool that copies data from any source to any destination using a single command. SQLBuild integrates with ingestr as a declarative source loader - you configure the ingestion directly in your source YAML, and SQLBuild handles execution as part of the build lifecycle.
+
+### Install
+
+```bash
+pip install 'sqlbuild[ingestr]'
+# or
+uv pip install 'sqlbuild[ingestr]'
+```
+
+This installs `ingestr` alongside SQLBuild. The `ingestr` CLI must be available on `PATH`.
+
+### How it works
+
+1. Declare an `ingestr` block on a source in `sources/*.yml`
+2. SQLBuild generates a synthetic loader that calls `ingestr ingest` as a subprocess
+3. ingestr reads from the configured source and writes directly to the SQLBuild adapter's database
+4. The destination URI is built automatically from your SQLBuild connection config - no manual destination setup
+
+No Python loader code is needed. The YAML declaration is the entire configuration.
+
+### Example: PostgreSQL to DuckDB
+
+Replicate a table from PostgreSQL into your local DuckDB project:
+
+```yaml
+# sources/raw.yml
+sources:
+  - name: raw_orders
+    table: orders
+    ingestr:
+      source_uri: "postgresql://user:pass@host:5432/mydb"
+      source_table: "public.orders"
+```
+
+That's it. Run `sqb load` or `sqb build` and ingestr copies the `orders` table into your project.
+
+### Example: Stripe with incremental merge
+
+Load Stripe charges with incremental merge on a primary key:
+
+```yaml
+sources:
+  - name: raw_stripe_charges
+    table: charges
+    ingestr:
+      source_uri: "stripe://${stripe_api_key}"
+      source_table: "charges"
+      strategy: merge
+      primary_key: id
+      incremental_key: created
+```
+
+On subsequent runs, ingestr merges new and updated records based on the `id` column, using `created` to detect changes.
+
+### Configuration reference
+
+The `ingestr` block on a source supports the following fields:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `source_uri` | Yes | ingestr source connection URI (e.g. `postgresql://...`, `stripe://...`, `shopify://...`) |
+| `source_table` | Yes | Source table or resource name to ingest |
+| `strategy` | No | Ingestion strategy: `replace`, `append`, `merge`, `delete+insert`, or `truncate+insert` |
+| `incremental_key` | No | Column used for incremental change detection |
+| `primary_key` | No | Primary key column(s) for merge strategy (string or list) |
+| `columns` | No | Comma-separated column list to select from the source |
+| `extra_args` | No | Additional CLI arguments passed to `ingestr ingest` (list of strings) |
+
+#### Strategy mapping
+
+| Strategy | Behavior |
+|----------|----------|
+| `replace` | Drop and recreate the destination table (default when no strategy is set) |
+| `append` | Insert all rows without deduplication |
+| `merge` | Upsert based on `primary_key`, using `incremental_key` for change detection |
+| `delete+insert` | Delete matching rows by `incremental_key` range, then insert replacements |
+| `truncate+insert` | Truncate destination table, then insert all rows |
+
+### Template variables
+
+All string fields in the `ingestr` block support SQLBuild project variable substitution and context templates:
+
+```yaml
+sources:
+  - name: raw_orders
+    ingestr:
+      source_uri: "postgresql://${pg_user}:${pg_password}@${pg_host}:5432/${pg_database}"
+      source_table: "public.orders"
+```
+
+Variables are resolved from the project's merged variable config (project + environment + local).
+
+Set sensitive values in `sqlbuild_local.toml` (gitignored):
+
+```toml
+[vars]
+pg_user = "readonly"
+pg_password = "secret"
+pg_host = "prod-db.example.com"
+pg_database = "analytics"
+stripe_api_key = "sk_live_..."
+```
+
+### Destination URI
+
+SQLBuild automatically builds the ingestr destination URI from your adapter connection config. All supported adapters work without manual destination configuration:
+
+| Adapter | Destination URI format |
+|---------|----------------------|
+| DuckDB | `duckdb:///path/to/db.duckdb` |
+| MotherDuck | `motherduck://database` |
+| PostgreSQL | `postgresql://user:pass@host:port/db` |
+| Snowflake | `snowflake://user:pass@account/db/schema` |
+| BigQuery | `bigquery://project` |
+| Databricks | `databricks://token:...@host` |
+| SQL Server | `mssql://user:pass@host:port/db` |
+
+### Reload
+
+When `--reload` is passed, ingestr runs with `--full-refresh`, forcing a complete reload regardless of the configured strategy:
+
+```bash
+sqb load --reload
+sqb build --reload
+```
+
+### Build integration
+
+ingestr sources are managed sources - they participate in the same lifecycle as Python loaders:
+
+```bash
+# ingestr runs automatically before dependent models
+sqb build
+
+# run ingestr sources standalone
+sqb load
+
+# skip loading
+sqb build --no-load
+```
+
+See [Loaders](/concepts/loaders) for details on auto-load behavior, source deferral, and the `--load` / `--no-load` / `--reload` flags.
+
+### Supported sources
+
+ingestr supports 50+ sources including databases, SaaS APIs, and file systems. See the [ingestr documentation](https://bruin-data.github.io/ingestr/) for the full list of supported sources and their URI formats.
 
 ## compile
 
