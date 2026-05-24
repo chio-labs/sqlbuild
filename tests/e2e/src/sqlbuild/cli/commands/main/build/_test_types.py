@@ -57,6 +57,19 @@ class AppendCursorBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class TimestampCursorBuildOverrideE2ETestCase:
+    """Test case for timestamp cursor override behavior in sqb build."""
+
+    description: str
+    repo_files: dict[str, str]
+    initial_seed_sql: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_runtime_sql_fragment: str
+    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
+
+
+@dataclass(frozen=True)
 class SnapshotTimestampBuildE2ETestCase:
     """Test case for timestamp snapshot build behavior across CLI reruns."""
 

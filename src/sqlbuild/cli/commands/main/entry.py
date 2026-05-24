@@ -458,7 +458,7 @@ def _main_with_dependencies(
             raise CliUserError("dbt requires a subcommand such as 'plan'", code="C237")
         if args.command == CliCommand.BUILD:
             cursor_overrides = CursorOverrides(
-                start_ts=None,
+                start_ts=args.start_cursor_ts,
                 end_ts=args.end_cursor_ts,
                 start_int=args.start_cursor_int,
                 end_int=args.end_cursor_int,
