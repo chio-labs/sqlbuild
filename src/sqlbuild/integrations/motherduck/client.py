@@ -8,13 +8,14 @@ from decimal import Decimal
 from typing import Any, ClassVar
 from urllib.parse import urlencode
 
-from sqlbuild.adapter.shared.types import LoaderLogicalType
+from sqlbuild.adapter.shared.types import BuiltinAdapter, LoaderLogicalType
 from sqlbuild.integrations.shared.classes.duckdb import DuckDbBackedAdapter
 
 
 class MotherDuckAdapter(DuckDbBackedAdapter):
     """MotherDuck adapter backed by DuckDB's MotherDuck connection support."""
 
+    adapter_name: ClassVar[str] = BuiltinAdapter.MOTHERDUCK.value
     sqlglot_dialect_name: ClassVar[str | None] = "duckdb"
 
     def render_loader_logical_type(self, type_name: LoaderLogicalType) -> str:

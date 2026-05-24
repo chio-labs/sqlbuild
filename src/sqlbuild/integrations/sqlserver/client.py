@@ -35,6 +35,7 @@ from sqlbuild.adapter.shared.models import (
     StatementRecorder,
 )
 from sqlbuild.adapter.shared.types import (
+    BuiltinAdapter,
     CursorKind,
     FrameworkType,
     LoaderLogicalType,
@@ -67,6 +68,7 @@ class _SqlServerConnection:
 class SqlServerAdapter(BaseAdapter):
     """Microsoft SQL Server adapter backed by pymssql."""
 
+    adapter_name: ClassVar[str] = BuiltinAdapter.SQLSERVER.value
     sqlglot_dialect_name: ClassVar[str | None] = "tsql"
     max_identifier_length: ClassVar[int] = 128
 
