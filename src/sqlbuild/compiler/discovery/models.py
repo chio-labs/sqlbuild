@@ -8,6 +8,7 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.types import SqlTestMode
+from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry, SourceLocation
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
@@ -173,6 +174,7 @@ class DiscoveredLoaderFunction:
     unique_key: tuple[str, ...] = field(default_factory=tuple)
     columns: tuple[SourceColumnEntry, ...] = field(default_factory=tuple)
     contract: str | None = None
+    connection_mode: LoaderConnectionMode = LoaderConnectionMode.SQLBUILD
 
 
 @dataclass(frozen=True)

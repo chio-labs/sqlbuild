@@ -7,6 +7,8 @@ from io import StringIO
 
 import pytest
 
+from sqlbuild.adapter.shared.models import LifeCycleEvent
+from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from sqlbuild.cli.commands.main.shared.helpers.nested_progress import NestedCommandProgressCallbacks
 from sqlbuild.cli.commands.main.shared.helpers.progress import (
     BuildProgressCallbacks,
@@ -24,6 +26,7 @@ from sqlbuild.executor.build.models import (
     SeedExecutionResult,
 )
 from sqlbuild.executor.build.types import BuildStatus
+from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
@@ -34,6 +37,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import
     BuildFooterTestCase,
     BuildProgressActiveSpinnerTestCase,
     BuildProgressFailureOutputTestCase,
+    BuildProgressLoadLogTestCase,
     BuildProgressModelOutputTestCase,
     BuildProgressSpinnerLifecycleTestCase,
     BuildProgressSqlTestRowsTestCase,
@@ -574,6 +578,56 @@ def test_given_model_node_when_reporting_progress_then_writes_materialization_la
     )
 
     callbacks.on_node_complete(test_case.node_result)
+    output: str = stream.getvalue()
+
+    expected_fragment: str
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in output
+    unexpected_fragment: str
+    for unexpected_fragment in test_case.unexpected_fragments:
+        assert unexpected_fragment not in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildProgressLoadLogTestCase(
+            description="completed source load renders multiline lifecycle logs",
+            expected_fragments=(
+                "source    raw_orders",
+                "log  ingestr stdout",
+                "         Starting data ingestion",
+                "         Rows: 3",
+            ),
+        )
+    ],
+    ids=["completed source load renders multiline lifecycle logs"],
+)
+def test_given_source_load_logs_when_reporting_progress_then_writes_indented_log_block(
+    test_case: BuildProgressLoadLogTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stream: StringIO = StringIO()
+    monkeypatch.setattr("sys.stdout", stream)
+    callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
+        plan=PlanOutput(),
+        use_color=False,
+    )
+
+    callbacks.on_node_complete(
+        LoadExecutionResult(
+            source_name="raw_orders",
+            loader_name="ingestr__raw_orders",
+            status=ExecutionStatus.SUCCESS,
+            target="raw_orders",
+            lifecycle_events=(
+                LifeCycleEvent(
+                    kind=LifeCycleEventKind.LOG,
+                    content="ingestr stdout\nStarting data ingestion\nRows: 3",
+                ),
+            ),
+        )
+    )
     output: str = stream.getvalue()
 
     expected_fragment: str

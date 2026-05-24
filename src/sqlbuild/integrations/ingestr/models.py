@@ -6,6 +6,15 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
+class IngestrCommandResult:
+    """Captured output from one ingestr subprocess run."""
+
+    command_display: str
+    stdout: str
+    stderr: str
+
+
+@dataclass(frozen=True)
 class IngestrSourceConfig:
     """Configuration for one source loaded by the ingestr integration loader."""
 

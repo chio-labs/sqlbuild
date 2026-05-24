@@ -99,6 +99,13 @@ class BuildProgressSqlTestRowsTestCase:
 
 
 @dataclass(frozen=True)
+class BuildProgressLoadLogTestCase:
+    description: str
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class ConnectionProgressTestCase:
     description: str
     connection_count: int
@@ -106,6 +113,7 @@ class ConnectionProgressTestCase:
     expected_start: str
     expected_complete: str
     expected_error: str
+    blank_line_before_start: bool = False
     blank_line_after_complete: bool = False
     use_color: bool = False
     expected_lines: tuple[str, ...] = ()

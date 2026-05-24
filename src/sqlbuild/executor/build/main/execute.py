@@ -10,6 +10,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.compiler.auditing.types import AuditOutcome
+from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
@@ -62,6 +63,9 @@ def execute_build_plan(
     warehouse_relations: dict[str, RelationInfo] | None = None,
     on_sub_progress: Callable[[str], None] | None = None,
     use_color: bool = False,
+    precompleted_keys: frozenset[CompiledObjectKey] = frozenset(),
+    initial_load_results: tuple[LoadExecutionResult, ...] = (),
+    initial_failed_keys: frozenset[CompiledObjectKey] = frozenset(),
 ) -> BuildExecutionResult:
     """Execute a full build plan using the DAG scheduler."""
 
@@ -96,6 +100,9 @@ def execute_build_plan(
         warehouse_relations=warehouse_relations,
         on_sub_progress=on_sub_progress,
         use_color=use_color,
+        precompleted_keys=precompleted_keys,
+        initial_load_results=initial_load_results,
+        initial_failed_keys=initial_failed_keys,
     )
 
     model_results: tuple[ModelExecutionResult, ...]
