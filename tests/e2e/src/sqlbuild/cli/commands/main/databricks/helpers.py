@@ -9,13 +9,13 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.integrations.databricks.client import DatabricksAdapter
+from sqlbuild.adapters.databricks.client import DatabricksAdapter
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     prepare_source_loader_strategies,
     prepare_waffle_shop,
     stringify_warehouse_rows,
 )
-from tests.integration.src.sqlbuild.integrations.databricks.helpers import (
+from tests.integration.src.sqlbuild.adapters.databricks.helpers import (
     build_databricks_connection_config,
     build_unique_schema_name,
     fetch_rows,

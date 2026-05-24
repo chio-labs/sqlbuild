@@ -1118,7 +1118,7 @@ The most common case is extending an existing adapter with custom behavior. Subc
 
 ```python
 # adapters/duckdb_plus.py
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 
 class DuckDbPlusAdapter(DuckDbAdapter):
     adapter_name = "duckdb_plus"

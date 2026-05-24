@@ -12,6 +12,7 @@ from _pytest.capture import CaptureFixture, CaptureResult
 from _pytest.monkeypatch import MonkeyPatch
 from duckdb import DuckDBPyConnection
 
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.cli.commands.main.audit import run_audit
 from sqlbuild.cli.commands.main.build import run_build
 from sqlbuild.cli.commands.main.helpers.load_selection import select_load_entries
@@ -28,7 +29,6 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.executor.load.main.run import run_load_pipeline
 from sqlbuild.executor.load.models import LoadExecutionResult
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from sqlbuild.spec.models.source import SourceEntry
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     BuildRunAutoLoadFailureTestCase,

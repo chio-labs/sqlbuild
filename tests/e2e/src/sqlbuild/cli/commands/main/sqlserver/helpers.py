@@ -5,7 +5,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.integrations.sqlserver.client import SqlServerAdapter
+from sqlbuild.adapters.sqlserver.client import SqlServerAdapter
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     prepare_source_loader_strategies,
     prepare_waffle_shop,

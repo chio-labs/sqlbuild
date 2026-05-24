@@ -4,13 +4,13 @@ from typing import Any
 
 import pytest
 
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.cli.commands.main.helpers.plan.formatter import format_plan
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import CascadeResult, ModelPlanEntry, PlanOutput, PlanWarning
 from sqlbuild.compiler.planner.types import BackfillAction, PlanAction, PlanReason, WarningSeverity
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     BuildExecutionPlanTestCase,
     FormatPlanIntegrationTestCase,

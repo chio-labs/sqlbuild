@@ -13,7 +13,7 @@ from tests.unit.src.sqlbuild.adapter.discovery.main._test_types import (
 from tests.unit.src.sqlbuild.adapter.discovery.main.helpers import write_project_files
 
 VALID_DUCKDB_ADAPTER: str = """
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 
 
 class DuckDbPlusAdapter(DuckDbAdapter):
@@ -21,7 +21,7 @@ class DuckDbPlusAdapter(DuckDbAdapter):
 """
 
 NESTED_DUCKDB_ADAPTER: str = """
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 
 
 class NestedDuckDbAdapter(DuckDbAdapter):
@@ -70,7 +70,7 @@ DISCOVERY_ERROR_TEST_CASES: list[ProjectAdapterDiscoveryErrorTestCase] = [
         description="rejects adapter subclass without adapter name",
         files={
             "adapters/missing_name.py": """
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 
 
 class MissingNameAdapter(DuckDbAdapter):

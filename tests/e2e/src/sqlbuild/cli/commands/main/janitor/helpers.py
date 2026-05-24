@@ -6,9 +6,9 @@ from datetime import datetime
 from pathlib import Path
 from textwrap import dedent
 
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_inline_project
 
 

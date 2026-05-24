@@ -60,7 +60,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake.helpers import (
     snowflake_relation_row_count,
     write_local_environment_override,
 )
-from tests.integration.src.sqlbuild.integrations.snowflake.helpers import build_unique_schema_name
+from tests.integration.src.sqlbuild.adapters.snowflake.helpers import build_unique_schema_name
 
 SNOWFLAKE_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES: list[SnowflakeScenarioLocalReplayE2ETestCase] = [
     SnowflakeScenarioLocalReplayE2ETestCase(

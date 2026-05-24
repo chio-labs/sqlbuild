@@ -8,13 +8,13 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 def builtin_adapter_classes() -> dict[str, type[BaseAdapter]]:
     """Return built-in adapter classes keyed by adapter name."""
 
-    from sqlbuild.integrations.bigquery.client import BigQueryAdapter
-    from sqlbuild.integrations.databricks.client import DatabricksAdapter
-    from sqlbuild.integrations.duckdb.client import DuckDbAdapter
-    from sqlbuild.integrations.motherduck.client import MotherDuckAdapter
-    from sqlbuild.integrations.postgres.client import PostgresAdapter
-    from sqlbuild.integrations.snowflake.client import SnowflakeAdapter
-    from sqlbuild.integrations.sqlserver.client import SqlServerAdapter
+    from sqlbuild.adapters.bigquery.client import BigQueryAdapter
+    from sqlbuild.adapters.databricks.client import DatabricksAdapter
+    from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+    from sqlbuild.adapters.motherduck.client import MotherDuckAdapter
+    from sqlbuild.adapters.postgres.client import PostgresAdapter
+    from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
+    from sqlbuild.adapters.sqlserver.client import SqlServerAdapter
 
     adapters: tuple[type[BaseAdapter], ...] = (
         DuckDbAdapter,

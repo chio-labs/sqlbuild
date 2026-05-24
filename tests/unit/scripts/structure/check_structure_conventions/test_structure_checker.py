@@ -868,12 +868,12 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=(),
     ),
     CheckPathsTestCase(
-        description="allows integrations client module with a single public class",
+        description="allows adapters client module with a single public class",
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/integrations/__init__.py": '"""Integrations."""\n',
-            "src/sqlbuild/integrations/clickhouse/__init__.py": '"""ClickHouse integration."""\n',
-            "src/sqlbuild/integrations/clickhouse/models.py": dedent(
+            "src/sqlbuild/adapters/clickhouse/__init__.py": '"""ClickHouse integration."""\n',
+            "src/sqlbuild/adapters/clickhouse/models.py": dedent(
                 """
                 from dataclasses import dataclass
 
@@ -884,9 +884,9 @@ TEST_CASES: list[CheckPathsTestCase] = [
                 """
             ).strip()
             + "\n",
-            "src/sqlbuild/integrations/clickhouse/client.py": dedent(
+            "src/sqlbuild/adapters/clickhouse/client.py": dedent(
                 """
-                from sqlbuild.integrations.clickhouse.models import ClickHouseConnectionConfig
+                from sqlbuild.adapters.clickhouse.models import ClickHouseConnectionConfig
 
 
                 class ClickHouseClient:
@@ -900,12 +900,12 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=(),
     ),
     CheckPathsTestCase(
-        description="reports main module inside integrations package",
+        description="reports main module inside adapters package",
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/integrations/__init__.py": '"""Integrations."""\n',
-            "src/sqlbuild/integrations/clickhouse/__init__.py": '"""ClickHouse integration."""\n',
-            "src/sqlbuild/integrations/clickhouse/main.py": dedent(
+            "src/sqlbuild/adapters/clickhouse/__init__.py": '"""ClickHouse integration."""\n',
+            "src/sqlbuild/adapters/clickhouse/main.py": dedent(
                 """
                 def create_client() -> object:
                     return object()
@@ -916,12 +916,12 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC023",),
     ),
     CheckPathsTestCase(
-        description="reports multiple public classes in integrations client module",
+        description="reports multiple public classes in adapters client module",
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/integrations/__init__.py": '"""Integrations."""\n',
-            "src/sqlbuild/integrations/clickhouse/__init__.py": '"""ClickHouse integration."""\n',
-            "src/sqlbuild/integrations/clickhouse/client.py": dedent(
+            "src/sqlbuild/adapters/clickhouse/__init__.py": '"""ClickHouse integration."""\n',
+            "src/sqlbuild/adapters/clickhouse/client.py": dedent(
                 """
                 class ClickHouseClient:
                     pass
@@ -936,12 +936,12 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC024",),
     ),
     CheckPathsTestCase(
-        description="reports top level function in integrations client module",
+        description="reports top level function in adapters client module",
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/integrations/__init__.py": '"""Integrations."""\n',
-            "src/sqlbuild/integrations/clickhouse/__init__.py": '"""ClickHouse integration."""\n',
-            "src/sqlbuild/integrations/clickhouse/client.py": dedent(
+            "src/sqlbuild/adapters/clickhouse/__init__.py": '"""ClickHouse integration."""\n',
+            "src/sqlbuild/adapters/clickhouse/client.py": dedent(
                 """
                 class ClickHouseClient:
                     pass
@@ -956,12 +956,12 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC025",),
     ),
     CheckPathsTestCase(
-        description="reports adapter-local integrations helpers module",
+        description="reports adapter-local adapters helpers module",
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/integrations/__init__.py": '"""Integrations."""\n',
-            "src/sqlbuild/integrations/clickhouse/__init__.py": '"""ClickHouse integration."""\n',
-            "src/sqlbuild/integrations/clickhouse/helpers.py": dedent(
+            "src/sqlbuild/adapters/clickhouse/__init__.py": '"""ClickHouse integration."""\n',
+            "src/sqlbuild/adapters/clickhouse/helpers.py": dedent(
                 """
                 def render_clickhouse_sql() -> str:
                     return "SELECT 1"
@@ -1048,7 +1048,7 @@ TEST_CASES: list[CheckPathsTestCase] = [
         description="reports first class adapter BaseAdapter method alias",
         repo_files=compliant_repo_files()
         | {
-            "src/sqlbuild/integrations/example/client.py": dedent(
+            "src/sqlbuild/adapters/example/client.py": dedent(
                 """
                 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 
@@ -1065,7 +1065,7 @@ TEST_CASES: list[CheckPathsTestCase] = [
         description="reports first class adapter super delegation in contract method",
         repo_files=compliant_repo_files()
         | {
-            "src/sqlbuild/integrations/example/client.py": dedent(
+            "src/sqlbuild/adapters/example/client.py": dedent(
                 """
                 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 
