@@ -42,6 +42,7 @@ class BaseAdapter(StrictAdapter):
     Override only the methods your engine requires.
     """
 
+    adapter_name: ClassVar[str]
     sqlglot_dialect_name: ClassVar[str | None] = None
     max_identifier_length: ClassVar[int] = 63
 

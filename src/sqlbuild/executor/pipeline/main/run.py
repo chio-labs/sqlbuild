@@ -13,7 +13,10 @@ from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.main.execute import execute_build_plan
-from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.executor.build.main.external_source_loads import (
+    run_external_source_loads_before_connections,
+)
+from sqlbuild.executor.build.models import BuildExecutionResult, ExternalSourceLoadResults
 from sqlbuild.executor.custom.models import MaterializationResult
 from sqlbuild.executor.pipeline.helpers.auditing import (
     run_audit_pipeline as run_audit_pipeline,
@@ -70,12 +73,33 @@ def run_build_pipeline(
     on_connection_start: Callable[[int], None] | None = None,
     on_connection_complete: Callable[[int, float], None] | None = None,
     on_connection_error: Callable[[int, float], None] | None = None,
+    use_color: bool = False,
 ) -> BuildExecutionResult:
     """Execute a full build pipeline: resolve settings, open connections, run plan, close."""
 
     promotion_mode: TablePromotionMode = resolve_promotion_mode(settings=settings, adapter=adapter)
     effective_concurrency: int = max(1, max_concurrency)
     logger: logging.Logger = logging.getLogger("sqlbuild.executor.pipeline")
+    external_source_load_results: ExternalSourceLoadResults = (
+        run_external_source_loads_before_connections(
+            plan=plan,
+            loader_functions=loader_functions,
+            adapter=adapter,
+            connection_config=connection_config,
+            run_id=run_id,
+            environment=environment,
+            effective_vars=effective_vars,
+            is_reload=loader_is_reload,
+            start_cursor_ts=start_cursor_ts,
+            end_cursor_ts=end_cursor_ts,
+            start_cursor_int=start_cursor_int,
+            end_cursor_int=end_cursor_int,
+            on_progress=on_progress,
+            on_node_start=on_node_start,
+            on_node_complete=on_node_complete,
+            use_color=use_color,
+        )
+    )
     worker_connections: list[Any] = []
     scheduler_connection: Any | None = None
     if on_connection_start is not None:
@@ -105,6 +129,7 @@ def run_build_pipeline(
         return execute_build_plan(
             plan=plan,
             adapter=adapter,
+            connection_config=connection_config,
             connections=tuple(worker_connections),
             scheduler_connection=scheduler_connection,
             promotion_mode=promotion_mode,
@@ -128,6 +153,10 @@ def run_build_pipeline(
             environment=environment,
             effective_vars=effective_vars,
             on_sub_progress=on_sub_progress,
+            use_color=use_color,
+            precompleted_keys=external_source_load_results.completed_keys,
+            initial_load_results=external_source_load_results.results,
+            initial_failed_keys=external_source_load_results.failed_keys,
         )
     finally:
         conn: Any

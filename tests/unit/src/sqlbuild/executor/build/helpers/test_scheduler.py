@@ -98,6 +98,7 @@ def test_given_managed_source_node_when_build_runs_then_records_loader_and_block
         result: BuildExecutionResult = execute_build_plan(
             plan=plan,
             adapter=adapter,
+            connection_config={"database": str(tmp_path / "scheduler.duckdb")},
             connections=(connection,),
             scheduler_connection=connection,
             promotion_mode=TablePromotionMode.DIRECT,

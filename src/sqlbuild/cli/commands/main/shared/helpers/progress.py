@@ -176,8 +176,16 @@ class BuildProgressCallbacks:
     def _write_log_block(self, message: str) -> None:
         """Write a log message with indent and muted styling."""
 
-        styled: str = blue_dim(f"    log  {message}") if self._use_color else f"    log  {message}"
-        self._stream.write(f"\n{styled}\n")
+        lines: list[str] = message.splitlines() or [""]
+        prefix: str = blue_dim("    log  ") if self._use_color else "    log  "
+        first_content: str = dim(lines[0]) if self._use_color else lines[0]
+        styled_first: str = f"{prefix}{first_content}"
+        self._stream.write(f"\n{styled_first}\n")
+        line: str
+        for line in lines[1:]:
+            continuation: str = f"         {line}"
+            styled_continuation: str = dim(continuation) if self._use_color else continuation
+            self._stream.write(f"{styled_continuation}\n")
 
     def on_node_start(self, name: str, resource_kind: ExecutionResourceKind) -> None:
         self._current_node_name = name
@@ -332,6 +340,12 @@ class BuildProgressCallbacks:
                 duration=duration,
                 detail=detail,
             )
+            event: LifeCycleEvent
+            for event in node_result.lifecycle_events:
+                if event.kind == LifeCycleEventKind.LOG:
+                    self._write_log_block(event.content)
+                elif self._verbose and event.kind == LifeCycleEventKind.SQL:
+                    self._write_sql_block(event.content)
             if node_result.status == ExecutionStatus.FAILED and node_result.error_message:
                 self._write_error_detail(
                     error_code=None,

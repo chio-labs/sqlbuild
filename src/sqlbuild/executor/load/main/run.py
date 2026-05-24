@@ -11,6 +11,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
+from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.executor.load.helpers.dag_runtime import (
     build_load_dag_state,
     complete_dag_source,
@@ -18,10 +19,12 @@ from sqlbuild.executor.load.helpers.dag_runtime import (
     load_dag_worker,
 )
 from sqlbuild.executor.load.models import LoadDagState, LoadExecutionIndexes, LoadExecutionResult
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.helpers.load_execution import (
     build_load_execution_indexes,
     build_source_downstream_names,
     build_source_upstream_names,
+    dependency_node_names,
 )
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -45,6 +48,7 @@ def run_load_pipeline(
     on_connection_start: Callable[[int], None] | None = None,
     on_connection_complete: Callable[[int, float], None] | None = None,
     on_connection_error: Callable[[int, float], None] | None = None,
+    use_color: bool = False,
 ) -> tuple[LoadExecutionResult, ...]:
     """Execute selected source loaders."""
 
@@ -55,7 +59,52 @@ def run_load_pipeline(
     source_count: int = sum(1 for source in sources if source.loader is not None)
     if source_count == 0:
         return ()
-    effective_concurrency: int = max(1, min(max_concurrency, source_count))
+    _validate_external_loaders_are_preconnect_runnable(sources=sources, indexes=indexes)
+    external_sources: tuple[SourceEntry, ...] = tuple(
+        source
+        for source in sources
+        if source.loader is not None
+        and indexes.loader_by_name[source.loader].connection_mode == LoaderConnectionMode.EXTERNAL
+    )
+    sqlbuild_sources: tuple[SourceEntry, ...] = tuple(
+        source
+        for source in sources
+        if source.loader is None
+        or indexes.loader_by_name[source.loader].connection_mode == LoaderConnectionMode.SQLBUILD
+    )
+    preloaded_results: list[LoadExecutionResult] = []
+    failed_or_skipped: set[str] = set()
+    source_by_name: dict[str, SourceEntry] = {source.name: source for source in sources}
+    external_source: SourceEntry
+    for external_source in external_sources:
+        result: LoadExecutionResult = execute_ready_dag_source(
+            source_name=external_source.name,
+            source_by_name=source_by_name,
+            indexes=indexes,
+            failed_or_skipped=failed_or_skipped,
+            adapter=adapter,
+            connection_config=connection_config,
+            connection=None,
+            run_id=run_id,
+            environment=environment,
+            vars=vars,
+            is_reload=is_reload,
+            start_cursor_ts=start_cursor_ts,
+            end_cursor_ts=end_cursor_ts,
+            start_cursor_int=start_cursor_int,
+            end_cursor_int=end_cursor_int,
+            use_color=use_color,
+        )
+        preloaded_results.append(result)
+        if result.status.value != "success":
+            failed_or_skipped.add(external_source.name)
+        if on_load_complete is not None:
+            on_load_complete(result)
+    if not sqlbuild_sources:
+        return tuple(preloaded_results)
+
+    remaining_source_count: int = sum(1 for source in sqlbuild_sources if source.loader is not None)
+    effective_concurrency: int = max(1, min(max_concurrency, remaining_source_count))
     if on_connection_start is not None:
         on_connection_start(effective_concurrency)
     start: float = time.monotonic()
@@ -73,26 +122,26 @@ def run_load_pipeline(
     if on_connection_complete is not None:
         on_connection_complete(effective_concurrency, time.monotonic() - start)
 
-    source_by_name: dict[str, SourceEntry] = {source.name: source for source in sources}
     source_index_by_name: dict[str, int] = {
-        source.name: index for index, source in enumerate(sources)
+        source.name: index for index, source in enumerate(sqlbuild_sources)
     }
     upstream_names: dict[str, tuple[str, ...]] = build_source_upstream_names(
-        sources=sources,
+        sources=sqlbuild_sources,
         indexes=indexes,
     )
     downstream_names: dict[str, tuple[str, ...]] = build_source_downstream_names(
         upstream_names=upstream_names
     )
-    results: list[LoadExecutionResult | None] = [None] * len(sources)
+    results: list[LoadExecutionResult | None] = [None] * len(sqlbuild_sources)
     try:
         state: LoadDagState = build_load_dag_state(
-            sources=sources,
+            sources=sqlbuild_sources,
             results=results,
             source_index_by_name=source_index_by_name,
             upstream_names=upstream_names,
             downstream_names=downstream_names,
         )
+        state.failed_or_skipped.update(failed_or_skipped)
         connection_pool: queue.Queue[Any] = queue.Queue()
         connection: Any
         for connection in connections:
@@ -110,6 +159,7 @@ def run_load_pipeline(
                         indexes=indexes,
                         failed_or_skipped=state.failed_or_skipped,
                         adapter=adapter,
+                        connection_config=connection_config,
                         connection=sequential_connection,
                         run_id=run_id,
                         environment=environment,
@@ -119,11 +169,14 @@ def run_load_pipeline(
                         end_cursor_ts=end_cursor_ts,
                         start_cursor_int=start_cursor_int,
                         end_cursor_int=end_cursor_int,
+                        use_color=use_color,
                     ),
                     state=state,
                     on_load_complete=on_load_complete,
                 )
-            return tuple(result for result in results if result is not None)
+            return tuple(preloaded_results) + tuple(
+                result for result in results if result is not None
+            )
 
         with ThreadPoolExecutor(max_workers=effective_concurrency) as pool:
             while state.ready or state.in_flight:
@@ -137,6 +190,7 @@ def run_load_pipeline(
                         indexes,
                         state.failed_or_skipped,
                         adapter,
+                        connection_config,
                         connection_pool,
                         run_id,
                         environment,
@@ -146,6 +200,7 @@ def run_load_pipeline(
                         end_cursor_ts,
                         start_cursor_int,
                         end_cursor_int,
+                        use_color,
                         state.completion_queue,
                     )
                 if not state.in_flight:
@@ -158,8 +213,35 @@ def run_load_pipeline(
                     state=state,
                     on_load_complete=on_load_complete,
                 )
-        return tuple(result for result in results if result is not None)
+        return tuple(preloaded_results) + tuple(result for result in results if result is not None)
     finally:
         connection = None
         for connection in connections:
             adapter.close(connection)
+
+
+def _validate_external_loaders_are_preconnect_runnable(
+    *, sources: tuple[SourceEntry, ...], indexes: LoadExecutionIndexes
+) -> None:
+    source_by_name: dict[str, SourceEntry] = {source.name: source for source in sources}
+    source: SourceEntry
+    for source in sources:
+        if source.loader is None:
+            continue
+        loader: DiscoveredLoaderFunction = indexes.loader_by_name[source.loader]
+        if loader.connection_mode != LoaderConnectionMode.EXTERNAL:
+            continue
+        dependency_name: str
+        for dependency_name in dependency_node_names(source=source, indexes=indexes):
+            dependency_source: SourceEntry | None = source_by_name.get(dependency_name)
+            if dependency_source is None or dependency_source.loader is None:
+                continue
+            dependency_loader: DiscoveredLoaderFunction = indexes.loader_by_name[
+                dependency_source.loader
+            ]
+            if dependency_loader.connection_mode == LoaderConnectionMode.SQLBUILD:
+                raise ExecutorInputError(
+                    f"External loader '{loader.name}' cannot depend on SQLBuild-connection "
+                    f"loader '{dependency_loader.name}'. External loaders must be runnable "
+                    "before SQLBuild opens warehouse connections."
+                )

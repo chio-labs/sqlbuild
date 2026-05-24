@@ -51,6 +51,7 @@ def run_build_for_project(
     return execute_build_plan(
         plan=plan,
         adapter=adapter,
+        connection_config={"database": str(project_dir / "test.duckdb")},
         connections=(connection,),
         scheduler_connection=connection,
         promotion_mode=promotion_mode,

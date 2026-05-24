@@ -33,6 +33,7 @@ from sqlbuild.adapter.shared.models import (
 )
 from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
 from sqlbuild.adapter.shared.types import (
+    BuiltinAdapter,
     CursorKind,
     FrameworkType,
     LoaderLogicalType,
@@ -99,6 +100,7 @@ class _BigQueryConnection:
 class BigQueryAdapter(BaseAdapter):
     """BigQuery adapter backed by google-cloud-bigquery."""
 
+    adapter_name: ClassVar[str] = BuiltinAdapter.BIGQUERY.value
     sqlglot_dialect_name: ClassVar[str | None] = "bigquery"
     max_identifier_length: ClassVar[int] = 1024
 

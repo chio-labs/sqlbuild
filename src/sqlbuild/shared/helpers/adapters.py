@@ -112,7 +112,7 @@ def _discover_module_adapters(
     for class_name, adapter_class in inspect.getmembers(module, inspect.isclass):
         if adapter_class.__module__ != module.__name__:
             continue
-        adapter_name: Any = getattr(adapter_class, "adapter_name", None)
+        adapter_name: Any = adapter_class.__dict__.get("adapter_name")
         is_adapter_class: bool = issubclass(adapter_class, StrictAdapter)
         if adapter_name is None and not is_adapter_class:
             continue
