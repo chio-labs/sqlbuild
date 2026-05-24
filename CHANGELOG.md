@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.19.0](https://github.com/chio-labs/sqlbuild/compare/v0.18.0...v0.19.0) (2026-05-24)
+
+
+### Features
+
+* add ingestr integration loaders ([d824860](https://github.com/chio-labs/sqlbuild/commit/d824860cb186b9a069e42c629b3680180fdd0552))
+* formalize adapter identity ([3977fad](https://github.com/chio-labs/sqlbuild/commit/3977fad13c39ab93c7d5dacda2c1074b1a5b62c5))
+
+
+### Bug Fixes
+
+* run external loaders before warehouse connections ([b4427a4](https://github.com/chio-labs/sqlbuild/commit/b4427a4188f772b71011197ab87d25de52bdf932))
+
 ## [0.18.0](https://github.com/chio-labs/sqlbuild/compare/v0.17.0...v0.18.0) (2026-05-23)
 
 
