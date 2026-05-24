@@ -148,7 +148,11 @@ def check_nested_runtime_package_direct_modules(
     if _is_dagster_integration_public_module(relative_parts):
         return []
     if file_path.name == "main.py" and (
-        relative_parts[:3] == ("src", "sqlbuild", "integrations")
+        relative_parts[:3]
+        in {
+            ("src", "sqlbuild", "adapters"),
+            ("src", "sqlbuild", "integrations"),
+        }
         or "shared" in relative_parts[2:-1]
     ):
         return []
@@ -170,7 +174,11 @@ def check_nested_runtime_package_direct_modules(
         return []
     if (
         len(relative_parts) >= 5
-        and relative_parts[:3] == ("src", "sqlbuild", "integrations")
+        and relative_parts[:3]
+        in {
+            ("src", "sqlbuild", "adapters"),
+            ("src", "sqlbuild", "integrations"),
+        }
         and file_path.name == "client.py"
     ):
         return []
@@ -729,10 +737,13 @@ def check_shared_package_structure(repo_root: Path, file_path: Path) -> list[Vio
 
 
 def check_integrations_package_structure(repo_root: Path, file_path: Path) -> list[Violation]:
-    """Enforce client.py instead of main.py within integrations/ packages."""
+    """Enforce client.py instead of main.py within client-style packages."""
 
     relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
-    if len(relative_parts) < 5 or relative_parts[:3] != ("src", "sqlbuild", "integrations"):
+    if len(relative_parts) < 5 or relative_parts[:3] not in {
+        ("src", "sqlbuild", "adapters"),
+        ("src", "sqlbuild", "integrations"),
+    }:
         return []
     if file_path.name != "main.py":
         return []
@@ -743,7 +754,7 @@ def check_integrations_package_structure(repo_root: Path, file_path: Path) -> li
             path=file_path,
             line=None,
             message=(
-                "integrations/ packages must use client.py instead of main.py for primary client "
+                "client-style packages must use client.py instead of main.py for primary client "
                 "entrypoints"
             ),
         )
@@ -812,13 +823,17 @@ def check_adapter_class_entry_module_shape(
 def check_client_module_shape(
     repo_root: Path, file_path: Path, module: ast.Module
 ) -> list[Violation]:
-    """Enforce focused single-class client.py modules within integrations/."""
+    """Enforce focused single-class client.py modules within client-style packages."""
 
     relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
     if (
         file_path.name != "client.py"
         or len(relative_parts) < 5
-        or relative_parts[:3] != ("src", "sqlbuild", "integrations")
+        or relative_parts[:3]
+        not in {
+            ("src", "sqlbuild", "adapters"),
+            ("src", "sqlbuild", "integrations"),
+        }
     ):
         return []
 
@@ -835,7 +850,7 @@ def check_client_module_shape(
                 code="SC024",
                 path=file_path,
                 line=1,
-                message="integrations client.py must define exactly one public top-level class",
+                message="client.py must define exactly one public top-level class",
             )
         )
 
@@ -847,7 +862,7 @@ def check_client_module_shape(
                 code="SC025",
                 path=file_path,
                 line=getattr(node, "lineno", 1),
-                message="integrations client.py must contain only imports and top-level classes",
+                message="client.py must contain only imports and top-level classes",
             )
         )
 
@@ -861,7 +876,11 @@ def check_integration_adapter_helpers_module(repo_root: Path, file_path: Path) -
     if (
         file_path.name != "helpers.py"
         or len(relative_parts) != 5
-        or relative_parts[:3] != ("src", "sqlbuild", "integrations")
+        or relative_parts[:3]
+        not in {
+            ("src", "sqlbuild", "adapters"),
+            ("src", "sqlbuild", "integrations"),
+        }
     ):
         return []
     return [
@@ -870,7 +889,7 @@ def check_integration_adapter_helpers_module(repo_root: Path, file_path: Path) -
             path=file_path,
             line=1,
             message=(
-                "adapter integration helpers.py modules hide overrideable adapter behavior; "
+                "adapter helpers.py modules hide overrideable adapter behavior; "
                 "put adapter-specific behavior on the adapter class"
             ),
         )
@@ -1175,7 +1194,10 @@ def _adapter_contract_class_names(
         return indexed_names
 
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
-    if relative_parts[:3] != ("src", "sqlbuild", "integrations"):
+    if relative_parts[:3] not in {
+        ("src", "sqlbuild", "adapters"),
+        ("src", "sqlbuild", "integrations"),
+    }:
         return frozenset()
     if file_path.name != "client.py" and relative_parts[-3:] != (
         "shared",

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledRelationTarget,
@@ -14,7 +15,6 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ChainStep, PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.pipeline.helpers.testing import run_test_pipeline
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.unit.src.sqlbuild.executor.pipeline.helpers._test_types import (
     SqlTestFunctionPreflightTestCase,
 )

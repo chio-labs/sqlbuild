@@ -2,6 +2,8 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.adapters.bigquery.client import BigQueryAdapter
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledRelationTarget,
@@ -9,8 +11,6 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
-from sqlbuild.integrations.bigquery.client import BigQueryAdapter
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 
 
 def build_result_model_plan_entry() -> ModelPlanEntry:

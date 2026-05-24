@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 
 
 def build_target(qualified: str | None, name: str) -> CompiledRelationTarget:

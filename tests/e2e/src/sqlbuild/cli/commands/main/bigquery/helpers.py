@@ -6,13 +6,13 @@ from pathlib import Path
 from shutil import copytree
 from typing import Any
 
-from sqlbuild.integrations.bigquery.client import BigQueryAdapter
+from sqlbuild.adapters.bigquery.client import BigQueryAdapter
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     WAFFLE_SHOP_DIR,
     prepare_source_loader_strategies,
     stringify_warehouse_rows,
 )
-from tests.integration.src.sqlbuild.integrations.bigquery.helpers import (
+from tests.integration.src.sqlbuild.adapters.bigquery.helpers import (
     build_bigquery_connection_config,
     build_unique_dataset_name,
     fetch_rows,

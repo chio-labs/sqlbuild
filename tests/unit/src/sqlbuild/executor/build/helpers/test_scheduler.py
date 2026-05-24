@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.adapter.shared.types import TablePromotionMode
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
@@ -14,7 +15,6 @@ from sqlbuild.compiler.planner.models import PlanOutput, SourceLoadPlanEntry
 from sqlbuild.executor.build.main.execute import execute_build_plan
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from sqlbuild.spec.models.source import SourceEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.executor.build.helpers._test_types import (

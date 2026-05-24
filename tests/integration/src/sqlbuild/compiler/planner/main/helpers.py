@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledFunction,
     CompiledModel,
@@ -31,7 +32,6 @@ from sqlbuild.compiler.planner.helpers.function_fingerprints import (
     build_compiled_function_fingerprint_sql,
 )
 from sqlbuild.compiler.shared.helpers.hashing import compute_query_hash
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.project import SettingsConfig
 from sqlbuild.spec.models.schema import SchemaSeedEntry

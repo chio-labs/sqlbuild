@@ -6,11 +6,11 @@ from typing import Any
 
 import pytest
 
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.planner.types import OnSchemaChange
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.executor.run.incremental._test_types import (
     IncrementalFailureTestCase,
     IncrementalSuccessTestCase,

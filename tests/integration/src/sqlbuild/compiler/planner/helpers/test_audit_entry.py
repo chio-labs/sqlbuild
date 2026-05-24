@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledAudit,
     CompiledObjectKey,
@@ -17,7 +18,6 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.planner.helpers.audit_entry import plan_audit
 from sqlbuild.compiler.planner.models import AuditPlanEntry
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from sqlbuild.spec.models.source import SourceEntry
 from tests.integration.src.sqlbuild.compiler.planner.helpers._test_types import (
     ExecuteAuditTestCase,

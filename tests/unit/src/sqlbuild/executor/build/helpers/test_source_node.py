@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.helpers.source_node import execute_build_source_node
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from sqlbuild.shared.types import ExecutionResourceKind
 from tests.unit.src.sqlbuild.executor.build.helpers._test_types import (
     BuildSourceNodeExecutionTestCase,

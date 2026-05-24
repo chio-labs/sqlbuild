@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlbuild.adapter.shared.models import LifeCycleEvent, QueryResult
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditRunScope,
@@ -38,7 +39,6 @@ from sqlbuild.executor.build.models import (
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from sqlbuild.spec.models.schema import SeedCsvSettings
 
 
