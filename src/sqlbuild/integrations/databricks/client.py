@@ -35,6 +35,7 @@ from sqlbuild.adapter.shared.models import (
 )
 from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
 from sqlbuild.adapter.shared.types import (
+    BuiltinAdapter,
     CursorKind,
     FrameworkType,
     LoaderLogicalType,
@@ -66,6 +67,7 @@ class _DatabricksConnection:
 class DatabricksAdapter(BaseAdapter):
     """Databricks adapter backed by databricks-sql-connector."""
 
+    adapter_name: ClassVar[str] = BuiltinAdapter.DATABRICKS.value
     sqlglot_dialect_name: ClassVar[str | None] = "databricks"
     max_identifier_length: ClassVar[int] = 255
 

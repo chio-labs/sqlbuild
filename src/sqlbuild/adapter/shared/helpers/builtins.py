@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.types import BuiltinAdapter
 
 
 def builtin_adapter_classes() -> dict[str, type[BaseAdapter]]:
@@ -17,12 +16,13 @@ def builtin_adapter_classes() -> dict[str, type[BaseAdapter]]:
     from sqlbuild.integrations.snowflake.client import SnowflakeAdapter
     from sqlbuild.integrations.sqlserver.client import SqlServerAdapter
 
-    return {
-        BuiltinAdapter.DUCKDB.value: DuckDbAdapter,
-        BuiltinAdapter.MOTHERDUCK.value: MotherDuckAdapter,
-        BuiltinAdapter.SNOWFLAKE.value: SnowflakeAdapter,
-        BuiltinAdapter.BIGQUERY.value: BigQueryAdapter,
-        BuiltinAdapter.DATABRICKS.value: DatabricksAdapter,
-        BuiltinAdapter.POSTGRES.value: PostgresAdapter,
-        BuiltinAdapter.SQLSERVER.value: SqlServerAdapter,
-    }
+    adapters: tuple[type[BaseAdapter], ...] = (
+        DuckDbAdapter,
+        MotherDuckAdapter,
+        SnowflakeAdapter,
+        BigQueryAdapter,
+        DatabricksAdapter,
+        PostgresAdapter,
+        SqlServerAdapter,
+    )
+    return {adapter.adapter_name: adapter for adapter in adapters}

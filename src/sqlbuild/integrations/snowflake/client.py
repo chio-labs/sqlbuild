@@ -32,6 +32,7 @@ from sqlbuild.adapter.shared.models import (
 )
 from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
 from sqlbuild.adapter.shared.types import (
+    BuiltinAdapter,
     CursorKind,
     FrameworkType,
     LoaderLogicalType,
@@ -63,6 +64,7 @@ class _SnowflakeConnection:
 class SnowflakeAdapter(BaseAdapter):
     """Snowflake adapter backed by snowflake-connector-python."""
 
+    adapter_name: ClassVar[str] = BuiltinAdapter.SNOWFLAKE.value
     sqlglot_dialect_name: ClassVar[str | None] = "snowflake"
     max_identifier_length: ClassVar[int] = 255
 

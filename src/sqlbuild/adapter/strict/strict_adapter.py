@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from decimal import Decimal
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlbuild.adapter.shared.classes.connection import ConnectionMixin
 from sqlbuild.adapter.shared.classes.diff import DiffMixin
@@ -39,6 +39,8 @@ class StrictAdapter(
     The concrete defaults from ConnectionMixin (begin, commit, rollback,
     transaction, supports_transactions) are inherited but may be overridden.
     """
+
+    adapter_name: ClassVar[str]
 
     @abstractmethod
     def supports_zero_copy_clone(self) -> bool:
