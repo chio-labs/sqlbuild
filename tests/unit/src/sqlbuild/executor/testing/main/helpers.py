@@ -1,10 +1,10 @@
+from sqlbuild.adapters.bigquery.client import BigQueryAdapter
+from sqlbuild.adapters.databricks.client import DatabricksAdapter
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestAssertionStep, SqlTestPlanEntry
-from sqlbuild.integrations.bigquery.client import BigQueryAdapter
-from sqlbuild.integrations.databricks.client import DatabricksAdapter
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
-from sqlbuild.integrations.snowflake.client import SnowflakeAdapter
 
 
 def build_comparison_test_entry(*, sqlglot_enabled: bool = True) -> SqlTestPlanEntry:

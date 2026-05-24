@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.shared.models import RelationInfo
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditOutcome,
@@ -24,7 +25,6 @@ from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
 from sqlbuild.executor.run.helpers.custom import execute_custom_entry
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 
 
 def build_custom_plan_entry(

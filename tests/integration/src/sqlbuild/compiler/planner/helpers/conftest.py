@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 
 
 @pytest.fixture

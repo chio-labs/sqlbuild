@@ -58,7 +58,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     run_sqb,
     stringify_warehouse_rows,
 )
-from tests.integration.src.sqlbuild.integrations.databricks.helpers import build_unique_schema_name
+from tests.integration.src.sqlbuild.adapters.databricks.helpers import build_unique_schema_name
 
 DATABRICKS_INTERMEDIATE_DAG_STRATEGY_TEST_CASES: list[
     DatabricksIntermediateDagStrategyE2ETestCase

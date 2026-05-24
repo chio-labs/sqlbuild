@@ -5,13 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.integrations.snowflake.client import SnowflakeAdapter
+from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     prepare_source_loader_strategies,
     prepare_waffle_shop,
     stringify_warehouse_rows,
 )
-from tests.integration.src.sqlbuild.integrations.snowflake.helpers import (
+from tests.integration.src.sqlbuild.adapters.snowflake.helpers import (
     build_snowflake_connection_config,
     build_unique_schema_name,
     create_schema_if_missing,

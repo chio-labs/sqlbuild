@@ -6,7 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.integrations.postgres.client import PostgresAdapter
+from sqlbuild.adapters.postgres.client import PostgresAdapter
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     prepare_source_loader_strategies,
     prepare_waffle_shop,

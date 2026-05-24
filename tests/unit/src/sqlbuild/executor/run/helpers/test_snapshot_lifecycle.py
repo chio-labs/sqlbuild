@@ -7,6 +7,8 @@ from typing import Any
 import pytest
 
 from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.executor.run.helpers.snapshot import (
@@ -16,8 +18,6 @@ from sqlbuild.executor.run.helpers.snapshot import (
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
-from sqlbuild.integrations.snowflake.client import SnowflakeAdapter
 from sqlbuild.spec.models.project import SnapshotsConfig
 from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
     SnapshotLifecycleTestCase,

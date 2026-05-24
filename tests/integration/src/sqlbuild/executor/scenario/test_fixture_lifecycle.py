@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledRelationTarget,
@@ -36,7 +37,6 @@ from sqlbuild.executor.scenario.models import (
     ScenarioFixtureExecutionResult,
 )
 from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from sqlbuild.spec.models.schema import default_seed_csv_settings
 from tests.integration.src.sqlbuild.executor.scenario._test_types import (
     ScenarioAssertionCheckIntegrationTestCase,

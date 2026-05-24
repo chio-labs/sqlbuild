@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledFunction,
     CompiledObjectKey,
@@ -24,7 +25,6 @@ from sqlbuild.compiler.planner.models import (
     SqlTestPlanEntry,
 )
 from sqlbuild.compiler.planner.types import WarningSeverity
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.unit.src.sqlbuild.compiler.planner.helpers.sql_test_assembly._test_types import (
     PlanMacroTestCase,
     PlanTestChainTestCase,

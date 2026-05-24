@@ -63,7 +63,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     run_sqb,
     stringify_warehouse_rows,
 )
-from tests.integration.src.sqlbuild.integrations.bigquery.helpers import (
+from tests.integration.src.sqlbuild.adapters.bigquery.helpers import (
     build_bigquery_connection_config,
     build_unique_dataset_name,
 )
