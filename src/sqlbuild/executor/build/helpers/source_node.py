@@ -26,6 +26,7 @@ def execute_build_source_node(
     loader_functions_by_name: dict[str, DiscoveredLoaderFunction],
     loader_ref_entries: dict[Callable[..., object], SourceEntry],
     adapter: BaseAdapter,
+    connection_config: dict[str, object],
     connection: Any,
     run_id: str,
     environment: str,
@@ -37,6 +38,7 @@ def execute_build_source_node(
     end_cursor_int: int | None,
     on_progress: Callable[[str], None] | None,
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None,
+    use_color: bool = False,
 ) -> LoadExecutionResult:
     """Execute one source-load node from the build scheduler."""
 
@@ -60,6 +62,7 @@ def execute_build_source_node(
         source_entry=source_entry,
         loader_function=loader_function,
         adapter=adapter,
+        connection_config=connection_config,
         connection=connection,
         run_id=run_id,
         environment=environment,
@@ -70,6 +73,7 @@ def execute_build_source_node(
         start_cursor_int=start_cursor_int,
         end_cursor_int=end_cursor_int,
         statement_recorder=StatementRecorder(),
+        use_color=use_color,
         loader_ref_entries=loader_ref_entries,
         source_ref_entries=plan.source_map,
     )

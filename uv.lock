@@ -1240,6 +1240,18 @@ wheels = [
 ]
 
 [[package]]
+name = "ingestr"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a1/e8/25b6bddfb758ce416a4ef28d8d42cf80b665216ad6dad1c814ed8e079730/ingestr-1.0.0-py2.py3-none-macosx_10_15_x86_64.whl", hash = "sha256:f32c9d70090c4eaa0f452b6c10aedb2efc146b8ea148e2baa349c6fa626fce5d", size = 55923802, upload-time = "2026-05-22T07:32:01.917Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/bc/c92aa774b74c2e6e65c115fcb7920e24c31751c7a4854b458b7917bd240a/ingestr-1.0.0-py2.py3-none-macosx_11_0_arm64.whl", hash = "sha256:c9ff2e5092f30685338e2a27cf0b384f516db9f1bf0edba580faac294abfd453", size = 51329572, upload-time = "2026-05-22T07:32:05.683Z" },
+    { url = "https://files.pythonhosted.org/packages/f7/c1/ee8b02a7266f1f0ab60cf4e55b8ac74d19bfe5905399bd4b323590dd9247/ingestr-1.0.0-py2.py3-none-manylinux2014_aarch64.whl", hash = "sha256:693f98ed6632fa1321ab4184aea25974bbf722478102627564674c3311b39ab3", size = 49705302, upload-time = "2026-05-22T07:32:08.958Z" },
+    { url = "https://files.pythonhosted.org/packages/34/0b/9cb4623a5903bf177f0411ead9a50fd8867c24380f574a8567c8ceb7e294/ingestr-1.0.0-py2.py3-none-manylinux2014_x86_64.whl", hash = "sha256:3910167cf18577635b39c695e257e2bcd74c2d4dd956e28ebc2381ca79cbb8cc", size = 55611218, upload-time = "2026-05-22T07:32:11.922Z" },
+    { url = "https://files.pythonhosted.org/packages/e3/7a/f0561d903fc96f5824a8e46864dd14f3203f6a3b7b59099f3c731c484a0f/ingestr-1.0.0-py2.py3-none-win_amd64.whl", hash = "sha256:db9460062b3b0466b412023282aa8a7349c44cbf4f7d654c820551fd19af236c", size = 57230133, upload-time = "2026-05-22T07:32:14.842Z" },
+]
+
+[[package]]
 name = "iniconfig"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2768,6 +2780,9 @@ dagster = [
 databricks = [
     { name = "databricks-sql-connector", extra = ["pyarrow"] },
 ]
+ingestr = [
+    { name = "ingestr" },
+]
 performance = [
     { name = "sqlglot", extra = ["c"] },
 ]
@@ -2789,6 +2804,7 @@ dev = [
     { name = "commitizen" },
     { name = "dbt-core" },
     { name = "dbt-duckdb" },
+    { name = "ingestr" },
     { name = "jsonschema" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -2805,6 +2821,7 @@ requires-dist = [
     { name = "databricks-sql-connector", extras = ["pyarrow"], marker = "extra == 'databricks'", specifier = ">=4.1.2" },
     { name = "duckdb", specifier = ">=1.3.2" },
     { name = "google-cloud-bigquery", marker = "extra == 'bigquery'", specifier = ">=3.37.0" },
+    { name = "ingestr", marker = "extra == 'ingestr'", specifier = ">=1.0.0" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.2.0" },
     { name = "pymssql", marker = "extra == 'sqlserver'", specifier = ">=2.3.0" },
     { name = "pyyaml", specifier = ">=6.0.2" },
@@ -2813,13 +2830,14 @@ requires-dist = [
     { name = "sqlglot", marker = "extra == 'sqlglot'", specifier = ">=27.13.2" },
     { name = "sqlglot", extras = ["c"], marker = "extra == 'performance'", specifier = ">=30.7.0" },
 ]
-provides-extras = ["sqlglot", "performance", "snowflake", "bigquery", "databricks", "dagster", "postgres", "sqlserver"]
+provides-extras = ["sqlglot", "performance", "snowflake", "bigquery", "databricks", "dagster", "postgres", "sqlserver", "ingestr"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "commitizen", specifier = ">=4.9.1" },
     { name = "dbt-core", specifier = ">=1.9.0,<1.11" },
     { name = "dbt-duckdb", specifier = ">=1.9.0,<1.11" },
+    { name = "ingestr", specifier = ">=1.0.0" },
     { name = "jsonschema", specifier = ">=4.23.0" },
     { name = "pre-commit", specifier = ">=4.3.0" },
     { name = "pytest", specifier = ">=8.4.2" },

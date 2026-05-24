@@ -172,6 +172,7 @@ def run_load(
         on_connection_start=connection_progress.on_connection_start,
         on_connection_complete=connection_progress.on_connection_complete,
         on_connection_error=connection_progress.on_connection_error,
+        use_color=use_color,
     )
     elapsed: float = time.monotonic() - start
     success_count: int = sum(1 for result in results if result.status.value == "success")

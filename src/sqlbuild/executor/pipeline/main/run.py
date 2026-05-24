@@ -70,6 +70,7 @@ def run_build_pipeline(
     on_connection_start: Callable[[int], None] | None = None,
     on_connection_complete: Callable[[int, float], None] | None = None,
     on_connection_error: Callable[[int, float], None] | None = None,
+    use_color: bool = False,
 ) -> BuildExecutionResult:
     """Execute a full build pipeline: resolve settings, open connections, run plan, close."""
 
@@ -105,6 +106,7 @@ def run_build_pipeline(
         return execute_build_plan(
             plan=plan,
             adapter=adapter,
+            connection_config=connection_config,
             connections=tuple(worker_connections),
             scheduler_connection=scheduler_connection,
             promotion_mode=promotion_mode,
@@ -128,6 +130,7 @@ def run_build_pipeline(
             environment=environment,
             effective_vars=effective_vars,
             on_sub_progress=on_sub_progress,
+            use_color=use_color,
         )
     finally:
         conn: Any

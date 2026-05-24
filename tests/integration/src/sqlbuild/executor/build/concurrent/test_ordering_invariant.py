@@ -113,6 +113,7 @@ def test_given_dag_when_building_concurrently_then_no_node_starts_before_deps_co
         result: BuildExecutionResult = execute_build_plan(
             plan=plan,
             adapter=adapter,
+            connection_config=config,
             connections=tuple(worker_connections),
             scheduler_connection=scheduler_connection,
             promotion_mode=TablePromotionMode.STAGED,

@@ -41,6 +41,7 @@ def test_given_loader_context_when_using_helpers_then_records_and_qualifies_name
     statement_recorder: StatementRecorder = StatementRecorder()
     context: LoaderContext = LoaderContext(
         adapter=adapter,
+        connection_config={},
         connection=object(),
         target="target_db.target_schema.raw_orders",
         target_database="target_db",
@@ -50,6 +51,7 @@ def test_given_loader_context_when_using_helpers_then_records_and_qualifies_name
         environment="dev",
         vars={},
         is_reload=False,
+        use_color=False,
         current_cursor_value=None,
         logger=logging.getLogger(test_case.expected_logger_name),
         statement_recorder=statement_recorder,
@@ -129,6 +131,7 @@ def test_given_loader_context_when_resolving_relation_refs_then_returns_cursor_v
     )
     context: LoaderContext = LoaderContext(
         adapter=adapter,
+        connection_config={},
         connection=object(),
         target="target_db.target_schema.raw_orders",
         target_database="target_db",
@@ -138,6 +141,7 @@ def test_given_loader_context_when_resolving_relation_refs_then_returns_cursor_v
         environment="dev",
         vars={},
         is_reload=False,
+        use_color=False,
         current_cursor_value=None,
         logger=logging.getLogger(test_case.expected_logger_name),
         statement_recorder=statement_recorder,

@@ -45,6 +45,7 @@ def run_load_pipeline(
     on_connection_start: Callable[[int], None] | None = None,
     on_connection_complete: Callable[[int, float], None] | None = None,
     on_connection_error: Callable[[int, float], None] | None = None,
+    use_color: bool = False,
 ) -> tuple[LoadExecutionResult, ...]:
     """Execute selected source loaders."""
 
@@ -110,6 +111,7 @@ def run_load_pipeline(
                         indexes=indexes,
                         failed_or_skipped=state.failed_or_skipped,
                         adapter=adapter,
+                        connection_config=connection_config,
                         connection=sequential_connection,
                         run_id=run_id,
                         environment=environment,
@@ -119,6 +121,7 @@ def run_load_pipeline(
                         end_cursor_ts=end_cursor_ts,
                         start_cursor_int=start_cursor_int,
                         end_cursor_int=end_cursor_int,
+                        use_color=use_color,
                     ),
                     state=state,
                     on_load_complete=on_load_complete,
@@ -137,6 +140,7 @@ def run_load_pipeline(
                         indexes,
                         state.failed_or_skipped,
                         adapter,
+                        connection_config,
                         connection_pool,
                         run_id,
                         environment,
@@ -146,6 +150,7 @@ def run_load_pipeline(
                         end_cursor_ts,
                         start_cursor_int,
                         end_cursor_int,
+                        use_color,
                         state.completion_queue,
                     )
                 if not state.in_flight:
