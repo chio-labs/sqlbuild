@@ -122,6 +122,9 @@ class BuildScheduler:
         warehouse_relations: dict[str, RelationInfo] | None = None,
         on_sub_progress: Callable[[str], None] | None = None,
         use_color: bool = False,
+        precompleted_keys: frozenset[CompiledObjectKey] = frozenset(),
+        initial_load_results: tuple[LoadExecutionResult, ...] = (),
+        initial_failed_keys: frozenset[CompiledObjectKey] = frozenset(),
     ) -> None:
         self._plan: PlanOutput = plan
         self._indexes: BuildIndexes = indexes
@@ -165,7 +168,8 @@ class BuildScheduler:
 
         self._max_concurrency: int = len(connections)
         self._blocked_keys: set[CompiledObjectKey] = set()
-        self._completed_keys: set[CompiledObjectKey] = set()
+        self._completed_keys: set[CompiledObjectKey] = set(precompleted_keys)
+        self._initial_failed_keys: frozenset[CompiledObjectKey] = initial_failed_keys
         self._in_flight: set[CompiledObjectKey] = set()
         self._ready: deque[CompiledObjectKey] = deque()
         self._stop: bool = False
@@ -173,7 +177,7 @@ class BuildScheduler:
         self._model_results: list[ModelExecutionResult] = []
         self._seed_results: list[SeedExecutionResult] = []
         self._function_results: list[FunctionExecutionResult] = []
-        self._load_results: list[LoadExecutionResult] = []
+        self._load_results: list[LoadExecutionResult] = list(initial_load_results)
         self._test_results: list[SqlTestExecutionResult] = []
         self._source_audit_results: list[AuditExecutionResult] = []
 
@@ -202,6 +206,7 @@ class BuildScheduler:
         """Execute the full build schedule and return all results."""
 
         self._init_connection_pool()
+        self._block_initial_failed_keys()
         self._compute_in_degrees()
         self._seed_ready_queue()
 
@@ -241,19 +246,35 @@ class BuildScheduler:
     def _compute_in_degrees(self) -> None:
         key: CompiledObjectKey
         for key in self._selected_execution_keys:
+            if key in self._completed_keys:
+                continue
             upstream: tuple[CompiledObjectKey, ...] = self._plan.upstream_deps.get(key, ())
             count: int = 0
             dep: CompiledObjectKey
             for dep in upstream:
-                if dep in self._selected_execution_keys:
+                if dep in self._selected_execution_keys and dep not in self._completed_keys:
                     count += 1
             self._in_degree[key] = count
 
     def _seed_ready_queue(self) -> None:
         key: CompiledObjectKey
         for key in self._plan.execution_order:
+            if key in self._completed_keys:
+                continue
             if self._in_degree.get(key, 0) == 0:
                 self._ready.append(key)
+
+    def _block_initial_failed_keys(self) -> None:
+        key: CompiledObjectKey
+        for key in self._initial_failed_keys:
+            block_downstream(
+                failed_key=key,
+                downstream_deps=self._plan.downstream_deps,
+                selected_keys=self._plan.selected_keys,
+                blocked_keys=self._blocked_keys,
+            )
+        if self._fail_fast and self._initial_failed_keys:
+            self._stop = True
 
     def _run_serial(self) -> None:
         connection: Any = self._connection_pool.get()

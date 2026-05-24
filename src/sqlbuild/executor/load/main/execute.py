@@ -11,11 +11,13 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
+from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.executor.load.helpers.cursors import (
     exclusive_cursor_end,
     format_cursor_bound,
     load_staging_cursor_bounds,
 )
+from sqlbuild.executor.load.helpers.external import execute_external_source_load
 from sqlbuild.executor.load.helpers.relation_refs import (
     build_loader_relation_refs,
     build_source_relation_refs,
@@ -74,6 +76,27 @@ def execute_source_load(
     start: float = time.monotonic()
     try:
         resource_kind: ExecutionResourceKind = load_resource_kind(source_entry)
+        if loader_function.connection_mode == LoaderConnectionMode.EXTERNAL:
+            return execute_external_source_load(
+                source_entry=source_entry,
+                loader_function=loader_function,
+                adapter=adapter,
+                connection_config=connection_config,
+                target=target,
+                target_name=target_name,
+                run_id=run_id,
+                environment=environment,
+                vars=vars,
+                is_reload=is_reload,
+                start_cursor_ts=start_cursor_ts,
+                end_cursor_ts=end_cursor_ts,
+                start_cursor_int=start_cursor_int,
+                end_cursor_int=end_cursor_int,
+                statement_recorder=statement_recorder,
+                use_color=use_color,
+                resource_kind=resource_kind,
+                start=start,
+            )
         supported_write_strategies: frozenset[SourceWriteStrategy] = frozenset(
             {
                 SourceWriteStrategy.APPEND,

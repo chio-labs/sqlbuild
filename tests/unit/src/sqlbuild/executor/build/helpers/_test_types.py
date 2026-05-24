@@ -41,3 +41,15 @@ class BuildSourceNodeExecutionTestCase:
     expected_start_event: tuple[str, ExecutionResourceKind]
     expected_status: ExecutionStatus
     expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ExternalBuildSourceLoadTestCase:
+    """One pre-connection build source-load behavior case."""
+
+    description: str
+    source_name: str
+    loader_name: str
+    expected_status: ExecutionStatus
+    expected_completed_key_count: int
+    expected_lifecycle_message: str

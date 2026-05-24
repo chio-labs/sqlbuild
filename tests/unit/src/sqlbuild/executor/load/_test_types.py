@@ -103,3 +103,16 @@ class LoadDagWorkerFailureTestCase:
     loader_name: str
     expected_status: ExecutionStatus
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ExternalLoadPipelineTestCase:
+    """One external loader pipeline behavior case."""
+
+    description: str
+    source_name: str
+    loader_name: str
+    expected_connection_count: int
+    expected_connection_is_none: bool
+    expected_status: ExecutionStatus
+    expected_lifecycle_message: str

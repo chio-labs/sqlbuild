@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import LifeCycleEvent
+from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from sqlbuild.cli.commands.main.helpers.load_selection import select_load_entries
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
@@ -220,6 +222,14 @@ def _build_on_complete(
             f"  {ordinal}/{total_count}  {result.resource_kind.value:<10}"
             f"{result.source_name:<30} {status:<6} {duration}  {rows_loaded}\n"
         )
+        event: LifeCycleEvent
+        for event in result.lifecycle_events:
+            if event.kind == LifeCycleEventKind.LOG:
+                lines: list[str] = event.content.splitlines() or [""]
+                stream.write(f"    log  {lines[0]}\n")
+                line: str
+                for line in lines[1:]:
+                    stream.write(f"         {line}\n")
         if result.error_message is not None:
             stream.write(f"    {result.error_message}\n")
         stream.flush()

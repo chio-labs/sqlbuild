@@ -52,6 +52,11 @@ def build_source_load_entries(
                 cursor_column=source_entry.cursor_column,
                 unique_key=source_entry.unique_key,
                 is_reload=is_reload,
+                integration_kind=(
+                    source_entry.integration_loader.kind
+                    if source_entry.integration_loader is not None
+                    else None
+                ),
             )
         )
     return tuple(entries)

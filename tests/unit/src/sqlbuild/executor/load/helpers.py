@@ -45,3 +45,15 @@ class LoaderContextTestAdapter(BaseAdapter):
         if sql.startswith("SELECT MAX"):
             return LoaderContextTestCursor(("max-value",))
         return f"result:{sql}"
+
+
+class CountingLoaderContextTestAdapter(LoaderContextTestAdapter):
+    """Adapter that records connection attempts."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.connection_count: int = 0
+
+    def connect(self, config: dict[str, object]) -> object:
+        self.connection_count += 1
+        return super().connect(config)

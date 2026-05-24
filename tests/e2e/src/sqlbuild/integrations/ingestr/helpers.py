@@ -12,7 +12,9 @@ from sqlbuild.integrations.postgres.client import PostgresAdapter
 REPO_ROOT: Path = Path(__file__).resolve().parents[6]
 
 
-def run_sqb_with_ingestr(*, command: tuple[str, ...], project_dir: Path) -> subprocess.CompletedProcess[str]:
+def run_sqb_with_ingestr(
+    *, command: tuple[str, ...], project_dir: Path
+) -> subprocess.CompletedProcess[str]:
     process_env: dict[str, str] = dict(os.environ)
     return subprocess.run(
         [
@@ -43,7 +45,8 @@ def postgres_uri(config: Mapping[str, object]) -> str:
 
 
 def postgres_project_toml(*, project_name: str, config: Mapping[str, object]) -> str:
-    return f"""
+    return (
+        f"""
 name = "{project_name}"
 adapter = "postgres"
 
@@ -53,17 +56,22 @@ port = {config["port"]}
 dbname = "{config["dbname"]}"
 user = "{config["user"]}"
 password = "{config["password"]}"
-""".strip() + "\n"
+""".strip()
+        + "\n"
+    )
 
 
 def duckdb_project_toml(*, project_name: str, database_path: Path) -> str:
-    return f"""
+    return (
+        f"""
 name = "{project_name}"
 adapter = "duckdb"
 
 [connection]
 database = "{database_path}"
-""".strip() + "\n"
+""".strip()
+        + "\n"
+    )
 
 
 def execute_postgres_sql(*, config: Mapping[str, object], sql: str) -> None:
@@ -75,7 +83,9 @@ def execute_postgres_sql(*, config: Mapping[str, object], sql: str) -> None:
         adapter.close(connection)
 
 
-def fetch_postgres_rows(*, config: Mapping[str, object], sql: str) -> tuple[tuple[object, ...], ...]:
+def fetch_postgres_rows(
+    *, config: Mapping[str, object], sql: str
+) -> tuple[tuple[object, ...], ...]:
     adapter: PostgresAdapter = PostgresAdapter()
     connection: Any = adapter.connect(dict(config))
     try:

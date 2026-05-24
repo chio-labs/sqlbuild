@@ -129,7 +129,9 @@ def test_given_dev_cli_environment_when_preparing_if_dev_then_writes_dag_artifac
         DagsterProjectDecoratorTestCase(
             description="decorator loads dag artifact from project default path",
             expected_asset_keys=(
+                ("raw_orders_loader",),
                 ("raw", "orders"),
+                ("shared_order_feed",),
                 ("analytics", "customers"),
                 ("analytics", "normalize_email"),
                 ("analytics", "orders"),

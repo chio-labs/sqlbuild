@@ -4,10 +4,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction, DiscoveredSourceFile
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredLoaderFunction,
+    DiscoveredSourceFile,
+)
+from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.executor.load.models import LoaderContext
+from sqlbuild.integrations.ingestr.exceptions import IngestrIntegrationError
 from sqlbuild.integrations.ingestr.helpers.command import build_ingestr_command
+from sqlbuild.integrations.ingestr.helpers.output import record_ingestr_output
 from sqlbuild.integrations.ingestr.helpers.runner import run_ingestr_command
+from sqlbuild.integrations.ingestr.models import IngestrCommandResult
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -33,6 +40,7 @@ def build_ingestr_loader_functions(
                     relative_path=source_file.relative_path,
                     name=loader_name,
                     function=_build_ingestr_loader(source_entry=source_entry),
+                    connection_mode=LoaderConnectionMode.EXTERNAL,
                 )
             )
     return tuple(loaders)
@@ -52,7 +60,13 @@ def _build_ingestr_loader(*, source_entry: SourceEntry) -> Any:
             run_id=ctx.run_id,
             is_reload=ctx.is_reload,
         )
-        run_ingestr_command(command, use_color=ctx.use_color)
+        try:
+            result: IngestrCommandResult = run_ingestr_command(command)
+        except IngestrIntegrationError as error:
+            if isinstance(error.run_result, IngestrCommandResult):
+                record_ingestr_output(ctx=ctx, result=error.run_result)
+            raise
+        record_ingestr_output(ctx=ctx, result=result)
         return None
 
     run.__name__ = f"ingestr__{source_entry.name}"
