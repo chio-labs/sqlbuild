@@ -96,12 +96,6 @@ def run_build(
         stream=progress_stream,
         use_color=use_color,
     )
-    execution_connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
-        adapter_name=adapter_name,
-        stream=progress_stream,
-        blank_line_after_complete=True,
-        use_color=use_color,
-    )
     planning_progress: PlanningProgressReporter = PlanningProgressReporter(
         stream=progress_stream,
         use_color=use_color,
@@ -173,6 +167,17 @@ def run_build(
     progress_stream.write(f"{execution_label}  {header_detail}\n\n")
     progress_stream.flush()
 
+    has_external_source_loads: bool = any(
+        entry.integration_kind is not None for entry in plan_output.source_load_entries
+    )
+    execution_connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
+        adapter_name=adapter_name,
+        stream=progress_stream,
+        blank_line_before_start=has_external_source_loads,
+        blank_line_after_complete=True,
+        use_color=use_color,
+    )
+
     result: BuildExecutionResult = run_build_pipeline(
         plan=plan_output,
         connection_config=connection_config,
@@ -198,6 +203,7 @@ def run_build(
         on_connection_start=execution_connection_progress.on_connection_start,
         on_connection_complete=execution_connection_progress.on_connection_complete,
         on_connection_error=execution_connection_progress.on_connection_error,
+        use_color=use_color,
     )
     write_runtime_target(
         target_dir=effective_project_dir / "target",

@@ -57,6 +57,21 @@ CONNECTION_PROGRESS_TEST_CASES: list[ConnectionProgressTestCase] = [
         ),
     ),
     ConnectionProgressTestCase(
+        description="execution connection start can add spacing after pre-connection work",
+        connection_count=1,
+        elapsed_seconds=0.034,
+        expected_start="Connecting to duckdb...",
+        expected_complete="Connected to duckdb. (0.03s)",
+        expected_error="Failed to connect to duckdb after 0.03s.",
+        blank_line_before_start=True,
+        expected_lines=(
+            "",
+            "Connecting to duckdb...",
+            "Connected to duckdb. (0.03s)",
+            "Failed to connect to duckdb after 0.03s.",
+        ),
+    ),
+    ConnectionProgressTestCase(
         description="connection progress dims start and success when color is enabled",
         connection_count=1,
         elapsed_seconds=0.034,
@@ -86,6 +101,7 @@ def test_given_connection_progress_event_when_reporting_then_writes_expected_mes
     reporter: ConnectionProgressReporter = ConnectionProgressReporter(
         adapter_name=adapter_name,
         stream=stream,
+        blank_line_before_start=test_case.blank_line_before_start,
         blank_line_after_complete=test_case.blank_line_after_complete,
         use_color=test_case.use_color,
     )

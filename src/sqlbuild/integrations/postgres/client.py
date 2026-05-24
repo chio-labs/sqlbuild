@@ -42,6 +42,7 @@ from sqlbuild.adapter.shared.models import (
 )
 from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
 from sqlbuild.adapter.shared.types import (
+    BuiltinAdapter,
     CursorKind,
     FrameworkType,
     LoaderLogicalType,
@@ -79,6 +80,7 @@ class PostgresAdapter(BaseAdapter):
     via BEGIN/COMMIT/ROLLBACK through the ConnectionMixin.transaction() context manager.
     """
 
+    adapter_name: ClassVar[str] = BuiltinAdapter.POSTGRES.value
     sqlglot_dialect_name: ClassVar[str | None] = "postgres"
     max_identifier_length: ClassVar[int] = 63
 

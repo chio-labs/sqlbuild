@@ -237,6 +237,16 @@ class ParseSourcesYamlErrorTestCase:
 
 
 @dataclass(frozen=True)
+class ParseSourcesYamlIngestrTestCase:
+    description: str
+    contents: str
+    expected_loader: str
+    expected_kind: str
+    expected_primary_key: tuple[str, ...]
+    expected_extra_args: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DiscoverMaterializationFilesTestCase:
     description: str
     files: dict[str, str]

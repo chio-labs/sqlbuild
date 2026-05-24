@@ -15,10 +15,13 @@ class ConnectionProgressReporter:
         *,
         adapter_name: str,
         stream: TextIO,
+        blank_line_before_start: bool = False,
         blank_line_after_complete: bool = False,
         use_color: bool = False,
     ) -> None:
         self._adapter_name: str = adapter_name
+        self._stream: TextIO = stream
+        self._blank_line_before_start: bool = blank_line_before_start
         self._blank_line_after_complete: bool = blank_line_after_complete
         self._status: TransientStatusReporter = TransientStatusReporter(
             stream=stream,
@@ -26,6 +29,9 @@ class ConnectionProgressReporter:
         )
 
     def on_connection_start(self, connection_count: int) -> None:
+        if self._blank_line_before_start:
+            self._stream.write("\n")
+            self._stream.flush()
         self._status.start(self._start_message(connection_count))
 
     def on_connection_complete(self, connection_count: int, elapsed_seconds: float) -> None:

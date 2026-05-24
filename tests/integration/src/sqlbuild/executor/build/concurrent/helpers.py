@@ -58,6 +58,7 @@ def run_concurrent_build(
         return execute_build_plan(
             plan=plan,
             adapter=adapter,
+            connection_config=config,
             connections=tuple(worker_connections),
             scheduler_connection=scheduler_connection,
             promotion_mode=TablePromotionMode.STAGED,

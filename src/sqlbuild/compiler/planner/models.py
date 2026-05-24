@@ -301,6 +301,7 @@ class SourceLoadPlanEntry:
     cursor_column: str | None = None
     unique_key: tuple[str, ...] = field(default_factory=tuple)
     is_reload: bool = False
+    integration_kind: str | None = None
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,92 @@
+"""Helpers for external source loader execution."""
+
+from __future__ import annotations
+
+import logging
+import time
+from datetime import datetime
+
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
+from sqlbuild.executor.load.models import LoaderContext, LoadExecutionResult
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.spec.models.source import SourceEntry
+
+
+def execute_external_source_load(
+    *,
+    source_entry: SourceEntry,
+    loader_function: DiscoveredLoaderFunction,
+    adapter: BaseAdapter,
+    connection_config: dict[str, object],
+    target: str,
+    target_name: str,
+    run_id: str,
+    environment: str | None,
+    vars: dict[str, object],
+    is_reload: bool,
+    start_cursor_ts: datetime | None,
+    end_cursor_ts: datetime | None,
+    start_cursor_int: int | None,
+    end_cursor_int: int | None,
+    statement_recorder: StatementRecorder,
+    use_color: bool,
+    resource_kind: ExecutionResourceKind,
+    start: float,
+) -> LoadExecutionResult:
+    """Run one external writer while SQLBuild holds no destination connection."""
+
+    try:
+        context: LoaderContext = LoaderContext(
+            adapter=adapter,
+            connection_config=connection_config,
+            connection=None,
+            target=target,
+            target_database=source_entry.database,
+            target_schema=source_entry.schema,
+            target_name=target_name,
+            run_id=run_id,
+            environment=environment,
+            vars=vars,
+            is_reload=is_reload,
+            use_color=use_color,
+            current_cursor_value=None,
+            logger=logging.getLogger(f"sqlbuild.loader.{loader_function.name}"),
+            statement_recorder=statement_recorder,
+            start_cursor_ts=start_cursor_ts,
+            end_cursor_ts=end_cursor_ts,
+            start_cursor_int=start_cursor_int,
+            end_cursor_int=end_cursor_int,
+        )
+        raw_rows: object = loader_function.function(context)
+        if raw_rows is not None:
+            raise ExecutorInputError(
+                f"External loader '{loader_function.name}' returned rows, but external loaders "
+                "must write their own destination and return None"
+            )
+        return LoadExecutionResult(
+            source_name=source_entry.name,
+            loader_name=loader_function.name,
+            status=ExecutionStatus.SUCCESS,
+            target=target,
+            resource_kind=resource_kind,
+            staging_relation=None,
+            rows_loaded=0,
+            duration_ms=int((time.monotonic() - start) * 1000),
+            lifecycle_events=statement_recorder.snapshot(),
+        )
+    except Exception as error:
+        return LoadExecutionResult(
+            source_name=source_entry.name,
+            loader_name=loader_function.name,
+            status=ExecutionStatus.FAILED,
+            target=target,
+            resource_kind=resource_kind,
+            staging_relation=None,
+            duration_ms=int((time.monotonic() - start) * 1000),
+            lifecycle_events=statement_recorder.snapshot(),
+            error_message=str(error),
+        )

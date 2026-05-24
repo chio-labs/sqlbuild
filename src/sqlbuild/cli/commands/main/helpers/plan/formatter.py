@@ -347,9 +347,7 @@ def _format_load_entry_group(
 
 
 def _source_load_label(entry: SourceLoadPlanEntry) -> str:
-    strategy: str = (
-        entry.write_strategy.value if entry.write_strategy is not None else "self-managed"
-    )
+    strategy: str = _source_load_strategy_label(entry)
     details: list[str] = []
     if entry.cursor_column is not None:
         details.append(f"cursor: {entry.cursor_column}")
@@ -359,6 +357,14 @@ def _source_load_label(entry: SourceLoadPlanEntry) -> str:
     if not details:
         return strategy
     return f"{strategy} ({'; '.join(details)})"
+
+
+def _source_load_strategy_label(entry: SourceLoadPlanEntry) -> str:
+    if entry.integration_kind is not None:
+        return f"external ({entry.integration_kind})"
+    if entry.write_strategy is not None:
+        return entry.write_strategy.value
+    return "self-managed"
 
 
 def _collect_normal(entries: list[ModelPlanEntry]) -> list[ModelPlanEntry]:
