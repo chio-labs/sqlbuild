@@ -5,6 +5,8 @@ from collections.abc import Callable
 import pytest
 
 from sqlbuild.adapter.shared.types import FrameworkType
+from sqlbuild.adapters.bigquery.client import BigQueryAdapter
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.main.shared.helpers.sql import (
     build_create_table_sql,
@@ -12,8 +14,6 @@ from sqlbuild.compiler.fingerprints.main.shared.helpers.sql import (
     build_qualified_table_name,
     build_read_all_sql,
 )
-from sqlbuild.integrations.bigquery.client import BigQueryAdapter
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.unit.src.sqlbuild.compiler.fingerprints.main.shared.helpers._test_types import (
     BuildCreateTableSqlTestCase,
     BuildInsertSqlTestCase,

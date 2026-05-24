@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledRelationTarget
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ModelPlanEntry
@@ -19,7 +20,6 @@ from sqlbuild.compiler.planner.types import (
 from sqlbuild.executor.run.helpers.snapshot import execute_snapshot_entry
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
     SnapshotAdapterRenderingTestCase,
 )

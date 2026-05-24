@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditRunScope,
@@ -26,7 +27,6 @@ from sqlbuild.compiler.planner.types import (
 from sqlbuild.executor.run.main.execute import execute_table_entry
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.executor.run._test_types import (
     TableFailureTestCase,
     TableSuccessTestCase,

@@ -11,6 +11,7 @@ import pytest
 
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import PlanReason
@@ -20,7 +21,6 @@ from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.executor.build.custom._test_types import (
     ExistingRelationTestCase,
     PartitionTrackingTestCase,

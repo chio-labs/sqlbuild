@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
@@ -18,7 +19,6 @@ from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
 from sqlbuild.compiler.planner.helpers.plan_entry import gather_source_columns
 from sqlbuild.compiler.planner.helpers.warehouse_snapshot import gather_warehouse_snapshot
 from sqlbuild.compiler.planner.models import ModelCursorSnapshot, WarehouseSnapshot
-from sqlbuild.integrations.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.compiler.planner.helpers._test_types import (
     GatherCursorSnapshotTestCase,
     GatherEmptySnapshotTestCase,
