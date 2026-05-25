@@ -1,17 +1,39 @@
 from __future__ import annotations
 
+from concurrent.futures import Future, ThreadPoolExecutor
+from datetime import datetime, timedelta
 from pathlib import Path
 
+import duckdb
 import pytest
 
-from sqlbuild.versioned.state.models import StateSchemaValidationResult
-from sqlbuild.versioned.state.types import StateMigrationAction
+from sqlbuild.versioned.state.constants import STATE_TABLE_INDEXES, STATE_TABLES
+from sqlbuild.versioned.state.models import (
+    ModelVersionRecord,
+    PhysicalRelationRecord,
+    StateLockRecord,
+    StateSchemaValidationResult,
+    VirtualEnvironmentRecord,
+    VirtualEnvironmentRefRecord,
+)
+from sqlbuild.versioned.state.types import (
+    ModelVersionStatus,
+    StateMigrationAction,
+    StateSchemaValidationIssueKind,
+    VirtualEnvironmentStatus,
+)
 from tests.integration.src.sqlbuild.versioned.state.classes._test_types import (
+    DuckDbStateBackendConcurrentLockTestCase,
+    DuckDbStateBackendCoreRecordsTestCase,
     DuckDbStateBackendErrorTestCase,
     DuckDbStateBackendEventTestCase,
     DuckDbStateBackendIdempotencyTestCase,
+    DuckDbStateBackendIndexValidationTestCase,
     DuckDbStateBackendLifecycleTestCase,
+    DuckDbStateBackendLockTestCase,
     DuckDbStateBackendRollbackTestCase,
+    DuckDbStateBackendTableCreationTestCase,
+    DuckDbStateBackendTransactionRollbackTestCase,
     DuckDbStateBackendValidationTestCase,
 )
 from tests.integration.src.sqlbuild.versioned.state.classes.helpers import (
@@ -86,7 +108,7 @@ def test_given_duckdb_state_backend_when_running_lifecycle_then_state_tables_are
         DuckDbStateBackendValidationTestCase(
             description="reports invalid manually-created state schema",
             schema="broken_state",
-            expected_issue_count=3,
+            expected_issue_count=13,
         )
     ],
     ids=["reports invalid manually-created state schema"],
@@ -122,6 +144,11 @@ def test_given_broken_duckdb_state_tables_when_validating_then_reports_schema_is
             schema="sqlbuild_state",
             sqlbuild_version="0.0.before",
             expected_restored_sqlbuild_version="0.0.before",
+            expected_index_names=tuple(
+                sorted(
+                    index_name for indexes in STATE_TABLE_INDEXES.values() for index_name in indexes
+                )
+            ),
         )
     ],
     ids=["rolls back to explicitly selected backup"],
@@ -151,6 +178,17 @@ def test_given_duckdb_state_backups_when_rolling_back_explicit_id_then_restores_
             connection,
             f"SELECT sqlbuild_version FROM {test_case.schema}.state_versions",
         ) == [(test_case.expected_restored_sqlbuild_version,)]
+        assert (
+            tuple(
+                row[0]
+                for row in fetch_all(
+                    connection,
+                    "SELECT index_name FROM duckdb_indexes() "
+                    f"WHERE schema_name = '{test_case.schema}' ORDER BY index_name",
+                )
+            )
+            == test_case.expected_index_names
+        )
     finally:
         backend.close(connection)
 
@@ -329,3 +367,645 @@ def test_given_duckdb_state_backend_when_initializing_twice_then_current_version
         ]
     finally:
         backend.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbStateBackendTableCreationTestCase(
+            description="initializes all phase two state tables",
+            schema="sqlbuild_state",
+            sqlbuild_version="0.0.test",
+            expected_table_names=tuple(sorted(STATE_TABLES)),
+            expected_index_names=tuple(
+                sorted(
+                    index_name for indexes in STATE_TABLE_INDEXES.values() for index_name in indexes
+                )
+            ),
+        )
+    ],
+    ids=["initializes all phase two state tables"],
+)
+def test_given_duckdb_state_backend_when_initializing_then_creates_all_state_tables(
+    test_case: DuckDbStateBackendTableCreationTestCase,
+    tmp_path: Path,
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    try:
+        backend.initialize(
+            connection,
+            schema=test_case.schema,
+            sqlbuild_version=test_case.sqlbuild_version,
+        )
+
+        rows: list[tuple[object, ...]] = fetch_all(
+            connection,
+            "SELECT table_name FROM information_schema.tables "
+            f"WHERE table_schema = '{test_case.schema}' ORDER BY table_name",
+        )
+        index_rows: list[tuple[object, ...]] = fetch_all(
+            connection,
+            "SELECT index_name FROM duckdb_indexes() "
+            f"WHERE schema_name = '{test_case.schema}' ORDER BY index_name",
+        )
+
+        assert tuple(row[0] for row in rows) == test_case.expected_table_names
+        assert tuple(row[0] for row in index_rows) == test_case.expected_index_names
+    finally:
+        backend.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbStateBackendCoreRecordsTestCase(
+            description="persists model physical relation and virtual environment refs",
+            schema="sqlbuild_state",
+            sqlbuild_version="0.0.test",
+            expected_model_name="fact_orders",
+            expected_version_hash="abc123",
+            expected_virtual_environment_name="dev",
+            expected_ref_count=1,
+            expected_ref_count_after_replace=0,
+            expected_relation_name="fact_orders__v_abc123",
+            expected_replaced_relation_name="fact_orders__v_abc123_replaced",
+        )
+    ],
+    ids=["persists model physical relation and virtual environment refs"],
+)
+def test_given_duckdb_state_backend_when_upserting_core_records_then_round_trips_state(
+    test_case: DuckDbStateBackendCoreRecordsTestCase,
+    tmp_path: Path,
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    try:
+        backend.initialize(
+            connection,
+            schema=test_case.schema,
+            sqlbuild_version=test_case.sqlbuild_version,
+        )
+        assert (
+            backend.get_model_version(
+                connection,
+                schema=test_case.schema,
+                model_name=test_case.expected_model_name,
+                version_hash=test_case.expected_version_hash,
+            )
+            is None
+        )
+        assert (
+            backend.get_physical_relation(
+                connection,
+                schema=test_case.schema,
+                model_name=test_case.expected_model_name,
+                version_hash=test_case.expected_version_hash,
+            )
+            is None
+        )
+        assert (
+            backend.get_virtual_environment(
+                connection,
+                schema=test_case.schema,
+                virtual_environment_name=test_case.expected_virtual_environment_name,
+            )
+            is None
+        )
+
+        model_record: ModelVersionRecord = ModelVersionRecord(
+            model_name=test_case.expected_model_name,
+            version_hash=test_case.expected_version_hash,
+            data_hash="data-hash",
+            metadata_hash="metadata-hash",
+            status=ModelVersionStatus.READY,
+        )
+        backend.upsert_model_version(connection, schema=test_case.schema, record=model_record)
+        relation_record: PhysicalRelationRecord = PhysicalRelationRecord(
+            model_name=test_case.expected_model_name,
+            version_hash=test_case.expected_version_hash,
+            database_name=None,
+            schema_name="dev__sqb_physical",
+            relation_name=test_case.expected_relation_name,
+            relation_type="table",
+        )
+        backend.upsert_physical_relation(
+            connection, schema=test_case.schema, record=relation_record
+        )
+        replaced_relation_record: PhysicalRelationRecord = PhysicalRelationRecord(
+            model_name=test_case.expected_model_name,
+            version_hash=test_case.expected_version_hash,
+            database_name=None,
+            schema_name="dev__sqb_physical",
+            relation_name=test_case.expected_replaced_relation_name,
+            relation_type="table",
+        )
+        backend.upsert_physical_relation(
+            connection, schema=test_case.schema, record=replaced_relation_record
+        )
+        virtual_environment_record: VirtualEnvironmentRecord = VirtualEnvironmentRecord(
+            virtual_environment_name=test_case.expected_virtual_environment_name,
+            status=VirtualEnvironmentStatus.FINALIZED,
+            baseline_virtual_environment_name=None,
+        )
+        backend.upsert_virtual_environment(
+            connection,
+            schema=test_case.schema,
+            record=virtual_environment_record,
+        )
+        backend.replace_virtual_environment_refs(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.expected_virtual_environment_name,
+            refs=(
+                VirtualEnvironmentRefRecord(
+                    virtual_environment_name=test_case.expected_virtual_environment_name,
+                    model_name=test_case.expected_model_name,
+                    version_hash=test_case.expected_version_hash,
+                ),
+            ),
+        )
+
+        assert (
+            backend.get_model_version(
+                connection,
+                schema=test_case.schema,
+                model_name=test_case.expected_model_name,
+                version_hash=test_case.expected_version_hash,
+            )
+            == model_record
+        )
+        assert (
+            backend.get_physical_relation(
+                connection,
+                schema=test_case.schema,
+                model_name=test_case.expected_model_name,
+                version_hash=test_case.expected_version_hash,
+            )
+            == replaced_relation_record
+        )
+        assert (
+            backend.get_virtual_environment(
+                connection,
+                schema=test_case.schema,
+                virtual_environment_name=test_case.expected_virtual_environment_name,
+            )
+            == virtual_environment_record
+        )
+        refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.expected_virtual_environment_name,
+        )
+        assert len(refs) == test_case.expected_ref_count
+        assert refs[0].model_name == test_case.expected_model_name
+        assert refs[0].version_hash == test_case.expected_version_hash
+        backend.replace_virtual_environment_refs(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.expected_virtual_environment_name,
+            refs=(),
+        )
+        replaced_refs: tuple[VirtualEnvironmentRefRecord, ...] = (
+            backend.get_virtual_environment_refs(
+                connection,
+                schema=test_case.schema,
+                virtual_environment_name=test_case.expected_virtual_environment_name,
+            )
+        )
+        assert len(replaced_refs) == test_case.expected_ref_count_after_replace
+    finally:
+        backend.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbStateBackendLockTestCase(
+            description="acquires blocks releases and replaces expired locks",
+            schema="sqlbuild_state",
+            sqlbuild_version="0.0.test",
+            lock_key="virtual_env:dev",
+            first_owner="run-1",
+            second_owner="run-2",
+            expected_active_lock_count=1,
+        )
+    ],
+    ids=["acquires blocks releases and replaces expired locks"],
+)
+def test_given_duckdb_state_backend_when_managing_locks_then_enforces_active_owner(
+    test_case: DuckDbStateBackendLockTestCase,
+    tmp_path: Path,
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    try:
+        backend.initialize(
+            connection,
+            schema=test_case.schema,
+            sqlbuild_version=test_case.sqlbuild_version,
+        )
+        future_expiry: datetime = datetime.now() + timedelta(hours=1)
+        expired_at: datetime = datetime.now() - timedelta(hours=1)
+
+        assert backend.acquire_lock(
+            connection,
+            schema=test_case.schema,
+            lock_key=test_case.lock_key,
+            owner_id=test_case.first_owner,
+            expires_at=future_expiry,
+        )
+        assert not backend.acquire_lock(
+            connection,
+            schema=test_case.schema,
+            lock_key=test_case.lock_key,
+            owner_id=test_case.second_owner,
+            expires_at=future_expiry,
+        )
+        active_locks: tuple[StateLockRecord, ...] = backend.list_active_locks(
+            connection,
+            schema=test_case.schema,
+        )
+        assert len(active_locks) == test_case.expected_active_lock_count
+        assert active_locks[0].owner_id == test_case.first_owner
+        assert not backend.release_lock(
+            connection,
+            schema=test_case.schema,
+            lock_key=test_case.lock_key,
+            owner_id=test_case.second_owner,
+        )
+        assert backend.release_lock(
+            connection,
+            schema=test_case.schema,
+            lock_key=test_case.lock_key,
+            owner_id=test_case.first_owner,
+        )
+        assert backend.list_active_locks(connection, schema=test_case.schema) == ()
+
+        assert backend.acquire_lock(
+            connection,
+            schema=test_case.schema,
+            lock_key=test_case.lock_key,
+            owner_id=test_case.first_owner,
+            expires_at=expired_at,
+        )
+        assert backend.acquire_lock(
+            connection,
+            schema=test_case.schema,
+            lock_key=test_case.lock_key,
+            owner_id=test_case.second_owner,
+            expires_at=future_expiry,
+        )
+        replacement_locks: tuple[StateLockRecord, ...] = backend.list_active_locks(
+            connection,
+            schema=test_case.schema,
+        )
+        assert len(replacement_locks) == test_case.expected_active_lock_count
+        assert replacement_locks[0].owner_id == test_case.second_owner
+    finally:
+        backend.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbStateBackendIndexValidationTestCase(
+            description="reports missing unique state index",
+            schema="sqlbuild_state",
+            sqlbuild_version="0.0.test",
+            dropped_index_name="idx_sqb_locks_identity",
+            expected_issue_kind=StateSchemaValidationIssueKind.MISSING_INDEX.value,
+        )
+    ],
+    ids=["reports missing unique state index"],
+)
+def test_given_duckdb_state_backend_when_required_index_is_missing_then_validation_reports_it(
+    test_case: DuckDbStateBackendIndexValidationTestCase,
+    tmp_path: Path,
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    try:
+        backend.initialize(
+            connection,
+            schema=test_case.schema,
+            sqlbuild_version=test_case.sqlbuild_version,
+        )
+
+        connection.execute(f"DROP INDEX {test_case.schema}.{test_case.dropped_index_name}")
+
+        validation_result: StateSchemaValidationResult = backend.validate_schema(
+            connection,
+            schema=test_case.schema,
+        )
+
+        assert test_case.expected_issue_kind in tuple(
+            issue.kind.value for issue in validation_result.issues
+        )
+    finally:
+        backend.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbStateBackendTransactionRollbackTestCase(
+            description="rolls back VDE ref replacement when duplicate rows violate unique index",
+            schema="sqlbuild_state",
+            sqlbuild_version="0.0.test",
+            virtual_environment_name="dev",
+            model_name="fact_orders",
+            original_version_hash="abc123",
+            duplicate_version_hash="def456",
+            expected_ref_count=1,
+        )
+    ],
+    ids=["rolls back VDE ref replacement when duplicate rows violate unique index"],
+)
+def test_given_duckdb_state_backend_when_ref_replace_fails_then_transaction_rolls_back(
+    test_case: DuckDbStateBackendTransactionRollbackTestCase,
+    tmp_path: Path,
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    try:
+        backend.initialize(
+            connection,
+            schema=test_case.schema,
+            sqlbuild_version=test_case.sqlbuild_version,
+        )
+        backend.replace_virtual_environment_refs(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+            refs=(
+                VirtualEnvironmentRefRecord(
+                    virtual_environment_name=test_case.virtual_environment_name,
+                    model_name=test_case.model_name,
+                    version_hash=test_case.original_version_hash,
+                ),
+            ),
+        )
+
+        with pytest.raises(duckdb.ConstraintException):
+            backend.replace_virtual_environment_refs(
+                connection,
+                schema=test_case.schema,
+                virtual_environment_name=test_case.virtual_environment_name,
+                refs=(
+                    VirtualEnvironmentRefRecord(
+                        virtual_environment_name=test_case.virtual_environment_name,
+                        model_name=test_case.model_name,
+                        version_hash=test_case.original_version_hash,
+                    ),
+                    VirtualEnvironmentRefRecord(
+                        virtual_environment_name=test_case.virtual_environment_name,
+                        model_name=test_case.model_name,
+                        version_hash=test_case.duplicate_version_hash,
+                    ),
+                ),
+            )
+
+        refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+        )
+        assert len(refs) == test_case.expected_ref_count
+        assert refs[0].version_hash == test_case.original_version_hash
+    finally:
+        backend.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbStateBackendCoreRecordsTestCase(
+            description="preserves created_at across current-state replacements",
+            schema="sqlbuild_state",
+            sqlbuild_version="0.0.test",
+            expected_model_name="fact_orders",
+            expected_version_hash="abc123",
+            expected_virtual_environment_name="dev",
+            expected_ref_count=1,
+            expected_ref_count_after_replace=0,
+            expected_relation_name="fact_orders__v_abc123",
+            expected_replaced_relation_name="fact_orders__v_abc123_replaced",
+        )
+    ],
+    ids=["preserves created_at across current-state replacements"],
+)
+def test_given_duckdb_state_backend_when_upserting_same_identity_then_created_at_is_preserved(
+    test_case: DuckDbStateBackendCoreRecordsTestCase,
+    tmp_path: Path,
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    try:
+        backend.initialize(
+            connection,
+            schema=test_case.schema,
+            sqlbuild_version=test_case.sqlbuild_version,
+        )
+        model_record: ModelVersionRecord = ModelVersionRecord(
+            model_name=test_case.expected_model_name,
+            version_hash=test_case.expected_version_hash,
+            data_hash="data-hash",
+            metadata_hash="metadata-hash",
+            status=ModelVersionStatus.READY,
+        )
+        backend.upsert_model_version(connection, schema=test_case.schema, record=model_record)
+        original_created_at: datetime = fetch_all(
+            connection,
+            f"SELECT created_at FROM {test_case.schema}.model_versions "
+            f"WHERE model_name = '{test_case.expected_model_name}' "
+            f"AND version_hash = '{test_case.expected_version_hash}'",
+        )[0][0]
+
+        backend.upsert_model_version(connection, schema=test_case.schema, record=model_record)
+
+        replaced_created_at: datetime = fetch_all(
+            connection,
+            f"SELECT created_at FROM {test_case.schema}.model_versions "
+            f"WHERE model_name = '{test_case.expected_model_name}' "
+            f"AND version_hash = '{test_case.expected_version_hash}'",
+        )[0][0]
+        assert (
+            backend.get_model_version(
+                connection,
+                schema=test_case.schema,
+                model_name=test_case.expected_model_name,
+                version_hash=test_case.expected_version_hash,
+            )
+            == model_record
+        )
+        assert replaced_created_at == original_created_at
+    finally:
+        backend.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbStateBackendCoreRecordsTestCase(
+            description="preserves created_at for physical relations and virtual environments",
+            schema="sqlbuild_state",
+            sqlbuild_version="0.0.test",
+            expected_model_name="fact_orders",
+            expected_version_hash="abc123",
+            expected_virtual_environment_name="dev",
+            expected_ref_count=1,
+            expected_ref_count_after_replace=0,
+            expected_relation_name="fact_orders__v_abc123",
+            expected_replaced_relation_name="fact_orders__v_abc123_replaced",
+        )
+    ],
+    ids=["preserves created_at for physical relations and virtual environments"],
+)
+def test_given_duckdb_state_backend_when_replacing_rows_then_preserves_created_at(
+    test_case: DuckDbStateBackendCoreRecordsTestCase,
+    tmp_path: Path,
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    try:
+        backend.initialize(
+            connection,
+            schema=test_case.schema,
+            sqlbuild_version=test_case.sqlbuild_version,
+        )
+        relation_record: PhysicalRelationRecord = PhysicalRelationRecord(
+            model_name=test_case.expected_model_name,
+            version_hash=test_case.expected_version_hash,
+            database_name=None,
+            schema_name="dev__sqb_physical",
+            relation_name=test_case.expected_relation_name,
+            relation_type="table",
+        )
+        backend.upsert_physical_relation(
+            connection,
+            schema=test_case.schema,
+            record=relation_record,
+        )
+        physical_created_at: datetime = fetch_all(
+            connection,
+            f"SELECT created_at FROM {test_case.schema}.physical_relations "
+            f"WHERE model_name = '{test_case.expected_model_name}' "
+            f"AND version_hash = '{test_case.expected_version_hash}'",
+        )[0][0]
+        backend.upsert_physical_relation(
+            connection,
+            schema=test_case.schema,
+            record=relation_record,
+        )
+        replaced_physical_created_at: datetime = fetch_all(
+            connection,
+            f"SELECT created_at FROM {test_case.schema}.physical_relations "
+            f"WHERE model_name = '{test_case.expected_model_name}' "
+            f"AND version_hash = '{test_case.expected_version_hash}'",
+        )[0][0]
+
+        virtual_environment_record: VirtualEnvironmentRecord = VirtualEnvironmentRecord(
+            virtual_environment_name=test_case.expected_virtual_environment_name,
+            status=VirtualEnvironmentStatus.FINALIZED,
+            baseline_virtual_environment_name=None,
+        )
+        backend.upsert_virtual_environment(
+            connection,
+            schema=test_case.schema,
+            record=virtual_environment_record,
+        )
+        virtual_created_at: datetime = fetch_all(
+            connection,
+            f"SELECT created_at FROM {test_case.schema}.virtual_environments "
+            f"WHERE virtual_environment_name = '{test_case.expected_virtual_environment_name}'",
+        )[0][0]
+        backend.upsert_virtual_environment(
+            connection,
+            schema=test_case.schema,
+            record=virtual_environment_record,
+        )
+        replaced_virtual_created_at: datetime = fetch_all(
+            connection,
+            f"SELECT created_at FROM {test_case.schema}.virtual_environments "
+            f"WHERE virtual_environment_name = '{test_case.expected_virtual_environment_name}'",
+        )[0][0]
+
+        assert (
+            backend.get_physical_relation(
+                connection,
+                schema=test_case.schema,
+                model_name=test_case.expected_model_name,
+                version_hash=test_case.expected_version_hash,
+            )
+            == relation_record
+        )
+        assert (
+            backend.get_virtual_environment(
+                connection,
+                schema=test_case.schema,
+                virtual_environment_name=test_case.expected_virtual_environment_name,
+            )
+            == virtual_environment_record
+        )
+        assert replaced_physical_created_at == physical_created_at
+        assert replaced_virtual_created_at == virtual_created_at
+    finally:
+        backend.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbStateBackendConcurrentLockTestCase(
+            description="allows only one winner across two DuckDB connections",
+            schema="sqlbuild_state",
+            sqlbuild_version="0.0.test",
+            lock_key="virtual_env:dev",
+            first_owner="run-1",
+            second_owner="run-2",
+            expected_success_count=1,
+            expected_active_lock_count=1,
+        )
+    ],
+    ids=["allows only one winner across two DuckDB connections"],
+)
+def test_given_duckdb_state_backend_when_two_connections_acquire_same_lock_then_only_one_succeeds(
+    test_case: DuckDbStateBackendConcurrentLockTestCase,
+    tmp_path: Path,
+) -> None:
+    db_path: Path = tmp_path / "state.duckdb"
+    backend, first_connection = open_duckdb_state_backend(db_path=db_path)
+    second_backend, second_connection = open_duckdb_state_backend(db_path=db_path)
+    try:
+        backend.initialize(
+            first_connection,
+            schema=test_case.schema,
+            sqlbuild_version=test_case.sqlbuild_version,
+        )
+        future_expiry: datetime = datetime.now() + timedelta(hours=1)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures: list[Future[bool]] = [
+                executor.submit(
+                    backend.acquire_lock,
+                    first_connection,
+                    schema=test_case.schema,
+                    lock_key=test_case.lock_key,
+                    owner_id=test_case.first_owner,
+                    expires_at=future_expiry,
+                ),
+                executor.submit(
+                    second_backend.acquire_lock,
+                    second_connection,
+                    schema=test_case.schema,
+                    lock_key=test_case.lock_key,
+                    owner_id=test_case.second_owner,
+                    expires_at=future_expiry,
+                ),
+            ]
+        results: list[bool] = [future.result() for future in futures]
+
+        assert sum(1 for result in results if result) == test_case.expected_success_count
+        active_locks: tuple[StateLockRecord, ...] = backend.list_active_locks(
+            first_connection,
+            schema=test_case.schema,
+        )
+        assert len(active_locks) == test_case.expected_active_lock_count
+        assert active_locks[0].owner_id in {test_case.first_owner, test_case.second_owner}
+    finally:
+        backend.close(first_connection)
+        second_backend.close(second_connection)

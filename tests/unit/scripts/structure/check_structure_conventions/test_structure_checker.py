@@ -542,6 +542,33 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=(),
     ),
     CheckPathsTestCase(
+        description="allows helpers import from same package classes",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/helpers/__init__.py": '"""Helpers."""\n',
+            "src/sqlbuild/example/widget/helpers/build.py": dedent(
+                """
+                from sqlbuild.example.widget.classes.runner import WidgetRunner
+
+
+                def build_widget() -> str:
+                    return WidgetRunner().run()
+                """
+            ).strip()
+            + "\n",
+            "src/sqlbuild/example/widget/classes/__init__.py": '"""Widget classes."""\n',
+            "src/sqlbuild/example/widget/classes/runner.py": dedent(
+                """
+                class WidgetRunner:
+                    def run(self) -> str:
+                        return "demo"
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=(),
+    ),
+    CheckPathsTestCase(
         description="reports subpackage under main even when flat entry exists",
         repo_files=compliant_repo_files()
         | {

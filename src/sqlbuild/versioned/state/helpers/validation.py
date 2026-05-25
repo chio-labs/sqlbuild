@@ -18,6 +18,8 @@ def build_validation_result(
     columns_by_table: dict[str, dict[str, str]],
     expected_columns: dict[str, dict[str, StateColumnType]],
     type_matches: Callable[[str, StateColumnType], bool],
+    expected_indexes: dict[str, dict[str, tuple[str, ...]]] | None = None,
+    existing_indexes_by_table: dict[str, set[str]] | None = None,
 ) -> StateSchemaValidationResult:
     """Build validation issues for required tables and columns."""
 
@@ -60,4 +62,16 @@ def build_validation_result(
                         ),
                     )
                 )
+        if expected_indexes is not None:
+            actual_indexes: set[str] = (existing_indexes_by_table or {}).get(table_name, set())
+            index_name: str
+            for index_name in expected_indexes.get(table_name, {}):
+                if index_name not in actual_indexes:
+                    issues.append(
+                        StateSchemaValidationIssue(
+                            kind=StateSchemaValidationIssueKind.MISSING_INDEX,
+                            table_name=table_name,
+                            message=f"Missing state index: {table_name}.{index_name}",
+                        )
+                    )
     return StateSchemaValidationResult(issues=tuple(issues))
