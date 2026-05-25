@@ -17,6 +17,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.state._test_types import (
     StateLifecycleErrorE2ETestCase,
     StateLocalOverrideE2ETestCase,
 )
+from tests.e2e.src.sqlbuild.cli.commands.main.state.helpers import assert_state_cli_error
 
 STATE_LIFECYCLE_ERROR_E2E_TEST_CASES: tuple[StateLifecycleErrorE2ETestCase, ...] = (
     StateLifecycleErrorE2ETestCase(
@@ -213,10 +214,11 @@ def test_given_duckdb_state_config_when_running_blocked_state_command_then_cli_r
         project_dir=project_dir,
     )
 
-    assert result.returncode == test_case.expected_exit_code
-    assert "error[E001]" in result.stderr
-    assert test_case.expected_error_fragment in result.stderr
-    assert "Traceback" not in result.stderr
+    assert_state_cli_error(
+        result=result,
+        expected_exit_code=test_case.expected_exit_code,
+        expected_error_fragment=test_case.expected_error_fragment,
+    )
 
 
 @pytest.mark.parametrize(

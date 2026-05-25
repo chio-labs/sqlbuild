@@ -84,6 +84,29 @@ def cleanup_postgres_schema(*, schema_name: str, config: dict[str, object]) -> N
         adapter.close(connection)
 
 
+def cleanup_postgres_state_schemas(*, schema_name: str, config: dict[str, object]) -> None:
+    adapter: PostgresAdapter = PostgresAdapter()
+    connection: Any = adapter.connect(config)
+    try:
+        adapter.execute(
+            connection, f"DROP SCHEMA IF EXISTS {quote_identifier(schema_name)} CASCADE"
+        )
+        cursor: Any = adapter.execute(
+            connection,
+            "SELECT schema_name FROM information_schema.schemata "
+            f"WHERE schema_name LIKE '{schema_name}__backup_%'",
+        )
+        backup_schemas: tuple[str, ...] = tuple(str(row[0]) for row in cursor.fetchall())
+        backup_schema: str
+        for backup_schema in backup_schemas:
+            adapter.execute(
+                connection,
+                f"DROP SCHEMA IF EXISTS {quote_identifier(backup_schema)} CASCADE",
+            )
+    finally:
+        adapter.close(connection)
+
+
 def fetch_postgres_rows(*, sql: str, config: dict[str, object]) -> tuple[tuple[object, ...], ...]:
     adapter: PostgresAdapter = PostgresAdapter()
     connection: Any = adapter.connect(config)
@@ -105,6 +128,14 @@ def execute_postgres_sql(*, sql: str, config: dict[str, object]) -> None:
 
 def relation_name(*, schema_name: str, name: str) -> str:
     return f"{schema_name}.{name}"
+
+
+def quote_identifier(identifier: str) -> str:
+    return '"' + identifier.replace('"', '""') + '"'
+
+
+def quoted_relation_name(*, schema_name: str, name: str) -> str:
+    return f"{quote_identifier(schema_name)}.{quote_identifier(name)}"
 
 
 def postgres_relation_row_count(*, schema_name: str, name: str, config: dict[str, object]) -> int:
