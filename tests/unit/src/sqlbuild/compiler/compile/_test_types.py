@@ -83,6 +83,7 @@ class BuildCompileInputsErrorTestCase:
     selected_environment: str | None
     run_id: str | None
     expected_error_fragment: str
+    expected_error_type: type[Exception] = ValueError
     environment_variables: dict[str, str] = field(default_factory=dict)
 
 

@@ -11,6 +11,7 @@ from sqlbuild.compiler.compile.models.core import CompileProjectInputs
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.models.environments import resolve_environment_config
+from sqlbuild.spec.models.exceptions import SpecConfigError
 from sqlbuild.spec.models.project import (
     ClonePolicy,
     EnvironmentConfig,
@@ -2945,6 +2946,7 @@ select 1
         selected_environment="missing",
         run_id=None,
         expected_error_fragment="Unknown environment 'missing'",
+        expected_error_type=SpecConfigError,
     ),
     BuildCompileInputsErrorTestCase(
         description="raises when the local environment does not exist",
@@ -2959,6 +2961,7 @@ environment = "missing"
         selected_environment=None,
         run_id=None,
         expected_error_fragment="Unknown environment 'missing'",
+        expected_error_type=SpecConfigError,
     ),
     BuildCompileInputsErrorTestCase(
         description="raises when the project default environment does not exist",
@@ -2975,6 +2978,7 @@ default_environment = "missing"
         selected_environment=None,
         run_id=None,
         expected_error_fragment="Unknown environment 'missing'",
+        expected_error_type=SpecConfigError,
     ),
     BuildCompileInputsErrorTestCase(
         description="raises when effective vars reference an unknown project variable",
@@ -3288,7 +3292,7 @@ def test_given_attachment_conflicts_when_building_compile_inputs_then_it_raises_
 
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
 
-    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+    with pytest.raises(test_case.expected_error_type, match=test_case.expected_error_fragment):
         build_compile_inputs(
             discovered_inputs,
             selected_environment=test_case.selected_environment,
