@@ -51,6 +51,7 @@ class BuildExecutionPlanTestCase:
     effective_connection: dict[str, object] = field(default_factory=dict)
     model_deps: dict[str, tuple[str, ...]] = field(default_factory=dict)
     expected_cascade_action: dict[str, BackfillAction] = field(default_factory=dict)
+    expected_cascade_duration: dict[str, str | None] = field(default_factory=dict)
     expected_cascade_root_cause: dict[str, str] = field(default_factory=dict)
     expected_progress_fragments: tuple[str, ...] = field(default_factory=tuple)
 
