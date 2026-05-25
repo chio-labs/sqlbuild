@@ -36,6 +36,9 @@ class MainTestCase:
     expected_skills_targets: tuple[str, ...] = ()
     expected_skills_force: bool = False
     expected_playground_template: str = "waffle_shop"
+    expected_state_command: str | None = None
+    expected_state_backup_id: str | None = None
+    expected_auto_approve: bool = False
     expected_vars: dict[str, object] | None = None
 
 

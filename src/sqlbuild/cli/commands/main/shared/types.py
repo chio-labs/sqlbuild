@@ -22,6 +22,7 @@ class CliCommand(StrEnum):
     QUERY = "query"
     CLEAN = "clean"
     JANITOR = "janitor"
+    STATE = "state"
     INIT = "init"
     PLAYGROUND = "playground"
     SCENARIO = "scenario"
