@@ -27,6 +27,7 @@ def resolve_cascade(
     *,
     model_name: str,
     own_backfill: BackfillResult,
+    local_backfill: BackfillResult,
     own_cursor_type: str | None,
     upstream_keys: tuple[CompiledObjectKey, ...],
     effective_cascades: dict[str, CascadeResult],
@@ -34,9 +35,9 @@ def resolve_cascade(
 ) -> CascadeResult | None:
     """Resolve the effective backfill for a model after upstream cascade propagation.
 
-    Returns None if no upstream produces a stronger effective window than the
-    model's own backfill. Returns a CascadeResult with the effective window,
-    all contributing upstream causes, and the nominated root decider.
+    Returns None if no upstream changes the model's effective propagated
+    backfill. Returns a CascadeResult with the effective window, all
+    contributing upstream causes, and the nominated root decider.
     """
 
     candidates: list[CascadeCause] = _gather_cascade_candidates(
@@ -49,13 +50,21 @@ def resolve_cascade(
     if not candidates:
         return None
 
-    winning: CascadeCause | None = _pick_winner(candidates=candidates, own_backfill=own_backfill)
+    winning: CascadeCause | None = _pick_winner(candidates=candidates)
     if winning is None:
         return None
 
+    resolved_backfill: BackfillResult = _resolve_effective_backfill(
+        own_backfill=own_backfill,
+        local_backfill=local_backfill,
+        incoming_cascade=winning,
+    )
+    if _backfills_match(resolved_backfill, own_backfill):
+        return None
+
     return CascadeResult(
-        effective_action=winning.effective_action,
-        effective_duration=winning.effective_duration,
+        effective_action=resolved_backfill.action,
+        effective_duration=resolved_backfill.duration,
         root_cause=winning.root_cause or winning.model_name,
         root_reason=winning.root_reason,
         causes=tuple(candidates),
@@ -145,26 +154,21 @@ def _gather_cascade_candidates(
 def _pick_winner(
     *,
     candidates: list[CascadeCause],
-    own_backfill: BackfillResult,
 ) -> CascadeCause | None:
-    """Pick the candidate that exceeds the model's own backfill.
+    """Pick the strongest incoming candidate.
 
-    Returns the most aggressive candidate, or None if no candidate exceeds the
-    model's own backfill. Among tied candidates, picks alphabetically by model
-    name.
+    Among tied candidates, pick alphabetically by model name.
     """
 
-    own_rank: tuple[int, int] = _backfill_rank(own_backfill.action, own_backfill.duration)
-
     best: CascadeCause | None = None
-    best_rank: tuple[int, int] = own_rank
+    best_rank: tuple[int, int] | None = None
 
     candidate: CascadeCause
     for candidate in candidates:
         candidate_rank: tuple[int, int] = _backfill_rank(
             candidate.effective_action, candidate.effective_duration
         )
-        if candidate_rank > best_rank:
+        if best_rank is None or candidate_rank > best_rank:
             best = candidate
             best_rank = candidate_rank
         elif candidate_rank == best_rank and best is not None:
@@ -172,6 +176,30 @@ def _pick_winner(
                 best = candidate
 
     return best
+
+
+def _resolve_effective_backfill(
+    *,
+    own_backfill: BackfillResult,
+    local_backfill: BackfillResult,
+    incoming_cascade: CascadeCause,
+) -> BackfillResult:
+    """Resolve the model's outgoing pressure from local and incoming state."""
+
+    if own_backfill.action != BackfillAction.WARN_ONLY:
+        return own_backfill
+    if local_backfill.action != BackfillAction.WARN_ONLY:
+        return local_backfill
+    return BackfillResult(
+        action=incoming_cascade.effective_action,
+        duration=incoming_cascade.effective_duration,
+    )
+
+
+def _backfills_match(a: BackfillResult, b: BackfillResult) -> bool:
+    """Return True when two backfill results resolve identically."""
+
+    return a.action == b.action and a.duration == b.duration
 
 
 def _backfill_rank(action: BackfillAction, duration: str | None) -> tuple[int, int]:

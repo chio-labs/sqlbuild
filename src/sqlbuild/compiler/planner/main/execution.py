@@ -26,6 +26,7 @@ from sqlbuild.compiler.planner.helpers.audit_entry import plan_audit
 from sqlbuild.compiler.planner.helpers.auto_load import managed_source_upstream_keys
 from sqlbuild.compiler.planner.helpers.buildability import check_buildability
 from sqlbuild.compiler.planner.helpers.cascade import build_self_cascade, resolve_cascade
+from sqlbuild.compiler.planner.helpers.changes.policy import resolve_query_change_backfill
 from sqlbuild.compiler.planner.helpers.function_fingerprints import (
     build_compiled_function_fingerprint_sql,
     detect_function_change,
@@ -284,9 +285,17 @@ def build_execution_plan(
         )
 
         model_cursor_types[entry.name] = entry.cursor_type
+        raw_query_change_backfill: object | None = model.config.values.get("query_change_backfill")
         cascade: CascadeResult | None = resolve_cascade(
             model_name=entry.name,
             own_backfill=entry.backfill,
+            local_backfill=resolve_query_change_backfill(
+                query_change_backfill=(
+                    raw_query_change_backfill
+                    if isinstance(raw_query_change_backfill, str)
+                    else None
+                )
+            ),
             own_cursor_type=entry.cursor_type,
             upstream_keys=upstream_deps.get(key, ()),
             effective_cascades=effective_cascades,
