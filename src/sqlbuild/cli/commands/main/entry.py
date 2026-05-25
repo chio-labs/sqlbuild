@@ -43,8 +43,8 @@ from sqlbuild.shared.constants import (
     SCENARIO_CLI_MISSING_SUBCOMMAND,
 )
 from sqlbuild.shared.helpers.colors import supports_color
-from sqlbuild.versioned.state.exceptions import StateBackendError
-from sqlbuild.versioned.state.types import StateCommand
+from sqlbuild.virtual.state.exceptions import StateBackendError
+from sqlbuild.virtual.state.types import StateCommand
 
 
 def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from sqlbuild.spec.models.types import EnvironmentMode
+
 
 @dataclass(frozen=True)
 class ClonePolicy:
@@ -23,7 +25,7 @@ class LocalClonePolicy:
 
 @dataclass(frozen=True)
 class StateConfig:
-    """Versioned mode state store configuration."""
+    """Virtual mode state store configuration."""
 
     backend: str | None = None
     schema: str | None = None
@@ -33,7 +35,7 @@ class StateConfig:
 
 @dataclass(frozen=True)
 class LocalStateConfig:
-    """Local versioned mode state store overrides."""
+    """Local virtual environment mode state store overrides."""
 
     backend: str | None = None
     schema: str | None = None
@@ -158,6 +160,7 @@ class ProjectConfig:
 
     name: str
     adapter: str
+    environment_mode: EnvironmentMode = EnvironmentMode.DIRECT
     default_environment: str | None = None
     connection: dict[str, object] = field(default_factory=dict)
     settings: SettingsConfig = field(default_factory=SettingsConfig)

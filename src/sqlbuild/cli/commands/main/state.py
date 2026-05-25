@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.versioned.state.main.lifecycle import run_state_lifecycle
-from sqlbuild.versioned.state.types import StateCommand
+from sqlbuild.virtual.state.main.lifecycle import run_state_lifecycle
+from sqlbuild.virtual.state.types import StateCommand
 
 
 def run_state(
@@ -14,7 +14,7 @@ def run_state(
     backup_id: str | None = None,
     auto_approve: bool = False,
 ) -> int:
-    """Execute a versioned state lifecycle command."""
+    """Execute a virtual state lifecycle command."""
 
     return run_state_lifecycle(
         project_dir=project_dir,

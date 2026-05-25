@@ -105,6 +105,8 @@ max_concurrency = 4
             "sqlbuild_local.toml": """
 default_environment = "prod"
 
+environment_mode = "virtual"
+
 [defaults]
 materialized = "table"
 
@@ -123,7 +125,12 @@ database = "local.duckdb"
         expected_max_concurrency=1,
         expected_setting_overrides=frozenset(),
         expected_vars={},
-        expected_missing_attributes=("default_environment", "defaults", "janitor"),
+        expected_missing_attributes=(
+            "default_environment",
+            "environment_mode",
+            "defaults",
+            "janitor",
+        ),
     ),
     LoadLocalConfigTestCase(
         description="loads local environment overrides",
@@ -170,6 +177,15 @@ allow_as_target = false
 ]
 
 PROJECT_CONFIG_ERROR_TEST_CASES: list[LoadProjectConfigErrorTestCase] = [
+    LoadProjectConfigErrorTestCase(
+        description="raises when environment mode is unknown",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+environment_mode = "stateful"
+""".strip(),
+        expected_error_fragment="environment_mode must be one of: direct, virtual",
+    ),
     LoadProjectConfigErrorTestCase(
         description="raises when settings sqlglot is not a boolean",
         project_file_contents="""
@@ -529,15 +545,39 @@ extra_concurrency = 8
 ]
 
 
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        LoadProjectConfigTestCase(
-            description="loads expected fields from project config",
-            project_file_contents="""
+PROJECT_CONFIG_TEST_CASES: list[LoadProjectConfigTestCase] = [
+    LoadProjectConfigTestCase(
+        description="defaults environment mode to direct when omitted",
+        project_file_contents="""
 name = "demo"
 adapter = "duckdb"
 default_environment = "dev"
+""".strip(),
+        expected_name="demo",
+        expected_adapter="duckdb",
+        expected_default_environment="dev",
+        expected_connection={},
+        expected_sqlglot=True,
+        expected_max_concurrency=1,
+        expected_materialized=None,
+        expected_row_diff_exclude_columns=(),
+        expected_row_diff_tolerances={},
+        expected_contract=None,
+        expected_path_defaults={},
+        expected_vars={},
+        expected_environments={},
+        expected_janitor_enabled=False,
+        expected_retention_days=30,
+        expected_janitor_delete_tracked_only=True,
+        expected_janitor_exclude_patterns=(),
+    ),
+    LoadProjectConfigTestCase(
+        description="loads expected fields from project config",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+default_environment = "dev"
+environment_mode = "virtual"
 
 [connection]
 path = "data.db"
@@ -611,59 +651,71 @@ profiles_dir = "../profiles"
 target = "prod"
 target_path = "target/dbt"
 """.strip(),
-            expected_name="demo",
-            expected_adapter="duckdb",
-            expected_default_environment="dev",
-            expected_connection={"path": "data.db"},
-            expected_sqlglot=False,
-            expected_max_concurrency=8,
-            expected_auto_load_sources=False,
-            expected_materialized="table",
-            expected_row_diff_exclude_columns=("loaded_at",),
-            expected_row_diff_tolerances={
-                "by_type": {
-                    "float": {"relative": 0.0001, "absolute": 0.000001},
-                },
-                "by_column": {
-                    "revenue": {"absolute": 0.01},
-                },
+        expected_name="demo",
+        expected_adapter="duckdb",
+        expected_environment_mode="virtual",
+        expected_default_environment="dev",
+        expected_connection={"path": "data.db"},
+        expected_sqlglot=False,
+        expected_max_concurrency=8,
+        expected_auto_load_sources=False,
+        expected_materialized="table",
+        expected_row_diff_exclude_columns=("loaded_at",),
+        expected_row_diff_tolerances={
+            "by_type": {
+                "float": {"relative": 0.0001, "absolute": 0.000001},
             },
-            expected_contract="enforced",
-            expected_path_default_schema="staging",
-            expected_vars={"user": "kevin"},
-            expected_dev_connection={"warehouse": "dev_wh"},
-            expected_dev_vars={"schema_prefix": "dev"},
-            expected_dev_schema="dev_${user}",
-            expected_dev_defer_sources_to="prod",
-            expected_allow_as_source=True,
-            expected_janitor_enabled=True,
-            expected_retention_days=14,
-            expected_janitor_delete_tracked_only=False,
-            expected_janitor_exclude_patterns=("partition_*",),
-            expected_current_state_full_refresh="require_confirmation",
-            expected_historical_full_refresh="allow",
-            expected_snapshot_schema_change="deny",
-            expected_wildcard_check_schema_change="append_new_columns",
-            expected_scenario_local_type_overrides={
-                "snowflake": {
-                    "NUMBER(*,0)": "BIGINT",
-                    "OBJECT": "JSON",
-                },
-                "bigquery": {"BIGNUMERIC(*,*)": "DECIMAL({1}, {2})"},
+            "by_column": {
+                "revenue": {"absolute": 0.01},
             },
-            expected_snapshot_limits={
-                "max_rows_per_relation": 100,
-                "max_total_rows": 200,
-                "max_bytes_per_relation": 300,
-                "max_total_bytes": 400,
+        },
+        expected_contract="enforced",
+        expected_path_defaults={"staging": {"schema": "staging"}},
+        expected_vars={"user": "kevin"},
+        expected_environments={
+            "dev": {
+                "connection": {"warehouse": "dev_wh"},
+                "vars": {"schema_prefix": "dev"},
+                "database": None,
+                "schema": "dev_${user}",
+                "defer_sources_to": "prod",
+                "allow_as_source": True,
+                "allow_as_target": True,
+            }
+        },
+        expected_janitor_enabled=True,
+        expected_retention_days=14,
+        expected_janitor_delete_tracked_only=False,
+        expected_janitor_exclude_patterns=("partition_*",),
+        expected_current_state_full_refresh="require_confirmation",
+        expected_historical_full_refresh="allow",
+        expected_snapshot_schema_change="deny",
+        expected_wildcard_check_schema_change="append_new_columns",
+        expected_scenario_local_type_overrides={
+            "snowflake": {
+                "NUMBER(*,0)": "BIGINT",
+                "OBJECT": "JSON",
             },
-            expected_dbt_project_dir="../dbt",
-            expected_dbt_profiles_dir="../profiles",
-            expected_dbt_target="prod",
-            expected_dbt_target_path="target/dbt",
-        )
-    ],
-    ids=["loads expected fields from project config"],
+            "bigquery": {"BIGNUMERIC(*,*)": "DECIMAL({1}, {2})"},
+        },
+        expected_snapshot_limits={
+            "max_rows_per_relation": 100,
+            "max_total_rows": 200,
+            "max_bytes_per_relation": 300,
+            "max_total_bytes": 400,
+        },
+        expected_dbt_project_dir="../dbt",
+        expected_dbt_profiles_dir="../profiles",
+        expected_dbt_target="prod",
+        expected_dbt_target_path="target/dbt",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    PROJECT_CONFIG_TEST_CASES,
+    ids=[case.description for case in PROJECT_CONFIG_TEST_CASES],
 )
 def test_given_project_config_file_when_loading_project_config_then_it_returns_expected_fields(
     test_case: LoadProjectConfigTestCase,
@@ -676,6 +728,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
 
     assert config.name == test_case.expected_name
     assert config.adapter == test_case.expected_adapter
+    assert config.environment_mode.value == test_case.expected_environment_mode
     assert config.default_environment == test_case.expected_default_environment
     assert config.connection == test_case.expected_connection
     assert config.settings.sqlglot is test_case.expected_sqlglot
@@ -685,13 +738,20 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.defaults.row_diff_exclude_columns == test_case.expected_row_diff_exclude_columns
     assert config.defaults.row_diff_tolerances == test_case.expected_row_diff_tolerances
     assert config.defaults.contract == test_case.expected_contract
-    assert config.path_defaults["staging"]["schema"] == test_case.expected_path_default_schema
+    assert config.path_defaults == test_case.expected_path_defaults
     assert config.vars == test_case.expected_vars
-    assert config.environments["dev"].connection == test_case.expected_dev_connection
-    assert config.environments["dev"].vars == test_case.expected_dev_vars
-    assert config.environments["dev"].schema == test_case.expected_dev_schema
-    assert config.environments["dev"].defer_sources_to == test_case.expected_dev_defer_sources_to
-    assert config.environments["dev"].clone.allow_as_source is test_case.expected_allow_as_source
+    assert {
+        environment_name: {
+            "connection": environment_config.connection,
+            "vars": environment_config.vars,
+            "database": environment_config.database,
+            "schema": environment_config.schema,
+            "defer_sources_to": environment_config.defer_sources_to,
+            "allow_as_source": environment_config.clone.allow_as_source,
+            "allow_as_target": environment_config.clone.allow_as_target,
+        }
+        for environment_name, environment_config in config.environments.items()
+    } == test_case.expected_environments
     assert config.janitor.enabled is test_case.expected_janitor_enabled
     assert config.janitor.retention_days == test_case.expected_retention_days
     assert config.janitor.delete_tracked_only is test_case.expected_janitor_delete_tracked_only

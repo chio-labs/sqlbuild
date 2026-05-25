@@ -36,3 +36,11 @@ class StateExplicitRollbackE2ETestCase:
     expected_exit_code: int
     expected_rollback_fragment: str
     expected_schema_version: int
+
+
+@dataclass(frozen=True)
+class StateModeGuardE2ETestCase:
+    description: str
+    project_toml: str
+    expected_exit_code: int
+    expected_error_fragment: str

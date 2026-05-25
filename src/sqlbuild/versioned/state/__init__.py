@@ -1,1 +1,0 @@
-"""Versioned state store package."""

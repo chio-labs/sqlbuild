@@ -35,6 +35,7 @@ from sqlbuild.spec.models.project import (
     SnapshotsConfig,
     StateConfig,
 )
+from sqlbuild.spec.models.types import EnvironmentMode
 
 _SNAPSHOT_FULL_REFRESH_POLICIES: frozenset[str] = frozenset(
     {"allow", "deny", "require_confirmation"}
@@ -56,6 +57,7 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
 
     name: str = _require_str(payload=payload, key="name", file_path=file_path)
     adapter: str = _require_str(payload=payload, key="adapter", file_path=file_path)
+    environment_mode: EnvironmentMode = _load_environment_mode(payload=payload, file_path=file_path)
     default_environment: str | None = _optional_str(payload=payload, key="default_environment")
     connection: dict[str, object] = _optional_mapping(payload=payload, key="connection")
     settings: SettingsConfig = _load_settings(payload=payload.get("settings"), file_path=file_path)
@@ -86,6 +88,7 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
     return ProjectConfig(
         name=name,
         adapter=adapter,
+        environment_mode=environment_mode,
         default_environment=default_environment,
         connection=connection,
         settings=settings,
@@ -225,6 +228,19 @@ def _optional_mapping(*, payload: dict[str, object], key: str) -> dict[str, obje
     if not isinstance(value, dict):
         raise ProjectConfigError(f"Expected '{key}' to be a mapping when provided")
     return cast(dict[str, object], value)
+
+
+def _load_environment_mode(*, payload: dict[str, object], file_path: Path) -> EnvironmentMode:
+    environment_mode_value: str | None = _optional_str(payload=payload, key="environment_mode")
+    if environment_mode_value is None:
+        return EnvironmentMode.DIRECT
+    try:
+        return EnvironmentMode(environment_mode_value)
+    except ValueError as error:
+        allowed_values: str = ", ".join(mode.value for mode in EnvironmentMode)
+        raise ProjectConfigError(
+            f"{file_path} environment_mode must be one of: {allowed_values}"
+        ) from error
 
 
 def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
