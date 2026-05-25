@@ -12,11 +12,16 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.shared.constants import (
     SCENARIO_CLI_NONE_DISCOVERED,
     SCENARIO_CLI_UNKNOWN_SELECTOR,
+    SCENARIO_CLI_UNSUPPORTED_GRAPH_SELECTOR,
 )
 
 
 def select_scenarios(
-    *, project: CompiledProject, selectors: tuple[str, ...], project_dir: Path
+    *,
+    project: CompiledProject,
+    selectors: tuple[str, ...],
+    exclude: tuple[str, ...] = (),
+    project_dir: Path,
 ) -> tuple[CompiledSqlScenario, ...]:
     """Resolve scenario names, files, and folder selectors into scenarios."""
 
@@ -26,29 +31,46 @@ def select_scenarios(
                 "No SQL scenarios were discovered under tests/scenarios",
                 code=SCENARIO_CLI_NONE_DISCOVERED,
             )
-        return project.sql_scenarios
+        selected_scenarios: tuple[CompiledSqlScenario, ...] = project.sql_scenarios
+    else:
+        selected: list[CompiledSqlScenario] = []
+        selected_names: set[str] = set()
+        selector: str
+        for selector in selectors:
+            matches: tuple[CompiledSqlScenario, ...] = _select_scenarios_for_selector(
+                project=project,
+                selector=selector,
+                project_dir=project_dir,
+            )
+            scenario: CompiledSqlScenario
+            for scenario in matches:
+                if scenario.name in selected_names:
+                    continue
+                selected.append(scenario)
+                selected_names.add(scenario.name)
+        selected_scenarios = tuple(selected)
 
-    selected: list[CompiledSqlScenario] = []
-    selected_names: set[str] = set()
-    selector: str
-    for selector in selectors:
-        matches: tuple[CompiledSqlScenario, ...] = _select_scenarios_for_selector(
-            project=project,
-            selector=selector,
-            project_dir=project_dir,
+    if not exclude:
+        return selected_scenarios
+
+    excluded_names: set[str] = set()
+    exclude_selector: str
+    for exclude_selector in exclude:
+        excluded_names.update(
+            scenario.name
+            for scenario in _select_scenarios_for_selector(
+                project=project,
+                selector=exclude_selector,
+                project_dir=project_dir,
+            )
         )
-        scenario: CompiledSqlScenario
-        for scenario in matches:
-            if scenario.name in selected_names:
-                continue
-            selected.append(scenario)
-            selected_names.add(scenario.name)
-    return tuple(selected)
+    return tuple(scenario for scenario in selected_scenarios if scenario.name not in excluded_names)
 
 
 def _select_scenarios_for_selector(
     *, project: CompiledProject, selector: str, project_dir: Path
 ) -> tuple[CompiledSqlScenario, ...]:
+    _validate_scenario_selector(selector)
     selector_path: Path = Path(selector)
     matches: list[CompiledSqlScenario] = []
     scenario: CompiledSqlScenario
@@ -82,6 +104,19 @@ def _select_scenarios_for_selector(
         f"Unknown scenario selector '{selector}'",
         code=SCENARIO_CLI_UNKNOWN_SELECTOR,
     )
+
+
+def _validate_scenario_selector(selector: str) -> None:
+    if selector.startswith("+") or selector.endswith("+") or "~" in selector:
+        raise CliUserError(
+            f"Scenario selector '{selector}' uses graph operators, which are not supported",
+            code=SCENARIO_CLI_UNSUPPORTED_GRAPH_SELECTOR,
+            help=(
+                "Use scenario names, scenario file paths, folders, --select-file, and --exclude. "
+                "Graph expansion operators such as '+model', 'model+', and 'a~b' are only "
+                "supported by graph resource commands."
+            ),
+        )
 
 
 def _scenario_file_matches_selector(

@@ -248,6 +248,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     scenario_test_parser.add_argument("--strict", dest="scenario_strict", action="store_true")
     scenario_test_parser.add_argument("--json", action="store_true", default=False)
     add_execution_json_output_arg(scenario_test_parser)
+    add_select_args(scenario_test_parser)
     scenario_snapshot_group: argparse._MutuallyExclusiveGroup = (
         scenario_test_parser.add_mutually_exclusive_group()
     )
@@ -259,6 +260,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     scenario_capture_parser: argparse.ArgumentParser = scenario_subparsers.add_parser("capture")
     scenario_capture_parser.add_argument("scenario_selector", nargs="*", metavar="scenario")
     scenario_capture_parser.add_argument("--retain", dest="scenario_retain", action="store_true")
+    add_select_args(scenario_capture_parser)
     add_scenario_snapshot_safety_args(scenario_capture_parser)
     dbt_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DBT)
     dbt_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
@@ -650,6 +652,7 @@ def _main_with_dependencies(
                 )
             raise CliUserError("skills requires a subcommand such as 'update'", code="C807")
         if args.command == CliCommand.SCENARIO:
+            scenario_select: tuple[str, ...] = (*tuple(args.scenario_selector), *select)
             if args.scenario_command == "test":
                 if args.scenario_local and args.scenario_retain:
                     raise CliUserError(
@@ -675,7 +678,8 @@ def _main_with_dependencies(
                     project_dir,
                     False,
                     args.no_color,
-                    tuple(args.scenario_selector),
+                    scenario_select,
+                    tuple(args.exclude),
                     args.scenario_retain,
                     args.scenario_local,
                     args.scenario_strict,
@@ -694,7 +698,8 @@ def _main_with_dependencies(
                     project_dir,
                     False,
                     args.no_color,
-                    tuple(args.scenario_selector),
+                    scenario_select,
+                    tuple(args.exclude),
                     args.scenario_retain,
                     args.scenario_force,
                     args.scenario_max_snapshot_rows,
