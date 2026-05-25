@@ -65,6 +65,7 @@ def run_scenario_capture(
     no_sql_validation: bool = False,
     no_color: bool = False,
     selectors: tuple[str, ...] = (),
+    exclude: tuple[str, ...] = (),
     retain: bool = False,
     force: bool = False,
     max_snapshot_rows: int | None = None,
@@ -139,6 +140,7 @@ def run_scenario_capture(
     scenarios: tuple[CompiledSqlScenario, ...] = select_scenarios(
         project=pipeline_result.project,
         selectors=selectors,
+        exclude=exclude,
         project_dir=effective_project_dir,
     )
     header: str = f"Scenario Capture ({len(scenarios)} selected)"

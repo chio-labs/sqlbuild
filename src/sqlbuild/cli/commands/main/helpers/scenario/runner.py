@@ -87,6 +87,7 @@ def run_scenario(
     no_sql_validation: bool = False,
     no_color: bool = False,
     selectors: tuple[str, ...] = (),
+    exclude: tuple[str, ...] = (),
     retain: bool = False,
     local: bool = False,
     strict: bool = False,
@@ -189,6 +190,7 @@ def run_scenario(
     scenarios: tuple[CompiledSqlScenario, ...] = select_scenarios(
         project=pipeline_result.project,
         selectors=selectors,
+        exclude=exclude,
         project_dir=effective_project_dir,
     )
     if local and (sync_snapshots or refresh):
