@@ -40,3 +40,24 @@ class StateSchemaValidationIssueKind(StrEnum):
     MISSING_TABLE = "missing_table"
     MISSING_COLUMN = "missing_column"
     WRONG_TYPE = "wrong_type"
+    MISSING_INDEX = "missing_index"
+
+
+class ModelVersionStatus(StrEnum):
+    PLANNED = "planned"
+    BUILDING = "building"
+    READY = "ready"
+    FAILED = "failed"
+
+
+class VirtualEnvironmentStatus(StrEnum):
+    ACTIVE = "active"
+    FINALIZING = "finalizing"
+    FINALIZED = "finalized"
+    FAILED = "failed"
+
+
+class StateOperationStatus(StrEnum):
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"

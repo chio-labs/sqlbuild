@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from sqlbuild.versioned.state.classes.state_backend import StateBackend
 from sqlbuild.versioned.state.constants import (
     CURRENT_STATE_SCHEMA_VERSION,
+    LOCK_TABLE,
+    MODEL_VERSION_TABLE,
+    PHYSICAL_RELATION_TABLE,
     STATE_MIGRATION_EVENTS_TABLE,
     STATE_TABLE_COLUMNS,
+    STATE_TABLE_INDEXES,
     STATE_TABLES,
     STATE_VERSION_TABLE,
+    VIRTUAL_ENVIRONMENT_REF_TABLE,
+    VIRTUAL_ENVIRONMENT_TABLE,
 )
 from sqlbuild.versioned.state.exceptions import (
     StateBackendConfigError,
@@ -19,11 +26,20 @@ from sqlbuild.versioned.state.exceptions import (
 )
 from sqlbuild.versioned.state.helpers.events import backup_id, event_id
 from sqlbuild.versioned.state.helpers.validation import build_validation_result
-from sqlbuild.versioned.state.models import StateSchemaValidationResult
+from sqlbuild.versioned.state.models import (
+    ModelVersionRecord,
+    PhysicalRelationRecord,
+    StateLockRecord,
+    StateSchemaValidationResult,
+    VirtualEnvironmentRecord,
+    VirtualEnvironmentRefRecord,
+)
 from sqlbuild.versioned.state.types import (
+    ModelVersionStatus,
     StateColumnType,
     StateMigrationAction,
     StateMigrationStatus,
+    VirtualEnvironmentStatus,
 )
 
 
@@ -78,6 +94,7 @@ class PostgresStateBackend(StateBackend):
                     "created_at TIMESTAMP NOT NULL"
                     ")"
                 )
+                self._create_additional_state_tables(cursor, schema=schema)
                 cursor.execute(f"DELETE FROM {self._qualified_name(schema, STATE_VERSION_TABLE)}")
                 cursor.execute(
                     f"INSERT INTO {self._qualified_name(schema, STATE_VERSION_TABLE)} "
@@ -113,11 +130,20 @@ class PostgresStateBackend(StateBackend):
             columns_by_table: dict[str, dict[str, str]] = {}
             for row in cursor.fetchall():
                 columns_by_table.setdefault(row[0], {})[row[1]] = row[2]
+            cursor.execute(
+                "SELECT tablename, indexname FROM pg_indexes WHERE schemaname = %s",
+                [schema],
+            )
+            indexes_by_table: dict[str, set[str]] = {}
+            for row in cursor.fetchall():
+                indexes_by_table.setdefault(row[0], set()).add(row[1])
         return build_validation_result(
             existing_tables=tables,
             columns_by_table=columns_by_table,
             expected_columns=STATE_TABLE_COLUMNS,
             type_matches=self._state_type_matches,
+            expected_indexes=STATE_TABLE_INDEXES,
+            existing_indexes_by_table=indexes_by_table,
         )
 
     def create_backup(self, connection: Any, *, schema: str) -> str:
@@ -173,6 +199,7 @@ class PostgresStateBackend(StateBackend):
                         f"CREATE TABLE {self._qualified_name(schema, table_name)} AS "
                         f"SELECT * FROM {self._qualified_name(backup_schema, table_name)}"
                     )
+                self._create_state_indexes(cursor, schema=schema)
                 self._record_event(
                     cursor,
                     schema=schema,
@@ -200,6 +227,304 @@ class PostgresStateBackend(StateBackend):
             except BaseException:
                 cursor.execute("ROLLBACK")
                 raise
+
+    def upsert_model_version(
+        self, connection: Any, *, schema: str, record: ModelVersionRecord
+    ) -> None:
+        with connection.cursor() as cursor:
+            cursor.execute("BEGIN")
+            try:
+                existing_created_at: datetime | None = self._created_at_for_key(
+                    cursor,
+                    schema=schema,
+                    table_name=MODEL_VERSION_TABLE,
+                    where_sql="model_name = %s AND version_hash = %s",
+                    params=[record.model_name, record.version_hash],
+                )
+                cursor.execute(
+                    f"DELETE FROM {self._qualified_name(schema, MODEL_VERSION_TABLE)} "
+                    "WHERE model_name = %s AND version_hash = %s",
+                    [record.model_name, record.version_hash],
+                )
+                cursor.execute(
+                    f"INSERT INTO {self._qualified_name(schema, MODEL_VERSION_TABLE)} "
+                    "(model_name, version_hash, data_hash, metadata_hash, status, "
+                    "created_at, updated_at) "
+                    "VALUES (%s, %s, %s, %s, %s, "
+                    "COALESCE(%s, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)",
+                    [
+                        record.model_name,
+                        record.version_hash,
+                        record.data_hash,
+                        record.metadata_hash,
+                        record.status.value,
+                        existing_created_at,
+                    ],
+                )
+                cursor.execute("COMMIT")
+            except BaseException:
+                cursor.execute("ROLLBACK")
+                raise
+
+    def get_model_version(
+        self, connection: Any, *, schema: str, model_name: str, version_hash: str
+    ) -> ModelVersionRecord | None:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"SELECT model_name, version_hash, data_hash, metadata_hash, status "
+                f"FROM {self._qualified_name(schema, MODEL_VERSION_TABLE)} "
+                "WHERE model_name = %s AND version_hash = %s",
+                [model_name, version_hash],
+            )
+            row: tuple[Any, ...] | None = cursor.fetchone()
+        if row is None:
+            return None
+        return ModelVersionRecord(
+            model_name=row[0],
+            version_hash=row[1],
+            data_hash=row[2],
+            metadata_hash=row[3],
+            status=ModelVersionStatus(row[4]),
+        )
+
+    def upsert_physical_relation(
+        self, connection: Any, *, schema: str, record: PhysicalRelationRecord
+    ) -> None:
+        with connection.cursor() as cursor:
+            cursor.execute("BEGIN")
+            try:
+                existing_created_at: datetime | None = self._created_at_for_key(
+                    cursor,
+                    schema=schema,
+                    table_name=PHYSICAL_RELATION_TABLE,
+                    where_sql="model_name = %s AND version_hash = %s",
+                    params=[record.model_name, record.version_hash],
+                )
+                cursor.execute(
+                    f"DELETE FROM {self._qualified_name(schema, PHYSICAL_RELATION_TABLE)} "
+                    "WHERE model_name = %s AND version_hash = %s",
+                    [record.model_name, record.version_hash],
+                )
+                cursor.execute(
+                    f"INSERT INTO {self._qualified_name(schema, PHYSICAL_RELATION_TABLE)} "
+                    "(model_name, version_hash, database_name, schema_name, relation_name, "
+                    "relation_type, created_at, updated_at) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, "
+                    "COALESCE(%s, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)",
+                    [
+                        record.model_name,
+                        record.version_hash,
+                        record.database_name,
+                        record.schema_name,
+                        record.relation_name,
+                        record.relation_type,
+                        existing_created_at,
+                    ],
+                )
+                cursor.execute("COMMIT")
+            except BaseException:
+                cursor.execute("ROLLBACK")
+                raise
+
+    def get_physical_relation(
+        self, connection: Any, *, schema: str, model_name: str, version_hash: str
+    ) -> PhysicalRelationRecord | None:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT model_name, version_hash, database_name, schema_name, "
+                "relation_name, relation_type "
+                f"FROM {self._qualified_name(schema, PHYSICAL_RELATION_TABLE)} "
+                "WHERE model_name = %s AND version_hash = %s",
+                [model_name, version_hash],
+            )
+            row: tuple[Any, ...] | None = cursor.fetchone()
+        if row is None:
+            return None
+        return PhysicalRelationRecord(
+            model_name=row[0],
+            version_hash=row[1],
+            database_name=row[2],
+            schema_name=row[3],
+            relation_name=row[4],
+            relation_type=row[5],
+        )
+
+    def upsert_virtual_environment(
+        self, connection: Any, *, schema: str, record: VirtualEnvironmentRecord
+    ) -> None:
+        with connection.cursor() as cursor:
+            cursor.execute("BEGIN")
+            try:
+                existing_created_at: datetime | None = self._created_at_for_key(
+                    cursor,
+                    schema=schema,
+                    table_name=VIRTUAL_ENVIRONMENT_TABLE,
+                    where_sql="virtual_environment_name = %s",
+                    params=[record.virtual_environment_name],
+                )
+                cursor.execute(
+                    f"DELETE FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
+                    "WHERE virtual_environment_name = %s",
+                    [record.virtual_environment_name],
+                )
+                cursor.execute(
+                    f"INSERT INTO {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
+                    "(virtual_environment_name, status, baseline_virtual_environment_name, "
+                    "created_at, updated_at, finalized_at) "
+                    "VALUES (%s, %s, %s, COALESCE(%s, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP, %s)",
+                    [
+                        record.virtual_environment_name,
+                        record.status.value,
+                        record.baseline_virtual_environment_name,
+                        existing_created_at,
+                        record.finalized_at,
+                    ],
+                )
+                cursor.execute("COMMIT")
+            except BaseException:
+                cursor.execute("ROLLBACK")
+                raise
+
+    def get_virtual_environment(
+        self, connection: Any, *, schema: str, virtual_environment_name: str
+    ) -> VirtualEnvironmentRecord | None:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT virtual_environment_name, status, baseline_virtual_environment_name, "
+                "finalized_at "
+                f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
+                "WHERE virtual_environment_name = %s",
+                [virtual_environment_name],
+            )
+            row: tuple[Any, ...] | None = cursor.fetchone()
+        if row is None:
+            return None
+        return VirtualEnvironmentRecord(
+            virtual_environment_name=row[0],
+            status=VirtualEnvironmentStatus(row[1]),
+            baseline_virtual_environment_name=row[2],
+            finalized_at=row[3],
+        )
+
+    def replace_virtual_environment_refs(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        virtual_environment_name: str,
+        refs: tuple[VirtualEnvironmentRefRecord, ...],
+    ) -> None:
+        with connection.cursor() as cursor:
+            cursor.execute("BEGIN")
+            try:
+                cursor.execute(
+                    f"DELETE FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_REF_TABLE)} "
+                    "WHERE virtual_environment_name = %s",
+                    [virtual_environment_name],
+                )
+                for ref in refs:
+                    cursor.execute(
+                        "INSERT INTO "
+                        f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_REF_TABLE)} "
+                        "(virtual_environment_name, model_name, version_hash, updated_at) "
+                        "VALUES (%s, %s, %s, CURRENT_TIMESTAMP)",
+                        [ref.virtual_environment_name, ref.model_name, ref.version_hash],
+                    )
+                cursor.execute("COMMIT")
+            except BaseException:
+                cursor.execute("ROLLBACK")
+                raise
+
+    def get_virtual_environment_refs(
+        self, connection: Any, *, schema: str, virtual_environment_name: str
+    ) -> tuple[VirtualEnvironmentRefRecord, ...]:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"SELECT virtual_environment_name, model_name, version_hash "
+                f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_REF_TABLE)} "
+                "WHERE virtual_environment_name = %s ORDER BY model_name",
+                [virtual_environment_name],
+            )
+            rows: list[tuple[Any, ...]] = cursor.fetchall()
+        return tuple(
+            VirtualEnvironmentRefRecord(
+                virtual_environment_name=row[0],
+                model_name=row[1],
+                version_hash=row[2],
+            )
+            for row in rows
+        )
+
+    def acquire_lock(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        lock_key: str,
+        owner_id: str,
+        expires_at: datetime,
+    ) -> bool:
+        with connection.cursor() as cursor:
+            cursor.execute("BEGIN")
+            try:
+                cursor.execute(
+                    f"DELETE FROM {self._qualified_name(schema, LOCK_TABLE)} "
+                    "WHERE lock_key = %s AND expires_at <= CURRENT_TIMESTAMP",
+                    [lock_key],
+                )
+                cursor.execute(
+                    f"INSERT INTO {self._qualified_name(schema, LOCK_TABLE)} "
+                    "(lock_key, owner_id, expires_at, created_at, updated_at) "
+                    "VALUES (%s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                    [lock_key, owner_id, expires_at],
+                )
+                cursor.execute("COMMIT")
+                return True
+            except BaseException:
+                cursor.execute("ROLLBACK")
+                cursor.execute(
+                    f"SELECT owner_id FROM {self._qualified_name(schema, LOCK_TABLE)} "
+                    "WHERE lock_key = %s AND expires_at > CURRENT_TIMESTAMP",
+                    [lock_key],
+                )
+                if cursor.fetchone() is not None:
+                    return False
+                raise
+
+    def release_lock(self, connection: Any, *, schema: str, lock_key: str, owner_id: str) -> bool:
+        with connection.cursor() as cursor:
+            cursor.execute("BEGIN")
+            try:
+                cursor.execute(
+                    f"SELECT owner_id FROM {self._qualified_name(schema, LOCK_TABLE)} "
+                    "WHERE lock_key = %s AND owner_id = %s",
+                    [lock_key, owner_id],
+                )
+                if cursor.fetchone() is None:
+                    cursor.execute("COMMIT")
+                    return False
+                cursor.execute(
+                    f"DELETE FROM {self._qualified_name(schema, LOCK_TABLE)} "
+                    "WHERE lock_key = %s AND owner_id = %s",
+                    [lock_key, owner_id],
+                )
+                cursor.execute("COMMIT")
+                return True
+            except BaseException:
+                cursor.execute("ROLLBACK")
+                raise
+
+    def list_active_locks(self, connection: Any, *, schema: str) -> tuple[StateLockRecord, ...]:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT lock_key, owner_id, expires_at FROM "
+                f"{self._qualified_name(schema, LOCK_TABLE)} "
+                "WHERE expires_at > CURRENT_TIMESTAMP ORDER BY lock_key"
+            )
+            rows: list[tuple[Any, ...]] = cursor.fetchall()
+        return tuple(
+            StateLockRecord(lock_key=row[0], owner_id=row[1], expires_at=row[2]) for row in rows
+        )
 
     def _latest_backup_id(self, connection: Any, *, schema: str) -> str:
         prefix: str = f"{schema}__backup_%"
@@ -230,6 +555,63 @@ class PostgresStateBackend(StateBackend):
             "VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)",
             [event_id(), action.value, backup_id_value, status.value, message],
         )
+
+    def _create_additional_state_tables(self, cursor: Any, *, schema: str) -> None:
+        table_name: str
+        columns: dict[str, StateColumnType]
+        for table_name, columns in STATE_TABLE_COLUMNS.items():
+            if table_name in {STATE_VERSION_TABLE, STATE_MIGRATION_EVENTS_TABLE}:
+                continue
+            column_sql: str = ", ".join(
+                f"{self._quote_identifier(column_name)} {self._state_column_sql_type(column_type)}"
+                for column_name, column_type in columns.items()
+            )
+            cursor.execute(
+                f"CREATE TABLE IF NOT EXISTS {self._qualified_name(schema, table_name)} "
+                f"({column_sql})"
+            )
+        self._create_state_indexes(cursor, schema=schema)
+
+    def _create_state_indexes(self, cursor: Any, *, schema: str) -> None:
+        table_name: str
+        indexes: dict[str, tuple[str, ...]]
+        for table_name, indexes in STATE_TABLE_INDEXES.items():
+            index_name: str
+            columns: tuple[str, ...]
+            for index_name, columns in indexes.items():
+                column_sql: str = ", ".join(self._quote_identifier(column) for column in columns)
+                cursor.execute(
+                    f"CREATE UNIQUE INDEX IF NOT EXISTS {self._quote_identifier(index_name)} "
+                    f"ON {self._qualified_name(schema, table_name)} ({column_sql})"
+                )
+
+    def _created_at_for_key(
+        self,
+        cursor: Any,
+        *,
+        schema: str,
+        table_name: str,
+        where_sql: str,
+        params: list[object],
+    ) -> datetime | None:
+        cursor.execute(
+            f"SELECT created_at FROM {self._qualified_name(schema, table_name)} WHERE {where_sql}",
+            params,
+        )
+        row: tuple[Any, ...] | None = cursor.fetchone()
+        if row is None:
+            return None
+        return row[0]
+
+    def _state_column_sql_type(self, column_type: StateColumnType) -> str:
+        match column_type:
+            case StateColumnType.INTEGER:
+                return "INTEGER"
+            case StateColumnType.TEXT:
+                return "TEXT"
+            case StateColumnType.TIMESTAMP:
+                return "TIMESTAMP"
+        raise StateBackendConfigError(f"Unsupported state column type: {column_type}")
 
     def _quote_identifier(self, identifier: str) -> str:
         return '"' + identifier.replace('"', '""') + '"'

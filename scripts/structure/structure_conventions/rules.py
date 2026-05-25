@@ -991,6 +991,8 @@ def check_no_sibling_package_imports(
             "exceptions",
         }:
             continue
+        if sibling_name == "classes" and current_subpackage_name == "helpers":
+            continue
         if sibling_name == "classes" and current_subpackage_name == "main":
             continue
         if sibling_name in {"shared", current_subpackage_name}:
@@ -1039,6 +1041,8 @@ def check_no_sibling_package_imports(
                 "constants",
                 "exceptions",
             }:
+                continue
+            if sibling_name == "classes" and current_subpackage_name == "helpers":
                 continue
             if sibling_name == "classes" and current_subpackage_name == "main":
                 continue
