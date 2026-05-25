@@ -1,0 +1,116 @@
+from __future__ import annotations
+
+import pytest
+
+from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
+from sqlbuild.cli.commands.main.shared.helpers.mode import (
+    enforce_direct_mode_command_support,
+    enforce_no_defer_to_in_virtual_mode,
+)
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
+from sqlbuild.spec.models.types import EnvironmentMode
+from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import ModeGuardTestCase
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ModeGuardTestCase(
+            description="allows run in direct mode",
+            environment_mode=EnvironmentMode.DIRECT.value,
+            command_name="run",
+            expected_error_fragment=None,
+        )
+    ],
+    ids=["allows run in direct mode"],
+)
+def test_given_direct_mode_command_when_enforcing_support_then_allows_execution(
+    test_case: ModeGuardTestCase,
+) -> None:
+    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
+        project_config=ProjectConfig(
+            name="demo",
+            adapter="duckdb",
+            environment_mode=EnvironmentMode(test_case.environment_mode),
+        ),
+        local_config=LocalConfig(),
+    )
+
+    enforce_direct_mode_command_support(
+        discovered_inputs=discovered_inputs,
+        command_name=test_case.command_name,
+    )
+    assert test_case.expected_error_fragment is None
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ModeGuardTestCase(
+            description="blocks clone in virtual mode",
+            environment_mode=EnvironmentMode.VIRTUAL.value,
+            command_name="clone",
+            expected_error_fragment="clone is not supported when environment_mode = 'virtual'",
+        )
+    ],
+    ids=["blocks clone in virtual mode"],
+)
+def test_given_virtual_mode_command_when_enforcing_support_then_raises_cli_user_error(
+    test_case: ModeGuardTestCase,
+) -> None:
+    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
+        project_config=ProjectConfig(
+            name="demo",
+            adapter="duckdb",
+            environment_mode=EnvironmentMode(test_case.environment_mode),
+        ),
+        local_config=LocalConfig(),
+    )
+
+    with pytest.raises(CliUserError) as exc_info:
+        enforce_direct_mode_command_support(
+            discovered_inputs=discovered_inputs,
+            command_name=test_case.command_name,
+        )
+
+    assert test_case.expected_error_fragment is not None
+    assert test_case.expected_error_fragment in exc_info.value.message
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ModeGuardTestCase(
+            description="blocks defer-to in virtual mode plan",
+            environment_mode=EnvironmentMode.VIRTUAL.value,
+            command_name="plan",
+            defer_to="prod",
+            expected_error_fragment=(
+                "plan does not support --defer-to when environment_mode = 'virtual'"
+            ),
+        )
+    ],
+    ids=["blocks defer-to in virtual mode plan"],
+)
+def test_given_virtual_mode_defer_to_when_enforcing_flag_support_then_raises_cli_user_error(
+    test_case: ModeGuardTestCase,
+) -> None:
+    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
+        project_config=ProjectConfig(
+            name="demo",
+            adapter="duckdb",
+            environment_mode=EnvironmentMode(test_case.environment_mode),
+        ),
+        local_config=LocalConfig(),
+    )
+
+    with pytest.raises(CliUserError) as exc_info:
+        enforce_no_defer_to_in_virtual_mode(
+            discovered_inputs=discovered_inputs,
+            command_name=test_case.command_name,
+            defer_to=test_case.defer_to,
+        )
+
+    assert test_case.expected_error_fragment is not None
+    assert test_case.expected_error_fragment in exc_info.value.message

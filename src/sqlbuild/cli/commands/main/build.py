@@ -20,6 +20,7 @@ from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
 )
+from sqlbuild.cli.commands.main.shared.helpers.mode import enforce_no_defer_to_in_virtual_mode
 from sqlbuild.cli.commands.main.shared.helpers.parsers import (
     parse_cursor_integer,
     parse_cursor_timestamp,
@@ -75,6 +76,11 @@ def run_build(
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
+    )
+    enforce_no_defer_to_in_virtual_mode(
+        discovered_inputs=discovered_inputs,
+        command_name="build",
+        defer_to=defer_to,
     )
     adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,

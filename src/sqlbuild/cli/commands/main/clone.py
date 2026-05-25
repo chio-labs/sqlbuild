@@ -19,6 +19,7 @@ from sqlbuild.cli.commands.main.shared.helpers.connection import (
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
 )
+from sqlbuild.cli.commands.main.shared.helpers.mode import enforce_direct_mode_command_support
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.clone import run_clone_pipeline
@@ -45,6 +46,7 @@ def run_clone(
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
+    enforce_direct_mode_command_support(discovered_inputs=discovered_inputs, command_name="clone")
     validate_clone_request(
         discovered_inputs=discovered_inputs,
         from_environment=from_environment,
