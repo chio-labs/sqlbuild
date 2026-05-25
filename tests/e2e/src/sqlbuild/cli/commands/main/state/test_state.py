@@ -16,6 +16,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.state._test_types import (
     StateLifecycleE2ETestCase,
     StateLifecycleErrorE2ETestCase,
     StateLocalOverrideE2ETestCase,
+    StateModeGuardE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.state.helpers import assert_state_cli_error
 
@@ -25,6 +26,7 @@ STATE_LIFECYCLE_ERROR_E2E_TEST_CASES: tuple[StateLifecycleErrorE2ETestCase, ...]
         project_toml="""
 name = "versioned_state_project"
 adapter = "duckdb"
+environment_mode = "virtual"
 default_environment = "dev"
 
 [connection]
@@ -49,6 +51,7 @@ database = "state.duckdb"
         project_toml="""
 name = "versioned_state_project"
 adapter = "duckdb"
+environment_mode = "virtual"
 default_environment = "dev"
 
 [connection]
@@ -71,6 +74,7 @@ database = "state.duckdb"
         project_toml="""
 name = "versioned_state_project"
 adapter = "duckdb"
+environment_mode = "virtual"
 default_environment = "dev"
 
 [connection]
@@ -96,10 +100,10 @@ database = "state.duckdb"
         StateLifecycleE2ETestCase(
             description="duckdb state lifecycle commands manage state tables",
             expected_exit_code=0,
-            expected_init_fragment="Initialized versioned state schema 'sqlbuild_state'.",
-            expected_migrate_fragment="Migrated versioned state schema 'sqlbuild_state'",
-            expected_rollback_fragment="Rolled back versioned state schema 'sqlbuild_state'",
-            expected_reset_fragment="Reset versioned state schema 'sqlbuild_state'.",
+            expected_init_fragment="Initialized virtual state schema 'sqlbuild_state'.",
+            expected_migrate_fragment="Migrated virtual state schema 'sqlbuild_state'",
+            expected_rollback_fragment="Rolled back virtual state schema 'sqlbuild_state'",
+            expected_reset_fragment="Reset virtual state schema 'sqlbuild_state'.",
             expected_schema_version=1,
         )
     ],
@@ -116,6 +120,7 @@ def test_given_duckdb_state_config_when_running_state_lifecycle_then_state_store
             "sqlbuild_project.toml": """
 name = "versioned_state_project"
 adapter = "duckdb"
+environment_mode = "virtual"
 default_environment = "dev"
 
 [connection]
@@ -224,6 +229,54 @@ def test_given_duckdb_state_config_when_running_blocked_state_command_then_cli_r
 @pytest.mark.parametrize(
     "test_case",
     [
+        StateModeGuardE2ETestCase(
+            description="state init blocks outside virtual mode",
+            project_toml="""
+name = "versioned_state_project"
+adapter = "duckdb"
+default_environment = "dev"
+
+[connection]
+database = "warehouse.duckdb"
+
+[environments.dev.state]
+backend = "duckdb"
+schema = "sqlbuild_state"
+
+[environments.dev.state.connection]
+database = "state.duckdb"
+""".lstrip(),
+            expected_exit_code=1,
+            expected_error_fragment="State commands require environment_mode = 'virtual'",
+        )
+    ],
+    ids=["state init blocks outside virtual mode"],
+)
+def test_given_direct_mode_project_when_running_state_init_then_cli_blocks_cleanly(
+    test_case: StateModeGuardE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="versioned_state_project",
+        repo_files={"sqlbuild_project.toml": test_case.project_toml},
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "state", "init"),
+        project_dir=project_dir,
+    )
+
+    assert_state_cli_error(
+        result=result,
+        expected_exit_code=test_case.expected_exit_code,
+        expected_error_fragment=test_case.expected_error_fragment,
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         StateLocalOverrideE2ETestCase(
             description="local state connection override controls CLI state database",
             expected_exit_code=0,
@@ -243,6 +296,7 @@ def test_given_local_state_override_when_running_state_init_then_cli_uses_local_
             "sqlbuild_project.toml": """
 name = "versioned_state_project"
 adapter = "duckdb"
+environment_mode = "virtual"
 default_environment = "dev"
 
 [connection]
@@ -281,7 +335,7 @@ database = "local-state.duckdb"
         StateExplicitRollbackE2ETestCase(
             description="rollback accepts explicit backup id",
             expected_exit_code=0,
-            expected_rollback_fragment="Rolled back versioned state schema 'sqlbuild_state'",
+            expected_rollback_fragment="Rolled back virtual state schema 'sqlbuild_state'",
             expected_schema_version=1,
         )
     ],
@@ -298,6 +352,7 @@ def test_given_duckdb_state_backup_when_rolling_back_explicit_backup_id_then_res
             "sqlbuild_project.toml": """
 name = "versioned_state_project"
 adapter = "duckdb"
+environment_mode = "virtual"
 default_environment = "dev"
 
 [connection]

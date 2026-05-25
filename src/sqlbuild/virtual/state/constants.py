@@ -1,0 +1,194 @@
+"""Virtual state store constants."""
+
+from __future__ import annotations
+
+from sqlbuild.virtual.state.types import StateColumnType
+
+CURRENT_STATE_SCHEMA_VERSION: int = 1
+
+STATE_VERSION_TABLE: str = "state_versions"
+MODEL_VERSION_TABLE: str = "model_versions"
+PHYSICAL_RELATION_TABLE: str = "physical_relations"
+VIRTUAL_ENVIRONMENT_TABLE: str = "virtual_environments"
+VIRTUAL_ENVIRONMENT_REF_TABLE: str = "virtual_environment_refs"
+LOCK_TABLE: str = "locks"
+STATE_MIGRATION_LOCK_KEY: str = "state_migration"
+STATE_OPERATION_TABLE: str = "state_operations"
+PLAN_RUN_TABLE: str = "plan_runs"
+VIRTUAL_ENVIRONMENT_REF_EVENT_TABLE: str = "virtual_environment_ref_events"
+RECONCILE_EVENT_TABLE: str = "reconcile_events"
+STATE_MIGRATION_EVENTS_TABLE: str = "state_migration_events"
+STATE_OPERATION_EVENT_TABLE: str = "state_operation_events"
+
+STATE_TABLES: tuple[str, ...] = (
+    STATE_VERSION_TABLE,
+    MODEL_VERSION_TABLE,
+    PHYSICAL_RELATION_TABLE,
+    VIRTUAL_ENVIRONMENT_TABLE,
+    VIRTUAL_ENVIRONMENT_REF_TABLE,
+    LOCK_TABLE,
+    STATE_OPERATION_TABLE,
+    PLAN_RUN_TABLE,
+    VIRTUAL_ENVIRONMENT_REF_EVENT_TABLE,
+    RECONCILE_EVENT_TABLE,
+    STATE_MIGRATION_EVENTS_TABLE,
+    STATE_OPERATION_EVENT_TABLE,
+)
+
+STATE_VERSION_COLUMNS: dict[str, StateColumnType] = {
+    "schema_version": StateColumnType.INTEGER,
+    "sqlbuild_version": StateColumnType.TEXT,
+    "updated_at": StateColumnType.TIMESTAMP,
+}
+
+STATE_MIGRATION_EVENT_COLUMNS: dict[str, StateColumnType] = {
+    "event_id": StateColumnType.TEXT,
+    "action": StateColumnType.TEXT,
+    "backup_id": StateColumnType.TEXT,
+    "status": StateColumnType.TEXT,
+    "message": StateColumnType.TEXT,
+    "created_at": StateColumnType.TIMESTAMP,
+}
+
+MODEL_VERSION_COLUMNS: dict[str, StateColumnType] = {
+    "model_name": StateColumnType.TEXT,
+    "version_hash": StateColumnType.TEXT,
+    "data_hash": StateColumnType.TEXT,
+    "metadata_hash": StateColumnType.TEXT,
+    "status": StateColumnType.TEXT,
+    "created_at": StateColumnType.TIMESTAMP,
+    "updated_at": StateColumnType.TIMESTAMP,
+}
+
+PHYSICAL_RELATION_COLUMNS: dict[str, StateColumnType] = {
+    "model_name": StateColumnType.TEXT,
+    "version_hash": StateColumnType.TEXT,
+    "database_name": StateColumnType.TEXT,
+    "schema_name": StateColumnType.TEXT,
+    "relation_name": StateColumnType.TEXT,
+    "relation_type": StateColumnType.TEXT,
+    "created_at": StateColumnType.TIMESTAMP,
+    "updated_at": StateColumnType.TIMESTAMP,
+}
+
+VIRTUAL_ENVIRONMENT_COLUMNS: dict[str, StateColumnType] = {
+    "virtual_environment_name": StateColumnType.TEXT,
+    "status": StateColumnType.TEXT,
+    "baseline_virtual_environment_name": StateColumnType.TEXT,
+    "created_at": StateColumnType.TIMESTAMP,
+    "updated_at": StateColumnType.TIMESTAMP,
+    "finalized_at": StateColumnType.TIMESTAMP,
+}
+
+VIRTUAL_ENVIRONMENT_REF_COLUMNS: dict[str, StateColumnType] = {
+    "virtual_environment_name": StateColumnType.TEXT,
+    "model_name": StateColumnType.TEXT,
+    "version_hash": StateColumnType.TEXT,
+    "updated_at": StateColumnType.TIMESTAMP,
+}
+
+LOCK_COLUMNS: dict[str, StateColumnType] = {
+    "lock_key": StateColumnType.TEXT,
+    "owner_id": StateColumnType.TEXT,
+    "expires_at": StateColumnType.TIMESTAMP,
+    "created_at": StateColumnType.TIMESTAMP,
+    "updated_at": StateColumnType.TIMESTAMP,
+}
+
+STATE_OPERATION_COLUMNS: dict[str, StateColumnType] = {
+    "operation_id": StateColumnType.TEXT,
+    "operation_type": StateColumnType.TEXT,
+    "status": StateColumnType.TEXT,
+    "virtual_environment_name": StateColumnType.TEXT,
+    "created_at": StateColumnType.TIMESTAMP,
+    "updated_at": StateColumnType.TIMESTAMP,
+}
+
+PLAN_RUN_COLUMNS: dict[str, StateColumnType] = {
+    "run_id": StateColumnType.TEXT,
+    "command": StateColumnType.TEXT,
+    "status": StateColumnType.TEXT,
+    "virtual_environment_name": StateColumnType.TEXT,
+    "started_at": StateColumnType.TIMESTAMP,
+    "completed_at": StateColumnType.TIMESTAMP,
+}
+
+VIRTUAL_ENVIRONMENT_REF_EVENT_COLUMNS: dict[str, StateColumnType] = {
+    "event_id": StateColumnType.TEXT,
+    "virtual_environment_name": StateColumnType.TEXT,
+    "model_name": StateColumnType.TEXT,
+    "previous_version_hash": StateColumnType.TEXT,
+    "new_version_hash": StateColumnType.TEXT,
+    "created_at": StateColumnType.TIMESTAMP,
+}
+
+RECONCILE_EVENT_COLUMNS: dict[str, StateColumnType] = {
+    "event_id": StateColumnType.TEXT,
+    "action": StateColumnType.TEXT,
+    "status": StateColumnType.TEXT,
+    "message": StateColumnType.TEXT,
+    "created_at": StateColumnType.TIMESTAMP,
+}
+
+STATE_OPERATION_EVENT_COLUMNS: dict[str, StateColumnType] = {
+    "event_id": StateColumnType.TEXT,
+    "operation_id": StateColumnType.TEXT,
+    "action": StateColumnType.TEXT,
+    "status": StateColumnType.TEXT,
+    "message": StateColumnType.TEXT,
+    "created_at": StateColumnType.TIMESTAMP,
+}
+
+STATE_TABLE_COLUMNS: dict[str, dict[str, StateColumnType]] = {
+    STATE_VERSION_TABLE: STATE_VERSION_COLUMNS,
+    MODEL_VERSION_TABLE: MODEL_VERSION_COLUMNS,
+    PHYSICAL_RELATION_TABLE: PHYSICAL_RELATION_COLUMNS,
+    VIRTUAL_ENVIRONMENT_TABLE: VIRTUAL_ENVIRONMENT_COLUMNS,
+    VIRTUAL_ENVIRONMENT_REF_TABLE: VIRTUAL_ENVIRONMENT_REF_COLUMNS,
+    LOCK_TABLE: LOCK_COLUMNS,
+    STATE_OPERATION_TABLE: STATE_OPERATION_COLUMNS,
+    PLAN_RUN_TABLE: PLAN_RUN_COLUMNS,
+    VIRTUAL_ENVIRONMENT_REF_EVENT_TABLE: VIRTUAL_ENVIRONMENT_REF_EVENT_COLUMNS,
+    RECONCILE_EVENT_TABLE: RECONCILE_EVENT_COLUMNS,
+    STATE_MIGRATION_EVENTS_TABLE: STATE_MIGRATION_EVENT_COLUMNS,
+    STATE_OPERATION_EVENT_TABLE: STATE_OPERATION_EVENT_COLUMNS,
+}
+
+STATE_TABLE_INDEXES: dict[str, dict[str, tuple[str, ...]]] = {
+    MODEL_VERSION_TABLE: {
+        "idx_sqb_model_versions_identity": ("model_name", "version_hash"),
+    },
+    PHYSICAL_RELATION_TABLE: {
+        "idx_sqb_physical_relations_identity": ("model_name", "version_hash"),
+    },
+    VIRTUAL_ENVIRONMENT_TABLE: {
+        "idx_sqb_virtual_environments_identity": ("virtual_environment_name",),
+    },
+    VIRTUAL_ENVIRONMENT_REF_TABLE: {
+        "idx_sqb_virtual_environment_refs_identity": (
+            "virtual_environment_name",
+            "model_name",
+        ),
+    },
+    LOCK_TABLE: {
+        "idx_sqb_locks_identity": ("lock_key",),
+    },
+    STATE_OPERATION_TABLE: {
+        "idx_sqb_state_operations_identity": ("operation_id",),
+    },
+    PLAN_RUN_TABLE: {
+        "idx_sqb_plan_runs_identity": ("run_id",),
+    },
+    VIRTUAL_ENVIRONMENT_REF_EVENT_TABLE: {
+        "idx_sqb_virtual_environment_ref_events_identity": ("event_id",),
+    },
+    RECONCILE_EVENT_TABLE: {
+        "idx_sqb_reconcile_events_identity": ("event_id",),
+    },
+    STATE_MIGRATION_EVENTS_TABLE: {
+        "idx_sqb_state_migration_events_identity": ("event_id",),
+    },
+    STATE_OPERATION_EVENT_TABLE: {
+        "idx_sqb_state_operation_events_identity": ("event_id",),
+    },
+}

@@ -28,6 +28,7 @@ def build_postgres_state_project_toml(
     return (
         f'name = "{project_name}"\n'
         'adapter = "postgres"\n'
+        'environment_mode = "virtual"\n'
         'default_environment = "dev"\n\n'
         "[connection]\n"
         f'host = "{config["host"]}"\n'
