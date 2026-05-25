@@ -20,6 +20,7 @@ from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
 )
+from sqlbuild.cli.commands.main.shared.helpers.mode import enforce_direct_mode_command_support
 from sqlbuild.cli.commands.main.shared.helpers.parsers import (
     parse_cursor_integer,
     parse_cursor_timestamp,
@@ -76,6 +77,7 @@ def run_run(
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
+    enforce_direct_mode_command_support(discovered_inputs=discovered_inputs, command_name="run")
     adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,

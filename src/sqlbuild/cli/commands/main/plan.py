@@ -17,6 +17,7 @@ from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
 )
 from sqlbuild.cli.commands.main.shared.helpers.json_output import format_plan_json
+from sqlbuild.cli.commands.main.shared.helpers.mode import enforce_no_defer_to_in_virtual_mode
 from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
 from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -49,6 +50,11 @@ def run_plan(
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
+    )
+    enforce_no_defer_to_in_virtual_mode(
+        discovered_inputs=discovered_inputs,
+        command_name="plan",
+        defer_to=defer_to,
     )
     adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,

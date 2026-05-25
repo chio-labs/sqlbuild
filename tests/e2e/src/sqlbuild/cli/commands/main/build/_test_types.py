@@ -457,6 +457,15 @@ class PlanCommandBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class VirtualModeGuardBuildE2ETestCase:
+    description: str
+    project_toml: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class RemoveColumnSemanticsBuildE2ETestCase:
     """Test case for remove-column mutation semantics."""
 
