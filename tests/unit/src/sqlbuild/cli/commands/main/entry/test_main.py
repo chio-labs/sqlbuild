@@ -174,6 +174,24 @@ SCENARIO_NO_SQL_VALIDATION_FLAG_ERROR_TEST_CASES: list[MainTestCase] = [
     ),
 ]
 
+STATE_DISPATCH_TEST_CASES: list[MainTestCase] = [
+    MainTestCase(
+        description="dispatches state rollback command through injected handler",
+        argv=["--project-dir", "/tmp/demo", "state", "rollback", "--backup-id", "b1"],
+        expected_exit_code=11,
+        expected_project_dir=Path("/tmp/demo"),
+        expected_state_command="rollback",
+        expected_state_backup_id="b1",
+    ),
+    MainTestCase(
+        description="dispatches state reset approval through injected handler",
+        argv=["state", "reset", "--auto-approve"],
+        expected_exit_code=12,
+        expected_state_command="reset",
+        expected_auto_approve=True,
+    ),
+]
+
 COMPILE_DISPATCH_TEST_CASES: list[MainTestCase] = [
     MainTestCase(
         description="passes no sql validation flag to compile handler",
@@ -1282,6 +1300,41 @@ def test_given_janitor_command_arguments_when_running_with_dependencies_then_it_
 
     assert exit_code == test_case.expected_exit_code
     assert received_args == [(None, test_case.expected_no_color, True, 0)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    STATE_DISPATCH_TEST_CASES,
+    ids=[case.description for case in STATE_DISPATCH_TEST_CASES],
+)
+def test_given_state_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[tuple[Path | None, str, str | None, bool]] = []
+
+    def run_state(
+        project_dir: Path | None,
+        state_command: str,
+        backup_id: str | None,
+        auto_approve: bool,
+    ) -> int:
+        received_args.append((project_dir, state_command, backup_id, auto_approve))
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_state=run_state),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [
+        (
+            test_case.expected_project_dir,
+            str(test_case.expected_state_command),
+            test_case.expected_state_backup_id,
+            test_case.expected_auto_approve,
+        )
+    ]
 
 
 @pytest.mark.parametrize(

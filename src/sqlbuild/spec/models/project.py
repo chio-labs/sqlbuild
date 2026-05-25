@@ -22,6 +22,26 @@ class LocalClonePolicy:
 
 
 @dataclass(frozen=True)
+class StateConfig:
+    """Versioned mode state store configuration."""
+
+    backend: str | None = None
+    schema: str | None = None
+    connection: dict[str, object] = field(default_factory=dict)
+    allow_reset: bool = False
+
+
+@dataclass(frozen=True)
+class LocalStateConfig:
+    """Local versioned mode state store overrides."""
+
+    backend: str | None = None
+    schema: str | None = None
+    connection: dict[str, object] = field(default_factory=dict)
+    allow_reset: bool | None = None
+
+
+@dataclass(frozen=True)
 class EnvironmentConfig:
     """One named environment configuration."""
 
@@ -31,6 +51,7 @@ class EnvironmentConfig:
     schema: str | None = None
     defer_sources_to: str | None = None
     clone: ClonePolicy = field(default_factory=ClonePolicy)
+    state: StateConfig = field(default_factory=StateConfig)
 
 
 @dataclass(frozen=True)
@@ -43,6 +64,7 @@ class LocalEnvironmentConfig:
     schema: str | None = None
     defer_sources_to: str | None = None
     clone: LocalClonePolicy = field(default_factory=LocalClonePolicy)
+    state: LocalStateConfig = field(default_factory=LocalStateConfig)
 
 
 @dataclass(frozen=True)

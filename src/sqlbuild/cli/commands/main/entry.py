@@ -43,6 +43,8 @@ from sqlbuild.shared.constants import (
     SCENARIO_CLI_MISSING_SUBCOMMAND,
 )
 from sqlbuild.shared.helpers.colors import supports_color
+from sqlbuild.versioned.state.exceptions import StateBackendError
+from sqlbuild.versioned.state.types import StateCommand
 
 
 def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
@@ -224,6 +226,19 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     janitor_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.JANITOR)
     janitor_parser.add_argument("--auto-approve", action="store_true", default=False)
     janitor_parser.add_argument("--retention-days", type=int, default=None)
+    state_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.STATE)
+    state_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
+    state_subparsers = state_parser.add_subparsers(dest="state_command")
+    state_subparsers.add_parser(StateCommand.INIT.value)
+    state_subparsers.add_parser(StateCommand.MIGRATE.value)
+    state_rollback_parser: argparse.ArgumentParser = state_subparsers.add_parser(
+        StateCommand.ROLLBACK.value
+    )
+    state_rollback_parser.add_argument("--backup-id", dest="state_backup_id", default=None)
+    state_reset_parser: argparse.ArgumentParser = state_subparsers.add_parser(
+        StateCommand.RESET.value
+    )
+    state_reset_parser.add_argument("--auto-approve", action="store_true", default=False)
     subparsers.add_parser(CliCommand.INIT)
     playground_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PLAYGROUND)
     playground_parser.add_argument(
@@ -308,6 +323,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.scenario import run_scenario
     from sqlbuild.cli.commands.main.seed import run_seed
     from sqlbuild.cli.commands.main.skills import run_skills_update
+    from sqlbuild.cli.commands.main.state import run_state
     from sqlbuild.cli.commands.main.test import run_test
 
     handlers: CliEntrypointHandlers = CliEntrypointHandlers(
@@ -356,6 +372,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_debug=run_debug,
         run_lineage=run_lineage,
         run_janitor=run_janitor,
+        run_state=run_state,
         run_playground=run_playground,
         run_skills_update=run_skills_update,
         run_scenario=run_scenario,
@@ -638,6 +655,15 @@ def _main_with_dependencies(
                 args.auto_approve,
                 args.retention_days,
             )
+        if args.command == CliCommand.STATE:
+            if args.state_command is None:
+                raise CliUserError("state requires a subcommand such as 'init'", code="C901")
+            return handlers.run_state(
+                project_dir,
+                args.state_command,
+                args.state_backup_id,
+                args.auto_approve,
+            )
         if args.command == CliCommand.PLAYGROUND:
             return handlers.run_playground(
                 project_dir, args.playground_path, args.playground_template
@@ -719,7 +745,7 @@ def _main_with_dependencies(
             file=sys.stderr,
         )
         return 1
-    except (DiscoveryError, ValueError) as error:
+    except (DiscoveryError, StateBackendError, ValueError) as error:
         logging.getLogger("sqlbuild.cli").exception("command failed")
         print(
             format_expected_error(error, fallback_code="E001", use_color=use_color),

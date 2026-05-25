@@ -27,11 +27,13 @@ from sqlbuild.spec.models.project import (
     LocalClonePolicy,
     LocalConfig,
     LocalEnvironmentConfig,
+    LocalStateConfig,
     ProjectConfig,
     ScenarioConfig,
     ScenarioSnapshotLimitsConfig,
     SettingsConfig,
     SnapshotsConfig,
+    StateConfig,
 )
 
 _SNAPSHOT_FULL_REFRESH_POLICIES: frozenset[str] = frozenset(
@@ -427,6 +429,11 @@ def _load_environments(*, payload: object, file_path: Path) -> dict[str, Environ
             label=f"environments.{env_name}.clone",
             file_path=file_path,
         )
+        state_mapping: dict[str, object] = _coerce_mapping(
+            payload=env_mapping.get("state"),
+            label=f"environments.{env_name}.state",
+            file_path=file_path,
+        )
         environments[env_name] = EnvironmentConfig(
             connection=_optional_mapping(payload=env_mapping, key="connection"),
             vars=_load_string_mapping(payload=env_mapping.get("vars"), file_path=file_path),
@@ -442,6 +449,16 @@ def _load_environments(*, payload: object, file_path: Path) -> dict[str, Environ
                 allow_as_target=_optional_bool(
                     mapping=clone_mapping,
                     key="allow_as_target",
+                    default=False,
+                ),
+            ),
+            state=StateConfig(
+                backend=_optional_str(payload=state_mapping, key="backend"),
+                schema=_optional_str(payload=state_mapping, key="schema"),
+                connection=_optional_mapping(payload=state_mapping, key="connection"),
+                allow_reset=_optional_bool(
+                    mapping=state_mapping,
+                    key="allow_reset",
                     default=False,
                 ),
             ),
@@ -469,6 +486,11 @@ def _load_local_environments(
             label=f"environments.{env_name}.clone",
             file_path=file_path,
         )
+        state_mapping: dict[str, object] = _coerce_mapping(
+            payload=env_mapping.get("state"),
+            label=f"environments.{env_name}.state",
+            file_path=file_path,
+        )
         environments[env_name] = LocalEnvironmentConfig(
             connection=_optional_mapping(payload=env_mapping, key="connection"),
             vars=_load_string_mapping(payload=env_mapping.get("vars"), file_path=file_path),
@@ -483,6 +505,15 @@ def _load_local_environments(
                 allow_as_target=_optional_nullable_bool(
                     mapping=clone_mapping,
                     key="allow_as_target",
+                ),
+            ),
+            state=LocalStateConfig(
+                backend=_optional_str(payload=state_mapping, key="backend"),
+                schema=_optional_str(payload=state_mapping, key="schema"),
+                connection=_optional_mapping(payload=state_mapping, key="connection"),
+                allow_reset=_optional_nullable_bool(
+                    mapping=state_mapping,
+                    key="allow_reset",
                 ),
             ),
         )
