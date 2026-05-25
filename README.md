@@ -145,14 +145,19 @@ Scenario files live under `tests/scenarios/**/*.sql`. Run them in the target war
 
 ```bash
 sqb scenario test
-sqb scenario test revenue__customer_refund --retain
+sqb scenario test --select revenue__customer_refund --retain
+sqb scenario test --select tests/scenarios/revenue --exclude revenue__slow_refund
 ```
+
+Scenario selectors can be passed with repeated `--select` flags or with `--select-file`.
+Positional selectors are still accepted, but `--select` is the preferred form.
 
 Capture local replay snapshots as JSONL under `tests/_scenario_snapshots/<scenario_name>/`:
 
 ```bash
-sqb scenario capture revenue__customer_refund
-sqb scenario test revenue__customer_refund --local
+sqb scenario capture --select revenue__customer_refund
+sqb scenario capture --select-file changed_scenarios.txt --exclude revenue__slow_refund
+sqb scenario test --select revenue__customer_refund --local
 sqb scenario test --local --sync-snapshots
 sqb scenario test --local --refresh
 ```
@@ -166,11 +171,15 @@ from sqlbuild.loaders import loader
 from sqlbuild.executor.load.models import LoaderContext
 
 @loader
-def raw_orders(ctx: LoaderContext):
+def raw_orders(ctx: LoaderContext) -> list[dict[str, object]]:
     if ctx.current_cursor_value is None:
         return fetch_all_orders()
     return fetch_orders_since(ctx.current_cursor_value)
 ```
+
+Python loaders should return rows for SQLBuild to write, such as a list of dictionaries
+or another supported tabular row object. Self-managed loaders that write their own data
+can return `None`.
 
 Bound to a source in `sources/*.yml`:
 

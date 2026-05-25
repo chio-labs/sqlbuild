@@ -625,7 +625,10 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
                 "scenario",
                 "test",
                 "order_totals_pass",
+                "--select",
                 "tests/scenarios/nested",
+                "--exclude",
+                "tests/scenarios/slow",
                 "--local",
                 "--strict",
                 "--sync-snapshots",
@@ -648,6 +651,7 @@ def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispa
             bool,
             bool,
             tuple[str, ...],
+            tuple[str, ...],
             bool,
             bool,
             bool,
@@ -668,6 +672,7 @@ def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispa
         no_sql_validation: bool,
         no_color: bool,
         selectors: tuple[str, ...],
+        exclude: tuple[str, ...],
         retain: bool,
         local: bool,
         strict: bool,
@@ -687,6 +692,7 @@ def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispa
                 no_sql_validation,
                 no_color,
                 selectors,
+                exclude,
                 retain,
                 local,
                 strict,
@@ -715,6 +721,7 @@ def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispa
             False,
             False,
             test_case.expected_scenario_selectors,
+            ("tests/scenarios/slow",),
             False,
             True,
             True,
@@ -880,7 +887,10 @@ def test_given_scenario_command_when_no_sql_validation_flag_passed_then_parser_r
                 "scenario",
                 "capture",
                 "order_totals_pass",
+                "--select",
                 "tests/scenarios/nested",
+                "--exclude",
+                "tests/scenarios/slow",
                 "--retain",
                 "--max-snapshot-total-rows",
                 "9",
@@ -900,6 +910,7 @@ def test_given_scenario_capture_arguments_when_running_with_dependencies_then_di
             bool,
             bool,
             tuple[str, ...],
+            tuple[str, ...],
             bool,
             bool,
             int | None,
@@ -914,6 +925,7 @@ def test_given_scenario_capture_arguments_when_running_with_dependencies_then_di
         no_sql_validation: bool,
         no_color: bool,
         selectors: tuple[str, ...],
+        exclude: tuple[str, ...],
         retain: bool,
         force: bool,
         max_snapshot_rows: int | None,
@@ -927,6 +939,7 @@ def test_given_scenario_capture_arguments_when_running_with_dependencies_then_di
                 no_sql_validation,
                 no_color,
                 selectors,
+                exclude,
                 retain,
                 force,
                 max_snapshot_rows,
@@ -949,6 +962,7 @@ def test_given_scenario_capture_arguments_when_running_with_dependencies_then_di
             False,
             False,
             test_case.expected_scenario_selectors,
+            ("tests/scenarios/slow",),
             True,
             False,
             None,
@@ -1886,6 +1900,71 @@ def test_given_select_file_when_running_then_dispatches_file_selectors(
 
     assert exit_code == test_case.expected_exit_code
     assert received_selects == [test_case.expected_select]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="passes scenario selectors from select file to capture handler",
+            argv=[
+                "scenario",
+                "capture",
+                "--select",
+                "orders",
+                "--select-file",
+                "scenario_selectors.txt",
+            ],
+            expected_exit_code=4,
+            expected_scenario_selectors=("orders", "customers", "payments"),
+        )
+    ],
+    ids=["passes scenario selectors from select file to capture handler"],
+)
+def test_given_scenario_select_file_when_running_then_dispatches_file_selectors(
+    test_case: MainTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "scenario_selectors.txt").write_text(
+        "customers\n\n# ignored\npayments\n", encoding="utf-8"
+    )
+    received_selects: list[tuple[str, ...]] = []
+
+    def run_scenario_capture(
+        project_dir: Path | None,
+        no_sql_validation: bool,
+        no_color: bool,
+        selectors: tuple[str, ...],
+        exclude: tuple[str, ...],
+        retain: bool,
+        force: bool,
+        max_snapshot_rows: int | None,
+        max_snapshot_total_rows: int | None,
+        max_snapshot_bytes: int | None,
+        max_snapshot_total_bytes: int | None,
+    ) -> int:
+        del (
+            project_dir,
+            no_sql_validation,
+            no_color,
+            exclude,
+            retain,
+            force,
+            max_snapshot_rows,
+            max_snapshot_total_rows,
+            max_snapshot_bytes,
+            max_snapshot_total_bytes,
+        )
+        received_selects.append(selectors)
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=[*test_case.argv[:5], str(tmp_path / test_case.argv[5])],
+        handlers=build_handlers(run_scenario_capture=run_scenario_capture),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_selects == [test_case.expected_scenario_selectors]
 
 
 @pytest.mark.parametrize(
