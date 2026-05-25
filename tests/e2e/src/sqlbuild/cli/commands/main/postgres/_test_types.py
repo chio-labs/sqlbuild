@@ -107,3 +107,52 @@ class PostgresPartialSourceTypeEnforcementE2ETestCase:
     expected_rows: tuple[tuple[object, ...], ...]
     command: tuple[str, ...] = ("--no-color", "build", "--select", "stg_orders")
     expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class PostgresStateLifecycleE2ETestCase:
+    description: str
+    expected_exit_code: int
+    expected_schema_version: int
+    expected_init_fragment: str = "Initialized versioned state schema"
+    expected_migrate_fragment: str = "Migrated versioned state schema"
+    expected_rollback_fragment: str = "Rolled back versioned state schema"
+    expected_reset_fragment: str = "Reset versioned state schema"
+
+
+@dataclass(frozen=True)
+class PostgresStateLifecycleErrorE2ETestCase:
+    description: str
+    allow_reset: bool
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class PostgresStateExplicitRollbackE2ETestCase:
+    description: str
+    expected_exit_code: int
+    expected_schema_version: int
+    expected_rollback_fragment: str = "Rolled back versioned state schema"
+
+
+@dataclass(frozen=True)
+class PostgresStateLocalOverrideE2ETestCase:
+    description: str
+    expected_exit_code: int
+    expected_schema_version: int
+
+
+@dataclass(frozen=True)
+class PostgresStateConnectionErrorE2ETestCase:
+    description: str
+    expected_exit_code: int
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class PostgresStateResetInvalidE2ETestCase:
+    description: str
+    expected_exit_code: int
+    expected_error_fragment: str
