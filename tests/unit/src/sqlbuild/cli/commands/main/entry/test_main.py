@@ -1577,7 +1577,9 @@ BUILD_EXECUTION_FLAG_TEST_CASES: list[MainTestCase] = [
 def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[bool, bool, bool, bool | None, bool, bool, bool, bool]] = []
+    received_args: list[
+        tuple[bool, bool, bool, str | None, bool | None, bool, bool, bool, bool]
+    ] = []
 
     def run_build(
         project_dir: Path | None,
@@ -1588,6 +1590,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         no_color: bool,
         fail_fast: bool,
         full_refresh: bool,
+        virtual_env: str | None,
         load_sources: bool | None,
         reload_sources: bool,
         allow_snapshot_full_refresh: bool,
@@ -1618,6 +1621,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
                 no_color,
                 fail_fast,
                 full_refresh,
+                virtual_env,
                 load_sources,
                 reload_sources,
                 allow_snapshot_full_refresh,
@@ -1638,6 +1642,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
             test_case.expected_no_color,
             False,
             test_case.expected_full_refresh,
+            test_case.expected_virtual_env,
             test_case.expected_load_sources,
             test_case.expected_reload,
             test_case.expected_allow_snapshot_full_refresh,
@@ -1775,6 +1780,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
             object,
             bool,
             bool,
+            str | None,
             bool | None,
             bool,
             tuple[str, ...],
@@ -1792,6 +1798,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
         cursor_overrides: object,
         json_output: bool,
         full_refresh: bool,
+        virtual_env: str | None,
         load_sources: bool | None,
         no_color: bool,
         select: tuple[str, ...],
@@ -1808,6 +1815,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
                 cursor_overrides,
                 json_output,
                 full_refresh,
+                virtual_env,
                 load_sources,
                 no_color,
                 select,
@@ -1828,6 +1836,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
     assert received_args[0][5:] == (
         False,
         False,
+        None,
         None,
         test_case.expected_no_color,
         test_case.expected_select,
@@ -1862,6 +1871,7 @@ def test_given_plan_load_flag_when_running_then_dispatches_expected_argument(
         cursor_overrides: object,
         json_output: bool,
         full_refresh: bool,
+        virtual_env: str | None,
         load_sources: bool | None,
         no_color: bool,
         select: tuple[str, ...],
@@ -1877,6 +1887,7 @@ def test_given_plan_load_flag_when_running_then_dispatches_expected_argument(
             cursor_overrides,
             json_output,
             full_refresh,
+            virtual_env,
             no_color,
             select,
             exclude,
@@ -1922,6 +1933,7 @@ def test_given_select_file_when_running_then_dispatches_file_selectors(
         cursor_overrides: object,
         json_output: bool,
         full_refresh: bool,
+        virtual_env: str | None,
         load_sources: bool | None,
         no_color: bool,
         select: tuple[str, ...],
@@ -1937,6 +1949,7 @@ def test_given_select_file_when_running_then_dispatches_file_selectors(
             cursor_overrides,
             json_output,
             full_refresh,
+            virtual_env,
             load_sources,
             no_color,
             exclude,

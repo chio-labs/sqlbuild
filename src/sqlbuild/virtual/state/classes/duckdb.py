@@ -382,20 +382,41 @@ class DuckDbStateBackend(StateBackend):
         virtual_environment_name: str,
         refs: tuple[VirtualEnvironmentRefRecord, ...],
     ) -> None:
+        temp_table_name: str = "__sqlbuild_replace_virtual_environment_refs"
         connection.execute("BEGIN")
         try:
+            connection.execute(f"DROP TABLE IF EXISTS {temp_table_name}")
             connection.execute(
-                f"DELETE FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_REF_TABLE)} "
-                "WHERE virtual_environment_name = ?",
-                [virtual_environment_name],
+                f"CREATE TEMP TABLE {temp_table_name} ("
+                "virtual_environment_name TEXT NOT NULL, "
+                "model_name TEXT NOT NULL, "
+                "version_hash TEXT NOT NULL, "
+                "UNIQUE (virtual_environment_name, model_name))"
             )
             for ref in refs:
                 connection.execute(
-                    f"INSERT INTO {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_REF_TABLE)} "
-                    "(virtual_environment_name, model_name, version_hash, updated_at) "
-                    "VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+                    f"INSERT INTO {temp_table_name} "
+                    "(virtual_environment_name, model_name, version_hash) "
+                    "VALUES (?, ?, ?)",
                     [ref.virtual_environment_name, ref.model_name, ref.version_hash],
                 )
+            connection.execute(
+                f"DELETE FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_REF_TABLE)} "
+                "WHERE virtual_environment_name = ? "
+                f"AND model_name NOT IN (SELECT model_name FROM {temp_table_name})",
+                [virtual_environment_name],
+            )
+            connection.execute(
+                f"INSERT INTO {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_REF_TABLE)} "
+                "(virtual_environment_name, model_name, version_hash, updated_at) "
+                "SELECT virtual_environment_name, model_name, version_hash, now() "
+                f"FROM {temp_table_name} "
+                "ON CONFLICT (virtual_environment_name, model_name) "
+                "DO UPDATE SET "
+                "version_hash = excluded.version_hash, "
+                "updated_at = now()"
+            )
+            connection.execute(f"DROP TABLE IF EXISTS {temp_table_name}")
             connection.execute("COMMIT")
         except BaseException:
             connection.execute("ROLLBACK")
