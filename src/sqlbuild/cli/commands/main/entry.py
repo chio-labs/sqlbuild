@@ -355,6 +355,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.lineage import run_lineage
     from sqlbuild.cli.commands.main.load import run_load
     from sqlbuild.cli.commands.main.plan import run_plan
+    from sqlbuild.cli.commands.main.init import run_init
     from sqlbuild.cli.commands.main.playground import run_playground
     from sqlbuild.cli.commands.main.promote import run_promote
     from sqlbuild.cli.commands.main.query import run_query
@@ -415,6 +416,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_lineage=run_lineage,
         run_janitor=run_janitor,
         run_state=run_state,
+        run_init=run_init,
         run_playground=run_playground,
         run_skills_update=run_skills_update,
         run_scenario=run_scenario,
@@ -745,6 +747,8 @@ def _main_with_dependencies(
                 args.state_checkpoint_id,
                 args.virtual_env,
             )
+        if args.command == CliCommand.INIT:
+            return handlers.run_init(project_dir)
         if args.command == CliCommand.PLAYGROUND:
             return handlers.run_playground(
                 project_dir, args.playground_path, args.playground_template

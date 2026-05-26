@@ -112,7 +112,7 @@ def _build_tag_index(project: CompiledProject) -> dict[str, frozenset[CompiledOb
 
 def _build_path_index(project: CompiledProject) -> dict[CompiledObjectKey, str]:
     return {
-        model.key: str(model.relative_path.parent).removeprefix("models/")
+        model.key: str(model.relative_path.parent).replace("\\", "/").removeprefix("models/")
         for model in project.models
     }
 
@@ -200,8 +200,8 @@ def _resolve_selector_token(
                 code="S008",
             )
         return _expand_keys(keys, upstream_requested, downstream_requested, upstream, downstream)
-    if core.startswith("path:") or "/" in core:
-        path_value: str = core.removeprefix("path:").strip("/")
+    if core.startswith("path:") or "/" in core or "\\" in core:
+        path_value: str = core.removeprefix("path:").replace("\\", "/").strip("/")
         keys = frozenset(
             key
             for key, folder in path_index.items()
