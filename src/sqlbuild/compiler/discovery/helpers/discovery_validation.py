@@ -444,7 +444,8 @@ def _validate_path_defaults_match_models(
     if not path_defaults:
         return
     model_paths: tuple[str, ...] = tuple(
-        str(model_file.relative_path).replace("\\", "/").removeprefix("models/") for model_file in model_files
+        str(model_file.relative_path).replace("\\", "/").removeprefix("models/")
+        for model_file in model_files
     )
     model_folders: tuple[str, ...] = tuple(
         sorted(

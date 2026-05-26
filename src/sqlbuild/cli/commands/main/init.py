@@ -8,7 +8,10 @@ from sqlbuild.cli.commands.main.helpers.skills.update import update_sqlbuild_ski
 from sqlbuild.shared.helpers.colors import green_bold, supports_color
 
 
-_PROJECT_TOML_TEMPLATE: str = """\
+def run_init(project_dir: Path | None) -> int:
+    """Create a minimal SQLBuild project in the current directory."""
+
+    project_toml_template: str = """\
 name = "{name}"
 adapter = "duckdb"
 default_environment = "dev"
@@ -28,20 +31,19 @@ schema = "prod"
 [environments.dev]
 schema = "dev"
 """
-
-_DIRECTORIES: tuple[str, ...] = (
-    "models/staging",
-    "models/marts",
-    "sources",
-    "seeds",
-    "tests/unit",
-    "macros",
-    "audits",
-)
-
-
-def run_init(project_dir: Path | None) -> int:
-    """Create a minimal SQLBuild project in the current directory."""
+    directories: tuple[str, ...] = (
+        "models/staging",
+        "models/marts",
+        "sources",
+        "seeds",
+        "loaders",
+        "tests/unit",
+        "tests/scenarios",
+        "functions/sql",
+        "functions/python",
+        "macros",
+        "audits",
+    )
 
     base_dir: Path = project_dir if project_dir is not None else Path.cwd()
     project_file: Path = base_dir / "sqlbuild_project.toml"
@@ -56,17 +58,21 @@ def run_init(project_dir: Path | None) -> int:
 
     project_name: str = base_dir.name.replace("-", "_").replace(" ", "_").lower()
 
-    for directory in _DIRECTORIES:
+    for directory in directories:
         (base_dir / directory).mkdir(parents=True, exist_ok=True)
 
-    project_file.write_text(_PROJECT_TOML_TEMPLATE.format(name=project_name))
+    project_file.write_text(project_toml_template.format(name=project_name))
 
     gitkeep_dirs: tuple[str, ...] = (
         "models/staging",
         "models/marts",
         "sources",
         "seeds",
+        "loaders",
         "tests/unit",
+        "tests/scenarios",
+        "functions/sql",
+        "functions/python",
         "macros",
         "audits",
     )
@@ -84,11 +90,12 @@ def run_init(project_dir: Path | None) -> int:
     print(heading)
     print()
     print(f"  Project: {project_name}")
-    print(f"  Config:  sqlbuild_project.toml")
+    print("  Config:  sqlbuild_project.toml")
     print()
     print("Next steps:")
     print("  1. Add sources to sources/")
     print("  2. Add models to models/staging/ and models/marts/")
-    print("  3. sqb compile")
-    print("  4. sqb build")
+    print("  3. Add tests to tests/unit/ or tests/scenarios/")
+    print("  4. sqb compile")
+    print("  5. sqb build")
     return 0
