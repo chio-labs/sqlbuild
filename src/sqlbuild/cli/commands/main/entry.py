@@ -186,8 +186,18 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     diff_parser.add_argument("--verbose", "-v", action="store_true", default=False)
     diff_parser.add_argument("--max-column-examples", type=int, default=None)
     diff_parser.add_argument("--max-row-only-examples", type=int, default=None)
+    diff_parser.add_argument("--allow-partial-diff", action="store_true", default=False)
     add_select_args(diff_parser)
     add_vars_args(diff_parser)
+    promote_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PROMOTE)
+    promote_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    promote_parser.add_argument("--from", dest="from_environment", required=True)
+    promote_parser.add_argument("--to", dest="to_environment", required=True)
+    promote_parser.add_argument("--allow-partial-promotion", action="store_true", default=False)
+    promote_parser.add_argument("--include-stale-upstreams", action="store_true", default=False)
+    promote_parser.add_argument("--verbose", "-v", action="store_true", default=False)
+    add_select_args(promote_parser)
+    add_vars_args(promote_parser)
     debug_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DEBUG)
     debug_parser.add_argument("--json", action="store_true", default=False)
     debug_parser.add_argument("--no-connection", action="store_true", default=False)
@@ -324,6 +334,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.load import run_load
     from sqlbuild.cli.commands.main.plan import run_plan
     from sqlbuild.cli.commands.main.playground import run_playground
+    from sqlbuild.cli.commands.main.promote import run_promote
     from sqlbuild.cli.commands.main.query import run_query
     from sqlbuild.cli.commands.main.run import run_run
     from sqlbuild.cli.commands.main.scenario import run_scenario
@@ -374,6 +385,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_load=run_load,
         run_clone=run_clone,
         run_diff=run_diff,
+        run_promote=run_promote,
         run_query=run_query,
         run_debug=run_debug,
         run_lineage=run_lineage,
@@ -642,6 +654,23 @@ def _main_with_dependencies(
                 args.max_row_only_examples,
                 select,
                 tuple(args.exclude),
+                args.verbose,
+                args.vars,
+                args.allow_partial_diff,
+            )
+        if args.command == CliCommand.PROMOTE:
+            if args.from_environment is None or args.to_environment is None:
+                raise CliUserError("promote requires --from and --to", code="C244")
+            return handlers.run_promote(
+                project_dir,
+                args.no_color,
+                args.no_sql_validation,
+                args.from_environment,
+                args.to_environment,
+                select,
+                tuple(args.exclude),
+                args.allow_partial_promotion,
+                args.include_stale_upstreams,
                 args.verbose,
                 args.vars,
             )

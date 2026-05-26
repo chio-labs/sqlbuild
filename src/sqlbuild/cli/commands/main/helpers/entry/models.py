@@ -47,6 +47,7 @@ class CliNamespace:
     reload: bool = False
     allow_snapshot_full_refresh: bool = False
     allow_snapshot_schema_change: bool = False
+    allow_partial_promotion: bool = False
     concurrency: int | None = None
     verbose: bool = False
     debug: bool = False
@@ -69,6 +70,7 @@ class CliNamespace:
     no_connection: bool = False
     full: bool = False
     schema_only: bool = False
+    allow_partial_diff: bool = False
     playground_path: str = "sqlbuild-playground"
     playground_template: str = "waffle_shop"
     scenario_command: str | None = None
@@ -276,6 +278,23 @@ class CliEntrypointHandlers:
             int | None,
             tuple[str, ...],
             tuple[str, ...],
+            bool,
+            dict[str, object],
+            bool,
+        ],
+        int,
+    ]
+    run_promote: Callable[
+        [
+            Path | None,
+            bool,
+            bool,
+            str,
+            str,
+            tuple[str, ...],
+            tuple[str, ...],
+            bool,
+            bool,
             bool,
             dict[str, object],
         ],

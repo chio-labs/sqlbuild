@@ -10,13 +10,15 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.diff._test_types import (
     DiffCommandE2ETestCase,
     DiffKeyFailureE2ETestCase,
+    VirtualDiffE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.diff.helpers import (
     build_both_environments,
     execute_duckdb,
     prepare_diff_project,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import build_virtual_plan_repo_files
+from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_inline_project, run_sqb
 
 DIFF_COMMAND_E2E_TEST_CASES: list[DiffCommandE2ETestCase] = [
     DiffCommandE2ETestCase(
@@ -313,6 +315,56 @@ DIFF_KEY_FAILURE_E2E_TEST_CASES: list[DiffKeyFailureE2ETestCase] = [
     ),
 ]
 
+VIRTUAL_DIFF_E2E_TEST_CASES: list[VirtualDiffE2ETestCase] = [
+    VirtualDiffE2ETestCase(
+        description="whole VDE diff blocks when one side is working",
+        command=("--no-color", "diff", "dev:pr", "--schema-only"),
+        expected_exit_code=1,
+        expected_stderr_fragments=(
+            "whole-VDE virtual diff requires finalized VDEs",
+            "--allow-partial-diff",
+        ),
+    ),
+    VirtualDiffE2ETestCase(
+        description="allow partial diff compares working VDEs",
+        command=(
+            "--no-color",
+            "diff",
+            "dev:pr",
+            "--schema-only",
+            "--allow-partial-diff",
+        ),
+        expected_exit_code=0,
+        expected_stdout_fragments=(
+            "Virtual diff",
+            "working VDEs            yes (partial allowed)",
+            "selected models         3",
+            "compared models         2",
+            "unchanged refs skipped  1",
+            "SQLBuild Diff Summary",
+        ),
+    ),
+    VirtualDiffE2ETestCase(
+        description="unchanged virtual refs are skipped",
+        command=(
+            "--no-color",
+            "diff",
+            "dev:pr",
+            "--schema-only",
+            "--allow-partial-diff",
+            "--select",
+            "dim_customers",
+        ),
+        expected_exit_code=0,
+        expected_stdout_fragments=(
+            "selected models         1",
+            "compared models         0",
+            "unchanged refs skipped  1",
+            "No VDE ref differences in selected scope.",
+        ),
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -375,3 +427,50 @@ def test_given_invalid_dev_keys_when_running_diff_then_it_fails_clearly(
 
     assert result.returncode == 1, result.stdout + result.stderr
     assert test_case.expected_stderr_fragment in result.stderr, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    VIRTUAL_DIFF_E2E_TEST_CASES,
+    ids=[case.description for case in VIRTUAL_DIFF_E2E_TEST_CASES],
+)
+def test_given_virtual_diff_with_working_vde_when_running_then_it_respects_partial_guard(
+    test_case: VirtualDiffE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_diff_guard",
+        repo_files=build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id"),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    default_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert default_build_result.returncode == 0, default_build_result.stderr
+    (project_dir / "models" / "stg_orders.sql").write_text(
+        "MODEL ();\n\nSELECT 2 AS id\n",
+        encoding="utf-8",
+    )
+    branch_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--virtual-env", "pr"),
+        project_dir=project_dir,
+    )
+    assert branch_build_result.returncode == 0, branch_build_result.stderr
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    fragment: str
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout, result.stdout + result.stderr
+    for fragment in test_case.expected_stderr_fragments:
+        assert fragment in result.stderr, result.stdout + result.stderr

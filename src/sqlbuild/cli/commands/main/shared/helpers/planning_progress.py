@@ -37,6 +37,7 @@ def _is_planning_completion_message(message: str) -> bool:
             "Generated ",
             "Inspected ",
             "Loaded ",
+            "Refreshed ",
             "Resolved ",
         )
     )
