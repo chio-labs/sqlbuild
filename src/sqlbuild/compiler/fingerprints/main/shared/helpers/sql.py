@@ -8,6 +8,7 @@ from collections.abc import Callable
 from sqlbuild.adapter.shared.types import FrameworkType
 from sqlbuild.compiler.fingerprints.constants import (
     COLUMN_AST_HASH,
+    COLUMN_METADATA_JSON_B64,
     COLUMN_MODEL_NAME,
     COLUMN_QUERY_HASH,
     COLUMN_QUERY_SQL_B64,
@@ -67,6 +68,7 @@ def build_create_table_sql(
         f"{COLUMN_AST_HASH} {string_type}, "
         f"{COLUMN_SCHEMA_FINGERPRINT} {string_type} NOT NULL, "
         f"{COLUMN_QUERY_SQL_B64} {string_type} NOT NULL, "
+        f"{COLUMN_METADATA_JSON_B64} {string_type} NOT NULL, "
         f"{COLUMN_TIMESTAMP} {timestamp_type} NOT NULL"
         f")"
     )
@@ -93,6 +95,7 @@ def build_read_all_sql(
         f"{COLUMN_AST_HASH}, "
         f"{COLUMN_SCHEMA_FINGERPRINT}, "
         f"{COLUMN_QUERY_SQL_B64}, "
+        f"{COLUMN_METADATA_JSON_B64}, "
         f"{COLUMN_TIMESTAMP} "
         f"FROM {qualified_name}"
     )
@@ -111,6 +114,7 @@ def build_insert_sql(
     ast_hash: str | None,
     schema_fingerprint: str,
     query_sql: str,
+    metadata_json: str,
     ts: str,
     render_qualified_name: Callable[..., str | None],
 ) -> str:
@@ -122,6 +126,7 @@ def build_insert_sql(
         render_qualified_name=render_qualified_name,
     )
     encoded_query_sql: str = _encode_query_sql_storage(query_sql).replace("'", "''")
+    encoded_metadata_json: str = _encode_query_sql_storage(metadata_json).replace("'", "''")
     ast_hash_literal: str = f"'{ast_hash}'" if ast_hash is not None else "NULL"
     target_database_literal: str = _optional_string_literal(target_database)
     target_schema_literal: str = _optional_string_literal(target_schema)
@@ -137,6 +142,7 @@ def build_insert_sql(
         f"{COLUMN_AST_HASH}, "
         f"{COLUMN_SCHEMA_FINGERPRINT}, "
         f"{COLUMN_QUERY_SQL_B64}, "
+        f"{COLUMN_METADATA_JSON_B64}, "
         f"{COLUMN_TIMESTAMP}"
         f") VALUES ("
         f"'{model_name}', "
@@ -148,6 +154,7 @@ def build_insert_sql(
         f"{ast_hash_literal}, "
         f"'{schema_fingerprint}', "
         f"'{encoded_query_sql}', "
+        f"'{encoded_metadata_json}', "
         f"'{ts}'"
         f")"
     )

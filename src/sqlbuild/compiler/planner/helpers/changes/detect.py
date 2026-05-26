@@ -21,6 +21,7 @@ from sqlbuild.compiler.planner.helpers.changes.policy import (
 )
 from sqlbuild.compiler.planner.helpers.changes.query import detect_query_change
 from sqlbuild.compiler.planner.helpers.changes.schema import detect_schema_changes
+from sqlbuild.compiler.planner.main.semantic_metadata import build_semantic_model_metadata_json
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     ChangeDetectionResult,
@@ -65,6 +66,11 @@ def detect_model_changes(
         )
 
     query_changed: bool = False
+    metadata_json: str = build_semantic_model_metadata_json(
+        model_name=model.name,
+        config_values=model.config.values,
+    )
+    config_changed: bool = fingerprint is not None and metadata_json != fingerprint.metadata_json
     query_backfill: BackfillResult = BackfillResult(action=BackfillAction.WARN_ONLY)
     if query_change_tracking and fingerprint is not None:
         debug_logger: logging.Logger = logging.getLogger("sqlbuild.planner.changes")
@@ -128,6 +134,8 @@ def detect_model_changes(
     change_kind: ChangeKind
     if query_changed:
         change_kind = ChangeKind.QUERY_CHANGED
+    elif config_changed:
+        change_kind = ChangeKind.CONFIG_CHANGED
     elif schema_findings:
         change_kind = ChangeKind.SCHEMA_CHANGED
     else:
@@ -137,6 +145,9 @@ def detect_model_changes(
         model_name=model_name,
         change_kind=change_kind,
         query_changed=query_changed,
+        config_changed=config_changed,
+        fingerprint_metadata_json=metadata_json,
+        previous_metadata_json=fingerprint.metadata_json if fingerprint is not None else None,
         schema_findings=schema_findings,
         backfill=backfill,
     )

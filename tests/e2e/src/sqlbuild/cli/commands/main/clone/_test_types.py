@@ -1,5 +1,3 @@
-"""Test types for clone e2e tests."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -13,3 +11,11 @@ class CloneE2ETestCase:
     expected_exit_code: int
     expected_stdout_fragments: tuple[str, ...]
     expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
+
+
+@dataclass(frozen=True)
+class VirtualCloneE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]

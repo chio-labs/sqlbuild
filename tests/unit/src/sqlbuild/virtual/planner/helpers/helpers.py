@@ -25,6 +25,10 @@ def build_virtual_planner_test_project(
     upstream_query_sql: str,
     downstream_query_sql: str,
     downstream_depends_on_dim_customers: bool = False,
+    upstream_model_name: str = "stg_orders",
+    upstream_schema: str = "staging",
+    upstream_materialized: str = "table",
+    upstream_extra_config: dict[str, object] | None = None,
 ) -> ProjectGraph:
     function: CompiledFunction = CompiledFunction(
         key=CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name="normalize_order"),
@@ -48,18 +52,24 @@ def build_virtual_planner_test_project(
         ),
         language=FunctionLanguage.SQL,
     )
+    upstream_config_values: dict[str, object] = {
+        "materialized": upstream_materialized,
+        "schema": upstream_schema,
+    }
+    if upstream_extra_config is not None:
+        upstream_config_values.update(upstream_extra_config)
     upstream_model: CompiledModel = CompiledModel(
-        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="stg_orders"),
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=upstream_model_name),
         deps=(),
-        name="stg_orders",
-        relative_path=Path("models/stg_orders.sql"),
+        name=upstream_model_name,
+        relative_path=Path(f"models/{upstream_model_name}.sql"),
         query_sql=upstream_query_sql,
-        config=CompileModelConfig(values={"materialized": "table"}),
+        config=CompileModelConfig(values=upstream_config_values),
         target=CompiledRelationTarget(
             database=None,
-            schema="staging",
-            name="stg_orders",
-            qualified_name="staging.stg_orders",
+            schema=upstream_schema,
+            name=upstream_model_name,
+            qualified_name=f"{upstream_schema}.{upstream_model_name}",
         ),
     )
     downstream_model: CompiledModel = CompiledModel(

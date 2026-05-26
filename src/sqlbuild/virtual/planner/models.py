@@ -17,6 +17,7 @@ class VirtualPlanSemantics:
     bound_version_hashes: dict[str, str] = field(default_factory=dict)
     bound_local_hashes: dict[str, str] = field(default_factory=dict)
     bound_previous_query_sqls: dict[str, str] = field(default_factory=dict)
+    bound_metadata_jsons: dict[str, str] = field(default_factory=dict)
     stale_model_names: tuple[str, ...] = ()
     default_selection: tuple[str, ...] = ()
     stale_root_reasons: dict[str, PlanReason] = field(default_factory=dict)

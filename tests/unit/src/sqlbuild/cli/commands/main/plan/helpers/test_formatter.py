@@ -202,6 +202,33 @@ TEST_CASES: list[FormatPlanTestCase] = [
         ),
     ),
     FormatPlanTestCase(
+        description="config changed shows config diff without query diff",
+        plan_output=build_plan_output(
+            model_entries=(
+                build_model_entry(
+                    name="fact_orders",
+                    action=PlanAction.CREATE_TABLE,
+                    reason=PlanReason.CONFIG_CHANGED,
+                    previous_query_sql="SELECT order_id FROM raw",
+                    previous_metadata_json=(
+                        '{"config":{"materialized":"view"},"model_name":"fact_orders"}'
+                    ),
+                    fingerprint_metadata_json=(
+                        '{"config":{"materialized":"table"},"model_name":"fact_orders"}'
+                    ),
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "Config changed (1)",
+            "fact_orders",
+            "config diff:",
+            '"materialized": "view"',
+            '"materialized": "table"',
+        ),
+        unexpected_fragments=("query diff:",),
+    ),
+    FormatPlanTestCase(
         description="full rebuild hides cursor range placeholders",
         plan_output=build_plan_output(
             model_entries=(

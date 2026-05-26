@@ -14,6 +14,8 @@ def rewrite_virtual_plan_entries(
     stale_root_reasons: dict[str, PlanReason],
     stale_root_causes: dict[str, str],
     previous_query_sqls: dict[str, str] | None = None,
+    current_metadata_jsons: dict[str, str] | None = None,
+    previous_metadata_jsons: dict[str, str] | None = None,
 ) -> PlanOutput:
     """Rewrite direct planner entries with virtual-specific reasons and causes."""
 
@@ -30,6 +32,8 @@ def rewrite_virtual_plan_entries(
                         entry.name,
                         entry.previous_query_sql,
                     ),
+                    fingerprint_metadata_json=(current_metadata_jsons or {}).get(entry.name),
+                    previous_metadata_json=(previous_metadata_jsons or {}).get(entry.name),
                 )
             )
             continue

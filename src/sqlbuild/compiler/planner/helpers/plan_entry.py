@@ -303,6 +303,8 @@ def plan_model(
         pre_hook=pre_hook,
         post_hook=post_hook,
         previous_query_sql=previous_query_sql,
+        fingerprint_metadata_json=change_result.fingerprint_metadata_json,
+        previous_metadata_json=change_result.previous_metadata_json,
         schema_actions=schema_actions,
         schema_findings=change_result.schema_findings,
         backfill=backfill,

@@ -49,6 +49,7 @@ def write_fingerprint(
         ast_hash=fingerprint.ast_hash,
         schema_fingerprint=fingerprint.schema_fingerprint,
         query_sql=fingerprint.query_sql,
+        metadata_json=fingerprint.metadata_json,
         ts=fingerprint.ts.isoformat(),
         render_qualified_name=render_qualified_name,
     )

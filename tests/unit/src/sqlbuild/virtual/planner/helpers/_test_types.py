@@ -54,6 +54,10 @@ class StaleRootReasonsTestCase:
     bound_version_hashes: dict[str, str]
     bound_local_hashes: dict[str, str]
     expected_stale_root_reasons: dict[str, PlanReason]
+    current_query_sqls: dict[str, str] | None = None
+    bound_previous_query_sqls: dict[str, str] | None = None
+    expected_metadata_jsons: dict[str, str] | None = None
+    bound_metadata_jsons: dict[str, str] | None = None
 
 
 @dataclass(frozen=True)

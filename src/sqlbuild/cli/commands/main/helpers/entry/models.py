@@ -41,6 +41,7 @@ class CliNamespace:
     fail_fast: bool = False
     full_refresh: bool = False
     virtual_env: str | None = None
+    skip_locked: bool = False
     include_stale_upstreams: bool = False
     changes_only: bool = False
     load_sources: bool | None = None
@@ -258,8 +259,11 @@ class CliEntrypointHandlers:
             str,
             str,
             bool,
+            str | None,
+            bool,
             tuple[str, ...],
             tuple[str, ...],
+            bool,
             dict[str, object],
         ],
         int,

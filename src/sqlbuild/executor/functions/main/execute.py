@@ -146,6 +146,7 @@ def _try_write_function_fingerprint(
             ast_hash=compute_ast_hash(entry.fingerprint_query_sql),
             schema_fingerprint=schema_fp,
             query_sql=entry.fingerprint_query_sql,
+            metadata_json="{}",
             ts=datetime.now(tz=UTC),
         )
         write_fingerprint(

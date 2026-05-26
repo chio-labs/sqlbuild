@@ -11,6 +11,10 @@ from sqlbuild.cli.commands.main.helpers.clone.output import (
     render_clone_output,
 )
 from sqlbuild.cli.commands.main.helpers.clone.validation import validate_clone_request
+from sqlbuild.cli.commands.main.helpers.clone.virtual_output import (
+    is_virtual_clone_success,
+    render_virtual_clone_output,
+)
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import (
@@ -19,7 +23,6 @@ from sqlbuild.cli.commands.main.shared.helpers.connection import (
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
 )
-from sqlbuild.cli.commands.main.shared.helpers.mode import enforce_direct_mode_command_support
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.clone import run_clone_pipeline
@@ -29,6 +32,9 @@ from sqlbuild.executor.clone.main.execute import execute_clone
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.models.types import EnvironmentMode
+from sqlbuild.virtual.executor.main.clone import run_virtual_clone
+from sqlbuild.virtual.executor.models import VirtualCloneResult
 
 
 def run_clone(
@@ -38,15 +44,17 @@ def run_clone(
     from_environment: str,
     to_environment: str,
     hard_copy: bool,
+    virtual_env: str | None = None,
+    skip_locked: bool = False,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
+    verbose: bool = False,
     cli_vars: dict[str, object] | None = None,
 ) -> int:
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
-    enforce_direct_mode_command_support(discovered_inputs=discovered_inputs, command_name="clone")
     validate_clone_request(
         discovered_inputs=discovered_inputs,
         from_environment=from_environment,
@@ -72,6 +80,33 @@ def run_clone(
         environment_name=to_environment,
         cli_vars=cli_vars,
     )
+    if discovered_inputs.project_config.environment_mode == EnvironmentMode.VIRTUAL:
+        result: VirtualCloneResult = run_virtual_clone(
+            project_dir=effective_project_dir,
+            discovered_inputs=discovered_inputs,
+            adapter=adapter,
+            from_environment=from_environment,
+            to_environment=to_environment,
+            source_connection_config=source_connection_config,
+            target_connection_config=target_connection_config,
+            virtual_environment_name=virtual_env,
+            skip_locked=skip_locked,
+            no_sql_validation=no_sql_validation,
+            select=select,
+            exclude=exclude,
+            cli_vars=cli_vars,
+            external_sql_reference_resolver=resolve_external_sql_reference_resolver(
+                project_dir=effective_project_dir,
+                discovered_inputs=discovered_inputs,
+            ),
+        )
+        render_virtual_clone_output(
+            result=result,
+            use_color=not no_color and supports_color(),
+            verbose=verbose,
+        )
+        return 0 if is_virtual_clone_success(result) else 1
+
     source_connection: Any = adapter.connect(source_connection_config)
     target_connection: Any = adapter.connect(target_connection_config)
     try:

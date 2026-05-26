@@ -661,6 +661,20 @@ class SqlServerAdapter(BaseAdapter):
         for stmt in statements:
             self.execute(connection, stmt)
 
+    def durable_clone(
+        self,
+        connection: Any,
+        *,
+        source: str,
+        target: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_durable_clone(source=source, target=target)
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
     def count_rows(
         self,
         connection: Any,
@@ -1374,6 +1388,9 @@ class SqlServerAdapter(BaseAdapter):
         del hard_copy
         return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
 
+    def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
+        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+
     def render_create_initial_historical_check_snapshot_target(
         self,
         *,
@@ -1866,6 +1883,9 @@ class SqlServerAdapter(BaseAdapter):
         return False
 
     def supports_zero_copy_clone(self) -> bool:
+        return False
+
+    def supports_durable_clone(self) -> bool:
         return False
 
     def swap(

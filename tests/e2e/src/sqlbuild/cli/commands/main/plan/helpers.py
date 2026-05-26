@@ -11,7 +11,9 @@ from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.virtual.planner.helpers.planning import (
     build_expected_local_hashes,
     build_expected_version_hashes,
+    build_model_fingerprint_metadata_jsons,
 )
+from sqlbuild.virtual.shared.helpers.encoding import encode_state_text
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.helpers.backend import build_state_backend
 from sqlbuild.virtual.state.helpers.config import resolve_state_backend_config
@@ -73,12 +75,14 @@ def seed_matching_virtual_refs(
         graph=graph,
         expected_local_hashes=expected_local_hashes,
     )
+    metadata_jsons: dict[str, str] = build_model_fingerprint_metadata_jsons(graph=graph)
     config: StateBackendConfig = resolve_state_backend_config(
         discovered_inputs=discovered_inputs, project_dir=project_dir
     )
     backend: StateBackend = build_state_backend(config.backend)
     connection: Any = backend.connect(config.connection)
     try:
+        query_sqls: dict[str, str] = {model.name: model.query_sql for model in graph.project.models}
         model_names: tuple[str, ...] = tuple(model.name for model in graph.project.models)
         model_name: str
         for model_name in model_names:
@@ -91,6 +95,8 @@ def seed_matching_virtual_refs(
                     data_hash=expected_local_hashes[model_name],
                     metadata_hash=expected_hashes[model_name],
                     status=ModelVersionStatus.READY,
+                    fingerprint_query_sql_b64=encode_state_text(query_sqls[model_name]),
+                    fingerprint_metadata_json_b64=encode_state_text(metadata_jsons[model_name]),
                 ),
             )
         backend.upsert_virtual_environment(

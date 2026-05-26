@@ -1412,6 +1412,9 @@ class SnowflakeAdapter(BaseAdapter):
     def supports_zero_copy_clone(self) -> bool:
         return True
 
+    def supports_durable_clone(self) -> bool:
+        return True
+
     def render_drop(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
         exists_clause: str = " IF EXISTS" if if_exists else ""
         return (
@@ -1435,6 +1438,23 @@ class SnowflakeAdapter(BaseAdapter):
         if hard_copy:
             return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
         return (f"CREATE OR REPLACE TABLE {target} CLONE {source}",)
+
+    def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
+        return (f"CREATE OR REPLACE TABLE {target} CLONE {source}",)
+
+    def durable_clone(
+        self,
+        connection: Any,
+        *,
+        source: str,
+        target: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_durable_clone(source=source, target=target)
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
 
     def load_seed(
         self,
