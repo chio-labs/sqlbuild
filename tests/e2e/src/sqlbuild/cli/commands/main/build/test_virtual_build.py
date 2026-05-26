@@ -8,11 +8,13 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     VirtualBuildE2ETestCase,
     VirtualBuildSelectionGuardE2ETestCase,
+    VirtualPromoteE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
     build_virtual_plan_repo_files,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    execute_duckdb,
     prepare_inline_project,
     query_duckdb,
     run_sqb,
@@ -334,3 +336,296 @@ def test_given_virtual_build_selected_downstream_with_stale_upstream_when_runnin
             db_path=project_dir / "warehouse.duckdb",
             sql=query_sql,
         ) == list(expected_rows)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualPromoteE2ETestCase(
+            description="whole VDE promotion swaps target refs and views",
+            promote_command=("--no-color", "promote", "--from", "pr", "--to", "dev"),
+            expected_promote_fragments=(
+                "Virtual promotion complete",
+                "pr -> dev",
+                "target status          finalized",
+                "promoted models        3",
+                "remaining stale models 0",
+            ),
+            expected_query_results=(("SELECT id FROM dev__dev.fact_orders ORDER BY id", ((2,),)),),
+        )
+    ],
+    ids=["whole VDE promotion swaps target refs and views"],
+)
+def test_given_virtual_env_when_promoting_then_it_updates_target_refs_and_views(
+    test_case: VirtualPromoteE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_promote_whole",
+        repo_files=build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id"),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    default_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert default_build_result.returncode == 0, default_build_result.stderr
+    (project_dir / "models" / "stg_orders.sql").write_text(
+        "MODEL ();\n\nSELECT 2 AS id\n",
+        encoding="utf-8",
+    )
+    branch_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--virtual-env", "pr"),
+        project_dir=project_dir,
+    )
+    assert branch_build_result.returncode == 0, branch_build_result.stderr
+
+    promote_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.promote_command,
+        project_dir=project_dir,
+    )
+
+    assert promote_result.returncode == 0, promote_result.stderr
+    fragment: str
+    for fragment in test_case.expected_promote_fragments:
+        assert fragment in promote_result.stdout
+    query_sql: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    for query_sql, expected_rows in test_case.expected_query_results:
+        assert query_duckdb(
+            db_path=project_dir / "warehouse.duckdb",
+            sql=query_sql,
+        ) == list(expected_rows)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualPromoteE2ETestCase(
+            description="partial promotion requires explicit working target acceptance",
+            blocked_command=(
+                "--no-color",
+                "promote",
+                "--from",
+                "pr",
+                "--to",
+                "dev",
+                "--select",
+                "fact_orders",
+                "--include-stale-upstreams",
+            ),
+            promote_command=(
+                "--no-color",
+                "promote",
+                "--from",
+                "pr",
+                "--to",
+                "dev",
+                "--select",
+                "fact_orders",
+                "--include-stale-upstreams",
+                "--allow-partial-promotion",
+            ),
+            expected_blocked_fragments=(
+                "promotion would leave target virtual environment working",
+                "orders_rollup",
+                "--allow-partial-promotion",
+            ),
+            expected_promote_fragments=(
+                "target status          working",
+                "promoted models        2",
+                "remaining stale set: orders_rollup",
+            ),
+            expected_query_results=(
+                ("SELECT id FROM dev__dev.fact_orders ORDER BY id", ((2,),)),
+                ("SELECT order_count FROM dev__dev.orders_rollup", ((1,),)),
+            ),
+        )
+    ],
+    ids=["partial promotion requires explicit working target acceptance"],
+)
+def test_given_partial_virtual_promotion_when_target_stays_working_then_it_requires_override(
+    test_case: VirtualPromoteE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_promote_partial",
+        repo_files=build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id")
+        | {
+            "models/orders_rollup.sql": (
+                'MODEL ();\n\nSELECT COUNT(*) AS order_count FROM __ref("fact_orders")\n'
+            )
+        },
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    default_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert default_build_result.returncode == 0, default_build_result.stderr
+    (project_dir / "models" / "stg_orders.sql").write_text(
+        "MODEL ();\n\nSELECT 2 AS id\n",
+        encoding="utf-8",
+    )
+    branch_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--virtual-env", "pr"),
+        project_dir=project_dir,
+    )
+    assert branch_build_result.returncode == 0, branch_build_result.stderr
+
+    blocked_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.blocked_command,
+        project_dir=project_dir,
+    )
+    assert blocked_result.returncode != 0
+    blocked_output: str = blocked_result.stdout + blocked_result.stderr
+    fragment: str
+    for fragment in test_case.expected_blocked_fragments:
+        assert fragment in blocked_output
+
+    promote_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.promote_command,
+        project_dir=project_dir,
+    )
+    assert promote_result.returncode == 0, promote_result.stderr
+    for fragment in test_case.expected_promote_fragments:
+        assert fragment in promote_result.stdout
+    query_sql: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    for query_sql, expected_rows in test_case.expected_query_results:
+        assert query_duckdb(
+            db_path=project_dir / "warehouse.duckdb",
+            sql=query_sql,
+        ) == list(expected_rows)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualPromoteE2ETestCase(
+            description="direct mode promotion fails with mode error",
+            promote_command=("promote", "--from", "pr", "--to", "dev"),
+            expected_promote_fragments=("promote requires environment_mode = 'virtual'",),
+            expected_query_results=(),
+        )
+    ],
+    ids=["direct mode promotion fails with mode error"],
+)
+def test_given_direct_mode_project_when_promoting_then_it_fails_with_mode_error(
+    test_case: VirtualPromoteE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_promote_guard",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_promote_guard"\n'
+                'adapter = "duckdb"\n'
+                'default_environment = "dev"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n\n'
+                "[environments.dev]\n"
+                'schema = "dev"\n'
+            ),
+            "models/stg_orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.promote_command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    fragment: str
+    for fragment in test_case.expected_promote_fragments:
+        assert fragment in result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualPromoteE2ETestCase(
+            description="missing promoted physical relation fails clearly",
+            promote_command=(
+                "promote",
+                "--from",
+                "pr",
+                "--to",
+                "dev",
+                "--select",
+                "fact_orders",
+                "--include-stale-upstreams",
+                "--allow-partial-promotion",
+            ),
+            expected_promote_fragments=("fact_orders",),
+            expected_query_results=(),
+        )
+    ],
+    ids=["missing promoted physical relation fails clearly"],
+)
+def test_given_promoted_physical_relation_is_missing_when_promoting_then_it_fails_clearly(
+    test_case: VirtualPromoteE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_promote_missing_physical",
+        repo_files=build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id"),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    default_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert default_build_result.returncode == 0, default_build_result.stderr
+    (project_dir / "models" / "stg_orders.sql").write_text(
+        "MODEL ();\n\nSELECT 2 AS id\n",
+        encoding="utf-8",
+    )
+    branch_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--virtual-env", "pr"),
+        project_dir=project_dir,
+    )
+    assert branch_build_result.returncode == 0, branch_build_result.stderr
+    physical_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT schema_name, relation_name "
+            "FROM sqlbuild_state.physical_relations "
+            "WHERE model_name = 'fact_orders' "
+            "ORDER BY created_at DESC LIMIT 1"
+        ),
+    )
+    assert physical_rows
+    schema_name, relation_name = physical_rows[0]
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=f'DROP TABLE "{schema_name}"."{relation_name}"',
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.promote_command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    output: str = result.stdout + result.stderr
+    fragment: str
+    for fragment in test_case.expected_promote_fragments:
+        assert fragment in output

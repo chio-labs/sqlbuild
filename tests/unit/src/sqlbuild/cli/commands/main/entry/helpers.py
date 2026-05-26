@@ -31,6 +31,7 @@ def build_handlers(**overrides: Any) -> CliEntrypointHandlers:
         run_load=overrides.get("run_load", noop_handler),
         run_clone=overrides.get("run_clone", noop_handler),
         run_diff=overrides.get("run_diff", noop_handler),
+        run_promote=overrides.get("run_promote", noop_handler),
         run_query=overrides.get("run_query", noop_handler),
         run_debug=overrides.get("run_debug", noop_handler),
         run_lineage=overrides.get("run_lineage", noop_handler),

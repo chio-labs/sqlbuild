@@ -569,7 +569,14 @@ def test_given_clone_command_arguments_when_running_with_dependencies_then_it_di
     [
         MainTestCase(
             description="dispatches diff command through injected handler",
-            argv=["diff", "prod:dev", "--full", "--select", "orders"],
+            argv=[
+                "diff",
+                "prod:dev",
+                "--full",
+                "--select",
+                "orders",
+                "--allow-partial-diff",
+            ],
             expected_exit_code=6,
         )
     ],
@@ -593,6 +600,7 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
             tuple[str, ...],
             tuple[str, ...],
             bool,
+            bool,
         ]
     ] = []
 
@@ -611,6 +619,7 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
         exclude: tuple[str, ...],
         verbose: bool,
         cli_vars: dict[str, object],
+        allow_partial_diff: bool = False,
     ) -> int:
         del cli_vars
         received_args.append(
@@ -628,6 +637,7 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
                 select,
                 exclude,
                 verbose,
+                allow_partial_diff,
             )
         )
         return test_case.expected_exit_code
@@ -639,7 +649,103 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
 
     assert exit_code == test_case.expected_exit_code
     assert received_args == [
-        (None, False, False, "prod", "dev", True, False, None, None, None, ("orders",), (), False)
+        (
+            None,
+            False,
+            False,
+            "prod",
+            "dev",
+            True,
+            False,
+            None,
+            None,
+            None,
+            ("orders",),
+            (),
+            False,
+            True,
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="dispatches promote command through injected handler",
+            argv=[
+                "promote",
+                "--from",
+                "pr",
+                "--to",
+                "dev",
+                "--select",
+                "fact_orders",
+                "--include-stale-upstreams",
+                "--allow-partial-promotion",
+                "--verbose",
+            ],
+            expected_exit_code=7,
+        )
+    ],
+    ids=["dispatches promote command through injected handler"],
+)
+def test_given_promote_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[
+        tuple[
+            Path | None,
+            bool,
+            bool,
+            str,
+            str,
+            tuple[str, ...],
+            tuple[str, ...],
+            bool,
+            bool,
+            bool,
+        ]
+    ] = []
+
+    def run_promote(
+        project_dir: Path | None,
+        no_color: bool,
+        no_sql_validation: bool,
+        from_virtual_environment: str,
+        to_virtual_environment: str,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+        allow_partial_promotion: bool,
+        include_stale_upstreams: bool,
+        verbose: bool,
+        cli_vars: dict[str, object],
+    ) -> int:
+        del cli_vars
+        received_args.append(
+            (
+                project_dir,
+                no_color,
+                no_sql_validation,
+                from_virtual_environment,
+                to_virtual_environment,
+                select,
+                exclude,
+                allow_partial_promotion,
+                include_stale_upstreams,
+                verbose,
+            )
+        )
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_promote=run_promote),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [
+        (None, False, False, "pr", "dev", ("fact_orders",), (), True, True, True)
     ]
 
 
@@ -1203,8 +1309,9 @@ def test_given_verbose_diff_arguments_when_running_then_it_dispatches_verbose_fl
         exclude: tuple[str, ...],
         verbose: bool,
         cli_vars: dict[str, object],
+        allow_partial_diff: bool = False,
     ) -> int:
-        del cli_vars
+        del cli_vars, allow_partial_diff
         del project_dir, no_color, no_sql_validation, from_environment, to_environment, full
         del schema_only, bounded, max_column_examples, max_row_only_examples, select, exclude
         received_verbose.append(verbose)
@@ -1260,8 +1367,9 @@ def test_given_diff_example_cap_arguments_when_running_then_it_dispatches_caps(
         exclude: tuple[str, ...],
         verbose: bool,
         cli_vars: dict[str, object],
+        allow_partial_diff: bool = False,
     ) -> int:
-        del cli_vars
+        del cli_vars, allow_partial_diff
         del project_dir, no_color, no_sql_validation, from_environment, to_environment, full
         del schema_only, bounded, select, exclude, verbose
         received_caps.append((max_column_examples, max_row_only_examples))
