@@ -195,7 +195,7 @@ def test_given_schema_when_building_qualified_name_then_returns_expected(
                 "query_hash VARCHAR NOT NULL",
                 "ast_hash VARCHAR,",
                 "schema_fingerprint VARCHAR NOT NULL",
-                "query_sql VARCHAR NOT NULL",
+                "query_sql_b64 VARCHAR NOT NULL",
                 "ts TIMESTAMP NOT NULL",
             ),
         ),

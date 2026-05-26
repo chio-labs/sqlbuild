@@ -28,11 +28,11 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
-from sqlbuild.compiler.shared.helpers.hashing import (
+from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event, log_sql
+from sqlbuild.shared.helpers.hashing import (
     compute_ast_hash,
     compute_query_hash,
 )
-from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event, log_sql
 
 
 def detect_model_changes(

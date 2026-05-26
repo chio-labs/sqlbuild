@@ -7,7 +7,6 @@ from typing import Any
 
 from sqlbuild.adapter.shared.types import FrameworkType
 from sqlbuild.compiler.fingerprints.main.shared.helpers.sql import (
-    build_add_target_columns_sql,
     build_create_table_sql,
     build_insert_sql,
 )
@@ -38,17 +37,6 @@ def write_fingerprint(
         )
     )
     execute(connection, create_sql)
-    migration_sql: str
-    for migration_sql in build_add_target_columns_sql(
-        database=database,
-        schema=schema,
-        render_qualified_name=render_qualified_name,
-        render_framework_type=render_framework_type,
-    ):
-        try:
-            execute(connection, migration_sql)
-        except Exception:
-            pass
     insert_sql: str = build_insert_sql(
         database=database,
         schema=schema,

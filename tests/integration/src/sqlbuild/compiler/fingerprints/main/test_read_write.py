@@ -222,6 +222,13 @@ def test_given_no_table_when_writing_then_creates_table(
         f"AND table_name = '{FINGERPRINT_TABLE_NAME}'"
     ).fetchone()
     assert (row is not None) == test_case.expected_table_exists
+    column_row: Any = connection.execute(
+        "SELECT 1 FROM information_schema.columns "
+        f"WHERE table_schema = '{test_case.schema}' "
+        f"AND table_name = '{FINGERPRINT_TABLE_NAME}' "
+        "AND column_name = 'query_sql_b64'"
+    ).fetchone()
+    assert column_row is not None
 
 
 @pytest.mark.parametrize(
@@ -350,7 +357,7 @@ def test_given_null_ast_hash_when_writing_and_reading_then_ast_hash_is_none(
     "test_case",
     [
         InvalidQuerySqlStorageTestCase(
-            description="invalid legacy query sql storage raises contextual error",
+            description="invalid query sql b64 storage raises contextual error",
             schema="test_schema",
             model_name="orders",
             raw_query_sql_storage="SELECT 1",
@@ -362,7 +369,7 @@ def test_given_null_ast_hash_when_writing_and_reading_then_ast_hash_is_none(
             ),
         )
     ],
-    ids=["invalid legacy query sql storage raises contextual error"],
+    ids=["invalid query sql b64 storage raises contextual error"],
 )
 def test_given_invalid_query_sql_storage_when_reading_then_raises_contextual_error(
     test_case: InvalidQuerySqlStorageTestCase,
@@ -380,7 +387,7 @@ def test_given_invalid_query_sql_storage_when_reading_then_raises_contextual_err
         "query_hash VARCHAR NOT NULL, "
         "ast_hash VARCHAR, "
         "schema_fingerprint VARCHAR NOT NULL, "
-        "query_sql VARCHAR NOT NULL, "
+        "query_sql_b64 VARCHAR NOT NULL, "
         "ts TIMESTAMP NOT NULL)"
     )
     connection.execute(
