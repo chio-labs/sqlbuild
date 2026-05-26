@@ -39,6 +39,7 @@ class VirtualBuildE2ETestCase:
     expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
     expected_ref_rows: tuple[tuple[object, ...], ...]
     expected_physical_version_count: int | None = None
+    expected_default_plan_fragments: tuple[str, ...] = field(default_factory=tuple)
     expected_final_plan_fragments: tuple[str, ...] = field(default_factory=tuple)
 
 

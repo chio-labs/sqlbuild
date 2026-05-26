@@ -114,10 +114,10 @@ class PostgresStateLifecycleE2ETestCase:
     description: str
     expected_exit_code: int
     expected_schema_version: int
-    expected_init_fragment: str = "Initialized virtual state schema"
-    expected_migrate_fragment: str = "Migrated virtual state schema"
-    expected_rollback_fragment: str = "Rolled back virtual state schema"
-    expected_reset_fragment: str = "Reset virtual state schema"
+    expected_init_fragment: str = "Virtual State Initialized"
+    expected_migrate_fragment: str = "Virtual State Migrated"
+    expected_rollback_fragment: str = "Virtual State Rolled Back"
+    expected_reset_fragment: str = "Virtual State Reset"
 
 
 @dataclass(frozen=True)

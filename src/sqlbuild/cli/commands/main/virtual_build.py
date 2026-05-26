@@ -9,6 +9,9 @@ from typing import TextIO
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compile_target
 from sqlbuild.cli.commands.main.helpers.plan.formatter import format_plan
+from sqlbuild.cli.commands.main.shared.helpers.connection_progress import (
+    ConnectionProgressReporter,
+)
 from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
     format_build_execution_json,
     write_execution_json_output,
@@ -16,6 +19,9 @@ from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
 from sqlbuild.cli.commands.main.shared.helpers.parsers import (
     parse_cursor_integer,
     parse_cursor_timestamp,
+)
+from sqlbuild.cli.commands.main.shared.helpers.planning_progress import (
+    PlanningProgressReporter,
 )
 from sqlbuild.cli.commands.main.shared.helpers.progress import (
     BuildProgressCallbacks,
@@ -67,10 +73,18 @@ def run_virtual_build(
 ) -> int:
     """Execute a virtual build and render CLI output."""
 
-    del adapter_name
     stream: TextIO = progress_stream or (sys.stderr if debug or json_output else sys.stdout)
     stream.write("\n")
     stream.flush()
+    connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
+        adapter_name=adapter_name,
+        stream=stream,
+        use_color=use_color,
+    )
+    planning_progress: PlanningProgressReporter = PlanningProgressReporter(
+        stream=stream,
+        use_color=use_color,
+    )
     callbacks_by_ref: list[BuildProgressCallbacks] = []
 
     def on_plan_ready(
@@ -143,6 +157,10 @@ def run_virtual_build(
         start_cursor_int=parse_cursor_integer((cursor_overrides or CursorOverrides()).start_int),
         end_cursor_int=parse_cursor_integer((cursor_overrides or CursorOverrides()).end_int),
         on_plan_ready=on_plan_ready,
+        on_connection_start=connection_progress.on_connection_start,
+        on_connection_complete=connection_progress.on_connection_complete,
+        on_connection_error=connection_progress.on_connection_error,
+        on_progress=planning_progress.on_progress,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     plan_output: PlanOutput = result.plan_output

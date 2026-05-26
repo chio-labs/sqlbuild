@@ -477,6 +477,9 @@ def test_given_duckdb_state_backend_when_upserting_core_records_then_round_trips
             data_hash="data-hash",
             metadata_hash="metadata-hash",
             status=ModelVersionStatus.READY,
+            fingerprint_query_sql_b64="U0VMRUNUIDEgQVMgaWQ=",
+            fingerprint_metadata_json_b64="e30=",
+            compiled_sql_b64="U0VMRUNUIDEgQVMgaWQ=",
         )
         backend.upsert_model_version(connection, schema=test_case.schema, record=model_record)
         relation_record: PhysicalRelationRecord = PhysicalRelationRecord(

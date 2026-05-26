@@ -153,6 +153,11 @@ def test_given_virtual_default_vde_when_building_then_it_creates_physical_versio
                 ("SELECT order_count FROM dev__kevin.orders_rollup", ((1,),)),
             ),
             expected_ref_rows=(("fact_orders",), ("stg_orders",)),
+            expected_default_plan_fragments=(
+                "query diff:",
+                "-SELECT 1 AS id",
+                "+SELECT 2 AS id",
+            ),
             expected_final_plan_fragments=("Plan ready (0 selected)", "status: finalized"),
         )
     ],
@@ -188,6 +193,14 @@ def test_given_explicit_virtual_env_with_graph_selection_when_building_then_refs
         "MODEL ();\n\nSELECT 2 AS id\n",
         encoding="utf-8",
     )
+
+    default_plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan"),
+        project_dir=project_dir,
+    )
+    assert default_plan_result.returncode == 0, default_plan_result.stderr
+    for fragment in test_case.expected_default_plan_fragments:
+        assert fragment in default_plan_result.stdout
 
     branch_build_result: subprocess.CompletedProcess[str] = run_sqb(
         command=(

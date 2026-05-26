@@ -13,6 +13,7 @@ def run_state(
     state_command: str,
     backup_id: str | None = None,
     auto_approve: bool = False,
+    no_color: bool = False,
 ) -> int:
     """Execute a virtual state lifecycle command."""
 
@@ -21,4 +22,5 @@ def run_state(
         command=StateCommand(state_command),
         backup_id=backup_id,
         auto_approve=auto_approve,
+        no_color=no_color,
     )

@@ -844,7 +844,7 @@ def _format_virtual_metadata(
     lines.append(f"  status: {virtual_environment_status}")
     lines.append(f"  stale roots: {len(stale_root_names)}")
     if stale_root_names:
-        lines.append(f"  stale root set: {', '.join(stale_root_names)}")
+        lines.append(f"  stale root set: {_format_capped_name_list(stale_root_names)}")
     lines.append(f"  stale models: {len(stale_model_names)}")
     if stale_model_names:
         lines.append(f"  stale model set: {_format_capped_name_list(stale_model_names)}")

@@ -177,9 +177,18 @@ SCENARIO_NO_SQL_VALIDATION_FLAG_ERROR_TEST_CASES: list[MainTestCase] = [
 STATE_DISPATCH_TEST_CASES: list[MainTestCase] = [
     MainTestCase(
         description="dispatches state rollback command through injected handler",
-        argv=["--project-dir", "/tmp/demo", "state", "rollback", "--backup-id", "b1"],
+        argv=[
+            "--project-dir",
+            "/tmp/demo",
+            "--no-color",
+            "state",
+            "rollback",
+            "--backup-id",
+            "b1",
+        ],
         expected_exit_code=11,
         expected_project_dir=Path("/tmp/demo"),
+        expected_no_color=True,
         expected_state_command="rollback",
         expected_state_backup_id="b1",
     ),
@@ -1310,15 +1319,16 @@ def test_given_janitor_command_arguments_when_running_with_dependencies_then_it_
 def test_given_state_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[Path | None, str, str | None, bool]] = []
+    received_args: list[tuple[Path | None, str, str | None, bool, bool]] = []
 
     def run_state(
         project_dir: Path | None,
         state_command: str,
         backup_id: str | None,
         auto_approve: bool,
+        no_color: bool,
     ) -> int:
-        received_args.append((project_dir, state_command, backup_id, auto_approve))
+        received_args.append((project_dir, state_command, backup_id, auto_approve, no_color))
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -1333,6 +1343,7 @@ def test_given_state_command_arguments_when_running_with_dependencies_then_it_di
             str(test_case.expected_state_command),
             test_case.expected_state_backup_id,
             test_case.expected_auto_approve,
+            test_case.expected_no_color,
         )
     ]
 

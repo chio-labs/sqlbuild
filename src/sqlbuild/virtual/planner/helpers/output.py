@@ -13,6 +13,7 @@ def rewrite_virtual_plan_entries(
     plan_output: PlanOutput,
     stale_root_reasons: dict[str, PlanReason],
     stale_root_causes: dict[str, str],
+    previous_query_sqls: dict[str, str] | None = None,
 ) -> PlanOutput:
     """Rewrite direct planner entries with virtual-specific reasons and causes."""
 
@@ -25,6 +26,10 @@ def rewrite_virtual_plan_entries(
                     entry,
                     reason=stale_root_reasons[entry.name],
                     cascade=None,
+                    previous_query_sql=(previous_query_sqls or {}).get(
+                        entry.name,
+                        entry.previous_query_sql,
+                    ),
                 )
             )
             continue

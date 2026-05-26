@@ -248,15 +248,20 @@ class PostgresStateBackend(StateBackend):
                 )
                 cursor.execute(
                     f"INSERT INTO {self._qualified_name(schema, MODEL_VERSION_TABLE)} "
-                    "(model_name, version_hash, data_hash, metadata_hash, status, "
+                    "(model_name, version_hash, data_hash, metadata_hash, "
+                    "fingerprint_query_sql_b64, fingerprint_metadata_json_b64, "
+                    "compiled_sql_b64, status, "
                     "created_at, updated_at) "
-                    "VALUES (%s, %s, %s, %s, %s, "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, "
                     "COALESCE(%s, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)",
                     [
                         record.model_name,
                         record.version_hash,
                         record.data_hash,
                         record.metadata_hash,
+                        record.fingerprint_query_sql_b64,
+                        record.fingerprint_metadata_json_b64,
+                        record.compiled_sql_b64,
                         record.status.value,
                         existing_created_at,
                     ],
@@ -271,7 +276,9 @@ class PostgresStateBackend(StateBackend):
     ) -> ModelVersionRecord | None:
         with connection.cursor() as cursor:
             cursor.execute(
-                f"SELECT model_name, version_hash, data_hash, metadata_hash, status "
+                "SELECT model_name, version_hash, data_hash, metadata_hash, "
+                "fingerprint_query_sql_b64, fingerprint_metadata_json_b64, "
+                "compiled_sql_b64, status "
                 f"FROM {self._qualified_name(schema, MODEL_VERSION_TABLE)} "
                 "WHERE model_name = %s AND version_hash = %s",
                 [model_name, version_hash],
@@ -284,7 +291,10 @@ class PostgresStateBackend(StateBackend):
             version_hash=row[1],
             data_hash=row[2],
             metadata_hash=row[3],
-            status=ModelVersionStatus(row[4]),
+            fingerprint_query_sql_b64=row[4],
+            fingerprint_metadata_json_b64=row[5],
+            compiled_sql_b64=row[6],
+            status=ModelVersionStatus(row[7]),
         )
 
     def upsert_physical_relation(
@@ -570,6 +580,14 @@ class PostgresStateBackend(StateBackend):
                 f"CREATE TABLE IF NOT EXISTS {self._qualified_name(schema, table_name)} "
                 f"({column_sql})"
             )
+            column_name: str
+            column_type: StateColumnType
+            for column_name, column_type in columns.items():
+                cursor.execute(
+                    f"ALTER TABLE {self._qualified_name(schema, table_name)} "
+                    f"ADD COLUMN IF NOT EXISTS {self._quote_identifier(column_name)} "
+                    f"{self._state_column_sql_type(column_type)}"
+                )
         self._create_state_indexes(cursor, schema=schema)
 
     def _create_state_indexes(self, cursor: Any, *, schema: str) -> None:
