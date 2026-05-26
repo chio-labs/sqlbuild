@@ -629,3 +629,165 @@ def test_given_promoted_physical_relation_is_missing_when_promoting_then_it_fail
     fragment: str
     for fragment in test_case.expected_promote_fragments:
         assert fragment in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualPromoteE2ETestCase(
+            description="target VDE lock blocks promotion",
+            promote_command=("promote", "--from", "pr", "--to", "dev"),
+            expected_promote_fragments=("virtual environment 'dev' is locked",),
+            expected_query_results=(),
+        )
+    ],
+    ids=["target VDE lock blocks promotion"],
+)
+def test_given_target_virtual_environment_lock_when_promoting_then_it_fails_clearly(
+    test_case: VirtualPromoteE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_promote_locked_target",
+        repo_files=build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id"),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    default_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert default_build_result.returncode == 0, default_build_result.stderr
+    (project_dir / "models" / "stg_orders.sql").write_text(
+        "MODEL ();\n\nSELECT 2 AS id\n",
+        encoding="utf-8",
+    )
+    branch_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--virtual-env", "pr"),
+        project_dir=project_dir,
+    )
+    assert branch_build_result.returncode == 0, branch_build_result.stderr
+    execute_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "INSERT INTO sqlbuild_state.locks "
+            "(lock_key, owner_id, expires_at, created_at, updated_at) "
+            "VALUES ('virtual_env:dev', 'test-owner', TIMESTAMP '2999-01-01', "
+            "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+        ),
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.promote_command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    output: str = result.stdout + result.stderr
+    fragment: str
+    for fragment in test_case.expected_promote_fragments:
+        assert fragment in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualPromoteE2ETestCase(
+            description=(
+                "working source blocks whole promotion but allows coherent partial promotion"
+            ),
+            blocked_command=("promote", "--from", "pr", "--to", "dev"),
+            promote_command=(
+                "promote",
+                "--from",
+                "pr",
+                "--to",
+                "dev",
+                "--select",
+                "fact_orders",
+                "--include-stale-upstreams",
+                "--allow-partial-promotion",
+            ),
+            expected_blocked_fragments=(
+                "whole-VDE promotion requires a finalized source virtual environment",
+                "--select",
+            ),
+            expected_promote_fragments=("Virtual promotion complete", "target status"),
+            expected_query_results=(
+                ("SELECT id FROM dev__dev.fact_orders ORDER BY id", ((2,),)),
+                ("SELECT order_count FROM dev__dev.orders_rollup", ((1,),)),
+            ),
+        )
+    ],
+    ids=["working source blocks whole promotion but allows coherent partial promotion"],
+)
+def test_given_working_source_vde_when_promoting_then_whole_blocks_and_partial_succeeds(
+    test_case: VirtualPromoteE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_promote_working_source",
+        repo_files=build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id")
+        | {
+            "models/orders_rollup.sql": (
+                'MODEL ();\n\nSELECT COUNT(*) AS order_count FROM __ref("fact_orders")\n'
+            )
+        },
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    default_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert default_build_result.returncode == 0, default_build_result.stderr
+    (project_dir / "models" / "stg_orders.sql").write_text(
+        "MODEL ();\n\nSELECT 2 AS id\n",
+        encoding="utf-8",
+    )
+    branch_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=(
+            "--no-color",
+            "build",
+            "--virtual-env",
+            "pr",
+            "--select",
+            "fact_orders",
+            "--include-stale-upstreams",
+        ),
+        project_dir=project_dir,
+    )
+    assert branch_build_result.returncode == 0, branch_build_result.stderr
+
+    blocked_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.blocked_command,
+        project_dir=project_dir,
+    )
+    assert blocked_result.returncode == 1, blocked_result.stdout + blocked_result.stderr
+    blocked_output: str = blocked_result.stdout + blocked_result.stderr
+    fragment: str
+    for fragment in test_case.expected_blocked_fragments:
+        assert fragment in blocked_output
+
+    promote_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.promote_command,
+        project_dir=project_dir,
+    )
+    assert promote_result.returncode == 0, promote_result.stdout + promote_result.stderr
+    for fragment in test_case.expected_promote_fragments:
+        assert fragment in promote_result.stdout
+    query_sql: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    for query_sql, expected_rows in test_case.expected_query_results:
+        assert query_duckdb(
+            db_path=project_dir / "warehouse.duckdb",
+            sql=query_sql,
+        ) == list(expected_rows)

@@ -104,6 +104,11 @@ def run_virtual_promote(
                 f"unknown source virtual environment '{from_virtual_environment_name}'",
                 code="S011",
             )
+        source_environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
+            state_connection,
+            schema=config.schema,
+            virtual_environment_name=from_virtual_environment_name,
+        )
         source_versions: dict[str, ModelVersionRecord | None] = _read_model_versions(
             backend=backend,
             state_connection=state_connection,
@@ -137,6 +142,23 @@ def run_virtual_promote(
         )
         if not select:
             selected_model_names = tuple(model.name for model in graph.project.models)
+            if (
+                source_environment is None
+                or source_environment.status != VirtualEnvironmentStatus.FINALIZED
+            ):
+                raise PlannerInputError(
+                    "whole-VDE promotion requires a finalized source virtual environment",
+                    code="S018",
+                    help="Use --select for a coherent partial promotion from a working source VDE.",
+                )
+            if source_semantics.stale_model_names:
+                raise PlannerInputError(
+                    "whole-VDE promotion requires a source virtual environment that is current "
+                    "with the workspace; stale models: "
+                    + ", ".join(source_semantics.stale_model_names),
+                    code="S018",
+                    help="Build the source VDE or use --select for a coherent partial promotion.",
+                )
         source_ref_map: dict[str, str] = {ref.model_name: ref.version_hash for ref in source_refs}
         missing_source_refs: tuple[str, ...] = tuple(
             model_name for model_name in selected_model_names if model_name not in source_ref_map
