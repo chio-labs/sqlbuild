@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.20.0](https://github.com/chio-labs/sqlbuild/compare/v0.19.0...v0.20.0) (2026-05-26)
+
+
+### Features
+
+* support scenario select options ([bb64dd8](https://github.com/chio-labs/sqlbuild/commit/bb64dd84ffc328f6c85a73998db4a3f86803c2b4))
+* support scenario select options ([e6a90a9](https://github.com/chio-labs/sqlbuild/commit/e6a90a9792962acb28cc95802e888ebdfff47405))
+
+
+### Bug Fixes
+
+* honor build start timestamp cursor override ([49b6396](https://github.com/chio-labs/sqlbuild/commit/49b639647cb543d21df423e0eee8074479622db4))
+* honor build start timestamp cursor override ([99be657](https://github.com/chio-labs/sqlbuild/commit/99be65746f6c5dd274319383815247abc4ea1b84))
+* normalize path separators for Windows compatibility + add sqb init command ([0c95ecc](https://github.com/chio-labs/sqlbuild/commit/0c95eccf74534e74e53ada17d1673060873e5677))
+* normalize path separators for Windows compatibility + init command ([75faf79](https://github.com/chio-labs/sqlbuild/commit/75faf796404f4277a92859ed1bfcbc5239bff39b))
+
 ## [0.19.0](https://github.com/chio-labs/sqlbuild/compare/v0.18.0...v0.19.0) (2026-05-24)
 
 
