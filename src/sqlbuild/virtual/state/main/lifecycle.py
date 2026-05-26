@@ -88,7 +88,10 @@ def run_state_lifecycle(
         if command == StateCommand.RESET:
             if not config.allow_reset:
                 raise StateBackendConfigError(
-                    "state reset requires environments.<name>.state.allow_reset = true"
+                    "state reset is disabled for this environment. To allow it, set "
+                    "`allow_reset = true` under `[environments.<name>.state]` in "
+                    "sqlbuild_project.toml or sqlbuild_local.toml, then rerun with "
+                    "--auto-approve."
                 )
             if not auto_approve:
                 raise StateBackendConfigError("state reset requires --auto-approve")

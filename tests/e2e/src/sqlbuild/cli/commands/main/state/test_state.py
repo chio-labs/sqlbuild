@@ -42,9 +42,7 @@ database = "state.duckdb"
 """.lstrip(),
         command=("--no-color", "state", "reset", "--auto-approve"),
         expected_exit_code=1,
-        expected_error_fragment=(
-            "state reset requires environments.<name>.state.allow_reset = true"
-        ),
+        expected_error_fragment=("set `allow_reset = true` under `[environments.<name>.state]`"),
     ),
     StateLifecycleErrorE2ETestCase(
         description="reset blocks without auto approve",
