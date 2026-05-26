@@ -549,7 +549,7 @@ def _append_query_diff(lines: list[str], entry: ModelPlanEntry) -> None:
 
 
 def _append_config_diff(lines: list[str], entry: ModelPlanEntry) -> None:
-    """Append semantic config diff lines if metadata changed."""
+    """Append version-identity config diff lines if metadata changed."""
 
     if entry.reason != PlanReason.CONFIG_CHANGED:
         return
@@ -623,6 +623,8 @@ def _plan_reason_text(reason: PlanReason) -> str:
 
     if reason == PlanReason.QUERY_CHANGED:
         return "query changed"
+    if reason == PlanReason.FUNCTION_CHANGED:
+        return "function changed"
     if reason == PlanReason.CONFIG_CHANGED:
         return "config changed"
     if reason == PlanReason.SCHEMA_CHANGED:

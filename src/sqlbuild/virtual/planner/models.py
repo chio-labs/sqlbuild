@@ -22,3 +22,4 @@ class VirtualPlanSemantics:
     default_selection: tuple[str, ...] = ()
     stale_root_reasons: dict[str, PlanReason] = field(default_factory=dict)
     stale_root_causes: dict[str, str] = field(default_factory=dict)
+    stale_root_cause_reasons: dict[str, PlanReason] = field(default_factory=dict)

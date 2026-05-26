@@ -12,8 +12,10 @@ from sqlbuild.virtual.planner.helpers.planning import (
     build_expected_version_hashes,
     build_model_fingerprint_metadata_jsons,
     build_stale_model_names,
+    build_stale_root_cause_reasons,
     build_stale_root_causes,
     build_stale_root_reasons,
+    build_stale_root_source_causes,
 )
 from sqlbuild.virtual.planner.helpers.state_metadata import (
     decode_model_version_metadata_jsons,
@@ -58,6 +60,21 @@ def build_virtual_plan_semantics(
         expected_metadata_jsons=expected_metadata_jsons,
         bound_metadata_jsons=bound_metadata_jsons,
     )
+    stale_root_source_causes: dict[str, str] = build_stale_root_source_causes(
+        stale_root_reasons=stale_root_reasons,
+        expected_metadata_jsons=expected_metadata_jsons,
+        bound_metadata_jsons=bound_metadata_jsons,
+    )
+    stale_root_causes: dict[str, str] = build_stale_root_causes(
+        stale_model_names=stale_model_names,
+        stale_root_reasons=stale_root_reasons,
+        graph=graph,
+        stale_root_source_causes=stale_root_source_causes,
+    )
+    stale_root_cause_reasons: dict[str, PlanReason] = build_stale_root_cause_reasons(
+        stale_root_reasons=stale_root_reasons,
+        stale_root_source_causes=stale_root_source_causes,
+    )
     return VirtualPlanSemantics(
         expected_local_hashes=expected_local_hashes,
         expected_metadata_jsons=expected_metadata_jsons,
@@ -72,9 +89,6 @@ def build_virtual_plan_semantics(
             graph=graph,
         ),
         stale_root_reasons=stale_root_reasons,
-        stale_root_causes=build_stale_root_causes(
-            stale_model_names=stale_model_names,
-            stale_root_reasons=stale_root_reasons,
-            graph=graph,
-        ),
+        stale_root_causes=stale_root_causes,
+        stale_root_cause_reasons=stale_root_cause_reasons,
     )

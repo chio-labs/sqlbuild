@@ -183,9 +183,9 @@ def test_given_virtual_plan_with_config_change_when_running_cli_then_it_uses_con
                 "fact_orders",
                 "Upstream changed (1)",
                 "orders_rollup",
-                "cause: fact_orders (query changed)",
+                "cause: is_large_order (function changed)",
             ),
-            unexpected_fragments=("stg_orders", "First run"),
+            unexpected_fragments=("cause: fact_orders", "stg_orders", "First run"),
         )
     ],
     ids=["virtual plan shows function-driven query changed root"],
@@ -244,6 +244,87 @@ def test_given_virtual_plan_with_function_change_when_running_cli_then_it_marks_
     seed_matching_virtual_refs(
         project_dir=project_dir,
         source_project_dir=baseline_project_dir,
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stderr
+    output: str = result.stdout
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in output, output
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualPlanE2ETestCase(
+            description="virtual plan after build shows changed function diff",
+            seed_matching_refs=False,
+            command=("--no-color", "plan"),
+            expected_fragments=(
+                "Changed functions (1)",
+                "is_large_order",
+                "policy: query_change_backfill=full",
+                "query diff:",
+                "--- previous",
+                "+++ current",
+                "-amount > 9",
+                "+amount > 5",
+                "Upstream changed (1)",
+                "orders_rollup",
+                "cause: is_large_order (function changed)",
+            ),
+            unexpected_fragments=("reason: first run", "cause: fact_orders"),
+        )
+    ],
+    ids=["virtual plan after build shows changed function diff"],
+)
+def test_given_virtual_build_then_function_change_when_running_plan_then_it_shows_function_diff(
+    test_case: VirtualPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    initial_function_sql: str = (
+        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, query_change_backfill full);\n\n"
+        "amount > 9\n"
+    )
+    changed_function_sql: str = (
+        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, query_change_backfill full);\n\n"
+        "amount > 5\n"
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_plan_function_diff_project",
+        repo_files=build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id")
+        | {
+            "models/fact_orders.sql": (
+                'MODEL ();\n\nSELECT __udf("is_large_order")(id) AS id FROM __ref("stg_orders")\n'
+            ),
+            "models/orders_rollup.sql": (
+                'MODEL ();\n\nSELECT COUNT(*) AS order_count FROM __ref("fact_orders")\n'
+            ),
+            "functions/sql/is_large_order.sql": initial_function_sql,
+        },
+    )
+
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stderr
+    (project_dir / "functions" / "sql" / "is_large_order.sql").write_text(
+        changed_function_sql,
+        encoding="utf-8",
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(

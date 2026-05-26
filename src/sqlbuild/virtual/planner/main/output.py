@@ -23,6 +23,7 @@ def apply_virtual_plan_output(
         plan_output=plan_output,
         stale_root_reasons=semantics.stale_root_reasons,
         stale_root_causes=semantics.stale_root_causes,
+        stale_root_cause_reasons=semantics.stale_root_cause_reasons,
         previous_query_sqls=semantics.bound_previous_query_sqls,
     )
     return with_virtual_metadata(

@@ -12,8 +12,10 @@ from sqlbuild.virtual.planner.helpers.planning import (
     build_model_fingerprint_metadata_jsons,
     build_stale_model_names,
     build_stale_required_upstream_closure,
+    build_stale_root_cause_reasons,
     build_stale_root_causes,
     build_stale_root_reasons,
+    build_stale_root_source_causes,
     resolve_virtual_model_selection,
 )
 from tests.unit.src.sqlbuild.virtual.planner.helpers._test_types import (
@@ -21,8 +23,10 @@ from tests.unit.src.sqlbuild.virtual.planner.helpers._test_types import (
     ExpectedVersionHashesTestCase,
     StaleModelNamesTestCase,
     StaleRequiredUpstreamClosureTestCase,
+    StaleRootCauseReasonsTestCase,
     StaleRootCausesTestCase,
     StaleRootReasonsTestCase,
+    StaleRootSourceCausesTestCase,
     VirtualModelSelectionTestCase,
 )
 from tests.unit.src.sqlbuild.virtual.planner.helpers.helpers import (
@@ -83,7 +87,7 @@ STALE_ROOT_REASONS_TEST_CASES: tuple[StaleRootReasonsTestCase, ...] = (
         },
     ),
     StaleRootReasonsTestCase(
-        description="classifies semantic config separately from function changes",
+        description="classifies version identity config separately from function changes",
         stale_model_names=("fact_orders", "orders_rollup"),
         expected_local_hashes={
             "fact_orders": "new-local-a",
@@ -106,17 +110,33 @@ STALE_ROOT_REASONS_TEST_CASES: tuple[StaleRootReasonsTestCase, ...] = (
             "orders_rollup": "SELECT COUNT(*) FROM fact_orders",
         },
         expected_metadata_jsons={
-            "fact_orders": '{"config":{},"local_function_hashes":["new"]}',
+            "fact_orders": '{"config":{},"local_function_hashes":{"is_large_order":"new"}}',
             "orders_rollup": '{"config":{"materialized":"table"}}',
         },
         bound_metadata_jsons={
-            "fact_orders": '{"config":{},"local_function_hashes":["old"]}',
+            "fact_orders": '{"config":{},"local_function_hashes":{"is_large_order":"old"}}',
             "orders_rollup": '{"config":{"materialized":"view"}}',
         },
         expected_stale_root_reasons={
             "fact_orders": PlanReason.QUERY_CHANGED,
             "orders_rollup": PlanReason.CONFIG_CHANGED,
         },
+    ),
+)
+
+STALE_ROOT_CAUSES_TEST_CASES: tuple[StaleRootCausesTestCase, ...] = (
+    StaleRootCausesTestCase(
+        description="maps downstream stale models to their first stale root cause",
+        stale_model_names=("stg_orders", "fact_orders"),
+        stale_root_reasons={"stg_orders": PlanReason.QUERY_CHANGED},
+        expected_stale_root_causes={"fact_orders": "stg_orders"},
+    ),
+    StaleRootCausesTestCase(
+        description="maps downstream stale models to changed function source cause",
+        stale_model_names=("stg_orders", "fact_orders"),
+        stale_root_reasons={"stg_orders": PlanReason.QUERY_CHANGED},
+        stale_root_source_causes={"stg_orders": "is_large_order"},
+        expected_stale_root_causes={"fact_orders": "is_large_order"},
     ),
 )
 
@@ -245,15 +265,15 @@ def test_given_only_model_name_differs_when_building_expected_hashes_then_hashes
     "test_case",
     [
         ExpectedVersionHashesTestCase(
-            description="unknown config key does not change model version hash",
+            description="unknown validation config keys do not change model version hash",
             upstream_query_sql="SELECT 1 AS id",
             downstream_query_sql="SELECT 1 AS order_id",
             expected_hashes_differ=False,
         )
     ],
-    ids=["unknown config key does not change model version hash"],
+    ids=["unknown validation config keys do not change model version hash"],
 )
-def test_given_unknown_config_key_when_building_expected_hashes_then_hashes_match(
+def test_given_validation_config_keys_when_building_expected_hashes_then_hashes_match(
     test_case: ExpectedVersionHashesTestCase,
 ) -> None:
     baseline_graph: ProjectGraph = build_virtual_planner_test_project(
@@ -263,7 +283,12 @@ def test_given_unknown_config_key_when_building_expected_hashes_then_hashes_matc
     extra_config_graph: ProjectGraph = build_virtual_planner_test_project(
         upstream_query_sql=test_case.upstream_query_sql,
         downstream_query_sql=test_case.downstream_query_sql,
-        upstream_extra_config={"future_default_flag": "off"},
+        upstream_extra_config={
+            "audits": ["not_null(order_id)"],
+            "contract": "enforced",
+            "future_default_flag": "off",
+            "mode": "strict",
+        },
     )
 
     baseline_hashes: dict[str, str] = build_expected_version_hashes(
@@ -281,22 +306,65 @@ def test_given_unknown_config_key_when_building_expected_hashes_then_hashes_matc
     assert (
         baseline_hashes["stg_orders"] != extra_config_hashes["stg_orders"]
     ) is test_case.expected_hashes_differ
+    assert "audits" not in metadata_jsons["stg_orders"]
+    assert "contract" not in metadata_jsons["stg_orders"]
     assert "future_default_flag" not in metadata_jsons["stg_orders"]
+    assert '"mode"' not in metadata_jsons["stg_orders"]
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
         ExpectedVersionHashesTestCase(
-            description="semantic config key changes model version hash",
+            description="incremental mode changes model version hash",
             upstream_query_sql="SELECT 1 AS id",
             downstream_query_sql="SELECT 1 AS order_id",
             expected_hashes_differ=True,
         )
     ],
-    ids=["semantic config key changes model version hash"],
+    ids=["incremental mode changes model version hash"],
 )
-def test_given_semantic_config_key_when_building_expected_hashes_then_hashes_differ(
+def test_given_incremental_mode_when_building_expected_hashes_then_hashes_differ(
+    test_case: ExpectedVersionHashesTestCase,
+) -> None:
+    baseline_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_extra_config={"incremental_mode": "normal"},
+    )
+    microbatch_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_extra_config={"incremental_mode": "microbatch"},
+    )
+
+    baseline_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=baseline_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=baseline_graph),
+    )
+    microbatch_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=microbatch_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=microbatch_graph),
+    )
+
+    assert (
+        baseline_hashes["stg_orders"] != microbatch_hashes["stg_orders"]
+    ) is test_case.expected_hashes_differ
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedVersionHashesTestCase(
+            description="version identity config key changes model version hash",
+            upstream_query_sql="SELECT 1 AS id",
+            downstream_query_sql="SELECT 1 AS order_id",
+            expected_hashes_differ=True,
+        )
+    ],
+    ids=["version identity config key changes model version hash"],
+)
+def test_given_version_identity_config_key_when_building_expected_hashes_then_hashes_differ(
     test_case: ExpectedVersionHashesTestCase,
 ) -> None:
     table_graph: ProjectGraph = build_virtual_planner_test_project(
@@ -501,15 +569,8 @@ def test_given_stale_models_when_building_stale_root_reasons_then_it_classifies_
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        StaleRootCausesTestCase(
-            description="maps downstream stale models to their first stale root cause",
-            stale_model_names=("stg_orders", "fact_orders"),
-            stale_root_reasons={"stg_orders": PlanReason.QUERY_CHANGED},
-            expected_stale_root_causes={"fact_orders": "stg_orders"},
-        )
-    ],
-    ids=["maps downstream stale models to their first stale root cause"],
+    STALE_ROOT_CAUSES_TEST_CASES,
+    ids=[case.description for case in STALE_ROOT_CAUSES_TEST_CASES],
 )
 def test_given_stale_roots_when_building_root_causes_then_it_maps_downstream_models(
     test_case: StaleRootCausesTestCase,
@@ -523,6 +584,61 @@ def test_given_stale_roots_when_building_root_causes_then_it_maps_downstream_mod
         stale_model_names=test_case.stale_model_names,
         stale_root_reasons=test_case.stale_root_reasons,
         graph=graph,
+        stale_root_source_causes=test_case.stale_root_source_causes,
     )
 
     assert stale_root_causes == test_case.expected_stale_root_causes
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StaleRootCauseReasonsTestCase(
+            description="maps function source causes to function changed display reasons",
+            stale_root_reasons={"fact_orders": PlanReason.QUERY_CHANGED},
+            stale_root_source_causes={"fact_orders": "is_large_order"},
+            expected_stale_root_cause_reasons={
+                "is_large_order": PlanReason.FUNCTION_CHANGED,
+            },
+        )
+    ],
+    ids=["maps function source causes to function changed display reasons"],
+)
+def test_given_function_source_cause_when_building_cause_reasons_then_uses_function_reason(
+    test_case: StaleRootCauseReasonsTestCase,
+) -> None:
+    result: dict[str, PlanReason] = build_stale_root_cause_reasons(
+        stale_root_reasons=test_case.stale_root_reasons,
+        stale_root_source_causes=test_case.stale_root_source_causes,
+    )
+
+    assert result == test_case.expected_stale_root_cause_reasons
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StaleRootSourceCausesTestCase(
+            description="maps function metadata diff to changed function source cause",
+            stale_root_reasons={"fact_orders": PlanReason.QUERY_CHANGED},
+            expected_metadata_jsons={
+                "fact_orders": '{"config":{},"local_function_hashes":{"is_large_order":"new"}}',
+            },
+            bound_metadata_jsons={
+                "fact_orders": '{"config":{},"local_function_hashes":{"is_large_order":"old"}}',
+            },
+            expected_stale_root_source_causes={"fact_orders": "is_large_order"},
+        ),
+    ],
+    ids=["maps function metadata diff to changed function source cause"],
+)
+def test_given_function_metadata_diff_when_building_source_causes_then_maps_root_to_function(
+    test_case: StaleRootSourceCausesTestCase,
+) -> None:
+    result: dict[str, str] = build_stale_root_source_causes(
+        stale_root_reasons=test_case.stale_root_reasons,
+        expected_metadata_jsons=test_case.expected_metadata_jsons,
+        bound_metadata_jsons=test_case.bound_metadata_jsons,
+    )
+
+    assert result == test_case.expected_stale_root_source_causes

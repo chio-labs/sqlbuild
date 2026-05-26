@@ -21,7 +21,9 @@ from sqlbuild.compiler.planner.helpers.changes.policy import (
 )
 from sqlbuild.compiler.planner.helpers.changes.query import detect_query_change
 from sqlbuild.compiler.planner.helpers.changes.schema import detect_schema_changes
-from sqlbuild.compiler.planner.main.semantic_metadata import build_semantic_model_metadata_json
+from sqlbuild.compiler.planner.main.version_identity_metadata import (
+    build_version_identity_metadata_json,
+)
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     ChangeDetectionResult,
@@ -47,7 +49,7 @@ def detect_model_changes(
     """Detect changes for one model and resolve backfill policy."""
 
     model_name: str = model.name
-    metadata_json: str = build_semantic_model_metadata_json(
+    metadata_json: str = build_version_identity_metadata_json(
         model_name=model.name,
         config_values=model.config.values,
     )

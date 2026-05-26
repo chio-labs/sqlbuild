@@ -241,7 +241,11 @@ def build_execution_plan(
         effective_cascades[function.name] = build_self_cascade(
             function_backfill,
             root_cause=function.name,
-            root_reason=function_reason,
+            root_reason=(
+                PlanReason.FUNCTION_CHANGED
+                if function_reason == PlanReason.QUERY_CHANGED
+                else function_reason
+            ),
         )
 
     key: CompiledObjectKey

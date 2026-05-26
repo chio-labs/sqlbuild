@@ -117,7 +117,7 @@ DETECT_MODEL_CHANGES_TEST_CASES: list[DetectModelChangesTestCase] = [
         expected_backfill_action=BackfillAction.WARN_ONLY,
     ),
     DetectModelChangesTestCase(
-        description="detects config change when semantic config differs",
+        description="detects config change when version identity config differs",
         model_name="orders",
         query_sql=_QUERY_SQL,
         config_values={"materialized": "table"},
