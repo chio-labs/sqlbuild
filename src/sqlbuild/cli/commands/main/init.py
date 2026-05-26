@@ -36,7 +36,11 @@ schema = "dev"
         "models/marts",
         "sources",
         "seeds",
+        "loaders",
         "tests/unit",
+        "tests/scenarios",
+        "functions/sql",
+        "functions/python",
         "macros",
         "audits",
     )
@@ -64,7 +68,11 @@ schema = "dev"
         "models/marts",
         "sources",
         "seeds",
+        "loaders",
         "tests/unit",
+        "tests/scenarios",
+        "functions/sql",
+        "functions/python",
         "macros",
         "audits",
     )
@@ -87,6 +95,7 @@ schema = "dev"
     print("Next steps:")
     print("  1. Add sources to sources/")
     print("  2. Add models to models/staging/ and models/marts/")
-    print("  3. sqb compile")
-    print("  4. sqb build")
+    print("  3. Add tests to tests/unit/ or tests/scenarios/")
+    print("  4. sqb compile")
+    print("  5. sqb build")
     return 0
