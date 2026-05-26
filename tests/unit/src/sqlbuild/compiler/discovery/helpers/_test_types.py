@@ -3,6 +3,14 @@ from pathlib import Path
 
 
 @dataclass(frozen=True)
+class ValidatePathDefaultsMatchModelsTestCase:
+    description: str
+    model_relative_paths: tuple[str, ...]
+    path_defaults: dict[str, dict[str, object]]
+    expected_model_file_count: int
+
+
+@dataclass(frozen=True)
 class LoadProjectConfigTestCase:
     description: str
     project_file_contents: str

@@ -298,11 +298,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.debug import run_debug
     from sqlbuild.cli.commands.main.diff import run_diff
     from sqlbuild.cli.commands.main.helpers.scenario.capture import run_scenario_capture
+    from sqlbuild.cli.commands.main.init import run_init
     from sqlbuild.cli.commands.main.janitor import run_janitor
     from sqlbuild.cli.commands.main.lineage import run_lineage
     from sqlbuild.cli.commands.main.load import run_load
     from sqlbuild.cli.commands.main.plan import run_plan
-    from sqlbuild.cli.commands.main.init import run_init
     from sqlbuild.cli.commands.main.playground import run_playground
     from sqlbuild.cli.commands.main.query import run_query
     from sqlbuild.cli.commands.main.run import run_run
