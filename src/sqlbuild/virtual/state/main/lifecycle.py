@@ -8,13 +8,12 @@ from typing import Any
 
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.virtual.state.classes.duckdb import DuckDbStateBackend
-from sqlbuild.virtual.state.classes.postgres import PostgresStateBackend
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.exceptions import StateBackendConfigError
+from sqlbuild.virtual.state.helpers.backend import build_state_backend
 from sqlbuild.virtual.state.helpers.config import resolve_state_backend_config
 from sqlbuild.virtual.state.models import StateBackendConfig, StateSchemaValidationResult
-from sqlbuild.virtual.state.types import StateBackendName, StateCommand
+from sqlbuild.virtual.state.types import StateCommand
 
 
 def run_state_lifecycle(
@@ -34,7 +33,7 @@ def run_state_lifecycle(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
     )
-    backend: StateBackend = _build_state_backend(config.backend)
+    backend: StateBackend = build_state_backend(config.backend)
     connection: Any = backend.connect(config.connection)
     try:
         if command == StateCommand.INIT:
@@ -83,12 +82,3 @@ def run_state_lifecycle(
         return 0
     finally:
         backend.close(connection)
-
-
-def _build_state_backend(backend_name: StateBackendName) -> StateBackend:
-    match backend_name:
-        case StateBackendName.DUCKDB:
-            return DuckDbStateBackend()
-        case StateBackendName.POSTGRES:
-            return PostgresStateBackend()
-    raise StateBackendConfigError(f"Unsupported state backend: {backend_name}")

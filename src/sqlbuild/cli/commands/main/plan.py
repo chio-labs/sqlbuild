@@ -28,6 +28,8 @@ from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.shared.helpers.display import DisplayOptions
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.models.types import EnvironmentMode
+from sqlbuild.virtual.planner.main.plan import run_virtual_plan_pipeline
 
 
 def run_plan(
@@ -88,28 +90,51 @@ def run_plan(
     if not json_output:
         progress_stream.write("\n")
         progress_stream.flush()
-    pipeline_result: CompilePipelineResult = run_compile_pipeline(
+    external_sql_reference_resolver: object | None = resolve_external_sql_reference_resolver(
+        project_dir=effective_project_dir,
         discovered_inputs=discovered_inputs,
-        adapter=adapter,
-        no_sql_validation=no_sql_validation,
-        defer_to=defer_to,
-        defer_sources_to=defer_sources_to,
-        cursor_overrides=cursor_overrides,
-        full_refresh=full_refresh,
-        auto_load_sources=should_load_sources,
-        select=select,
-        exclude=exclude,
-        connection_config=connection_config,
-        cli_vars=cli_vars,
-        on_connection_start=connection_progress.on_connection_start,
-        on_connection_complete=connection_progress.on_connection_complete,
-        on_connection_error=connection_progress.on_connection_error,
-        on_progress=planning_progress.on_progress,
-        external_sql_reference_resolver=resolve_external_sql_reference_resolver(
+    )
+    pipeline_result: CompilePipelineResult
+    if discovered_inputs.project_config.environment_mode == EnvironmentMode.VIRTUAL:
+        pipeline_result = run_virtual_plan_pipeline(
             project_dir=effective_project_dir,
             discovered_inputs=discovered_inputs,
-        ),
-    )
+            adapter=adapter,
+            no_sql_validation=no_sql_validation,
+            defer_sources_to=defer_sources_to,
+            cursor_overrides=cursor_overrides,
+            full_refresh=full_refresh,
+            auto_load_sources=should_load_sources,
+            select=select,
+            exclude=exclude,
+            connection_config=connection_config,
+            cli_vars=cli_vars,
+            on_connection_start=connection_progress.on_connection_start,
+            on_connection_complete=connection_progress.on_connection_complete,
+            on_connection_error=connection_progress.on_connection_error,
+            on_progress=planning_progress.on_progress,
+            external_sql_reference_resolver=external_sql_reference_resolver,
+        )
+    else:
+        pipeline_result = run_compile_pipeline(
+            discovered_inputs=discovered_inputs,
+            adapter=adapter,
+            no_sql_validation=no_sql_validation,
+            defer_to=defer_to,
+            defer_sources_to=defer_sources_to,
+            cursor_overrides=cursor_overrides,
+            full_refresh=full_refresh,
+            auto_load_sources=should_load_sources,
+            select=select,
+            exclude=exclude,
+            connection_config=connection_config,
+            cli_vars=cli_vars,
+            on_connection_start=connection_progress.on_connection_start,
+            on_connection_complete=connection_progress.on_connection_complete,
+            on_connection_error=connection_progress.on_connection_error,
+            on_progress=planning_progress.on_progress,
+            external_sql_reference_resolver=external_sql_reference_resolver,
+        )
 
     plan_output: PlanOutput = pipeline_result.plan_output
 

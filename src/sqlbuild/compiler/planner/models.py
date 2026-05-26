@@ -513,3 +513,4 @@ class PlanOutput:
     seed_targets: dict[str, CompiledRelationTarget] = field(default_factory=dict)
     function_targets: dict[str, CompiledRelationTarget] = field(default_factory=dict)
     source_map: dict[str, SourceEntry] = field(default_factory=dict)
+    metadata: dict[str, object] = field(default_factory=dict)

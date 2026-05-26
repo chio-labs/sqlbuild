@@ -634,6 +634,33 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "  order_status_index                 delete_insert (integer)",
         ),
     ),
+    FormatPlanTestCase(
+        description="virtual metadata shows roots first and caps stale model list",
+        plan_output=build_plan_output(
+            metadata={
+                "virtual_environment_name": "dev",
+                "virtual_environment_status": "working",
+                "virtual_stale_root_names": ("root_a", "root_b"),
+                "virtual_stale_model_names": tuple(f"model_{index:02d}" for index in range(25)),
+            },
+        ),
+        expected_fragments=(
+            "Virtual environment",
+            "name: dev",
+            "status: working",
+            "stale roots: 2",
+            "stale root set: root_a, root_b",
+            "stale models: 25",
+            "stale model set: model_00",
+            "... (+5 more)",
+        ),
+        expected_ordered_fragments=(
+            "stale roots: 2",
+            "stale root set: root_a, root_b",
+            "stale models: 25",
+            "stale model set: model_00",
+        ),
+    ),
 ]
 
 
