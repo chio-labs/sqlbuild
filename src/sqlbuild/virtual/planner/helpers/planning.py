@@ -6,8 +6,11 @@ import hashlib
 import json
 from typing import Any
 
+from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.main.selection import resolve_project_selectors
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.virtual.state.models import ModelVersionRecord, VirtualEnvironmentRefRecord
 
@@ -263,6 +266,116 @@ def build_default_virtual_selection(
             for downstream_key in graph.downstream_deps.get(current, ()):  # pragma: no branch
                 stack.append(downstream_key)
     return tuple(sorted(selected))
+
+
+def resolve_virtual_model_selection(
+    *,
+    graph: ProjectGraph,
+    select: tuple[str, ...],
+    exclude: tuple[str, ...],
+    default_selection: tuple[str, ...],
+    stale_model_names: tuple[str, ...],
+    include_stale_upstreams: bool = False,
+    changes_only: bool = False,
+) -> tuple[str, ...]:
+    """Resolve and guard the effective virtual model selection."""
+
+    selected_model_names: tuple[str, ...] = (
+        _resolve_selected_model_names(graph=graph, select=select, exclude=exclude)
+        if select
+        else _apply_exclude_to_model_names(
+            graph=graph,
+            model_names=default_selection,
+            exclude=exclude,
+        )
+    )
+    if changes_only:
+        default_set: set[str] = set(default_selection)
+        selected_model_names = tuple(
+            model_name for model_name in selected_model_names if model_name in default_set
+        )
+    stale_upstream_names: tuple[str, ...] = build_stale_required_upstream_closure(
+        graph=graph,
+        selected_model_names=selected_model_names,
+        stale_model_names=stale_model_names,
+    )
+    if stale_upstream_names and not include_stale_upstreams:
+        stale_list: str = ", ".join(stale_upstream_names)
+        raise PlannerInputError(
+            f"selected virtual scope is missing stale required upstream models: {stale_list}",
+            code="S010",
+            help=(
+                "Re-run with --include-stale-upstreams to add the minimal required "
+                "upstream closure."
+            ),
+        )
+    if include_stale_upstreams:
+        selected_model_names = tuple(sorted({*selected_model_names, *stale_upstream_names}))
+    return selected_model_names
+
+
+def build_stale_required_upstream_closure(
+    *,
+    graph: ProjectGraph,
+    selected_model_names: tuple[str, ...],
+    stale_model_names: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Return stale model ancestors required by the selected models."""
+
+    selected: set[str] = set(selected_model_names)
+    stale: set[str] = set(stale_model_names)
+    required: set[str] = set()
+    selected_model_name: str
+    for selected_model_name in selected_model_names:
+        start_key: Any | None = graph.all_keys.get(selected_model_name)
+        if start_key is None:
+            continue
+        stack: list[Any] = list(graph.upstream_deps.get(start_key, ()))
+        visited: set[Any] = set()
+        while stack:
+            current: Any = stack.pop()
+            if current in visited:
+                continue
+            visited.add(current)
+            if current.resource_type == CompiledResourceType.MODEL:
+                if current.name in stale and current.name not in selected:
+                    required.add(current.name)
+            upstream_key: Any
+            for upstream_key in graph.upstream_deps.get(current, ()):  # pragma: no branch
+                stack.append(upstream_key)
+    return tuple(sorted(required))
+
+
+def _resolve_selected_model_names(
+    *,
+    graph: ProjectGraph,
+    select: tuple[str, ...],
+    exclude: tuple[str, ...],
+) -> tuple[str, ...]:
+    selected_keys: frozenset[CompiledObjectKey] = resolve_project_selectors(
+        select=select,
+        exclude=exclude,
+        all_keys=graph.all_keys,
+        upstream_deps=graph.upstream_deps,
+        downstream_deps=graph.downstream_deps,
+        tag_index=graph.tag_index,
+        path_index=graph.path_index,
+    )
+    return tuple(
+        sorted(key.name for key in selected_keys if key.resource_type == CompiledResourceType.MODEL)
+    )
+
+
+def _apply_exclude_to_model_names(
+    *,
+    graph: ProjectGraph,
+    model_names: tuple[str, ...],
+    exclude: tuple[str, ...],
+) -> tuple[str, ...]:
+    if not model_names or not exclude:
+        return model_names
+    excluded: set[str] = set(_resolve_selected_model_names(graph=graph, select=exclude, exclude=()))
+    return tuple(model_name for model_name in model_names if model_name not in excluded)
 
 
 def _stable_hash(value: str) -> str:

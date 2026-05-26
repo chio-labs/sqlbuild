@@ -71,6 +71,8 @@ def run_build(
     verbose: bool = False,
     debug: bool = False,
     cli_vars: dict[str, object] | None = None,
+    include_stale_upstreams: bool = False,
+    changes_only: bool = False,
     json_output: bool = False,
     json_output_path: Path | None = None,
 ) -> int:
@@ -126,6 +128,8 @@ def run_build(
             cursor_overrides=cursor_overrides,
             full_refresh=full_refresh,
             virtual_environment_name=virtual_env,
+            include_stale_upstreams=include_stale_upstreams,
+            changes_only=changes_only,
             auto_load_sources=should_load_sources,
             reload_sources=reload_sources,
             select=select,

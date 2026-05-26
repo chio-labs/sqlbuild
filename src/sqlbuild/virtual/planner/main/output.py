@@ -15,6 +15,7 @@ def apply_virtual_plan_output(
     plan_output: PlanOutput,
     environment_name: str,
     semantics: VirtualPlanSemantics,
+    selected_model_names: tuple[str, ...] = (),
 ) -> PlanOutput:
     """Rewrite plan entries and attach virtual environment metadata."""
 
@@ -29,4 +30,7 @@ def apply_virtual_plan_output(
         environment_name=environment_name,
         stale_model_names=semantics.stale_model_names,
         stale_root_names=tuple(sorted(semantics.stale_root_reasons)),
+        remaining_stale_model_names=tuple(
+            sorted(set(semantics.stale_model_names) - set(selected_model_names))
+        ),
     )

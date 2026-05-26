@@ -679,6 +679,27 @@ TEST_CASES: list[FormatPlanTestCase] = [
         ),
         unexpected_fragments=("use --verbose",),
     ),
+    FormatPlanTestCase(
+        description="virtual metadata shows remaining stale models after partial selection",
+        plan_output=build_plan_output(
+            metadata={
+                "virtual_environment_name": "dev",
+                "virtual_environment_status": "working",
+                "virtual_stale_root_names": ("stg_orders",),
+                "virtual_stale_model_names": ("fact_orders", "orders_rollup", "stg_orders"),
+                "virtual_remaining_stale_model_names": ("orders_rollup",),
+            },
+        ),
+        expected_fragments=(
+            "stale models: 3",
+            "stale model set: fact_orders, orders_rollup, stg_orders",
+            "remaining stale after selection: orders_rollup",
+        ),
+        expected_ordered_fragments=(
+            "stale model set: fact_orders, orders_rollup, stg_orders",
+            "remaining stale after selection: orders_rollup",
+        ),
+    ),
 ]
 
 

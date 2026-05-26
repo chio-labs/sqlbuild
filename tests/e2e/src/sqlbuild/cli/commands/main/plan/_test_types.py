@@ -14,3 +14,12 @@ class VirtualPlanE2ETestCase:
 class VirtualPlanJsonE2ETestCase:
     description: str
     expected_json_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class VirtualPlanSelectionGuardE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...] = ()

@@ -41,6 +41,8 @@ class CliNamespace:
     fail_fast: bool = False
     full_refresh: bool = False
     virtual_env: str | None = None
+    include_stale_upstreams: bool = False
+    changes_only: bool = False
     load_sources: bool | None = None
     reload: bool = False
     allow_snapshot_full_refresh: bool = False
@@ -128,6 +130,8 @@ class CliEntrypointHandlers:
             tuple[str, ...],
             bool,
             dict[str, object],
+            bool,
+            bool,
         ],
         int,
     ]
@@ -157,6 +161,8 @@ class CliEntrypointHandlers:
             bool,
             bool,
             dict[str, object],
+            bool,
+            bool,
             bool,
             Path | None,
         ],

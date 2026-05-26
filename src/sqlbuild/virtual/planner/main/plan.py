@@ -32,6 +32,7 @@ from sqlbuild.virtual.planner.helpers.planning import (
     build_stale_model_names,
     build_stale_root_causes,
     build_stale_root_reasons,
+    resolve_virtual_model_selection,
 )
 from sqlbuild.virtual.planner.helpers.targets import build_target_from_physical_relation
 from sqlbuild.virtual.shared.helpers.encoding import decode_state_text
@@ -52,6 +53,8 @@ def run_virtual_plan_pipeline(
     cursor_overrides: CursorOverrides | None = None,
     full_refresh: bool = False,
     virtual_environment_name: str | None = None,
+    include_stale_upstreams: bool = False,
+    changes_only: bool = False,
     auto_load_sources: bool = False,
     reload_sources: bool = False,
     connection_config: dict[str, object] | None = None,
@@ -121,13 +124,18 @@ def run_virtual_plan_pipeline(
             stale_root_reasons=stale_root_reasons,
             graph=graph,
         )
-        effective_select: tuple[str, ...] = (
-            select
-            if select
-            else build_default_virtual_selection(
-                stale_model_names=stale_model_names,
-                graph=graph,
-            )
+        default_selection: tuple[str, ...] = build_default_virtual_selection(
+            stale_model_names=stale_model_names,
+            graph=graph,
+        )
+        effective_select: tuple[str, ...] = resolve_virtual_model_selection(
+            graph=graph,
+            select=select,
+            exclude=exclude,
+            default_selection=default_selection,
+            stale_model_names=stale_model_names,
+            include_stale_upstreams=include_stale_upstreams,
+            changes_only=changes_only,
         )
 
         if effective_select:
@@ -136,7 +144,7 @@ def run_virtual_plan_pipeline(
                 adapter=adapter,
                 connection=connection,
                 select=effective_select,
-                exclude=exclude,
+                exclude=(),
                 cursor_overrides=cursor_overrides,
                 full_refresh=full_refresh,
                 auto_load_sources=auto_load_sources,
@@ -175,6 +183,9 @@ def run_virtual_plan_pipeline(
             ),
             stale_model_names=stale_model_names,
             stale_root_names=tuple(sorted(stale_root_reasons)),
+            remaining_stale_model_names=tuple(
+                sorted(set(stale_model_names) - set(effective_select))
+            ),
         )
         return CompilePipelineResult(
             project=graph.project,

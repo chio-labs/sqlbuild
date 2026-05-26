@@ -7,6 +7,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     VirtualBuildE2ETestCase,
+    VirtualBuildSelectionGuardE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
     build_virtual_plan_repo_files,
@@ -263,3 +264,73 @@ def test_given_explicit_virtual_env_with_graph_selection_when_building_then_refs
     assert final_plan_result.returncode == 0, final_plan_result.stderr
     for fragment in test_case.expected_final_plan_fragments:
         assert fragment in final_plan_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualBuildSelectionGuardE2ETestCase(
+            description="selected downstream with stale upstream blocks then expands",
+            blocked_command=("--no-color", "build", "--select", "fact_orders"),
+            expanded_command=(
+                "--no-color",
+                "build",
+                "--select",
+                "fact_orders",
+                "--include-stale-upstreams",
+            ),
+            expected_blocked_fragments=("missing stale required upstream models: stg_orders",),
+            expected_query_results=(("SELECT id FROM dev__dev.fact_orders ORDER BY id", ((2,),)),),
+        )
+    ],
+    ids=["selected downstream with stale upstream blocks then expands"],
+)
+def test_given_virtual_build_selected_downstream_with_stale_upstream_when_running_then_it_blocks(
+    test_case: VirtualBuildSelectionGuardE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_build_guard",
+        repo_files=build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id"),
+    )
+
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    default_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert default_build_result.returncode == 0, default_build_result.stderr
+    (project_dir / "models" / "stg_orders.sql").write_text(
+        "MODEL ();\n\nSELECT 2 AS id\n",
+        encoding="utf-8",
+    )
+
+    blocked_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.blocked_command,
+        project_dir=project_dir,
+    )
+
+    assert blocked_result.returncode != 0
+    blocked_output: str = blocked_result.stdout + blocked_result.stderr
+    fragment: str
+    for fragment in test_case.expected_blocked_fragments:
+        assert fragment in blocked_output
+
+    expanded_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.expanded_command,
+        project_dir=project_dir,
+    )
+
+    assert expanded_result.returncode == 0, expanded_result.stderr
+    query_sql: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    for query_sql, expected_rows in test_case.expected_query_results:
+        assert query_duckdb(
+            db_path=project_dir / "warehouse.duckdb",
+            sql=query_sql,
+        ) == list(expected_rows)
