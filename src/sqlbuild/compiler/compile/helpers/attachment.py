@@ -3070,7 +3070,7 @@ def find_matching_path_default(
 ) -> str | None:
     """Return the nearest matching path_defaults key for a model file."""
 
-    relative_path: Path = Path(str(model_file.relative_path).removeprefix("models/"))
+    relative_path: Path = Path(str(model_file.relative_path).replace("\\", "/").removeprefix("models/"))
     best_match: str | None = None
     best_length: int = -1
 
