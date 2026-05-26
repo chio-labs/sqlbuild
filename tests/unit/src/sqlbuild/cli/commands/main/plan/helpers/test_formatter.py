@@ -15,6 +15,7 @@ from sqlbuild.compiler.planner.types import (
     SchemaChangeKind,
     WarningSeverity,
 )
+from sqlbuild.shared.helpers.display import DisplayOptions
 from sqlbuild.spec.models.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers._test_types import (
     FormatPlanTestCase,
@@ -641,7 +642,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
                 "virtual_environment_name": "dev",
                 "virtual_environment_status": "working",
                 "virtual_stale_root_names": ("root_a", "root_b"),
-                "virtual_stale_model_names": tuple(f"model_{index:02d}" for index in range(25)),
+                "virtual_stale_model_names": tuple(f"model_{index:02d}" for index in range(55)),
             },
         ),
         expected_fragments=(
@@ -650,16 +651,33 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "status: working",
             "stale roots: 2",
             "stale root set: root_a, root_b",
-            "stale models: 25",
+            "stale models: 55",
             "stale model set: model_00",
-            "... (+5 more)",
+            "... (+5 more; use --verbose to show all)",
         ),
         expected_ordered_fragments=(
             "stale roots: 2",
             "stale root set: root_a, root_b",
-            "stale models: 25",
+            "stale models: 55",
             "stale model set: model_00",
         ),
+    ),
+    FormatPlanTestCase(
+        description="virtual metadata shows full stale sets in verbose output",
+        plan_output=build_plan_output(
+            metadata={
+                "virtual_environment_name": "dev",
+                "virtual_environment_status": "working",
+                "virtual_stale_root_names": tuple(f"root_{index:02d}" for index in range(3)),
+                "virtual_stale_model_names": tuple(f"model_{index:02d}" for index in range(3)),
+            },
+        ),
+        display_options=DisplayOptions(max_entries_per_section=None),
+        expected_fragments=(
+            "stale root set: root_00, root_01, root_02",
+            "stale model set: model_00, model_01, model_02",
+        ),
+        unexpected_fragments=("use --verbose",),
     ),
 ]
 
@@ -676,6 +694,7 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
         test_case.plan_output,
         full_refresh=test_case.full_refresh,
         use_color=False,
+        display_options=test_case.display_options,
     )
 
     fragment: str

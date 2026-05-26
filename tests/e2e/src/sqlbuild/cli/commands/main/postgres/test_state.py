@@ -38,9 +38,7 @@ POSTGRES_STATE_LIFECYCLE_ERROR_E2E_TEST_CASES: tuple[
         allow_reset=False,
         command=("--no-color", "state", "reset", "--auto-approve"),
         expected_exit_code=1,
-        expected_error_fragment=(
-            "state reset requires environments.<name>.state.allow_reset = true"
-        ),
+        expected_error_fragment=("set `allow_reset = true` under `[environments.<name>.state]`"),
     ),
     PostgresStateLifecycleErrorE2ETestCase(
         description="reset blocks without auto approve",

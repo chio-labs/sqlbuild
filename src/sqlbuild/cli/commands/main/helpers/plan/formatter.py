@@ -100,6 +100,7 @@ def format_plan(
         lines,
         plan,
         section_header_style=section_header_style,
+        display_options=resolved_display_options,
     )
 
     _format_source_loads(
@@ -817,6 +818,7 @@ def _format_virtual_metadata(
     plan: PlanOutput,
     *,
     section_header_style: Callable[[str], str],
+    display_options: DisplayOptions,
 ) -> None:
     """Append a virtual planner metadata section when present."""
 
@@ -844,21 +846,30 @@ def _format_virtual_metadata(
     lines.append(f"  status: {virtual_environment_status}")
     lines.append(f"  stale roots: {len(stale_root_names)}")
     if stale_root_names:
-        lines.append(f"  stale root set: {_format_capped_name_list(stale_root_names)}")
+        stale_root_set: str = _format_capped_name_list(
+            stale_root_names,
+            display_options=display_options,
+        )
+        lines.append(f"  stale root set: {stale_root_set}")
     lines.append(f"  stale models: {len(stale_model_names)}")
     if stale_model_names:
-        lines.append(f"  stale model set: {_format_capped_name_list(stale_model_names)}")
+        stale_model_set: str = _format_capped_name_list(
+            stale_model_names,
+            display_options=display_options,
+        )
+        lines.append(f"  stale model set: {stale_model_set}")
 
 
-def _format_capped_name_list(names: tuple[str, ...], *, limit: int = 20) -> str:
+def _format_capped_name_list(names: tuple[str, ...], *, display_options: DisplayOptions) -> str:
     """Format a capped comma-separated name list."""
 
-    visible_names: tuple[str, ...] = names[:limit]
+    limit: int | None = display_options.max_entries_per_section
+    visible_names: tuple[str, ...] = names if limit is None else names[:limit]
     remaining_count: int = len(names) - len(visible_names)
     base: str = ", ".join(visible_names)
     if remaining_count <= 0:
         return base
-    return f"{base}, ... (+{remaining_count} more)"
+    return f"{base}, ... (+{remaining_count} more; use {display_options.overflow_flag} to show all)"
 
 
 def _resolve_name_column_width(plan: PlanOutput) -> int:
