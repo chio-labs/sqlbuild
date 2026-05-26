@@ -83,6 +83,7 @@ class FakeJanitorAdapter(BaseAdapter):
                     None,
                     "schema_hash",
                     base64.b64encode(b"SELECT 1").decode("ascii"),
+                    base64.b64encode(b"{}").decode("ascii"),
                     "2026-01-15T12:00:00",
                 )
             )

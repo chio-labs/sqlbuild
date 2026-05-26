@@ -47,12 +47,17 @@ def detect_model_changes(
     """Detect changes for one model and resolve backfill policy."""
 
     model_name: str = model.name
+    metadata_json: str = build_semantic_model_metadata_json(
+        model_name=model.name,
+        config_values=model.config.values,
+    )
 
     if full_refresh:
         return ChangeDetectionResult(
             model_name=model_name,
             change_kind=ChangeKind.NO_CHANGE,
             backfill=BackfillResult(action=BackfillAction.FULL),
+            fingerprint_metadata_json=metadata_json,
         )
 
     relation_exists: bool = model_name in snapshot.existing_relations
@@ -63,14 +68,15 @@ def detect_model_changes(
             model_name=model_name,
             change_kind=ChangeKind.FIRST_RUN,
             backfill=BackfillResult(action=BackfillAction.FULL),
+            fingerprint_metadata_json=metadata_json,
         )
 
     query_changed: bool = False
-    metadata_json: str = build_semantic_model_metadata_json(
-        model_name=model.name,
-        config_values=model.config.values,
+    config_changed: bool = (
+        fingerprint is not None
+        and fingerprint.metadata_json != "{}"
+        and metadata_json != fingerprint.metadata_json
     )
-    config_changed: bool = fingerprint is not None and metadata_json != fingerprint.metadata_json
     query_backfill: BackfillResult = BackfillResult(action=BackfillAction.WARN_ONLY)
     if query_change_tracking and fingerprint is not None:
         debug_logger: logging.Logger = logging.getLogger("sqlbuild.planner.changes")
@@ -134,10 +140,10 @@ def detect_model_changes(
     change_kind: ChangeKind
     if query_changed:
         change_kind = ChangeKind.QUERY_CHANGED
-    elif config_changed:
-        change_kind = ChangeKind.CONFIG_CHANGED
     elif schema_findings:
         change_kind = ChangeKind.SCHEMA_CHANGED
+    elif config_changed:
+        change_kind = ChangeKind.CONFIG_CHANGED
     else:
         change_kind = ChangeKind.NO_CHANGE
 

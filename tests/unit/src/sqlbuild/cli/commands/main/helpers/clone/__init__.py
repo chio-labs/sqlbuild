@@ -1,0 +1,1 @@
+"""Clone helper output tests."""

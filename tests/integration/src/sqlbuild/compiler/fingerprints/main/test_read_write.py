@@ -388,11 +388,12 @@ def test_given_invalid_query_sql_storage_when_reading_then_raises_contextual_err
         "ast_hash VARCHAR, "
         "schema_fingerprint VARCHAR NOT NULL, "
         "query_sql_b64 VARCHAR NOT NULL, "
+        "metadata_json_b64 VARCHAR NOT NULL, "
         "ts TIMESTAMP NOT NULL)"
     )
     connection.execute(
         f"INSERT INTO {test_case.schema}.{FINGERPRINT_TABLE_NAME} VALUES "
-        "(?, NULL, ?, ?, ?, ?, NULL, ?, ?, ?)",
+        "(?, NULL, ?, ?, ?, ?, NULL, ?, ?, ?, ?)",
         (
             test_case.model_name,
             test_case.schema,
@@ -401,6 +402,7 @@ def test_given_invalid_query_sql_storage_when_reading_then_raises_contextual_err
             "hash_a",
             "schema_a",
             test_case.raw_query_sql_storage,
+            "e30=",
             datetime(2026, 1, 15, 12, 0, 0),
         ),
     )
