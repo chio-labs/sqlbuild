@@ -18,6 +18,7 @@ class CliCommand(StrEnum):
     CLONE = "clone"
     DIFF = "diff"
     PROMOTE = "promote"
+    ROLLBACK = "rollback"
     DEBUG = "debug"
     LINEAGE = "lineage"
     QUERY = "query"

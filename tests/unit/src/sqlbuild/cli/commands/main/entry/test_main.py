@@ -199,6 +199,22 @@ STATE_DISPATCH_TEST_CASES: list[MainTestCase] = [
         expected_state_command="reset",
         expected_auto_approve=True,
     ),
+    MainTestCase(
+        description="dispatches state checkpoints list through injected handler",
+        argv=["state", "checkpoints", "list", "--virtual-env", "dev"],
+        expected_exit_code=13,
+        expected_state_command="checkpoints",
+        expected_state_checkpoint_command="list",
+        expected_virtual_env="dev",
+    ),
+    MainTestCase(
+        description="dispatches state checkpoints show through injected handler",
+        argv=["state", "checkpoints", "show", "chk_1"],
+        expected_exit_code=14,
+        expected_state_command="checkpoints",
+        expected_state_checkpoint_command="show",
+        expected_state_checkpoint_id="chk_1",
+    ),
 ]
 
 COMPILE_DISPATCH_TEST_CASES: list[MainTestCase] = [
@@ -779,6 +795,45 @@ def test_given_promote_command_arguments_when_running_with_dependencies_then_it_
     assert received_args == [
         (None, False, False, "pr", "dev", ("fact_orders",), (), True, True, True)
     ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="dispatches rollback command through injected handler",
+            argv=["rollback", "--virtual-env", "dev", "--verbose"],
+            expected_exit_code=7,
+        )
+    ],
+    ids=["dispatches rollback command through injected handler"],
+)
+def test_given_rollback_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[tuple[Path | None, bool, bool, str | None, bool]] = []
+
+    def run_rollback(
+        project_dir: Path | None,
+        no_color: bool,
+        no_sql_validation: bool,
+        virtual_environment: str | None,
+        verbose: bool,
+        cli_vars: dict[str, object],
+    ) -> int:
+        del cli_vars
+        received_args.append(
+            (project_dir, no_color, no_sql_validation, virtual_environment, verbose)
+        )
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_rollback=run_rollback),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [(None, False, False, "dev", True)]
 
 
 @pytest.mark.parametrize(
@@ -1459,7 +1514,9 @@ def test_given_janitor_command_arguments_when_running_with_dependencies_then_it_
 def test_given_state_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[Path | None, str, str | None, bool, bool]] = []
+    received_args: list[
+        tuple[Path | None, str, str | None, bool, bool, str | None, str | None, str | None]
+    ] = []
 
     def run_state(
         project_dir: Path | None,
@@ -1467,8 +1524,22 @@ def test_given_state_command_arguments_when_running_with_dependencies_then_it_di
         backup_id: str | None,
         auto_approve: bool,
         no_color: bool,
+        checkpoint_command: str | None,
+        checkpoint_id: str | None,
+        virtual_environment: str | None,
     ) -> int:
-        received_args.append((project_dir, state_command, backup_id, auto_approve, no_color))
+        received_args.append(
+            (
+                project_dir,
+                state_command,
+                backup_id,
+                auto_approve,
+                no_color,
+                checkpoint_command,
+                checkpoint_id,
+                virtual_environment,
+            )
+        )
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -1484,6 +1555,9 @@ def test_given_state_command_arguments_when_running_with_dependencies_then_it_di
             test_case.expected_state_backup_id,
             test_case.expected_auto_approve,
             test_case.expected_no_color,
+            test_case.expected_state_checkpoint_command,
+            test_case.expected_state_checkpoint_id,
+            test_case.expected_virtual_env,
         )
     ]
 

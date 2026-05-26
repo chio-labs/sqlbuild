@@ -90,6 +90,24 @@ class VirtualEnvironmentRefRecord:
 
 
 @dataclass(frozen=True)
+class VirtualEnvironmentCheckpointRecord:
+    """Finalized checkpoint for one virtual data environment."""
+
+    checkpoint_id: str
+    virtual_environment_name: str
+    created_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class VirtualEnvironmentCheckpointRefRecord:
+    """Checkpoint row mapping a model ref to a model version."""
+
+    checkpoint_id: str
+    model_name: str
+    version_hash: str
+
+
+@dataclass(frozen=True)
 class StateLockRecord:
     """Current state row for one active lock."""
 

@@ -42,6 +42,7 @@ from sqlbuild.virtual.planner.main.semantics import (
 )
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
 from sqlbuild.virtual.shared.helpers.encoding import encode_state_text
+from sqlbuild.virtual.state.main.checkpoints import create_finalized_virtual_environment_checkpoint
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
@@ -430,19 +431,28 @@ def _persist_successful_virtual_build(
                 ),
             ),
         )
+        refs: tuple[VirtualEnvironmentRefRecord, ...] = tuple(
+            VirtualEnvironmentRefRecord(
+                virtual_environment_name=target_vde_name,
+                model_name=model_name,
+                version_hash=version_hash,
+            )
+            for model_name, version_hash in sorted(final_version_hashes.items())
+        )
         backend.replace_virtual_environment_refs(
             state_connection,
             schema=config.schema,
             virtual_environment_name=target_vde_name,
-            refs=tuple(
-                VirtualEnvironmentRefRecord(
-                    virtual_environment_name=target_vde_name,
-                    model_name=model_name,
-                    version_hash=version_hash,
-                )
-                for model_name, version_hash in sorted(final_version_hashes.items())
-            ),
+            refs=refs,
         )
+        if status == VirtualEnvironmentStatus.FINALIZED and refs:
+            create_finalized_virtual_environment_checkpoint(
+                backend,
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=target_vde_name,
+                refs=refs,
+            )
     finally:
         backend.close(state_connection)
 

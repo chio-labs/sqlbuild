@@ -108,7 +108,7 @@ def test_given_duckdb_state_backend_when_running_lifecycle_then_state_tables_are
         DuckDbStateBackendValidationTestCase(
             description="reports invalid manually-created state schema",
             schema="broken_state",
-            expected_issue_count=13,
+            expected_issue_count=15,
         )
     ],
     ids=["reports invalid manually-created state schema"],

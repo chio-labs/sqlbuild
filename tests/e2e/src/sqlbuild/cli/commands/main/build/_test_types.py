@@ -67,6 +67,19 @@ class VirtualPromoteE2ETestCase:
 
 
 @dataclass(frozen=True)
+class VirtualRollbackE2ETestCase:
+    """Test case for virtual rollback behavior."""
+
+    description: str
+    rollback_command: tuple[str, ...]
+    expected_rollback_fragments: tuple[str, ...]
+    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
+    expected_checkpoint_count: int
+    expected_exit_code: int = 0
+    expected_stderr_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class ModelBackedCursorBuildE2ETestCase:
     """Test case for model-backed cursor build e2e regression coverage."""
 
