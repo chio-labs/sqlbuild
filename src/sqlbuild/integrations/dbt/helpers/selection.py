@@ -204,11 +204,12 @@ def _resolve_excluded_sqlbuild_names(
 
 
 def _translate_dbt_path_selector(raw_path: str) -> str:
-    if raw_path == "models":
+    normalised: str = raw_path.replace("\\", "/")
+    if normalised == "models":
         return ""
-    if raw_path.startswith("models/"):
-        return raw_path.removeprefix("models/")
-    return raw_path
+    if normalised.startswith("models/"):
+        return normalised.removeprefix("models/")
+    return normalised
 
 
 def _model_path_selector(model: CompiledModel) -> str:
