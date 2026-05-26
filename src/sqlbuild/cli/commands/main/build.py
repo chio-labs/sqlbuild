@@ -36,6 +36,7 @@ from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import writ
 from sqlbuild.cli.commands.main.shared.helpers.snapshot_full_refresh import (
     enforce_snapshot_full_refresh_policy,
 )
+from sqlbuild.cli.commands.main.virtual_build import run_virtual_build
 from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -47,6 +48,7 @@ from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.pipeline.main.run import run_build_pipeline
 from sqlbuild.shared.helpers.colors import blue_bold, dim, supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.models.types import EnvironmentMode
 
 
 def run_build(
@@ -58,6 +60,7 @@ def run_build(
     no_color: bool = False,
     fail_fast: bool = False,
     full_refresh: bool = False,
+    virtual_env: str | None = None,
     load_sources: bool | None = None,
     reload_sources: bool = False,
     allow_snapshot_full_refresh: bool = False,
@@ -111,6 +114,34 @@ def run_build(
         if load_sources is not None
         else build_effective_settings_config(discovered_inputs=discovered_inputs).auto_load_sources
     )
+    if discovered_inputs.project_config.environment_mode == EnvironmentMode.VIRTUAL:
+        return run_virtual_build(
+            project_dir=effective_project_dir,
+            discovered_inputs=discovered_inputs,
+            adapter=adapter,
+            adapter_name=adapter_name,
+            connection_config=connection_config,
+            no_sql_validation=no_sql_validation,
+            defer_sources_to=defer_sources_to,
+            cursor_overrides=cursor_overrides,
+            full_refresh=full_refresh,
+            virtual_environment_name=virtual_env,
+            auto_load_sources=should_load_sources,
+            reload_sources=reload_sources,
+            select=select,
+            exclude=exclude,
+            fail_fast=fail_fast,
+            allow_snapshot_full_refresh=allow_snapshot_full_refresh,
+            allow_snapshot_schema_change=allow_snapshot_schema_change,
+            concurrency=concurrency,
+            verbose=verbose,
+            debug=debug,
+            cli_vars=cli_vars,
+            json_output=json_output,
+            json_output_path=json_output_path,
+            use_color=use_color,
+            progress_stream=progress_stream,
+        )
     progress_stream.write("\n")
     progress_stream.flush()
     pipeline_result: CompilePipelineResult = run_compile_pipeline(

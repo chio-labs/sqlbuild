@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import RelationInfo
+from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult, ProjectGraph
@@ -31,8 +33,9 @@ from sqlbuild.virtual.planner.helpers.planning import (
     build_stale_root_causes,
     build_stale_root_reasons,
 )
+from sqlbuild.virtual.planner.helpers.targets import build_target_from_physical_relation
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
-from sqlbuild.virtual.state.models import ModelVersionRecord
+from sqlbuild.virtual.state.models import ModelVersionRecord, PhysicalRelationRecord
 
 
 def run_virtual_plan_pipeline(
@@ -47,6 +50,7 @@ def run_virtual_plan_pipeline(
     exclude: tuple[str, ...] = (),
     cursor_overrides: CursorOverrides | None = None,
     full_refresh: bool = False,
+    virtual_environment_name: str | None = None,
     auto_load_sources: bool = False,
     reload_sources: bool = False,
     connection_config: dict[str, object] | None = None,
@@ -87,9 +91,17 @@ def run_virtual_plan_pipeline(
             graph=graph,
             expected_local_hashes=expected_local_hashes,
         )
-        bound_version_hashes, bound_local_hashes = _read_bound_state(
+        (
+            bound_version_hashes,
+            bound_local_hashes,
+            deferred_targets,
+            deferred_relations,
+        ) = _read_bound_state(
             discovered_inputs=discovered_inputs,
             project_dir=project_dir,
+            adapter=adapter,
+            graph=graph,
+            virtual_environment_name=virtual_environment_name,
         )
         stale_model_names: tuple[str, ...] = build_stale_model_names(
             model_names=tuple(model.name for model in graph.project.models),
@@ -132,6 +144,8 @@ def run_virtual_plan_pipeline(
                 local_config=discovered_inputs.local_config,
                 defer_sources_to=defer_sources_to,
                 source_deferral_enabled=source_deferral_enabled,
+                deferred_targets=deferred_targets,
+                deferred_relations=deferred_relations,
             )
         else:
             plan_output = PlanOutput(
@@ -152,7 +166,10 @@ def run_virtual_plan_pipeline(
         )
         plan_output = with_virtual_metadata(
             plan_output=plan_output,
-            environment_name=graph.project.effective_environment_name,
+            environment_name=_resolve_virtual_environment_name(
+                physical_environment_name=graph.project.effective_environment_name,
+                virtual_environment_name=virtual_environment_name,
+            ),
             stale_model_names=stale_model_names,
             stale_root_names=tuple(sorted(stale_root_reasons)),
         )
@@ -168,20 +185,32 @@ def _read_bound_state(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     project_dir: Path,
-) -> tuple[dict[str, str], dict[str, str]]:
+    adapter: BaseAdapter,
+    graph: ProjectGraph,
+    virtual_environment_name: str | None,
+) -> tuple[
+    dict[str, str],
+    dict[str, str],
+    dict[str, CompiledRelationTarget],
+    dict[str, RelationInfo],
+]:
     config, backend = build_state_runtime(
         discovered_inputs=discovered_inputs,
         project_dir=project_dir,
     )
     state_connection: Any = backend.connect(config.connection)
     try:
-        environment_name: str | None = resolve_environment_name(
+        physical_environment_name: str | None = resolve_environment_name(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
             selected_environment=None,
         )
+        environment_name: str | None = _resolve_virtual_environment_name(
+            physical_environment_name=physical_environment_name,
+            virtual_environment_name=virtual_environment_name,
+        )
         if environment_name is None:
-            return {}, {}
+            return {}, {}, {}, {}
         refs: tuple[object, ...] = backend.get_virtual_environment_refs(
             state_connection,
             schema=config.schema,
@@ -197,6 +226,50 @@ def _read_bound_state(
             )
             for model_name, version_hash in bound_version_hashes.items()
         }
-        return bound_version_hashes, build_bound_local_hashes(model_versions)
+        model_targets: dict[str, CompiledRelationTarget] = {
+            model.name: model.target for model in graph.project.models
+        }
+        physical_relations: dict[str, PhysicalRelationRecord] = {}
+        for model_name, version_hash in bound_version_hashes.items():
+            relation: PhysicalRelationRecord | None = backend.get_physical_relation(
+                state_connection,
+                schema=config.schema,
+                model_name=model_name,
+                version_hash=version_hash,
+            )
+            if relation is not None:
+                physical_relations[model_name] = relation
+        deferred_targets: dict[str, CompiledRelationTarget] = {
+            model_name: build_target_from_physical_relation(
+                adapter=adapter,
+                relation=relation,
+                fallback_target=model_targets[model_name],
+            )
+            for model_name, relation in physical_relations.items()
+            if model_name in model_targets
+        }
+        deferred_relations: dict[str, RelationInfo] = {
+            model_name: RelationInfo(
+                database=relation.database_name,
+                schema=relation.schema_name,
+                name=relation.relation_name,
+                relation_type=relation.relation_type,
+            )
+            for model_name, relation in physical_relations.items()
+        }
+        return (
+            bound_version_hashes,
+            build_bound_local_hashes(model_versions),
+            deferred_targets,
+            deferred_relations,
+        )
     finally:
         backend.close(state_connection)
+
+
+def _resolve_virtual_environment_name(
+    *,
+    physical_environment_name: str | None,
+    virtual_environment_name: str | None,
+) -> str | None:
+    return virtual_environment_name or physical_environment_name

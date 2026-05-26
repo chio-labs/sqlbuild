@@ -30,6 +30,19 @@ class BuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class VirtualBuildE2ETestCase:
+    """Test case for virtual build e2e behavior."""
+
+    description: str
+    expected_build_fragments: tuple[str, ...]
+    expected_plan_fragments: tuple[str, ...]
+    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
+    expected_ref_rows: tuple[tuple[object, ...], ...]
+    expected_physical_version_count: int | None = None
+    expected_final_plan_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class ModelBackedCursorBuildE2ETestCase:
     """Test case for model-backed cursor build e2e regression coverage."""
 
