@@ -93,6 +93,7 @@ def build_plan_output(
     function_entries: tuple[FunctionPlanEntry, ...] = (),
     source_load_entries: tuple[SourceLoadPlanEntry, ...] = (),
     warnings: tuple[PlanWarning, ...] = (),
+    metadata: dict[str, object] | None = None,
 ) -> PlanOutput:
     """Build a minimal PlanOutput for formatter tests."""
 
@@ -107,6 +108,7 @@ def build_plan_output(
         source_load_entries=source_load_entries,
         selected_keys=selected_keys,
         warnings=warnings,
+        metadata={} if metadata is None else metadata,
     )
 
 

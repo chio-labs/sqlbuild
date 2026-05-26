@@ -1,0 +1,120 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from sqlbuild.compiler.compile.models.core import (
+    CompiledFunction,
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationTarget,
+    CompileModelConfig,
+    FunctionArgument,
+)
+from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
+from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.planner.helpers.graph import (
+    build_downstream_deps,
+    build_upstream_deps,
+)
+from sqlbuild.spec.models.project import SettingsConfig
+
+
+def build_virtual_planner_test_project(
+    *,
+    upstream_query_sql: str,
+    downstream_query_sql: str,
+) -> ProjectGraph:
+    function: CompiledFunction = CompiledFunction(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name="normalize_order"),
+        deps=(),
+        name="normalize_order",
+        relative_path=Path("functions/sql/normalize_order.sql"),
+        arguments=(FunctionArgument(name="value", type="INTEGER"),),
+        returns="INTEGER",
+        body_sql="value + 1",
+        target=CompiledRelationTarget(
+            database=None,
+            schema="staging",
+            name="normalize_order",
+            qualified_name="staging.normalize_order",
+        ),
+        fingerprint_target=CompiledRelationTarget(
+            database=None,
+            schema="staging",
+            name="normalize_order",
+            qualified_name="staging.normalize_order",
+        ),
+        language=FunctionLanguage.SQL,
+    )
+    upstream_model: CompiledModel = CompiledModel(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="stg_orders"),
+        deps=(),
+        name="stg_orders",
+        relative_path=Path("models/stg_orders.sql"),
+        query_sql=upstream_query_sql,
+        config=CompileModelConfig(values={"materialized": "table"}),
+        target=CompiledRelationTarget(
+            database=None,
+            schema="staging",
+            name="stg_orders",
+            qualified_name="staging.stg_orders",
+        ),
+    )
+    downstream_model: CompiledModel = CompiledModel(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="fact_orders"),
+        deps=(upstream_model.key, function.key),
+        name="fact_orders",
+        relative_path=Path("models/fact_orders.sql"),
+        query_sql=downstream_query_sql,
+        config=CompileModelConfig(values={"materialized": "table"}),
+        target=CompiledRelationTarget(
+            database=None,
+            schema="marts",
+            name="fact_orders",
+            qualified_name="marts.fact_orders",
+        ),
+    )
+    unrelated_model: CompiledModel = CompiledModel(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="dim_customers"),
+        deps=(),
+        name="dim_customers",
+        relative_path=Path("models/dim_customers.sql"),
+        query_sql="SELECT 1 AS customer_id",
+        config=CompileModelConfig(values={"materialized": "table"}),
+        target=CompiledRelationTarget(
+            database=None,
+            schema="marts",
+            name="dim_customers",
+            qualified_name="marts.dim_customers",
+        ),
+    )
+    project: CompiledProject = CompiledProject(
+        run_id="test_run",
+        effective_environment_name="dev",
+        effective_connection={},
+        effective_vars={},
+        settings=SettingsConfig(),
+        models=(upstream_model, downstream_model, unrelated_model),
+        functions=(function,),
+    )
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_upstream_deps(
+        project
+    )
+    downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_downstream_deps(
+        upstream_deps
+    )
+    all_keys: dict[str, CompiledObjectKey] = {
+        upstream_model.name: upstream_model.key,
+        downstream_model.name: downstream_model.key,
+        unrelated_model.name: unrelated_model.key,
+        function.name: function.key,
+    }
+    return ProjectGraph(
+        project=project,
+        upstream_deps=upstream_deps,
+        downstream_deps=downstream_deps,
+        tag_index={},
+        path_index={},
+        all_keys=all_keys,
+    )

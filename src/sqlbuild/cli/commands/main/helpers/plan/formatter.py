@@ -96,6 +96,12 @@ def format_plan(
         )
         lines.append(green_bold(header))
 
+    _format_virtual_metadata(
+        lines,
+        plan,
+        section_header_style=section_header_style,
+    )
+
     _format_source_loads(
         lines,
         plan,
@@ -804,6 +810,55 @@ def _format_warnings(lines: list[str], plan: PlanOutput) -> None:
         if warning.model_name is not None:
             lines.append(f"  {blue_bold(warning.model_name)}")
         lines.append(f"  {yellow(f'- {warning.message}')}")
+
+
+def _format_virtual_metadata(
+    lines: list[str],
+    plan: PlanOutput,
+    *,
+    section_header_style: Callable[[str], str],
+) -> None:
+    """Append a virtual planner metadata section when present."""
+
+    virtual_environment_name: object | None = plan.metadata.get("virtual_environment_name")
+    if not isinstance(virtual_environment_name, str):
+        return
+    virtual_environment_status: str = str(
+        plan.metadata.get("virtual_environment_status", "unknown")
+    )
+    raw_stale_model_names: object | None = plan.metadata.get("virtual_stale_model_names")
+    stale_model_names: tuple[str, ...] = (
+        tuple(str(item) for item in raw_stale_model_names)
+        if isinstance(raw_stale_model_names, (tuple, list))
+        else ()
+    )
+    raw_stale_root_names: object | None = plan.metadata.get("virtual_stale_root_names")
+    stale_root_names: tuple[str, ...] = (
+        tuple(str(item) for item in raw_stale_root_names)
+        if isinstance(raw_stale_root_names, (tuple, list))
+        else ()
+    )
+    lines.append("")
+    lines.append(section_header_style("Virtual environment"))
+    lines.append(f"  name: {virtual_environment_name}")
+    lines.append(f"  status: {virtual_environment_status}")
+    lines.append(f"  stale roots: {len(stale_root_names)}")
+    if stale_root_names:
+        lines.append(f"  stale root set: {', '.join(stale_root_names)}")
+    lines.append(f"  stale models: {len(stale_model_names)}")
+    if stale_model_names:
+        lines.append(f"  stale model set: {_format_capped_name_list(stale_model_names)}")
+
+
+def _format_capped_name_list(names: tuple[str, ...], *, limit: int = 20) -> str:
+    """Format a capped comma-separated name list."""
+
+    visible_names: tuple[str, ...] = names[:limit]
+    remaining_count: int = len(names) - len(visible_names)
+    base: str = ", ".join(visible_names)
+    if remaining_count <= 0:
+        return base
+    return f"{base}, ... (+{remaining_count} more)"
 
 
 def _resolve_name_column_width(plan: PlanOutput) -> int:
