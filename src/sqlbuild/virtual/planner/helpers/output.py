@@ -13,6 +13,7 @@ def rewrite_virtual_plan_entries(
     plan_output: PlanOutput,
     stale_root_reasons: dict[str, PlanReason],
     stale_root_causes: dict[str, str],
+    stale_root_cause_reasons: dict[str, PlanReason] | None = None,
     previous_query_sqls: dict[str, str] | None = None,
     current_metadata_jsons: dict[str, str] | None = None,
     previous_metadata_jsons: dict[str, str] | None = None,
@@ -20,6 +21,7 @@ def rewrite_virtual_plan_entries(
     """Rewrite direct planner entries with virtual-specific reasons and causes."""
 
     rewritten_entries: list[ModelPlanEntry] = []
+    cause_reasons: dict[str, PlanReason] = stale_root_cause_reasons or stale_root_reasons
     entry: ModelPlanEntry
     for entry in plan_output.model_entries:
         if entry.name in stale_root_reasons:
@@ -47,7 +49,7 @@ def rewrite_virtual_plan_entries(
                         effective_action=BackfillAction.WARN_ONLY,
                         effective_duration=None,
                         root_cause=root_cause,
-                        root_reason=stale_root_reasons[root_cause],
+                        root_reason=cause_reasons[root_cause],
                         causes=(),
                     ),
                 )

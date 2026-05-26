@@ -66,3 +66,21 @@ class StaleRootCausesTestCase:
     stale_model_names: tuple[str, ...]
     stale_root_reasons: dict[str, PlanReason]
     expected_stale_root_causes: dict[str, str]
+    stale_root_source_causes: dict[str, str] | None = None
+
+
+@dataclass(frozen=True)
+class StaleRootCauseReasonsTestCase:
+    description: str
+    stale_root_reasons: dict[str, PlanReason]
+    stale_root_source_causes: dict[str, str]
+    expected_stale_root_cause_reasons: dict[str, PlanReason]
+
+
+@dataclass(frozen=True)
+class StaleRootSourceCausesTestCase:
+    description: str
+    stale_root_reasons: dict[str, PlanReason]
+    expected_metadata_jsons: dict[str, str]
+    bound_metadata_jsons: dict[str, str]
+    expected_stale_root_source_causes: dict[str, str]

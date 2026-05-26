@@ -31,8 +31,10 @@ from sqlbuild.virtual.planner.helpers.planning import (
     build_expected_version_hashes,
     build_model_fingerprint_metadata_jsons,
     build_stale_model_names,
+    build_stale_root_cause_reasons,
     build_stale_root_causes,
     build_stale_root_reasons,
+    build_stale_root_source_causes,
     resolve_virtual_model_selection,
 )
 from sqlbuild.virtual.planner.helpers.state_metadata import (
@@ -131,10 +133,20 @@ def run_virtual_plan_pipeline(
             expected_metadata_jsons=expected_metadata_jsons,
             bound_metadata_jsons=previous_metadata_jsons,
         )
+        stale_root_source_causes: dict[str, str] = build_stale_root_source_causes(
+            stale_root_reasons=stale_root_reasons,
+            expected_metadata_jsons=expected_metadata_jsons,
+            bound_metadata_jsons=previous_metadata_jsons,
+        )
         stale_root_causes: dict[str, str] = build_stale_root_causes(
             stale_model_names=stale_model_names,
             stale_root_reasons=stale_root_reasons,
             graph=graph,
+            stale_root_source_causes=stale_root_source_causes,
+        )
+        stale_root_cause_reasons: dict[str, PlanReason] = build_stale_root_cause_reasons(
+            stale_root_reasons=stale_root_reasons,
+            stale_root_source_causes=stale_root_source_causes,
         )
         default_selection: tuple[str, ...] = build_default_virtual_selection(
             stale_model_names=stale_model_names,
@@ -185,6 +197,7 @@ def run_virtual_plan_pipeline(
             plan_output=plan_output,
             stale_root_reasons=stale_root_reasons,
             stale_root_causes=stale_root_causes,
+            stale_root_cause_reasons=stale_root_cause_reasons,
             previous_query_sqls=previous_query_sqls,
             current_metadata_jsons=expected_metadata_jsons,
             previous_metadata_jsons=previous_metadata_jsons,

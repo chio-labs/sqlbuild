@@ -442,7 +442,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
         ),
     ),
     FormatPlanTestCase(
-        description="upstream changed prefers root function query cause",
+        description="upstream changed prefers root function changed cause",
         plan_output=build_plan_output(
             model_entries=(
                 build_model_entry(
@@ -453,7 +453,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
                         effective_action=BackfillAction.FULL,
                         effective_duration=None,
                         root_cause="is_completed_order",
-                        root_reason=PlanReason.QUERY_CHANGED,
+                        root_reason=PlanReason.FUNCTION_CHANGED,
                         causes=(
                             CascadeCause(
                                 model_name="hourly_order_activity",
@@ -469,7 +469,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "Upstream changed (1)",
             "daily_activity_rollup",
             "full rebuild",
-            "cause: is_completed_order (query changed)",
+            "cause: is_completed_order (function changed)",
         ),
         unexpected_fragments=("cause: hourly_order_activity", "cause: is_completed_order (full)"),
     ),

@@ -11,7 +11,9 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.selection import resolve_project_selectors
-from sqlbuild.compiler.planner.main.semantic_metadata import build_semantic_model_metadata_json
+from sqlbuild.compiler.planner.main.version_identity_metadata import (
+    build_version_identity_metadata_json,
+)
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.virtual.state.models import ModelVersionRecord, VirtualEnvironmentRefRecord
 
@@ -88,18 +90,18 @@ def build_model_fingerprint_metadata_jsons(
         model: Any | None = models_by_name.get(key.name)
         if model is None:
             continue
-        local_function_hashes: list[str] = []
+        local_function_hashes: dict[str, str] = {}
         upstream_key: Any
         for upstream_key in model.deps:
             if upstream_key.resource_type != CompiledResourceType.FUNCTION:
                 continue
             upstream_hash: str | None = function_hashes.get(upstream_key.name)
             if upstream_hash is not None:
-                local_function_hashes.append(upstream_hash)
-        result[model.name] = build_semantic_model_metadata_json(
+                local_function_hashes[upstream_key.name] = upstream_hash
+        result[model.name] = build_version_identity_metadata_json(
             model_name=model.name,
             config_values=model.config.values,
-            local_function_hashes=tuple(local_function_hashes),
+            local_function_hashes=local_function_hashes,
         )
     return result
 
@@ -233,15 +235,32 @@ def _metadata_config_payload(metadata_json: str | None) -> object:
     return payload.get("config", {})
 
 
+def _metadata_function_hashes(metadata_json: str | None) -> dict[str, str]:
+    if metadata_json is None:
+        return {}
+    try:
+        payload: object = json.loads(metadata_json)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    raw_hashes: object = payload.get("local_function_hashes", {})
+    if not isinstance(raw_hashes, dict):
+        return {}
+    return {str(name): str(value) for name, value in raw_hashes.items()}
+
+
 def build_stale_root_causes(
     *,
     stale_model_names: tuple[str, ...],
     stale_root_reasons: dict[str, PlanReason],
     graph: ProjectGraph,
+    stale_root_source_causes: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Assign each non-root stale model to one stale root cause."""
 
     causes: dict[str, str] = {}
+    root_source_causes: dict[str, str] = stale_root_source_causes or {}
     stale_root_name: str
     for stale_root_name in sorted(stale_root_reasons):
         start_key: Any | None = graph.all_keys.get(stale_root_name)
@@ -260,11 +279,59 @@ def build_stale_root_causes(
                 and current.name not in stale_root_reasons
                 and current.name not in causes
             ):
-                causes[current.name] = stale_root_name
+                causes[current.name] = root_source_causes.get(stale_root_name, stale_root_name)
             downstream_key: Any
             for downstream_key in graph.downstream_deps.get(current, ()):  # pragma: no branch
                 stack.append(downstream_key)
     return causes
+
+
+def build_stale_root_source_causes(
+    *,
+    stale_root_reasons: dict[str, PlanReason],
+    expected_metadata_jsons: dict[str, str],
+    bound_metadata_jsons: dict[str, str],
+) -> dict[str, str]:
+    """Map stale root models to changed function names when function metadata is the root."""
+
+    result: dict[str, str] = {}
+    model_name: str
+    for model_name, reason in stale_root_reasons.items():
+        if reason != PlanReason.QUERY_CHANGED:
+            continue
+        expected_hashes: dict[str, str] = _metadata_function_hashes(
+            expected_metadata_jsons.get(model_name)
+        )
+        bound_hashes: dict[str, str] = _metadata_function_hashes(
+            bound_metadata_jsons.get(model_name)
+        )
+        changed_function_names: tuple[str, ...] = tuple(
+            sorted(
+                function_name
+                for function_name, expected_hash in expected_hashes.items()
+                if bound_hashes.get(function_name) != expected_hash
+            )
+        )
+        if len(changed_function_names) == 1:
+            result[model_name] = changed_function_names[0]
+    return result
+
+
+def build_stale_root_cause_reasons(
+    *,
+    stale_root_reasons: dict[str, PlanReason],
+    stale_root_source_causes: dict[str, str],
+) -> dict[str, PlanReason]:
+    """Map display cause names to display cause reasons."""
+
+    result: dict[str, PlanReason] = {}
+    for root_name, root_reason in stale_root_reasons.items():
+        cause_name: str = stale_root_source_causes.get(root_name, root_name)
+        cause_reason: PlanReason = root_reason
+        if cause_name != root_name and root_reason == PlanReason.QUERY_CHANGED:
+            cause_reason = PlanReason.FUNCTION_CHANGED
+        result[cause_name] = cause_reason
+    return result
 
 
 def build_default_virtual_selection(

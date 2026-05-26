@@ -71,6 +71,7 @@ class PlanReason(StrEnum):
     FIRST_RUN = "first_run"
     FULL_REFRESH = "full_refresh"
     QUERY_CHANGED = "query_changed"
+    FUNCTION_CHANGED = "function_changed"
     CONFIG_CHANGED = "config_changed"
     SCHEMA_CHANGED = "schema_changed"
     UPSTREAM_CHANGED = "upstream_changed"
