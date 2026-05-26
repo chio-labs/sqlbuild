@@ -202,6 +202,10 @@ def _resolve_selector_token(
         return _expand_keys(keys, upstream_requested, downstream_requested, upstream, downstream)
     if core.startswith("path:") or "/" in core or "\\" in core:
         path_value: str = core.removeprefix("path:").replace("\\", "/").strip("/")
+        if path_value == "models":
+            path_value = ""
+        elif path_value.startswith("models/"):
+            path_value = path_value.removeprefix("models/")
         keys = frozenset(
             key
             for key, folder in path_index.items()
