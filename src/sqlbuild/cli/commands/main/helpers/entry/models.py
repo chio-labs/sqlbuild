@@ -288,6 +288,7 @@ class CliEntrypointHandlers:
         int,
     ]
     run_janitor: Callable[[Path | None, bool, bool, int | None], int]
+    run_init: Callable[[Path | None], int]
     run_playground: Callable[[Path | None, str, str], int]
     run_skills_update: Callable[[Path | None, bool, tuple[str, ...], bool], int]
     run_scenario: Callable[
