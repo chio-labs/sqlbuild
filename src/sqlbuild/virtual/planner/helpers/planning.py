@@ -11,6 +11,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.selection import resolve_project_selectors
+from sqlbuild.compiler.planner.main.semantic_metadata import build_semantic_model_metadata_json
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.virtual.state.models import ModelVersionRecord, VirtualEnvironmentRefRecord
 
@@ -95,14 +96,10 @@ def build_model_fingerprint_metadata_jsons(
             upstream_hash: str | None = function_hashes.get(upstream_key.name)
             if upstream_hash is not None:
                 local_function_hashes.append(upstream_hash)
-        result[model.name] = json.dumps(
-            {
-                "config": model.config.values,
-                "local_function_hashes": local_function_hashes,
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-            default=str,
+        result[model.name] = build_semantic_model_metadata_json(
+            model_name=model.name,
+            config_values=model.config.values,
+            local_function_hashes=tuple(local_function_hashes),
         )
     return result
 
@@ -189,6 +186,10 @@ def build_stale_root_reasons(
     expected_local_hashes: dict[str, str],
     bound_version_hashes: dict[str, str],
     bound_local_hashes: dict[str, str],
+    current_query_sqls: dict[str, str] | None = None,
+    bound_previous_query_sqls: dict[str, str] | None = None,
+    expected_metadata_jsons: dict[str, str] | None = None,
+    bound_metadata_jsons: dict[str, str] | None = None,
 ) -> dict[str, PlanReason]:
     """Classify stale root models by first-run vs local semantic change."""
 
@@ -202,8 +203,34 @@ def build_stale_root_reasons(
         expected_local_hash: str | None = expected_local_hashes.get(stale_model_name)
         bound_local_hash: str | None = bound_local_hashes.get(stale_model_name)
         if expected_local_hash != bound_local_hash:
+            current_query_sql: str | None = (current_query_sqls or {}).get(stale_model_name)
+            previous_query_sql: str | None = (bound_previous_query_sqls or {}).get(stale_model_name)
+            if previous_query_sql is not None and current_query_sql != previous_query_sql:
+                stale_root_reasons[stale_model_name] = PlanReason.QUERY_CHANGED
+                continue
+            expected_metadata_json: str | None = (expected_metadata_jsons or {}).get(
+                stale_model_name
+            )
+            bound_metadata_json: str | None = (bound_metadata_jsons or {}).get(stale_model_name)
+            if _metadata_config_payload(expected_metadata_json) != _metadata_config_payload(
+                bound_metadata_json
+            ):
+                stale_root_reasons[stale_model_name] = PlanReason.CONFIG_CHANGED
+                continue
             stale_root_reasons[stale_model_name] = PlanReason.QUERY_CHANGED
     return stale_root_reasons
+
+
+def _metadata_config_payload(metadata_json: str | None) -> object:
+    if metadata_json is None:
+        return None
+    try:
+        payload: object = json.loads(metadata_json)
+    except json.JSONDecodeError:
+        return metadata_json
+    if not isinstance(payload, dict):
+        return None
+    return payload.get("config", {})
 
 
 def build_stale_root_causes(

@@ -93,6 +93,81 @@ def test_given_virtual_plan_with_seeded_baseline_when_running_cli_then_it_uses_v
     "test_case",
     [
         VirtualPlanE2ETestCase(
+            description="virtual plan shows config changed root without query diff",
+            seed_matching_refs=True,
+            command=("--no-color", "plan"),
+            expected_fragments=(
+                "Plan ready (2 selected)",
+                "stale root set: stg_orders",
+                "Config changed (1)",
+                "stg_orders",
+                "config diff:",
+                '"materialized": "view"',
+                '"materialized": "table"',
+                "Upstream changed (1)",
+                "fact_orders",
+                "cause: stg_orders (config changed)",
+            ),
+            unexpected_fragments=("Query changed", "query diff:"),
+        )
+    ],
+    ids=["virtual plan shows config changed root without query diff"],
+)
+def test_given_virtual_plan_with_config_change_when_running_cli_then_it_uses_config_reason(
+    test_case: VirtualPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    baseline_project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_plan_config_baseline",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id")[
+                "sqlbuild_project.toml"
+            ],
+            "models/stg_orders.sql": "MODEL (materialized view);\n\nSELECT 1 AS id\n",
+            "models/fact_orders.sql": 'MODEL ();\n\nSELECT id FROM __ref("stg_orders")\n',
+        },
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_plan_config_current",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id")[
+                "sqlbuild_project.toml"
+            ],
+            "models/stg_orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
+            "models/fact_orders.sql": 'MODEL ();\n\nSELECT id FROM __ref("stg_orders")\n',
+        },
+    )
+
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    seed_matching_virtual_refs(
+        project_dir=project_dir,
+        source_project_dir=baseline_project_dir,
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stderr
+    output: str = result.stdout
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in output, output
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualPlanE2ETestCase(
             description="virtual plan shows function-driven query changed root",
             seed_matching_refs=True,
             command=("--no-color", "plan"),

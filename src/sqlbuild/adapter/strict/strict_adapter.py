@@ -48,6 +48,11 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def supports_durable_clone(self) -> bool:
+        """Return whether the adapter has a native durable clone primitive."""
+        ...
+
+    @abstractmethod
     def supports_relation_age_metadata(self) -> bool:
         """Return whether relation metadata includes reliable age information."""
         ...
@@ -240,6 +245,11 @@ class StrictAdapter(
         hard_copy: bool = False,
     ) -> tuple[str, ...]:
         """Render SQL statements that clone or copy a relation."""
+        ...
+
+    @abstractmethod
+    def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
+        """Render SQL statements that clone/copy into a durable independent target."""
         ...
 
     @abstractmethod

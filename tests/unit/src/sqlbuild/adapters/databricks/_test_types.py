@@ -34,6 +34,15 @@ class DatabricksRenderCloneTestCase:
 
 
 @dataclass(frozen=True)
+class DatabricksRenderDurableCloneTestCase:
+    description: str
+    source: str
+    target: str
+    expected_statements: tuple[str, ...]
+    expected_supports_durable_clone: bool
+
+
+@dataclass(frozen=True)
 class DatabricksRenderPythonFunctionTestCase:
     description: str
     body_sql: str

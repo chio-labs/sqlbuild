@@ -29,13 +29,17 @@ from sqlbuild.virtual.planner.helpers.planning import (
     build_default_virtual_selection,
     build_expected_local_hashes,
     build_expected_version_hashes,
+    build_model_fingerprint_metadata_jsons,
     build_stale_model_names,
     build_stale_root_causes,
     build_stale_root_reasons,
     resolve_virtual_model_selection,
 )
+from sqlbuild.virtual.planner.helpers.state_metadata import (
+    decode_model_version_metadata_jsons,
+    decode_model_version_query_sqls,
+)
 from sqlbuild.virtual.planner.helpers.targets import build_target_from_physical_relation
-from sqlbuild.virtual.shared.helpers.encoding import decode_state_text
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import ModelVersionRecord, PhysicalRelationRecord
 
@@ -95,12 +99,16 @@ def run_virtual_plan_pipeline(
             graph=graph,
             expected_local_hashes=expected_local_hashes,
         )
+        expected_metadata_jsons: dict[str, str] = build_model_fingerprint_metadata_jsons(
+            graph=graph
+        )
         (
             bound_version_hashes,
             bound_local_hashes,
             deferred_targets,
             deferred_relations,
             previous_query_sqls,
+            previous_metadata_jsons,
         ) = _read_bound_state(
             discovered_inputs=discovered_inputs,
             project_dir=project_dir,
@@ -118,6 +126,10 @@ def run_virtual_plan_pipeline(
             expected_local_hashes=expected_local_hashes,
             bound_version_hashes=bound_version_hashes,
             bound_local_hashes=bound_local_hashes,
+            current_query_sqls={model.name: model.query_sql for model in graph.project.models},
+            bound_previous_query_sqls=previous_query_sqls,
+            expected_metadata_jsons=expected_metadata_jsons,
+            bound_metadata_jsons=previous_metadata_jsons,
         )
         stale_root_causes: dict[str, str] = build_stale_root_causes(
             stale_model_names=stale_model_names,
@@ -174,6 +186,8 @@ def run_virtual_plan_pipeline(
             stale_root_reasons=stale_root_reasons,
             stale_root_causes=stale_root_causes,
             previous_query_sqls=previous_query_sqls,
+            current_metadata_jsons=expected_metadata_jsons,
+            previous_metadata_jsons=previous_metadata_jsons,
         )
         plan_output = with_virtual_metadata(
             plan_output=plan_output,
@@ -208,6 +222,7 @@ def _read_bound_state(
     dict[str, CompiledRelationTarget],
     dict[str, RelationInfo],
     dict[str, str],
+    dict[str, str],
 ]:
     config, backend = build_state_runtime(
         discovered_inputs=discovered_inputs,
@@ -225,7 +240,7 @@ def _read_bound_state(
             virtual_environment_name=virtual_environment_name,
         )
         if environment_name is None:
-            return {}, {}, {}, {}, {}
+            return {}, {}, {}, {}, {}, {}
         refs: tuple[object, ...] = backend.get_virtual_environment_refs(
             state_connection,
             schema=config.schema,
@@ -241,13 +256,10 @@ def _read_bound_state(
             )
             for model_name, version_hash in bound_version_hashes.items()
         }
-        previous_query_sqls: dict[str, str] = {
-            model_name: query_sql
-            for model_name, model_version in model_versions.items()
-            if model_version is not None
-            for query_sql in (decode_state_text(model_version.fingerprint_query_sql_b64),)
-            if query_sql is not None
-        }
+        previous_query_sqls: dict[str, str] = decode_model_version_query_sqls(model_versions)
+        previous_metadata_jsons: dict[str, str] = decode_model_version_metadata_jsons(
+            model_versions
+        )
         model_targets: dict[str, CompiledRelationTarget] = {
             model.name: model.target for model in graph.project.models
         }
@@ -285,6 +297,7 @@ def _read_bound_state(
             deferred_targets,
             deferred_relations,
             previous_query_sqls,
+            previous_metadata_jsons,
         )
     finally:
         backend.close(state_connection)

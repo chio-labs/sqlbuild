@@ -16,6 +16,7 @@ class SelectorKind(StrEnum):
 class ChangeKind(StrEnum):
     FIRST_RUN = "first_run"
     QUERY_CHANGED = "query_changed"
+    CONFIG_CHANGED = "config_changed"
     SCHEMA_CHANGED = "schema_changed"
     NO_CHANGE = "no_change"
 
@@ -70,6 +71,7 @@ class PlanReason(StrEnum):
     FIRST_RUN = "first_run"
     FULL_REFRESH = "full_refresh"
     QUERY_CHANGED = "query_changed"
+    CONFIG_CHANGED = "config_changed"
     SCHEMA_CHANGED = "schema_changed"
     UPSTREAM_CHANGED = "upstream_changed"
     NORMAL_INCREMENTAL = "normal_incremental"

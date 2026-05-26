@@ -173,6 +173,9 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     clone_parser.add_argument("--from", dest="from_environment", required=True)
     clone_parser.add_argument("--to", dest="to_environment", required=True)
     clone_parser.add_argument("--hard-copy", action="store_true", default=False)
+    clone_parser.add_argument("--virtual-env", default=None)
+    clone_parser.add_argument("--skip-locked", action="store_true", default=False)
+    clone_parser.add_argument("--verbose", "-v", action="store_true", default=False)
     add_select_args(clone_parser)
     add_vars_args(clone_parser)
     add_dbt_config_args(clone_parser)
@@ -633,8 +636,11 @@ def _main_with_dependencies(
                 args.from_environment,
                 args.to_environment,
                 args.hard_copy,
+                args.virtual_env,
+                args.skip_locked,
                 select,
                 tuple(args.exclude),
+                args.verbose,
                 args.vars,
             )
         if args.command == CliCommand.DIFF:

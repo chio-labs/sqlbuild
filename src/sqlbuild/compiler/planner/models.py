@@ -195,6 +195,9 @@ class ChangeDetectionResult:
     model_name: str
     change_kind: ChangeKind
     query_changed: bool = False
+    config_changed: bool = False
+    fingerprint_metadata_json: str | None = None
+    previous_metadata_json: str | None = None
     schema_findings: tuple[SchemaFinding, ...] = field(default_factory=tuple)
     backfill: BackfillResult = field(
         default_factory=lambda: BackfillResult(action=BackfillAction.WARN_ONLY)
@@ -264,6 +267,8 @@ class ModelPlanEntry:
     pre_hook: object = None
     post_hook: object = None
     previous_query_sql: str | None = None
+    fingerprint_metadata_json: str | None = None
+    previous_metadata_json: str | None = None
     schema_actions: tuple[SchemaAction, ...] = field(default_factory=tuple)
     schema_findings: tuple[SchemaFinding, ...] = field(default_factory=tuple)
     backfill: BackfillResult = field(

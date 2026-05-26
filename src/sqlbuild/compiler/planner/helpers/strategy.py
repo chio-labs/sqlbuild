@@ -269,6 +269,8 @@ def _custom_reason(change_result: ChangeDetectionResult, full_refresh: bool) -> 
         return PlanReason.FIRST_RUN
     if change_result.change_kind == ChangeKind.QUERY_CHANGED:
         return PlanReason.QUERY_CHANGED
+    if change_result.change_kind == ChangeKind.CONFIG_CHANGED:
+        return PlanReason.CONFIG_CHANGED
     if change_result.change_kind == ChangeKind.SCHEMA_CHANGED:
         return PlanReason.SCHEMA_CHANGED
     return PlanReason.NO_CHANGE
@@ -283,6 +285,8 @@ def _view_reason(change_result: ChangeDetectionResult, full_refresh: bool) -> Pl
         return PlanReason.FIRST_RUN
     if change_result.change_kind == ChangeKind.QUERY_CHANGED:
         return PlanReason.QUERY_CHANGED
+    if change_result.change_kind == ChangeKind.CONFIG_CHANGED:
+        return PlanReason.CONFIG_CHANGED
     if change_result.change_kind == ChangeKind.SCHEMA_CHANGED:
         return PlanReason.SCHEMA_CHANGED
     return PlanReason.NO_CHANGE
@@ -297,6 +301,8 @@ def _snapshot_reason(change_result: ChangeDetectionResult, full_refresh: bool) -
         return PlanReason.FIRST_RUN
     if change_result.change_kind == ChangeKind.QUERY_CHANGED:
         return PlanReason.QUERY_CHANGED
+    if change_result.change_kind == ChangeKind.CONFIG_CHANGED:
+        return PlanReason.CONFIG_CHANGED
     if change_result.change_kind == ChangeKind.SCHEMA_CHANGED:
         return PlanReason.SCHEMA_CHANGED
     return PlanReason.NORMAL_INCREMENTAL
@@ -307,6 +313,8 @@ def _backfill_reason(change_result: ChangeDetectionResult) -> PlanReason:
 
     if change_result.query_changed:
         return PlanReason.QUERY_CHANGED
+    if change_result.config_changed:
+        return PlanReason.CONFIG_CHANGED
     if change_result.schema_findings:
         return PlanReason.SCHEMA_CHANGED
     return PlanReason.FULL_REFRESH
@@ -319,6 +327,8 @@ def _table_action(
 
     if change_result.change_kind == ChangeKind.QUERY_CHANGED:
         return PlanAction.CREATE_TABLE, PlanReason.QUERY_CHANGED
+    if change_result.change_kind == ChangeKind.CONFIG_CHANGED:
+        return PlanAction.CREATE_TABLE, PlanReason.CONFIG_CHANGED
     if change_result.change_kind == ChangeKind.SCHEMA_CHANGED:
         return PlanAction.CREATE_TABLE, PlanReason.SCHEMA_CHANGED
     return PlanAction.CREATE_TABLE, PlanReason.NO_CHANGE
@@ -340,6 +350,8 @@ def _incremental_action(
     reason: PlanReason
     if change_result.change_kind == ChangeKind.QUERY_CHANGED:
         reason = PlanReason.QUERY_CHANGED
+    elif change_result.change_kind == ChangeKind.CONFIG_CHANGED:
+        reason = PlanReason.CONFIG_CHANGED
     elif change_result.change_kind == ChangeKind.SCHEMA_CHANGED:
         reason = PlanReason.SCHEMA_CHANGED
     else:

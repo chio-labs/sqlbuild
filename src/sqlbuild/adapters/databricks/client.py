@@ -646,6 +646,9 @@ class DatabricksAdapter(BaseAdapter):
     def supports_zero_copy_clone(self) -> bool:
         return True
 
+    def supports_durable_clone(self) -> bool:
+        return True
+
     def supports_relation_age_metadata(self) -> bool:
         return False
 
@@ -1221,6 +1224,9 @@ class DatabricksAdapter(BaseAdapter):
             return (f"CREATE TABLE {target} SHALLOW CLONE {source}",)
         return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
 
+    def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
+        return (f"CREATE TABLE {target} DEEP CLONE {source}",)
+
     def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:
         return (f"CREATE OR REPLACE TABLE {target} AS SELECT * FROM {source}",)
 
@@ -1373,6 +1379,20 @@ class DatabricksAdapter(BaseAdapter):
             target=target,
             hard_copy=hard_copy,
         )
+        statement_recorder.record_many(statements)
+        statement: str
+        for statement in statements:
+            self.execute(connection, statement)
+
+    def durable_clone(
+        self,
+        connection: Any,
+        *,
+        source: str,
+        target: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_durable_clone(source=source, target=target)
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:

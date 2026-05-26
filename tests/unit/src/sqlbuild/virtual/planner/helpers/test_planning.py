@@ -9,6 +9,7 @@ from sqlbuild.virtual.planner.helpers.planning import (
     build_default_virtual_selection,
     build_expected_local_hashes,
     build_expected_version_hashes,
+    build_model_fingerprint_metadata_jsons,
     build_stale_model_names,
     build_stale_required_upstream_closure,
     build_stale_root_causes,
@@ -59,6 +60,66 @@ VIRTUAL_MODEL_SELECTION_TEST_CASES: tuple[VirtualModelSelectionTestCase, ...] = 
     ),
 )
 
+STALE_ROOT_REASONS_TEST_CASES: tuple[StaleRootReasonsTestCase, ...] = (
+    StaleRootReasonsTestCase(
+        description="classifies first run and query changed stale roots",
+        stale_model_names=("stg_orders", "fact_orders", "dim_customers"),
+        expected_local_hashes={
+            "stg_orders": "new-local-a",
+            "fact_orders": "same-local-b",
+            "dim_customers": "new-local-c",
+        },
+        bound_version_hashes={
+            "stg_orders": "old-version-a",
+            "fact_orders": "old-version-b",
+        },
+        bound_local_hashes={
+            "stg_orders": "old-local-a",
+            "fact_orders": "same-local-b",
+        },
+        expected_stale_root_reasons={
+            "stg_orders": PlanReason.QUERY_CHANGED,
+            "dim_customers": PlanReason.FIRST_RUN,
+        },
+    ),
+    StaleRootReasonsTestCase(
+        description="classifies semantic config separately from function changes",
+        stale_model_names=("fact_orders", "orders_rollup"),
+        expected_local_hashes={
+            "fact_orders": "new-local-a",
+            "orders_rollup": "new-local-b",
+        },
+        bound_version_hashes={
+            "fact_orders": "old-version-a",
+            "orders_rollup": "old-version-b",
+        },
+        bound_local_hashes={
+            "fact_orders": "old-local-a",
+            "orders_rollup": "old-local-b",
+        },
+        current_query_sqls={
+            "fact_orders": "SELECT id FROM stg_orders",
+            "orders_rollup": "SELECT COUNT(*) FROM fact_orders",
+        },
+        bound_previous_query_sqls={
+            "fact_orders": "SELECT id FROM stg_orders",
+            "orders_rollup": "SELECT COUNT(*) FROM fact_orders",
+        },
+        expected_metadata_jsons={
+            "fact_orders": '{"config":{},"local_function_hashes":["new"]}',
+            "orders_rollup": '{"config":{"materialized":"table"}}',
+        },
+        bound_metadata_jsons={
+            "fact_orders": '{"config":{},"local_function_hashes":["old"]}',
+            "orders_rollup": '{"config":{"materialized":"view"}}',
+        },
+        expected_stale_root_reasons={
+            "fact_orders": PlanReason.QUERY_CHANGED,
+            "orders_rollup": PlanReason.CONFIG_CHANGED,
+        },
+    ),
+)
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -95,6 +156,171 @@ def test_given_upstream_change_when_building_expected_hashes_then_downstream_has
 
     assert (
         baseline_hashes["fact_orders"] != changed_hashes["fact_orders"]
+    ) is test_case.expected_hashes_differ
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedVersionHashesTestCase(
+            description="target schema does not change model version hash",
+            upstream_query_sql="SELECT 1 AS id",
+            downstream_query_sql="SELECT 1 AS order_id",
+            expected_hashes_differ=False,
+        )
+    ],
+    ids=["target schema does not change model version hash"],
+)
+def test_given_only_target_schema_differs_when_building_expected_hashes_then_hashes_match(
+    test_case: ExpectedVersionHashesTestCase,
+) -> None:
+    prod_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_schema="prod",
+    )
+    dev_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_schema="dev",
+    )
+
+    prod_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=prod_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=prod_graph),
+    )
+    dev_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=dev_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=dev_graph),
+    )
+    prod_metadata_jsons: dict[str, str] = build_model_fingerprint_metadata_jsons(graph=prod_graph)
+
+    assert (
+        prod_hashes["stg_orders"] != dev_hashes["stg_orders"]
+    ) is test_case.expected_hashes_differ
+    assert '"schema"' not in prod_metadata_jsons["stg_orders"]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedVersionHashesTestCase(
+            description="model identity changes model version hash",
+            upstream_query_sql="SELECT 1 AS id",
+            downstream_query_sql="SELECT 1 AS order_id",
+            expected_hashes_differ=True,
+        )
+    ],
+    ids=["model identity changes model version hash"],
+)
+def test_given_only_model_name_differs_when_building_expected_hashes_then_hashes_differ(
+    test_case: ExpectedVersionHashesTestCase,
+) -> None:
+    first_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_model_name="stg_orders",
+    )
+    second_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_model_name="stg_orders_copy",
+    )
+
+    first_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=first_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=first_graph),
+    )
+    second_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=second_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=second_graph),
+    )
+
+    assert (
+        first_hashes["stg_orders"] != second_hashes["stg_orders_copy"]
+    ) is test_case.expected_hashes_differ
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedVersionHashesTestCase(
+            description="unknown config key does not change model version hash",
+            upstream_query_sql="SELECT 1 AS id",
+            downstream_query_sql="SELECT 1 AS order_id",
+            expected_hashes_differ=False,
+        )
+    ],
+    ids=["unknown config key does not change model version hash"],
+)
+def test_given_unknown_config_key_when_building_expected_hashes_then_hashes_match(
+    test_case: ExpectedVersionHashesTestCase,
+) -> None:
+    baseline_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+    )
+    extra_config_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_extra_config={"future_default_flag": "off"},
+    )
+
+    baseline_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=baseline_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=baseline_graph),
+    )
+    extra_config_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=extra_config_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=extra_config_graph),
+    )
+    metadata_jsons: dict[str, str] = build_model_fingerprint_metadata_jsons(
+        graph=extra_config_graph
+    )
+
+    assert (
+        baseline_hashes["stg_orders"] != extra_config_hashes["stg_orders"]
+    ) is test_case.expected_hashes_differ
+    assert "future_default_flag" not in metadata_jsons["stg_orders"]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedVersionHashesTestCase(
+            description="semantic config key changes model version hash",
+            upstream_query_sql="SELECT 1 AS id",
+            downstream_query_sql="SELECT 1 AS order_id",
+            expected_hashes_differ=True,
+        )
+    ],
+    ids=["semantic config key changes model version hash"],
+)
+def test_given_semantic_config_key_when_building_expected_hashes_then_hashes_differ(
+    test_case: ExpectedVersionHashesTestCase,
+) -> None:
+    table_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_materialized="table",
+    )
+    view_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_materialized="view",
+    )
+
+    table_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=table_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=table_graph),
+    )
+    view_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=view_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=view_graph),
+    )
+
+    assert (
+        table_hashes["stg_orders"] != view_hashes["stg_orders"]
     ) is test_case.expected_hashes_differ
 
 
@@ -253,30 +479,8 @@ def test_given_bound_hash_mismatch_when_building_stale_models_then_it_marks_only
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        StaleRootReasonsTestCase(
-            description="classifies first run and query changed stale roots",
-            stale_model_names=("stg_orders", "fact_orders", "dim_customers"),
-            expected_local_hashes={
-                "stg_orders": "new-local-a",
-                "fact_orders": "same-local-b",
-                "dim_customers": "new-local-c",
-            },
-            bound_version_hashes={
-                "stg_orders": "old-version-a",
-                "fact_orders": "old-version-b",
-            },
-            bound_local_hashes={
-                "stg_orders": "old-local-a",
-                "fact_orders": "same-local-b",
-            },
-            expected_stale_root_reasons={
-                "stg_orders": PlanReason.QUERY_CHANGED,
-                "dim_customers": PlanReason.FIRST_RUN,
-            },
-        )
-    ],
-    ids=["classifies first run and query changed stale roots"],
+    STALE_ROOT_REASONS_TEST_CASES,
+    ids=[case.description for case in STALE_ROOT_REASONS_TEST_CASES],
 )
 def test_given_stale_models_when_building_stale_root_reasons_then_it_classifies_roots(
     test_case: StaleRootReasonsTestCase,
@@ -286,6 +490,10 @@ def test_given_stale_models_when_building_stale_root_reasons_then_it_classifies_
         expected_local_hashes=test_case.expected_local_hashes,
         bound_version_hashes=test_case.bound_version_hashes,
         bound_local_hashes=test_case.bound_local_hashes,
+        current_query_sqls=test_case.current_query_sqls,
+        bound_previous_query_sqls=test_case.bound_previous_query_sqls,
+        expected_metadata_jsons=test_case.expected_metadata_jsons,
+        bound_metadata_jsons=test_case.bound_metadata_jsons,
     )
 
     assert stale_root_reasons == test_case.expected_stale_root_reasons

@@ -516,7 +516,19 @@ def test_given_dbt_without_subcommand_when_running_with_dependencies_then_it_ret
     [
         MainTestCase(
             description="dispatches clone command through injected handler",
-            argv=["clone", "--from", "prod", "--to", "dev", "--select", "orders"],
+            argv=[
+                "clone",
+                "--from",
+                "prod",
+                "--to",
+                "dev",
+                "--select",
+                "orders",
+                "--virtual-env",
+                "preview",
+                "--skip-locked",
+                "--verbose",
+            ],
             expected_exit_code=8,
         )
     ],
@@ -526,7 +538,19 @@ def test_given_clone_command_arguments_when_running_with_dependencies_then_it_di
     test_case: MainTestCase,
 ) -> None:
     received_args: list[
-        tuple[Path | None, bool, bool, str, str, bool, tuple[str, ...], tuple[str, ...]]
+        tuple[
+            Path | None,
+            bool,
+            bool,
+            str,
+            str,
+            bool,
+            str | None,
+            bool,
+            tuple[str, ...],
+            tuple[str, ...],
+            bool,
+        ]
     ] = []
 
     def run_clone(
@@ -536,8 +560,11 @@ def test_given_clone_command_arguments_when_running_with_dependencies_then_it_di
         from_environment: str,
         to_environment: str,
         hard_copy: bool,
+        virtual_env: str | None,
+        skip_locked: bool,
         select: tuple[str, ...],
         exclude: tuple[str, ...],
+        verbose: bool,
         cli_vars: dict[str, object],
     ) -> int:
         del cli_vars
@@ -549,8 +576,11 @@ def test_given_clone_command_arguments_when_running_with_dependencies_then_it_di
                 from_environment,
                 to_environment,
                 hard_copy,
+                virtual_env,
+                skip_locked,
                 select,
                 exclude,
+                verbose,
             )
         )
         return test_case.expected_exit_code
@@ -561,7 +591,9 @@ def test_given_clone_command_arguments_when_running_with_dependencies_then_it_di
     )
 
     assert exit_code == test_case.expected_exit_code
-    assert received_args == [(None, False, False, "prod", "dev", False, ("orders",), ())]
+    assert received_args == [
+        (None, False, False, "prod", "dev", False, "preview", True, ("orders",), (), True)
+    ]
 
 
 @pytest.mark.parametrize(

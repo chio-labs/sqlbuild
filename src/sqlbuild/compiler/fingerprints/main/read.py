@@ -62,7 +62,7 @@ def _table_exists(*, connection: Any, execute: Any, qualified_name: str) -> bool
 
 
 def _row_to_fingerprint(row: tuple[Any, ...], *, qualified_name: str) -> Fingerprint:
-    raw_ts: Any = row[9]
+    raw_ts: Any = row[10]
     ts: datetime = raw_ts if isinstance(raw_ts, datetime) else datetime.fromisoformat(str(raw_ts))
     raw_ast_hash: Any = row[6]
     ast_hash: str | None = str(raw_ast_hash) if raw_ast_hash is not None else None
@@ -71,10 +71,14 @@ def _row_to_fingerprint(row: tuple[Any, ...], *, qualified_name: str) -> Fingerp
     raw_target_name: Any = row[3]
     model_name: str = str(row[0])
     query_sql_storage: str = str(row[8])
+    metadata_json_storage: str = str(row[9])
     try:
         query_sql: str = base64.b64decode(query_sql_storage.encode("ascii"), validate=True).decode(
             "utf-8"
         )
+        metadata_json: str = base64.b64decode(
+            metadata_json_storage.encode("ascii"), validate=True
+        ).decode("utf-8")
     except (binascii.Error, UnicodeDecodeError) as error:
         raise FingerprintInputError(
             f"Invalid fingerprint query SQL storage for '{model_name}' in {qualified_name}: "
@@ -91,5 +95,6 @@ def _row_to_fingerprint(row: tuple[Any, ...], *, qualified_name: str) -> Fingerp
         ast_hash=ast_hash,
         schema_fingerprint=str(row[7]),
         query_sql=query_sql,
+        metadata_json=metadata_json,
         ts=ts,
     )

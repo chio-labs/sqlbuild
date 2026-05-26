@@ -15,8 +15,11 @@ from sqlbuild.virtual.planner.helpers.planning import (
     build_stale_root_causes,
     build_stale_root_reasons,
 )
+from sqlbuild.virtual.planner.helpers.state_metadata import (
+    decode_model_version_metadata_jsons,
+    decode_model_version_query_sqls,
+)
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
-from sqlbuild.virtual.shared.helpers.encoding import decode_state_text
 from sqlbuild.virtual.state.models import ModelVersionRecord, VirtualEnvironmentRefRecord
 
 
@@ -36,13 +39,10 @@ def build_virtual_plan_semantics(
     )
     bound_version_hashes: dict[str, str] = build_bound_version_hashes(bound_refs)
     bound_local_hashes: dict[str, str] = build_bound_local_hashes(bound_model_versions)
-    bound_previous_query_sqls: dict[str, str] = {
-        model_name: query_sql
-        for model_name, model_version in bound_model_versions.items()
-        if model_version is not None
-        for query_sql in (decode_state_text(model_version.fingerprint_query_sql_b64),)
-        if query_sql is not None
-    }
+    bound_previous_query_sqls: dict[str, str] = decode_model_version_query_sqls(
+        bound_model_versions
+    )
+    bound_metadata_jsons: dict[str, str] = decode_model_version_metadata_jsons(bound_model_versions)
     stale_model_names: tuple[str, ...] = build_stale_model_names(
         model_names=tuple(model.name for model in graph.project.models),
         expected_version_hashes=expected_version_hashes,
@@ -53,6 +53,10 @@ def build_virtual_plan_semantics(
         expected_local_hashes=expected_local_hashes,
         bound_version_hashes=bound_version_hashes,
         bound_local_hashes=bound_local_hashes,
+        current_query_sqls={model.name: model.query_sql for model in graph.project.models},
+        bound_previous_query_sqls=bound_previous_query_sqls,
+        expected_metadata_jsons=expected_metadata_jsons,
+        bound_metadata_jsons=bound_metadata_jsons,
     )
     return VirtualPlanSemantics(
         expected_local_hashes=expected_local_hashes,
@@ -61,6 +65,7 @@ def build_virtual_plan_semantics(
         bound_version_hashes=bound_version_hashes,
         bound_local_hashes=bound_local_hashes,
         bound_previous_query_sqls=bound_previous_query_sqls,
+        bound_metadata_jsons=bound_metadata_jsons,
         stale_model_names=stale_model_names,
         default_selection=build_default_virtual_selection(
             stale_model_names=stale_model_names,

@@ -16,6 +16,7 @@ from tests.unit.src.sqlbuild.adapters.databricks._test_types import (
     DatabricksPythonFunctionSupportTestCase,
     DatabricksRenderCloneTestCase,
     DatabricksRenderDeleteInsertCursorTestCase,
+    DatabricksRenderDurableCloneTestCase,
     DatabricksRenderPythonFunctionTestCase,
     DatabricksRenderTableFunctionTestCase,
 )
@@ -155,6 +156,36 @@ def test_given_clone_request_when_rendering_then_databricks_uses_expected_clone_
     )
 
     assert adapter.supports_zero_copy_clone() is test_case.expected_supports_zero_copy
+    assert statements == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksRenderDurableCloneTestCase(
+            description="renders deep clone for durable physical versions",
+            source="`workspace`.`prod`.`fact_orders`",
+            target="`workspace`.`dev`.`fact_orders`",
+            expected_statements=(
+                "CREATE TABLE `workspace`.`dev`.`fact_orders` "
+                "DEEP CLONE `workspace`.`prod`.`fact_orders`",
+            ),
+            expected_supports_durable_clone=True,
+        )
+    ],
+    ids=["renders deep clone for durable physical versions"],
+)
+def test_given_durable_clone_request_when_rendering_then_databricks_uses_deep_clone_sql(
+    test_case: DatabricksRenderDurableCloneTestCase,
+) -> None:
+    adapter: DatabricksAdapter = DatabricksAdapter()
+
+    statements: tuple[str, ...] = adapter.render_durable_clone(
+        source=test_case.source,
+        target=test_case.target,
+    )
+
+    assert adapter.supports_durable_clone() is test_case.expected_supports_durable_clone
     assert statements == test_case.expected_statements
 
 

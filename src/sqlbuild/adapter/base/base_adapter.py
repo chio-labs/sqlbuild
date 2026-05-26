@@ -49,6 +49,9 @@ class BaseAdapter(StrictAdapter):
     def supports_zero_copy_clone(self) -> bool:
         return False
 
+    def supports_durable_clone(self) -> bool:
+        return False
+
     def supports_relation_age_metadata(self) -> bool:
         return False
 
@@ -395,6 +398,9 @@ class BaseAdapter(StrictAdapter):
         hard_copy: bool = False,
     ) -> tuple[str, ...]:
         del hard_copy
+        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+
+    def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
         return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
 
     def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:
@@ -1003,6 +1009,20 @@ class BaseAdapter(StrictAdapter):
             target=target,
             hard_copy=hard_copy,
         )
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def durable_clone(
+        self,
+        connection: Any,
+        *,
+        source: str,
+        target: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_durable_clone(source=source, target=target)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
