@@ -39,7 +39,14 @@ def read_latest_fingerprints(
         schema=schema,
         render_qualified_name=render_qualified_name,
     )
-    result: Any = execute(connection, read_sql)
+    try:
+        result: Any = execute(connection, read_sql)
+    except Exception as error:
+        raise FingerprintInputError(
+            f"Unable to read fingerprints from {qualified_name}. This can happen after "
+            "upgrading from an older sqlbuild version; delete or rebuild the SQLBuild "
+            "fingerprint table to regenerate fingerprints."
+        ) from error
     rows: list[tuple[Any, ...]] = result.fetchall()
     latest: dict[str, Fingerprint] = {}
     row: tuple[Any, ...]

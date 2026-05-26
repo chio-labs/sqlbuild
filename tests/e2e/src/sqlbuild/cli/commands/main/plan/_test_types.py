@@ -2,6 +2,13 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class DirectPlanE2ETestCase:
+    description: str
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class VirtualPlanE2ETestCase:
     description: str
     seed_matching_refs: bool
