@@ -54,6 +54,12 @@ TEST_CASES: list[DiffSelectorIntegrationTestCase] = [
         expected_model_names=frozenset(("stg_orders", "stg_customers")),
     ),
     DiffSelectorIntegrationTestCase(
+        description="Windows-style path selector returns models under folder",
+        select=("path:models\\staging",),
+        exclude=(),
+        expected_model_names=frozenset(("stg_orders", "stg_customers")),
+    ),
+    DiffSelectorIntegrationTestCase(
         description="tag selector returns tagged models",
         select=("tag:mart",),
         exclude=(),
