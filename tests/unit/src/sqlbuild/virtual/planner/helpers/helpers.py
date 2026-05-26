@@ -24,6 +24,7 @@ def build_virtual_planner_test_project(
     *,
     upstream_query_sql: str,
     downstream_query_sql: str,
+    downstream_depends_on_dim_customers: bool = False,
 ) -> ProjectGraph:
     function: CompiledFunction = CompiledFunction(
         key=CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name="normalize_order"),
@@ -88,6 +89,20 @@ def build_virtual_planner_test_project(
             name="dim_customers",
             qualified_name="marts.dim_customers",
         ),
+    )
+    downstream_deps: tuple[CompiledObjectKey, ...] = (
+        (upstream_model.key, function.key, unrelated_model.key)
+        if downstream_depends_on_dim_customers
+        else (upstream_model.key, function.key)
+    )
+    downstream_model = CompiledModel(
+        key=downstream_model.key,
+        deps=downstream_deps,
+        name=downstream_model.name,
+        relative_path=downstream_model.relative_path,
+        query_sql=downstream_model.query_sql,
+        config=downstream_model.config,
+        target=downstream_model.target,
     )
     project: CompiledProject = CompiledProject(
         run_id="test_run",

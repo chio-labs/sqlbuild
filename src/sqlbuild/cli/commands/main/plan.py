@@ -47,6 +47,8 @@ def run_plan(
     exclude: tuple[str, ...] = (),
     verbose: bool = False,
     cli_vars: dict[str, object] | None = None,
+    include_stale_upstreams: bool = False,
+    changes_only: bool = False,
 ) -> int:
     """Execute the plan command."""
 
@@ -106,6 +108,8 @@ def run_plan(
             cursor_overrides=cursor_overrides,
             full_refresh=full_refresh,
             virtual_environment_name=virtual_env,
+            include_stale_upstreams=include_stale_upstreams,
+            changes_only=changes_only,
             auto_load_sources=should_load_sources,
             select=select,
             exclude=exclude,

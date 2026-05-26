@@ -3,24 +3,60 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.virtual.planner.helpers.planning import (
     build_default_virtual_selection,
     build_expected_local_hashes,
     build_expected_version_hashes,
     build_stale_model_names,
+    build_stale_required_upstream_closure,
     build_stale_root_causes,
     build_stale_root_reasons,
+    resolve_virtual_model_selection,
 )
 from tests.unit.src.sqlbuild.virtual.planner.helpers._test_types import (
     DefaultVirtualSelectionTestCase,
     ExpectedVersionHashesTestCase,
     StaleModelNamesTestCase,
+    StaleRequiredUpstreamClosureTestCase,
     StaleRootCausesTestCase,
     StaleRootReasonsTestCase,
+    VirtualModelSelectionTestCase,
 )
 from tests.unit.src.sqlbuild.virtual.planner.helpers.helpers import (
     build_virtual_planner_test_project,
+)
+
+VIRTUAL_MODEL_SELECTION_TEST_CASES: tuple[VirtualModelSelectionTestCase, ...] = (
+    VirtualModelSelectionTestCase(
+        description="include stale upstreams expands minimally",
+        select=("fact_orders",),
+        default_selection=("fact_orders", "stg_orders"),
+        stale_model_names=("fact_orders", "stg_orders"),
+        include_stale_upstreams=True,
+        changes_only=False,
+        expected_selection=("fact_orders", "stg_orders"),
+    ),
+    VirtualModelSelectionTestCase(
+        description="changes only intersects selected models with default stale selection",
+        select=("fact_orders", "dim_customers"),
+        default_selection=("fact_orders", "stg_orders"),
+        stale_model_names=("fact_orders", "stg_orders"),
+        include_stale_upstreams=True,
+        changes_only=True,
+        expected_selection=("fact_orders", "stg_orders"),
+    ),
+    VirtualModelSelectionTestCase(
+        description="include stale upstreams excludes unchanged upstreams",
+        select=("fact_orders",),
+        default_selection=("fact_orders", "stg_orders"),
+        stale_model_names=("fact_orders", "stg_orders"),
+        include_stale_upstreams=True,
+        changes_only=False,
+        expected_selection=("fact_orders", "stg_orders"),
+        downstream_depends_on_dim_customers=True,
+    ),
 )
 
 
@@ -87,6 +123,100 @@ def test_given_stale_models_when_building_default_selection_then_it_includes_dow
     )
 
     assert selection == test_case.expected_selection
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StaleRequiredUpstreamClosureTestCase(
+            description="finds stale required upstreams for selected downstream",
+            selected_model_names=("fact_orders",),
+            stale_model_names=("stg_orders", "fact_orders"),
+            expected_stale_upstream_names=("stg_orders",),
+        )
+    ],
+    ids=["finds stale required upstreams for selected downstream"],
+)
+def test_given_selected_downstream_when_building_closure_then_it_returns_stale_ancestors(
+    test_case: StaleRequiredUpstreamClosureTestCase,
+) -> None:
+    graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql="SELECT 1 AS id",
+        downstream_query_sql="SELECT id FROM stg_orders",
+    )
+
+    stale_upstream_names: tuple[str, ...] = build_stale_required_upstream_closure(
+        graph=graph,
+        selected_model_names=test_case.selected_model_names,
+        stale_model_names=test_case.stale_model_names,
+    )
+
+    assert stale_upstream_names == test_case.expected_stale_upstream_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    VIRTUAL_MODEL_SELECTION_TEST_CASES,
+    ids=[case.description for case in VIRTUAL_MODEL_SELECTION_TEST_CASES],
+)
+def test_given_virtual_selectors_when_resolving_selection_then_it_returns_coherent_scope(
+    test_case: VirtualModelSelectionTestCase,
+) -> None:
+    graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql="SELECT 1 AS id",
+        downstream_query_sql="SELECT id FROM stg_orders",
+        downstream_depends_on_dim_customers=test_case.downstream_depends_on_dim_customers,
+    )
+
+    selection: tuple[str, ...] = resolve_virtual_model_selection(
+        graph=graph,
+        select=test_case.select,
+        exclude=(),
+        default_selection=test_case.default_selection,
+        stale_model_names=test_case.stale_model_names,
+        include_stale_upstreams=test_case.include_stale_upstreams,
+        changes_only=test_case.changes_only,
+    )
+
+    assert selection == test_case.expected_selection
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualModelSelectionTestCase(
+            description="blocks selected downstream with stale required upstream",
+            select=("fact_orders",),
+            default_selection=("fact_orders", "stg_orders"),
+            stale_model_names=("fact_orders", "stg_orders"),
+            include_stale_upstreams=False,
+            changes_only=False,
+            expected_selection=("stg_orders",),
+        )
+    ],
+    ids=["blocks selected downstream with stale required upstream"],
+)
+def test_given_virtual_selector_missing_stale_upstream_when_resolving_selection_then_it_raises(
+    test_case: VirtualModelSelectionTestCase,
+) -> None:
+    graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql="SELECT 1 AS id",
+        downstream_query_sql="SELECT id FROM stg_orders",
+    )
+
+    with pytest.raises(PlannerInputError) as exc_info:
+        resolve_virtual_model_selection(
+            graph=graph,
+            select=test_case.select,
+            exclude=(),
+            default_selection=test_case.default_selection,
+            stale_model_names=test_case.stale_model_names,
+            include_stale_upstreams=test_case.include_stale_upstreams,
+            changes_only=test_case.changes_only,
+        )
+
+    assert exc_info.value.code == "S010"
+    assert test_case.expected_selection[0] in exc_info.value.message
 
 
 @pytest.mark.parametrize(

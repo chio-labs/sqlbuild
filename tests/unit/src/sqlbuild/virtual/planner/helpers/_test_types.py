@@ -19,6 +19,26 @@ class DefaultVirtualSelectionTestCase:
 
 
 @dataclass(frozen=True)
+class VirtualModelSelectionTestCase:
+    description: str
+    select: tuple[str, ...]
+    default_selection: tuple[str, ...]
+    stale_model_names: tuple[str, ...]
+    include_stale_upstreams: bool
+    changes_only: bool
+    expected_selection: tuple[str, ...]
+    downstream_depends_on_dim_customers: bool = False
+
+
+@dataclass(frozen=True)
+class StaleRequiredUpstreamClosureTestCase:
+    description: str
+    selected_model_names: tuple[str, ...]
+    stale_model_names: tuple[str, ...]
+    expected_stale_upstream_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class StaleModelNamesTestCase:
     description: str
     expected_version_hashes: dict[str, str]

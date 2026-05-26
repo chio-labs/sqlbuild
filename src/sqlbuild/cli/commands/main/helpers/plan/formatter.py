@@ -840,6 +840,14 @@ def _format_virtual_metadata(
         if isinstance(raw_stale_root_names, (tuple, list))
         else ()
     )
+    raw_remaining_stale_model_names: object | None = plan.metadata.get(
+        "virtual_remaining_stale_model_names"
+    )
+    remaining_stale_model_names: tuple[str, ...] = (
+        tuple(str(item) for item in raw_remaining_stale_model_names)
+        if isinstance(raw_remaining_stale_model_names, (tuple, list))
+        else ()
+    )
     lines.append("")
     lines.append(section_header_style("Virtual environment"))
     lines.append(f"  name: {virtual_environment_name}")
@@ -858,6 +866,12 @@ def _format_virtual_metadata(
             display_options=display_options,
         )
         lines.append(f"  stale model set: {stale_model_set}")
+    if remaining_stale_model_names:
+        remaining_stale_set: str = _format_capped_name_list(
+            remaining_stale_model_names,
+            display_options=display_options,
+        )
+        lines.append(f"  remaining stale after selection: {remaining_stale_set}")
 
 
 def _format_capped_name_list(names: tuple[str, ...], *, display_options: DisplayOptions) -> str:

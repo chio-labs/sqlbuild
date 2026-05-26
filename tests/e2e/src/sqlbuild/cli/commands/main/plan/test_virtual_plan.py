@@ -9,6 +9,7 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.plan._test_types import (
     VirtualPlanE2ETestCase,
     VirtualPlanJsonE2ETestCase,
+    VirtualPlanSelectionGuardE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
     build_virtual_plan_repo_files,
@@ -361,6 +362,119 @@ def test_given_virtual_plan_with_explicit_select_when_running_cli_then_it_bypass
         assert fragment in output, output
     for fragment in test_case.unexpected_fragments:
         assert fragment not in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualPlanSelectionGuardE2ETestCase(
+            description="selected downstream with stale upstream blocks",
+            command=("--no-color", "plan", "--select", "fact_orders"),
+            expected_exit_code=1,
+            expected_fragments=(
+                "missing stale required upstream models: stg_orders",
+                "--include-stale-upstreams",
+            ),
+        )
+    ],
+    ids=["selected downstream with stale upstream blocks"],
+)
+def test_given_virtual_plan_selected_downstream_with_stale_upstream_when_running_then_it_blocks(
+    test_case: VirtualPlanSelectionGuardE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    baseline_project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_plan_guard_baseline",
+        repo_files=build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id"),
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_plan_guard_current",
+        repo_files=build_virtual_plan_repo_files(stg_orders_sql="SELECT 2 AS id"),
+    )
+
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    seed_matching_virtual_refs(
+        project_dir=project_dir,
+        source_project_dir=baseline_project_dir,
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code
+    output: str = result.stdout + result.stderr
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualPlanSelectionGuardE2ETestCase(
+            description="include stale upstreams and changes only narrows scope",
+            command=(
+                "--no-color",
+                "plan",
+                "--select",
+                "fact_orders",
+                "--select",
+                "dim_customers",
+                "--include-stale-upstreams",
+                "--changes-only",
+            ),
+            expected_exit_code=0,
+            expected_fragments=("Plan ready (2 selected)", "stg_orders", "fact_orders"),
+            unexpected_fragments=("dim_customers",),
+        )
+    ],
+    ids=["include stale upstreams and changes only narrows scope"],
+)
+def test_given_virtual_plan_include_stale_upstreams_when_running_then_it_expands_minimally(
+    test_case: VirtualPlanSelectionGuardE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    baseline_project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_plan_include_baseline",
+        repo_files=build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id"),
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_plan_include_current",
+        repo_files=build_virtual_plan_repo_files(stg_orders_sql="SELECT 2 AS id"),
+    )
+
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    seed_matching_virtual_refs(
+        project_dir=project_dir,
+        source_project_dir=baseline_project_dir,
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stderr
+    output: str = result.stdout
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in output
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in output
 
 
 @pytest.mark.parametrize(

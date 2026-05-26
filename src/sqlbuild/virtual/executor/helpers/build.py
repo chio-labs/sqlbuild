@@ -13,16 +13,13 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo, StatementRecorder
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
-    CompiledObjectKey,
     CompiledProject,
     CompiledRelationTarget,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.main.execution import build_execution_plan
-from sqlbuild.compiler.planner.main.selection import resolve_project_selectors
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
@@ -39,6 +36,7 @@ from sqlbuild.virtual.executor.helpers.rewrite import (
 )
 from sqlbuild.virtual.executor.models import VirtualBuildExecutionHooks, VirtualBuildPipelineResult
 from sqlbuild.virtual.planner.main.output import apply_virtual_plan_output
+from sqlbuild.virtual.planner.main.selection import resolve_virtual_plan_model_selection
 from sqlbuild.virtual.planner.main.semantics import (
     build_virtual_plan_semantics,
 )
@@ -66,6 +64,8 @@ def run_virtual_build(
     cursor_overrides: CursorOverrides | None = None,
     full_refresh: bool = False,
     virtual_environment_name: str | None = None,
+    include_stale_upstreams: bool = False,
+    changes_only: bool = False,
     auto_load_sources: bool = False,
     reload_sources: bool = False,
     select: tuple[str, ...] = (),
@@ -129,12 +129,16 @@ def run_virtual_build(
             bound_refs=bound_refs,
             bound_model_versions=bound_model_versions,
         )
-        effective_select: tuple[str, ...] = select or semantics.default_selection
-        selected_model_names: tuple[str, ...] = _resolve_selected_model_names(
+        selected_model_names: tuple[str, ...] = resolve_virtual_plan_model_selection(
             graph=graph,
-            select=effective_select,
+            select=select,
             exclude=exclude,
+            default_selection=semantics.default_selection,
+            stale_model_names=semantics.stale_model_names,
+            include_stale_upstreams=include_stale_upstreams,
+            changes_only=changes_only,
         )
+        effective_select: tuple[str, ...] = selected_model_names
         bound_physical_relations: dict[str, PhysicalRelationRecord] = _read_bound_relations(
             backend=backend,
             state_connection=state_connection,
@@ -186,7 +190,7 @@ def run_virtual_build(
             adapter=adapter,
             connection=planning_connection,
             select=effective_select,
-            exclude=exclude,
+            exclude=(),
             cursor_overrides=cursor_overrides,
             full_refresh=full_refresh,
             auto_load_sources=auto_load_sources,
@@ -203,6 +207,7 @@ def run_virtual_build(
         plan_output=plan_output,
         environment_name=target_vde_name,
         semantics=semantics,
+        selected_model_names=selected_model_names,
     )
     effective_concurrency: int = (
         concurrency if concurrency is not None else rewritten_project.settings.concurrency
@@ -323,26 +328,6 @@ def _read_bound_relations(
         if relation is not None:
             relations[model_name] = relation
     return relations
-
-
-def _resolve_selected_model_names(
-    *,
-    graph: ProjectGraph,
-    select: tuple[str, ...],
-    exclude: tuple[str, ...],
-) -> tuple[str, ...]:
-    selected_keys: frozenset[CompiledObjectKey] = resolve_project_selectors(
-        select=select,
-        exclude=exclude,
-        all_keys=graph.all_keys,
-        upstream_deps=graph.upstream_deps,
-        downstream_deps=graph.downstream_deps,
-        tag_index=graph.tag_index,
-        path_index=graph.path_index,
-    )
-    return tuple(
-        sorted(key.name for key in selected_keys if key.resource_type == CompiledResourceType.MODEL)
-    )
 
 
 def _persist_successful_virtual_build(

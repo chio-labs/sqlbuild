@@ -44,6 +44,17 @@ class VirtualBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class VirtualBuildSelectionGuardE2ETestCase:
+    """Test case for virtual build selection guard behavior."""
+
+    description: str
+    blocked_command: tuple[str, ...]
+    expanded_command: tuple[str, ...]
+    expected_blocked_fragments: tuple[str, ...]
+    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
+
+
+@dataclass(frozen=True)
 class ModelBackedCursorBuildE2ETestCase:
     """Test case for model-backed cursor build e2e regression coverage."""
 

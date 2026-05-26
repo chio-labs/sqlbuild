@@ -1612,6 +1612,8 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         verbose: bool = False,
         debug: bool = False,
         cli_vars: dict[str, object] | None = None,
+        include_stale_upstreams: bool = False,
+        changes_only: bool = False,
         json_output: bool = False,
         json_output_path: Path | None = None,
     ) -> int:
@@ -1627,6 +1629,8 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         del cli_vars
         del json_output
         del json_output_path
+        del include_stale_upstreams
+        del changes_only
         received_args.append(
             (
                 no_color,
@@ -1816,6 +1820,8 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
         exclude: tuple[str, ...],
         verbose: bool,
         cli_vars: dict[str, object],
+        include_stale_upstreams: bool = False,
+        changes_only: bool = False,
     ) -> int:
         received_args.append(
             (
@@ -1889,6 +1895,8 @@ def test_given_plan_load_flag_when_running_then_dispatches_expected_argument(
         exclude: tuple[str, ...],
         verbose: bool,
         cli_vars: dict[str, object],
+        include_stale_upstreams: bool = False,
+        changes_only: bool = False,
     ) -> int:
         del (
             project_dir,
@@ -1904,6 +1912,8 @@ def test_given_plan_load_flag_when_running_then_dispatches_expected_argument(
             exclude,
             verbose,
             cli_vars,
+            include_stale_upstreams,
+            changes_only,
         )
         received_load_sources.append(load_sources)
         return test_case.expected_exit_code
@@ -1951,6 +1961,8 @@ def test_given_select_file_when_running_then_dispatches_file_selectors(
         exclude: tuple[str, ...],
         verbose: bool,
         cli_vars: dict[str, object],
+        include_stale_upstreams: bool = False,
+        changes_only: bool = False,
     ) -> int:
         del (
             project_dir,
@@ -1966,6 +1978,8 @@ def test_given_select_file_when_running_then_dispatches_file_selectors(
             exclude,
             verbose,
             cli_vars,
+            include_stale_upstreams,
+            changes_only,
         )
         received_selects.append(select)
         return test_case.expected_exit_code
@@ -2058,6 +2072,7 @@ def test_given_command_local_global_flags_when_running_main_then_it_returns_pars
 
     assert exit_code == test_case.expected_exit_code
     assert "error[C900]:" in rendered_stderr
+    assert rendered_stderr.endswith("\n\n")
 
 
 @pytest.mark.parametrize(
@@ -2083,6 +2098,7 @@ def test_given_parser_error_and_color_support_when_running_main_then_it_colorize
 
     assert exit_code == test_case.expected_exit_code
     assert "\033[31m\033[1merror[C900]:\033[0m" in rendered_stderr
+    assert rendered_stderr.endswith("\n\n")
 
 
 @pytest.mark.parametrize(
@@ -2109,6 +2125,7 @@ def test_given_parser_error_and_no_color_when_running_main_then_it_renders_plain
     assert exit_code == test_case.expected_exit_code
     assert "error[C900]:" in rendered_stderr
     assert "\033[31m" not in rendered_stderr
+    assert rendered_stderr.endswith("\n\n")
 
 
 @pytest.mark.parametrize(
@@ -2159,6 +2176,7 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
 
     assert exit_code == test_case.expected_exit_code
     assert test_case.expected_stderr_fragment in rendered_stderr
+    assert rendered_stderr.endswith("\n\n")
 
 
 @pytest.mark.parametrize(
