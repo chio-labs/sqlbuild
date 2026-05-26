@@ -11,7 +11,7 @@ from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.helpers.changes.policy import resolve_query_change_backfill
 from sqlbuild.compiler.planner.models import BackfillResult, WarehouseSnapshot
 from sqlbuild.compiler.planner.types import BackfillAction, PlanReason
-from sqlbuild.compiler.shared.helpers.hashing import compute_query_hash
+from sqlbuild.shared.helpers.hashing import compute_query_hash
 
 
 def build_compiled_function_fingerprint_sql(function: CompiledFunction) -> str:

@@ -809,7 +809,9 @@ def test_given_fingerprint_row_when_written_to_bigquery_then_base64_sql_round_tr
     raw_rows: tuple[tuple[object, ...], ...] = fetch_rows(
         adapter=adapter,
         connection=connection,
-        sql=f"SELECT query_sql FROM {fingerprint_table} WHERE model_name = 'fingerprint_model'",
+        sql=(
+            f"SELECT query_sql_b64 FROM {fingerprint_table} WHERE model_name = 'fingerprint_model'"
+        ),
     )
 
     actual_query_sql: str = fingerprint_set.fingerprints[test_case.expected_model_name].query_sql

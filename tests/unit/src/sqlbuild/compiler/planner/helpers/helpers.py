@@ -58,7 +58,7 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction
-from sqlbuild.compiler.shared.helpers.hashing import compute_query_hash
+from sqlbuild.shared.helpers.hashing import compute_query_hash
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry

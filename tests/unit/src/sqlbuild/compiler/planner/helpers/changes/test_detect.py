@@ -6,7 +6,7 @@ from sqlbuild.compiler.compile.models.core import CompiledModel
 from sqlbuild.compiler.planner.helpers.changes.detect import detect_model_changes
 from sqlbuild.compiler.planner.models import ChangeDetectionResult, WarehouseSnapshot
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
-from sqlbuild.compiler.shared.helpers.hashing import compute_query_hash
+from sqlbuild.shared.helpers.hashing import compute_query_hash
 from tests.unit.src.sqlbuild.compiler.planner.helpers.changes._test_helpers import (
     build_model_from_test_case,
     build_snapshot_from_test_case,

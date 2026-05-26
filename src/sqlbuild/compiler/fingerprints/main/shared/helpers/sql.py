@@ -10,7 +10,7 @@ from sqlbuild.compiler.fingerprints.constants import (
     COLUMN_AST_HASH,
     COLUMN_MODEL_NAME,
     COLUMN_QUERY_HASH,
-    COLUMN_QUERY_SQL,
+    COLUMN_QUERY_SQL_B64,
     COLUMN_RUN_ID,
     COLUMN_SCHEMA_FINGERPRINT,
     COLUMN_TARGET_DATABASE,
@@ -66,7 +66,7 @@ def build_create_table_sql(
         f"{COLUMN_QUERY_HASH} {string_type} NOT NULL, "
         f"{COLUMN_AST_HASH} {string_type}, "
         f"{COLUMN_SCHEMA_FINGERPRINT} {string_type} NOT NULL, "
-        f"{COLUMN_QUERY_SQL} {string_type} NOT NULL, "
+        f"{COLUMN_QUERY_SQL_B64} {string_type} NOT NULL, "
         f"{COLUMN_TIMESTAMP} {timestamp_type} NOT NULL"
         f")"
     )
@@ -92,7 +92,7 @@ def build_read_all_sql(
         f"{COLUMN_QUERY_HASH}, "
         f"{COLUMN_AST_HASH}, "
         f"{COLUMN_SCHEMA_FINGERPRINT}, "
-        f"{COLUMN_QUERY_SQL}, "
+        f"{COLUMN_QUERY_SQL_B64}, "
         f"{COLUMN_TIMESTAMP} "
         f"FROM {qualified_name}"
     )
@@ -136,7 +136,7 @@ def build_insert_sql(
         f"{COLUMN_QUERY_HASH}, "
         f"{COLUMN_AST_HASH}, "
         f"{COLUMN_SCHEMA_FINGERPRINT}, "
-        f"{COLUMN_QUERY_SQL}, "
+        f"{COLUMN_QUERY_SQL_B64}, "
         f"{COLUMN_TIMESTAMP}"
         f") VALUES ("
         f"'{model_name}', "
@@ -150,28 +150,6 @@ def build_insert_sql(
         f"'{encoded_query_sql}', "
         f"'{ts}'"
         f")"
-    )
-
-
-def build_add_target_columns_sql(
-    *,
-    database: str | None,
-    schema: str,
-    render_qualified_name: Callable[..., str | None],
-    render_framework_type: Callable[[FrameworkType], str],
-) -> tuple[str, ...]:
-    """Build best-effort schema migration statements for existing fingerprint tables."""
-
-    qualified_name: str = build_qualified_table_name(
-        database=database,
-        schema=schema,
-        render_qualified_name=render_qualified_name,
-    )
-    string_type: str = render_framework_type(FrameworkType.STRING)
-    return (
-        f"ALTER TABLE {qualified_name} ADD COLUMN {COLUMN_TARGET_DATABASE} {string_type}",
-        f"ALTER TABLE {qualified_name} ADD COLUMN {COLUMN_TARGET_SCHEMA} {string_type}",
-        f"ALTER TABLE {qualified_name} ADD COLUMN {COLUMN_TARGET_NAME} {string_type}",
     )
 
 
