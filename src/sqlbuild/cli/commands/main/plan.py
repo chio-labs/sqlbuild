@@ -155,5 +155,6 @@ def run_plan(
             use_color=use_color,
             display_options=display_options,
         )
+        + "\n"
     )
     return 0

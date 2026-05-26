@@ -667,6 +667,7 @@ def _main_with_dependencies(
                 args.state_command,
                 args.state_backup_id,
                 args.auto_approve,
+                args.no_color,
             )
         if args.command == CliCommand.PLAYGROUND:
             return handlers.run_playground(

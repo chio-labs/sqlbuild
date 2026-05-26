@@ -53,6 +53,9 @@ class ModelVersionRecord:
     data_hash: str
     metadata_hash: str
     status: ModelVersionStatus
+    fingerprint_query_sql_b64: str | None = None
+    fingerprint_metadata_json_b64: str | None = None
+    compiled_sql_b64: str | None = None
 
 
 @dataclass(frozen=True)

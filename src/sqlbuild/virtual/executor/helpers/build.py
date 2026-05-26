@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import time
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -41,6 +43,7 @@ from sqlbuild.virtual.planner.main.semantics import (
     build_virtual_plan_semantics,
 )
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
+from sqlbuild.virtual.shared.helpers.encoding import encode_state_text
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
@@ -78,6 +81,10 @@ def run_virtual_build(
     end_cursor_int: int | None = None,
     on_plan_ready: Callable[[CompiledProject, PlanOutput], VirtualBuildExecutionHooks]
     | None = None,
+    on_connection_start: Callable[[int], None] | None = None,
+    on_connection_complete: Callable[[int, float], None] | None = None,
+    on_connection_error: Callable[[int, float], None] | None = None,
+    on_progress: Callable[[str], None] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> VirtualBuildPipelineResult:
     """Execute a virtual-mode build."""
@@ -162,7 +169,17 @@ def run_virtual_build(
         for model_name, relation in bound_physical_relations.items()
     }
 
-    planning_connection: Any = adapter.connect(connection_config)
+    if on_connection_start is not None:
+        on_connection_start(1)
+    connection_start: float = time.monotonic()
+    try:
+        planning_connection: Any = adapter.connect(connection_config)
+    except Exception:
+        if on_connection_error is not None:
+            on_connection_error(1, time.monotonic() - connection_start)
+        raise
+    if on_connection_complete is not None:
+        on_connection_complete(1, time.monotonic() - connection_start)
     try:
         plan_output: PlanOutput = build_execution_plan(
             project=rewritten_project,
@@ -178,6 +195,7 @@ def run_virtual_build(
             local_config=discovered_inputs.local_config,
             defer_sources_to=defer_sources_to,
             deferred_relations=deferred_relations,
+            on_progress=on_progress,
         )
     finally:
         adapter.close(planning_connection)
@@ -228,6 +246,7 @@ def run_virtual_build(
             bound_version_hashes=semantics.bound_version_hashes,
             plan_output=plan_output,
             expected_local_hashes=semantics.expected_local_hashes,
+            expected_metadata_jsons=semantics.expected_metadata_jsons,
             expected_version_hashes=semantics.expected_version_hashes,
         )
 
@@ -338,6 +357,7 @@ def _persist_successful_virtual_build(
     bound_version_hashes: dict[str, str],
     plan_output: PlanOutput,
     expected_local_hashes: dict[str, str],
+    expected_metadata_jsons: dict[str, str],
     expected_version_hashes: dict[str, str],
 ) -> None:
     final_version_hashes: dict[str, str] = dict(bound_version_hashes)
@@ -364,6 +384,7 @@ def _persist_successful_virtual_build(
             version_hash: str | None = final_version_hashes.get(model.name)
             if version_hash is None:
                 continue
+            entry: Any | None = model_entries_by_name.get(model.name)
             existing_model_version: ModelVersionRecord | None = backend.get_model_version(
                 state_connection,
                 schema=config.schema,
@@ -371,6 +392,7 @@ def _persist_successful_virtual_build(
                 version_hash=version_hash,
             )
             if existing_model_version is None:
+                metadata_json: str = expected_metadata_jsons.get(model.name, "{}")
                 backend.upsert_model_version(
                     state_connection,
                     schema=config.schema,
@@ -378,11 +400,15 @@ def _persist_successful_virtual_build(
                         model_name=model.name,
                         version_hash=version_hash,
                         data_hash=expected_local_hashes.get(model.name, version_hash),
-                        metadata_hash=version_hash,
+                        metadata_hash=hashlib.sha256(metadata_json.encode("utf-8")).hexdigest(),
                         status=ModelVersionStatus.READY,
+                        fingerprint_query_sql_b64=encode_state_text(model.query_sql),
+                        fingerprint_metadata_json_b64=encode_state_text(metadata_json),
+                        compiled_sql_b64=(
+                            encode_state_text(entry.resolved_sql) if entry is not None else None
+                        ),
                     ),
                 )
-            entry: Any | None = model_entries_by_name.get(model.name)
             target: CompiledRelationTarget | None = entry.target if entry is not None else None
             if target is not None:
                 existing_physical_relation: PhysicalRelationRecord | None = (

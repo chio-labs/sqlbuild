@@ -42,6 +42,10 @@ def run_virtual_build(
     end_cursor_int: int | None = None,
     on_plan_ready: Callable[[CompiledProject, PlanOutput], VirtualBuildExecutionHooks]
     | None = None,
+    on_connection_start: Callable[[int], None] | None = None,
+    on_connection_complete: Callable[[int, float], None] | None = None,
+    on_connection_error: Callable[[int, float], None] | None = None,
+    on_progress: Callable[[str], None] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> VirtualBuildPipelineResult:
     """Execute a virtual-mode build."""
@@ -70,5 +74,9 @@ def run_virtual_build(
         start_cursor_int=start_cursor_int,
         end_cursor_int=end_cursor_int,
         on_plan_ready=on_plan_ready,
+        on_connection_start=on_connection_start,
+        on_connection_complete=on_connection_complete,
+        on_connection_error=on_connection_error,
+        on_progress=on_progress,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )

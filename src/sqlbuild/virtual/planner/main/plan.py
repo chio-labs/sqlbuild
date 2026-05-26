@@ -34,6 +34,7 @@ from sqlbuild.virtual.planner.helpers.planning import (
     build_stale_root_reasons,
 )
 from sqlbuild.virtual.planner.helpers.targets import build_target_from_physical_relation
+from sqlbuild.virtual.shared.helpers.encoding import decode_state_text
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import ModelVersionRecord, PhysicalRelationRecord
 
@@ -96,6 +97,7 @@ def run_virtual_plan_pipeline(
             bound_local_hashes,
             deferred_targets,
             deferred_relations,
+            previous_query_sqls,
         ) = _read_bound_state(
             discovered_inputs=discovered_inputs,
             project_dir=project_dir,
@@ -163,6 +165,7 @@ def run_virtual_plan_pipeline(
             plan_output=plan_output,
             stale_root_reasons=stale_root_reasons,
             stale_root_causes=stale_root_causes,
+            previous_query_sqls=previous_query_sqls,
         )
         plan_output = with_virtual_metadata(
             plan_output=plan_output,
@@ -193,6 +196,7 @@ def _read_bound_state(
     dict[str, str],
     dict[str, CompiledRelationTarget],
     dict[str, RelationInfo],
+    dict[str, str],
 ]:
     config, backend = build_state_runtime(
         discovered_inputs=discovered_inputs,
@@ -210,7 +214,7 @@ def _read_bound_state(
             virtual_environment_name=virtual_environment_name,
         )
         if environment_name is None:
-            return {}, {}, {}, {}
+            return {}, {}, {}, {}, {}
         refs: tuple[object, ...] = backend.get_virtual_environment_refs(
             state_connection,
             schema=config.schema,
@@ -225,6 +229,13 @@ def _read_bound_state(
                 version_hash=version_hash,
             )
             for model_name, version_hash in bound_version_hashes.items()
+        }
+        previous_query_sqls: dict[str, str] = {
+            model_name: query_sql
+            for model_name, model_version in model_versions.items()
+            if model_version is not None
+            for query_sql in (decode_state_text(model_version.fingerprint_query_sql_b64),)
+            if query_sql is not None
         }
         model_targets: dict[str, CompiledRelationTarget] = {
             model.name: model.target for model in graph.project.models
@@ -262,6 +273,7 @@ def _read_bound_state(
             build_bound_local_hashes(model_versions),
             deferred_targets,
             deferred_relations,
+            previous_query_sqls,
         )
     finally:
         backend.close(state_connection)

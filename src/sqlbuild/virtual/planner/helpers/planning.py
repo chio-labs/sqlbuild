@@ -18,7 +18,35 @@ def build_expected_local_hashes(
 ) -> dict[str, str]:
     """Derive local-only semantic hashes for functions and models."""
 
-    function_local_hashes: dict[str, str] = {
+    function_local_hashes: dict[str, str] = build_function_local_hashes(graph=graph)
+    expected_local_hashes: dict[str, str] = dict(function_local_hashes)
+    model_metadata_jsons: dict[str, str] = build_model_fingerprint_metadata_jsons(
+        graph=graph,
+        function_local_hashes=function_local_hashes,
+    )
+    models_by_name: dict[str, Any] = {model.name: model for model in graph.project.models}
+    key: Any
+    for key in _topologically_order_keys(graph):
+        if key.resource_type != CompiledResourceType.MODEL:
+            continue
+        model: Any | None = models_by_name.get(key.name)
+        if model is None:
+            continue
+        expected_local_hashes[model.name] = _stable_hash(
+            "\n".join(
+                (
+                    model.query_sql,
+                    model_metadata_jsons[model.name],
+                )
+            )
+        )
+    return expected_local_hashes
+
+
+def build_function_local_hashes(*, graph: ProjectGraph) -> dict[str, str]:
+    """Derive local-only semantic hashes for functions."""
+
+    return {
         function.name: _stable_hash(
             json.dumps(
                 {
@@ -30,11 +58,24 @@ def build_expected_local_hashes(
                     "language": function.language.value,
                 },
                 sort_keys=True,
+                default=str,
             )
         )
         for function in graph.project.functions
     }
-    expected_local_hashes: dict[str, str] = dict(function_local_hashes)
+
+
+def build_model_fingerprint_metadata_jsons(
+    *,
+    graph: ProjectGraph,
+    function_local_hashes: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Build deterministic non-query model fingerprint metadata JSON by model."""
+
+    function_hashes: dict[str, str] = function_local_hashes or build_function_local_hashes(
+        graph=graph
+    )
+    result: dict[str, str] = {}
     models_by_name: dict[str, Any] = {model.name: model for model in graph.project.models}
     key: Any
     for key in _topologically_order_keys(graph):
@@ -48,24 +89,19 @@ def build_expected_local_hashes(
         for upstream_key in model.deps:
             if upstream_key.resource_type != CompiledResourceType.FUNCTION:
                 continue
-            upstream_hash: str | None = function_local_hashes.get(upstream_key.name)
+            upstream_hash: str | None = function_hashes.get(upstream_key.name)
             if upstream_hash is not None:
                 local_function_hashes.append(upstream_hash)
-        config_fingerprint: str = json.dumps(
-            model.config.values,
+        result[model.name] = json.dumps(
+            {
+                "config": model.config.values,
+                "local_function_hashes": local_function_hashes,
+            },
             sort_keys=True,
+            separators=(",", ":"),
             default=str,
         )
-        expected_local_hashes[model.name] = _stable_hash(
-            "\n".join(
-                (
-                    model.query_sql,
-                    config_fingerprint,
-                    *local_function_hashes,
-                )
-            )
-        )
-    return expected_local_hashes
+    return result
 
 
 def build_expected_version_hashes(

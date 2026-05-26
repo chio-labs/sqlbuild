@@ -436,6 +436,9 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
         data_hash="data-hash",
         metadata_hash="metadata-hash",
         status=ModelVersionStatus.READY,
+        fingerprint_query_sql_b64="U0VMRUNUIDEgQVMgaWQ=",
+        fingerprint_metadata_json_b64="e30=",
+        compiled_sql_b64="U0VMRUNUIDEgQVMgaWQ=",
     )
     postgres_state_backend.upsert_model_version(
         postgres_state_connection,

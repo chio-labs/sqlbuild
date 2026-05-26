@@ -100,10 +100,10 @@ database = "state.duckdb"
         StateLifecycleE2ETestCase(
             description="duckdb state lifecycle commands manage state tables",
             expected_exit_code=0,
-            expected_init_fragment="Initialized virtual state schema 'sqlbuild_state'.",
-            expected_migrate_fragment="Migrated virtual state schema 'sqlbuild_state'",
-            expected_rollback_fragment="Rolled back virtual state schema 'sqlbuild_state'",
-            expected_reset_fragment="Reset virtual state schema 'sqlbuild_state'.",
+            expected_init_fragment="Virtual State Initialized",
+            expected_migrate_fragment="Virtual State Migrated",
+            expected_rollback_fragment="Virtual State Rolled Back",
+            expected_reset_fragment="Virtual State Reset",
             expected_schema_version=1,
         )
     ],
@@ -335,7 +335,7 @@ database = "local-state.duckdb"
         StateExplicitRollbackE2ETestCase(
             description="rollback accepts explicit backup id",
             expected_exit_code=0,
-            expected_rollback_fragment="Rolled back virtual state schema 'sqlbuild_state'",
+            expected_rollback_fragment="Virtual State Rolled Back",
             expected_schema_version=1,
         )
     ],
