@@ -16,6 +16,8 @@ from sqlbuild.virtual.state.constants import (
     STATE_TABLE_INDEXES,
     STATE_TABLES,
     STATE_VERSION_TABLE,
+    VIRTUAL_ENVIRONMENT_CHECKPOINT_REF_TABLE,
+    VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE,
     VIRTUAL_ENVIRONMENT_REF_TABLE,
     VIRTUAL_ENVIRONMENT_TABLE,
 )
@@ -31,6 +33,8 @@ from sqlbuild.virtual.state.models import (
     PhysicalRelationRecord,
     StateLockRecord,
     StateSchemaValidationResult,
+    VirtualEnvironmentCheckpointRecord,
+    VirtualEnvironmentCheckpointRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentRefRecord,
 )
@@ -459,6 +463,76 @@ class PostgresStateBackend(StateBackend):
         return tuple(
             VirtualEnvironmentRefRecord(
                 virtual_environment_name=row[0],
+                model_name=row[1],
+                version_hash=row[2],
+            )
+            for row in rows
+        )
+
+    def create_virtual_environment_checkpoint(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        checkpoint: VirtualEnvironmentCheckpointRecord,
+        refs: tuple[VirtualEnvironmentCheckpointRefRecord, ...],
+    ) -> None:
+        with connection.cursor() as cursor:
+            cursor.execute("BEGIN")
+            try:
+                cursor.execute(
+                    "INSERT INTO "
+                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE)} "
+                    "(checkpoint_id, virtual_environment_name, created_at) "
+                    "VALUES (%s, %s, CURRENT_TIMESTAMP)",
+                    [checkpoint.checkpoint_id, checkpoint.virtual_environment_name],
+                )
+                for ref in refs:
+                    cursor.execute(
+                        "INSERT INTO "
+                        f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_REF_TABLE)} "
+                        "(checkpoint_id, model_name, version_hash) VALUES (%s, %s, %s)",
+                        [ref.checkpoint_id, ref.model_name, ref.version_hash],
+                    )
+                cursor.execute("COMMIT")
+            except BaseException:
+                cursor.execute("ROLLBACK")
+                raise
+
+    def list_virtual_environment_checkpoints(
+        self, connection: Any, *, schema: str, virtual_environment_name: str
+    ) -> tuple[VirtualEnvironmentCheckpointRecord, ...]:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT checkpoint_id, virtual_environment_name, created_at "
+                f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE)} "
+                "WHERE virtual_environment_name = %s ORDER BY created_at DESC, checkpoint_id DESC",
+                [virtual_environment_name],
+            )
+            rows: list[tuple[Any, ...]] = cursor.fetchall()
+        return tuple(
+            VirtualEnvironmentCheckpointRecord(
+                checkpoint_id=row[0],
+                virtual_environment_name=row[1],
+                created_at=row[2],
+            )
+            for row in rows
+        )
+
+    def get_virtual_environment_checkpoint_refs(
+        self, connection: Any, *, schema: str, checkpoint_id: str
+    ) -> tuple[VirtualEnvironmentCheckpointRefRecord, ...]:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"SELECT checkpoint_id, model_name, version_hash "
+                f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_REF_TABLE)} "
+                "WHERE checkpoint_id = %s ORDER BY model_name",
+                [checkpoint_id],
+            )
+            rows: list[tuple[Any, ...]] = cursor.fetchall()
+        return tuple(
+            VirtualEnvironmentCheckpointRefRecord(
+                checkpoint_id=row[0],
                 model_name=row[1],
                 version_hash=row[2],
             )

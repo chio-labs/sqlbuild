@@ -9,6 +9,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     VirtualBuildE2ETestCase,
     VirtualBuildSelectionGuardE2ETestCase,
     VirtualPromoteE2ETestCase,
+    VirtualRollbackE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
     build_virtual_plan_repo_files,
@@ -341,6 +342,262 @@ def test_given_virtual_build_selected_downstream_with_stale_upstream_when_runnin
 @pytest.mark.parametrize(
     "test_case",
     [
+        VirtualRollbackE2ETestCase(
+            description="rollback blocks when checkpoint physical relation is missing",
+            rollback_command=("--no-color", "rollback"),
+            expected_exit_code=1,
+            expected_rollback_fragments=(),
+            expected_stderr_fragments=(
+                "error[S024]",
+                "checkpoint references missing warehouse relation",
+            ),
+            expected_query_results=(),
+            expected_checkpoint_count=2,
+        )
+    ],
+    ids=["rollback blocks when checkpoint physical relation is missing"],
+)
+def test_given_checkpoint_physical_relation_missing_when_rolling_back_then_it_blocks_cleanly(
+    test_case: VirtualRollbackE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_rollback_missing_physical",
+        repo_files=build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id"),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert initial_build_result.returncode == 0, initial_build_result.stderr
+    (project_dir / "models" / "stg_orders.sql").write_text(
+        "MODEL ();\n\nSELECT 2 AS id\n",
+        encoding="utf-8",
+    )
+    changed_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert changed_build_result.returncode == 0, changed_build_result.stderr
+    checkpoint_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql="SELECT checkpoint_id FROM sqlbuild_state.virtual_environment_checkpoints",
+    )
+    assert len(checkpoint_rows) == test_case.expected_checkpoint_count
+    initial_physical_relation: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT pr.schema_name, pr.relation_name "
+            "FROM sqlbuild_state.virtual_environment_checkpoints cp "
+            "JOIN sqlbuild_state.virtual_environment_checkpoint_refs cr "
+            "ON cp.checkpoint_id = cr.checkpoint_id "
+            "JOIN sqlbuild_state.physical_relations pr "
+            "ON pr.model_name = cr.model_name AND pr.version_hash = cr.version_hash "
+            "WHERE cp.virtual_environment_name = 'dev' AND cr.model_name = 'stg_orders' "
+            "ORDER BY cp.created_at ASC LIMIT 1"
+        ),
+    )
+    assert initial_physical_relation
+    schema_name, relation_name = initial_physical_relation[0]
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=f'DROP TABLE "{schema_name}"."{relation_name}"',
+    )
+
+    rollback_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.rollback_command,
+        project_dir=project_dir,
+    )
+
+    assert rollback_result.returncode == test_case.expected_exit_code
+    fragment: str
+    for fragment in test_case.expected_stderr_fragments:
+        assert fragment in rollback_result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualRollbackE2ETestCase(
+            description="rollback blocks when no previous checkpoint exists",
+            rollback_command=("--no-color", "rollback"),
+            expected_exit_code=1,
+            expected_rollback_fragments=(),
+            expected_stderr_fragments=(
+                "error[S021]",
+                "no previous finalized checkpoint is available for rollback",
+            ),
+            expected_query_results=(),
+            expected_checkpoint_count=1,
+        )
+    ],
+    ids=["rollback blocks when no previous checkpoint exists"],
+)
+def test_given_only_current_checkpoint_when_rolling_back_then_it_blocks_cleanly(
+    test_case: VirtualRollbackE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_rollback_no_previous",
+        repo_files=build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id"),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stderr
+    checkpoint_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql="SELECT checkpoint_id FROM sqlbuild_state.virtual_environment_checkpoints",
+    )
+    assert len(checkpoint_rows) == test_case.expected_checkpoint_count
+
+    rollback_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.rollback_command,
+        project_dir=project_dir,
+    )
+
+    assert rollback_result.returncode == test_case.expected_exit_code
+    fragment: str
+    for fragment in test_case.expected_stderr_fragments:
+        assert fragment in rollback_result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualRollbackE2ETestCase(
+            description="rollback blocks when target VDE lock exists",
+            rollback_command=("rollback", "--virtual-env", "dev"),
+            expected_exit_code=1,
+            expected_rollback_fragments=(),
+            expected_stderr_fragments=("virtual environment 'dev' is locked",),
+            expected_query_results=(),
+            expected_checkpoint_count=2,
+        )
+    ],
+    ids=["rollback blocks when target VDE lock exists"],
+)
+def test_given_target_virtual_environment_lock_when_rolling_back_then_it_fails_clearly(
+    test_case: VirtualRollbackE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_rollback_locked_target",
+        repo_files=build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id"),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert initial_build_result.returncode == 0, initial_build_result.stderr
+    (project_dir / "models" / "stg_orders.sql").write_text(
+        "MODEL ();\n\nSELECT 2 AS id\n",
+        encoding="utf-8",
+    )
+    changed_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert changed_build_result.returncode == 0, changed_build_result.stderr
+    checkpoint_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql="SELECT checkpoint_id FROM sqlbuild_state.virtual_environment_checkpoints",
+    )
+    assert len(checkpoint_rows) == test_case.expected_checkpoint_count
+    execute_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "INSERT INTO sqlbuild_state.locks "
+            "(lock_key, owner_id, expires_at, created_at, updated_at) "
+            "VALUES ('virtual_env:dev', 'test-owner', TIMESTAMP '2999-01-01', "
+            "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+        ),
+    )
+
+    rollback_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.rollback_command,
+        project_dir=project_dir,
+    )
+
+    assert rollback_result.returncode == test_case.expected_exit_code
+    fragment: str
+    for fragment in test_case.expected_stderr_fragments:
+        assert fragment in rollback_result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualRollbackE2ETestCase(
+            description="checkpoint show blocks for unknown checkpoint",
+            rollback_command=("--no-color", "state", "checkpoints", "show", "missing"),
+            expected_exit_code=1,
+            expected_rollback_fragments=(),
+            expected_stderr_fragments=("error[C905]", "unknown checkpoint 'missing'"),
+            expected_query_results=(),
+            expected_checkpoint_count=1,
+        )
+    ],
+    ids=["checkpoint show blocks for unknown checkpoint"],
+)
+def test_given_unknown_checkpoint_when_showing_checkpoint_then_it_blocks_cleanly(
+    test_case: VirtualRollbackE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_checkpoint_show_unknown",
+        repo_files=build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id"),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stderr
+    checkpoint_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql="SELECT checkpoint_id FROM sqlbuild_state.virtual_environment_checkpoints",
+    )
+    assert len(checkpoint_rows) == test_case.expected_checkpoint_count
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.rollback_command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code
+    fragment: str
+    for fragment in test_case.expected_stderr_fragments:
+        assert fragment in result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         VirtualPromoteE2ETestCase(
             description="whole VDE promotion swaps target refs and views",
             promote_command=("--no-color", "promote", "--from", "pr", "--to", "dev"),
@@ -394,6 +651,118 @@ def test_given_virtual_env_when_promoting_then_it_updates_target_refs_and_views(
     fragment: str
     for fragment in test_case.expected_promote_fragments:
         assert fragment in promote_result.stdout
+    checkpoint_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT checkpoint_id FROM sqlbuild_state.virtual_environment_checkpoints "
+            "WHERE virtual_environment_name = 'dev'"
+        ),
+    )
+    assert len(checkpoint_rows) == 2
+    query_sql: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    for query_sql, expected_rows in test_case.expected_query_results:
+        assert query_duckdb(
+            db_path=project_dir / "warehouse.duckdb",
+            sql=query_sql,
+        ) == list(expected_rows)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualRollbackE2ETestCase(
+            description="whole VDE rollback restores previous finalized checkpoint",
+            rollback_command=("--no-color", "rollback"),
+            expected_rollback_fragments=(
+                "Virtual rollback complete",
+                "virtual environment  dev",
+                "rolled back models   2",
+                "rolled back model set",
+            ),
+            expected_query_results=(("SELECT id FROM dev__dev.fact_orders ORDER BY id", ((1,),)),),
+            expected_checkpoint_count=2,
+        )
+    ],
+    ids=["whole VDE rollback restores previous finalized checkpoint"],
+)
+def test_given_finalized_checkpoints_when_rolling_back_then_it_restores_previous_refs_and_views(
+    test_case: VirtualRollbackE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_rollback_whole",
+        repo_files=build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id"),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert initial_build_result.returncode == 0, initial_build_result.stderr
+    initial_ref_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT model_name, version_hash "
+            "FROM sqlbuild_state.virtual_environment_refs "
+            "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
+        ),
+    )
+    (project_dir / "models" / "stg_orders.sql").write_text(
+        "MODEL ();\n\nSELECT 2 AS id\n",
+        encoding="utf-8",
+    )
+    changed_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert changed_build_result.returncode == 0, changed_build_result.stderr
+    checkpoint_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql="SELECT checkpoint_id FROM sqlbuild_state.virtual_environment_checkpoints",
+    )
+    assert len(checkpoint_rows) == test_case.expected_checkpoint_count
+    checkpoint_id: str = str(checkpoint_rows[0][0])
+    list_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "state", "checkpoints", "list"),
+        project_dir=project_dir,
+    )
+    assert list_result.returncode == 0, list_result.stderr
+    assert "Virtual environment checkpoints" in list_result.stdout
+    assert "dev" in list_result.stdout
+    assert checkpoint_id in list_result.stdout
+    show_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "state", "checkpoints", "show", checkpoint_id),
+        project_dir=project_dir,
+    )
+    assert show_result.returncode == 0, show_result.stderr
+    assert "Virtual environment checkpoint" in show_result.stdout
+    assert checkpoint_id in show_result.stdout
+    assert "stg_orders" in show_result.stdout
+
+    rollback_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.rollback_command,
+        project_dir=project_dir,
+    )
+
+    assert rollback_result.returncode == 0, rollback_result.stderr
+    fragment: str
+    for fragment in test_case.expected_rollback_fragments:
+        assert fragment in rollback_result.stdout
+    rolled_back_ref_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT model_name, version_hash "
+            "FROM sqlbuild_state.virtual_environment_refs "
+            "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
+        ),
+    )
+    assert rolled_back_ref_rows == initial_ref_rows
     query_sql: str
     expected_rows: tuple[tuple[object, ...], ...]
     for query_sql, expected_rows in test_case.expected_query_results:

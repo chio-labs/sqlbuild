@@ -11,6 +11,8 @@ from sqlbuild.virtual.state.models import (
     PhysicalRelationRecord,
     StateLockRecord,
     StateSchemaValidationResult,
+    VirtualEnvironmentCheckpointRecord,
+    VirtualEnvironmentCheckpointRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentRefRecord,
 )
@@ -113,6 +115,32 @@ class StateBackend(ABC):
         self, connection: Any, *, schema: str, virtual_environment_name: str
     ) -> tuple[VirtualEnvironmentRefRecord, ...]:
         """Return refs for a virtual environment."""
+        ...
+
+    @abstractmethod
+    def create_virtual_environment_checkpoint(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        checkpoint: VirtualEnvironmentCheckpointRecord,
+        refs: tuple[VirtualEnvironmentCheckpointRefRecord, ...],
+    ) -> None:
+        """Create a finalized virtual environment checkpoint."""
+        ...
+
+    @abstractmethod
+    def list_virtual_environment_checkpoints(
+        self, connection: Any, *, schema: str, virtual_environment_name: str
+    ) -> tuple[VirtualEnvironmentCheckpointRecord, ...]:
+        """Return checkpoints for a virtual environment, newest first."""
+        ...
+
+    @abstractmethod
+    def get_virtual_environment_checkpoint_refs(
+        self, connection: Any, *, schema: str, checkpoint_id: str
+    ) -> tuple[VirtualEnvironmentCheckpointRefRecord, ...]:
+        """Return refs for a virtual environment checkpoint."""
         ...
 
     @abstractmethod

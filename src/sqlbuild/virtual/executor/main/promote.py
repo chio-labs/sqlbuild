@@ -19,6 +19,7 @@ from sqlbuild.virtual.planner.main.selection import resolve_virtual_plan_model_s
 from sqlbuild.virtual.planner.main.semantics import build_virtual_plan_semantics
 from sqlbuild.virtual.planner.main.upstreams import build_virtual_stale_required_upstream_closure
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
+from sqlbuild.virtual.state.main.checkpoints import create_finalized_virtual_environment_checkpoint
 from sqlbuild.virtual.state.main.locks import (
     acquire_virtual_environment_lease,
 )
@@ -237,6 +238,14 @@ def run_virtual_promote(
             virtual_environment_name=to_virtual_environment_name,
             refs=refs,
         )
+        if status == VirtualEnvironmentStatus.FINALIZED and refs:
+            create_finalized_virtual_environment_checkpoint(
+                backend,
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=to_virtual_environment_name,
+                refs=refs,
+            )
         physical_relations: dict[str, PhysicalRelationRecord] = _read_physical_relations(
             backend=backend,
             state_connection=state_connection,

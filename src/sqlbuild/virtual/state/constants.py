@@ -11,6 +11,8 @@ MODEL_VERSION_TABLE: str = "model_versions"
 PHYSICAL_RELATION_TABLE: str = "physical_relations"
 VIRTUAL_ENVIRONMENT_TABLE: str = "virtual_environments"
 VIRTUAL_ENVIRONMENT_REF_TABLE: str = "virtual_environment_refs"
+VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE: str = "virtual_environment_checkpoints"
+VIRTUAL_ENVIRONMENT_CHECKPOINT_REF_TABLE: str = "virtual_environment_checkpoint_refs"
 LOCK_TABLE: str = "locks"
 STATE_MIGRATION_LOCK_KEY: str = "state_migration"
 STATE_OPERATION_TABLE: str = "state_operations"
@@ -26,6 +28,8 @@ STATE_TABLES: tuple[str, ...] = (
     PHYSICAL_RELATION_TABLE,
     VIRTUAL_ENVIRONMENT_TABLE,
     VIRTUAL_ENVIRONMENT_REF_TABLE,
+    VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE,
+    VIRTUAL_ENVIRONMENT_CHECKPOINT_REF_TABLE,
     LOCK_TABLE,
     STATE_OPERATION_TABLE,
     PLAN_RUN_TABLE,
@@ -90,6 +94,18 @@ VIRTUAL_ENVIRONMENT_REF_COLUMNS: dict[str, StateColumnType] = {
     "updated_at": StateColumnType.TIMESTAMP,
 }
 
+VIRTUAL_ENVIRONMENT_CHECKPOINT_COLUMNS: dict[str, StateColumnType] = {
+    "checkpoint_id": StateColumnType.TEXT,
+    "virtual_environment_name": StateColumnType.TEXT,
+    "created_at": StateColumnType.TIMESTAMP,
+}
+
+VIRTUAL_ENVIRONMENT_CHECKPOINT_REF_COLUMNS: dict[str, StateColumnType] = {
+    "checkpoint_id": StateColumnType.TEXT,
+    "model_name": StateColumnType.TEXT,
+    "version_hash": StateColumnType.TEXT,
+}
+
 LOCK_COLUMNS: dict[str, StateColumnType] = {
     "lock_key": StateColumnType.TEXT,
     "owner_id": StateColumnType.TEXT,
@@ -148,6 +164,8 @@ STATE_TABLE_COLUMNS: dict[str, dict[str, StateColumnType]] = {
     PHYSICAL_RELATION_TABLE: PHYSICAL_RELATION_COLUMNS,
     VIRTUAL_ENVIRONMENT_TABLE: VIRTUAL_ENVIRONMENT_COLUMNS,
     VIRTUAL_ENVIRONMENT_REF_TABLE: VIRTUAL_ENVIRONMENT_REF_COLUMNS,
+    VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE: VIRTUAL_ENVIRONMENT_CHECKPOINT_COLUMNS,
+    VIRTUAL_ENVIRONMENT_CHECKPOINT_REF_TABLE: VIRTUAL_ENVIRONMENT_CHECKPOINT_REF_COLUMNS,
     LOCK_TABLE: LOCK_COLUMNS,
     STATE_OPERATION_TABLE: STATE_OPERATION_COLUMNS,
     PLAN_RUN_TABLE: PLAN_RUN_COLUMNS,
@@ -170,6 +188,15 @@ STATE_TABLE_INDEXES: dict[str, dict[str, tuple[str, ...]]] = {
     VIRTUAL_ENVIRONMENT_REF_TABLE: {
         "idx_sqb_virtual_environment_refs_identity": (
             "virtual_environment_name",
+            "model_name",
+        ),
+    },
+    VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE: {
+        "idx_sqb_virtual_environment_checkpoints_identity": ("checkpoint_id",),
+    },
+    VIRTUAL_ENVIRONMENT_CHECKPOINT_REF_TABLE: {
+        "idx_sqb_virtual_environment_checkpoint_refs_identity": (
+            "checkpoint_id",
             "model_name",
         ),
     },

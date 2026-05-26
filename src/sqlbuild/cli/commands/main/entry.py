@@ -201,6 +201,11 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     promote_parser.add_argument("--verbose", "-v", action="store_true", default=False)
     add_select_args(promote_parser)
     add_vars_args(promote_parser)
+    rollback_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.ROLLBACK)
+    rollback_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    rollback_parser.add_argument("--virtual-env", dest="virtual_env", default=None)
+    rollback_parser.add_argument("--verbose", "-v", action="store_true", default=False)
+    add_vars_args(rollback_parser)
     debug_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DEBUG)
     debug_parser.add_argument("--json", action="store_true", default=False)
     debug_parser.add_argument("--no-connection", action="store_true", default=False)
@@ -258,6 +263,20 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
         StateCommand.RESET.value
     )
     state_reset_parser.add_argument("--auto-approve", action="store_true", default=False)
+    state_checkpoints_parser: argparse.ArgumentParser = state_subparsers.add_parser("checkpoints")
+    state_checkpoints_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
+    state_checkpoints_subparsers = state_checkpoints_parser.add_subparsers(
+        dest="state_checkpoint_command"
+    )
+    state_checkpoints_list_parser: argparse.ArgumentParser = (
+        state_checkpoints_subparsers.add_parser("list")
+    )
+    state_checkpoints_list_parser.add_argument("--virtual-env", dest="virtual_env", default=None)
+    state_checkpoints_show_parser: argparse.ArgumentParser = (
+        state_checkpoints_subparsers.add_parser("show")
+    )
+    state_checkpoints_show_parser.add_argument("state_checkpoint_id", metavar="checkpoint_id")
+    state_checkpoints_show_parser.add_argument("--virtual-env", dest="virtual_env", default=None)
     subparsers.add_parser(CliCommand.INIT)
     playground_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PLAYGROUND)
     playground_parser.add_argument(
@@ -339,6 +358,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.playground import run_playground
     from sqlbuild.cli.commands.main.promote import run_promote
     from sqlbuild.cli.commands.main.query import run_query
+    from sqlbuild.cli.commands.main.rollback import run_rollback
     from sqlbuild.cli.commands.main.run import run_run
     from sqlbuild.cli.commands.main.scenario import run_scenario
     from sqlbuild.cli.commands.main.seed import run_seed
@@ -389,6 +409,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_clone=run_clone,
         run_diff=run_diff,
         run_promote=run_promote,
+        run_rollback=run_rollback,
         run_query=run_query,
         run_debug=run_debug,
         run_lineage=run_lineage,
@@ -680,6 +701,15 @@ def _main_with_dependencies(
                 args.verbose,
                 args.vars,
             )
+        if args.command == CliCommand.ROLLBACK:
+            return handlers.run_rollback(
+                project_dir,
+                args.no_color,
+                args.no_sql_validation,
+                args.virtual_env,
+                args.verbose,
+                args.vars,
+            )
         if args.command == CliCommand.QUERY:
             query_limit: int | None = None if args.query_no_limit else args.query_limit
             return handlers.run_query(
@@ -711,6 +741,9 @@ def _main_with_dependencies(
                 args.state_backup_id,
                 args.auto_approve,
                 args.no_color,
+                args.state_checkpoint_command,
+                args.state_checkpoint_id,
+                args.virtual_env,
             )
         if args.command == CliCommand.PLAYGROUND:
             return handlers.run_playground(

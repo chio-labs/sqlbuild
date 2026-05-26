@@ -1,0 +1,95 @@
+"""CLI rollback command entry point."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.cli.commands.main.helpers.rollback.output import format_rollback_output
+from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
+from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
+from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
+from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
+from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
+    resolve_external_sql_reference_resolver,
+)
+from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
+from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.spec.models.environments import resolve_environment_name
+from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.models.types import EnvironmentMode
+from sqlbuild.virtual.executor.main.rollback import run_virtual_rollback
+
+
+def run_rollback(
+    project_dir: Path | None,
+    no_color: bool,
+    no_sql_validation: bool,
+    virtual_environment: str | None,
+    verbose: bool = False,
+    cli_vars: dict[str, object] | None = None,
+) -> int:
+    """Execute the rollback command."""
+
+    effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
+    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
+        project_dir=effective_project_dir
+    )
+    if discovered_inputs.project_config.environment_mode != EnvironmentMode.VIRTUAL:
+        raise CliUserError("rollback requires environment_mode = 'virtual'", code="C245")
+    adapter_name: str = resolve_effective_adapter_name(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+    )
+    adapter: BaseAdapter = resolve_adapter(adapter_name, project_dir=effective_project_dir)
+    connection_config: dict[str, object] = resolve_project_connection_config(
+        discovered_inputs=discovered_inputs,
+        project_dir=effective_project_dir,
+        cli_vars=cli_vars,
+    )
+    resolved_environment_name: str | None = resolve_environment_name(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+        selected_environment=None,
+    )
+    virtual_environment_name: str | None = virtual_environment or resolved_environment_name
+    if virtual_environment_name is None:
+        raise CliUserError("rollback requires --virtual-env or a default environment", code="C246")
+    planning_progress: PlanningProgressReporter = PlanningProgressReporter(
+        stream=sys.stdout,
+        use_color=not no_color,
+    )
+    connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
+        adapter_name=adapter_name,
+        stream=sys.stdout,
+        use_color=not no_color,
+    )
+    checkpoint_id, rolled_back_models = run_virtual_rollback(
+        project_dir=effective_project_dir,
+        discovered_inputs=discovered_inputs,
+        adapter=adapter,
+        connection_config=connection_config,
+        virtual_environment_name=virtual_environment_name,
+        no_sql_validation=no_sql_validation,
+        cli_vars=cli_vars,
+        external_sql_reference_resolver=resolve_external_sql_reference_resolver(
+            project_dir=effective_project_dir,
+            discovered_inputs=discovered_inputs,
+        ),
+        on_progress=planning_progress.on_progress,
+        on_connection_start=connection_progress.on_connection_start,
+        on_connection_complete=connection_progress.on_connection_complete,
+        on_connection_error=connection_progress.on_connection_error,
+    )
+    print(
+        format_rollback_output(
+            virtual_environment=virtual_environment_name,
+            checkpoint_id=checkpoint_id,
+            rolled_back_models=rolled_back_models,
+            verbose=verbose,
+            use_color=not no_color,
+        )
+    )
+    return 0

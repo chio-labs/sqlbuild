@@ -55,6 +55,8 @@ class CliNamespace:
     auto_approve: bool = False
     retention_days: int | None = None
     state_command: str | None = None
+    state_checkpoint_command: str | None = None
+    state_checkpoint_id: str | None = None
     state_backup_id: str | None = None
     bounded: str | None = None
     max_column_examples: int | None = None
@@ -304,6 +306,17 @@ class CliEntrypointHandlers:
         ],
         int,
     ]
+    run_rollback: Callable[
+        [
+            Path | None,
+            bool,
+            bool,
+            str | None,
+            bool,
+            dict[str, object],
+        ],
+        int,
+    ]
     run_query: Callable[[Path | None, str | None, str, int | None], int]
     run_debug: Callable[[Path | None, bool, bool, bool], int]
     run_lineage: Callable[
@@ -322,7 +335,9 @@ class CliEntrypointHandlers:
         int,
     ]
     run_janitor: Callable[[Path | None, bool, bool, int | None], int]
-    run_state: Callable[[Path | None, str, str | None, bool, bool], int]
+    run_state: Callable[
+        [Path | None, str, str | None, bool, bool, str | None, str | None, str | None], int
+    ]
     run_playground: Callable[[Path | None, str, str], int]
     run_skills_update: Callable[[Path | None, bool, tuple[str, ...], bool], int]
     run_scenario: Callable[
