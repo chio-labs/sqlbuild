@@ -108,6 +108,14 @@ class VirtualEnvironmentCheckpointRefRecord:
 
 
 @dataclass(frozen=True)
+class CheckpointRetentionInspection:
+    """Checkpoint retention inspection for janitor planning."""
+
+    prune_checkpoints: tuple[VirtualEnvironmentCheckpointRecord, ...]
+    retained_physical_relations: tuple[PhysicalRelationRecord, ...]
+
+
+@dataclass(frozen=True)
 class StateLockRecord:
     """Current state row for one active lock."""
 

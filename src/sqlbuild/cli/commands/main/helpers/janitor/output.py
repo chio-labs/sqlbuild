@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TextIO
 
 from sqlbuild.executor.janitor.models import (
+    JanitorCheckpointCandidate,
     JanitorDeleteCandidate,
     JanitorPlan,
     JanitorSkippedRelation,
@@ -53,6 +54,13 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
         else _value(candidate_count, use_color=use_color)
     )
     stream.write(f"  {'eligible for deletion':<22} {rendered_candidates}\n")
+    checkpoint_count: str = str(len(plan.checkpoint_candidates))
+    rendered_checkpoints: str = (
+        yellow(checkpoint_count)
+        if use_color and plan.checkpoint_candidates
+        else _value(checkpoint_count, use_color=use_color)
+    )
+    stream.write(f"  {'checkpoints pruned':<22} {rendered_checkpoints}\n")
     skipped_count: str = _value(str(len(plan.skipped_relations)), use_color=use_color)
     stream.write(f"  {'objects skipped':<22} {skipped_count}\n")
 
@@ -72,6 +80,15 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
         for candidate in plan.candidates:
             stream.write(f"  {_object(candidate.key.display_name(), use_color=use_color)}\n")
 
+    if plan.checkpoint_candidates:
+        stream.write(f"\n{_section('Eligible checkpoints', use_color=use_color)}\n")
+        checkpoint_candidate: JanitorCheckpointCandidate
+        for checkpoint_candidate in plan.checkpoint_candidates:
+            stream.write(
+                f"  {_object(checkpoint_candidate.checkpoint_id, use_color=use_color)}  "
+                f"{_reason(checkpoint_candidate.virtual_environment_name, use_color=use_color)}\n"
+            )
+
     if plan.skipped_relations:
         stream.write(f"\n{_section('Skipped objects', use_color=use_color)}\n")
         skipped: JanitorSkippedRelation
@@ -86,7 +103,10 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
 def confirmation_text(plan: JanitorPlan) -> str:
     """Build the exact confirmation phrase for a janitor plan."""
 
-    return f"delete {len(plan.candidates)} objects from {environment_label(plan)}"
+    if not plan.checkpoint_candidates:
+        return f"delete {len(plan.candidates)} objects from {environment_label(plan)}"
+    deletion_count: int = len(plan.candidates) + len(plan.checkpoint_candidates)
+    return f"delete {deletion_count} items from {environment_label(plan)}"
 
 
 def environment_label(plan: JanitorPlan) -> str:

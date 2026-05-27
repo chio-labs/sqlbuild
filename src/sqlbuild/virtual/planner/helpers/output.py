@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from sqlbuild.compiler.planner.models import CascadeResult, ModelPlanEntry, PlanOutput
+from sqlbuild.compiler.planner.models import (
+    CascadeResult,
+    FunctionPlanEntry,
+    ModelPlanEntry,
+    PlanOutput,
+)
 from sqlbuild.compiler.planner.types import BackfillAction, PlanReason
 
 
@@ -17,6 +22,7 @@ def rewrite_virtual_plan_entries(
     previous_query_sqls: dict[str, str] | None = None,
     current_metadata_jsons: dict[str, str] | None = None,
     previous_metadata_jsons: dict[str, str] | None = None,
+    previous_function_query_sqls: dict[str, str] | None = None,
 ) -> PlanOutput:
     """Rewrite direct planner entries with virtual-specific reasons and causes."""
 
@@ -56,7 +62,32 @@ def rewrite_virtual_plan_entries(
             )
             continue
         rewritten_entries.append(entry)
-    return replace(plan_output, model_entries=tuple(rewritten_entries))
+    rewritten_function_entries: list[FunctionPlanEntry] = []
+    function_entry: FunctionPlanEntry
+    for function_entry in plan_output.function_entries:
+        previous_function_query_sql: str | None = (previous_function_query_sqls or {}).get(
+            function_entry.name,
+            function_entry.previous_query_sql,
+        )
+        if previous_function_query_sql is not None:
+            rewritten_function_entries.append(
+                replace(
+                    function_entry,
+                    previous_query_sql=previous_function_query_sql,
+                    reason=(
+                        PlanReason.QUERY_CHANGED
+                        if previous_function_query_sql != function_entry.fingerprint_query_sql
+                        else function_entry.reason
+                    ),
+                )
+            )
+            continue
+        rewritten_function_entries.append(function_entry)
+    return replace(
+        plan_output,
+        model_entries=tuple(rewritten_entries),
+        function_entries=tuple(rewritten_function_entries),
+    )
 
 
 def with_virtual_metadata(

@@ -542,6 +542,7 @@ def _load_janitor(*, payload: object, file_path: Path) -> JanitorConfig:
     )
     enabled: bool = _optional_bool(mapping=mapping, key="enabled", default=False)
     retention_days: int = _optional_int(mapping=mapping, key="retention_days", default=30)
+    max_checkpoints: int = _optional_int(mapping=mapping, key="max_checkpoints", default=20)
     delete_tracked_only: bool = _optional_bool(
         mapping=mapping,
         key="delete_tracked_only",
@@ -556,9 +557,12 @@ def _load_janitor(*, payload: object, file_path: Path) -> JanitorConfig:
     )
     if retention_days < 0:
         raise ProjectConfigError(f"{file_path} janitor.retention_days must be >= 0")
+    if max_checkpoints < 1:
+        raise ProjectConfigError(f"{file_path} janitor.max_checkpoints must be >= 1")
     return JanitorConfig(
         enabled=enabled,
         retention_days=retention_days,
+        max_checkpoints=max_checkpoints,
         delete_tracked_only=delete_tracked_only,
         exclude_patterns=exclude_patterns,
     )

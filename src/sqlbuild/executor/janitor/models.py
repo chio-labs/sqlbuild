@@ -38,6 +38,15 @@ class JanitorDeleteCandidate:
 
 
 @dataclass(frozen=True)
+class JanitorCheckpointCandidate:
+    """One retained-history checkpoint eligible for pruning."""
+
+    checkpoint_id: str
+    virtual_environment_name: str
+    created_at: datetime | None
+
+
+@dataclass(frozen=True)
 class JanitorSkippedRelation:
     """One stale relation skipped by a safety rule."""
 
@@ -74,6 +83,7 @@ class JanitorPlan:
     environment_name: str | None
     retention_days: int
     candidates: tuple[JanitorDeleteCandidate, ...] = field(default_factory=tuple)
+    checkpoint_candidates: tuple[JanitorCheckpointCandidate, ...] = field(default_factory=tuple)
     skipped_relations: tuple[JanitorSkippedRelation, ...] = field(default_factory=tuple)
     skipped_schemas: tuple[JanitorSkippedSchema, ...] = field(default_factory=tuple)
     scanned_schema_count: int = 0
@@ -85,3 +95,4 @@ class JanitorExecutionResult:
     """Result from deleting janitor candidates."""
 
     deleted: tuple[JanitorDeleteCandidate, ...] = field(default_factory=tuple)
+    deleted_checkpoints: tuple[JanitorCheckpointCandidate, ...] = field(default_factory=tuple)

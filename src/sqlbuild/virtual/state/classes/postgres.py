@@ -539,6 +539,29 @@ class PostgresStateBackend(StateBackend):
             for row in rows
         )
 
+    def delete_virtual_environment_checkpoint(
+        self, connection: Any, *, schema: str, checkpoint_id: str
+    ) -> None:
+        with connection.cursor() as cursor:
+            cursor.execute("BEGIN")
+            try:
+                cursor.execute(
+                    "DELETE FROM "
+                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_REF_TABLE)} "
+                    "WHERE checkpoint_id = %s",
+                    [checkpoint_id],
+                )
+                cursor.execute(
+                    "DELETE FROM "
+                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE)} "
+                    "WHERE checkpoint_id = %s",
+                    [checkpoint_id],
+                )
+                cursor.execute("COMMIT")
+            except BaseException:
+                cursor.execute("ROLLBACK")
+                raise
+
     def acquire_lock(
         self,
         connection: Any,

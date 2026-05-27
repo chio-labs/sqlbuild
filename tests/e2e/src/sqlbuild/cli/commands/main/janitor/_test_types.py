@@ -39,6 +39,18 @@ class JanitorCheckpointProtectionE2ETestCase:
 
 
 @dataclass(frozen=True)
+class JanitorCheckpointRetentionE2ETestCase:
+    """Test case for virtual checkpoint pruning behavior."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_checkpoint_count_before: int
+    expected_checkpoint_count_after: int
+    expected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class JanitorInvalidConfigE2ETestCase:
     """Test case for invalid janitor config behavior."""
 
