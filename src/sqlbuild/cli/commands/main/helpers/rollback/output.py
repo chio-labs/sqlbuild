@@ -12,6 +12,7 @@ def format_rollback_output(
     virtual_environment: str,
     checkpoint_id: str,
     rolled_back_models: tuple[str, ...],
+    status: str,
     verbose: bool = False,
     use_color: bool = True,
 ) -> str:
@@ -29,6 +30,7 @@ def format_rollback_output(
         "",
         f"  virtual environment  {virtual_environment}",
         f"  checkpoint           {checkpoint_id}",
+        f"  status               {status}",
         f"  rolled back models   {model_count}",
     ]
     if rolled_back_models:

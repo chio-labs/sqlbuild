@@ -9,6 +9,7 @@ from textwrap import dedent
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.janitor._test_types import (
+    JanitorCheckpointProtectionE2ETestCase,
     JanitorCleanupE2ETestCase,
     JanitorDisabledE2ETestCase,
     JanitorInvalidConfigE2ETestCase,
@@ -18,7 +19,13 @@ from tests.e2e.src.sqlbuild.cli.commands.main.janitor.helpers import (
     create_janitor_scenario_relations,
     prepare_janitor_project,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb, table_exists
+from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import build_virtual_plan_repo_files
+from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    prepare_inline_project,
+    query_duckdb,
+    run_sqb,
+    table_exists,
+)
 
 
 @pytest.mark.parametrize(
@@ -65,12 +72,12 @@ def test_given_default_config_when_running_janitor_then_it_reports_disabled(
             janitor_command=("janitor", "--auto-approve"),
             expected_exit_code=0,
             expected_stdout_fragments=(
-                "Objects eligible for deletion: 1",
-                "Objects skipped: 3",
-                "- main.janitor_tracked_extra",
-                "main.janitor_untracked_extra: relation is not tracked by SQLBuild",
-                "main.partition_state: relation matches exclude pattern 'partition_*'",
-                "main._sqlbuild_fingerprints: relation matches exclude pattern",
+                "eligible for deletion  1",
+                "objects skipped        3",
+                "main.janitor_tracked_extra",
+                "main.janitor_untracked_extra  relation is not tracked by SQLBuild",
+                "main.partition_state  relation matches exclude pattern 'partition_*'",
+                "main._sqlbuild_fingerprints  relation matches exclude pattern",
                 "Deleted 1 objects.",
             ),
             expected_existing_tables=(
@@ -137,11 +144,11 @@ def test_given_stale_relations_when_running_janitor_then_it_deletes_only_tracked
             janitor_command=("janitor", "--auto-approve"),
             expected_exit_code=0,
             expected_stdout_fragments=(
-                "Objects eligible for deletion: 2",
-                "Objects skipped: 2",
-                "- main.__sqb_a13f09c2e7b8__model__daily_revenue",
-                "- main.__sqb_a13f09c2e7b8__source__raw_orders",
-                "main.__sqb_a13f09c2e7b__model__daily_revenue: relation is not tracked by SQLBuild",
+                "eligible for deletion  2",
+                "objects skipped        2",
+                "main.__sqb_a13f09c2e7b8__model__daily_revenue",
+                "main.__sqb_a13f09c2e7b8__source__raw_orders",
+                "main.__sqb_a13f09c2e7b__model__daily_revenue  relation is not tracked by SQLBuild",
                 "Deleted 2 objects.",
             ),
             expected_existing_tables=(
@@ -197,6 +204,76 @@ def test_given_scenario_artifacts_when_running_tracked_only_janitor_then_it_dele
         assert table_exists(db_path=db_path, table_name=table_name)
     for table_name in test_case.expected_missing_tables:
         assert not table_exists(db_path=db_path, table_name=table_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorCheckpointProtectionE2ETestCase(
+            description="virtual janitor preserves checkpoint referenced physical versions",
+            janitor_command=("janitor", "--auto-approve"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "eligible for deletion  0",
+                "relation is referenced by a retained virtual checkpoint",
+            ),
+        )
+    ],
+    ids=["virtual janitor preserves checkpoint referenced physical versions"],
+)
+def test_given_virtual_checkpoint_refs_when_running_janitor_then_it_preserves_physical_versions(
+    test_case: JanitorCheckpointProtectionE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    repo_files: dict[str, str] = build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id")
+    repo_files["sqlbuild_project.toml"] += dedent(
+        """
+
+        [janitor]
+        enabled = true
+        retention_days = 0
+        delete_tracked_only = false
+        """
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_janitor_checkpoint_protection",
+        repo_files=repo_files,
+    )
+    state_db_path: Path = project_dir / "state.duckdb"
+    warehouse_db_path: Path = project_dir / "warehouse.duckdb"
+
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+    protected_relation_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=state_db_path,
+        sql=(
+            "SELECT relation_name FROM sqlbuild_state.physical_relations "
+            "WHERE model_name = 'stg_orders' ORDER BY created_at ASC LIMIT 1"
+        ),
+    )
+    protected_relation_name: str = str(protected_relation_rows[0][0])
+    (project_dir / "models" / "stg_orders.sql").write_text(
+        "MODEL ();\n\nSELECT 2 AS id\n",
+        encoding="utf-8",
+    )
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+
+    janitor_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.janitor_command,
+        project_dir=project_dir,
+    )
+
+    assert janitor_result.returncode == test_case.expected_exit_code, (
+        janitor_result.stdout + janitor_result.stderr
+    )
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in janitor_result.stdout
+    assert table_exists(
+        db_path=warehouse_db_path,
+        schema="dev__sqb_physical",
+        table_name=protected_relation_name,
+    )
 
 
 @pytest.mark.parametrize(

@@ -215,6 +215,15 @@ STATE_DISPATCH_TEST_CASES: list[MainTestCase] = [
         expected_state_checkpoint_command="show",
         expected_state_checkpoint_id="chk_1",
     ),
+    MainTestCase(
+        description="dispatches state checkpoints diff through injected handler",
+        argv=["state", "checkpoints", "diff", "chk_2", "--virtual-env", "dev"],
+        expected_exit_code=15,
+        expected_state_command="checkpoints",
+        expected_state_checkpoint_command="diff",
+        expected_state_checkpoint_id="chk_2",
+        expected_virtual_env="dev",
+    ),
 ]
 
 COMPILE_DISPATCH_TEST_CASES: list[MainTestCase] = [
@@ -802,7 +811,18 @@ def test_given_promote_command_arguments_when_running_with_dependencies_then_it_
     [
         MainTestCase(
             description="dispatches rollback command through injected handler",
-            argv=["rollback", "--virtual-env", "dev", "--verbose"],
+            argv=[
+                "rollback",
+                "--virtual-env",
+                "dev",
+                "--checkpoint-id",
+                "chk_1",
+                "--select",
+                "fact_orders",
+                "--allow-partial-rollback",
+                "--include-stale-upstreams",
+                "--verbose",
+            ],
             expected_exit_code=7,
         )
     ],
@@ -811,7 +831,20 @@ def test_given_promote_command_arguments_when_running_with_dependencies_then_it_
 def test_given_rollback_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[Path | None, bool, bool, str | None, bool]] = []
+    received_args: list[
+        tuple[
+            Path | None,
+            bool,
+            bool,
+            str | None,
+            bool,
+            str | None,
+            tuple[str, ...],
+            tuple[str, ...],
+            bool,
+            bool,
+        ]
+    ] = []
 
     def run_rollback(
         project_dir: Path | None,
@@ -819,11 +852,27 @@ def test_given_rollback_command_arguments_when_running_with_dependencies_then_it
         no_sql_validation: bool,
         virtual_environment: str | None,
         verbose: bool,
+        checkpoint_id: str | None,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+        allow_partial_rollback: bool,
+        include_stale_upstreams: bool,
         cli_vars: dict[str, object],
     ) -> int:
         del cli_vars
         received_args.append(
-            (project_dir, no_color, no_sql_validation, virtual_environment, verbose)
+            (
+                project_dir,
+                no_color,
+                no_sql_validation,
+                virtual_environment,
+                verbose,
+                checkpoint_id,
+                select,
+                exclude,
+                allow_partial_rollback,
+                include_stale_upstreams,
+            )
         )
         return test_case.expected_exit_code
 
@@ -833,7 +882,9 @@ def test_given_rollback_command_arguments_when_running_with_dependencies_then_it
     )
 
     assert exit_code == test_case.expected_exit_code
-    assert received_args == [(None, False, False, "dev", True)]
+    assert received_args == [
+        (None, False, False, "dev", True, "chk_1", ("fact_orders",), (), True, True)
+    ]
 
 
 @pytest.mark.parametrize(

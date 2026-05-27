@@ -80,6 +80,27 @@ class VirtualRollbackE2ETestCase:
 
 
 @dataclass(frozen=True)
+class VirtualExplicitCheckpointRollbackE2ETestCase:
+    """Test case for explicit checkpoint rollback behavior."""
+
+    description: str
+    rollback_command_prefix: tuple[str, ...]
+    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
+
+
+@dataclass(frozen=True)
+class VirtualPartialRollbackE2ETestCase:
+    """Test case for partial rollback guard behavior."""
+
+    description: str
+    blocked_command: tuple[str, ...]
+    allowed_command: tuple[str, ...]
+    expected_blocked_stderr_fragments: tuple[str, ...]
+    expected_allowed_stdout_fragments: tuple[str, ...]
+    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
+
+
+@dataclass(frozen=True)
 class ModelBackedCursorBuildE2ETestCase:
     """Test case for model-backed cursor build e2e regression coverage."""
 

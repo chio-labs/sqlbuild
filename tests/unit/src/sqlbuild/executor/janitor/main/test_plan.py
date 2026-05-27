@@ -6,7 +6,11 @@ import pytest
 
 from sqlbuild.executor.janitor.main.execute import execute_janitor_plan
 from sqlbuild.executor.janitor.main.plan import build_janitor_plan
-from sqlbuild.executor.janitor.models import JanitorExecutionResult, JanitorPlan
+from sqlbuild.executor.janitor.models import (
+    JanitorExecutionResult,
+    JanitorPlan,
+    JanitorRelationKey,
+)
 from tests.unit.src.sqlbuild.executor.janitor.main._test_types import (
     JanitorExecuteTestCase,
     JanitorPlanTestCase,
@@ -124,6 +128,25 @@ PLAN_TEST_CASES: list[JanitorPlanTestCase] = [
         expected_candidate_names=(),
         expected_skipped_relation_reasons=("relation is not tracked by SQLBuild",),
     ),
+    JanitorPlanTestCase(
+        description="checkpoint protected relation is skipped",
+        relation_infos=(
+            relation_info("orders__v_old", schema="analytics__sqb_physical", created_at=OLD_TIME),
+        ),
+        protected_relation_keys=frozenset(
+            (
+                JanitorRelationKey(
+                    database=None,
+                    schema="analytics__sqb_physical",
+                    name="orders__v_old",
+                ),
+            )
+        ),
+        expected_candidate_names=(),
+        expected_skipped_relation_reasons=(
+            "relation is referenced by a retained virtual checkpoint",
+        ),
+    ),
 ]
 
 
@@ -148,6 +171,7 @@ def test_given_project_and_warehouse_when_building_janitor_plan_then_returns_exp
         retention_days=test_case.retention_days,
         delete_tracked_only=test_case.delete_tracked_only,
         exclude_patterns=test_case.exclude_patterns,
+        protected_relation_keys=test_case.protected_relation_keys,
     )
 
     assert tuple(candidate.key.name for candidate in plan.candidates) == (
