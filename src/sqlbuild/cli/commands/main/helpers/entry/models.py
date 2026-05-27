@@ -49,6 +49,8 @@ class CliNamespace:
     allow_snapshot_full_refresh: bool = False
     allow_snapshot_schema_change: bool = False
     allow_partial_promotion: bool = False
+    allow_partial_rollback: bool = False
+    rollback_checkpoint_id: str | None = None
     concurrency: int | None = None
     verbose: bool = False
     debug: bool = False
@@ -312,6 +314,11 @@ class CliEntrypointHandlers:
             bool,
             bool,
             str | None,
+            bool,
+            str | None,
+            tuple[str, ...],
+            tuple[str, ...],
+            bool,
             bool,
             dict[str, object],
         ],

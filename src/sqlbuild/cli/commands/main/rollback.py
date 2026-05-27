@@ -29,6 +29,11 @@ def run_rollback(
     no_sql_validation: bool,
     virtual_environment: str | None,
     verbose: bool = False,
+    checkpoint_id: str | None = None,
+    select: tuple[str, ...] = (),
+    exclude: tuple[str, ...] = (),
+    allow_partial_rollback: bool = False,
+    include_stale_upstreams: bool = False,
     cli_vars: dict[str, object] | None = None,
 ) -> int:
     """Execute the rollback command."""
@@ -66,12 +71,17 @@ def run_rollback(
         stream=sys.stdout,
         use_color=not no_color,
     )
-    checkpoint_id, rolled_back_models = run_virtual_rollback(
+    restored_checkpoint_id, rolled_back_models, status = run_virtual_rollback(
         project_dir=effective_project_dir,
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         connection_config=connection_config,
         virtual_environment_name=virtual_environment_name,
+        checkpoint_id=checkpoint_id,
+        select=select,
+        exclude=exclude,
+        allow_partial_rollback=allow_partial_rollback,
+        include_stale_upstreams=include_stale_upstreams,
         no_sql_validation=no_sql_validation,
         cli_vars=cli_vars,
         external_sql_reference_resolver=resolve_external_sql_reference_resolver(
@@ -86,8 +96,9 @@ def run_rollback(
     print(
         format_rollback_output(
             virtual_environment=virtual_environment_name,
-            checkpoint_id=checkpoint_id,
+            checkpoint_id=restored_checkpoint_id,
             rolled_back_models=rolled_back_models,
+            status=status.value,
             verbose=verbose,
             use_color=not no_color,
         )

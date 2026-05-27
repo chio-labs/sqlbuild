@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -15,14 +16,28 @@ from sqlbuild.cli.commands.main.helpers.janitor.output import (
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_connection_config
+from sqlbuild.cli.commands.main.shared.helpers.connection_progress import (
+    ConnectionProgressReporter,
+)
+from sqlbuild.cli.commands.main.shared.helpers.status import TransientStatusReporter
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.executor.janitor.main.execute import execute_janitor_plan
 from sqlbuild.executor.janitor.main.plan import build_janitor_plan
-from sqlbuild.executor.janitor.models import JanitorExecutionResult, JanitorPlan
+from sqlbuild.executor.janitor.models import (
+    JanitorExecutionResult,
+    JanitorPlan,
+    JanitorRelationKey,
+)
+from sqlbuild.shared.helpers.colors import green, supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.models.types import EnvironmentMode
+from sqlbuild.virtual.state.main.checkpoint_physical_relations import (
+    list_checkpoint_physical_relations,
+)
+from sqlbuild.virtual.state.models import PhysicalRelationRecord
 
 
 def run_janitor(
@@ -33,13 +48,17 @@ def run_janitor(
 ) -> int:
     """Execute the janitor command."""
 
-    del no_color
+    use_color: bool = not no_color and supports_color()
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
+    status: TransientStatusReporter = TransientStatusReporter(
+        stream=sys.stdout,
+        use_color=use_color,
+    )
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
     if not discovered_inputs.project_config.janitor.enabled:
-        write_disabled(sys.stdout)
+        write_disabled(stream=sys.stdout, use_color=use_color)
         return 0
     effective_retention_days: int = (
         retention_days
@@ -56,17 +75,28 @@ def run_janitor(
     adapter: BaseAdapter = resolve_adapter(
         effective_adapter_name, project_dir=effective_project_dir
     )
+    status.start("Compiling project...")
     project: CompiledProject = compile_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
     )
+    status.complete("Compiled project.")
     connection_config: dict[str, object] = resolve_connection_config(
         raw_config=project.effective_connection,
         project_dir=effective_project_dir,
         adapter_name=effective_adapter_name,
     )
+    connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
+        adapter_name=effective_adapter_name,
+        stream=sys.stdout,
+        use_color=use_color,
+    )
+    connection_progress.on_connection_start(1)
+    connection_start: float = time.perf_counter()
     connection: object = adapter.connect(connection_config)
+    connection_progress.on_connection_complete(1, time.perf_counter() - connection_start)
     try:
+        status.start("Inspecting warehouse state...")
         plan: JanitorPlan = build_janitor_plan(
             project=project,
             adapter=adapter,
@@ -74,8 +104,14 @@ def run_janitor(
             retention_days=effective_retention_days,
             delete_tracked_only=discovered_inputs.project_config.janitor.delete_tracked_only,
             exclude_patterns=discovered_inputs.project_config.janitor.exclude_patterns,
+            protected_relation_keys=_checkpoint_protected_relation_keys(
+                project_dir=effective_project_dir,
+                discovered_inputs=discovered_inputs,
+                virtual_environment_name=project.effective_environment_name,
+            ),
         )
-        write_plan(plan=plan, stream=sys.stdout)
+        status.complete("Inspected warehouse state.", blank_line_after=True)
+        write_plan(plan=plan, stream=sys.stdout, use_color=use_color)
         if not plan.candidates:
             return 0
         if not auto_approve and not _confirm(plan=plan):
@@ -86,7 +122,8 @@ def run_janitor(
             adapter=adapter,
             connection=connection,
         )
-        sys.stdout.write(f"Deleted {len(result.deleted)} objects.\n")
+        deleted_message: str = f"Deleted {len(result.deleted)} objects."
+        sys.stdout.write((green(deleted_message) if use_color else deleted_message) + "\n")
         return 0
     finally:
         adapter.close(connection)
@@ -106,3 +143,28 @@ def _confirm(*, plan: JanitorPlan) -> bool:
     sys.stdout.flush()
     response: str = input()
     return response == expected
+
+
+def _checkpoint_protected_relation_keys(
+    *,
+    project_dir: Path,
+    discovered_inputs: DiscoveredProjectInputs,
+    virtual_environment_name: str | None,
+) -> frozenset[JanitorRelationKey]:
+    if discovered_inputs.project_config.environment_mode != EnvironmentMode.VIRTUAL:
+        return frozenset()
+    if virtual_environment_name is None:
+        return frozenset()
+    relations: tuple[PhysicalRelationRecord, ...] = list_checkpoint_physical_relations(
+        project_dir=project_dir,
+        discovered_inputs=discovered_inputs,
+        virtual_environment_name=virtual_environment_name,
+    )
+    return frozenset(
+        JanitorRelationKey(
+            database=relation.database_name,
+            schema=relation.schema_name,
+            name=relation.relation_name,
+        )
+        for relation in relations
+    )

@@ -204,7 +204,11 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     rollback_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.ROLLBACK)
     rollback_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     rollback_parser.add_argument("--virtual-env", dest="virtual_env", default=None)
+    rollback_parser.add_argument("--checkpoint-id", dest="rollback_checkpoint_id", default=None)
+    rollback_parser.add_argument("--allow-partial-rollback", action="store_true", default=False)
+    rollback_parser.add_argument("--include-stale-upstreams", action="store_true", default=False)
     rollback_parser.add_argument("--verbose", "-v", action="store_true", default=False)
+    add_select_args(rollback_parser)
     add_vars_args(rollback_parser)
     debug_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DEBUG)
     debug_parser.add_argument("--json", action="store_true", default=False)
@@ -277,6 +281,11 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     )
     state_checkpoints_show_parser.add_argument("state_checkpoint_id", metavar="checkpoint_id")
     state_checkpoints_show_parser.add_argument("--virtual-env", dest="virtual_env", default=None)
+    state_checkpoints_diff_parser: argparse.ArgumentParser = (
+        state_checkpoints_subparsers.add_parser("diff")
+    )
+    state_checkpoints_diff_parser.add_argument("state_checkpoint_id", metavar="checkpoint_id")
+    state_checkpoints_diff_parser.add_argument("--virtual-env", dest="virtual_env", default=None)
     subparsers.add_parser(CliCommand.INIT)
     playground_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PLAYGROUND)
     playground_parser.add_argument(
@@ -351,11 +360,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.debug import run_debug
     from sqlbuild.cli.commands.main.diff import run_diff
     from sqlbuild.cli.commands.main.helpers.scenario.capture import run_scenario_capture
+    from sqlbuild.cli.commands.main.init import run_init
     from sqlbuild.cli.commands.main.janitor import run_janitor
     from sqlbuild.cli.commands.main.lineage import run_lineage
     from sqlbuild.cli.commands.main.load import run_load
     from sqlbuild.cli.commands.main.plan import run_plan
-    from sqlbuild.cli.commands.main.init import run_init
     from sqlbuild.cli.commands.main.playground import run_playground
     from sqlbuild.cli.commands.main.promote import run_promote
     from sqlbuild.cli.commands.main.query import run_query
@@ -710,6 +719,11 @@ def _main_with_dependencies(
                 args.no_sql_validation,
                 args.virtual_env,
                 args.verbose,
+                args.rollback_checkpoint_id,
+                select,
+                tuple(args.exclude),
+                args.allow_partial_rollback,
+                args.include_stale_upstreams,
                 args.vars,
             )
         if args.command == CliCommand.QUERY:

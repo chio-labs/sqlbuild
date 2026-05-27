@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from sqlbuild.adapter.shared.models import RelationInfo
+from sqlbuild.executor.janitor.models import JanitorRelationKey
 
 
 @dataclass(frozen=True)
@@ -16,6 +17,7 @@ class JanitorPlanTestCase:
     supports_age_metadata: bool = True
     tracked_relations: tuple[tuple[str | None, str | None, str], ...] = field(default_factory=tuple)
     exclude_patterns: tuple[str, ...] = field(default_factory=tuple)
+    protected_relation_keys: frozenset[JanitorRelationKey] = frozenset()
     expected_candidate_names: tuple[str, ...] = field(default_factory=tuple)
     expected_skipped_relation_reasons: tuple[str, ...] = field(default_factory=tuple)
     expected_skipped_schema_sources: tuple[str, ...] = field(default_factory=tuple)

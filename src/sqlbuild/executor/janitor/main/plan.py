@@ -39,10 +39,12 @@ def build_janitor_plan(
     retention_days: int,
     delete_tracked_only: bool = True,
     exclude_patterns: tuple[str, ...] = (),
+    protected_relation_keys: frozenset[JanitorRelationKey] = frozenset(),
 ) -> JanitorPlan:
     """Build a desired-vs-warehouse cleanup plan for target schemas."""
 
     target_schemas: set[tuple[str | None, str | None]] = collect_target_schemas(project)
+    target_schemas.update((key.database, key.schema) for key in protected_relation_keys)
     if not target_schemas:
         return JanitorPlan(
             environment_name=project.effective_environment_name,
@@ -100,6 +102,15 @@ def build_janitor_plan(
             relation_key: JanitorRelationKey = build_relation_key(relation)
             scenario_artifact: bool = is_scenario_artifact_physical_name(relation_key.name)
             if relation_key in desired_keys:
+                continue
+            if relation_key in protected_relation_keys:
+                skipped_relations.append(
+                    JanitorSkippedRelation(
+                        key=relation_key,
+                        relation=relation,
+                        reason="relation is referenced by a retained virtual checkpoint",
+                    )
+                )
                 continue
             exclude_pattern: str | None = _matching_exclude_pattern(
                 key=relation_key,

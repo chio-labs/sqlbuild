@@ -9,14 +9,24 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledModel
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.virtual.executor.helpers.rollback import (
+    guard_partial_rollback_scope,
+    read_model_versions,
+    read_physical_relations,
+    resolve_selected_model_names,
+    resolve_target_checkpoint,
+    stale_after_rollback,
+    validate_physical_relations_exist,
+)
 from sqlbuild.virtual.executor.main.views import refresh_logical_vde_views
-from sqlbuild.virtual.planner.main.targets import build_virtual_target_from_physical_relation
+from sqlbuild.virtual.planner.main.semantics import build_virtual_plan_semantics
+from sqlbuild.virtual.planner.models import VirtualPlanSemantics
 from sqlbuild.virtual.state.main.locks import acquire_virtual_environment_lease
 from sqlbuild.virtual.state.main.release_lock import release_state_lease
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
@@ -38,6 +48,11 @@ def run_virtual_rollback(
     adapter: BaseAdapter,
     connection_config: dict[str, object],
     virtual_environment_name: str,
+    checkpoint_id: str | None = None,
+    select: tuple[str, ...] = (),
+    exclude: tuple[str, ...] = (),
+    allow_partial_rollback: bool = False,
+    include_stale_upstreams: bool = False,
     no_sql_validation: bool = False,
     cli_vars: dict[str, object] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
@@ -45,7 +60,7 @@ def run_virtual_rollback(
     on_connection_start: Callable[[int], None] | None = None,
     on_connection_complete: Callable[[int, float], None] | None = None,
     on_connection_error: Callable[[int, float], None] | None = None,
-) -> tuple[str, tuple[str, ...]]:
+) -> tuple[str, tuple[str, ...], VirtualEnvironmentStatus]:
     """Rollback a VDE to the previous finalized checkpoint."""
 
     if on_progress is not None:
@@ -102,36 +117,94 @@ def run_virtual_rollback(
                 virtual_environment_name=virtual_environment_name,
             )
         )
-        target_checkpoint: VirtualEnvironmentCheckpointRecord | None = None
-        target_checkpoint_refs: tuple[VirtualEnvironmentCheckpointRefRecord, ...] = ()
-        checkpoint: VirtualEnvironmentCheckpointRecord
-        for checkpoint in checkpoints:
-            checkpoint_refs: tuple[VirtualEnvironmentCheckpointRefRecord, ...] = (
-                backend.get_virtual_environment_checkpoint_refs(
-                    state_connection,
-                    schema=config.schema,
-                    checkpoint_id=checkpoint.checkpoint_id,
-                )
-            )
-            checkpoint_ref_map: dict[str, str] = {
-                ref.model_name: ref.version_hash for ref in checkpoint_refs
-            }
-            if checkpoint_ref_map != current_ref_map:
-                target_checkpoint = checkpoint
-                target_checkpoint_refs = checkpoint_refs
-                break
+        target_checkpoint, target_checkpoint_refs = resolve_target_checkpoint(
+            backend=backend,
+            state_connection=state_connection,
+            schema=config.schema,
+            checkpoints=checkpoints,
+            current_ref_map=current_ref_map,
+            checkpoint_id=checkpoint_id,
+        )
         if target_checkpoint is None:
             raise PlannerInputError(
                 "no previous finalized checkpoint is available for rollback",
                 code="S021",
             )
-        physical_relations: dict[str, PhysicalRelationRecord] = _read_physical_relations(
+        current_model_versions: dict[str, Any] = read_model_versions(
             backend=backend,
             state_connection=state_connection,
             schema=config.schema,
-            refs=target_checkpoint_refs,
+            refs=current_refs,
         )
-        _validate_physical_relations_exist(
+        current_semantics: VirtualPlanSemantics = build_virtual_plan_semantics(
+            graph=graph,
+            bound_refs=current_refs,
+            bound_model_versions=current_model_versions,
+        )
+        selected_model_names: tuple[str, ...] = resolve_selected_model_names(
+            graph=graph,
+            select=select,
+            exclude=exclude,
+            all_model_names=tuple(model.name for model in graph.project.models),
+            target_checkpoint_refs=target_checkpoint_refs,
+        )
+        checkpoint_ref_map: dict[str, str] = {
+            ref.model_name: ref.version_hash for ref in target_checkpoint_refs
+        }
+        missing_checkpoint_refs: tuple[str, ...] = tuple(
+            model_name
+            for model_name in selected_model_names
+            if model_name not in checkpoint_ref_map
+        )
+        if missing_checkpoint_refs:
+            raise PlannerInputError(
+                "checkpoint is missing selected refs: " + ", ".join(missing_checkpoint_refs),
+                code="S025",
+            )
+        final_version_hashes: dict[str, str] = dict(current_ref_map)
+        for model_name in selected_model_names:
+            final_version_hashes[model_name] = checkpoint_ref_map[model_name]
+        stale_after: tuple[str, ...] = stale_after_rollback(
+            graph=graph,
+            final_version_hashes=final_version_hashes,
+            expected_version_hashes=current_semantics.expected_version_hashes,
+        )
+        is_partial_scope: bool = bool(select or exclude)
+        if is_partial_scope:
+            selected_model_names = guard_partial_rollback_scope(
+                graph=graph,
+                selected_model_names=selected_model_names,
+                stale_after=stale_after,
+                checkpoint_ref_map=checkpoint_ref_map,
+                final_version_hashes=final_version_hashes,
+                include_stale_upstreams=include_stale_upstreams,
+            )
+            stale_after = stale_after_rollback(
+                graph=graph,
+                final_version_hashes=final_version_hashes,
+                expected_version_hashes=current_semantics.expected_version_hashes,
+            )
+            if stale_after and not allow_partial_rollback:
+                raise PlannerInputError(
+                    "rollback would leave target virtual environment working; "
+                    "remaining stale models: " + ", ".join(stale_after),
+                    code="S027",
+                    help="Re-run with --allow-partial-rollback to accept a working target VDE.",
+                )
+        physical_relations: dict[str, PhysicalRelationRecord] = read_physical_relations(
+            backend=backend,
+            state_connection=state_connection,
+            schema=config.schema,
+            refs=tuple(
+                VirtualEnvironmentCheckpointRefRecord(
+                    checkpoint_id=target_checkpoint.checkpoint_id,
+                    model_name=model_name,
+                    version_hash=version_hash,
+                )
+                for model_name, version_hash in sorted(final_version_hashes.items())
+            ),
+        )
+        validate_physical_relations_exist(
             adapter=adapter,
             connection_config=connection_config,
             models_by_name=models_by_name,
@@ -140,17 +213,22 @@ def run_virtual_rollback(
         target_refs: tuple[VirtualEnvironmentRefRecord, ...] = tuple(
             VirtualEnvironmentRefRecord(
                 virtual_environment_name=virtual_environment_name,
-                model_name=ref.model_name,
-                version_hash=ref.version_hash,
+                model_name=model_name,
+                version_hash=version_hash,
             )
-            for ref in target_checkpoint_refs
+            for model_name, version_hash in sorted(final_version_hashes.items())
+        )
+        status: VirtualEnvironmentStatus = (
+            VirtualEnvironmentStatus.FINALIZED
+            if not is_partial_scope or not stale_after
+            else VirtualEnvironmentStatus.ACTIVE
         )
         backend.upsert_virtual_environment(
             state_connection,
             schema=config.schema,
             record=VirtualEnvironmentRecord(
                 virtual_environment_name=virtual_environment_name,
-                status=VirtualEnvironmentStatus.FINALIZED,
+                status=status,
             ),
         )
         backend.replace_virtual_environment_refs(
@@ -159,12 +237,11 @@ def run_virtual_rollback(
             virtual_environment_name=virtual_environment_name,
             refs=target_refs,
         )
-        target_ref_map: dict[str, str] = {ref.model_name: ref.version_hash for ref in target_refs}
         rolled_back_models: tuple[str, ...] = tuple(
             sorted(
                 model_name
                 for model_name, version_hash in current_ref_map.items()
-                if target_ref_map.get(model_name) != version_hash
+                if final_version_hashes.get(model_name) != version_hash
             )
         )
         if on_progress is not None:
@@ -193,66 +270,4 @@ def run_virtual_rollback(
     )
     if on_progress is not None:
         on_progress("Refreshed target VDE views.")
-    return target_checkpoint.checkpoint_id, rolled_back_models
-
-
-def _read_physical_relations(
-    *,
-    backend: Any,
-    state_connection: Any,
-    schema: str,
-    refs: tuple[VirtualEnvironmentCheckpointRefRecord, ...],
-) -> dict[str, PhysicalRelationRecord]:
-    relations: dict[str, PhysicalRelationRecord] = {}
-    ref: VirtualEnvironmentCheckpointRefRecord
-    for ref in refs:
-        relation: PhysicalRelationRecord | None = backend.get_physical_relation(
-            state_connection,
-            schema=schema,
-            model_name=ref.model_name,
-            version_hash=ref.version_hash,
-        )
-        if relation is None:
-            raise PlannerInputError(
-                f"checkpoint references missing physical relation for model '{ref.model_name}'",
-                code="S022",
-            )
-        relations[ref.model_name] = relation
-    return relations
-
-
-def _validate_physical_relations_exist(
-    *,
-    adapter: BaseAdapter,
-    connection_config: dict[str, object],
-    models_by_name: dict[str, CompiledModel],
-    physical_relations: dict[str, PhysicalRelationRecord],
-) -> None:
-    connection: Any = adapter.connect(connection_config)
-    try:
-        model_name: str
-        relation: PhysicalRelationRecord
-        for model_name, relation in physical_relations.items():
-            model: CompiledModel | None = models_by_name.get(model_name)
-            if model is None:
-                raise PlannerInputError(
-                    f"checkpoint references unknown model '{model_name}'",
-                    code="S023",
-                )
-            target: CompiledRelationTarget = build_virtual_target_from_physical_relation(
-                adapter=adapter,
-                relation=relation,
-                fallback_target=model.target,
-            )
-            if not adapter.relation_exists(
-                connection,
-                database=target.database,
-                schema=target.schema,
-                name=target.name,
-            ):
-                raise PlannerInputError(
-                    f"checkpoint references missing warehouse relation for model '{model_name}'",
-                    code="S024",
-                )
-    finally:
-        adapter.close(connection)
+    return target_checkpoint.checkpoint_id, rolled_back_models, status

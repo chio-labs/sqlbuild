@@ -4,40 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.cli.commands.main.helpers.init.scaffold import scaffold_blank_project
 from sqlbuild.cli.commands.main.helpers.skills.update import update_sqlbuild_skills
 from sqlbuild.shared.helpers.colors import green_bold, supports_color
-
-
-_PROJECT_TOML_TEMPLATE: str = """\
-name = "{name}"
-adapter = "duckdb"
-default_environment = "dev"
-
-[connection]
-database = "{name}.duckdb"
-
-[settings]
-default_audit_severity = "warn"
-
-[defaults]
-materialized = "table"
-
-[environments.prod]
-schema = "prod"
-
-[environments.dev]
-schema = "dev"
-"""
-
-_DIRECTORIES: tuple[str, ...] = (
-    "models/staging",
-    "models/marts",
-    "sources",
-    "seeds",
-    "tests/unit",
-    "macros",
-    "audits",
-)
 
 
 def run_init(project_dir: Path | None) -> int:
@@ -56,24 +25,7 @@ def run_init(project_dir: Path | None) -> int:
 
     project_name: str = base_dir.name.replace("-", "_").replace(" ", "_").lower()
 
-    for directory in _DIRECTORIES:
-        (base_dir / directory).mkdir(parents=True, exist_ok=True)
-
-    project_file.write_text(_PROJECT_TOML_TEMPLATE.format(name=project_name))
-
-    gitkeep_dirs: tuple[str, ...] = (
-        "models/staging",
-        "models/marts",
-        "sources",
-        "seeds",
-        "tests/unit",
-        "macros",
-        "audits",
-    )
-    for directory in gitkeep_dirs:
-        gitkeep: Path = base_dir / directory / ".gitkeep"
-        if not any((base_dir / directory).iterdir()):
-            gitkeep.touch()
+    scaffold_blank_project(base_dir=base_dir, project_name=project_name)
 
     update_sqlbuild_skills(project_dir=base_dir)
 
@@ -84,7 +36,7 @@ def run_init(project_dir: Path | None) -> int:
     print(heading)
     print()
     print(f"  Project: {project_name}")
-    print(f"  Config:  sqlbuild_project.toml")
+    print("  Config:  sqlbuild_project.toml")
     print()
     print("Next steps:")
     print("  1. Add sources to sources/")
