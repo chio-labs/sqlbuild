@@ -239,6 +239,7 @@ def run_virtual_build(
         end_cursor_ts=end_cursor_ts,
         start_cursor_int=start_cursor_int,
         end_cursor_int=end_cursor_int,
+        query_change_tracking=False,
     )
     if result.status == BuildStatus.SUCCESS:
         _persist_successful_virtual_build(

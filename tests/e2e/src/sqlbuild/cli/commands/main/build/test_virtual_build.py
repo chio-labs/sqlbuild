@@ -74,6 +74,11 @@ def test_given_virtual_default_vde_when_building_then_it_creates_physical_versio
         schema="dev__dev",
         table_name="fact_orders",
     )
+    assert not table_exists(
+        db_path=project_dir / "warehouse.duckdb",
+        schema="dev__sqb_physical",
+        table_name="_sqlbuild_fingerprints",
+    )
     query_sql: str
     expected_rows: tuple[tuple[object, ...], ...]
     for query_sql, expected_rows in test_case.expected_query_results:
