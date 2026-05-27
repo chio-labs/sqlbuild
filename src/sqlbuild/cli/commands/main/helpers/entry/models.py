@@ -296,7 +296,16 @@ class CliEntrypointHandlers:
         int,
     ]
     run_reconcile: Callable[
-        [Path | None, bool, str | None, str | None, str | None, str | None, dict[str, object]],
+        [
+            Path | None,
+            bool,
+            str | None,
+            str | None,
+            str | None,
+            str | None,
+            bool,
+            dict[str, object],
+        ],
         int,
     ]
     run_promote: Callable[

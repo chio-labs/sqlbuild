@@ -10,7 +10,15 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.janitor.checkpoints import (
     checkpoint_candidates,
     checkpoint_protected_relation_keys,
+    checkpoint_protected_relation_reasons,
     checkpoint_retention,
+)
+from sqlbuild.cli.commands.main.helpers.janitor.detached_environments import (
+    detached_environment_candidates,
+    detached_environment_protected_relation_keys,
+    detached_environment_protected_relation_reasons,
+    detached_environment_retention,
+    detached_environment_scan_relation_keys,
 )
 from sqlbuild.cli.commands.main.helpers.janitor.output import (
     confirmation_text,
@@ -34,11 +42,16 @@ from sqlbuild.executor.janitor.main.plan import build_janitor_plan
 from sqlbuild.executor.janitor.models import (
     JanitorExecutionResult,
     JanitorPlan,
+    JanitorRelationKey,
 )
 from sqlbuild.shared.helpers.colors import green, supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 from sqlbuild.virtual.state.main.delete_checkpoint import delete_virtual_environment_checkpoint
-from sqlbuild.virtual.state.models import CheckpointRetentionInspection
+from sqlbuild.virtual.state.main.delete_virtual_environment import delete_virtual_environment
+from sqlbuild.virtual.state.models import (
+    CheckpointRetentionInspection,
+    DetachedVirtualEnvironmentInspection,
+)
 
 
 def run_janitor(
@@ -103,6 +116,24 @@ def run_janitor(
             discovered_inputs=discovered_inputs,
             virtual_environment_name=project.effective_environment_name,
         )
+        detached_retention: DetachedVirtualEnvironmentInspection | None = (
+            detached_environment_retention(
+                project_dir=effective_project_dir,
+                discovered_inputs=discovered_inputs,
+                retention_days=effective_retention_days,
+            )
+        )
+        protected_relation_keys: frozenset[JanitorRelationKey] = checkpoint_protected_relation_keys(
+            retention=retention,
+        ) | detached_environment_protected_relation_keys(retention=detached_retention)
+        protected_relation_reasons: dict[JanitorRelationKey, str] = (
+            detached_environment_protected_relation_reasons(
+                retention=detached_retention,
+            )
+        )
+        protected_relation_reasons.update(
+            checkpoint_protected_relation_reasons(retention=retention)
+        )
         plan: JanitorPlan = build_janitor_plan(
             project=project,
             adapter=adapter,
@@ -110,16 +141,25 @@ def run_janitor(
             retention_days=effective_retention_days,
             delete_tracked_only=discovered_inputs.project_config.janitor.delete_tracked_only,
             exclude_patterns=discovered_inputs.project_config.janitor.exclude_patterns,
-            protected_relation_keys=checkpoint_protected_relation_keys(
-                retention=retention,
+            scan_relation_keys=detached_environment_scan_relation_keys(
+                retention=detached_retention,
             ),
+            protected_relation_keys=protected_relation_keys,
+            protected_relation_reasons=protected_relation_reasons,
             checkpoint_candidates=checkpoint_candidates(
                 retention=retention,
+            ),
+            detached_virtual_environment_candidates=detached_environment_candidates(
+                retention=detached_retention,
             ),
         )
         status.complete("Inspected warehouse state.", blank_line_after=True)
         write_plan(plan=plan, stream=sys.stdout, use_color=use_color)
-        if not plan.candidates and not plan.checkpoint_candidates:
+        if (
+            not plan.candidates
+            and not plan.checkpoint_candidates
+            and not plan.detached_virtual_environment_candidates
+        ):
             return 0
         if not auto_approve and not _confirm(plan=plan):
             sys.stdout.write("Janitor cancelled.\n")
@@ -133,9 +173,21 @@ def run_janitor(
                 discovered_inputs=discovered_inputs,
                 checkpoint_id=candidate.checkpoint_id,
             ),
+            delete_detached_virtual_environment=lambda candidate: delete_virtual_environment(
+                project_dir=effective_project_dir,
+                discovered_inputs=discovered_inputs,
+                virtual_environment_name=candidate.virtual_environment_name,
+            ),
         )
-        if result.deleted_checkpoints:
+        if result.deleted_detached_virtual_environments:
+            deleted_state_count: int = len(result.deleted_checkpoints) + len(
+                result.deleted_detached_virtual_environments
+            )
             deleted_message: str = (
+                f"Deleted {len(result.deleted)} objects and {deleted_state_count} state items."
+            )
+        elif result.deleted_checkpoints:
+            deleted_message = (
                 f"Deleted {len(result.deleted)} objects and "
                 f"{len(result.deleted_checkpoints)} checkpoints."
             )
@@ -149,8 +201,11 @@ def run_janitor(
 
 def _confirm(*, plan: JanitorPlan) -> bool:
     expected: str = confirmation_text(plan)
-    if plan.checkpoint_candidates:
-        deletion_count: int = len(plan.candidates) + len(plan.checkpoint_candidates)
+    state_candidate_count: int = len(plan.checkpoint_candidates) + len(
+        plan.detached_virtual_environment_candidates
+    )
+    if state_candidate_count:
+        deletion_count: int = len(plan.candidates) + state_candidate_count
         sys.stdout.write(
             f"Janitor will delete {deletion_count} items from {environment_label(plan)}.\n"
         )

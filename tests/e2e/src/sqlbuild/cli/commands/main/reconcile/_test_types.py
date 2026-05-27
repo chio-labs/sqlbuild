@@ -14,3 +14,4 @@ class ReconcileE2ETestCase:
     expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...] = field(
         default_factory=tuple
     )
+    input_text: str | None = None

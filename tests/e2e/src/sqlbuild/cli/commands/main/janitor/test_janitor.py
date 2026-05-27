@@ -9,9 +9,12 @@ from textwrap import dedent
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.janitor._test_types import (
+    JanitorActiveVirtualEnvironmentProtectionE2ETestCase,
     JanitorCheckpointProtectionE2ETestCase,
     JanitorCheckpointRetentionE2ETestCase,
     JanitorCleanupE2ETestCase,
+    JanitorDetachedVirtualEnvironmentE2ETestCase,
+    JanitorDetachedVirtualEnvironmentRetentionE2ETestCase,
     JanitorDisabledE2ETestCase,
     JanitorInvalidConfigE2ETestCase,
 )
@@ -22,6 +25,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.janitor.helpers import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import build_virtual_plan_repo_files
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    execute_duckdb,
     prepare_inline_project,
     query_duckdb,
     run_sqb,
@@ -388,6 +392,277 @@ def test_given_virtual_checkpoints_over_limit_when_running_janitor_then_it_prune
         db_path=warehouse_db_path,
         schema="dev__sqb_physical",
         table_name=latest_relation_name,
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorDetachedVirtualEnvironmentE2ETestCase(
+            description="virtual janitor prunes detached VDE refs and physicals",
+            janitor_command=("janitor", "--auto-approve"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "eligible for deletion  1",
+                "detached VDEs pruned",
+                "Eligible detached VDEs",
+                "dev  detached virtual environment",
+                "Deleted 1 objects and 1 state items.",
+            ),
+            expected_virtual_environment_count_after=0,
+            expected_ref_count_after=0,
+        )
+    ],
+    ids=["virtual janitor prunes detached VDE refs and physicals"],
+)
+def test_given_detached_vde_when_running_janitor_then_it_cleans_refs_and_physical_versions(
+    test_case: JanitorDetachedVirtualEnvironmentE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_janitor_detached_vde",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "virtual_janitor_detached_vde"\n'
+                'adapter = "duckdb"\n'
+                'environment_mode = "virtual"\n'
+                'default_environment = "dev"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n\n'
+                "[environments.dev]\n"
+                'schema = "dev"\n\n'
+                "[environments.dev.state]\n"
+                'backend = "duckdb"\n'
+                'schema = "sqlbuild_state"\n'
+                'unsuffixed_virtual_env = "dev"\n\n'
+                "[environments.dev.state.connection]\n"
+                'database = "state.duckdb"\n\n'
+                "[janitor]\n"
+                "enabled = true\n"
+                "retention_days = 0\n"
+                "delete_tracked_only = false\n"
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+    state_db_path: Path = project_dir / "state.duckdb"
+    warehouse_db_path: Path = project_dir / "warehouse.duckdb"
+    execute_duckdb(
+        db_path=warehouse_db_path,
+        sql="CREATE SCHEMA dev; CREATE TABLE dev.orders AS SELECT 1 AS id",
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    adopt_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "adopt", "--allow-copy"),
+        project_dir=project_dir,
+        input_text="adopt dev\n",
+    )
+    assert adopt_result.returncode == 0, adopt_result.stdout + adopt_result.stderr
+    physical_relation_name: str = str(
+        query_duckdb(
+            db_path=state_db_path,
+            sql=(
+                "SELECT relation_name FROM sqlbuild_state.physical_relations "
+                "WHERE model_name = 'orders'"
+            ),
+        )[0][0]
+    )
+    detach_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "detach", "--allow-copy"),
+        project_dir=project_dir,
+        input_text="detach dev\n",
+    )
+    assert detach_result.returncode == 0, detach_result.stdout + detach_result.stderr
+
+    janitor_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.janitor_command,
+        project_dir=project_dir,
+    )
+
+    assert janitor_result.returncode == test_case.expected_exit_code, (
+        janitor_result.stdout + janitor_result.stderr
+    )
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in janitor_result.stdout
+    assert query_duckdb(
+        db_path=state_db_path,
+        sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environments",
+    ) == [(test_case.expected_virtual_environment_count_after,)]
+    assert query_duckdb(
+        db_path=state_db_path,
+        sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_refs",
+    ) == [(test_case.expected_ref_count_after,)]
+    assert not table_exists(
+        db_path=warehouse_db_path,
+        schema="dev__sqb_physical",
+        table_name=physical_relation_name,
+    )
+    assert table_exists(db_path=warehouse_db_path, schema="dev", table_name="orders")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorDetachedVirtualEnvironmentRetentionE2ETestCase(
+            description="virtual janitor prunes only detached VDEs older than retention",
+            retention_days=7,
+            janitor_command=("janitor", "--auto-approve"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "7 days",
+                "detached VDEs pruned",
+                "Eligible detached VDEs",
+                "dev  detached virtual environment",
+                "Deleted 0 objects and 1 state items.",
+            ),
+            expected_virtual_environment_count_after=0,
+        )
+    ],
+    ids=["virtual janitor prunes only detached VDEs older than retention"],
+)
+def test_given_old_detached_vde_when_running_janitor_then_retention_allows_cleanup(
+    test_case: JanitorDetachedVirtualEnvironmentRetentionE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_janitor_detached_vde_retention",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "virtual_janitor_detached_vde_retention"\n'
+                'adapter = "duckdb"\n'
+                'environment_mode = "virtual"\n'
+                'default_environment = "dev"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n\n'
+                "[environments.dev]\n"
+                'schema = "dev"\n\n'
+                "[environments.dev.state]\n"
+                'backend = "duckdb"\n'
+                'schema = "sqlbuild_state"\n'
+                'unsuffixed_virtual_env = "dev"\n\n'
+                "[environments.dev.state.connection]\n"
+                'database = "state.duckdb"\n\n'
+                "[janitor]\n"
+                "enabled = true\n"
+                f"retention_days = {test_case.retention_days}\n"
+                "delete_tracked_only = false\n"
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+    state_db_path: Path = project_dir / "state.duckdb"
+    warehouse_db_path: Path = project_dir / "warehouse.duckdb"
+    execute_duckdb(
+        db_path=warehouse_db_path,
+        sql="CREATE SCHEMA dev; CREATE TABLE dev.orders AS SELECT 1 AS id",
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    adopt_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "adopt", "--allow-copy"),
+        project_dir=project_dir,
+        input_text="adopt dev\n",
+    )
+    assert adopt_result.returncode == 0, adopt_result.stdout + adopt_result.stderr
+    detach_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "detach", "--allow-copy"),
+        project_dir=project_dir,
+        input_text="detach dev\n",
+    )
+    assert detach_result.returncode == 0, detach_result.stdout + detach_result.stderr
+    execute_duckdb(
+        db_path=state_db_path,
+        sql=(
+            "UPDATE sqlbuild_state.virtual_environments "
+            "SET updated_at = TIMESTAMP '2026-01-01 00:00:00' "
+            "WHERE virtual_environment_name = 'dev'"
+        ),
+    )
+
+    janitor_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.janitor_command,
+        project_dir=project_dir,
+    )
+
+    assert janitor_result.returncode == test_case.expected_exit_code, (
+        janitor_result.stdout + janitor_result.stderr
+    )
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in janitor_result.stdout
+    assert query_duckdb(
+        db_path=state_db_path,
+        sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environments",
+    ) == [(test_case.expected_virtual_environment_count_after,)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorActiveVirtualEnvironmentProtectionE2ETestCase(
+            description="virtual janitor preserves active working VDE refs",
+            janitor_command=("janitor", "--auto-approve"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "eligible for deletion  0",
+                "relation is referenced by an active or retained virtual environment",
+            ),
+        )
+    ],
+    ids=["virtual janitor preserves active working VDE refs"],
+)
+def test_given_active_vde_ref_when_running_janitor_then_it_preserves_physical_version(
+    test_case: JanitorActiveVirtualEnvironmentProtectionE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    repo_files: dict[str, str] = build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id")
+    repo_files["sqlbuild_project.toml"] += dedent(
+        """
+
+        [janitor]
+        enabled = true
+        retention_days = 0
+        delete_tracked_only = false
+        """
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_janitor_active_vde_protection",
+        repo_files=repo_files,
+    )
+    state_db_path: Path = project_dir / "state.duckdb"
+    warehouse_db_path: Path = project_dir / "warehouse.duckdb"
+
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "stg_orders"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+    protected_relation_name: str = str(
+        query_duckdb(
+            db_path=state_db_path,
+            sql=(
+                "SELECT relation_name FROM sqlbuild_state.physical_relations "
+                "WHERE model_name = 'stg_orders'"
+            ),
+        )[0][0]
+    )
+
+    janitor_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.janitor_command,
+        project_dir=project_dir,
+    )
+
+    assert janitor_result.returncode == test_case.expected_exit_code, (
+        janitor_result.stdout + janitor_result.stderr
+    )
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in janitor_result.stdout
+    assert table_exists(
+        db_path=warehouse_db_path,
+        schema="dev__sqb_physical",
+        table_name=protected_relation_name,
     )
 
 

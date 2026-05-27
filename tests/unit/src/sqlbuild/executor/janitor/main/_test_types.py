@@ -30,6 +30,13 @@ class JanitorExecuteTestCase:
     expected_dropped_targets: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class JanitorExecutionOrderTestCase:
+    description: str
+    expected_error_fragment: str
+    expected_deleted_state_items: tuple[str, ...]
+
+
 def relation_info(
     name: str,
     *,

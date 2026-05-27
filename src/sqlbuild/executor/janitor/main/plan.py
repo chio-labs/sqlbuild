@@ -24,6 +24,7 @@ from sqlbuild.executor.janitor.helpers.tracking import collect_tracked_relation_
 from sqlbuild.executor.janitor.models import (
     JanitorCheckpointCandidate,
     JanitorDeleteCandidate,
+    JanitorDetachedVirtualEnvironmentCandidate,
     JanitorPlan,
     JanitorRelationKey,
     JanitorSkippedRelation,
@@ -40,18 +41,25 @@ def build_janitor_plan(
     retention_days: int,
     delete_tracked_only: bool = True,
     exclude_patterns: tuple[str, ...] = (),
+    scan_relation_keys: frozenset[JanitorRelationKey] = frozenset(),
     protected_relation_keys: frozenset[JanitorRelationKey] = frozenset(),
+    protected_relation_reasons: dict[JanitorRelationKey, str] | None = None,
     checkpoint_candidates: tuple[JanitorCheckpointCandidate, ...] = (),
+    detached_virtual_environment_candidates: tuple[
+        JanitorDetachedVirtualEnvironmentCandidate, ...
+    ] = (),
 ) -> JanitorPlan:
     """Build a desired-vs-warehouse cleanup plan for target schemas."""
 
     target_schemas: set[tuple[str | None, str | None]] = collect_target_schemas(project)
     target_schemas.update((key.database, key.schema) for key in protected_relation_keys)
+    target_schemas.update((key.database, key.schema) for key in scan_relation_keys)
     if not target_schemas:
         return JanitorPlan(
             environment_name=project.effective_environment_name,
             retention_days=retention_days,
             checkpoint_candidates=checkpoint_candidates,
+            detached_virtual_environment_candidates=detached_virtual_environment_candidates,
             age_metadata_supported=adapter.supports_relation_age_metadata(),
         )
 
@@ -84,6 +92,7 @@ def build_janitor_plan(
     now: datetime = datetime.now(UTC)
     age_supported: bool = adapter.supports_relation_age_metadata()
     effective_exclude_patterns: tuple[str, ...] = BUILT_IN_EXCLUDE_PATTERNS + exclude_patterns
+    protection_reasons: dict[JanitorRelationKey, str] = protected_relation_reasons or {}
 
     schema_key: tuple[str | None, str | None]
     for schema_key in sorted(target_schemas, key=lambda key: (key[0] or "", key[1] or "")):
@@ -111,7 +120,10 @@ def build_janitor_plan(
                     JanitorSkippedRelation(
                         key=relation_key,
                         relation=relation,
-                        reason="relation is referenced by a retained virtual checkpoint",
+                        reason=protection_reasons.get(
+                            relation_key,
+                            "relation is referenced by a retained virtual checkpoint",
+                        ),
                     )
                 )
                 continue
@@ -183,6 +195,7 @@ def build_janitor_plan(
         retention_days=retention_days,
         candidates=tuple(candidates),
         checkpoint_candidates=checkpoint_candidates,
+        detached_virtual_environment_candidates=detached_virtual_environment_candidates,
         skipped_relations=tuple(skipped_relations),
         skipped_schemas=tuple(skipped_schemas),
         scanned_schema_count=len(target_schemas),

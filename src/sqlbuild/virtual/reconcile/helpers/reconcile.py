@@ -7,7 +7,9 @@ from typing import Any
 from uuid import uuid4
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.helpers.relation_type import normalize_relation_type
 from sqlbuild.adapter.shared.models import RelationInfo
+from sqlbuild.adapter.shared.types import RelationType
 from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
@@ -107,7 +109,12 @@ def run_virtual_reconcile(
                 action=ReconcileAction.REPAIR_VIEW,
                 message=f"repaired view for {model_name}",
             )
-            return f"Repaired logical view for {model_name} in {resolved_virtual_environment_name}."
+            return (
+                f"Will recreate logical view for {model_name} in "
+                f"{resolved_virtual_environment_name}.\n"
+                f"Repaired logical view for {model_name} in "
+                f"{resolved_virtual_environment_name}."
+            )
 
         if command == "attach":
             if model_name is None or physical_relation_name is None:
@@ -122,6 +129,14 @@ def run_virtual_reconcile(
                 schema=config.schema,
                 model_name=model_name,
                 physical_relation_name=physical_relation_name,
+            )
+            validate_logical_target_repairable(
+                graph=graph,
+                adapter=adapter,
+                connection_config=connection_config,
+                virtual_environment_name=resolved_virtual_environment_name,
+                unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+                model_name=model_name,
             )
             backend.replace_virtual_environment_refs(
                 state_connection,
@@ -150,7 +165,11 @@ def run_virtual_reconcile(
                 action=ReconcileAction.ATTACH,
                 message=f"attached {model_name} to {physical_relation_name}",
             )
-            return f"Attached {model_name} to {physical_relation_name}."
+            return (
+                f"Will attach {model_name} in {resolved_virtual_environment_name} "
+                f"to {physical_relation_name}.\n"
+                f"Attached {model_name} to {physical_relation_name}."
+            )
 
         _record_reconcile_event(
             backend=backend,
@@ -214,7 +233,7 @@ def build_reconcile_report(
         relation_type: str | None = relation_types.get(model.name)
         if relation_type is None:
             issues.append(f"missing logical target: {model.name}")
-        elif relation_type == "table":
+        elif normalize_relation_type(relation_type) == RelationType.TABLE:
             issues.append(f"logical target is table: {model.name}")
     if not issues:
         return f"Reconcile report for {virtual_environment_name}: no issues."
@@ -231,18 +250,14 @@ def repair_view(
     model_name: str,
     physical_map: dict[str, PhysicalRelationRecord],
 ) -> None:
-    relation_types: dict[str, str] = list_virtual_relation_types(
+    validate_logical_target_repairable(
         graph=graph,
         adapter=adapter,
         connection_config=connection_config,
         virtual_environment_name=virtual_environment_name,
         unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+        model_name=model_name,
     )
-    if relation_types.get(model_name) == "table":
-        raise PlannerInputError(
-            f"logical target for '{model_name}' is a table; repair-view will not overwrite it",
-            code="C250",
-        )
     relation: PhysicalRelationRecord | None = physical_map.get(model_name)
     if relation is None:
         raise PlannerInputError(
@@ -260,6 +275,30 @@ def repair_view(
         unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
         physical_relations={model_name: relation},
     )
+
+
+def validate_logical_target_repairable(
+    *,
+    graph: ProjectGraph,
+    adapter: BaseAdapter,
+    connection_config: dict[str, object],
+    virtual_environment_name: str,
+    unsuffixed_virtual_environment_name: str | None,
+    model_name: str,
+) -> None:
+    relation_types: dict[str, str] = list_virtual_relation_types(
+        graph=graph,
+        adapter=adapter,
+        connection_config=connection_config,
+        virtual_environment_name=virtual_environment_name,
+        unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+    )
+    relation_type: str | None = relation_types.get(model_name)
+    if relation_type is not None and normalize_relation_type(relation_type) == RelationType.TABLE:
+        raise PlannerInputError(
+            f"logical target for '{model_name}' is a table; repair-view will not overwrite it",
+            code="C250",
+        )
 
 
 def resolve_attach_relation(

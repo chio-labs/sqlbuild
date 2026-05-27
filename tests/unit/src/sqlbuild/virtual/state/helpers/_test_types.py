@@ -44,3 +44,12 @@ class StateLockServiceTestCase:
     expected_virtual_environment_lock_key: str
     expected_model_version_lock_key: str
     expected_state_migration_lock_key: str
+
+
+@dataclass(frozen=True)
+class DetachedRetentionHelperTestCase:
+    description: str
+    retention_days: int
+    expected_cleanup_environment_names: tuple[str, ...]
+    expected_cleanup_relation_names: tuple[str, ...]
+    expected_retained_relation_names: tuple[str, ...]

@@ -208,6 +208,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     reconcile_attach_parser.add_argument(
         "--physical-relation", dest="reconcile_physical_relation", required=True
     )
+    reconcile_attach_parser.add_argument("--auto-approve", action="store_true", default=False)
     promote_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PROMOTE)
     promote_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     promote_parser.add_argument("--from", dest="from_environment", required=True)
@@ -730,6 +731,7 @@ def _main_with_dependencies(
                 args.reconcile_command,
                 args.reconcile_model,
                 args.reconcile_physical_relation,
+                getattr(args, "auto_approve", False),
                 args.vars,
             )
         if args.command == CliCommand.PROMOTE:
