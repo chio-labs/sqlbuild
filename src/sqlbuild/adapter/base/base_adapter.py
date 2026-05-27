@@ -403,6 +403,35 @@ class BaseAdapter(StrictAdapter):
     def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
         return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
 
+    def _render_query_with_cursor_bounds_impl(
+        self,
+        *,
+        sql: str,
+        cursor_column: str,
+        cursor_start: str,
+        cursor_end: str,
+        cursor_type: str | None,
+    ) -> str:
+        quoted_cursor: str = self.render_identifier(cursor_column)
+        start_literal: str = self.render_cursor_bound_literal(cursor_start, cursor_type)
+        end_literal: str = self.render_cursor_bound_literal(cursor_end, cursor_type)
+        return (
+            f"SELECT * FROM ({sql}) AS __sqlbuild_cursor_bounded "
+            f"WHERE {quoted_cursor} >= {start_literal} AND {quoted_cursor} < {end_literal}"
+        )
+
+    def _render_seed_select_before_cursor_impl(
+        self,
+        *,
+        source: str,
+        cursor_column: str,
+        cursor_end_exclusive: str,
+        cursor_type: str | None,
+    ) -> str:
+        quoted_cursor: str = self.render_identifier(cursor_column)
+        end_literal: str = self.render_cursor_bound_literal(cursor_end_exclusive, cursor_type)
+        return f"SELECT * FROM {source} WHERE {quoted_cursor} < {end_literal}"
+
     def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:
         return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
 

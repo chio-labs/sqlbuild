@@ -9,6 +9,7 @@ from typing import Any
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     ModelVersionRecord,
+    PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
     StateLockRecord,
     StateSchemaValidationResult,
@@ -99,6 +100,20 @@ class StateBackend(ABC):
         self, connection: Any, *, schema: str, model_name: str, version_hash: str
     ) -> PhysicalRelationRecord | None:
         """Return a physical relation row if it exists."""
+        ...
+
+    @abstractmethod
+    def upsert_physical_relation_ancestry(
+        self, connection: Any, *, schema: str, record: PhysicalRelationAncestryRecord
+    ) -> None:
+        """Insert or replace physical relation ancestry."""
+        ...
+
+    @abstractmethod
+    def get_physical_relation_ancestry(
+        self, connection: Any, *, schema: str, model_name: str, version_hash: str
+    ) -> PhysicalRelationAncestryRecord | None:
+        """Return physical relation ancestry if it exists."""
         ...
 
     @abstractmethod

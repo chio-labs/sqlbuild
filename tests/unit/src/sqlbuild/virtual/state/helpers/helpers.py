@@ -7,6 +7,7 @@ from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     ModelVersionRecord,
+    PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
     StateLockRecord,
     StateSchemaValidationResult,
@@ -105,6 +106,16 @@ class FakeStateBackend(StateBackend):
     def get_physical_relation(
         self, connection: Any, *, schema: str, model_name: str, version_hash: str
     ) -> PhysicalRelationRecord | None:
+        return None
+
+    def upsert_physical_relation_ancestry(
+        self, connection: Any, *, schema: str, record: PhysicalRelationAncestryRecord
+    ) -> None:
+        return None
+
+    def get_physical_relation_ancestry(
+        self, connection: Any, *, schema: str, model_name: str, version_hash: str
+    ) -> PhysicalRelationAncestryRecord | None:
         return None
 
     def upsert_virtual_environment(

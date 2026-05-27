@@ -11,6 +11,7 @@ from sqlbuild.virtual.state.constants import (
     FUNCTION_VERSION_TABLE,
     LOCK_TABLE,
     MODEL_VERSION_TABLE,
+    PHYSICAL_RELATION_ANCESTRY_TABLE,
     PHYSICAL_RELATION_TABLE,
     STATE_MIGRATION_EVENTS_TABLE,
     STATE_TABLE_COLUMNS,
@@ -34,6 +35,7 @@ from sqlbuild.virtual.state.helpers.validation import build_validation_result
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     ModelVersionRecord,
+    PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
     StateLockRecord,
     StateSchemaValidationResult,
@@ -412,6 +414,62 @@ class DuckDbStateBackend(StateBackend):
             schema_name=row[3],
             relation_name=row[4],
             relation_type=row[5],
+        )
+
+    def upsert_physical_relation_ancestry(
+        self, connection: Any, *, schema: str, record: PhysicalRelationAncestryRecord
+    ) -> None:
+        connection.execute("BEGIN")
+        try:
+            existing_created_at: datetime | None = self._created_at_for_key(
+                connection,
+                schema=schema,
+                table_name=PHYSICAL_RELATION_ANCESTRY_TABLE,
+                where_sql="model_name = ? AND version_hash = ?",
+                params=[record.model_name, record.version_hash],
+            )
+            connection.execute(
+                f"DELETE FROM {self._qualified_name(schema, PHYSICAL_RELATION_ANCESTRY_TABLE)} "
+                "WHERE model_name = ? AND version_hash = ?",
+                [record.model_name, record.version_hash],
+            )
+            connection.execute(
+                f"INSERT INTO {self._qualified_name(schema, PHYSICAL_RELATION_ANCESTRY_TABLE)} "
+                "(model_name, version_hash, parent_model_name, parent_version_hash, "
+                "seed_strategy, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)",
+                [
+                    record.model_name,
+                    record.version_hash,
+                    record.parent_model_name,
+                    record.parent_version_hash,
+                    record.seed_strategy,
+                    existing_created_at,
+                ],
+            )
+            connection.execute("COMMIT")
+        except BaseException:
+            connection.execute("ROLLBACK")
+            raise
+
+    def get_physical_relation_ancestry(
+        self, connection: Any, *, schema: str, model_name: str, version_hash: str
+    ) -> PhysicalRelationAncestryRecord | None:
+        row: tuple[Any, ...] | None = connection.execute(
+            "SELECT model_name, version_hash, parent_model_name, parent_version_hash, "
+            "seed_strategy "
+            f"FROM {self._qualified_name(schema, PHYSICAL_RELATION_ANCESTRY_TABLE)} "
+            "WHERE model_name = ? AND version_hash = ?",
+            [model_name, version_hash],
+        ).fetchone()
+        if row is None:
+            return None
+        return PhysicalRelationAncestryRecord(
+            model_name=row[0],
+            version_hash=row[1],
+            parent_model_name=row[2],
+            parent_version_hash=row[3],
+            seed_strategy=row[4],
         )
 
     def upsert_virtual_environment(

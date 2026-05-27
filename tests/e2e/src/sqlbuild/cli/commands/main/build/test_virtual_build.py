@@ -13,6 +13,11 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     VirtualPromoteE2ETestCase,
     VirtualRollbackE2ETestCase,
 )
+from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
+    initialize_virtual_seeded_project,
+    prepare_virtual_seeded_incremental_project,
+    rewrite_incremental_orders_model,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
     build_virtual_plan_repo_files,
 )
@@ -145,6 +150,148 @@ def test_given_virtual_default_vde_when_building_then_it_creates_physical_versio
         ),
     )
     assert repeat_ref_hash_rows == ref_hash_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualBuildE2ETestCase(
+            description="delete-insert incremental seeds new physical version from prior version",
+            expected_build_fragments=(),
+            expected_plan_fragments=(),
+            expected_query_results=(
+                (
+                    "SELECT id, amount_cents FROM dev__dev.orders ORDER BY id",
+                    ((1, 10), (2, 21), (3, 31)),
+                ),
+            ),
+            expected_ref_rows=(),
+        )
+    ],
+    ids=["delete-insert incremental seeds new physical version from prior version"],
+)
+def test_given_virtual_incremental_change_when_building_then_it_seeds_new_physical_version(
+    test_case: VirtualBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_virtual_seeded_incremental_project(
+        tmp_path=tmp_path,
+        project_name="virtual_seeded_delete_insert",
+        incremental_strategy="delete_insert",
+        query_change_backfill="bounded-7d",
+    )
+    initialize_virtual_seeded_project(project_dir=project_dir)
+
+    rewrite_incremental_orders_model(
+        project_dir=project_dir,
+        incremental_strategy="delete_insert",
+        query_change_backfill="bounded-7d",
+        amount_expression="amount_cents + 1",
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="INSERT INTO raw.raw_orders VALUES (3, '2026-01-03 00:00:00', 30)",
+    )
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=(
+            "--no-color",
+            "build",
+            "--start-cursor-ts",
+            "2026-01-02T00:00:00",
+            "--end-cursor-ts",
+            "2026-01-04T00:00:00",
+        ),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == 0, build_result.stderr
+    query_sql: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    for query_sql, expected_rows in test_case.expected_query_results:
+        assert query_duckdb(db_path=project_dir / "warehouse.duckdb", sql=query_sql) == list(
+            expected_rows
+        )
+    ancestry_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT parent_model_name, seed_strategy "
+            "FROM sqlbuild_state.physical_relation_ancestry "
+            "WHERE model_name = 'orders'"
+        ),
+    )
+    assert ancestry_rows == [("orders", "copy")]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualBuildE2ETestCase(
+            description="append bounded incremental seeds only rows before replay window",
+            expected_build_fragments=(),
+            expected_plan_fragments=(),
+            expected_query_results=(
+                (
+                    "SELECT id, amount_cents FROM dev__dev.orders ORDER BY id",
+                    ((1, 10), (2, 21), (3, 31)),
+                ),
+            ),
+            expected_ref_rows=(),
+        )
+    ],
+    ids=["append bounded incremental seeds only rows before replay window"],
+)
+def test_given_virtual_append_bounded_change_when_building_then_seed_excludes_replay_window(
+    test_case: VirtualBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_virtual_seeded_incremental_project(
+        tmp_path=tmp_path,
+        project_name="virtual_seeded_append",
+        incremental_strategy="append",
+        query_change_backfill="bounded-7d",
+    )
+    initialize_virtual_seeded_project(project_dir=project_dir)
+
+    rewrite_incremental_orders_model(
+        project_dir=project_dir,
+        incremental_strategy="append",
+        query_change_backfill="bounded-7d",
+        amount_expression="amount_cents + 1",
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="INSERT INTO raw.raw_orders VALUES (3, '2026-01-03 00:00:00', 30)",
+    )
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=(
+            "--no-color",
+            "build",
+            "--start-cursor-ts",
+            "2026-01-02T00:00:00",
+            "--end-cursor-ts",
+            "2026-01-04T00:00:00",
+        ),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == 0, build_result.stderr
+    query_sql: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    for query_sql, expected_rows in test_case.expected_query_results:
+        assert query_duckdb(db_path=project_dir / "warehouse.duckdb", sql=query_sql) == list(
+            expected_rows
+        )
+    ancestry_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT parent_model_name, seed_strategy "
+            "FROM sqlbuild_state.physical_relation_ancestry "
+            "WHERE model_name = 'orders'"
+        ),
+    )
+    assert ancestry_rows == [("orders", "bounded_append_copy")]
 
 
 @pytest.mark.parametrize(

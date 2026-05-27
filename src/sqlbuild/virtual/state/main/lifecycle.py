@@ -137,7 +137,7 @@ def _format_state_lifecycle_summary(
     lines.append(f"  created/validated: {len(STATE_TABLE_COLUMNS)}")
     lines.append(
         "  current state: model_versions, function_versions, physical_relations, "
-        "virtual_environments, virtual_environment_refs, "
+        "physical_relation_ancestry, virtual_environments, virtual_environment_refs, "
         "virtual_environment_function_refs, locks"
     )
     lines.append(

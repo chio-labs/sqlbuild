@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from textwrap import dedent
 
 import pytest
 
@@ -20,6 +21,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery._test_types import (
     BigQuerySourceDeferralE2ETestCase,
     BigQuerySourceLoaderSchemaEvolutionE2ETestCase,
     BigQuerySourceLoaderStrategiesE2ETestCase,
+    BigQueryVirtualSeedE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.bigquery.helpers import (
     assert_bigquery_snapshot_apply_rows,
@@ -29,6 +31,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery.helpers import (
     build_bigquery_local_config,
     build_bigquery_project_toml,
     build_bigquery_source_deferral_project_toml,
+    build_bigquery_virtual_seed_project_toml,
     cleanup_bigquery_dataset,
     ensure_bigquery_dataset_ready,
     execute_bigquery_sql,
@@ -39,6 +42,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery.helpers import (
     prepare_bigquery_source_loader_strategies,
     prepare_bigquery_waffle_shop,
     relation_name,
+    virtual_seed_orders_model,
+    virtual_seed_source_yml,
     write_local_environment_override,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.load.helpers import (
@@ -60,6 +65,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     build_real_warehouse_existing_snapshot_project_files,
     build_real_warehouse_snapshot_project_files,
     prepare_inline_project,
+    query_duckdb,
     run_sqb,
     stringify_warehouse_rows,
 )
@@ -67,6 +73,105 @@ from tests.integration.src.sqlbuild.adapters.bigquery.helpers import (
     build_bigquery_connection_config,
     build_unique_dataset_name,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryVirtualSeedE2ETestCase(
+            description="virtual seeded incremental build uses clone on bigquery",
+            expected_rows=(("1", "10"), ("2", "21"), ("3", "31")),
+            expected_seed_strategy="durable_clone",
+        )
+    ],
+    ids=["virtual seeded incremental build uses clone on bigquery"],
+)
+def test_given_virtual_incremental_change_when_building_on_bigquery_then_seeds_with_clone(
+    test_case: BigQueryVirtualSeedE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    dataset_name: str = build_unique_dataset_name(prefix="sqlbuild_virtual_seed")
+    project_id: str = str(build_bigquery_connection_config(schema=dataset_name)["project"])
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="bigquery_virtual_seed",
+        repo_files={
+            "sqlbuild_project.toml": build_bigquery_virtual_seed_project_toml(
+                project_name="bigquery_virtual_seed",
+                dataset_name=dataset_name,
+            ),
+            "sources/raw.yml": virtual_seed_source_yml(dataset_name=dataset_name),
+            "models/orders.sql": virtual_seed_orders_model(amount_expression="amount_cents + 0"),
+        },
+    )
+    try:
+        ensure_bigquery_dataset_ready(dataset_name=dataset_name)
+        execute_bigquery_sql(
+            dataset_name=dataset_name,
+            sql=dedent(
+                f"""
+                CREATE OR REPLACE TABLE
+                  {relation_name(dataset_name=dataset_name, name="raw_orders")} AS
+                SELECT
+                  1 AS id,
+                  TIMESTAMP '2026-01-01 00:00:00 UTC' AS ordered_at,
+                  10 AS amount_cents
+                UNION ALL
+                SELECT 2, TIMESTAMP '2026-01-02 00:00:00 UTC', 20
+                """
+            ).strip(),
+        )
+        assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        (project_dir / "models" / "orders.sql").write_text(
+            virtual_seed_orders_model(amount_expression="amount_cents + 1"),
+            encoding="utf-8",
+        )
+        execute_bigquery_sql(
+            dataset_name=dataset_name,
+            sql=(
+                f"INSERT INTO {relation_name(dataset_name=dataset_name, name='raw_orders')} "
+                "VALUES (3, TIMESTAMP '2026-01-03 00:00:00 UTC', 30)"
+            ),
+        )
+
+        build_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "build",
+                "--start-cursor-ts",
+                "2026-01-02T00:00:00",
+                "--end-cursor-ts",
+                "2026-01-04T00:00:00",
+            ),
+            project_dir=project_dir,
+        )
+
+        assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+        assert (
+            stringify_warehouse_rows(
+                fetch_bigquery_rows(
+                    dataset_name=dataset_name,
+                    sql=(
+                        f"SELECT id, amount_cents FROM `{project_id}.{dataset_name}__dev.orders` "
+                        "ORDER BY id"
+                    ),
+                )
+            )
+            == test_case.expected_rows
+        )
+        assert query_duckdb(
+            db_path=project_dir / "state.duckdb",
+            sql=(
+                "SELECT seed_strategy FROM sqlbuild_state.physical_relation_ancestry "
+                "WHERE model_name = 'orders'"
+            ),
+        ) == [(test_case.expected_seed_strategy,)]
+    finally:
+        cleanup_bigquery_dataset(dataset_name=dataset_name)
+        cleanup_bigquery_dataset(dataset_name=f"{dataset_name}__dev")
+        cleanup_bigquery_dataset(dataset_name=f"{dataset_name}__sqb_physical")
+
 
 BIGQUERY_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES: list[BigQueryScenarioLocalReplayE2ETestCase] = [
     BigQueryScenarioLocalReplayE2ETestCase(

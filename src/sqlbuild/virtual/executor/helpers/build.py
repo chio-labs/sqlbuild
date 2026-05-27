@@ -36,6 +36,10 @@ from sqlbuild.virtual.executor.helpers.rewrite import (
     rewrite_project_function_targets,
     rewrite_project_model_targets,
 )
+from sqlbuild.virtual.executor.helpers.seeded_plan import (
+    adapt_plan_for_seeded_virtual_execution,
+)
+from sqlbuild.virtual.executor.helpers.seeding import seed_virtual_physical_versions
 from sqlbuild.virtual.executor.models import VirtualBuildExecutionHooks, VirtualBuildPipelineResult
 from sqlbuild.virtual.planner.main.output import apply_virtual_plan_output
 from sqlbuild.virtual.planner.main.selection import resolve_virtual_plan_model_selection
@@ -226,6 +230,13 @@ def run_virtual_build(
         semantics=semantics,
         selected_model_names=selected_model_names,
     )
+    plan_output = adapt_plan_for_seeded_virtual_execution(
+        adapter=adapter,
+        plan_output=plan_output,
+        bound_physical_relations=bound_physical_relations,
+        expected_version_hashes=semantics.expected_version_hashes,
+        cursor_overrides=cursor_overrides,
+    )
     effective_concurrency: int = (
         concurrency if concurrency is not None else rewritten_project.settings.concurrency
     )
@@ -233,6 +244,15 @@ def run_virtual_build(
         on_plan_ready(rewritten_project, plan_output)
         if on_plan_ready is not None
         else VirtualBuildExecutionHooks()
+    )
+    _seed_selected_physical_versions(
+        adapter=adapter,
+        connection_config=connection_config,
+        backend=backend,
+        config=config,
+        plan_output=plan_output,
+        bound_physical_relations=bound_physical_relations,
+        expected_version_hashes=semantics.expected_version_hashes,
     )
     result: BuildExecutionResult = run_build_pipeline(
         plan=plan_output,
@@ -279,6 +299,34 @@ def run_virtual_build(
         plan_output=plan_output,
         execution_result=result,
     )
+
+
+def _seed_selected_physical_versions(
+    *,
+    adapter: BaseAdapter,
+    connection_config: dict[str, object],
+    backend: Any,
+    config: StateBackendConfig,
+    plan_output: PlanOutput,
+    bound_physical_relations: dict[str, PhysicalRelationRecord],
+    expected_version_hashes: dict[str, str],
+) -> None:
+    warehouse_connection: Any = adapter.connect(connection_config)
+    state_connection: Any = backend.connect(config.connection)
+    try:
+        seed_virtual_physical_versions(
+            adapter=adapter,
+            connection=warehouse_connection,
+            backend=backend,
+            state_connection=state_connection,
+            state_schema=config.schema,
+            plan_entries=plan_output.model_entries,
+            bound_physical_relations=bound_physical_relations,
+            expected_version_hashes=expected_version_hashes,
+        )
+    finally:
+        backend.close(state_connection)
+        adapter.close(warehouse_connection)
 
 
 def _read_or_initialize_refs(

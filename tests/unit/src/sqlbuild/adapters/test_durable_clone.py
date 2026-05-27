@@ -33,14 +33,12 @@ DURABLE_CLONE_TEST_CASES: tuple[AdapterDurableCloneTestCase, ...] = (
         expected_supports_durable_clone=False,
     ),
     AdapterDurableCloneTestCase(
-        description="bigquery durable clone uses CTAS fallback",
+        description="bigquery durable clone uses table clone",
         adapter=BigQueryAdapter(),
         source="prod.fact_orders",
         target="dev.fact_orders",
-        expected_statements=(
-            "CREATE OR REPLACE TABLE `dev.fact_orders` AS SELECT * FROM prod.fact_orders",
-        ),
-        expected_supports_durable_clone=False,
+        expected_statements=("CREATE TABLE `dev.fact_orders` CLONE `prod.fact_orders`",),
+        expected_supports_durable_clone=True,
     ),
     AdapterDurableCloneTestCase(
         description="postgres durable clone uses drop and CTAS fallback",

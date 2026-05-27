@@ -136,3 +136,10 @@ class BigQuerySourceDeferralE2ETestCase:
     expected_loader_rows: tuple[tuple[object, ...], ...]
     command: tuple[str, ...] = ("--no-color", "build", "--select", "stg_orders")
     expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class BigQueryVirtualSeedE2ETestCase:
+    description: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_seed_strategy: str

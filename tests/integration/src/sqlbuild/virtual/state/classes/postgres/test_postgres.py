@@ -11,6 +11,7 @@ from sqlbuild.virtual.state.classes.postgres import PostgresStateBackend
 from sqlbuild.virtual.state.constants import STATE_TABLE_INDEXES, STATE_TABLES
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
+    PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
     StateLockRecord,
     StateSchemaValidationResult,
@@ -138,7 +139,7 @@ def test_given_postgres_state_backend_when_running_lifecycle_then_state_tables_a
     [
         PostgresStateBackendValidationTestCase(
             description="reports invalid manually-created state schema",
-            expected_issue_count=15,
+            expected_issue_count=16,
         )
     ],
     ids=["reports invalid manually-created state schema"],
@@ -471,6 +472,18 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
         schema=postgres_state_schema,
         record=replaced_relation_record,
     )
+    ancestry_record: PhysicalRelationAncestryRecord = PhysicalRelationAncestryRecord(
+        model_name=test_case.expected_model_name,
+        version_hash=test_case.expected_version_hash,
+        parent_model_name=test_case.expected_model_name,
+        parent_version_hash="parent123",
+        seed_strategy="copy",
+    )
+    postgres_state_backend.upsert_physical_relation_ancestry(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        record=ancestry_record,
+    )
     virtual_environment_record: VirtualEnvironmentRecord = VirtualEnvironmentRecord(
         virtual_environment_name=test_case.expected_virtual_environment_name,
         status=VirtualEnvironmentStatus.FINALIZED,
@@ -511,6 +524,15 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
             version_hash=test_case.expected_version_hash,
         )
         == replaced_relation_record
+    )
+    assert (
+        postgres_state_backend.get_physical_relation_ancestry(
+            postgres_state_connection,
+            schema=postgres_state_schema,
+            model_name=test_case.expected_model_name,
+            version_hash=test_case.expected_version_hash,
+        )
+        == ancestry_record
     )
     assert (
         postgres_state_backend.get_virtual_environment(

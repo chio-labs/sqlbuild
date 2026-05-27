@@ -1227,6 +1227,38 @@ class DatabricksAdapter(BaseAdapter):
     def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
         return (f"CREATE TABLE {target} DEEP CLONE {source}",)
 
+    def render_query_with_cursor_bounds(
+        self,
+        *,
+        sql: str,
+        cursor_column: str,
+        cursor_start: str,
+        cursor_end: str,
+        cursor_type: str | None,
+    ) -> str:
+        return self._render_query_with_cursor_bounds_impl(
+            sql=sql,
+            cursor_column=cursor_column,
+            cursor_start=cursor_start,
+            cursor_end=cursor_end,
+            cursor_type=cursor_type,
+        )
+
+    def render_seed_select_before_cursor(
+        self,
+        *,
+        source: str,
+        cursor_column: str,
+        cursor_end_exclusive: str,
+        cursor_type: str | None,
+    ) -> str:
+        return self._render_seed_select_before_cursor_impl(
+            source=source,
+            cursor_column=cursor_column,
+            cursor_end_exclusive=cursor_end_exclusive,
+            cursor_type=cursor_type,
+        )
+
     def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:
         return (f"CREATE OR REPLACE TABLE {target} AS SELECT * FROM {source}",)
 

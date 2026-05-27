@@ -10,6 +10,7 @@ STATE_VERSION_TABLE: str = "state_versions"
 MODEL_VERSION_TABLE: str = "model_versions"
 FUNCTION_VERSION_TABLE: str = "function_versions"
 PHYSICAL_RELATION_TABLE: str = "physical_relations"
+PHYSICAL_RELATION_ANCESTRY_TABLE: str = "physical_relation_ancestry"
 VIRTUAL_ENVIRONMENT_TABLE: str = "virtual_environments"
 VIRTUAL_ENVIRONMENT_REF_TABLE: str = "virtual_environment_refs"
 VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE: str = "virtual_environment_function_refs"
@@ -32,6 +33,7 @@ STATE_TABLES: tuple[str, ...] = (
     MODEL_VERSION_TABLE,
     FUNCTION_VERSION_TABLE,
     PHYSICAL_RELATION_TABLE,
+    PHYSICAL_RELATION_ANCESTRY_TABLE,
     VIRTUAL_ENVIRONMENT_TABLE,
     VIRTUAL_ENVIRONMENT_REF_TABLE,
     VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE,
@@ -99,6 +101,16 @@ PHYSICAL_RELATION_COLUMNS: dict[str, StateColumnType] = {
     "schema_name": StateColumnType.TEXT,
     "relation_name": StateColumnType.TEXT,
     "relation_type": StateColumnType.TEXT,
+    "created_at": StateColumnType.TIMESTAMP,
+    "updated_at": StateColumnType.TIMESTAMP,
+}
+
+PHYSICAL_RELATION_ANCESTRY_COLUMNS: dict[str, StateColumnType] = {
+    "model_name": StateColumnType.TEXT,
+    "version_hash": StateColumnType.TEXT,
+    "parent_model_name": StateColumnType.TEXT,
+    "parent_version_hash": StateColumnType.TEXT,
+    "seed_strategy": StateColumnType.TEXT,
     "created_at": StateColumnType.TIMESTAMP,
     "updated_at": StateColumnType.TIMESTAMP,
 }
@@ -201,6 +213,7 @@ STATE_TABLE_COLUMNS: dict[str, dict[str, StateColumnType]] = {
     MODEL_VERSION_TABLE: MODEL_VERSION_COLUMNS,
     FUNCTION_VERSION_TABLE: FUNCTION_VERSION_COLUMNS,
     PHYSICAL_RELATION_TABLE: PHYSICAL_RELATION_COLUMNS,
+    PHYSICAL_RELATION_ANCESTRY_TABLE: PHYSICAL_RELATION_ANCESTRY_COLUMNS,
     VIRTUAL_ENVIRONMENT_TABLE: VIRTUAL_ENVIRONMENT_COLUMNS,
     VIRTUAL_ENVIRONMENT_REF_TABLE: VIRTUAL_ENVIRONMENT_REF_COLUMNS,
     VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE: VIRTUAL_ENVIRONMENT_FUNCTION_REF_COLUMNS,
@@ -227,6 +240,9 @@ STATE_TABLE_INDEXES: dict[str, dict[str, tuple[str, ...]]] = {
     },
     PHYSICAL_RELATION_TABLE: {
         "idx_sqb_physical_relations_identity": ("model_name", "version_hash"),
+    },
+    PHYSICAL_RELATION_ANCESTRY_TABLE: {
+        "idx_sqb_physical_relation_ancestry_identity": ("model_name", "version_hash"),
     },
     VIRTUAL_ENVIRONMENT_TABLE: {
         "idx_sqb_virtual_environments_identity": ("virtual_environment_name",),

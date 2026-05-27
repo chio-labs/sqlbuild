@@ -31,3 +31,11 @@ class RewriteProjectTargetsTestCase:
     description: str
     selected_model_version_hashes: dict[str, str]
     expected_rewritten_name: str
+
+
+@dataclass(frozen=True)
+class SeededPlanAdaptationTestCase:
+    description: str
+    incremental_strategy: str
+    expected_action: str
+    expected_sql_fragment: str
