@@ -35,6 +35,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake._test_types import (
     SnowflakeCloneE2ETestCase,
     SnowflakeDiffE2ETestCase,
     SnowflakeIntermediateDagStrategyE2ETestCase,
+    SnowflakeJanitorDetachedVdeE2ETestCase,
+    SnowflakeReconcileE2ETestCase,
     SnowflakeScenarioLocalReplayE2ETestCase,
     SnowflakeScenarioRemoteE2ETestCase,
     SnowflakeSnapshotApplyE2ETestCase,
@@ -42,6 +44,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake._test_types import (
     SnowflakeSourceDeferralE2ETestCase,
     SnowflakeSourceLoaderSchemaEvolutionE2ETestCase,
     SnowflakeSourceLoaderStrategiesE2ETestCase,
+    SnowflakeVirtualLifecycleE2ETestCase,
     SnowflakeVirtualSeedE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.snowflake.helpers import (
@@ -178,6 +181,258 @@ def test_given_virtual_incremental_change_when_building_on_snowflake_then_seeds_
     finally:
         cleanup_snowflake_schema(schema_name=schema_name)
         cleanup_snowflake_schema(schema_name=f"{schema_name}__dev")
+        cleanup_snowflake_schema(schema_name=f"{schema_name}__sqb_physical")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeReconcileE2ETestCase(
+            description="reconcile repair-view recreates snowflake logical view",
+            expected_rows=(("1",),),
+            expected_stdout_fragments=(
+                "Will recreate logical view for orders in dev.",
+                "Repaired logical view for orders in dev.",
+            ),
+        )
+    ],
+    ids=["reconcile repair-view recreates snowflake logical view"],
+)
+def test_given_missing_logical_view_when_repairing_on_snowflake_then_view_is_recreated(
+    test_case: SnowflakeReconcileE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_virtual_reconcile")
+    database_name: str = str(build_snowflake_connection_config(schema=schema_name)["database"])
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="snowflake_virtual_reconcile",
+        repo_files={
+            "sqlbuild_project.toml": build_snowflake_virtual_seed_project_toml(
+                database_name=database_name,
+                schema_name=schema_name,
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+    try:
+        assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        execute_snowflake_sql(
+            schema_name=schema_name,
+            sql=f"DROP VIEW {relation_name(schema_name=f'{schema_name}__dev', name='orders')}",
+        )
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "reconcile",
+                "repair-view",
+                "--virtual-env",
+                "dev",
+                "--model",
+                "orders",
+            ),
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in result.stdout
+        assert (
+            stringify_warehouse_rows(
+                fetch_snowflake_rows(
+                    schema_name=schema_name,
+                    sql=(
+                        "SELECT id FROM "
+                        f"{relation_name(schema_name=f'{schema_name}__dev', name='orders')} "
+                        "ORDER BY id"
+                    ),
+                )
+            )
+            == test_case.expected_rows
+        )
+    finally:
+        cleanup_snowflake_schema(schema_name=schema_name)
+        cleanup_snowflake_schema(schema_name=f"{schema_name}__dev")
+        cleanup_snowflake_schema(schema_name=f"{schema_name}__sqb_physical")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeVirtualLifecycleE2ETestCase(
+            description="adopt and detach preserve snowflake logical table",
+            expected_rows=(("1",),),
+            expected_stdout_fragments=(
+                "Adopted 1 models into virtual environment dev.",
+                "Detached 1 models from virtual environment dev.",
+            ),
+        )
+    ],
+    ids=["adopt and detach preserve snowflake logical table"],
+)
+def test_given_stateless_table_when_adopting_and_detaching_on_snowflake_then_table_is_preserved(
+    test_case: SnowflakeVirtualLifecycleE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_virtual_lifecycle")
+    database_name: str = str(build_snowflake_connection_config(schema=schema_name)["database"])
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="snowflake_virtual_lifecycle",
+        repo_files={
+            "sqlbuild_project.toml": (
+                build_snowflake_virtual_seed_project_toml(
+                    database_name=database_name,
+                    schema_name=schema_name,
+                    unsuffixed_virtual_env="dev",
+                )
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+    try:
+        execute_snowflake_sql(
+            schema_name=schema_name,
+            sql=f"CREATE SCHEMA IF NOT EXISTS {database_name}.{schema_name}",
+        )
+        execute_snowflake_sql(
+            schema_name=schema_name,
+            sql=(
+                f"CREATE OR REPLACE TABLE {relation_name(schema_name=schema_name, name='orders')} "
+                "AS SELECT 1 AS id"
+            ),
+        )
+        assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+        adopt_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "state", "adopt", "--allow-copy"),
+            project_dir=project_dir,
+            input_text="adopt dev\n",
+        )
+        detach_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "state", "detach", "--allow-copy"),
+            project_dir=project_dir,
+            input_text="detach dev\n",
+        )
+
+        assert adopt_result.returncode == test_case.expected_return_code, (
+            adopt_result.stdout + adopt_result.stderr
+        )
+        assert detach_result.returncode == test_case.expected_return_code, (
+            detach_result.stdout + detach_result.stderr
+        )
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in adopt_result.stdout + detach_result.stdout
+        assert (
+            stringify_warehouse_rows(
+                fetch_snowflake_rows(
+                    schema_name=schema_name,
+                    sql=(
+                        f"SELECT id FROM {relation_name(schema_name=schema_name, name='orders')} "
+                        "ORDER BY id"
+                    ),
+                )
+            )
+            == test_case.expected_rows
+        )
+    finally:
+        cleanup_snowflake_schema(schema_name=schema_name)
+        cleanup_snowflake_schema(schema_name=f"{schema_name}__sqb_physical")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeJanitorDetachedVdeE2ETestCase(
+            description="janitor prunes snowflake detached VDE refs and physical versions",
+            expected_stdout_fragments=(
+                "eligible for deletion",
+                "detached VDEs pruned",
+                "Eligible detached VDEs",
+                "dev  detached virtual environment",
+                "state items",
+            ),
+            expected_virtual_environment_count_after=0,
+            expected_ref_count_after=0,
+        )
+    ],
+    ids=["janitor prunes snowflake detached VDE refs and physical versions"],
+)
+def test_given_detached_vde_when_running_janitor_on_snowflake_then_refs_are_pruned(
+    test_case: SnowflakeJanitorDetachedVdeE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_virtual_janitor")
+    database_name: str = str(build_snowflake_connection_config(schema=schema_name)["database"])
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="snowflake_virtual_janitor",
+        repo_files={
+            "sqlbuild_project.toml": (
+                build_snowflake_virtual_seed_project_toml(
+                    database_name=database_name,
+                    schema_name=schema_name,
+                    unsuffixed_virtual_env="dev",
+                )
+                + "\n[janitor]\n"
+                + "enabled = true\n"
+                + "retention_days = 0\n"
+                + "delete_tracked_only = false\n"
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+    try:
+        execute_snowflake_sql(
+            schema_name=schema_name,
+            sql=f"CREATE SCHEMA IF NOT EXISTS {database_name}.{schema_name}",
+        )
+        execute_snowflake_sql(
+            schema_name=schema_name,
+            sql=(
+                f"CREATE OR REPLACE TABLE {relation_name(schema_name=schema_name, name='orders')} "
+                "AS SELECT 1 AS id"
+            ),
+        )
+        assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+        assert (
+            run_sqb(
+                command=("--no-color", "state", "adopt", "--allow-copy"),
+                project_dir=project_dir,
+                input_text="adopt dev\n",
+            ).returncode
+            == 0
+        )
+        assert (
+            run_sqb(
+                command=("--no-color", "state", "detach", "--allow-copy"),
+                project_dir=project_dir,
+                input_text="detach dev\n",
+            ).returncode
+            == 0
+        )
+
+        janitor_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "janitor", "--auto-approve"),
+            project_dir=project_dir,
+        )
+
+        assert janitor_result.returncode == test_case.expected_return_code, (
+            janitor_result.stdout + janitor_result.stderr
+        )
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in janitor_result.stdout
+        assert query_duckdb(
+            db_path=project_dir / "state.duckdb",
+            sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environments",
+        ) == [(test_case.expected_virtual_environment_count_after,)]
+        assert query_duckdb(
+            db_path=project_dir / "state.duckdb",
+            sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_refs",
+        ) == [(test_case.expected_ref_count_after,)]
+    finally:
+        cleanup_snowflake_schema(schema_name=schema_name)
         cleanup_snowflake_schema(schema_name=f"{schema_name}__sqb_physical")
 
 
