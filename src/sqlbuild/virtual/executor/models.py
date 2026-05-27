@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from sqlbuild.compiler.compile.models.core import CompiledProject
-from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.shared.types import ExecutionResourceKind
 
@@ -25,8 +25,24 @@ class VirtualBuildPipelineResult:
     """Result returned by the virtual build pipeline."""
 
     project: CompiledProject
-    plan_output: PlanOutput
+    direct_plan_output: PlanOutput
+    display_plan_output: PlanOutput
+    execution_plan: VirtualBuildExecutionPlan
     execution_result: BuildExecutionResult
+
+
+@dataclass(frozen=True)
+class VirtualBuildExecutionPlan:
+    """Virtual-only execution adaptation layered on top of direct planning."""
+
+    direct_plan_output: PlanOutput
+    display_plan_output: PlanOutput
+    execution_model_entries: tuple[ModelPlanEntry, ...]
+
+    def build_executor_plan_output(self) -> PlanOutput:
+        """Materialize the executor-facing PlanOutput at the boundary."""
+
+        return replace(self.direct_plan_output, model_entries=self.execution_model_entries)
 
 
 @dataclass(frozen=True)

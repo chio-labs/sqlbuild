@@ -6,9 +6,8 @@ import pytest
 
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.compiler.planner.types import PlanAction
-from sqlbuild.virtual.executor.helpers.seeded_plan import (
-    adapt_plan_for_seeded_virtual_execution,
-)
+from sqlbuild.virtual.executor.helpers.seeded_plan import build_virtual_execution_plan
+from sqlbuild.virtual.executor.models import VirtualBuildExecutionPlan
 from tests.unit.src.sqlbuild.virtual.executor.helpers._test_types import (
     SeededPlanAdaptationTestCase,
 )
@@ -42,9 +41,9 @@ def test_given_seeded_virtual_incremental_plan_when_adapting_then_it_restores_bo
         incremental_strategy=test_case.incremental_strategy
     )
 
-    adapted: PlanOutput = adapt_plan_for_seeded_virtual_execution(
+    adapted: VirtualBuildExecutionPlan = build_virtual_execution_plan(
         adapter=build_adapter(),
-        plan_output=plan_output,
+        direct_plan_output=plan_output,
         bound_physical_relations={
             "orders": build_bound_physical_relation(
                 model_name="orders", version_hash="oldhash123456"
@@ -57,6 +56,8 @@ def test_given_seeded_virtual_incremental_plan_when_adapting_then_it_restores_bo
         ),
     )
 
-    adapted_entry: Any = adapted.model_entries[0]
+    adapted_entry: Any = adapted.execution_model_entries[0]
     assert adapted_entry.action == test_case.expected_action
     assert test_case.expected_sql_fragment in adapted_entry.resolved_sql
+    assert adapted.direct_plan_output.model_entries[0].action == PlanAction.CREATE_TABLE
+    assert adapted.display_plan_output.model_entries[0].action == test_case.expected_action
