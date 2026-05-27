@@ -278,6 +278,11 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def relation_names_match(self, left: str, right: str) -> bool:
+        """Return whether two relation name strings identify the same adapter relation."""
+        ...
+
+    @abstractmethod
     def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:
         """Render SQL statements that replace a target table from a source relation."""
         ...
@@ -292,6 +297,20 @@ class StrictAdapter(
         statement_recorder: StatementRecorder,
     ) -> None:
         """Replace a target table from a source relation."""
+        ...
+
+    @abstractmethod
+    def move_or_copy_relation(
+        self,
+        connection: Any,
+        *,
+        source: str,
+        target: str,
+        remove_source: bool,
+        allow_copy_fallback: bool,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        """Move a relation to a target, or copy it when explicit fallback is allowed."""
         ...
 
     @abstractmethod

@@ -45,3 +45,16 @@ class StateModeGuardE2ETestCase:
     project_toml: str
     expected_exit_code: int
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class StateAdoptDetachE2ETestCase:
+    description: str
+    expected_adopt_fragment: str
+    expected_detach_fragment: str
+    expected_detached_status: str
+    expected_operation_rows: tuple[tuple[object, ...], ...]
+    expected_operation_event_rows: tuple[tuple[object, ...], ...]
+    expected_detached_error_fragment: str
+    expected_query_results_after_adopt: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
+    expected_query_results_after_detach: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]

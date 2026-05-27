@@ -73,6 +73,7 @@ def run_sqb(
     command: tuple[str, ...],
     project_dir: Path,
     env: Mapping[str, str] | None = None,
+    input_text: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run an sqb CLI command via subprocess and return the result."""
 
@@ -85,6 +86,7 @@ def run_sqb(
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        input=input_text,
         env=process_env,
         check=False,
     )

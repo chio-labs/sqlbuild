@@ -93,3 +93,11 @@ class PostgresStateBackendConcurrentLockTestCase:
     second_owner: str
     expected_success_count: int
     expected_active_lock_count: int
+
+
+@dataclass(frozen=True)
+class PostgresStateBackendOperationEventTestCase:
+    description: str
+    sqlbuild_version: str
+    expected_operation_id: str
+    expected_virtual_environment_name: str

@@ -11,7 +11,10 @@ from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
+    ReconcileEventRecord,
     StateLockRecord,
+    StateOperationEventRecord,
+    StateOperationRecord,
     StateSchemaValidationResult,
     VirtualEnvironmentCheckpointFunctionRefRecord,
     VirtualEnvironmentCheckpointRecord,
@@ -100,6 +103,13 @@ class StateBackend(ABC):
         self, connection: Any, *, schema: str, model_name: str, version_hash: str
     ) -> PhysicalRelationRecord | None:
         """Return a physical relation row if it exists."""
+        ...
+
+    @abstractmethod
+    def list_physical_relations_for_model(
+        self, connection: Any, *, schema: str, model_name: str
+    ) -> tuple[PhysicalRelationRecord, ...]:
+        """Return tracked physical relations for one model, newest first when available."""
         ...
 
     @abstractmethod
@@ -207,6 +217,34 @@ class StateBackend(ABC):
         self, connection: Any, *, schema: str, checkpoint_id: str
     ) -> None:
         """Delete one virtual environment checkpoint and its refs."""
+        ...
+
+    @abstractmethod
+    def upsert_state_operation(
+        self, connection: Any, *, schema: str, record: StateOperationRecord
+    ) -> None:
+        """Insert or replace a tracked virtual operation row."""
+        ...
+
+    @abstractmethod
+    def get_state_operation(
+        self, connection: Any, *, schema: str, operation_id: str
+    ) -> StateOperationRecord | None:
+        """Return a tracked virtual operation row if it exists."""
+        ...
+
+    @abstractmethod
+    def create_state_operation_event(
+        self, connection: Any, *, schema: str, record: StateOperationEventRecord
+    ) -> None:
+        """Append one state operation event row."""
+        ...
+
+    @abstractmethod
+    def create_reconcile_event(
+        self, connection: Any, *, schema: str, record: ReconcileEventRecord
+    ) -> None:
+        """Append one reconcile event row."""
         ...
 
     @abstractmethod

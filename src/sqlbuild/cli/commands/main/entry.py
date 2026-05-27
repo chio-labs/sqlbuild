@@ -192,6 +192,22 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     diff_parser.add_argument("--allow-partial-diff", action="store_true", default=False)
     add_select_args(diff_parser)
     add_vars_args(diff_parser)
+    reconcile_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.RECONCILE)
+    reconcile_parser.add_argument("--virtual-env", dest="virtual_env", default=None)
+    reconcile_parser.add_argument("--model", dest="reconcile_model", default=None)
+    reconcile_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
+    reconcile_subparsers = reconcile_parser.add_subparsers(dest="reconcile_command")
+    reconcile_repair_view_parser: argparse.ArgumentParser = reconcile_subparsers.add_parser(
+        "repair-view"
+    )
+    reconcile_repair_view_parser.add_argument("--virtual-env", dest="virtual_env", default=None)
+    reconcile_repair_view_parser.add_argument("--model", dest="reconcile_model", required=True)
+    reconcile_attach_parser: argparse.ArgumentParser = reconcile_subparsers.add_parser("attach")
+    reconcile_attach_parser.add_argument("--virtual-env", dest="virtual_env", default=None)
+    reconcile_attach_parser.add_argument("--model", dest="reconcile_model", required=True)
+    reconcile_attach_parser.add_argument(
+        "--physical-relation", dest="reconcile_physical_relation", required=True
+    )
     promote_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PROMOTE)
     promote_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     promote_parser.add_argument("--from", dest="from_environment", required=True)
@@ -259,6 +275,14 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     state_subparsers = state_parser.add_subparsers(dest="state_command")
     state_subparsers.add_parser(StateCommand.INIT.value)
     state_subparsers.add_parser(StateCommand.MIGRATE.value)
+    state_adopt_parser: argparse.ArgumentParser = state_subparsers.add_parser(
+        StateCommand.ADOPT.value
+    )
+    state_adopt_parser.add_argument("--allow-copy", action="store_true", default=False)
+    state_detach_parser: argparse.ArgumentParser = state_subparsers.add_parser(
+        StateCommand.DETACH.value
+    )
+    state_detach_parser.add_argument("--allow-copy", action="store_true", default=False)
     state_rollback_parser: argparse.ArgumentParser = state_subparsers.add_parser(
         StateCommand.ROLLBACK.value
     )
@@ -368,6 +392,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.playground import run_playground
     from sqlbuild.cli.commands.main.promote import run_promote
     from sqlbuild.cli.commands.main.query import run_query
+    from sqlbuild.cli.commands.main.reconcile import run_reconcile
     from sqlbuild.cli.commands.main.rollback import run_rollback
     from sqlbuild.cli.commands.main.run import run_run
     from sqlbuild.cli.commands.main.scenario import run_scenario
@@ -418,6 +443,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_load=run_load,
         run_clone=run_clone,
         run_diff=run_diff,
+        run_reconcile=run_reconcile,
         run_promote=run_promote,
         run_rollback=run_rollback,
         run_query=run_query,
@@ -696,6 +722,16 @@ def _main_with_dependencies(
                 args.vars,
                 args.allow_partial_diff,
             )
+        if args.command == CliCommand.RECONCILE:
+            return handlers.run_reconcile(
+                project_dir,
+                args.no_color,
+                args.virtual_env,
+                args.reconcile_command,
+                args.reconcile_model,
+                args.reconcile_physical_relation,
+                args.vars,
+            )
         if args.command == CliCommand.PROMOTE:
             if args.from_environment is None or args.to_environment is None:
                 raise CliUserError("promote requires --from and --to", code="C244")
@@ -760,6 +796,7 @@ def _main_with_dependencies(
                 args.state_checkpoint_command,
                 args.state_checkpoint_id,
                 args.virtual_env,
+                getattr(args, "allow_copy", False),
             )
         if args.command == CliCommand.INIT:
             return handlers.run_init(project_dir)

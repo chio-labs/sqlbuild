@@ -14,6 +14,7 @@ from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.spec.models.environments import resolve_environment_config, resolve_environment_name
 from sqlbuild.virtual.executor.helpers.rollback import publish_function_versions
 from sqlbuild.virtual.executor.main.views import refresh_logical_vde_views
 from sqlbuild.virtual.planner.main.selection import resolve_virtual_plan_model_selection
@@ -24,6 +25,7 @@ from sqlbuild.virtual.state.main.checkpoints import create_finalized_virtual_env
 from sqlbuild.virtual.state.main.locks import (
     acquire_virtual_environment_lease,
 )
+from sqlbuild.virtual.state.main.record_operation import record_state_operation
 from sqlbuild.virtual.state.main.release_lock import release_state_lease
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
@@ -35,7 +37,11 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentRecord,
     VirtualEnvironmentRefRecord,
 )
-from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
+from sqlbuild.virtual.state.types import (
+    StateOperationStatus,
+    StateOperationType,
+    VirtualEnvironmentStatus,
+)
 
 
 def run_virtual_promote(
@@ -71,15 +77,41 @@ def run_virtual_promote(
     )
     if on_progress is not None:
         on_progress("Compiled project.")
+    active_environment_name: str | None = resolve_environment_name(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+        selected_environment=None,
+    )
+    unsuffixed_virtual_environment_name: str | None = None
+    if active_environment_name is not None:
+        unsuffixed_virtual_environment_name = resolve_environment_config(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+            environment_name=active_environment_name,
+        ).state.unsuffixed_virtual_env
     config, backend = build_state_runtime(
         discovered_inputs=discovered_inputs,
         project_dir=project_dir,
     )
     state_connection: Any = backend.connect(config.connection)
     lease: StateLockLease | None = None
+    operation_id: str = f"promote:{uuid.uuid4()}"
     try:
         if on_progress is not None:
             on_progress("Inspecting virtual state...")
+        record_state_operation(
+            backend,
+            state_connection,
+            schema=config.schema,
+            operation_id=operation_id,
+            operation_type=StateOperationType.PROMOTE,
+            status=StateOperationStatus.RUNNING,
+            action="start",
+            virtual_environment_name=to_virtual_environment_name,
+            message=(
+                f"promote from {from_virtual_environment_name} to {to_virtual_environment_name}"
+            ),
+        )
         lease = acquire_virtual_environment_lease(
             backend,
             state_connection,
@@ -120,6 +152,27 @@ def run_virtual_promote(
             schema=config.schema,
             virtual_environment_name=from_virtual_environment_name,
         )
+        if (
+            source_environment is not None
+            and source_environment.status == VirtualEnvironmentStatus.DETACHED
+        ):
+            raise PlannerInputError(
+                f"source virtual environment '{from_virtual_environment_name}' is detached",
+                code="S028",
+            )
+        target_environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
+            state_connection,
+            schema=config.schema,
+            virtual_environment_name=to_virtual_environment_name,
+        )
+        if (
+            target_environment is not None
+            and target_environment.status == VirtualEnvironmentStatus.DETACHED
+        ):
+            raise PlannerInputError(
+                f"target virtual environment '{to_virtual_environment_name}' is detached",
+                code="S028",
+            )
         source_versions: dict[str, ModelVersionRecord | None] = _read_model_versions(
             backend=backend,
             state_connection=state_connection,
@@ -289,8 +342,32 @@ def run_virtual_promote(
             schema=config.schema,
             refs=refs,
         )
+        record_state_operation(
+            backend,
+            state_connection,
+            schema=config.schema,
+            operation_id=operation_id,
+            operation_type=None,
+            status=StateOperationStatus.SUCCEEDED,
+            action="finish",
+            virtual_environment_name=None,
+            message=f"promoted {len(selected_model_names)} models",
+        )
         if on_progress is not None:
             on_progress("Inspected virtual state.")
+    except Exception as error:
+        record_state_operation(
+            backend,
+            state_connection,
+            schema=config.schema,
+            operation_id=operation_id,
+            operation_type=None,
+            status=StateOperationStatus.FAILED,
+            action="finish",
+            virtual_environment_name=None,
+            message=str(error),
+        )
+        raise
     finally:
         if lease is not None:
             release_state_lease(
@@ -308,6 +385,7 @@ def run_virtual_promote(
         adapter=adapter,
         connection_config=connection_config,
         virtual_environment_name=to_virtual_environment_name,
+        unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
         physical_relations=physical_relations,
         on_connection_start=on_connection_start,
         on_connection_complete=on_connection_complete,

@@ -15,6 +15,7 @@ from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.spec.models.environments import resolve_environment_config, resolve_environment_name
 from sqlbuild.virtual.executor.helpers.rollback import (
     guard_partial_rollback_scope,
     publish_function_versions,
@@ -77,6 +78,18 @@ def run_virtual_rollback(
         cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
+    active_environment_name: str | None = resolve_environment_name(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+        selected_environment=None,
+    )
+    unsuffixed_virtual_environment_name: str | None = None
+    if active_environment_name is not None:
+        unsuffixed_virtual_environment_name = resolve_environment_config(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+            environment_name=active_environment_name,
+        ).state.unsuffixed_virtual_env
     if on_progress is not None:
         on_progress("Compiled project.")
     models_by_name: dict[str, CompiledModel] = {model.name: model for model in graph.project.models}
@@ -101,6 +114,16 @@ def run_virtual_rollback(
             raise PlannerInputError(
                 f"virtual environment '{virtual_environment_name}' is locked",
                 code="S019",
+            )
+        environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
+            state_connection,
+            schema=config.schema,
+            virtual_environment_name=virtual_environment_name,
+        )
+        if environment is not None and environment.status == VirtualEnvironmentStatus.DETACHED:
+            raise PlannerInputError(
+                f"virtual environment '{virtual_environment_name}' is detached",
+                code="S028",
             )
         current_refs: tuple[VirtualEnvironmentRefRecord, ...] = (
             backend.get_virtual_environment_refs(
@@ -296,6 +319,7 @@ def run_virtual_rollback(
         adapter=adapter,
         connection_config=connection_config,
         virtual_environment_name=virtual_environment_name,
+        unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
         physical_relations=physical_relations,
         on_connection_start=on_connection_start,
         on_connection_complete=on_connection_complete,

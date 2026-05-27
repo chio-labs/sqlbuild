@@ -1566,7 +1566,17 @@ def test_given_state_command_arguments_when_running_with_dependencies_then_it_di
     test_case: MainTestCase,
 ) -> None:
     received_args: list[
-        tuple[Path | None, str, str | None, bool, bool, str | None, str | None, str | None]
+        tuple[
+            Path | None,
+            str,
+            str | None,
+            bool,
+            bool,
+            str | None,
+            str | None,
+            str | None,
+            bool,
+        ]
     ] = []
 
     def run_state(
@@ -1578,6 +1588,7 @@ def test_given_state_command_arguments_when_running_with_dependencies_then_it_di
         checkpoint_command: str | None,
         checkpoint_id: str | None,
         virtual_environment: str | None,
+        allow_copy: bool,
     ) -> int:
         received_args.append(
             (
@@ -1589,6 +1600,7 @@ def test_given_state_command_arguments_when_running_with_dependencies_then_it_di
                 checkpoint_command,
                 checkpoint_id,
                 virtual_environment,
+                allow_copy,
             )
         )
         return test_case.expected_exit_code
@@ -1609,6 +1621,7 @@ def test_given_state_command_arguments_when_running_with_dependencies_then_it_di
             test_case.expected_state_checkpoint_command,
             test_case.expected_state_checkpoint_id,
             test_case.expected_virtual_env,
+            False,
         )
     ]
 

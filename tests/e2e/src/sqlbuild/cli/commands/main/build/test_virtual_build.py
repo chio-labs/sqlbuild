@@ -813,6 +813,21 @@ def test_given_virtual_env_when_promoting_then_it_updates_target_refs_and_views(
         ),
     )
     assert len(checkpoint_rows) == 2
+    operation_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT operation_type, status, virtual_environment_name "
+            "FROM sqlbuild_state.state_operations ORDER BY created_at DESC LIMIT 1"
+        ),
+    )
+    assert operation_rows == [("promote", "succeeded", "dev")]
+    operation_event_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT action, status FROM sqlbuild_state.state_operation_events ORDER BY created_at"
+        ),
+    )
+    assert operation_event_rows[-2:] == [("start", "running"), ("finish", "succeeded")]
     query_sql: str
     expected_rows: tuple[tuple[object, ...], ...]
     for query_sql, expected_rows in test_case.expected_query_results:

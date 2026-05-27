@@ -106,6 +106,29 @@ class DuckDbBackedAdapter(BaseAdapter):
         for stmt in statements:
             self.execute(connection, stmt)
 
+    def move_or_copy_relation(
+        self,
+        connection: Any,
+        *,
+        source: str,
+        target: str,
+        remove_source: bool,
+        allow_copy_fallback: bool,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        if not allow_copy_fallback:
+            raise AdapterUserError("DuckDB relation move/copy requires --allow-copy")
+        statements: tuple[str, ...] = self.render_replace_table_from_relation(
+            target=target,
+            source=source,
+        )
+        if remove_source:
+            statements = (*statements, *self.render_drop(target=source))
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
     def render_drop_view(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
         exists_clause: str = " IF EXISTS" if if_exists else ""
         return (f"DROP VIEW{exists_clause} {target}",)
@@ -1325,6 +1348,9 @@ class DuckDbBackedAdapter(BaseAdapter):
             cursor_end_exclusive=cursor_end_exclusive,
             cursor_type=cursor_type,
         )
+
+    def relation_names_match(self, left: str, right: str) -> bool:
+        return self._relation_names_match_impl(left, right)
 
     def clone(
         self,

@@ -13,7 +13,10 @@ from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
+    ReconcileEventRecord,
     StateLockRecord,
+    StateOperationEventRecord,
+    StateOperationRecord,
     StateSchemaValidationResult,
     VirtualEnvironmentCheckpointFunctionRefRecord,
     VirtualEnvironmentCheckpointRecord,
@@ -23,7 +26,10 @@ from sqlbuild.virtual.state.models import (
 )
 from sqlbuild.virtual.state.types import (
     ModelVersionStatus,
+    ReconcileAction,
     StateMigrationAction,
+    StateOperationStatus,
+    StateOperationType,
     StateSchemaValidationIssueKind,
     VirtualEnvironmentStatus,
 )
@@ -36,6 +42,7 @@ from tests.integration.src.sqlbuild.virtual.state.classes._test_types import (
     DuckDbStateBackendIndexValidationTestCase,
     DuckDbStateBackendLifecycleTestCase,
     DuckDbStateBackendLockTestCase,
+    DuckDbStateBackendOperationEventTestCase,
     DuckDbStateBackendRollbackTestCase,
     DuckDbStateBackendTableCreationTestCase,
     DuckDbStateBackendTransactionRollbackTestCase,
@@ -1099,6 +1106,86 @@ def test_given_duckdb_state_backend_when_replacing_rows_then_preserves_created_a
         )
         assert replaced_physical_created_at == physical_created_at
         assert replaced_virtual_created_at == virtual_created_at
+    finally:
+        backend.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbStateBackendOperationEventTestCase(
+            description="records operation and reconcile events",
+            schema="sqlbuild_state",
+            sqlbuild_version="0.0.test",
+            expected_operation_id="op-1",
+            expected_virtual_environment_name="dev",
+        )
+    ],
+    ids=["records operation and reconcile events"],
+)
+def test_given_duckdb_state_backend_when_recording_operation_events_then_they_round_trip(
+    test_case: DuckDbStateBackendOperationEventTestCase,
+    tmp_path: Path,
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    try:
+        backend.initialize(
+            connection,
+            schema=test_case.schema,
+            sqlbuild_version=test_case.sqlbuild_version,
+        )
+        backend.upsert_state_operation(
+            connection,
+            schema=test_case.schema,
+            record=StateOperationRecord(
+                operation_id=test_case.expected_operation_id,
+                operation_type=StateOperationType.PROMOTE,
+                status=StateOperationStatus.RUNNING,
+                virtual_environment_name=test_case.expected_virtual_environment_name,
+            ),
+        )
+        backend.create_state_operation_event(
+            connection,
+            schema=test_case.schema,
+            record=StateOperationEventRecord(
+                event_id="event-1",
+                operation_id=test_case.expected_operation_id,
+                action="start",
+                status=StateOperationStatus.RUNNING,
+                message="started",
+            ),
+        )
+        backend.create_reconcile_event(
+            connection,
+            schema=test_case.schema,
+            record=ReconcileEventRecord(
+                event_id="event-2",
+                action=ReconcileAction.REPORT,
+                status=StateOperationStatus.SUCCEEDED,
+                message="clean",
+            ),
+        )
+
+        assert backend.get_state_operation(
+            connection,
+            schema=test_case.schema,
+            operation_id=test_case.expected_operation_id,
+        ) == StateOperationRecord(
+            operation_id=test_case.expected_operation_id,
+            operation_type=StateOperationType.PROMOTE,
+            status=StateOperationStatus.RUNNING,
+            virtual_environment_name=test_case.expected_virtual_environment_name,
+        )
+        assert fetch_all(
+            connection,
+            f"SELECT action, status, message FROM {test_case.schema}.state_operation_events "
+            f"WHERE operation_id = '{test_case.expected_operation_id}'",
+        ) == [("start", "running", "started")]
+        assert fetch_all(
+            connection,
+            f"SELECT action, status, message FROM {test_case.schema}.reconcile_events "
+            "WHERE event_id = 'event-2'",
+        ) == [("report", "succeeded", "clean")]
     finally:
         backend.close(connection)
 

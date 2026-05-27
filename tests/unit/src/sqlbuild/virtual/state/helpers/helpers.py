@@ -9,7 +9,10 @@ from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
+    ReconcileEventRecord,
     StateLockRecord,
+    StateOperationEventRecord,
+    StateOperationRecord,
     StateSchemaValidationResult,
     VirtualEnvironmentCheckpointFunctionRefRecord,
     VirtualEnvironmentCheckpointRecord,
@@ -108,6 +111,11 @@ class FakeStateBackend(StateBackend):
     ) -> PhysicalRelationRecord | None:
         return None
 
+    def list_physical_relations_for_model(
+        self, connection: Any, *, schema: str, model_name: str
+    ) -> tuple[PhysicalRelationRecord, ...]:
+        return ()
+
     def upsert_physical_relation_ancestry(
         self, connection: Any, *, schema: str, record: PhysicalRelationAncestryRecord
     ) -> None:
@@ -186,6 +194,26 @@ class FakeStateBackend(StateBackend):
 
     def delete_virtual_environment_checkpoint(
         self, connection: Any, *, schema: str, checkpoint_id: str
+    ) -> None:
+        return None
+
+    def upsert_state_operation(
+        self, connection: Any, *, schema: str, record: StateOperationRecord
+    ) -> None:
+        return None
+
+    def get_state_operation(
+        self, connection: Any, *, schema: str, operation_id: str
+    ) -> StateOperationRecord | None:
+        return None
+
+    def create_state_operation_event(
+        self, connection: Any, *, schema: str, record: StateOperationEventRecord
+    ) -> None:
+        return None
+
+    def create_reconcile_event(
+        self, connection: Any, *, schema: str, record: ReconcileEventRecord
     ) -> None:
         return None
 

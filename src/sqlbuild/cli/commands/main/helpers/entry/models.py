@@ -76,6 +76,9 @@ class CliNamespace:
     full: bool = False
     schema_only: bool = False
     allow_partial_diff: bool = False
+    reconcile_command: str | None = None
+    reconcile_model: str | None = None
+    reconcile_physical_relation: str | None = None
     playground_path: str = "sqlbuild-playground"
     playground_template: str = "waffle_shop"
     scenario_command: str | None = None
@@ -292,6 +295,10 @@ class CliEntrypointHandlers:
         ],
         int,
     ]
+    run_reconcile: Callable[
+        [Path | None, bool, str | None, str | None, str | None, str | None, dict[str, object]],
+        int,
+    ]
     run_promote: Callable[
         [
             Path | None,
@@ -343,7 +350,7 @@ class CliEntrypointHandlers:
     ]
     run_janitor: Callable[[Path | None, bool, bool, int | None], int]
     run_state: Callable[
-        [Path | None, str, str | None, bool, bool, str | None, str | None, str | None], int
+        [Path | None, str, str | None, bool, bool, str | None, str | None, str | None, bool], int
     ]
     run_init: Callable[[Path | None], int]
     run_playground: Callable[[Path | None, str, str], int]

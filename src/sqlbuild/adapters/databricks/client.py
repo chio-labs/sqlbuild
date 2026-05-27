@@ -1259,6 +1259,9 @@ class DatabricksAdapter(BaseAdapter):
             cursor_type=cursor_type,
         )
 
+    def relation_names_match(self, left: str, right: str) -> bool:
+        return self._relation_names_match_impl(left, right)
+
     def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:
         return (f"CREATE OR REPLACE TABLE {target} AS SELECT * FROM {source}",)
 
@@ -1442,6 +1445,29 @@ class DatabricksAdapter(BaseAdapter):
             target=target,
             source=source,
         )
+        statement_recorder.record_many(statements)
+        statement: str
+        for statement in statements:
+            self.execute(connection, statement)
+
+    def move_or_copy_relation(
+        self,
+        connection: Any,
+        *,
+        source: str,
+        target: str,
+        remove_source: bool,
+        allow_copy_fallback: bool,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        if not allow_copy_fallback:
+            raise AdapterUserError("Databricks relation move/copy requires --allow-copy")
+        statements: tuple[str, ...] = self.render_replace_table_from_relation(
+            target=target,
+            source=source,
+        )
+        if remove_source:
+            statements = (*statements, *self.render_drop(target=source))
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:

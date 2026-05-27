@@ -477,6 +477,10 @@ def _load_environments(*, payload: object, file_path: Path) -> dict[str, Environ
                     key="allow_reset",
                     default=False,
                 ),
+                unsuffixed_virtual_env=_optional_str(
+                    payload=state_mapping,
+                    key="unsuffixed_virtual_env",
+                ),
             ),
         )
     return environments
@@ -530,6 +534,10 @@ def _load_local_environments(
                 allow_reset=_optional_nullable_bool(
                     mapping=state_mapping,
                     key="allow_reset",
+                ),
+                unsuffixed_virtual_env=_optional_str(
+                    payload=state_mapping,
+                    key="unsuffixed_virtual_env",
                 ),
             ),
         )

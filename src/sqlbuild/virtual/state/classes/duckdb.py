@@ -13,7 +13,10 @@ from sqlbuild.virtual.state.constants import (
     MODEL_VERSION_TABLE,
     PHYSICAL_RELATION_ANCESTRY_TABLE,
     PHYSICAL_RELATION_TABLE,
+    RECONCILE_EVENT_TABLE,
     STATE_MIGRATION_EVENTS_TABLE,
+    STATE_OPERATION_EVENT_TABLE,
+    STATE_OPERATION_TABLE,
     STATE_TABLE_COLUMNS,
     STATE_TABLE_INDEXES,
     STATE_TABLES,
@@ -37,7 +40,10 @@ from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
+    ReconcileEventRecord,
     StateLockRecord,
+    StateOperationEventRecord,
+    StateOperationRecord,
     StateSchemaValidationResult,
     VirtualEnvironmentCheckpointFunctionRefRecord,
     VirtualEnvironmentCheckpointRecord,
@@ -51,6 +57,8 @@ from sqlbuild.virtual.state.types import (
     StateColumnType,
     StateMigrationAction,
     StateMigrationStatus,
+    StateOperationStatus,
+    StateOperationType,
     VirtualEnvironmentStatus,
 )
 
@@ -414,6 +422,28 @@ class DuckDbStateBackend(StateBackend):
             schema_name=row[3],
             relation_name=row[4],
             relation_type=row[5],
+        )
+
+    def list_physical_relations_for_model(
+        self, connection: Any, *, schema: str, model_name: str
+    ) -> tuple[PhysicalRelationRecord, ...]:
+        rows: list[tuple[Any, ...]] = connection.execute(
+            "SELECT model_name, version_hash, database_name, schema_name, "
+            "relation_name, relation_type "
+            f"FROM {self._qualified_name(schema, PHYSICAL_RELATION_TABLE)} "
+            "WHERE model_name = ? ORDER BY updated_at DESC, version_hash DESC",
+            [model_name],
+        ).fetchall()
+        return tuple(
+            PhysicalRelationRecord(
+                model_name=row[0],
+                version_hash=row[1],
+                database_name=row[2],
+                schema_name=row[3],
+                relation_name=row[4],
+                relation_type=row[5],
+            )
+            for row in rows
         )
 
     def upsert_physical_relation_ancestry(
@@ -792,6 +822,85 @@ class DuckDbStateBackend(StateBackend):
         except BaseException:
             connection.execute("ROLLBACK")
             raise
+
+    def upsert_state_operation(
+        self, connection: Any, *, schema: str, record: StateOperationRecord
+    ) -> None:
+        connection.execute("BEGIN")
+        try:
+            existing_created_at: datetime | None = self._created_at_for_key(
+                connection,
+                schema=schema,
+                table_name=STATE_OPERATION_TABLE,
+                where_sql="operation_id = ?",
+                params=[record.operation_id],
+            )
+            connection.execute(
+                f"DELETE FROM {self._qualified_name(schema, STATE_OPERATION_TABLE)} "
+                "WHERE operation_id = ?",
+                [record.operation_id],
+            )
+            connection.execute(
+                f"INSERT INTO {self._qualified_name(schema, STATE_OPERATION_TABLE)} "
+                "(operation_id, operation_type, status, virtual_environment_name, "
+                "created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)",
+                [
+                    record.operation_id,
+                    record.operation_type.value,
+                    record.status.value,
+                    record.virtual_environment_name,
+                    existing_created_at,
+                ],
+            )
+            connection.execute("COMMIT")
+        except BaseException:
+            connection.execute("ROLLBACK")
+            raise
+
+    def get_state_operation(
+        self, connection: Any, *, schema: str, operation_id: str
+    ) -> StateOperationRecord | None:
+        row: tuple[Any, ...] | None = connection.execute(
+            "SELECT operation_id, operation_type, status, virtual_environment_name "
+            f"FROM {self._qualified_name(schema, STATE_OPERATION_TABLE)} "
+            "WHERE operation_id = ?",
+            [operation_id],
+        ).fetchone()
+        if row is None:
+            return None
+        return StateOperationRecord(
+            operation_id=row[0],
+            operation_type=StateOperationType(row[1]),
+            status=StateOperationStatus(row[2]),
+            virtual_environment_name=row[3],
+        )
+
+    def create_state_operation_event(
+        self, connection: Any, *, schema: str, record: StateOperationEventRecord
+    ) -> None:
+        connection.execute(
+            f"INSERT INTO {self._qualified_name(schema, STATE_OPERATION_EVENT_TABLE)} "
+            "(event_id, operation_id, action, status, message, created_at) "
+            "VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
+            [
+                record.event_id,
+                record.operation_id,
+                record.action,
+                record.status.value,
+                record.message,
+            ],
+        )
+
+    def create_reconcile_event(
+        self, connection: Any, *, schema: str, record: ReconcileEventRecord
+    ) -> None:
+        connection.execute(
+            f"INSERT INTO {self._qualified_name(schema, RECONCILE_EVENT_TABLE)} "
+            "(event_id, action, status, message, created_at) "
+            "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)",
+            [record.event_id, record.action.value, record.status.value, record.message],
+        )
 
     def acquire_lock(
         self,

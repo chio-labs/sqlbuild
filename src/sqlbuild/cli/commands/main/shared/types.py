@@ -17,6 +17,7 @@ class CliCommand(StrEnum):
     SEED = "seed"
     CLONE = "clone"
     DIFF = "diff"
+    RECONCILE = "reconcile"
     PROMOTE = "promote"
     ROLLBACK = "rollback"
     DEBUG = "debug"

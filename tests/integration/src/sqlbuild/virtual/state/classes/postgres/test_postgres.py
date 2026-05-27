@@ -13,14 +13,20 @@ from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
+    ReconcileEventRecord,
     StateLockRecord,
+    StateOperationEventRecord,
+    StateOperationRecord,
     StateSchemaValidationResult,
     VirtualEnvironmentRecord,
     VirtualEnvironmentRefRecord,
 )
 from sqlbuild.virtual.state.types import (
     ModelVersionStatus,
+    ReconcileAction,
     StateMigrationAction,
+    StateOperationStatus,
+    StateOperationType,
     StateSchemaValidationIssueKind,
     VirtualEnvironmentStatus,
 )
@@ -32,6 +38,7 @@ from tests.integration.src.sqlbuild.virtual.state.classes.postgres._test_types i
     PostgresStateBackendIndexValidationTestCase,
     PostgresStateBackendLifecycleTestCase,
     PostgresStateBackendLockTestCase,
+    PostgresStateBackendOperationEventTestCase,
     PostgresStateBackendTableCreationTestCase,
     PostgresStateBackendTransactionRollbackTestCase,
     PostgresStateBackendValidationTestCase,
@@ -907,6 +914,85 @@ def test_given_postgres_state_backend_when_replacing_rows_then_preserves_created
     )
     assert replaced_physical_created_at == physical_created_at
     assert replaced_virtual_created_at == virtual_created_at
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresStateBackendOperationEventTestCase(
+            description="records operation and reconcile events",
+            sqlbuild_version="0.0.test",
+            expected_operation_id="op-1",
+            expected_virtual_environment_name="dev",
+        )
+    ],
+    ids=["records operation and reconcile events"],
+)
+def test_given_postgres_state_backend_when_recording_operation_events_then_they_round_trip(
+    test_case: PostgresStateBackendOperationEventTestCase,
+    postgres_state_backend: PostgresStateBackend,
+    postgres_state_connection: Any,
+    postgres_state_schema: str,
+) -> None:
+    postgres_state_backend.initialize(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        sqlbuild_version=test_case.sqlbuild_version,
+    )
+    postgres_state_backend.upsert_state_operation(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        record=StateOperationRecord(
+            operation_id=test_case.expected_operation_id,
+            operation_type=StateOperationType.PROMOTE,
+            status=StateOperationStatus.RUNNING,
+            virtual_environment_name=test_case.expected_virtual_environment_name,
+        ),
+    )
+    postgres_state_backend.create_state_operation_event(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        record=StateOperationEventRecord(
+            event_id="event-1",
+            operation_id=test_case.expected_operation_id,
+            action="start",
+            status=StateOperationStatus.RUNNING,
+            message="started",
+        ),
+    )
+    postgres_state_backend.create_reconcile_event(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        record=ReconcileEventRecord(
+            event_id="event-2",
+            action=ReconcileAction.REPORT,
+            status=StateOperationStatus.SUCCEEDED,
+            message="clean",
+        ),
+    )
+
+    assert postgres_state_backend.get_state_operation(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        operation_id=test_case.expected_operation_id,
+    ) == StateOperationRecord(
+        operation_id=test_case.expected_operation_id,
+        operation_type=StateOperationType.PROMOTE,
+        status=StateOperationStatus.RUNNING,
+        virtual_environment_name=test_case.expected_virtual_environment_name,
+    )
+    assert fetch_all(
+        postgres_state_connection,
+        "SELECT action, status, message FROM "
+        f"{qualified_name(schema=postgres_state_schema, table='state_operation_events')} "
+        f"WHERE operation_id = '{test_case.expected_operation_id}'",
+    ) == [("start", "running", "started")]
+    assert fetch_all(
+        postgres_state_connection,
+        "SELECT action, status, message FROM "
+        f"{qualified_name(schema=postgres_state_schema, table='reconcile_events')} "
+        "WHERE event_id = 'event-2'",
+    ) == [("report", "succeeded", "clean")]
 
 
 @pytest.mark.parametrize(

@@ -1404,6 +1404,9 @@ class BigQueryAdapter(BaseAdapter):
             cursor_type=cursor_type,
         )
 
+    def relation_names_match(self, left: str, right: str) -> bool:
+        return self._relation_names_match_impl(left, right)
+
     def durable_clone(
         self,
         connection: Any,
@@ -1448,6 +1451,27 @@ class BigQueryAdapter(BaseAdapter):
             job_config=job_config,
             location=connection.location,
         ).result()
+
+    def move_or_copy_relation(
+        self,
+        connection: _BigQueryConnection,
+        *,
+        source: str,
+        target: str,
+        remove_source: bool,
+        allow_copy_fallback: bool,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        if not allow_copy_fallback:
+            raise AdapterUserError("BigQuery relation move/copy requires --allow-copy")
+        self.replace_table_from_relation(
+            connection,
+            source=source,
+            target=target,
+            statement_recorder=statement_recorder,
+        )
+        if remove_source:
+            self.drop(connection, target=source, statement_recorder=statement_recorder)
 
     def relation_exists(
         self,
