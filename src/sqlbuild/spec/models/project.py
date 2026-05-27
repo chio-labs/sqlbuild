@@ -31,6 +31,7 @@ class StateConfig:
     schema: str | None = None
     connection: dict[str, object] = field(default_factory=dict)
     allow_reset: bool = False
+    unsuffixed_virtual_env: str | None = None
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,7 @@ class LocalStateConfig:
     schema: str | None = None
     connection: dict[str, object] = field(default_factory=dict)
     allow_reset: bool | None = None
+    unsuffixed_virtual_env: str | None = None
 
 
 @dataclass(frozen=True)

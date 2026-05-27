@@ -12,6 +12,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     run_sqb,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.state._test_types import (
+    StateAdoptDetachE2ETestCase,
     StateExplicitRollbackE2ETestCase,
     StateLifecycleE2ETestCase,
     StateLifecycleErrorE2ETestCase,
@@ -333,6 +334,466 @@ database = "local-state.duckdb"
         sql="SELECT schema_version FROM sqlbuild_state.state_versions",
     ) == [(test_case.expected_schema_version,)]
     assert not (project_dir / "project-state.duckdb").exists()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StateAdoptDetachE2ETestCase(
+            description="adopt and detach preserve unsuffixed logical names interactively",
+            expected_adopt_fragment="Adopted 1 models into virtual environment dev.",
+            expected_detach_fragment="Detached 1 models from virtual environment dev.",
+            expected_detached_status="detached",
+            expected_operation_rows=(
+                ("adopt:dev", "adopt", "succeeded", "dev"),
+                ("detach:dev", "detach", "succeeded", "dev"),
+            ),
+            expected_operation_event_rows=(
+                ("adopt:dev", "start", "running", "starting adopt"),
+                ("adopt:dev", "finish", "succeeded", "adopted 1 models"),
+                ("detach:dev", "start", "running", "starting detach"),
+                ("detach:dev", "finish", "succeeded", "detached 1 models"),
+            ),
+            expected_detached_error_fragment="detached",
+            expected_query_results_after_adopt=(("SELECT id FROM dev.orders", ((1,),)),),
+            expected_query_results_after_detach=(("SELECT id FROM dev.orders", ((1,),)),),
+        )
+    ],
+    ids=["adopt and detach preserve unsuffixed logical names interactively"],
+)
+def test_given_unsuffixed_virtual_environment_when_adopting_and_detaching_then_names_are_preserved(
+    test_case: StateAdoptDetachE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_state_adopt_detach",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "virtual_state_adopt_detach"\n'
+                'adapter = "duckdb"\n'
+                'environment_mode = "virtual"\n'
+                'default_environment = "dev"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n\n'
+                "[environments.dev]\n"
+                'schema = "dev"\n\n'
+                "[environments.dev.state]\n"
+                'backend = "duckdb"\n'
+                'schema = "sqlbuild_state"\n'
+                'unsuffixed_virtual_env = "dev"\n\n'
+                "[environments.dev.state.connection]\n"
+                'database = "state.duckdb"\n'
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="CREATE SCHEMA dev; CREATE TABLE dev.orders AS SELECT 1 AS id",
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+
+    adopt_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "adopt", "--allow-copy"),
+        project_dir=project_dir,
+        input_text="adopt dev\n",
+    )
+    assert adopt_result.returncode == 0, adopt_result.stdout + adopt_result.stderr
+    assert test_case.expected_adopt_fragment in adopt_result.stdout + adopt_result.stderr
+    for query_sql, expected_rows in test_case.expected_query_results_after_adopt:
+        assert query_duckdb(db_path=project_dir / "warehouse.duckdb", sql=query_sql) == list(
+            expected_rows
+        )
+
+    detach_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "detach", "--allow-copy"),
+        project_dir=project_dir,
+        input_text="detach dev\n",
+    )
+    assert detach_result.returncode == 0, detach_result.stdout + detach_result.stderr
+    assert test_case.expected_detach_fragment in detach_result.stdout + detach_result.stderr
+    for query_sql, expected_rows in test_case.expected_query_results_after_detach:
+        assert query_duckdb(db_path=project_dir / "warehouse.duckdb", sql=query_sql) == list(
+            expected_rows
+        )
+    assert query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT status FROM sqlbuild_state.virtual_environments "
+            "WHERE virtual_environment_name = 'dev'"
+        ),
+    ) == [(test_case.expected_detached_status,)]
+    assert query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT model_name FROM sqlbuild_state.virtual_environment_refs "
+            "WHERE virtual_environment_name = 'dev'"
+        ),
+    ) == [("orders",)]
+    assert query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT operation_id, operation_type, status, virtual_environment_name "
+            "FROM sqlbuild_state.state_operations ORDER BY operation_id"
+        ),
+    ) == list(test_case.expected_operation_rows)
+    assert query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT operation_id, action, status, message "
+            "FROM sqlbuild_state.state_operation_events ORDER BY operation_id, created_at"
+        ),
+    ) == list(test_case.expected_operation_event_rows)
+
+    build_after_detach: subprocess.CompletedProcess[str] = run_sqb(
+        command=("build",),
+        project_dir=project_dir,
+    )
+    assert build_after_detach.returncode == 1, build_after_detach.stdout + build_after_detach.stderr
+    assert test_case.expected_detached_error_fragment in (
+        build_after_detach.stdout + build_after_detach.stderr
+    )
+
+    promote_after_detach: subprocess.CompletedProcess[str] = run_sqb(
+        command=("promote", "--from", "dev", "--to", "prod"),
+        project_dir=project_dir,
+    )
+    assert promote_after_detach.returncode == 1, (
+        promote_after_detach.stdout + promote_after_detach.stderr
+    )
+    assert test_case.expected_detached_error_fragment in (
+        promote_after_detach.stdout + promote_after_detach.stderr
+    )
+
+    rollback_after_detach: subprocess.CompletedProcess[str] = run_sqb(
+        command=("rollback",),
+        project_dir=project_dir,
+    )
+    assert rollback_after_detach.returncode == 1, (
+        rollback_after_detach.stdout + rollback_after_detach.stderr
+    )
+    assert test_case.expected_detached_error_fragment in (
+        rollback_after_detach.stdout + rollback_after_detach.stderr
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StateModeGuardE2ETestCase(
+            description="adopt blocks without unsuffixed virtual env",
+            project_toml="",
+            expected_exit_code=1,
+            expected_error_fragment="unsuffixed_virtual_env",
+        )
+    ],
+    ids=["adopt blocks without unsuffixed virtual env"],
+)
+def test_given_missing_unsuffixed_virtual_env_when_adopting_then_it_blocks_with_config_error(
+    tmp_path: Path,
+    test_case: StateModeGuardE2ETestCase,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_state_adopt_missing_unsuffixed",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "virtual_state_adopt_missing_unsuffixed"\n'
+                'adapter = "duckdb"\n'
+                'environment_mode = "virtual"\n'
+                'default_environment = "dev"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n\n'
+                "[environments.dev]\n"
+                'schema = "dev"\n\n'
+                "[environments.dev.state]\n"
+                'backend = "duckdb"\n'
+                'schema = "sqlbuild_state"\n\n'
+                "[environments.dev.state.connection]\n"
+                'database = "state.duckdb"\n'
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="CREATE SCHEMA dev; CREATE TABLE dev.orders AS SELECT 1 AS id",
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "adopt"),
+        project_dir=project_dir,
+        input_text="adopt dev\n",
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    assert test_case.expected_error_fragment in (result.stdout + result.stderr)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StateModeGuardE2ETestCase(
+            description="adopt blocks copy fallback without explicit permission",
+            project_toml="",
+            expected_exit_code=1,
+            expected_error_fragment="requires --allow-copy",
+        )
+    ],
+    ids=["adopt blocks copy fallback without explicit permission"],
+)
+def test_given_copy_fallback_required_when_adopting_without_allow_copy_then_it_blocks(
+    tmp_path: Path,
+    test_case: StateModeGuardE2ETestCase,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_state_adopt_allow_copy_required",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "virtual_state_adopt_allow_copy_required"\n'
+                'adapter = "duckdb"\n'
+                'environment_mode = "virtual"\n'
+                'default_environment = "dev"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n\n'
+                "[environments.dev]\n"
+                'schema = "dev"\n\n'
+                "[environments.dev.state]\n"
+                'backend = "duckdb"\n'
+                'schema = "sqlbuild_state"\n'
+                'unsuffixed_virtual_env = "dev"\n\n'
+                "[environments.dev.state.connection]\n"
+                'database = "state.duckdb"\n'
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="CREATE SCHEMA dev; CREATE TABLE dev.orders AS SELECT 1 AS id",
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "adopt"),
+        project_dir=project_dir,
+        input_text="adopt dev\n",
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    assert test_case.expected_error_fragment in (result.stdout + result.stderr)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StateModeGuardE2ETestCase(
+            description="interrupted detach records failed operation",
+            project_toml="",
+            expected_exit_code=1,
+            expected_error_fragment="simulated detach copy failure",
+        )
+    ],
+    ids=["interrupted detach records failed operation"],
+)
+def test_given_detach_copy_failure_when_detaching_then_operation_is_marked_failed(
+    tmp_path: Path,
+    test_case: StateModeGuardE2ETestCase,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_state_detach_failed_operation",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "virtual_state_detach_failed_operation"\n'
+                'adapter = "duckdb"\n'
+                'environment_mode = "virtual"\n'
+                'default_environment = "dev"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n\n'
+                "[environments.dev]\n"
+                'schema = "dev"\n\n'
+                "[environments.dev.state]\n"
+                'backend = "duckdb"\n'
+                'schema = "sqlbuild_state"\n'
+                'unsuffixed_virtual_env = "dev"\n\n'
+                "[environments.dev.state.connection]\n"
+                'database = "state.duckdb"\n'
+            ),
+            "adapters/failing_duckdb.py": (
+                "from typing import Any\n"
+                "from sqlbuild.adapter.shared.models import StatementRecorder\n"
+                "from sqlbuild.adapter.shared.exceptions import AdapterUserError\n"
+                "from sqlbuild.adapters.duckdb.client import DuckDbAdapter\n\n"
+                "class FailingDuckDbAdapter(DuckDbAdapter):\n"
+                "    adapter_name = 'failing_duckdb'\n\n"
+                "    def move_or_copy_relation(\n"
+                "        self,\n"
+                "        connection: Any,\n"
+                "        *,\n"
+                "        source: str,\n"
+                "        target: str,\n"
+                "        remove_source: bool,\n"
+                "        allow_copy_fallback: bool,\n"
+                "        statement_recorder: StatementRecorder,\n"
+                "    ) -> None:\n"
+                "        raise AdapterUserError('simulated detach copy failure')\n"
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="CREATE SCHEMA dev; CREATE TABLE dev.orders AS SELECT 1 AS id",
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    assert (
+        run_sqb(
+            command=("state", "adopt", "--allow-copy"),
+            project_dir=project_dir,
+            input_text="adopt dev\n",
+        ).returncode
+        == 0
+    )
+    (project_dir / "sqlbuild_local.toml").write_text('adapter = "failing_duckdb"\n')
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "detach", "--allow-copy"),
+        project_dir=project_dir,
+        input_text="detach dev\n",
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    assert test_case.expected_error_fragment in (result.stdout + result.stderr)
+    assert query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT status FROM sqlbuild_state.state_operations WHERE operation_id = 'detach:dev'"
+        ),
+    ) == [("failed",)]
+    assert query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT action, status, message FROM sqlbuild_state.state_operation_events "
+            "WHERE operation_id = 'detach:dev' ORDER BY created_at"
+        ),
+    ) == [
+        ("start", "running", "starting detach"),
+        ("fail", "failed", test_case.expected_error_fragment),
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StateModeGuardE2ETestCase(
+            description="adopt cancels on wrong confirmation",
+            project_toml="",
+            expected_exit_code=1,
+            expected_error_fragment="cancelled",
+        )
+    ],
+    ids=["adopt cancels on wrong confirmation"],
+)
+def test_given_wrong_confirmation_when_adopting_then_it_cancels(
+    tmp_path: Path,
+    test_case: StateModeGuardE2ETestCase,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_state_adopt_cancelled",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "virtual_state_adopt_cancelled"\n'
+                'adapter = "duckdb"\n'
+                'environment_mode = "virtual"\n'
+                'default_environment = "dev"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n\n'
+                "[environments.dev]\n"
+                'schema = "dev"\n\n'
+                "[environments.dev.state]\n"
+                'backend = "duckdb"\n'
+                'schema = "sqlbuild_state"\n'
+                'unsuffixed_virtual_env = "dev"\n\n'
+                "[environments.dev.state.connection]\n"
+                'database = "state.duckdb"\n'
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "adopt"),
+        project_dir=project_dir,
+        input_text="nope\n",
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    assert test_case.expected_error_fragment in (result.stdout + result.stderr)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StateModeGuardE2ETestCase(
+            description="detach blocks non-finalized virtual environment",
+            project_toml="",
+            expected_exit_code=1,
+            expected_error_fragment="requires a finalized virtual environment",
+        )
+    ],
+    ids=["detach blocks non-finalized virtual environment"],
+)
+def test_given_non_finalized_virtual_environment_when_detaching_then_it_blocks(
+    tmp_path: Path,
+    test_case: StateModeGuardE2ETestCase,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_state_detach_not_finalized",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "virtual_state_detach_not_finalized"\n'
+                'adapter = "duckdb"\n'
+                'environment_mode = "virtual"\n'
+                'default_environment = "dev"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n\n'
+                "[environments.dev]\n"
+                'schema = "dev"\n\n'
+                "[environments.dev.state]\n"
+                'backend = "duckdb"\n'
+                'schema = "sqlbuild_state"\n'
+                'unsuffixed_virtual_env = "dev"\n\n'
+                "[environments.dev.state.connection]\n"
+                'database = "state.duckdb"\n'
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    execute_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "INSERT INTO sqlbuild_state.virtual_environments "
+            "(virtual_environment_name, status, created_at, updated_at) "
+            "VALUES ('dev', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+        ),
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "detach"),
+        project_dir=project_dir,
+        input_text="detach dev\n",
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    assert test_case.expected_error_fragment in (result.stdout + result.stderr)
 
 
 @pytest.mark.parametrize(

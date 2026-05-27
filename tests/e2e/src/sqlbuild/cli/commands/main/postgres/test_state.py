@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.postgres._test_types import (
+    PostgresStateAdoptDetachE2ETestCase,
     PostgresStateConnectionErrorE2ETestCase,
     PostgresStateExplicitRollbackE2ETestCase,
     PostgresStateLifecycleE2ETestCase,
@@ -18,6 +19,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.postgres.helpers import (
     cleanup_postgres_state_schemas,
     execute_postgres_sql,
     fetch_postgres_rows,
+    quote_identifier,
     quoted_relation_name,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
@@ -153,6 +155,121 @@ def test_given_postgres_state_config_when_running_state_lifecycle_then_state_sto
         ) == ((0,),)
     finally:
         cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresStateAdoptDetachE2ETestCase(
+            description="postgres adopt and detach preserve logical table name",
+            expected_exit_code=0,
+            expected_rows_after_adopt=((1,),),
+            expected_rows_after_detach=((1,),),
+            expected_detached_status="detached",
+        )
+    ],
+    ids=["postgres adopt and detach preserve logical table name"],
+)
+def test_given_postgres_virtual_state_when_adopting_and_detaching_then_state_is_detached(
+    test_case: PostgresStateAdoptDetachE2ETestCase,
+    tmp_path: Path,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    state_schema: str = build_unique_schema_name(prefix="sqb_state_e2e")
+    warehouse_schema: str = build_unique_schema_name(prefix="sqb_virtual_e2e")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_state_adopt_detach",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "postgres_state_adopt_detach"\n'
+                'adapter = "postgres"\n'
+                'environment_mode = "virtual"\n'
+                'default_environment = "dev"\n\n'
+                "[connection]\n"
+                f'host = "{postgres_e2e_config["host"]}"\n'
+                f"port = {postgres_e2e_config['port']}\n"
+                f'dbname = "{postgres_e2e_config["dbname"]}"\n'
+                f'user = "{postgres_e2e_config["user"]}"\n'
+                f'password = "{postgres_e2e_config["password"]}"\n\n'
+                "[environments.dev]\n"
+                f'schema = "{warehouse_schema}"\n\n'
+                "[environments.dev.state]\n"
+                'backend = "postgres"\n'
+                f'schema = "{state_schema}"\n'
+                'unsuffixed_virtual_env = "dev"\n\n'
+                "[environments.dev.state.connection]\n"
+                f'host = "{postgres_e2e_config["host"]}"\n'
+                f"port = {postgres_e2e_config['port']}\n"
+                f'dbname = "{postgres_e2e_config["dbname"]}"\n'
+                f'user = "{postgres_e2e_config["user"]}"\n'
+                f'password = "{postgres_e2e_config["password"]}"\n'
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+
+    try:
+        execute_postgres_sql(
+            sql=(
+                f"CREATE SCHEMA {quote_identifier(warehouse_schema)}; "
+                f"CREATE TABLE {quoted_relation_name(schema_name=warehouse_schema, name='orders')} "
+                "AS SELECT 1 AS id"
+            ),
+            config=postgres_e2e_config,
+        )
+        assert (
+            run_sqb(command=("--no-color", "state", "init"), project_dir=project_dir).returncode
+            == test_case.expected_exit_code
+        )
+        adopt_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "state", "adopt", "--allow-copy"),
+            project_dir=project_dir,
+            input_text="adopt dev\n",
+        )
+        assert adopt_result.returncode == test_case.expected_exit_code, (
+            adopt_result.stdout + adopt_result.stderr
+        )
+        assert (
+            fetch_postgres_rows(
+                sql=(
+                    "SELECT id FROM "
+                    f"{quoted_relation_name(schema_name=warehouse_schema, name='orders')}"
+                ),
+                config=postgres_e2e_config,
+            )
+            == test_case.expected_rows_after_adopt
+        )
+
+        detach_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "state", "detach", "--allow-copy"),
+            project_dir=project_dir,
+            input_text="detach dev\n",
+        )
+        assert detach_result.returncode == test_case.expected_exit_code, (
+            detach_result.stdout + detach_result.stderr
+        )
+        assert (
+            fetch_postgres_rows(
+                sql=(
+                    "SELECT id FROM "
+                    f"{quoted_relation_name(schema_name=warehouse_schema, name='orders')}"
+                ),
+                config=postgres_e2e_config,
+            )
+            == test_case.expected_rows_after_detach
+        )
+        assert fetch_postgres_rows(
+            sql=(
+                "SELECT status FROM "
+                f"{quoted_relation_name(schema_name=state_schema, name='virtual_environments')} "
+                "WHERE virtual_environment_name = 'dev'"
+            ),
+            config=postgres_e2e_config,
+        ) == ((test_case.expected_detached_status,),)
+    finally:
+        cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(schema_name=warehouse_schema, config=postgres_e2e_config)
 
 
 @pytest.mark.parametrize(

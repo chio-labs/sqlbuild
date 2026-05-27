@@ -112,4 +112,9 @@ def _merge_state_config(
             if local_state.allow_reset is not None
             else project_state.allow_reset
         ),
+        unsuffixed_virtual_env=(
+            local_state.unsuffixed_virtual_env
+            if local_state.unsuffixed_virtual_env is not None
+            else project_state.unsuffixed_virtual_env
+        ),
     )

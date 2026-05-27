@@ -15,6 +15,8 @@ class StateCommand(StrEnum):
     MIGRATE = "migrate"
     ROLLBACK = "rollback"
     RESET = "reset"
+    ADOPT = "adopt"
+    DETACH = "detach"
 
 
 class StateMigrationAction(StrEnum):
@@ -54,6 +56,7 @@ class VirtualEnvironmentStatus(StrEnum):
     ACTIVE = "active"
     FINALIZING = "finalizing"
     FINALIZED = "finalized"
+    DETACHED = "detached"
     FAILED = "failed"
 
 
@@ -61,3 +64,15 @@ class StateOperationStatus(StrEnum):
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+
+
+class StateOperationType(StrEnum):
+    PROMOTE = "promote"
+    ADOPT = "adopt"
+    DETACH = "detach"
+
+
+class ReconcileAction(StrEnum):
+    REPORT = "report"
+    REPAIR_VIEW = "repair_view"
+    ATTACH = "attach"

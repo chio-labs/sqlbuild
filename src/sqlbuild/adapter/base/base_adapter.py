@@ -432,6 +432,9 @@ class BaseAdapter(StrictAdapter):
         end_literal: str = self.render_cursor_bound_literal(cursor_end_exclusive, cursor_type)
         return f"SELECT * FROM {source} WHERE {quoted_cursor} < {end_literal}"
 
+    def _relation_names_match_impl(self, left: str, right: str) -> bool:
+        return left.replace('"', "") == right.replace('"', "")
+
     def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:
         return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
 
@@ -1069,6 +1072,32 @@ class BaseAdapter(StrictAdapter):
             target=target,
             source=source,
         )
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def move_or_copy_relation(
+        self,
+        connection: Any,
+        *,
+        source: str,
+        target: str,
+        remove_source: bool,
+        allow_copy_fallback: bool,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        if not allow_copy_fallback:
+            raise AdapterUserError(
+                f"Adapter '{type(self).__name__}' requires explicit copy fallback permission "
+                "to move or copy relations"
+            )
+        statements: tuple[str, ...] = self.render_replace_table_from_relation(
+            target=target,
+            source=source,
+        )
+        if remove_source:
+            statements = (*statements, *self.render_drop(target=source))
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:

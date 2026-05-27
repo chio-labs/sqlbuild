@@ -49,12 +49,17 @@ def build_virtual_target(
     adapter: BaseAdapter,
     target: CompiledRelationTarget,
     virtual_environment_name: str,
+    unsuffixed_virtual_environment_name: str | None = None,
 ) -> CompiledRelationTarget:
     """Build the logical VDE view target for a model."""
 
-    virtual_schema: str | None = (
-        f"{target.schema}__{virtual_environment_name}" if target.schema is not None else None
-    )
+    virtual_schema: str | None
+    if target.schema is None:
+        virtual_schema = None
+    elif unsuffixed_virtual_environment_name == virtual_environment_name:
+        virtual_schema = target.schema
+    else:
+        virtual_schema = f"{target.schema}__{virtual_environment_name}"
     return CompiledRelationTarget(
         database=target.database,
         schema=virtual_schema,
@@ -112,6 +117,7 @@ def rewrite_project_function_targets(
     project: CompiledProject,
     adapter: BaseAdapter,
     virtual_environment_name: str,
+    unsuffixed_virtual_environment_name: str | None = None,
 ) -> CompiledProject:
     """Return a compiled project with functions published into the VDE schema."""
 
@@ -122,11 +128,13 @@ def rewrite_project_function_targets(
                 adapter=adapter,
                 target=function.target,
                 virtual_environment_name=virtual_environment_name,
+                unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
             ),
             fingerprint_target=build_virtual_target(
                 adapter=adapter,
                 target=function.fingerprint_target,
                 virtual_environment_name=virtual_environment_name,
+                unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
             ),
         )
         for function in project.functions

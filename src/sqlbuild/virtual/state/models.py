@@ -7,7 +7,10 @@ from datetime import datetime
 
 from sqlbuild.virtual.state.types import (
     ModelVersionStatus,
+    ReconcileAction,
     StateBackendName,
+    StateOperationStatus,
+    StateOperationType,
     StateSchemaValidationIssueKind,
     VirtualEnvironmentStatus,
 )
@@ -178,3 +181,34 @@ class StateLockLease:
     lock_key: str
     owner_id: str
     expires_at: datetime
+
+
+@dataclass(frozen=True)
+class StateOperationRecord:
+    """Current state row for one tracked multi-step virtual operation."""
+
+    operation_id: str
+    operation_type: StateOperationType
+    status: StateOperationStatus
+    virtual_environment_name: str | None = None
+
+
+@dataclass(frozen=True)
+class StateOperationEventRecord:
+    """Append-only event row for one tracked operation."""
+
+    event_id: str
+    operation_id: str
+    action: str
+    status: StateOperationStatus
+    message: str | None = None
+
+
+@dataclass(frozen=True)
+class ReconcileEventRecord:
+    """Append-only event row for virtual reconcile actions."""
+
+    event_id: str
+    action: ReconcileAction
+    status: StateOperationStatus
+    message: str | None = None

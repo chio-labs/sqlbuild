@@ -121,6 +121,15 @@ class PostgresStateLifecycleE2ETestCase:
 
 
 @dataclass(frozen=True)
+class PostgresStateAdoptDetachE2ETestCase:
+    description: str
+    expected_exit_code: int
+    expected_rows_after_adopt: tuple[tuple[object, ...], ...]
+    expected_rows_after_detach: tuple[tuple[object, ...], ...]
+    expected_detached_status: str
+
+
+@dataclass(frozen=True)
 class PostgresStateLifecycleErrorE2ETestCase:
     description: str
     allow_reset: bool
