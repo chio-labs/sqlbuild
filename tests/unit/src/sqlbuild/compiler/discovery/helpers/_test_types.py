@@ -29,6 +29,7 @@ class LoadProjectConfigTestCase:
     expected_environments: dict[str, dict[str, object]]
     expected_janitor_enabled: bool
     expected_retention_days: int
+    expected_janitor_max_checkpoints: int
     expected_janitor_delete_tracked_only: bool
     expected_janitor_exclude_patterns: tuple[str, ...]
     expected_current_state_full_refresh: str = "deny"

@@ -519,6 +519,27 @@ class DuckDbStateBackend(StateBackend):
             for row in rows
         )
 
+    def delete_virtual_environment_checkpoint(
+        self, connection: Any, *, schema: str, checkpoint_id: str
+    ) -> None:
+        connection.execute("BEGIN")
+        try:
+            connection.execute(
+                "DELETE FROM "
+                f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_REF_TABLE)} "
+                "WHERE checkpoint_id = ?",
+                [checkpoint_id],
+            )
+            connection.execute(
+                f"DELETE FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE)} "
+                "WHERE checkpoint_id = ?",
+                [checkpoint_id],
+            )
+            connection.execute("COMMIT")
+        except BaseException:
+            connection.execute("ROLLBACK")
+            raise
+
     def acquire_lock(
         self,
         connection: Any,

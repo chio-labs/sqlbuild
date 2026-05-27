@@ -144,6 +144,13 @@ class StateBackend(ABC):
         ...
 
     @abstractmethod
+    def delete_virtual_environment_checkpoint(
+        self, connection: Any, *, schema: str, checkpoint_id: str
+    ) -> None:
+        """Delete one virtual environment checkpoint and its refs."""
+        ...
+
+    @abstractmethod
     def acquire_lock(
         self,
         connection: Any,

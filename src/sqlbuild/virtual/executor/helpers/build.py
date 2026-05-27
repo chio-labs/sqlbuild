@@ -53,6 +53,8 @@ from sqlbuild.virtual.state.models import (
 )
 from sqlbuild.virtual.state.types import ModelVersionStatus, VirtualEnvironmentStatus
 
+_FUNCTION_STATE_VERSION_HASH: str = "current"
+
 
 def run_virtual_build(
     *,
@@ -421,6 +423,23 @@ def _persist_successful_virtual_build(
                             ),
                         ),
                     )
+        function_entry: Any
+        for function_entry in plan_output.function_entries:
+            function_sql: str = function_entry.fingerprint_query_sql
+            backend.upsert_model_version(
+                state_connection,
+                schema=config.schema,
+                record=ModelVersionRecord(
+                    model_name=_function_state_name(function_entry.name),
+                    version_hash=_FUNCTION_STATE_VERSION_HASH,
+                    data_hash=hashlib.sha256(function_sql.encode("utf-8")).hexdigest(),
+                    metadata_hash=hashlib.sha256(b"{}").hexdigest(),
+                    status=ModelVersionStatus.READY,
+                    fingerprint_query_sql_b64=encode_state_text(function_sql),
+                    fingerprint_metadata_json_b64=encode_state_text("{}"),
+                    compiled_sql_b64=encode_state_text(function_entry.body_sql),
+                ),
+            )
         backend.upsert_virtual_environment(
             state_connection,
             schema=config.schema,
@@ -512,3 +531,7 @@ def _create_logical_vde_views(
             )
     finally:
         adapter.close(connection)
+
+
+def _function_state_name(function_name: str) -> str:
+    return f"__function__:{function_name}"

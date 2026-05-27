@@ -22,6 +22,7 @@ from sqlbuild.executor.janitor.helpers.plan import (
 )
 from sqlbuild.executor.janitor.helpers.tracking import collect_tracked_relation_keys
 from sqlbuild.executor.janitor.models import (
+    JanitorCheckpointCandidate,
     JanitorDeleteCandidate,
     JanitorPlan,
     JanitorRelationKey,
@@ -40,6 +41,7 @@ def build_janitor_plan(
     delete_tracked_only: bool = True,
     exclude_patterns: tuple[str, ...] = (),
     protected_relation_keys: frozenset[JanitorRelationKey] = frozenset(),
+    checkpoint_candidates: tuple[JanitorCheckpointCandidate, ...] = (),
 ) -> JanitorPlan:
     """Build a desired-vs-warehouse cleanup plan for target schemas."""
 
@@ -49,6 +51,7 @@ def build_janitor_plan(
         return JanitorPlan(
             environment_name=project.effective_environment_name,
             retention_days=retention_days,
+            checkpoint_candidates=checkpoint_candidates,
             age_metadata_supported=adapter.supports_relation_age_metadata(),
         )
 
@@ -179,6 +182,7 @@ def build_janitor_plan(
         environment_name=project.effective_environment_name,
         retention_days=retention_days,
         candidates=tuple(candidates),
+        checkpoint_candidates=checkpoint_candidates,
         skipped_relations=tuple(skipped_relations),
         skipped_schemas=tuple(skipped_schemas),
         scanned_schema_count=len(target_schemas),

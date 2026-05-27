@@ -453,6 +453,17 @@ enabled = true
         expected_error_fragment="janitor.delete_tracked_only requires",
     ),
     LoadProjectConfigErrorTestCase(
+        description="raises when janitor max checkpoints is less than one",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[janitor]
+max_checkpoints = 0
+""".strip(),
+        expected_error_fragment="janitor.max_checkpoints must be >= 1",
+    ),
+    LoadProjectConfigErrorTestCase(
         description="raises when project settings contain unknown key",
         project_file_contents="""
 name = "demo"
@@ -568,6 +579,7 @@ default_environment = "dev"
         expected_environments={},
         expected_janitor_enabled=False,
         expected_retention_days=30,
+        expected_janitor_max_checkpoints=20,
         expected_janitor_delete_tracked_only=True,
         expected_janitor_exclude_patterns=(),
     ),
@@ -623,6 +635,7 @@ allow_as_target = true
 [janitor]
 enabled = true
 retention_days = 14
+max_checkpoints = 3
 delete_tracked_only = false
 exclude_patterns = ["partition_*"]
 
@@ -685,6 +698,7 @@ target_path = "target/dbt"
         },
         expected_janitor_enabled=True,
         expected_retention_days=14,
+        expected_janitor_max_checkpoints=3,
         expected_janitor_delete_tracked_only=False,
         expected_janitor_exclude_patterns=("partition_*",),
         expected_current_state_full_refresh="require_confirmation",
@@ -754,6 +768,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     } == test_case.expected_environments
     assert config.janitor.enabled is test_case.expected_janitor_enabled
     assert config.janitor.retention_days == test_case.expected_retention_days
+    assert config.janitor.max_checkpoints == test_case.expected_janitor_max_checkpoints
     assert config.janitor.delete_tracked_only is test_case.expected_janitor_delete_tracked_only
     assert config.janitor.exclude_patterns == test_case.expected_janitor_exclude_patterns
     assert (

@@ -10,6 +10,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.janitor._test_types import (
     JanitorCheckpointProtectionE2ETestCase,
+    JanitorCheckpointRetentionE2ETestCase,
     JanitorCleanupE2ETestCase,
     JanitorDisabledE2ETestCase,
     JanitorInvalidConfigE2ETestCase,
@@ -273,6 +274,120 @@ def test_given_virtual_checkpoint_refs_when_running_janitor_then_it_preserves_ph
         db_path=warehouse_db_path,
         schema="dev__sqb_physical",
         table_name=protected_relation_name,
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorCheckpointRetentionE2ETestCase(
+            description="virtual janitor prunes old checkpoints and newly unprotected physicals",
+            janitor_command=("janitor", "--auto-approve"),
+            expected_exit_code=0,
+            expected_checkpoint_count_before=3,
+            expected_checkpoint_count_after=1,
+            expected_stdout_fragments=(
+                "checkpoints pruned",
+                "Eligible checkpoints",
+                "Deleted ",
+                "2 checkpoints.",
+            ),
+        )
+    ],
+    ids=["virtual janitor prunes old checkpoints and newly unprotected physicals"],
+)
+def test_given_virtual_checkpoints_over_limit_when_running_janitor_then_it_prunes_old_history(
+    test_case: JanitorCheckpointRetentionE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    repo_files: dict[str, str] = build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id")
+    repo_files["sqlbuild_project.toml"] += dedent(
+        """
+
+        [janitor]
+        enabled = true
+        retention_days = 0
+        max_checkpoints = 1
+        delete_tracked_only = false
+        """
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_janitor_checkpoint_retention",
+        repo_files=repo_files,
+    )
+    state_db_path: Path = project_dir / "state.duckdb"
+    warehouse_db_path: Path = project_dir / "warehouse.duckdb"
+
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+    first_relation_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=state_db_path,
+        sql=(
+            "SELECT physical_relations.relation_name "
+            "FROM sqlbuild_state.virtual_environment_refs AS refs "
+            "JOIN sqlbuild_state.physical_relations AS physical_relations "
+            "ON physical_relations.model_name = refs.model_name "
+            "AND physical_relations.version_hash = refs.version_hash "
+            "WHERE refs.virtual_environment_name = 'dev' "
+            "AND refs.model_name = 'stg_orders'"
+        ),
+    )
+    first_relation_name: str = str(first_relation_rows[0][0])
+
+    (project_dir / "models" / "stg_orders.sql").write_text(
+        "MODEL ();\n\nSELECT 2 AS id\n",
+        encoding="utf-8",
+    )
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+    (project_dir / "models" / "stg_orders.sql").write_text(
+        "MODEL ();\n\nSELECT 3 AS id\n",
+        encoding="utf-8",
+    )
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+    latest_relation_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=state_db_path,
+        sql=(
+            "SELECT physical_relations.relation_name "
+            "FROM sqlbuild_state.virtual_environment_refs AS refs "
+            "JOIN sqlbuild_state.physical_relations AS physical_relations "
+            "ON physical_relations.model_name = refs.model_name "
+            "AND physical_relations.version_hash = refs.version_hash "
+            "WHERE refs.virtual_environment_name = 'dev' "
+            "AND refs.model_name = 'stg_orders'"
+        ),
+    )
+    latest_relation_name: str = str(latest_relation_rows[0][0])
+    checkpoint_rows_before: list[tuple[object, ...]] = query_duckdb(
+        db_path=state_db_path,
+        sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_checkpoints",
+    )
+
+    janitor_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.janitor_command,
+        project_dir=project_dir,
+    )
+
+    assert int(checkpoint_rows_before[0][0]) == test_case.expected_checkpoint_count_before
+    assert janitor_result.returncode == test_case.expected_exit_code, (
+        janitor_result.stdout + janitor_result.stderr
+    )
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in janitor_result.stdout
+    checkpoint_rows_after: list[tuple[object, ...]] = query_duckdb(
+        db_path=state_db_path,
+        sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_checkpoints",
+    )
+    assert int(checkpoint_rows_after[0][0]) == test_case.expected_checkpoint_count_after
+    assert not table_exists(
+        db_path=warehouse_db_path,
+        schema="dev__sqb_physical",
+        table_name=first_relation_name,
+    )
+    assert table_exists(
+        db_path=warehouse_db_path,
+        schema="dev__sqb_physical",
+        table_name=latest_relation_name,
     )
 
 

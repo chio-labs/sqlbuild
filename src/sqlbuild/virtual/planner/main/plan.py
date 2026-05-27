@@ -40,6 +40,7 @@ from sqlbuild.virtual.planner.helpers.planning import (
 from sqlbuild.virtual.planner.helpers.state_metadata import (
     decode_model_version_metadata_jsons,
     decode_model_version_query_sqls,
+    read_previous_function_query_sqls,
 )
 from sqlbuild.virtual.planner.helpers.targets import build_target_from_physical_relation
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
@@ -111,6 +112,7 @@ def run_virtual_plan_pipeline(
             deferred_relations,
             previous_query_sqls,
             previous_metadata_jsons,
+            previous_function_query_sqls,
         ) = _read_bound_state(
             discovered_inputs=discovered_inputs,
             project_dir=project_dir,
@@ -201,6 +203,7 @@ def run_virtual_plan_pipeline(
             previous_query_sqls=previous_query_sqls,
             current_metadata_jsons=expected_metadata_jsons,
             previous_metadata_jsons=previous_metadata_jsons,
+            previous_function_query_sqls=previous_function_query_sqls,
         )
         plan_output = with_virtual_metadata(
             plan_output=plan_output,
@@ -236,6 +239,7 @@ def _read_bound_state(
     dict[str, RelationInfo],
     dict[str, str],
     dict[str, str],
+    dict[str, str],
 ]:
     config, backend = build_state_runtime(
         discovered_inputs=discovered_inputs,
@@ -253,7 +257,7 @@ def _read_bound_state(
             virtual_environment_name=virtual_environment_name,
         )
         if environment_name is None:
-            return {}, {}, {}, {}, {}, {}
+            return {}, {}, {}, {}, {}, {}, {}
         refs: tuple[object, ...] = backend.get_virtual_environment_refs(
             state_connection,
             schema=config.schema,
@@ -272,6 +276,12 @@ def _read_bound_state(
         previous_query_sqls: dict[str, str] = decode_model_version_query_sqls(model_versions)
         previous_metadata_jsons: dict[str, str] = decode_model_version_metadata_jsons(
             model_versions
+        )
+        previous_function_query_sqls: dict[str, str] = read_previous_function_query_sqls(
+            backend=backend,
+            state_connection=state_connection,
+            schema=config.schema,
+            graph=graph,
         )
         model_targets: dict[str, CompiledRelationTarget] = {
             model.name: model.target for model in graph.project.models
@@ -311,6 +321,7 @@ def _read_bound_state(
             deferred_relations,
             previous_query_sqls,
             previous_metadata_jsons,
+            previous_function_query_sqls,
         )
     finally:
         backend.close(state_connection)

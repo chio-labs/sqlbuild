@@ -9,6 +9,8 @@ from sqlbuild.virtual.state.models import (
     PhysicalRelationRecord,
     StateLockRecord,
     StateSchemaValidationResult,
+    VirtualEnvironmentCheckpointRecord,
+    VirtualEnvironmentCheckpointRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentRefRecord,
 )
@@ -116,6 +118,31 @@ class FakeStateBackend(StateBackend):
         self, connection: Any, *, schema: str, virtual_environment_name: str
     ) -> tuple[VirtualEnvironmentRefRecord, ...]:
         return ()
+
+    def create_virtual_environment_checkpoint(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        checkpoint: VirtualEnvironmentCheckpointRecord,
+        refs: tuple[VirtualEnvironmentCheckpointRefRecord, ...],
+    ) -> None:
+        return None
+
+    def list_virtual_environment_checkpoints(
+        self, connection: Any, *, schema: str, virtual_environment_name: str
+    ) -> tuple[VirtualEnvironmentCheckpointRecord, ...]:
+        return ()
+
+    def get_virtual_environment_checkpoint_refs(
+        self, connection: Any, *, schema: str, checkpoint_id: str
+    ) -> tuple[VirtualEnvironmentCheckpointRefRecord, ...]:
+        return ()
+
+    def delete_virtual_environment_checkpoint(
+        self, connection: Any, *, schema: str, checkpoint_id: str
+    ) -> None:
+        return None
 
     def acquire_lock(
         self,
