@@ -36,6 +36,12 @@ class TablePromotionMode(StrEnum):
     STAGED = "staged"
 
 
+class RelationType(StrEnum):
+    TABLE = "table"
+    VIEW = "view"
+    OTHER = "other"
+
+
 class LifeCycleEventKind(StrEnum):
     SQL = "sql"
     LOG = "log"

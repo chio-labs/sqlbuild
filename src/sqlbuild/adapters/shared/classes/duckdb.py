@@ -116,6 +116,16 @@ class DuckDbBackedAdapter(BaseAdapter):
         allow_copy_fallback: bool,
         statement_recorder: StatementRecorder,
     ) -> None:
+        source_parent: str = source.rsplit(".", 1)[0] if "." in source else ""
+        target_parent: str = target.rsplit(".", 1)[0] if "." in target else ""
+        if remove_source and source_parent == target_parent:
+            self.rename(
+                connection,
+                source=source,
+                target=target,
+                statement_recorder=statement_recorder,
+            )
+            return
         if not allow_copy_fallback:
             raise AdapterUserError("DuckDB relation move/copy requires --allow-copy")
         statements: tuple[str, ...] = self.render_replace_table_from_relation(

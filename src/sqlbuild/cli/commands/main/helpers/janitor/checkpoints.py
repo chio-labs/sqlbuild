@@ -50,6 +50,24 @@ def checkpoint_protected_relation_keys(
     )
 
 
+def checkpoint_protected_relation_reasons(
+    *,
+    retention: CheckpointRetentionInspection | None,
+) -> dict[JanitorRelationKey, str]:
+    """Build protection reasons for retained checkpoint physical relations."""
+
+    if retention is None:
+        return {}
+    return {
+        JanitorRelationKey(
+            database=relation.database_name,
+            schema=relation.schema_name,
+            name=relation.relation_name,
+        ): "relation is referenced by a retained virtual checkpoint"
+        for relation in retention.retained_physical_relations
+    }
+
+
 def checkpoint_candidates(
     *,
     retention: CheckpointRetentionInspection | None,

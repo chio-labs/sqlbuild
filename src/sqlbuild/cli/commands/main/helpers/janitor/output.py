@@ -7,6 +7,7 @@ from typing import TextIO
 from sqlbuild.executor.janitor.models import (
     JanitorCheckpointCandidate,
     JanitorDeleteCandidate,
+    JanitorDetachedVirtualEnvironmentCandidate,
     JanitorPlan,
     JanitorSkippedRelation,
     JanitorSkippedSchema,
@@ -61,6 +62,13 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
         else _value(checkpoint_count, use_color=use_color)
     )
     stream.write(f"  {'checkpoints pruned':<22} {rendered_checkpoints}\n")
+    detached_count: str = str(len(plan.detached_virtual_environment_candidates))
+    rendered_detached: str = (
+        yellow(detached_count)
+        if use_color and plan.detached_virtual_environment_candidates
+        else _value(detached_count, use_color=use_color)
+    )
+    stream.write(f"  {'detached VDEs pruned':<22} {rendered_detached}\n")
     skipped_count: str = _value(str(len(plan.skipped_relations)), use_color=use_color)
     stream.write(f"  {'objects skipped':<22} {skipped_count}\n")
 
@@ -89,6 +97,15 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
                 f"{_reason(checkpoint_candidate.virtual_environment_name, use_color=use_color)}\n"
             )
 
+    if plan.detached_virtual_environment_candidates:
+        stream.write(f"\n{_section('Eligible detached VDEs', use_color=use_color)}\n")
+        detached_candidate: JanitorDetachedVirtualEnvironmentCandidate
+        for detached_candidate in plan.detached_virtual_environment_candidates:
+            stream.write(
+                f"  {_object(detached_candidate.virtual_environment_name, use_color=use_color)}  "
+                f"{_reason('detached virtual environment', use_color=use_color)}\n"
+            )
+
     if plan.skipped_relations:
         stream.write(f"\n{_section('Skipped objects', use_color=use_color)}\n")
         skipped: JanitorSkippedRelation
@@ -103,9 +120,12 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
 def confirmation_text(plan: JanitorPlan) -> str:
     """Build the exact confirmation phrase for a janitor plan."""
 
-    if not plan.checkpoint_candidates:
+    state_candidate_count: int = len(plan.checkpoint_candidates) + len(
+        plan.detached_virtual_environment_candidates
+    )
+    if state_candidate_count == 0:
         return f"delete {len(plan.candidates)} objects from {environment_label(plan)}"
-    deletion_count: int = len(plan.candidates) + len(plan.checkpoint_candidates)
+    deletion_count: int = len(plan.candidates) + state_candidate_count
     return f"delete {deletion_count} items from {environment_label(plan)}"
 
 
@@ -135,5 +155,7 @@ def _reason(text: str, *, use_color: bool) -> str:
     if not use_color:
         return text
     if "referenced by a retained virtual checkpoint" in text:
+        return green(text)
+    if "referenced by an active or retained virtual environment" in text:
         return green(text)
     return dim(text)

@@ -51,6 +51,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentRefRecord,
+    VirtualEnvironmentRetentionRecord,
 )
 from sqlbuild.virtual.state.types import (
     ModelVersionStatus,
@@ -595,6 +596,54 @@ class PostgresStateBackend(StateBackend):
             baseline_virtual_environment_name=row[2],
             finalized_at=row[3],
         )
+
+    def list_virtual_environments(
+        self, connection: Any, *, schema: str
+    ) -> tuple[VirtualEnvironmentRetentionRecord, ...]:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT virtual_environment_name, status, updated_at "
+                f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
+                "ORDER BY updated_at DESC, virtual_environment_name DESC"
+            )
+            rows: list[tuple[Any, ...]] = cursor.fetchall()
+        return tuple(
+            VirtualEnvironmentRetentionRecord(
+                virtual_environment_name=row[0],
+                status=VirtualEnvironmentStatus(row[1]),
+                updated_at=row[2],
+            )
+            for row in rows
+        )
+
+    def delete_virtual_environment(
+        self, connection: Any, *, schema: str, virtual_environment_name: str
+    ) -> None:
+        with connection.cursor() as cursor:
+            cursor.execute("BEGIN")
+            try:
+                cursor.execute(
+                    "DELETE FROM "
+                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_REF_TABLE)} "
+                    "WHERE virtual_environment_name = %s",
+                    [virtual_environment_name],
+                )
+                cursor.execute(
+                    "DELETE FROM "
+                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE)} "
+                    "WHERE virtual_environment_name = %s",
+                    [virtual_environment_name],
+                )
+                cursor.execute(
+                    "DELETE FROM "
+                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
+                    "WHERE virtual_environment_name = %s",
+                    [virtual_environment_name],
+                )
+                cursor.execute("COMMIT")
+            except BaseException:
+                cursor.execute("ROLLBACK")
+                raise
 
     def replace_virtual_environment_refs(
         self,

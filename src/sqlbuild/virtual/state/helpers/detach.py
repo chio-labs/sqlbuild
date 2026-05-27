@@ -14,6 +14,7 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
 from sqlbuild.spec.models.environments import resolve_environment_name
 from sqlbuild.virtual.executor.main.logical_target import build_virtual_logical_target
+from sqlbuild.virtual.executor.main.relation_type import resolve_model_relation_type
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.main.record_operation import record_state_operation
 from sqlbuild.virtual.state.models import (
@@ -106,6 +107,18 @@ def detach_from_virtual_state(
                 ),
                 statement_recorder=recorder,
             )
+            model_relation_type: str = resolve_model_relation_type(
+                str(model.config.values.get("materialized", "table"))
+            )
+            if model_relation_type == "view":
+                adapter.create_view_as(
+                    connection,
+                    target=resolve_target_qualified_name(adapter=adapter, target=model.target),
+                    sql=model.query_sql,
+                    statement_recorder=recorder,
+                )
+                detached_count += 1
+                continue
             physical_target: CompiledRelationTarget = CompiledRelationTarget(
                 database=relation.database_name,
                 schema=relation.schema_name,

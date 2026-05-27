@@ -20,6 +20,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentRefRecord,
+    VirtualEnvironmentRetentionRecord,
 )
 from sqlbuild.virtual.state.types import StateColumnType
 
@@ -46,6 +47,27 @@ def state_indexes_for_test(
     expected_indexes: dict[str, dict[str, tuple[str, ...]]],
 ) -> dict[str, set[str]]:
     return {table_name: set(indexes) for table_name, indexes in expected_indexes.items()}
+
+
+def virtual_environment_ref_for_test(
+    virtual_environment_name: str, model_name: str, version_hash: str
+) -> VirtualEnvironmentRefRecord:
+    return VirtualEnvironmentRefRecord(
+        virtual_environment_name=virtual_environment_name,
+        model_name=model_name,
+        version_hash=version_hash,
+    )
+
+
+def physical_relation_for_test(relation_name: str, version_hash: str) -> PhysicalRelationRecord:
+    return PhysicalRelationRecord(
+        model_name="orders",
+        version_hash=version_hash,
+        database_name=None,
+        schema_name="dev__sqb_physical",
+        relation_name=relation_name,
+        relation_type="table",
+    )
 
 
 def _state_column_type_for_test(column_type: StateColumnType) -> str:
@@ -134,6 +156,16 @@ class FakeStateBackend(StateBackend):
     def get_virtual_environment(
         self, connection: Any, *, schema: str, virtual_environment_name: str
     ) -> VirtualEnvironmentRecord | None:
+        return None
+
+    def list_virtual_environments(
+        self, connection: Any, *, schema: str
+    ) -> tuple[VirtualEnvironmentRetentionRecord, ...]:
+        return ()
+
+    def delete_virtual_environment(
+        self, connection: Any, *, schema: str, virtual_environment_name: str
+    ) -> None:
         return None
 
     def replace_virtual_environment_refs(

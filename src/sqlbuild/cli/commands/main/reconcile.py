@@ -22,6 +22,7 @@ def run_reconcile(
     reconcile_command: str | None,
     model_name: str | None,
     physical_relation_name: str | None,
+    auto_approve: bool = False,
     cli_vars: dict[str, object] | None = None,
 ) -> int:
     """Execute the reconcile command."""
@@ -43,6 +44,12 @@ def run_reconcile(
         project_dir=effective_project_dir,
         cli_vars=cli_vars,
     )
+    if reconcile_command == "attach" and not auto_approve:
+        if model_name is None:
+            raise CliUserError("reconcile attach requires --model", code="C249")
+        prompt: str = f"Type 'attach {model_name}' to confirm: "
+        if input(prompt).strip() != f"attach {model_name}":
+            raise CliUserError("reconcile attach cancelled", code="C262")
     print(
         run_virtual_reconcile(
             project_dir=effective_project_dir,

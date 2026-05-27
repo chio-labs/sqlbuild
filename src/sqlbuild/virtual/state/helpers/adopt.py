@@ -15,6 +15,7 @@ from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
 from sqlbuild.spec.models.environments import resolve_environment_name
 from sqlbuild.virtual.executor.main.logical_target import build_virtual_logical_target
 from sqlbuild.virtual.executor.main.physical_target import build_virtual_physical_target
+from sqlbuild.virtual.executor.main.relation_type import resolve_model_relation_type
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.main.record_operation import record_state_operation
 from sqlbuild.virtual.state.models import (
@@ -89,14 +90,23 @@ def adopt_into_virtual_state(
                 schema=physical_target.schema,
                 statement_recorder=recorder,
             )
+            model_relation_type: str = resolve_model_relation_type(
+                str(model.config.values.get("materialized", "table"))
+            )
             adapter.move_or_copy_relation(
                 connection,
                 source=resolve_target_qualified_name(adapter=adapter, target=model.target),
                 target=resolve_target_qualified_name(adapter=adapter, target=physical_target),
-                remove_source=True,
+                remove_source=model_relation_type != "view",
                 allow_copy_fallback=allow_copy,
                 statement_recorder=recorder,
             )
+            if model_relation_type == "view":
+                adapter.drop_view(
+                    connection,
+                    target=resolve_target_qualified_name(adapter=adapter, target=model.target),
+                    statement_recorder=recorder,
+                )
             virtual_target: CompiledRelationTarget = build_virtual_logical_target(
                 adapter=adapter,
                 target=model.target,

@@ -22,6 +22,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentRefRecord,
+    VirtualEnvironmentRetentionRecord,
 )
 
 
@@ -138,6 +139,20 @@ class StateBackend(ABC):
         self, connection: Any, *, schema: str, virtual_environment_name: str
     ) -> VirtualEnvironmentRecord | None:
         """Return a virtual environment row if it exists."""
+        ...
+
+    @abstractmethod
+    def list_virtual_environments(
+        self, connection: Any, *, schema: str
+    ) -> tuple[VirtualEnvironmentRetentionRecord, ...]:
+        """Return virtual environment retention metadata."""
+        ...
+
+    @abstractmethod
+    def delete_virtual_environment(
+        self, connection: Any, *, schema: str, virtual_environment_name: str
+    ) -> None:
+        """Delete a virtual environment and its current refs."""
         ...
 
     @abstractmethod

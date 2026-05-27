@@ -113,6 +113,15 @@ class VirtualEnvironmentRecord:
 
 
 @dataclass(frozen=True)
+class VirtualEnvironmentRetentionRecord:
+    """Virtual data environment retention metadata."""
+
+    virtual_environment_name: str
+    status: VirtualEnvironmentStatus
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
 class VirtualEnvironmentRefRecord:
     """Current state row mapping a VDE model ref to a model version."""
 
@@ -162,6 +171,15 @@ class CheckpointRetentionInspection:
     """Checkpoint retention inspection for janitor planning."""
 
     prune_checkpoints: tuple[VirtualEnvironmentCheckpointRecord, ...]
+    retained_physical_relations: tuple[PhysicalRelationRecord, ...]
+
+
+@dataclass(frozen=True)
+class DetachedVirtualEnvironmentInspection:
+    """Detached VDE cleanup inspection for janitor planning."""
+
+    cleanup_virtual_environments: tuple[VirtualEnvironmentRetentionRecord, ...]
+    cleanup_physical_relations: tuple[PhysicalRelationRecord, ...]
     retained_physical_relations: tuple[PhysicalRelationRecord, ...]
 
 

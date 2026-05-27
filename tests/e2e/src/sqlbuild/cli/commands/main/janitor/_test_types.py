@@ -51,6 +51,40 @@ class JanitorCheckpointRetentionE2ETestCase:
 
 
 @dataclass(frozen=True)
+class JanitorDetachedVirtualEnvironmentE2ETestCase:
+    """Test case for detached VDE cleanup behavior."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+    expected_virtual_environment_count_after: int
+    expected_ref_count_after: int
+
+
+@dataclass(frozen=True)
+class JanitorDetachedVirtualEnvironmentRetentionE2ETestCase:
+    """Test case for detached VDE retention age behavior."""
+
+    description: str
+    retention_days: int
+    janitor_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+    expected_virtual_environment_count_after: int
+
+
+@dataclass(frozen=True)
+class JanitorActiveVirtualEnvironmentProtectionE2ETestCase:
+    """Test case for active VDE ref protection behavior."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class JanitorInvalidConfigE2ETestCase:
     """Test case for invalid janitor config behavior."""
 

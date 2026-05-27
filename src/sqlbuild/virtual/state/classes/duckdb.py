@@ -51,6 +51,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentRefRecord,
+    VirtualEnvironmentRetentionRecord,
 )
 from sqlbuild.virtual.state.types import (
     ModelVersionStatus,
@@ -555,6 +556,50 @@ class DuckDbStateBackend(StateBackend):
             baseline_virtual_environment_name=row[2],
             finalized_at=row[3],
         )
+
+    def list_virtual_environments(
+        self, connection: Any, *, schema: str
+    ) -> tuple[VirtualEnvironmentRetentionRecord, ...]:
+        rows: list[tuple[Any, ...]] = connection.execute(
+            "SELECT virtual_environment_name, status, updated_at "
+            f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
+            "ORDER BY updated_at DESC, virtual_environment_name DESC"
+        ).fetchall()
+        return tuple(
+            VirtualEnvironmentRetentionRecord(
+                virtual_environment_name=row[0],
+                status=VirtualEnvironmentStatus(row[1]),
+                updated_at=row[2],
+            )
+            for row in rows
+        )
+
+    def delete_virtual_environment(
+        self, connection: Any, *, schema: str, virtual_environment_name: str
+    ) -> None:
+        connection.execute("BEGIN")
+        try:
+            connection.execute(
+                "DELETE FROM "
+                f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_REF_TABLE)} "
+                "WHERE virtual_environment_name = ?",
+                [virtual_environment_name],
+            )
+            connection.execute(
+                "DELETE FROM "
+                f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE)} "
+                "WHERE virtual_environment_name = ?",
+                [virtual_environment_name],
+            )
+            connection.execute(
+                f"DELETE FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
+                "WHERE virtual_environment_name = ?",
+                [virtual_environment_name],
+            )
+            connection.execute("COMMIT")
+        except BaseException:
+            connection.execute("ROLLBACK")
+            raise
 
     def replace_virtual_environment_refs(
         self,
