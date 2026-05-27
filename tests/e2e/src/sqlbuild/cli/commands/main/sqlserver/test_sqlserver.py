@@ -182,6 +182,95 @@ def test_given_missing_logical_view_when_repairing_on_sqlserver_then_view_is_rec
 @pytest.mark.parametrize(
     "test_case",
     [
+        SqlServerReconcileE2ETestCase(
+            description="reconcile attach rebinds sqlserver logical view",
+            expected_rows=(("2",),),
+            expected_stdout_fragments=("Will attach orders in dev", "Attached orders to"),
+        )
+    ],
+    ids=["reconcile attach rebinds sqlserver logical view"],
+)
+def test_given_tracked_physical_relation_when_attaching_on_sqlserver_then_view_is_rebound(
+    tmp_path: Path,
+    test_case: SqlServerReconcileE2ETestCase,
+) -> None:
+    config: dict[str, object] = build_sqlserver_config()
+    schema_name: str = build_unique_schema_name(prefix="sqb_virtual_attach")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="sqlserver_virtual_attach",
+        repo_files={
+            "sqlbuild_project.toml": build_sqlserver_virtual_project_toml(
+                project_name="sqlserver_virtual_attach",
+                schema_name=schema_name,
+                config=config,
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+    ensure_sqlserver_schema_ready(schema_name=schema_name, config=config)
+
+    try:
+        assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        (project_dir / "models" / "orders.sql").write_text(
+            "MODEL ();\n\nSELECT 2 AS id\n",
+            encoding="utf-8",
+        )
+        assert (
+            run_sqb(
+                command=("--no-color", "build", "--virtual-env", "pr"),
+                project_dir=project_dir,
+            ).returncode
+            == 0
+        )
+        _database_name, physical_schema_name, physical_relation_name = query_duckdb(
+            db_path=project_dir / "state.duckdb",
+            sql=(
+                "SELECT database_name, schema_name, relation_name "
+                "FROM sqlbuild_state.physical_relations "
+                "WHERE model_name = 'orders' ORDER BY updated_at DESC LIMIT 1"
+            ),
+        )[0]
+        physical_relation: str = f'"{physical_schema_name}"."{physical_relation_name}"'
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "reconcile",
+                "attach",
+                "--virtual-env",
+                "dev",
+                "--model",
+                "orders",
+                "--physical-relation",
+                physical_relation,
+                "--auto-approve",
+            ),
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in result.stdout
+        rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
+            sql=(
+                f"SELECT id FROM {relation_name(schema_name=f'{schema_name}__dev', name='orders')} "
+                "ORDER BY id"
+            ),
+            config=config,
+        )
+        assert stringify_warehouse_rows(rows) == test_case.expected_rows
+    finally:
+        cleanup_sqlserver_schema(schema_name=schema_name, config=config)
+        cleanup_sqlserver_schema(schema_name=f"{schema_name}__dev", config=config)
+        cleanup_sqlserver_schema(schema_name=f"{schema_name}__pr", config=config)
+        cleanup_sqlserver_schema(schema_name=f"{schema_name}__sqb_physical", config=config)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         SqlServerVirtualLifecycleE2ETestCase(
             description="adopt and detach preserve sqlserver logical table",
             expected_rows=(("1",),),
