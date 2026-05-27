@@ -11,6 +11,14 @@ from sqlbuild.compiler.lineage.types import InferredNullability
 
 
 @dataclass(frozen=True)
+class FindMatchingPathDefaultTestCase:
+    description: str
+    model_relative_path: str
+    path_defaults: dict[str, dict[str, object]]
+    expected_path_default: str | None
+
+
+@dataclass(frozen=True)
 class ExpandSqlMacrosTestCase:
     description: str
     macro_file_contents: str

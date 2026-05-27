@@ -2761,12 +2761,13 @@ wheels = [
 
 [[package]]
 name = "sqlbuild"
-version = "0.20.0"
+version = "0.20.1"
 source = { editable = "." }
 dependencies = [
     { name = "duckdb" },
     { name = "pyyaml" },
     { name = "rich" },
+    { name = "sqlglot" },
 ]
 
 [package.optional-dependencies]
@@ -2791,9 +2792,6 @@ postgres = [
 ]
 snowflake = [
     { name = "snowflake-connector-python" },
-]
-sqlglot = [
-    { name = "sqlglot" },
 ]
 sqlserver = [
     { name = "pymssql" },
@@ -2827,10 +2825,10 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "rich", specifier = ">=15.0.0" },
     { name = "snowflake-connector-python", marker = "extra == 'snowflake'", specifier = ">=3.17.3" },
-    { name = "sqlglot", marker = "extra == 'sqlglot'", specifier = ">=27.13.2" },
+    { name = "sqlglot", specifier = ">=27.13.2" },
     { name = "sqlglot", extras = ["c"], marker = "extra == 'performance'", specifier = ">=30.7.0" },
 ]
-provides-extras = ["sqlglot", "performance", "snowflake", "bigquery", "databricks", "dagster", "postgres", "sqlserver", "ingestr"]
+provides-extras = ["performance", "snowflake", "bigquery", "databricks", "dagster", "postgres", "sqlserver", "ingestr"]
 
 [package.metadata.requires-dev]
 dev = [

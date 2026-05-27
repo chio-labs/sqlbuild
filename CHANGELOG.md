@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.20.1](https://github.com/chio-labs/sqlbuild/compare/v0.20.0...v0.20.1) (2026-05-26)
+
+
+### Bug Fixes
+
+* make sqlglot a core dependency ([a6e1517](https://github.com/chio-labs/sqlbuild/commit/a6e1517888e45cd4ddd8fdd1184f798bb7a27e69))
+* make sqlglot a core dependency ([25119a7](https://github.com/chio-labs/sqlbuild/commit/25119a78d5b22841d680335b9e1e3f56991002d6))
+* scaffold all project resource directories ([2fefe84](https://github.com/chio-labs/sqlbuild/commit/2fefe845d66c5fd174aa08d0a20ab6ebedad836d))
+
 ## [0.20.0](https://github.com/chio-labs/sqlbuild/compare/v0.19.0...v0.20.0) (2026-05-26)
 
 
