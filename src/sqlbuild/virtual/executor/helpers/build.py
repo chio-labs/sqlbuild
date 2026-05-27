@@ -28,10 +28,12 @@ from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.environments import resolve_environment_name
 from sqlbuild.spec.models.project import SnapshotsConfig
+from sqlbuild.virtual.executor.helpers.functions import build_function_version_record
 from sqlbuild.virtual.executor.helpers.rewrite import (
     build_rewritten_model_targets,
     build_virtual_target,
     relation_type_for_model,
+    rewrite_project_function_targets,
     rewrite_project_model_targets,
 )
 from sqlbuild.virtual.executor.models import VirtualBuildExecutionHooks, VirtualBuildPipelineResult
@@ -45,15 +47,15 @@ from sqlbuild.virtual.shared.helpers.encoding import encode_state_text
 from sqlbuild.virtual.state.main.checkpoints import create_finalized_virtual_environment_checkpoint
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
+    FunctionVersionRecord,
     ModelVersionRecord,
     PhysicalRelationRecord,
     StateBackendConfig,
+    VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentRefRecord,
 )
 from sqlbuild.virtual.state.types import ModelVersionStatus, VirtualEnvironmentStatus
-
-_FUNCTION_STATE_VERSION_HASH: str = "current"
 
 
 def run_virtual_build(
@@ -121,6 +123,13 @@ def run_virtual_build(
             target_vde_name=target_vde_name,
             baseline_vde_name=physical_environment_name,
         )
+        bound_function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = (
+            backend.get_virtual_environment_function_refs(
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=target_vde_name,
+            )
+        )
         bound_model_versions: dict[str, ModelVersionRecord | None] = _read_bound_model_versions(
             backend=backend,
             state_connection=state_connection,
@@ -165,6 +174,11 @@ def run_virtual_build(
     rewritten_project: CompiledProject = rewrite_project_model_targets(
         project=graph.project,
         rewritten_targets=rewritten_targets,
+    )
+    rewritten_project = rewrite_project_function_targets(
+        project=rewritten_project,
+        adapter=adapter,
+        virtual_environment_name=target_vde_name,
     )
     deferred_relations: dict[str, RelationInfo] = {
         model_name: RelationInfo(
@@ -253,6 +267,7 @@ def run_virtual_build(
             target_vde_name=target_vde_name,
             baseline_vde_name=physical_environment_name,
             bound_version_hashes=semantics.bound_version_hashes,
+            bound_function_refs=bound_function_refs,
             plan_output=plan_output,
             expected_local_hashes=semantics.expected_local_hashes,
             expected_metadata_jsons=semantics.expected_metadata_jsons,
@@ -344,12 +359,16 @@ def _persist_successful_virtual_build(
     target_vde_name: str,
     baseline_vde_name: str | None,
     bound_version_hashes: dict[str, str],
+    bound_function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...],
     plan_output: PlanOutput,
     expected_local_hashes: dict[str, str],
     expected_metadata_jsons: dict[str, str],
     expected_version_hashes: dict[str, str],
 ) -> None:
     final_version_hashes: dict[str, str] = dict(bound_version_hashes)
+    final_function_hashes: dict[str, str] = {
+        ref.function_name: ref.version_hash for ref in bound_function_refs
+    }
     model_entries_by_name: dict[str, Any] = {
         entry.name: entry for entry in plan_output.model_entries
     }
@@ -425,20 +444,12 @@ def _persist_successful_virtual_build(
                     )
         function_entry: Any
         for function_entry in plan_output.function_entries:
-            function_sql: str = function_entry.fingerprint_query_sql
-            backend.upsert_model_version(
+            function_version: FunctionVersionRecord = build_function_version_record(function_entry)
+            final_function_hashes[function_entry.name] = function_version.version_hash
+            backend.upsert_function_version(
                 state_connection,
                 schema=config.schema,
-                record=ModelVersionRecord(
-                    model_name=_function_state_name(function_entry.name),
-                    version_hash=_FUNCTION_STATE_VERSION_HASH,
-                    data_hash=hashlib.sha256(function_sql.encode("utf-8")).hexdigest(),
-                    metadata_hash=hashlib.sha256(b"{}").hexdigest(),
-                    status=ModelVersionStatus.READY,
-                    fingerprint_query_sql_b64=encode_state_text(function_sql),
-                    fingerprint_metadata_json_b64=encode_state_text("{}"),
-                    compiled_sql_b64=encode_state_text(function_entry.body_sql),
-                ),
+                record=function_version,
             )
         backend.upsert_virtual_environment(
             state_connection,
@@ -465,6 +476,20 @@ def _persist_successful_virtual_build(
             virtual_environment_name=target_vde_name,
             refs=refs,
         )
+        function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = tuple(
+            VirtualEnvironmentFunctionRefRecord(
+                virtual_environment_name=target_vde_name,
+                function_name=function_name,
+                version_hash=version_hash,
+            )
+            for function_name, version_hash in sorted(final_function_hashes.items())
+        )
+        backend.replace_virtual_environment_function_refs(
+            state_connection,
+            schema=config.schema,
+            virtual_environment_name=target_vde_name,
+            refs=function_refs,
+        )
         if status == VirtualEnvironmentStatus.FINALIZED and refs:
             create_finalized_virtual_environment_checkpoint(
                 backend,
@@ -472,6 +497,7 @@ def _persist_successful_virtual_build(
                 schema=config.schema,
                 virtual_environment_name=target_vde_name,
                 refs=refs,
+                function_refs=function_refs,
             )
     finally:
         backend.close(state_connection)
@@ -531,7 +557,3 @@ def _create_logical_vde_views(
             )
     finally:
         adapter.close(connection)
-
-
-def _function_state_name(function_name: str) -> str:
-    return f"__function__:{function_name}"

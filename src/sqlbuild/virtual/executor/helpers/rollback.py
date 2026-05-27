@@ -5,13 +5,28 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledRelationTarget
+from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.compiler.compile.models.core import (
+    CompiledFunction,
+    CompiledModel,
+    CompiledRelationTarget,
+)
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.virtual.executor.helpers.functions import (
+    decode_function_arguments,
+    decode_function_body_sql,
+    decode_function_language,
+    decode_function_packages,
+    decode_function_return_columns,
+)
+from sqlbuild.virtual.executor.helpers.rewrite import build_virtual_target
 from sqlbuild.virtual.planner.main.selection import resolve_virtual_plan_model_selection
 from sqlbuild.virtual.planner.main.targets import build_virtual_target_from_physical_relation
 from sqlbuild.virtual.state.models import (
+    FunctionVersionRecord,
     PhysicalRelationRecord,
+    VirtualEnvironmentCheckpointFunctionRefRecord,
     VirtualEnvironmentCheckpointRecord,
     VirtualEnvironmentCheckpointRefRecord,
     VirtualEnvironmentRefRecord,
@@ -209,5 +224,79 @@ def validate_physical_relations_exist(
                     f"checkpoint references missing warehouse relation for model '{model_name}'",
                     code="S024",
                 )
+    finally:
+        adapter.close(connection)
+
+
+def read_function_versions(
+    *,
+    backend: Any,
+    state_connection: Any,
+    schema: str,
+    refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...],
+) -> dict[str, FunctionVersionRecord]:
+    versions: dict[str, FunctionVersionRecord] = {}
+    ref: VirtualEnvironmentCheckpointFunctionRefRecord
+    for ref in refs:
+        record: FunctionVersionRecord | None = backend.get_function_version(
+            state_connection,
+            schema=schema,
+            function_name=ref.function_name,
+            version_hash=ref.version_hash,
+        )
+        if record is None:
+            raise PlannerInputError(
+                f"checkpoint references missing function version for '{ref.function_name}'",
+                code="S029",
+            )
+        versions[ref.function_name] = record
+    return versions
+
+
+def publish_function_versions(
+    *,
+    adapter: BaseAdapter,
+    connection_config: dict[str, object],
+    graph: ProjectGraph,
+    virtual_environment_name: str,
+    function_versions: dict[str, FunctionVersionRecord],
+) -> None:
+    functions_by_name: dict[str, CompiledFunction] = {
+        function.name: function for function in graph.project.functions
+    }
+    connection: Any = adapter.connect(connection_config)
+    recorder: StatementRecorder = StatementRecorder()
+    try:
+        for function_name, record in function_versions.items():
+            function: CompiledFunction | None = functions_by_name.get(function_name)
+            if function is None:
+                continue
+            target: CompiledRelationTarget = build_virtual_target(
+                adapter=adapter,
+                target=function.target,
+                virtual_environment_name=virtual_environment_name,
+            )
+            adapter.ensure_schema(
+                connection,
+                database=target.database,
+                schema=target.schema,
+                statement_recorder=recorder,
+            )
+            if target.qualified_name is None:
+                continue
+            adapter.create_function(
+                connection,
+                target=target.qualified_name,
+                arguments=decode_function_arguments(record),
+                returns=record.returns,
+                body_sql=decode_function_body_sql(record),
+                return_columns=decode_function_return_columns(record),
+                language=decode_function_language(record),
+                runtime_version=record.runtime_version,
+                entry_point=record.entry_point,
+                packages=decode_function_packages(record),
+                source_file_path=None,
+                statement_recorder=recorder,
+            )
     finally:
         adapter.close(connection)

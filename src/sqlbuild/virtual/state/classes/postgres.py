@@ -8,6 +8,7 @@ from typing import Any
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.constants import (
     CURRENT_STATE_SCHEMA_VERSION,
+    FUNCTION_VERSION_TABLE,
     LOCK_TABLE,
     MODEL_VERSION_TABLE,
     PHYSICAL_RELATION_TABLE,
@@ -16,8 +17,10 @@ from sqlbuild.virtual.state.constants import (
     STATE_TABLE_INDEXES,
     STATE_TABLES,
     STATE_VERSION_TABLE,
+    VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
     VIRTUAL_ENVIRONMENT_CHECKPOINT_REF_TABLE,
     VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE,
+    VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE,
     VIRTUAL_ENVIRONMENT_REF_TABLE,
     VIRTUAL_ENVIRONMENT_TABLE,
 )
@@ -29,12 +32,15 @@ from sqlbuild.virtual.state.exceptions import (
 from sqlbuild.virtual.state.helpers.events import backup_id, event_id
 from sqlbuild.virtual.state.helpers.validation import build_validation_result
 from sqlbuild.virtual.state.models import (
+    FunctionVersionRecord,
     ModelVersionRecord,
     PhysicalRelationRecord,
     StateLockRecord,
     StateSchemaValidationResult,
+    VirtualEnvironmentCheckpointFunctionRefRecord,
     VirtualEnvironmentCheckpointRecord,
     VirtualEnvironmentCheckpointRefRecord,
+    VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentRefRecord,
 )
@@ -301,6 +307,82 @@ class PostgresStateBackend(StateBackend):
             status=ModelVersionStatus(row[7]),
         )
 
+    def upsert_function_version(
+        self, connection: Any, *, schema: str, record: FunctionVersionRecord
+    ) -> None:
+        with connection.cursor() as cursor:
+            cursor.execute("BEGIN")
+            try:
+                existing_created_at: datetime | None = self._created_at_for_key(
+                    cursor,
+                    schema=schema,
+                    table_name=FUNCTION_VERSION_TABLE,
+                    where_sql="function_name = %s AND version_hash = %s",
+                    params=[record.function_name, record.version_hash],
+                )
+                cursor.execute(
+                    f"DELETE FROM {self._qualified_name(schema, FUNCTION_VERSION_TABLE)} "
+                    "WHERE function_name = %s AND version_hash = %s",
+                    [record.function_name, record.version_hash],
+                )
+                cursor.execute(
+                    f"INSERT INTO {self._qualified_name(schema, FUNCTION_VERSION_TABLE)} "
+                    "(function_name, version_hash, language, returns, arguments_json_b64, "
+                    "return_columns_json_b64, packages_json_b64, runtime_version, entry_point, "
+                    "body_sql_b64, fingerprint_query_sql_b64, status, created_at, updated_at) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
+                    "COALESCE(%s, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)",
+                    [
+                        record.function_name,
+                        record.version_hash,
+                        record.language,
+                        record.returns,
+                        record.arguments_json_b64,
+                        record.return_columns_json_b64,
+                        record.packages_json_b64,
+                        record.runtime_version,
+                        record.entry_point,
+                        record.body_sql_b64,
+                        record.fingerprint_query_sql_b64,
+                        record.status.value,
+                        existing_created_at,
+                    ],
+                )
+                cursor.execute("COMMIT")
+            except BaseException:
+                cursor.execute("ROLLBACK")
+                raise
+
+    def get_function_version(
+        self, connection: Any, *, schema: str, function_name: str, version_hash: str
+    ) -> FunctionVersionRecord | None:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT function_name, version_hash, language, returns, arguments_json_b64, "
+                "return_columns_json_b64, packages_json_b64, runtime_version, entry_point, "
+                "body_sql_b64, fingerprint_query_sql_b64, status "
+                f"FROM {self._qualified_name(schema, FUNCTION_VERSION_TABLE)} "
+                "WHERE function_name = %s AND version_hash = %s",
+                [function_name, version_hash],
+            )
+            row: tuple[Any, ...] | None = cursor.fetchone()
+        if row is None:
+            return None
+        return FunctionVersionRecord(
+            function_name=row[0],
+            version_hash=row[1],
+            language=row[2],
+            returns=row[3],
+            arguments_json_b64=row[4],
+            return_columns_json_b64=row[5],
+            packages_json_b64=row[6],
+            runtime_version=row[7],
+            entry_point=row[8],
+            body_sql_b64=row[9],
+            fingerprint_query_sql_b64=row[10],
+            status=ModelVersionStatus(row[11]),
+        )
+
     def upsert_physical_relation(
         self, connection: Any, *, schema: str, record: PhysicalRelationRecord
     ) -> None:
@@ -469,6 +551,56 @@ class PostgresStateBackend(StateBackend):
             for row in rows
         )
 
+    def replace_virtual_environment_function_refs(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        virtual_environment_name: str,
+        refs: tuple[VirtualEnvironmentFunctionRefRecord, ...],
+    ) -> None:
+        with connection.cursor() as cursor:
+            cursor.execute("BEGIN")
+            try:
+                cursor.execute(
+                    "DELETE FROM "
+                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE)} "
+                    "WHERE virtual_environment_name = %s",
+                    [virtual_environment_name],
+                )
+                for ref in refs:
+                    cursor.execute(
+                        "INSERT INTO "
+                        f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE)} "
+                        "(virtual_environment_name, function_name, version_hash, updated_at) "
+                        "VALUES (%s, %s, %s, CURRENT_TIMESTAMP)",
+                        [ref.virtual_environment_name, ref.function_name, ref.version_hash],
+                    )
+                cursor.execute("COMMIT")
+            except BaseException:
+                cursor.execute("ROLLBACK")
+                raise
+
+    def get_virtual_environment_function_refs(
+        self, connection: Any, *, schema: str, virtual_environment_name: str
+    ) -> tuple[VirtualEnvironmentFunctionRefRecord, ...]:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT virtual_environment_name, function_name, version_hash "
+                f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE)} "
+                "WHERE virtual_environment_name = %s ORDER BY function_name",
+                [virtual_environment_name],
+            )
+            rows: list[tuple[Any, ...]] = cursor.fetchall()
+        return tuple(
+            VirtualEnvironmentFunctionRefRecord(
+                virtual_environment_name=row[0],
+                function_name=row[1],
+                version_hash=row[2],
+            )
+            for row in rows
+        )
+
     def create_virtual_environment_checkpoint(
         self,
         connection: Any,
@@ -476,6 +608,7 @@ class PostgresStateBackend(StateBackend):
         schema: str,
         checkpoint: VirtualEnvironmentCheckpointRecord,
         refs: tuple[VirtualEnvironmentCheckpointRefRecord, ...],
+        function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...] = (),
     ) -> None:
         with connection.cursor() as cursor:
             cursor.execute("BEGIN")
@@ -493,6 +626,21 @@ class PostgresStateBackend(StateBackend):
                         f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_REF_TABLE)} "
                         "(checkpoint_id, model_name, version_hash) VALUES (%s, %s, %s)",
                         [ref.checkpoint_id, ref.model_name, ref.version_hash],
+                    )
+                for function_ref in function_refs:
+                    checkpoint_function_ref_table: str = self._qualified_name(
+                        schema,
+                        VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
+                    )
+                    cursor.execute(
+                        "INSERT INTO "
+                        f"{checkpoint_function_ref_table} "
+                        "(checkpoint_id, function_name, version_hash) VALUES (%s, %s, %s)",
+                        [
+                            function_ref.checkpoint_id,
+                            function_ref.function_name,
+                            function_ref.version_hash,
+                        ],
                     )
                 cursor.execute("COMMIT")
             except BaseException:
@@ -539,12 +687,44 @@ class PostgresStateBackend(StateBackend):
             for row in rows
         )
 
+    def get_virtual_environment_checkpoint_function_refs(
+        self, connection: Any, *, schema: str, checkpoint_id: str
+    ) -> tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...]:
+        with connection.cursor() as cursor:
+            checkpoint_function_ref_table: str = self._qualified_name(
+                schema,
+                VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
+            )
+            cursor.execute(
+                f"SELECT checkpoint_id, function_name, version_hash "
+                f"FROM {checkpoint_function_ref_table} "
+                "WHERE checkpoint_id = %s ORDER BY function_name",
+                [checkpoint_id],
+            )
+            rows: list[tuple[Any, ...]] = cursor.fetchall()
+        return tuple(
+            VirtualEnvironmentCheckpointFunctionRefRecord(
+                checkpoint_id=row[0],
+                function_name=row[1],
+                version_hash=row[2],
+            )
+            for row in rows
+        )
+
     def delete_virtual_environment_checkpoint(
         self, connection: Any, *, schema: str, checkpoint_id: str
     ) -> None:
         with connection.cursor() as cursor:
             cursor.execute("BEGIN")
             try:
+                checkpoint_function_ref_table: str = self._qualified_name(
+                    schema,
+                    VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
+                )
+                cursor.execute(
+                    f"DELETE FROM {checkpoint_function_ref_table} WHERE checkpoint_id = %s",
+                    [checkpoint_id],
+                )
                 cursor.execute(
                     "DELETE FROM "
                     f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_REF_TABLE)} "

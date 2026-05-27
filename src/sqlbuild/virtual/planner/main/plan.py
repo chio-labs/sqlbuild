@@ -282,6 +282,7 @@ def _read_bound_state(
             state_connection=state_connection,
             schema=config.schema,
             graph=graph,
+            virtual_environment_name=environment_name,
         )
         model_targets: dict[str, CompiledRelationTarget] = {
             model.name: model.target for model in graph.project.models

@@ -9,10 +9,14 @@ import pytest
 
 from sqlbuild.virtual.state.constants import STATE_TABLE_INDEXES, STATE_TABLES
 from sqlbuild.virtual.state.models import (
+    FunctionVersionRecord,
     ModelVersionRecord,
     PhysicalRelationRecord,
     StateLockRecord,
     StateSchemaValidationResult,
+    VirtualEnvironmentCheckpointFunctionRefRecord,
+    VirtualEnvironmentCheckpointRecord,
+    VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentRefRecord,
 )
@@ -108,7 +112,7 @@ def test_given_duckdb_state_backend_when_running_lifecycle_then_state_tables_are
         DuckDbStateBackendValidationTestCase(
             description="reports invalid manually-created state schema",
             schema="broken_state",
-            expected_issue_count=15,
+            expected_issue_count=18,
         )
     ],
     ids=["reports invalid manually-created state schema"],
@@ -575,6 +579,135 @@ def test_given_duckdb_state_backend_when_upserting_core_records_then_round_trips
             )
         )
         assert len(replaced_refs) == test_case.expected_ref_count_after_replace
+    finally:
+        backend.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbStateBackendCoreRecordsTestCase(
+            description="persists function versions refs and checkpoint refs",
+            schema="sqlbuild_state",
+            sqlbuild_version="0.0.test",
+            expected_model_name="is_large_order",
+            expected_version_hash="function123",
+            expected_virtual_environment_name="dev",
+            expected_ref_count=1,
+            expected_ref_count_after_replace=0,
+            expected_relation_name="unused",
+            expected_replaced_relation_name="unused",
+        )
+    ],
+    ids=["persists function versions refs and checkpoint refs"],
+)
+def test_given_duckdb_state_backend_when_upserting_function_records_then_round_trips_state(
+    test_case: DuckDbStateBackendCoreRecordsTestCase,
+    tmp_path: Path,
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    try:
+        backend.initialize(
+            connection,
+            schema=test_case.schema,
+            sqlbuild_version=test_case.sqlbuild_version,
+        )
+        assert (
+            backend.get_function_version(
+                connection,
+                schema=test_case.schema,
+                function_name=test_case.expected_model_name,
+                version_hash=test_case.expected_version_hash,
+            )
+            is None
+        )
+        function_record: FunctionVersionRecord = FunctionVersionRecord(
+            function_name=test_case.expected_model_name,
+            version_hash=test_case.expected_version_hash,
+            language="sql",
+            returns="BOOLEAN",
+            arguments_json_b64="W3sibmFtZSI6ImFtb3VudCIsInR5cGUiOiJJTlRFR0VSIn1d",
+            return_columns_json_b64="W10=",
+            packages_json_b64="W10=",
+            runtime_version=None,
+            entry_point=None,
+            body_sql_b64="YW1vdW50ID4gOQ==",
+            fingerprint_query_sql_b64="YW1vdW50ID4gOQ==",
+            status=ModelVersionStatus.READY,
+        )
+        backend.upsert_function_version(
+            connection,
+            schema=test_case.schema,
+            record=function_record,
+        )
+        assert (
+            backend.get_function_version(
+                connection,
+                schema=test_case.schema,
+                function_name=test_case.expected_model_name,
+                version_hash=test_case.expected_version_hash,
+            )
+            == function_record
+        )
+        backend.replace_virtual_environment_function_refs(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.expected_virtual_environment_name,
+            refs=(
+                VirtualEnvironmentFunctionRefRecord(
+                    virtual_environment_name=test_case.expected_virtual_environment_name,
+                    function_name=test_case.expected_model_name,
+                    version_hash=test_case.expected_version_hash,
+                ),
+            ),
+        )
+        function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = (
+            backend.get_virtual_environment_function_refs(
+                connection,
+                schema=test_case.schema,
+                virtual_environment_name=test_case.expected_virtual_environment_name,
+            )
+        )
+        assert len(function_refs) == test_case.expected_ref_count
+        assert function_refs[0].function_name == test_case.expected_model_name
+        checkpoint: VirtualEnvironmentCheckpointRecord = VirtualEnvironmentCheckpointRecord(
+            checkpoint_id="chk_function",
+            virtual_environment_name=test_case.expected_virtual_environment_name,
+        )
+        backend.create_virtual_environment_checkpoint(
+            connection,
+            schema=test_case.schema,
+            checkpoint=checkpoint,
+            refs=(),
+            function_refs=(
+                VirtualEnvironmentCheckpointFunctionRefRecord(
+                    checkpoint_id=checkpoint.checkpoint_id,
+                    function_name=test_case.expected_model_name,
+                    version_hash=test_case.expected_version_hash,
+                ),
+            ),
+        )
+        checkpoint_function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...] = (
+            backend.get_virtual_environment_checkpoint_function_refs(
+                connection,
+                schema=test_case.schema,
+                checkpoint_id=checkpoint.checkpoint_id,
+            )
+        )
+        assert len(checkpoint_function_refs) == test_case.expected_ref_count
+        backend.delete_virtual_environment_checkpoint(
+            connection,
+            schema=test_case.schema,
+            checkpoint_id=checkpoint.checkpoint_id,
+        )
+        assert (
+            backend.get_virtual_environment_checkpoint_function_refs(
+                connection,
+                schema=test_case.schema,
+                checkpoint_id=checkpoint.checkpoint_id,
+            )
+            == ()
+        )
     finally:
         backend.close(connection)
 

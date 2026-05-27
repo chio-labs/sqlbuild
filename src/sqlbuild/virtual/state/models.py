@@ -71,6 +71,24 @@ class PhysicalRelationRecord:
 
 
 @dataclass(frozen=True)
+class FunctionVersionRecord:
+    """Current state row for one function version."""
+
+    function_name: str
+    version_hash: str
+    language: str
+    returns: str
+    arguments_json_b64: str
+    return_columns_json_b64: str
+    packages_json_b64: str
+    body_sql_b64: str
+    fingerprint_query_sql_b64: str
+    status: ModelVersionStatus
+    runtime_version: str | None = None
+    entry_point: str | None = None
+
+
+@dataclass(frozen=True)
 class VirtualEnvironmentRecord:
     """Current state row for one virtual data environment."""
 
@@ -90,6 +108,15 @@ class VirtualEnvironmentRefRecord:
 
 
 @dataclass(frozen=True)
+class VirtualEnvironmentFunctionRefRecord:
+    """Current state row mapping a VDE function ref to a function version."""
+
+    virtual_environment_name: str
+    function_name: str
+    version_hash: str
+
+
+@dataclass(frozen=True)
 class VirtualEnvironmentCheckpointRecord:
     """Finalized checkpoint for one virtual data environment."""
 
@@ -104,6 +131,15 @@ class VirtualEnvironmentCheckpointRefRecord:
 
     checkpoint_id: str
     model_name: str
+    version_hash: str
+
+
+@dataclass(frozen=True)
+class VirtualEnvironmentCheckpointFunctionRefRecord:
+    """Checkpoint row mapping a function ref to a function version."""
+
+    checkpoint_id: str
+    function_name: str
     version_hash: str
 
 

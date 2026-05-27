@@ -136,12 +136,15 @@ def _format_state_lifecycle_summary(
     lines.append(tables_label)
     lines.append(f"  created/validated: {len(STATE_TABLE_COLUMNS)}")
     lines.append(
-        "  current state: model_versions, physical_relations, "
-        "virtual_environments, virtual_environment_refs, locks"
+        "  current state: model_versions, function_versions, physical_relations, "
+        "virtual_environments, virtual_environment_refs, "
+        "virtual_environment_function_refs, locks"
     )
     lines.append(
-        "  history: plan_runs, virtual_environment_ref_events, "
-        "reconcile_events, state_migration_events"
+        "  history: virtual_environment_checkpoints, "
+        "virtual_environment_checkpoint_refs, "
+        "virtual_environment_checkpoint_function_refs, plan_runs, "
+        "virtual_environment_ref_events, reconcile_events, state_migration_events"
     )
     lines.append("")
     return "\n".join(lines)

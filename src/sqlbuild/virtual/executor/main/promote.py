@@ -14,6 +14,7 @@ from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.virtual.executor.helpers.rollback import publish_function_versions
 from sqlbuild.virtual.executor.main.views import refresh_logical_vde_views
 from sqlbuild.virtual.planner.main.selection import resolve_virtual_plan_model_selection
 from sqlbuild.virtual.planner.main.semantics import build_virtual_plan_semantics
@@ -26,9 +27,11 @@ from sqlbuild.virtual.state.main.locks import (
 from sqlbuild.virtual.state.main.release_lock import release_state_lease
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
+    FunctionVersionRecord,
     ModelVersionRecord,
     PhysicalRelationRecord,
     StateLockLease,
+    VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentRefRecord,
 )
@@ -99,6 +102,13 @@ def run_virtual_promote(
             state_connection,
             schema=config.schema,
             virtual_environment_name=to_virtual_environment_name,
+        )
+        source_function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = (
+            backend.get_virtual_environment_function_refs(
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=from_virtual_environment_name,
+            )
         )
         if not source_refs:
             raise PlannerInputError(
@@ -238,6 +248,32 @@ def run_virtual_promote(
             virtual_environment_name=to_virtual_environment_name,
             refs=refs,
         )
+        function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = ()
+        function_versions: dict[str, FunctionVersionRecord] = {}
+        if not select:
+            function_refs = tuple(
+                VirtualEnvironmentFunctionRefRecord(
+                    virtual_environment_name=to_virtual_environment_name,
+                    function_name=ref.function_name,
+                    version_hash=ref.version_hash,
+                )
+                for ref in source_function_refs
+            )
+            backend.replace_virtual_environment_function_refs(
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=to_virtual_environment_name,
+                refs=function_refs,
+            )
+            for ref in function_refs:
+                function_version: FunctionVersionRecord | None = backend.get_function_version(
+                    state_connection,
+                    schema=config.schema,
+                    function_name=ref.function_name,
+                    version_hash=ref.version_hash,
+                )
+                if function_version is not None:
+                    function_versions[ref.function_name] = function_version
         if status == VirtualEnvironmentStatus.FINALIZED and refs:
             create_finalized_virtual_environment_checkpoint(
                 backend,
@@ -245,6 +281,7 @@ def run_virtual_promote(
                 schema=config.schema,
                 virtual_environment_name=to_virtual_environment_name,
                 refs=refs,
+                function_refs=function_refs,
             )
         physical_relations: dict[str, PhysicalRelationRecord] = _read_physical_relations(
             backend=backend,
@@ -276,6 +313,14 @@ def run_virtual_promote(
         on_connection_complete=on_connection_complete,
         on_connection_error=on_connection_error,
     )
+    if function_versions:
+        publish_function_versions(
+            adapter=adapter,
+            connection_config=connection_config,
+            graph=graph,
+            virtual_environment_name=to_virtual_environment_name,
+            function_versions=function_versions,
+        )
     if on_progress is not None:
         on_progress("Refreshed target VDE views.")
     return status.value, selected_model_names, stale_after

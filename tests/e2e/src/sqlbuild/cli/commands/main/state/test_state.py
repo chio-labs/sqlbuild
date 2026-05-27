@@ -103,6 +103,11 @@ database = "state.duckdb"
             expected_rollback_fragment="Virtual State Rolled Back",
             expected_reset_fragment="Virtual State Reset",
             expected_schema_version=1,
+            expected_init_fragments=(
+                "function_versions",
+                "virtual_environment_function_refs",
+                "virtual_environment_checkpoint_function_refs",
+            ),
         )
     ],
     ids=["duckdb state lifecycle commands manage state tables"],
@@ -144,6 +149,8 @@ database = "state.duckdb"
         init_result.stdout + init_result.stderr
     )
     assert test_case.expected_init_fragment in init_result.stdout
+    for fragment in test_case.expected_init_fragments:
+        assert fragment in init_result.stdout
     assert query_duckdb(
         db_path=state_db_path,
         sql="SELECT schema_version FROM sqlbuild_state.state_versions",

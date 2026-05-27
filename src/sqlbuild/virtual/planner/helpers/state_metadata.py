@@ -6,9 +6,7 @@ from typing import Any
 
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.virtual.shared.helpers.encoding import decode_state_text
-from sqlbuild.virtual.state.models import ModelVersionRecord
-
-_FUNCTION_STATE_VERSION_HASH: str = "current"
+from sqlbuild.virtual.state.models import FunctionVersionRecord, ModelVersionRecord
 
 
 def decode_model_version_query_sqls(
@@ -49,22 +47,33 @@ def read_previous_function_query_sqls(
     state_connection: Any,
     schema: str,
     graph: ProjectGraph,
+    virtual_environment_name: str,
 ) -> dict[str, str]:
     """Read persisted virtual function fingerprint SQL by function name."""
 
-    function_versions: dict[str, ModelVersionRecord | None] = {
-        function.name: backend.get_model_version(
+    function_refs: dict[str, str] = {
+        ref.function_name: ref.version_hash
+        for ref in backend.get_virtual_environment_function_refs(
             state_connection,
             schema=schema,
-            model_name=function_state_name(function.name),
-            version_hash=_FUNCTION_STATE_VERSION_HASH,
+            virtual_environment_name=virtual_environment_name,
+        )
+    }
+    function_versions: dict[str, FunctionVersionRecord | None] = {
+        function.name: backend.get_function_version(
+            state_connection,
+            schema=schema,
+            function_name=function.name,
+            version_hash=function_refs[function.name],
         )
         for function in graph.project.functions
+        if function.name in function_refs
     }
-    return decode_model_version_query_sqls(function_versions)
-
-
-def function_state_name(function_name: str) -> str:
-    """Return the virtual state identity used for function fingerprints."""
-
-    return f"__function__:{function_name}"
+    result: dict[str, str] = {}
+    for function_name, function_version in function_versions.items():
+        if function_version is None:
+            continue
+        query_sql: str | None = decode_state_text(function_version.fingerprint_query_sql_b64)
+        if query_sql is not None:
+            result[function_name] = query_sql
+    return result

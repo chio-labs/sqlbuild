@@ -678,6 +678,95 @@ def test_given_virtual_env_when_promoting_then_it_updates_target_refs_and_views(
 @pytest.mark.parametrize(
     "test_case",
     [
+        VirtualPromoteE2ETestCase(
+            description="whole VDE promotion carries function definitions",
+            promote_command=("--no-color", "promote", "--from", "pr", "--to", "dev"),
+            expected_promote_fragments=(
+                "Virtual promotion complete",
+                "pr -> dev",
+                "target status          finalized",
+            ),
+            expected_query_results=(
+                ("SELECT is_large FROM dev__dev.fact_orders ORDER BY is_large", ((True,),)),
+                ("SELECT dev__dev.is_large_order(7)", ((True,),)),
+            ),
+        )
+    ],
+    ids=["whole VDE promotion carries function definitions"],
+)
+def test_given_function_change_when_promoting_then_it_publishes_target_function_definition(
+    test_case: VirtualPromoteE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_promote_function_definition",
+        repo_files=build_virtual_plan_repo_files(stg_orders_sql="SELECT 7 AS id")
+        | {
+            "models/fact_orders.sql": (
+                "MODEL (materialized view);\n\n"
+                'SELECT __udf("is_large_order")(id) AS is_large FROM __ref("stg_orders")\n'
+            ),
+            "functions/sql/is_large_order.sql": (
+                "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, "
+                "query_change_backfill full);\n\n"
+                "amount > 9\n"
+            ),
+        },
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT dev__dev.is_large_order(7)",
+    ) == [(False,)]
+
+    (project_dir / "functions" / "sql" / "is_large_order.sql").write_text(
+        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, query_change_backfill full);\n\n"
+        "amount > 5\n",
+        encoding="utf-8",
+    )
+    assert (
+        run_sqb(
+            command=("--no-color", "build", "--virtual-env", "pr"), project_dir=project_dir
+        ).returncode
+        == 0
+    )
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT is_large FROM dev__pr.fact_orders ORDER BY is_large",
+    ) == [(True,)]
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT is_large FROM dev__dev.fact_orders ORDER BY is_large",
+    ) == [(False,)]
+
+    promote_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.promote_command,
+        project_dir=project_dir,
+    )
+
+    assert promote_result.returncode == 0, promote_result.stderr
+    for fragment in test_case.expected_promote_fragments:
+        assert fragment in promote_result.stdout
+    function_ref_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT function_name, version_hash "
+            "FROM sqlbuild_state.virtual_environment_function_refs "
+            "WHERE virtual_environment_name = 'dev'"
+        ),
+    )
+    assert len(function_ref_rows) == 1
+    for sql, expected_rows in test_case.expected_query_results:
+        assert query_duckdb(db_path=project_dir / "warehouse.duckdb", sql=sql) == list(
+            expected_rows
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         VirtualRollbackE2ETestCase(
             description="whole VDE rollback restores previous finalized checkpoint",
             rollback_command=("--no-color", "rollback"),
@@ -786,6 +875,86 @@ def test_given_finalized_checkpoints_when_rolling_back_then_it_restores_previous
             db_path=project_dir / "warehouse.duckdb",
             sql=query_sql,
         ) == list(expected_rows)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualRollbackE2ETestCase(
+            description="whole VDE rollback restores checkpointed function definitions",
+            rollback_command=("--no-color", "rollback"),
+            expected_rollback_fragments=(
+                "Virtual rollback complete",
+                "status               finalized",
+            ),
+            expected_query_results=(
+                ("SELECT is_large FROM dev__dev.fact_orders ORDER BY is_large", ((False,),)),
+            ),
+            expected_checkpoint_count=2,
+        )
+    ],
+    ids=["whole VDE rollback restores checkpointed function definitions"],
+)
+def test_given_function_change_when_rolling_back_then_it_restores_checkpointed_definition(
+    test_case: VirtualRollbackE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_rollback_function_definition",
+        repo_files=build_virtual_plan_repo_files(stg_orders_sql="SELECT 7 AS id")
+        | {
+            "models/fact_orders.sql": (
+                "MODEL (materialized view);\n\n"
+                'SELECT __udf("is_large_order")(id) AS is_large FROM __ref("stg_orders")\n'
+            ),
+            "functions/sql/is_large_order.sql": (
+                "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, "
+                "query_change_backfill full);\n\n"
+                "amount > 9\n"
+            ),
+        },
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT is_large FROM dev__dev.fact_orders ORDER BY is_large",
+    ) == [(False,)]
+
+    (project_dir / "functions" / "sql" / "is_large_order.sql").write_text(
+        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, query_change_backfill full);\n\n"
+        "amount > 5\n",
+        encoding="utf-8",
+    )
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT is_large FROM dev__dev.fact_orders ORDER BY is_large",
+    ) == [(True,)]
+    checkpoint_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_checkpoints",
+    )
+    checkpoint_function_ref_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_checkpoint_function_refs",
+    )
+
+    rollback_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.rollback_command,
+        project_dir=project_dir,
+    )
+
+    assert int(checkpoint_rows[0][0]) == test_case.expected_checkpoint_count
+    assert int(checkpoint_function_ref_rows[0][0]) == 2
+    assert rollback_result.returncode == 0, rollback_result.stderr
+    for fragment in test_case.expected_rollback_fragments:
+        assert fragment in rollback_result.stdout
+    for sql, expected_rows in test_case.expected_query_results:
+        assert query_duckdb(db_path=project_dir / "warehouse.duckdb", sql=sql) == list(
+            expected_rows
+        )
 
 
 @pytest.mark.parametrize(

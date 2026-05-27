@@ -5,12 +5,15 @@ from typing import Any
 
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.models import (
+    FunctionVersionRecord,
     ModelVersionRecord,
     PhysicalRelationRecord,
     StateLockRecord,
     StateSchemaValidationResult,
+    VirtualEnvironmentCheckpointFunctionRefRecord,
     VirtualEnvironmentCheckpointRecord,
     VirtualEnvironmentCheckpointRefRecord,
+    VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentRefRecord,
 )
@@ -84,6 +87,16 @@ class FakeStateBackend(StateBackend):
     ) -> ModelVersionRecord | None:
         return None
 
+    def upsert_function_version(
+        self, connection: Any, *, schema: str, record: FunctionVersionRecord
+    ) -> None:
+        return None
+
+    def get_function_version(
+        self, connection: Any, *, schema: str, function_name: str, version_hash: str
+    ) -> FunctionVersionRecord | None:
+        return None
+
     def upsert_physical_relation(
         self, connection: Any, *, schema: str, record: PhysicalRelationRecord
     ) -> None:
@@ -119,6 +132,21 @@ class FakeStateBackend(StateBackend):
     ) -> tuple[VirtualEnvironmentRefRecord, ...]:
         return ()
 
+    def replace_virtual_environment_function_refs(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        virtual_environment_name: str,
+        refs: tuple[VirtualEnvironmentFunctionRefRecord, ...],
+    ) -> None:
+        return None
+
+    def get_virtual_environment_function_refs(
+        self, connection: Any, *, schema: str, virtual_environment_name: str
+    ) -> tuple[VirtualEnvironmentFunctionRefRecord, ...]:
+        return ()
+
     def create_virtual_environment_checkpoint(
         self,
         connection: Any,
@@ -126,6 +154,7 @@ class FakeStateBackend(StateBackend):
         schema: str,
         checkpoint: VirtualEnvironmentCheckpointRecord,
         refs: tuple[VirtualEnvironmentCheckpointRefRecord, ...],
+        function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...] = (),
     ) -> None:
         return None
 
@@ -137,6 +166,11 @@ class FakeStateBackend(StateBackend):
     def get_virtual_environment_checkpoint_refs(
         self, connection: Any, *, schema: str, checkpoint_id: str
     ) -> tuple[VirtualEnvironmentCheckpointRefRecord, ...]:
+        return ()
+
+    def get_virtual_environment_checkpoint_function_refs(
+        self, connection: Any, *, schema: str, checkpoint_id: str
+    ) -> tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...]:
         return ()
 
     def delete_virtual_environment_checkpoint(
