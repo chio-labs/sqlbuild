@@ -17,6 +17,8 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.virtual.executor.helpers.rollback import (
     guard_partial_rollback_scope,
+    publish_function_versions,
+    read_function_versions,
     read_model_versions,
     read_physical_relations,
     resolve_selected_model_names,
@@ -31,10 +33,13 @@ from sqlbuild.virtual.state.main.locks import acquire_virtual_environment_lease
 from sqlbuild.virtual.state.main.release_lock import release_state_lease
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
+    FunctionVersionRecord,
     PhysicalRelationRecord,
     StateLockLease,
+    VirtualEnvironmentCheckpointFunctionRefRecord,
     VirtualEnvironmentCheckpointRecord,
     VirtualEnvironmentCheckpointRefRecord,
+    VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentRefRecord,
 )
@@ -130,6 +135,13 @@ def run_virtual_rollback(
                 "no previous finalized checkpoint is available for rollback",
                 code="S021",
             )
+        target_checkpoint_function_refs: tuple[
+            VirtualEnvironmentCheckpointFunctionRefRecord, ...
+        ] = backend.get_virtual_environment_checkpoint_function_refs(
+            state_connection,
+            schema=config.schema,
+            checkpoint_id=target_checkpoint.checkpoint_id,
+        )
         current_model_versions: dict[str, Any] = read_model_versions(
             backend=backend,
             state_connection=state_connection,
@@ -237,6 +249,27 @@ def run_virtual_rollback(
             virtual_environment_name=virtual_environment_name,
             refs=target_refs,
         )
+        target_function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = tuple(
+            VirtualEnvironmentFunctionRefRecord(
+                virtual_environment_name=virtual_environment_name,
+                function_name=ref.function_name,
+                version_hash=ref.version_hash,
+            )
+            for ref in target_checkpoint_function_refs
+        )
+        function_versions: dict[str, FunctionVersionRecord] = read_function_versions(
+            backend=backend,
+            state_connection=state_connection,
+            schema=config.schema,
+            refs=target_checkpoint_function_refs,
+        )
+        if not is_partial_scope:
+            backend.replace_virtual_environment_function_refs(
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=virtual_environment_name,
+                refs=target_function_refs,
+            )
         rolled_back_models: tuple[str, ...] = tuple(
             sorted(
                 model_name
@@ -268,6 +301,14 @@ def run_virtual_rollback(
         on_connection_complete=on_connection_complete,
         on_connection_error=on_connection_error,
     )
+    if function_versions and not is_partial_scope:
+        publish_function_versions(
+            adapter=adapter,
+            connection_config=connection_config,
+            graph=graph,
+            virtual_environment_name=virtual_environment_name,
+            function_versions=function_versions,
+        )
     if on_progress is not None:
         on_progress("Refreshed target VDE views.")
     return target_checkpoint.checkpoint_id, rolled_back_models, status

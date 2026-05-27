@@ -12,6 +12,7 @@ class StateLifecycleE2ETestCase:
     expected_rollback_fragment: str
     expected_reset_fragment: str
     expected_schema_version: int
+    expected_init_fragments: tuple[str, ...]
 
 
 @dataclass(frozen=True)

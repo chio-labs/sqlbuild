@@ -7,12 +7,15 @@ from datetime import datetime
 from typing import Any
 
 from sqlbuild.virtual.state.models import (
+    FunctionVersionRecord,
     ModelVersionRecord,
     PhysicalRelationRecord,
     StateLockRecord,
     StateSchemaValidationResult,
+    VirtualEnvironmentCheckpointFunctionRefRecord,
     VirtualEnvironmentCheckpointRecord,
     VirtualEnvironmentCheckpointRefRecord,
+    VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentRefRecord,
 )
@@ -71,6 +74,20 @@ class StateBackend(ABC):
         ...
 
     @abstractmethod
+    def upsert_function_version(
+        self, connection: Any, *, schema: str, record: FunctionVersionRecord
+    ) -> None:
+        """Insert or replace a function version row."""
+        ...
+
+    @abstractmethod
+    def get_function_version(
+        self, connection: Any, *, schema: str, function_name: str, version_hash: str
+    ) -> FunctionVersionRecord | None:
+        """Return a function version row if it exists."""
+        ...
+
+    @abstractmethod
     def upsert_physical_relation(
         self, connection: Any, *, schema: str, record: PhysicalRelationRecord
     ) -> None:
@@ -118,6 +135,25 @@ class StateBackend(ABC):
         ...
 
     @abstractmethod
+    def replace_virtual_environment_function_refs(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        virtual_environment_name: str,
+        refs: tuple[VirtualEnvironmentFunctionRefRecord, ...],
+    ) -> None:
+        """Replace all function refs for a virtual environment."""
+        ...
+
+    @abstractmethod
+    def get_virtual_environment_function_refs(
+        self, connection: Any, *, schema: str, virtual_environment_name: str
+    ) -> tuple[VirtualEnvironmentFunctionRefRecord, ...]:
+        """Return function refs for a virtual environment."""
+        ...
+
+    @abstractmethod
     def create_virtual_environment_checkpoint(
         self,
         connection: Any,
@@ -125,6 +161,7 @@ class StateBackend(ABC):
         schema: str,
         checkpoint: VirtualEnvironmentCheckpointRecord,
         refs: tuple[VirtualEnvironmentCheckpointRefRecord, ...],
+        function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...] = (),
     ) -> None:
         """Create a finalized virtual environment checkpoint."""
         ...
@@ -141,6 +178,13 @@ class StateBackend(ABC):
         self, connection: Any, *, schema: str, checkpoint_id: str
     ) -> tuple[VirtualEnvironmentCheckpointRefRecord, ...]:
         """Return refs for a virtual environment checkpoint."""
+        ...
+
+    @abstractmethod
+    def get_virtual_environment_checkpoint_function_refs(
+        self, connection: Any, *, schema: str, checkpoint_id: str
+    ) -> tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...]:
+        """Return function refs for a virtual environment checkpoint."""
         ...
 
     @abstractmethod

@@ -8,8 +8,10 @@ from typing import Any
 
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.models import (
+    VirtualEnvironmentCheckpointFunctionRefRecord,
     VirtualEnvironmentCheckpointRecord,
     VirtualEnvironmentCheckpointRefRecord,
+    VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentRefRecord,
 )
 
@@ -21,6 +23,7 @@ def create_finalized_virtual_environment_checkpoint(
     schema: str,
     virtual_environment_name: str,
     refs: tuple[VirtualEnvironmentRefRecord, ...],
+    function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = (),
 ) -> str:
     """Persist a finalized VDE checkpoint and return its checkpoint id."""
 
@@ -40,6 +43,14 @@ def create_finalized_virtual_environment_checkpoint(
                 version_hash=ref.version_hash,
             )
             for ref in refs
+        ),
+        function_refs=tuple(
+            VirtualEnvironmentCheckpointFunctionRefRecord(
+                checkpoint_id=checkpoint_id,
+                function_name=ref.function_name,
+                version_hash=ref.version_hash,
+            )
+            for ref in function_refs
         ),
     )
     return checkpoint_id

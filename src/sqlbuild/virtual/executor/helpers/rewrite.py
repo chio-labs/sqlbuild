@@ -6,6 +6,7 @@ from dataclasses import replace
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import (
+    CompiledFunction,
     CompiledModel,
     CompiledProject,
     CompiledRelationTarget,
@@ -104,6 +105,33 @@ def rewrite_project_model_targets(
         for model in project.models
     )
     return replace(project, models=rewritten_models)
+
+
+def rewrite_project_function_targets(
+    *,
+    project: CompiledProject,
+    adapter: BaseAdapter,
+    virtual_environment_name: str,
+) -> CompiledProject:
+    """Return a compiled project with functions published into the VDE schema."""
+
+    rewritten_functions: tuple[CompiledFunction, ...] = tuple(
+        replace(
+            function,
+            target=build_virtual_target(
+                adapter=adapter,
+                target=function.target,
+                virtual_environment_name=virtual_environment_name,
+            ),
+            fingerprint_target=build_virtual_target(
+                adapter=adapter,
+                target=function.fingerprint_target,
+                virtual_environment_name=virtual_environment_name,
+            ),
+        )
+        for function in project.functions
+    )
+    return replace(project, functions=rewritten_functions)
 
 
 def relation_type_for_model(materialized: str | None) -> str:
