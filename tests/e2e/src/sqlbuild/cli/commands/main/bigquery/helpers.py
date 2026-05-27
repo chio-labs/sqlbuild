@@ -53,9 +53,16 @@ def build_bigquery_project_toml(*, project_name: str, dataset_name: str) -> str:
     )
 
 
-def build_bigquery_virtual_seed_project_toml(*, project_name: str, dataset_name: str) -> str:
+def build_bigquery_virtual_seed_project_toml(
+    *, project_name: str, dataset_name: str, unsuffixed_virtual_env: str | None = None
+) -> str:
     project_id: str = str(build_bigquery_connection_config(schema=dataset_name)["project"])
     location: str = str(build_bigquery_connection_config(schema=dataset_name)["location"])
+    unsuffixed_line: str = (
+        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n'
+        if unsuffixed_virtual_env is not None
+        else ""
+    )
     return (
         f'name = "{project_name}"\n'
         'adapter = "bigquery"\n'
@@ -69,7 +76,8 @@ def build_bigquery_virtual_seed_project_toml(*, project_name: str, dataset_name:
         f'schema = "{dataset_name}"\n\n'
         "[environments.dev.state]\n"
         'backend = "duckdb"\n'
-        'schema = "sqlbuild_state"\n\n'
+        'schema = "sqlbuild_state"\n'
+        f"{unsuffixed_line}\n"
         "[environments.dev.state.connection]\n"
         'database = "state.duckdb"\n'
     )

@@ -62,7 +62,14 @@ def build_snowflake_project_toml(*, project_name: str, schema_name: str) -> str:
     )
 
 
-def build_snowflake_virtual_seed_project_toml(*, database_name: str, schema_name: str) -> str:
+def build_snowflake_virtual_seed_project_toml(
+    *, database_name: str, schema_name: str, unsuffixed_virtual_env: str | None = None
+) -> str:
+    unsuffixed_line: str = (
+        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n'
+        if unsuffixed_virtual_env is not None
+        else ""
+    )
     return (
         'name = "snowflake_virtual_seed"\n'
         'adapter = "snowflake"\n'
@@ -81,7 +88,8 @@ def build_snowflake_virtual_seed_project_toml(*, database_name: str, schema_name
         f'schema = "{schema_name}"\n\n'
         "[environments.dev.state]\n"
         'backend = "duckdb"\n'
-        'schema = "sqlbuild_state"\n\n'
+        'schema = "sqlbuild_state"\n'
+        f"{unsuffixed_line}\n"
         "[environments.dev.state.connection]\n"
         'database = "state.duckdb"\n'
     )

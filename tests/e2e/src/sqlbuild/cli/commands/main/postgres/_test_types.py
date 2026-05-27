@@ -130,6 +130,15 @@ class PostgresStateAdoptDetachE2ETestCase:
 
 
 @dataclass(frozen=True)
+class PostgresJanitorDetachedVdeE2ETestCase:
+    description: str
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+    expected_virtual_environment_count_after: int
+    expected_ref_count_after: int
+
+
+@dataclass(frozen=True)
 class PostgresStateLifecycleErrorE2ETestCase:
     description: str
     allow_reset: bool

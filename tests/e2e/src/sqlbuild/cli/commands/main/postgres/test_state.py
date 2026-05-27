@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.postgres._test_types import (
+    PostgresJanitorDetachedVdeE2ETestCase,
     PostgresStateAdoptDetachE2ETestCase,
     PostgresStateConnectionErrorE2ETestCase,
     PostgresStateExplicitRollbackE2ETestCase,
@@ -270,6 +271,149 @@ def test_given_postgres_virtual_state_when_adopting_and_detaching_then_state_is_
     finally:
         cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
         cleanup_postgres_state_schemas(schema_name=warehouse_schema, config=postgres_e2e_config)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresJanitorDetachedVdeE2ETestCase(
+            description="postgres janitor prunes detached VDE refs and physical versions",
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "eligible for deletion",
+                "detached VDEs pruned",
+                "Eligible detached VDEs",
+                "dev  detached virtual environment",
+                "state items",
+            ),
+            expected_virtual_environment_count_after=0,
+            expected_ref_count_after=0,
+        )
+    ],
+    ids=["postgres janitor prunes detached VDE refs and physical versions"],
+)
+def test_given_postgres_detached_vde_when_running_janitor_then_refs_and_physical_are_pruned(
+    test_case: PostgresJanitorDetachedVdeE2ETestCase,
+    tmp_path: Path,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    state_schema: str = build_unique_schema_name(prefix="sqb_state_e2e")
+    warehouse_schema: str = build_unique_schema_name(prefix="sqb_virtual_e2e")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_janitor_detached_vde",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "postgres_janitor_detached_vde"\n'
+                'adapter = "postgres"\n'
+                'environment_mode = "virtual"\n'
+                'default_environment = "dev"\n\n'
+                "[connection]\n"
+                f'host = "{postgres_e2e_config["host"]}"\n'
+                f"port = {postgres_e2e_config['port']}\n"
+                f'dbname = "{postgres_e2e_config["dbname"]}"\n'
+                f'user = "{postgres_e2e_config["user"]}"\n'
+                f'password = "{postgres_e2e_config["password"]}"\n\n'
+                "[environments.dev]\n"
+                f'schema = "{warehouse_schema}"\n\n'
+                "[environments.dev.state]\n"
+                'backend = "postgres"\n'
+                f'schema = "{state_schema}"\n'
+                'unsuffixed_virtual_env = "dev"\n\n'
+                "[environments.dev.state.connection]\n"
+                f'host = "{postgres_e2e_config["host"]}"\n'
+                f"port = {postgres_e2e_config['port']}\n"
+                f'dbname = "{postgres_e2e_config["dbname"]}"\n'
+                f'user = "{postgres_e2e_config["user"]}"\n'
+                f'password = "{postgres_e2e_config["password"]}"\n\n'
+                "[janitor]\n"
+                "enabled = true\n"
+                "retention_days = 0\n"
+                "delete_tracked_only = false\n"
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+
+    try:
+        execute_postgres_sql(
+            sql=(
+                f"CREATE SCHEMA {quote_identifier(warehouse_schema)}; "
+                f"CREATE TABLE {quoted_relation_name(schema_name=warehouse_schema, name='orders')} "
+                "AS SELECT 1 AS id"
+            ),
+            config=postgres_e2e_config,
+        )
+        assert (
+            run_sqb(command=("--no-color", "state", "init"), project_dir=project_dir).returncode
+            == test_case.expected_exit_code
+        )
+        adopt_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "state", "adopt", "--allow-copy"),
+            project_dir=project_dir,
+            input_text="adopt dev\n",
+        )
+        assert adopt_result.returncode == test_case.expected_exit_code, (
+            adopt_result.stdout + adopt_result.stderr
+        )
+        physical_relation_name: str = str(
+            fetch_postgres_rows(
+                sql=(
+                    "SELECT relation_name FROM "
+                    f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
+                    "WHERE model_name = 'orders'"
+                ),
+                config=postgres_e2e_config,
+            )[0][0]
+        )
+        detach_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "state", "detach", "--allow-copy"),
+            project_dir=project_dir,
+            input_text="detach dev\n",
+        )
+        assert detach_result.returncode == test_case.expected_exit_code, (
+            detach_result.stdout + detach_result.stderr
+        )
+
+        janitor_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "janitor", "--auto-approve"),
+            project_dir=project_dir,
+        )
+
+        assert janitor_result.returncode == test_case.expected_exit_code, (
+            janitor_result.stdout + janitor_result.stderr
+        )
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in janitor_result.stdout
+        assert fetch_postgres_rows(
+            sql=(
+                "SELECT COUNT(*) FROM "
+                f"{quoted_relation_name(schema_name=state_schema, name='virtual_environments')}"
+            ),
+            config=postgres_e2e_config,
+        ) == ((test_case.expected_virtual_environment_count_after,),)
+        assert fetch_postgres_rows(
+            sql=(
+                "SELECT COUNT(*) FROM "
+                f"{quoted_relation_name(schema_name=state_schema, name='virtual_environment_refs')}"
+            ),
+            config=postgres_e2e_config,
+        ) == ((test_case.expected_ref_count_after,),)
+        assert fetch_postgres_rows(
+            sql=(
+                "SELECT COUNT(*) FROM information_schema.tables "
+                f"WHERE table_schema = '{warehouse_schema}__sqb_physical' "
+                f"AND table_name = '{physical_relation_name}'"
+            ),
+            config=postgres_e2e_config,
+        ) == ((0,),)
+    finally:
+        cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(schema_name=warehouse_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__sqb_physical",
+            config=postgres_e2e_config,
+        )
 
 
 @pytest.mark.parametrize(
