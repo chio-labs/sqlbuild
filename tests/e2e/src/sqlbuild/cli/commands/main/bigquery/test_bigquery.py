@@ -253,6 +253,97 @@ def test_given_missing_logical_view_when_repairing_on_bigquery_then_view_is_recr
 @pytest.mark.parametrize(
     "test_case",
     [
+        BigQueryReconcileE2ETestCase(
+            description="reconcile attach rebinds bigquery logical view",
+            expected_rows=(("2",),),
+            expected_stdout_fragments=("Will attach orders in dev", "Attached orders to"),
+        )
+    ],
+    ids=["reconcile attach rebinds bigquery logical view"],
+)
+def test_given_tracked_physical_relation_when_attaching_on_bigquery_then_view_is_rebound(
+    test_case: BigQueryReconcileE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    dataset_name: str = build_unique_dataset_name(prefix="sqlbuild_virtual_attach")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="bigquery_virtual_attach",
+        repo_files={
+            "sqlbuild_project.toml": build_bigquery_virtual_seed_project_toml(
+                project_name="bigquery_virtual_attach",
+                dataset_name=dataset_name,
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+    try:
+        ensure_bigquery_dataset_ready(dataset_name=dataset_name)
+        assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        (project_dir / "models" / "orders.sql").write_text(
+            "MODEL ();\n\nSELECT 2 AS id\n",
+            encoding="utf-8",
+        )
+        assert (
+            run_sqb(
+                command=("--no-color", "build", "--virtual-env", "pr"),
+                project_dir=project_dir,
+            ).returncode
+            == 0
+        )
+        project_id, physical_dataset_name, physical_relation_name = query_duckdb(
+            db_path=project_dir / "state.duckdb",
+            sql=(
+                "SELECT database_name, schema_name, relation_name "
+                "FROM sqlbuild_state.physical_relations "
+                "WHERE model_name = 'orders' ORDER BY updated_at DESC LIMIT 1"
+            ),
+        )[0]
+        physical_relation: str = f"`{project_id}.{physical_dataset_name}.{physical_relation_name}`"
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "reconcile",
+                "attach",
+                "--virtual-env",
+                "dev",
+                "--model",
+                "orders",
+                "--physical-relation",
+                physical_relation,
+                "--auto-approve",
+            ),
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in result.stdout
+        assert (
+            stringify_warehouse_rows(
+                fetch_bigquery_rows(
+                    dataset_name=dataset_name,
+                    sql=(
+                        "SELECT id FROM "
+                        f"{relation_name(dataset_name=f'{dataset_name}__dev', name='orders')} "
+                        "ORDER BY id"
+                    ),
+                )
+            )
+            == test_case.expected_rows
+        )
+    finally:
+        cleanup_bigquery_dataset(dataset_name=dataset_name)
+        cleanup_bigquery_dataset(dataset_name=f"{dataset_name}__dev")
+        cleanup_bigquery_dataset(dataset_name=f"{dataset_name}__pr")
+        cleanup_bigquery_dataset(dataset_name=f"{dataset_name}__sqb_physical")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         BigQueryVirtualLifecycleE2ETestCase(
             description="adopt and detach preserve bigquery logical table",
             expected_rows=(("1",),),

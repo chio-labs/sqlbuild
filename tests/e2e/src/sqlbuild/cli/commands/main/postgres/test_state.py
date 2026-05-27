@@ -7,6 +7,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.postgres._test_types import (
     PostgresJanitorDetachedVdeE2ETestCase,
+    PostgresReconcileE2ETestCase,
     PostgresStateAdoptDetachE2ETestCase,
     PostgresStateConnectionErrorE2ETestCase,
     PostgresStateExplicitRollbackE2ETestCase,
@@ -410,6 +411,135 @@ def test_given_postgres_detached_vde_when_running_janitor_then_refs_and_physical
     finally:
         cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
         cleanup_postgres_state_schemas(schema_name=warehouse_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__sqb_physical",
+            config=postgres_e2e_config,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresReconcileE2ETestCase(
+            description="postgres reconcile attach rebinds logical view",
+            expected_rows=((2,),),
+            expected_stdout_fragments=("Will attach orders in dev", "Attached orders to"),
+        )
+    ],
+    ids=["postgres reconcile attach rebinds logical view"],
+)
+def test_given_postgres_tracked_physical_relation_when_attaching_then_view_is_rebound(
+    test_case: PostgresReconcileE2ETestCase,
+    tmp_path: Path,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    state_schema: str = build_unique_schema_name(prefix="sqb_state_e2e")
+    warehouse_schema: str = build_unique_schema_name(prefix="sqb_virtual_e2e")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_reconcile_attach",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "postgres_reconcile_attach"\n'
+                'adapter = "postgres"\n'
+                'environment_mode = "virtual"\n'
+                'default_environment = "dev"\n\n'
+                "[connection]\n"
+                f'host = "{postgres_e2e_config["host"]}"\n'
+                f"port = {postgres_e2e_config['port']}\n"
+                f'dbname = "{postgres_e2e_config["dbname"]}"\n'
+                f'user = "{postgres_e2e_config["user"]}"\n'
+                f'password = "{postgres_e2e_config["password"]}"\n\n'
+                "[environments.dev]\n"
+                f'schema = "{warehouse_schema}"\n\n'
+                "[environments.dev.state]\n"
+                'backend = "postgres"\n'
+                f'schema = "{state_schema}"\n\n'
+                "[environments.dev.state.connection]\n"
+                f'host = "{postgres_e2e_config["host"]}"\n'
+                f"port = {postgres_e2e_config['port']}\n"
+                f'dbname = "{postgres_e2e_config["dbname"]}"\n'
+                f'user = "{postgres_e2e_config["user"]}"\n'
+                f'password = "{postgres_e2e_config["password"]}"\n'
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+
+    try:
+        assert (
+            run_sqb(command=("--no-color", "state", "init"), project_dir=project_dir).returncode
+            == test_case.expected_exit_code
+        )
+        assert (
+            run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode
+            == test_case.expected_exit_code
+        )
+        (project_dir / "models" / "orders.sql").write_text(
+            "MODEL ();\n\nSELECT 2 AS id\n",
+            encoding="utf-8",
+        )
+        assert (
+            run_sqb(
+                command=("--no-color", "build", "--virtual-env", "pr"),
+                project_dir=project_dir,
+            ).returncode
+            == test_case.expected_exit_code
+        )
+        _database_name, physical_schema_name, physical_relation_name = fetch_postgres_rows(
+            sql=(
+                "SELECT database_name, schema_name, relation_name FROM "
+                f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
+                "WHERE model_name = 'orders' ORDER BY updated_at DESC LIMIT 1"
+            ),
+            config=postgres_e2e_config,
+        )[0]
+        physical_relation: str = quoted_relation_name(
+            schema_name=str(physical_schema_name),
+            name=str(physical_relation_name),
+        )
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "reconcile",
+                "attach",
+                "--virtual-env",
+                "dev",
+                "--model",
+                "orders",
+                "--physical-relation",
+                physical_relation,
+                "--auto-approve",
+            ),
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in result.stdout
+        logical_relation: str = quoted_relation_name(
+            schema_name=f"{warehouse_schema}__dev",
+            name="orders",
+        )
+        assert (
+            fetch_postgres_rows(
+                sql=(f"SELECT id FROM {logical_relation} ORDER BY id"),
+                config=postgres_e2e_config,
+            )
+            == test_case.expected_rows
+        )
+    finally:
+        cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(schema_name=warehouse_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__dev",
+            config=postgres_e2e_config,
+        )
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__pr",
+            config=postgres_e2e_config,
+        )
         cleanup_postgres_state_schemas(
             schema_name=f"{warehouse_schema}__sqb_physical",
             config=postgres_e2e_config,

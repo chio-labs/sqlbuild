@@ -130,6 +130,14 @@ class PostgresStateAdoptDetachE2ETestCase:
 
 
 @dataclass(frozen=True)
+class PostgresReconcileE2ETestCase:
+    description: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_stdout_fragments: tuple[str, ...]
+    expected_exit_code: int = 0
+
+
+@dataclass(frozen=True)
 class PostgresJanitorDetachedVdeE2ETestCase:
     description: str
     expected_exit_code: int
