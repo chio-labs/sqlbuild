@@ -8,28 +8,29 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import CursorBounds, CursorOverrides, PlanOutput
 from sqlbuild.compiler.planner.types import IncrementalStrategy, MaterializationType, PlanAction
+from sqlbuild.virtual.executor.models import VirtualBuildExecutionPlan
 from sqlbuild.virtual.state.models import PhysicalRelationRecord
 
 
-def adapt_plan_for_seeded_virtual_execution(
+def build_virtual_execution_plan(
     *,
     adapter: BaseAdapter,
-    plan_output: PlanOutput,
+    direct_plan_output: PlanOutput,
     bound_physical_relations: dict[str, PhysicalRelationRecord],
     expected_version_hashes: dict[str, str],
     cursor_overrides: CursorOverrides | None,
-) -> PlanOutput:
-    """Restore seeded incremental execution semantics for changed physical targets."""
+) -> VirtualBuildExecutionPlan:
+    """Build separated virtual execution metadata from a direct plan."""
 
-    entries: list[Any] = []
+    execution_entries: list[Any] = []
     changed: bool = False
-    for entry in plan_output.model_entries:
+    for entry in direct_plan_output.model_entries:
         if not _requires_seeded_incremental_adaptation(
             entry=entry,
             bound_physical_relations=bound_physical_relations,
             expected_version_hashes=expected_version_hashes,
         ):
-            entries.append(entry)
+            execution_entries.append(entry)
             continue
 
         action: PlanAction | None = _incremental_action_for_strategy(
@@ -40,13 +41,13 @@ def adapt_plan_for_seeded_virtual_execution(
             cursor_overrides=cursor_overrides,
         )
         if action == PlanAction.INCREMENTAL_DELETE_INSERT and cursor_bounds is None:
-            entries.append(entry)
+            execution_entries.append(entry)
             continue
         if action is None:
-            entries.append(entry)
+            execution_entries.append(entry)
             continue
 
-        entries.append(
+        execution_entries.append(
             replace(
                 entry,
                 action=action,
@@ -60,9 +61,17 @@ def adapt_plan_for_seeded_virtual_execution(
         )
         changed = True
 
-    if not changed:
-        return plan_output
-    return replace(plan_output, model_entries=tuple(entries))
+    execution_model_entries: tuple[Any, ...] = tuple(execution_entries)
+    display_plan_output: PlanOutput = (
+        replace(direct_plan_output, model_entries=execution_model_entries)
+        if changed
+        else direct_plan_output
+    )
+    return VirtualBuildExecutionPlan(
+        direct_plan_output=direct_plan_output,
+        display_plan_output=display_plan_output,
+        execution_model_entries=execution_model_entries,
+    )
 
 
 def _requires_seeded_incremental_adaptation(

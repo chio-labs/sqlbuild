@@ -167,7 +167,7 @@ def run_virtual_build(
         on_progress=planning_progress.on_progress,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
-    plan_output: PlanOutput = result.plan_output
+    plan_output: PlanOutput = result.display_plan_output
     footer: str = format_build_footer(
         result=result.execution_result,
         elapsed=callbacks_by_ref[0].elapsed if callbacks_by_ref else 0,

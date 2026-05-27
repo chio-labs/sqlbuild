@@ -37,10 +37,14 @@ from sqlbuild.virtual.executor.helpers.rewrite import (
     rewrite_project_model_targets,
 )
 from sqlbuild.virtual.executor.helpers.seeded_plan import (
-    adapt_plan_for_seeded_virtual_execution,
+    build_virtual_execution_plan,
 )
 from sqlbuild.virtual.executor.helpers.seeding import seed_virtual_physical_versions
-from sqlbuild.virtual.executor.models import VirtualBuildExecutionHooks, VirtualBuildPipelineResult
+from sqlbuild.virtual.executor.models import (
+    VirtualBuildExecutionPlan,
+    VirtualBuildExecutionHooks,
+    VirtualBuildPipelineResult,
+)
 from sqlbuild.virtual.planner.main.output import apply_virtual_plan_output
 from sqlbuild.virtual.planner.main.selection import resolve_virtual_plan_model_selection
 from sqlbuild.virtual.planner.main.semantics import (
@@ -230,18 +234,19 @@ def run_virtual_build(
         semantics=semantics,
         selected_model_names=selected_model_names,
     )
-    plan_output = adapt_plan_for_seeded_virtual_execution(
+    execution_plan: VirtualBuildExecutionPlan = build_virtual_execution_plan(
         adapter=adapter,
-        plan_output=plan_output,
+        direct_plan_output=plan_output,
         bound_physical_relations=bound_physical_relations,
         expected_version_hashes=semantics.expected_version_hashes,
         cursor_overrides=cursor_overrides,
     )
+    executor_plan_output: PlanOutput = execution_plan.build_executor_plan_output()
     effective_concurrency: int = (
         concurrency if concurrency is not None else rewritten_project.settings.concurrency
     )
     hooks: VirtualBuildExecutionHooks = (
-        on_plan_ready(rewritten_project, plan_output)
+        on_plan_ready(rewritten_project, execution_plan.display_plan_output)
         if on_plan_ready is not None
         else VirtualBuildExecutionHooks()
     )
@@ -250,12 +255,12 @@ def run_virtual_build(
         connection_config=connection_config,
         backend=backend,
         config=config,
-        plan_output=plan_output,
+        plan_output=executor_plan_output,
         bound_physical_relations=bound_physical_relations,
         expected_version_hashes=semantics.expected_version_hashes,
     )
     result: BuildExecutionResult = run_build_pipeline(
-        plan=plan_output,
+        plan=executor_plan_output,
         connection_config=connection_config,
         adapter=adapter,
         settings=rewritten_project.settings,
@@ -288,7 +293,7 @@ def run_virtual_build(
             baseline_vde_name=physical_environment_name,
             bound_version_hashes=semantics.bound_version_hashes,
             bound_function_refs=bound_function_refs,
-            plan_output=plan_output,
+            plan_output=executor_plan_output,
             expected_local_hashes=semantics.expected_local_hashes,
             expected_metadata_jsons=semantics.expected_metadata_jsons,
             expected_version_hashes=semantics.expected_version_hashes,
@@ -296,7 +301,9 @@ def run_virtual_build(
 
     return VirtualBuildPipelineResult(
         project=rewritten_project,
-        plan_output=plan_output,
+        direct_plan_output=plan_output,
+        display_plan_output=execution_plan.display_plan_output,
+        execution_plan=execution_plan,
         execution_result=result,
     )
 
