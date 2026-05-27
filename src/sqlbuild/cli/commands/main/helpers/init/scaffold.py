@@ -13,7 +13,11 @@ def scaffold_blank_project(*, base_dir: Path, project_name: str) -> None:
         "models/marts",
         "sources",
         "seeds",
+        "loaders",
         "tests/unit",
+        "tests/scenarios",
+        "functions/sql",
+        "functions/python",
         "macros",
         "audits",
     )
