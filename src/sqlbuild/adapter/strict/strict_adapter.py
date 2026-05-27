@@ -253,6 +253,31 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_query_with_cursor_bounds(
+        self,
+        *,
+        sql: str,
+        cursor_column: str,
+        cursor_start: str,
+        cursor_end: str,
+        cursor_type: str | None,
+    ) -> str:
+        """Render a query wrapped with adapter-correct cursor bounds."""
+        ...
+
+    @abstractmethod
+    def render_seed_select_before_cursor(
+        self,
+        *,
+        source: str,
+        cursor_column: str,
+        cursor_end_exclusive: str,
+        cursor_type: str | None,
+    ) -> str:
+        """Render a seed-select query that keeps rows before a cursor bound."""
+        ...
+
+    @abstractmethod
     def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:
         """Render SQL statements that replace a target table from a source relation."""
         ...

@@ -11,6 +11,7 @@ from sqlbuild.virtual.state.constants import STATE_TABLE_INDEXES, STATE_TABLES
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     ModelVersionRecord,
+    PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
     StateLockRecord,
     StateSchemaValidationResult,
@@ -112,7 +113,7 @@ def test_given_duckdb_state_backend_when_running_lifecycle_then_state_tables_are
         DuckDbStateBackendValidationTestCase(
             description="reports invalid manually-created state schema",
             schema="broken_state",
-            expected_issue_count=18,
+            expected_issue_count=19,
         )
     ],
     ids=["reports invalid manually-created state schema"],
@@ -508,6 +509,16 @@ def test_given_duckdb_state_backend_when_upserting_core_records_then_round_trips
         backend.upsert_physical_relation(
             connection, schema=test_case.schema, record=replaced_relation_record
         )
+        ancestry_record: PhysicalRelationAncestryRecord = PhysicalRelationAncestryRecord(
+            model_name=test_case.expected_model_name,
+            version_hash=test_case.expected_version_hash,
+            parent_model_name=test_case.expected_model_name,
+            parent_version_hash="parent123",
+            seed_strategy="copy",
+        )
+        backend.upsert_physical_relation_ancestry(
+            connection, schema=test_case.schema, record=ancestry_record
+        )
         virtual_environment_record: VirtualEnvironmentRecord = VirtualEnvironmentRecord(
             virtual_environment_name=test_case.expected_virtual_environment_name,
             status=VirtualEnvironmentStatus.FINALIZED,
@@ -548,6 +559,15 @@ def test_given_duckdb_state_backend_when_upserting_core_records_then_round_trips
                 version_hash=test_case.expected_version_hash,
             )
             == replaced_relation_record
+        )
+        assert (
+            backend.get_physical_relation_ancestry(
+                connection,
+                schema=test_case.schema,
+                model_name=test_case.expected_model_name,
+                version_hash=test_case.expected_version_hash,
+            )
+            == ancestry_record
         )
         assert (
             backend.get_virtual_environment(

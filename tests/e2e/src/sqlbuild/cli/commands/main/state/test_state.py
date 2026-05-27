@@ -104,6 +104,7 @@ database = "state.duckdb"
             expected_reset_fragment="Virtual State Reset",
             expected_schema_version=1,
             expected_init_fragments=(
+                "physical_relation_ancestry",
                 "function_versions",
                 "virtual_environment_function_refs",
                 "virtual_environment_checkpoint_function_refs",

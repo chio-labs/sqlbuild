@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from textwrap import dedent
 
 import pytest
 
@@ -24,6 +25,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     build_real_warehouse_existing_snapshot_project_files,
     build_real_warehouse_snapshot_project_files,
     prepare_inline_project,
+    query_duckdb,
     run_sqb,
     stringify_warehouse_rows,
 )
@@ -40,6 +42,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake._test_types import (
     SnowflakeSourceDeferralE2ETestCase,
     SnowflakeSourceLoaderSchemaEvolutionE2ETestCase,
     SnowflakeSourceLoaderStrategiesE2ETestCase,
+    SnowflakeVirtualSeedE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.snowflake.helpers import (
     assert_current_snowflake_snapshot_rows,
@@ -48,6 +51,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake.helpers import (
     build_snowflake_local_config,
     build_snowflake_project_toml,
     build_snowflake_source_deferral_project_toml,
+    build_snowflake_virtual_seed_project_toml,
     cleanup_snowflake_schema,
     ensure_query_schema_ready,
     execute_snowflake_sql,
@@ -58,9 +62,124 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake.helpers import (
     prepare_snowflake_waffle_shop,
     relation_name,
     snowflake_relation_row_count,
+    virtual_seed_orders_model,
+    virtual_seed_source_yml,
     write_local_environment_override,
 )
-from tests.integration.src.sqlbuild.adapters.snowflake.helpers import build_unique_schema_name
+from tests.integration.src.sqlbuild.adapters.snowflake.helpers import (
+    build_snowflake_connection_config,
+    build_unique_schema_name,
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeVirtualSeedE2ETestCase(
+            description="virtual seeded incremental build uses clone on snowflake",
+            expected_rows=(("1", "10"), ("2", "21"), ("3", "31")),
+            expected_seed_strategy="durable_clone",
+        )
+    ],
+    ids=["virtual seeded incremental build uses clone on snowflake"],
+)
+def test_given_virtual_incremental_change_when_building_on_snowflake_then_seeds_with_clone(
+    test_case: SnowflakeVirtualSeedE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_virtual_seed")
+    database_name: str = str(build_snowflake_connection_config(schema=schema_name)["database"])
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="snowflake_virtual_seed",
+        repo_files={
+            "sqlbuild_project.toml": build_snowflake_virtual_seed_project_toml(
+                database_name=database_name,
+                schema_name=schema_name,
+            ),
+            "sources/raw.yml": virtual_seed_source_yml(schema_name=schema_name),
+            "models/orders.sql": virtual_seed_orders_model(amount_expression="amount_cents + 0"),
+        },
+    )
+    try:
+        execute_snowflake_sql(
+            schema_name=schema_name,
+            sql=f"CREATE SCHEMA IF NOT EXISTS {database_name}.{schema_name}",
+        )
+        execute_snowflake_sql(
+            schema_name=schema_name,
+            sql=dedent(
+                f"""
+                CREATE OR REPLACE TABLE
+                  {relation_name(schema_name=schema_name, name="raw_orders")} (
+                  id INTEGER,
+                  ordered_at TIMESTAMP_NTZ,
+                  amount_cents INTEGER
+                )
+                """
+            ).strip(),
+        )
+        execute_snowflake_sql(
+            schema_name=schema_name,
+            sql=dedent(
+                f"""
+                INSERT INTO {relation_name(schema_name=schema_name, name="raw_orders")} VALUES
+                  (1, '2026-01-01 00:00:00', 10),
+                  (2, '2026-01-02 00:00:00', 20)
+                """
+            ).strip(),
+        )
+        assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        (project_dir / "models" / "orders.sql").write_text(
+            virtual_seed_orders_model(amount_expression="amount_cents + 1"),
+            encoding="utf-8",
+        )
+        execute_snowflake_sql(
+            schema_name=schema_name,
+            sql=(
+                f"INSERT INTO {relation_name(schema_name=schema_name, name='raw_orders')} "
+                "VALUES (3, '2026-01-03 00:00:00', 30)"
+            ),
+        )
+
+        build_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "build",
+                "--start-cursor-ts",
+                "2026-01-02T00:00:00",
+                "--end-cursor-ts",
+                "2026-01-04T00:00:00",
+            ),
+            project_dir=project_dir,
+        )
+
+        assert build_result.returncode == 0, build_result.stderr
+        assert (
+            stringify_warehouse_rows(
+                fetch_snowflake_rows(
+                    schema_name=schema_name,
+                    sql=(
+                        f"SELECT id, amount_cents FROM {database_name}.{schema_name}__dev.orders "
+                        "ORDER BY id"
+                    ),
+                )
+            )
+            == test_case.expected_rows
+        )
+        assert query_duckdb(
+            db_path=project_dir / "state.duckdb",
+            sql=(
+                "SELECT seed_strategy FROM sqlbuild_state.physical_relation_ancestry "
+                "WHERE model_name = 'orders'"
+            ),
+        ) == [(test_case.expected_seed_strategy,)]
+    finally:
+        cleanup_snowflake_schema(schema_name=schema_name)
+        cleanup_snowflake_schema(schema_name=f"{schema_name}__dev")
+        cleanup_snowflake_schema(schema_name=f"{schema_name}__sqb_physical")
+
 
 SNOWFLAKE_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES: list[SnowflakeScenarioLocalReplayE2ETestCase] = [
     SnowflakeScenarioLocalReplayE2ETestCase(

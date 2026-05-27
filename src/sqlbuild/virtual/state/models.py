@@ -71,6 +71,17 @@ class PhysicalRelationRecord:
 
 
 @dataclass(frozen=True)
+class PhysicalRelationAncestryRecord:
+    """State row linking a seeded physical relation to its source relation."""
+
+    model_name: str
+    version_hash: str
+    parent_model_name: str
+    parent_version_hash: str
+    seed_strategy: str
+
+
+@dataclass(frozen=True)
 class FunctionVersionRecord:
     """Current state row for one function version."""
 
