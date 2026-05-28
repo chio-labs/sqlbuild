@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -18,10 +19,13 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
 from sqlbuild.spec.models.environments import resolve_environment_config, resolve_environment_name
 from sqlbuild.virtual.executor.main.views import refresh_logical_vde_views
+from sqlbuild.virtual.state.main.locks import acquire_virtual_environment_lease
+from sqlbuild.virtual.state.main.release_lock import release_state_lease
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     PhysicalRelationRecord,
     ReconcileEventRecord,
+    StateLockLease,
     VirtualEnvironmentRefRecord,
 )
 from sqlbuild.virtual.state.types import ReconcileAction, StateOperationStatus
@@ -72,6 +76,7 @@ def run_virtual_reconcile(
         project_dir=project_dir,
     )
     state_connection: Any = backend.connect(config.connection)
+    lease: StateLockLease | None = None
     try:
         refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
             state_connection,
@@ -93,6 +98,19 @@ def run_virtual_reconcile(
         if command == "repair-view":
             if model_name is None:
                 raise PlannerInputError("reconcile repair-view requires --model", code="C248")
+            lease = acquire_virtual_environment_lease(
+                backend,
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=resolved_virtual_environment_name,
+                owner_id=f"reconcile:{uuid4()}",
+                ttl=timedelta(minutes=10),
+            )
+            if lease is None:
+                raise PlannerInputError(
+                    f"virtual environment '{resolved_virtual_environment_name}' is locked",
+                    code="S014",
+                )
             repair_view(
                 graph=graph,
                 adapter=adapter,
@@ -122,6 +140,19 @@ def run_virtual_reconcile(
                 raise PlannerInputError(
                     "reconcile attach requires --model and --physical-relation",
                     code="C249",
+                )
+            lease = acquire_virtual_environment_lease(
+                backend,
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=resolved_virtual_environment_name,
+                owner_id=f"reconcile:{uuid4()}",
+                ttl=timedelta(minutes=10),
+            )
+            if lease is None:
+                raise PlannerInputError(
+                    f"virtual environment '{resolved_virtual_environment_name}' is locked",
+                    code="S014",
                 )
             selected_relation: PhysicalRelationRecord = resolve_attach_relation(
                 adapter=adapter,
@@ -192,6 +223,13 @@ def run_virtual_reconcile(
             physical_map=physical_map,
         )
     finally:
+        if lease is not None:
+            release_state_lease(
+                backend,
+                state_connection,
+                schema=config.schema,
+                lease=lease,
+            )
         backend.close(state_connection)
 
 

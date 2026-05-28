@@ -189,6 +189,8 @@ class DuckDbStateBackend(StateBackend):
             schema=schema,
             backup_id_value=backup_id_value,
         )
+        if not self._schema_exists(connection, schema=backup_schema):
+            raise StateBackupNotFoundError(f"State backup schema '{backup_schema}' does not exist")
         connection.execute("BEGIN")
         try:
             table_name: str
@@ -1068,6 +1070,13 @@ class DuckDbStateBackend(StateBackend):
         if not rows:
             raise StateBackupNotFoundError("No state backup is available for rollback")
         return rows[0][0].removeprefix(f"{schema}__backup_")
+
+    def _schema_exists(self, connection: Any, *, schema: str) -> bool:
+        rows: list[tuple[str]] = connection.execute(
+            "SELECT schema_name FROM information_schema.schemata WHERE schema_name = ?",
+            [schema],
+        ).fetchall()
+        return bool(rows)
 
     def _record_event(
         self,

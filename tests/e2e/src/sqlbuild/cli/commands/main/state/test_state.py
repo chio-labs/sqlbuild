@@ -203,6 +203,73 @@ database = "state.duckdb"
 
 @pytest.mark.parametrize(
     "test_case",
+    [
+        StateModeGuardE2ETestCase(
+            description="explicit rollback blocks cleanly when backup schema is deleted",
+            project_toml="",
+            expected_exit_code=1,
+            expected_error_fragment="sqlbuild_state__backup_",
+        )
+    ],
+    ids=["explicit rollback blocks cleanly when backup schema is deleted"],
+)
+def test_given_deleted_duckdb_state_backup_when_rolling_back_then_it_blocks_cleanly(
+    test_case: StateModeGuardE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="duckdb_state_deleted_backup",
+        repo_files={
+            "sqlbuild_project.toml": """
+name = "duckdb_state_deleted_backup"
+adapter = "duckdb"
+environment_mode = "virtual"
+default_environment = "dev"
+
+[connection]
+database = "warehouse.duckdb"
+
+[environments.dev.state]
+backend = "duckdb"
+schema = "sqlbuild_state"
+
+[environments.dev.state.connection]
+database = "state.duckdb"
+""".lstrip()
+        },
+    )
+    state_db_path: Path = project_dir / "state.duckdb"
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    assert run_sqb(command=("state", "migrate"), project_dir=project_dir).returncode == 0
+    backup_id: str = str(
+        query_duckdb(
+            db_path=state_db_path,
+            sql=(
+                "SELECT backup_id FROM sqlbuild_state.state_migration_events "
+                "WHERE action = 'backup' ORDER BY created_at DESC LIMIT 1"
+            ),
+        )[0][0]
+    )
+    execute_duckdb(
+        db_path=state_db_path,
+        sql=f'DROP SCHEMA "sqlbuild_state__backup_{backup_id}" CASCADE',
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "state", "rollback", "--backup-id", backup_id),
+        project_dir=project_dir,
+    )
+
+    assert_state_cli_error(
+        result=result,
+        expected_exit_code=test_case.expected_exit_code,
+        expected_error_fragment=test_case.expected_error_fragment,
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
     STATE_LIFECYCLE_ERROR_E2E_TEST_CASES,
     ids=[case.description for case in STATE_LIFECYCLE_ERROR_E2E_TEST_CASES],
 )
