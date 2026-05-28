@@ -1829,6 +1829,35 @@ class SqlServerAdapter(BaseAdapter):
         allow_copy_fallback: bool,
         statement_recorder: StatementRecorder,
     ) -> None:
+        source_parts: list[str] = source.split(".")
+        target_parts: list[str] = target.split(".")
+        if (
+            remove_source
+            and len(source_parts) >= 2
+            and len(target_parts) >= 2
+            and source_parts[:-2] == target_parts[:-2]
+        ):
+            source_parent: str = ".".join(source_parts[:-1])
+            target_parent: str = ".".join(target_parts[:-1])
+            if source_parent == target_parent:
+                statements: tuple[str, ...] = self.render_rename(source=source, target=target)
+            else:
+                target_schema: str = target_parts[-2]
+                source_name: str = source_parts[-1]
+                target_name: str = target_parts[-1]
+                moved_source: str = ".".join((*source_parts[:-2], target_schema, source_name))
+                statements = (f"ALTER SCHEMA {target_schema} TRANSFER {source}",)
+                if source_name != target_name:
+                    target_name_unquoted: str = target_name.strip("[]")
+                    statements = (
+                        *statements,
+                        f"EXEC sp_rename '{moved_source}', '{target_name_unquoted}'",
+                    )
+            statement_recorder.record_many(statements)
+            stmt: str
+            for stmt in statements:
+                self.execute(connection, stmt)
+            return
         if not allow_copy_fallback:
             raise AdapterUserError("SQL Server relation move/copy requires --allow-copy")
         statements: tuple[str, ...] = self.render_replace_table_from_relation(

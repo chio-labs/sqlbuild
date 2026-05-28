@@ -26,6 +26,14 @@ class PostgresRenderRenameTestCase:
 
 
 @dataclass(frozen=True)
+class PostgresMoveOrCopyRelationTestCase:
+    description: str
+    source: str
+    target: str
+    expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class PostgresRenderSwapTestCase:
     description: str
     left: str

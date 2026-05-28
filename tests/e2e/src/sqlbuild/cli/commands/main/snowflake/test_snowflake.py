@@ -400,7 +400,7 @@ def test_given_stateless_table_when_adopting_and_detaching_on_snowflake_then_tab
         )
         assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
         adopt_result: subprocess.CompletedProcess[str] = run_sqb(
-            command=("--no-color", "state", "adopt", "--allow-copy"),
+            command=("--no-color", "state", "adopt"),
             project_dir=project_dir,
             input_text="adopt dev\n",
         )

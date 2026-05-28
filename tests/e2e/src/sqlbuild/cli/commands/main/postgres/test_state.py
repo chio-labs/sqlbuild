@@ -234,7 +234,7 @@ def test_given_postgres_virtual_state_when_adopting_and_detaching_then_state_is_
             == test_case.expected_exit_code
         )
         adopt_result: subprocess.CompletedProcess[str] = run_sqb(
-            command=("--no-color", "state", "adopt", "--allow-copy"),
+            command=("--no-color", "state", "adopt"),
             project_dir=project_dir,
             input_text="adopt dev\n",
         )
@@ -346,12 +346,12 @@ def test_given_postgres_missing_unsuffixed_virtual_env_when_adopting_then_it_blo
     "test_case",
     [
         PostgresStateAdoptDetachErrorE2ETestCase(
-            description="postgres adopt blocks copy fallback without explicit permission",
+            description="postgres adopt blocks view copy fallback without explicit permission",
             expected_exit_code=1,
             expected_error_fragment="requires --allow-copy",
         )
     ],
-    ids=["postgres adopt blocks copy fallback without explicit permission"],
+    ids=["postgres adopt blocks view copy fallback without explicit permission"],
 )
 def test_given_postgres_copy_fallback_required_when_adopting_without_allow_copy_then_it_blocks(
     test_case: PostgresStateAdoptDetachErrorE2ETestCase,
@@ -373,7 +373,7 @@ def test_given_postgres_copy_fallback_required_when_adopting_without_allow_copy_
                     unsuffixed_virtual_env="dev",
                 )
             ),
-            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+            "models/orders.sql": "MODEL (materialized view);\n\nSELECT 1 AS id\n",
         },
     )
 
@@ -381,7 +381,7 @@ def test_given_postgres_copy_fallback_required_when_adopting_without_allow_copy_
         execute_postgres_sql(
             sql=(
                 f"CREATE SCHEMA {quote_identifier(warehouse_schema)}; "
-                f"CREATE TABLE {quoted_relation_name(schema_name=warehouse_schema, name='orders')} "
+                f"CREATE VIEW {quoted_relation_name(schema_name=warehouse_schema, name='orders')} "
                 "AS SELECT 1 AS id"
             ),
             config=postgres_e2e_config,
