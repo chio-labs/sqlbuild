@@ -29,7 +29,7 @@ SQLBuild is a SQL pipeline framework that validates SQL at compile time, blocks 
 ```bash
 pip install sqlbuild
 # or
-uv add sqlbuild
+uv pip install sqlbuild
 ```
 
 Create and run the playground project:

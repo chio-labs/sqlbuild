@@ -13,6 +13,237 @@ _TEMPLATE_PACKAGE: str = "sqlbuild.playground"
 _WAFFLE_SHOP_TEMPLATE: str = "templates/waffle_shop"
 _LOADER_WAFFLE_SHOP_TEMPLATE: str = "templates/loader_waffle_shop"
 
+_VIRTUAL_PROJECT_TOML: str = """name = "loader_waffle_shop_virtual"
+adapter = "duckdb"
+environment_mode = "virtual"
+default_environment = "dev"
+
+[connection]
+database = "loader_waffle_shop_virtual.duckdb"
+
+[settings]
+default_audit_severity = "warn"
+
+[defaults]
+materialized = "table"
+
+[environments.dev]
+schema = "dev"
+defer_sources_to = "dev"
+
+[environments.dev.state]
+backend = "duckdb"
+schema = "sqlbuild_state"
+unsuffixed_virtual_env = "dev"
+allow_reset = true
+
+[environments.dev.state.connection]
+database = "loader_waffle_shop_state.duckdb"
+"""
+
+_VIRTUAL_FACT_WAFFLE_ORDERS_SQL: str = """MODEL (
+  materialized table,
+  columns (
+    order_id (nullable false, audits [not_null, unique]),
+    revenue_cents (nullable false, audits [not_null]),
+  ),
+);
+
+SELECT
+  o.order_id,
+  o.customer_id,
+  c.plan_name,
+  o.waffle_type,
+  p.waffle_category,
+  o.quantity,
+  o.price_cents,
+  o.quantity * o.price_cents AS revenue_cents,
+  o.load_seq
+FROM __source("raw_orders") o
+LEFT JOIN __source("raw_customers") c ON o.customer_id = c.customer_id
+LEFT JOIN __seed("waffle_price_tiers") p ON o.waffle_type = p.waffle_type
+"""
+
+_VIRTUAL_TEST_FACT_WAFFLE_ORDERS_SQL: str = """TEST();
+
+WITH
+__source__raw_orders AS (
+  SELECT
+    1 AS order_id,
+    10 AS customer_id,
+    'classic' AS waffle_type,
+    2 AS quantity,
+    600 AS price_cents,
+    1 AS load_seq
+),
+__source__raw_customers AS (
+  SELECT
+    10 AS customer_id,
+    'plus' AS plan_name,
+    1 AS load_seq
+),
+__seed__waffle_price_tiers AS (
+  SELECT 'classic' AS waffle_type, 'standard' AS waffle_category
+),
+__expected__fact_waffle_orders AS (
+  SELECT
+    1 AS order_id,
+    10 AS customer_id,
+    'plus' AS plan_name,
+    'classic' AS waffle_type,
+    'standard' AS waffle_category,
+    2 AS quantity,
+    600 AS price_cents,
+    1200 AS revenue_cents,
+    1 AS load_seq
+),
+__assert__revenue_is_non_negative AS (
+  SELECT *
+  FROM __ref("fact_waffle_orders")
+  WHERE revenue_cents < 0
+)
+SELECT 1
+"""
+
+_VIRTUAL_SCENARIO_CUSTOMER_REVENUE_SQL: str = """SCENARIO (
+  description: "Customer revenue includes seed-backed waffle categories",
+  tags: ["virtual", "example"]
+);
+
+WITH
+__source__raw_orders AS (
+  SELECT
+    1 AS order_id,
+    10 AS customer_id,
+    'classic' AS waffle_type,
+    2 AS quantity,
+    600 AS price_cents,
+    1 AS load_seq
+  UNION ALL
+  SELECT
+    2 AS order_id,
+    10 AS customer_id,
+    'blueberry' AS waffle_type,
+    1 AS quantity,
+    750 AS price_cents,
+    1 AS load_seq
+),
+__source__raw_customers AS (
+  SELECT
+    10 AS customer_id,
+    'plus' AS plan_name,
+    1 AS load_seq
+),
+__seed__waffle_price_tiers AS (
+  SELECT 'classic' AS waffle_type, 'standard' AS waffle_category
+  UNION ALL
+  SELECT 'blueberry' AS waffle_type, 'fruit' AS waffle_category
+),
+__expected__customer_revenue AS (
+  SELECT
+    10 AS customer_id,
+    'plus' AS plan_name,
+    1950 AS revenue_cents,
+    2 AS order_count
+),
+__assert__no_negative_customer_revenue AS (
+  SELECT *
+  FROM __ref("customer_revenue")
+  WHERE revenue_cents < 0
+)
+SELECT 1
+"""
+
+_VIRTUAL_SEED_SCHEMA_YML: str = """seeds:
+  - name: waffle_price_tiers
+    description: Waffle category lookup used by the virtual playground.
+    columns:
+      - name: waffle_type
+        type: VARCHAR
+      - name: waffle_category
+        type: VARCHAR
+"""
+
+_VIRTUAL_SEED_CSV: str = """waffle_type,waffle_category
+classic,standard
+blueberry,fruit
+chocolate,dessert
+"""
+
+_VIRTUAL_README: str = """# SQLBuild Virtual Environments Playground
+
+This project is a local DuckDB playground for SQLBuild virtual environments. It is
+self-contained and does not require warehouse credentials.
+
+Virtual environments are an advanced, state-backed workflow. This playground uses a
+local DuckDB state database so you can try the lifecycle without operating shared
+infrastructure.
+
+## Try It
+
+Initialize the state store:
+
+```bash
+sqb state init
+```
+
+Build the default `dev` virtual environment:
+
+```bash
+sqb build
+```
+
+Create a branch-like virtual environment:
+
+```bash
+sqb build --virtual-env pr
+```
+
+Modify a model, then rebuild only the branch:
+
+```bash
+sqb build --virtual-env pr
+```
+
+Run the project checks:
+
+```bash
+sqb test
+sqb audit
+sqb scenario test
+```
+
+Compare the branch with `dev`:
+
+```bash
+sqb diff dev:pr --schema-only
+```
+
+Promote the branch into `dev`:
+
+```bash
+sqb promote --from pr --to dev
+```
+
+Inspect and roll back checkpoints:
+
+```bash
+sqb state checkpoints list --virtual-env dev
+sqb rollback --virtual-env dev
+```
+
+## What This Shows
+
+- DuckDB-backed local virtual environment execution
+- A local DuckDB state store
+- Branch-like virtual environments with `--virtual-env`
+- Low-copy promotion through versioned pointers and logical views
+- Checkpoint-backed rollback
+- Loader-backed waffle shop models without external services
+- A seed lookup that is loaded before virtual model execution
+- Unit test, audit, and scenario commands that exercise the generated project
+"""
+
 _DAGSTER_DEFINITIONS: str = '''"""Dagster definitions for the SQLBuild waffle shop playground."""
 
 from pathlib import Path
@@ -93,7 +324,9 @@ def create_playground_project(*, target_dir: Path, template: str = "waffle_shop"
         )
 
     template_path: str = (
-        _LOADER_WAFFLE_SHOP_TEMPLATE if template == "loader_waffle_shop" else _WAFFLE_SHOP_TEMPLATE
+        _LOADER_WAFFLE_SHOP_TEMPLATE
+        if template in ("loader_waffle_shop", "virtual")
+        else _WAFFLE_SHOP_TEMPLATE
     )
     template_root: Traversable = files(_TEMPLATE_PACKAGE).joinpath(template_path)
     if not template_root.is_dir():
@@ -105,6 +338,8 @@ def create_playground_project(*, target_dir: Path, template: str = "waffle_shop"
     _copy_tree(source=template_root, target=target_dir)
     if template == "dagster":
         _write_dagster_template_files(target_dir=target_dir)
+    if template == "virtual":
+        _write_virtual_template_files(target_dir=target_dir)
 
 
 def _copy_tree(*, source: Traversable, target: Path) -> None:
@@ -129,3 +364,25 @@ def _write_dagster_template_files(*, target_dir: Path) -> None:
     dagster_dir.mkdir()
     (dagster_dir / "definitions.py").write_text(_DAGSTER_DEFINITIONS, encoding="utf-8")
     (dagster_dir / "README.md").write_text(_DAGSTER_README, encoding="utf-8")
+
+
+def _write_virtual_template_files(*, target_dir: Path) -> None:
+    (target_dir / "sqlbuild_project.toml").write_text(_VIRTUAL_PROJECT_TOML, encoding="utf-8")
+    (target_dir / "README.md").write_text(_VIRTUAL_README, encoding="utf-8")
+    (target_dir / "models/fact_waffle_orders.sql").write_text(
+        _VIRTUAL_FACT_WAFFLE_ORDERS_SQL, encoding="utf-8"
+    )
+    seeds_dir: Path = target_dir / "seeds"
+    seeds_dir.mkdir()
+    (seeds_dir / "lookups.yml").write_text(_VIRTUAL_SEED_SCHEMA_YML, encoding="utf-8")
+    (seeds_dir / "waffle_price_tiers.csv").write_text(_VIRTUAL_SEED_CSV, encoding="utf-8")
+    unit_tests_dir: Path = target_dir / "tests" / "unit"
+    unit_tests_dir.mkdir(parents=True)
+    (unit_tests_dir / "test_fact_waffle_orders.sql").write_text(
+        _VIRTUAL_TEST_FACT_WAFFLE_ORDERS_SQL, encoding="utf-8"
+    )
+    scenarios_dir: Path = target_dir / "tests" / "scenarios"
+    scenarios_dir.mkdir(parents=True)
+    (scenarios_dir / "customer_revenue_minimal.sql").write_text(
+        _VIRTUAL_SCENARIO_CUSTOMER_REVENUE_SQL, encoding="utf-8"
+    )
