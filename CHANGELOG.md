@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.21.0](https://github.com/chio-labs/sqlbuild/compare/v0.20.1...v0.21.0) (2026-05-28)
+
+
+### Features
+
+* add virtual reconcile adopt detach ([ad63d06](https://github.com/chio-labs/sqlbuild/commit/ad63d06e58d9ad80895bf238d36b96fbf535ca0c))
+* harden cross-schema virtual moves ([ee7e1de](https://github.com/chio-labs/sqlbuild/commit/ee7e1de76ea2044edf11bc8989a850e8045d51ee))
+* harden virtual janitor cleanup ([da58879](https://github.com/chio-labs/sqlbuild/commit/da588794601110aa935c80c0d29a7808f61280c3))
+* harden virtual rollback checkpoints ([92ce8a5](https://github.com/chio-labs/sqlbuild/commit/92ce8a52d7302fa293857aa3f4623ab005936037))
+* harden virtual state repair cleanup ([3f599dc](https://github.com/chio-labs/sqlbuild/commit/3f599dc8a16f26a36851abe2a7ecc417c09ab615))
+* prune virtual checkpoints with janitor ([66cbd2c](https://github.com/chio-labs/sqlbuild/commit/66cbd2c842ae00a9b4efbce384892a4dcd7ca730))
+* seed virtual model versions ([7e0f07f](https://github.com/chio-labs/sqlbuild/commit/7e0f07fc76223696c989109bffda0ba51bba8e18))
+* version virtual functions ([33cea90](https://github.com/chio-labs/sqlbuild/commit/33cea909541ef442837259ca8dbfd13aa6ea56e5))
+
+
+### Bug Fixes
+
+* polish virtual ops output ([e9a549a](https://github.com/chio-labs/sqlbuild/commit/e9a549ab4ec1dfe05903389f4561d029521602f1))
+* polish virtual reconcile output ([f298ac9](https://github.com/chio-labs/sqlbuild/commit/f298ac9ec4bb6fb6b065cb693fb475c554033ee6))
+* suppress virtual fingerprint table writes ([7bae1eb](https://github.com/chio-labs/sqlbuild/commit/7bae1eb83f6dc5cd1dbd87843471b022847fdf56))
+
+
+### Documentation
+
+* mention advanced virtual environments ([21b47ee](https://github.com/chio-labs/sqlbuild/commit/21b47ee5b3073780bf8e0c4fa5a09c57768fa972))
+* trim scenario selector note ([34bc6e9](https://github.com/chio-labs/sqlbuild/commit/34bc6e917b71521ab257f82a35f0df3f9c8942b6))
+
 ## [0.20.1](https://github.com/chio-labs/sqlbuild/compare/v0.20.0...v0.20.1) (2026-05-26)
 
 
