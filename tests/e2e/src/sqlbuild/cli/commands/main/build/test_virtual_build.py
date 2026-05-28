@@ -1603,6 +1603,93 @@ def test_given_target_virtual_environment_lock_when_promoting_then_it_fails_clea
     "test_case",
     [
         VirtualPromoteE2ETestCase(
+            description="interrupted promotion records failed operation",
+            promote_command=("promote", "--from", "pr", "--to", "dev"),
+            expected_promote_fragments=("simulated promote view refresh failure",),
+            expected_query_results=(("SELECT id FROM dev__dev.fact_orders", ((1,),)),),
+        )
+    ],
+    ids=["interrupted promotion records failed operation"],
+)
+def test_given_view_refresh_failure_when_promoting_then_operation_is_marked_failed(
+    test_case: VirtualPromoteE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_promote_failed_operation",
+        repo_files=build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id")
+        | {
+            "adapters/failing_duckdb.py": (
+                "from typing import Any\n"
+                "from sqlbuild.adapter.shared.models import StatementRecorder\n"
+                "from sqlbuild.adapter.shared.exceptions import AdapterUserError\n"
+                "from sqlbuild.adapters.duckdb.client import DuckDbAdapter\n\n"
+                "class FailingDuckDbAdapter(DuckDbAdapter):\n"
+                "    adapter_name = 'failing_duckdb'\n\n"
+                "    def create_view_as(\n"
+                "        self,\n"
+                "        connection: Any,\n"
+                "        *,\n"
+                "        target: str,\n"
+                "        sql: str,\n"
+                "        statement_recorder: StatementRecorder,\n"
+                "    ) -> None:\n"
+                "        raise AdapterUserError('simulated promote view refresh failure')\n"
+            )
+        },
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+    (project_dir / "models" / "stg_orders.sql").write_text(
+        "MODEL ();\n\nSELECT 2 AS id\n",
+        encoding="utf-8",
+    )
+    assert (
+        run_sqb(
+            command=("--no-color", "build", "--virtual-env", "pr"), project_dir=project_dir
+        ).returncode
+        == 0
+    )
+    (project_dir / "sqlbuild_local.toml").write_text(
+        'adapter = "failing_duckdb"\n\n'
+        "[connection]\n"
+        f'database = "{project_dir / "warehouse.duckdb"}"\n'
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.promote_command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert test_case.expected_promote_fragments[0] in (result.stdout + result.stderr)
+    assert query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT operation_type, status, virtual_environment_name "
+            "FROM sqlbuild_state.state_operations WHERE operation_type = 'promote'"
+        ),
+    ) == [("promote", "failed", "dev")]
+    assert query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT status, message FROM sqlbuild_state.state_operation_events "
+            "WHERE operation_id LIKE 'promote:%' ORDER BY created_at DESC LIMIT 1"
+        ),
+    ) == [("failed", test_case.expected_promote_fragments[0])]
+    query_sql: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    for query_sql, expected_rows in test_case.expected_query_results:
+        assert query_duckdb(db_path=project_dir / "warehouse.duckdb", sql=query_sql) == list(
+            expected_rows
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualPromoteE2ETestCase(
             description=(
                 "working source blocks whole promotion but allows coherent partial promotion"
             ),

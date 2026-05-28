@@ -916,7 +916,9 @@ def test_given_detach_copy_failure_when_detaching_then_operation_is_marked_faile
         ).returncode
         == 0
     )
-    (project_dir / "sqlbuild_local.toml").write_text('adapter = "failing_duckdb"\n')
+    (project_dir / "sqlbuild_local.toml").write_text(
+        'adapter = "failing_duckdb"\n\n[connection]\ndatabase = "warehouse.duckdb"\n'
+    )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=("state", "detach", "--allow-copy"),
@@ -963,6 +965,125 @@ def test_given_detach_copy_failure_when_detaching_then_operation_is_marked_faile
             "WHERE virtual_environment_name = 'dev'"
         ),
     ) == [("finalized",)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StateModeGuardE2ETestCase(
+            description="interrupted adopt records failed operation and leaves recoverable residue",
+            project_toml="",
+            expected_exit_code=1,
+            expected_error_fragment="simulated adopt failure after move",
+        )
+    ],
+    ids=["interrupted adopt records failed operation and leaves recoverable residue"],
+)
+def test_given_adopt_move_failure_when_adopting_then_operation_is_marked_failed(
+    tmp_path: Path,
+    test_case: StateModeGuardE2ETestCase,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_state_adopt_failed_operation",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "virtual_state_adopt_failed_operation"\n'
+                'adapter = "duckdb"\n'
+                'environment_mode = "virtual"\n'
+                'default_environment = "dev"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n\n'
+                "[environments.dev]\n"
+                'schema = "dev"\n\n'
+                "[environments.dev.state]\n"
+                'backend = "duckdb"\n'
+                'schema = "sqlbuild_state"\n'
+                'unsuffixed_virtual_env = "dev"\n\n'
+                "[environments.dev.state.connection]\n"
+                'database = "state.duckdb"\n'
+            ),
+            "adapters/failing_duckdb.py": (
+                "from typing import Any\n"
+                "from sqlbuild.adapter.shared.models import StatementRecorder\n"
+                "from sqlbuild.adapter.shared.exceptions import AdapterUserError\n"
+                "from sqlbuild.adapters.duckdb.client import DuckDbAdapter\n\n"
+                "class FailingDuckDbAdapter(DuckDbAdapter):\n"
+                "    adapter_name = 'failing_duckdb'\n\n"
+                "    def move_or_copy_relation(\n"
+                "        self,\n"
+                "        connection: Any,\n"
+                "        *,\n"
+                "        source: str,\n"
+                "        target: str,\n"
+                "        remove_source: bool,\n"
+                "        allow_copy_fallback: bool,\n"
+                "        statement_recorder: StatementRecorder,\n"
+                "    ) -> None:\n"
+                "        super().move_or_copy_relation(\n"
+                "            connection,\n"
+                "            source=source,\n"
+                "            target=target,\n"
+                "            remove_source=remove_source,\n"
+                "            allow_copy_fallback=allow_copy_fallback,\n"
+                "            statement_recorder=statement_recorder,\n"
+                "        )\n"
+                "        raise AdapterUserError('simulated adopt failure after move')\n"
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="CREATE SCHEMA dev; CREATE TABLE dev.orders AS SELECT 1 AS id",
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    (project_dir / "sqlbuild_local.toml").write_text(
+        'adapter = "failing_duckdb"\n\n'
+        "[connection]\n"
+        f'database = "{project_dir / "warehouse.duckdb"}"\n'
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "adopt", "--allow-copy"),
+        project_dir=project_dir,
+        input_text="adopt dev\n",
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    assert test_case.expected_error_fragment in (result.stdout + result.stderr)
+    assert query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql="SELECT status FROM sqlbuild_state.state_operations WHERE operation_id = 'adopt:dev'",
+    ) == [("failed",)]
+    assert query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT action, status, message FROM sqlbuild_state.state_operation_events "
+            "WHERE operation_id = 'adopt:dev' ORDER BY created_at"
+        ),
+    ) == [
+        ("start", "running", "starting adopt"),
+        ("fail", "failed", test_case.expected_error_fragment),
+    ]
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=(
+            "SELECT table_type FROM information_schema.tables "
+            "WHERE table_schema = 'dev__sqb_physical' AND table_name = 'orders__v_orders'"
+        ),
+    ) == [("BASE TABLE",)]
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=(
+            "SELECT COUNT(*) FROM information_schema.tables "
+            "WHERE table_schema = 'dev' AND table_name = 'orders'"
+        ),
+    ) == [(0,)]
+    assert query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_refs",
+    ) == [(0,)]
 
 
 @pytest.mark.parametrize(
