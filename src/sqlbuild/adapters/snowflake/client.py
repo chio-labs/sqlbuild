@@ -401,6 +401,20 @@ class SnowflakeAdapter(BaseAdapter):
         allow_copy_fallback: bool,
         statement_recorder: StatementRecorder,
     ) -> None:
+        source_parts: list[str] = source.split(".")
+        target_parts: list[str] = target.split(".")
+        if (
+            remove_source
+            and len(source_parts) >= 2
+            and len(target_parts) >= 2
+            and source_parts[:-2] == target_parts[:-2]
+        ):
+            statements: tuple[str, ...] = self.render_rename(source=source, target=target)
+            statement_recorder.record_many(statements)
+            stmt: str
+            for stmt in statements:
+                self.execute(connection, stmt)
+            return
         if not allow_copy_fallback:
             raise AdapterUserError("Snowflake relation move/copy requires --allow-copy")
         statements: tuple[str, ...] = self.render_replace_table_from_relation(

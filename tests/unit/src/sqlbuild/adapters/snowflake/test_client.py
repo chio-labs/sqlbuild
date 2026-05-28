@@ -21,6 +21,7 @@ from sqlbuild.compiler.lineage.types import InferredNullability
 from tests.unit.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakeExpressionInferenceProfileTestCase,
     SnowflakeLoadSeedTestCase,
+    SnowflakeMoveOrCopyRelationTestCase,
     SnowflakeQueryColumnNamesTestCase,
     SnowflakeRenderCloneTestCase,
     SnowflakeRenderCursorBoundLiteralTestCase,
@@ -159,6 +160,44 @@ def test_given_clone_request_when_rendering_then_snowflake_uses_expected_clone_s
 
     assert adapter.supports_zero_copy_clone() is test_case.expected_supports_zero_copy
     assert statements == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeMoveOrCopyRelationTestCase(
+            description="moves table across schemas with native rename",
+            source="ANALYTICS.MARTS.FACT_ORDERS",
+            target="ANALYTICS.MARTS__SQB_PHYSICAL.FACT_ORDERS__V_ABC123",
+            expected_statements=(
+                "ALTER TABLE ANALYTICS.MARTS.FACT_ORDERS "
+                "RENAME TO ANALYTICS.MARTS__SQB_PHYSICAL.FACT_ORDERS__V_ABC123",
+            ),
+        )
+    ],
+    ids=["moves table across schemas with native rename"],
+)
+def test_given_cross_schema_table_move_when_moving_then_snowflake_uses_native_rename(
+    test_case: SnowflakeMoveOrCopyRelationTestCase,
+) -> None:
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+    cursor: FakeSnowflakeDescribeCursor = FakeSnowflakeDescribeCursor(())
+    connection: FakeSnowflakeDescribeConnection = FakeSnowflakeDescribeConnection(cursor)
+    statement_recorder: StatementRecorder = StatementRecorder()
+
+    adapter.move_or_copy_relation(
+        connection,
+        source=test_case.source,
+        target=test_case.target,
+        remove_source=True,
+        allow_copy_fallback=False,
+        statement_recorder=statement_recorder,
+    )
+
+    assert tuple(connection.executed_sql) == test_case.expected_statements
+    assert tuple(event.content for event in statement_recorder.snapshot()) == (
+        test_case.expected_statements
+    )
 
 
 @pytest.mark.parametrize(
