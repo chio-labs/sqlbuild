@@ -345,6 +345,30 @@ def run_virtual_promote(
             schema=config.schema,
             refs=refs,
         )
+        refresh_start: float = time.perf_counter()
+        if on_progress is not None:
+            on_progress("Refreshing target VDE views...")
+        refresh_logical_vde_views(
+            project=graph.project,
+            adapter=adapter,
+            connection_config=connection_config,
+            virtual_environment_name=to_virtual_environment_name,
+            unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+            physical_relations=physical_relations,
+            on_connection_start=on_connection_start,
+            on_connection_complete=on_connection_complete,
+            on_connection_error=on_connection_error,
+        )
+        if function_versions:
+            publish_function_versions(
+                adapter=adapter,
+                connection_config=connection_config,
+                graph=graph,
+                virtual_environment_name=to_virtual_environment_name,
+                function_versions=function_versions,
+            )
+        if on_progress is not None:
+            on_progress(f"Refreshed target VDE views. ({time.perf_counter() - refresh_start:.2f}s)")
         record_state_operation(
             backend,
             state_connection,
@@ -380,31 +404,6 @@ def run_virtual_promote(
                 lease=lease,
             )
         backend.close(state_connection)
-
-    refresh_start: float = time.perf_counter()
-    if on_progress is not None:
-        on_progress("Refreshing target VDE views...")
-    refresh_logical_vde_views(
-        project=graph.project,
-        adapter=adapter,
-        connection_config=connection_config,
-        virtual_environment_name=to_virtual_environment_name,
-        unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
-        physical_relations=physical_relations,
-        on_connection_start=on_connection_start,
-        on_connection_complete=on_connection_complete,
-        on_connection_error=on_connection_error,
-    )
-    if function_versions:
-        publish_function_versions(
-            adapter=adapter,
-            connection_config=connection_config,
-            graph=graph,
-            virtual_environment_name=to_virtual_environment_name,
-            function_versions=function_versions,
-        )
-    if on_progress is not None:
-        on_progress(f"Refreshed target VDE views. ({time.perf_counter() - refresh_start:.2f}s)")
     return status.value, selected_model_names, stale_after
 
 
