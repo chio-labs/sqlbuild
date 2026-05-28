@@ -110,10 +110,11 @@ def run_virtual_reconcile(
                 message=f"repaired view for {model_name}",
             )
             return (
-                f"Will recreate logical view for {model_name} in "
-                f"{resolved_virtual_environment_name}.\n"
-                f"Repaired logical view for {model_name} in "
-                f"{resolved_virtual_environment_name}."
+                "Repair\n"
+                f"  model   {model_name}\n"
+                f"  VDE     {resolved_virtual_environment_name}\n"
+                "  action  recreate logical view from state\n"
+                "  result  repaired"
             )
 
         if command == "attach":
@@ -166,9 +167,11 @@ def run_virtual_reconcile(
                 message=f"attached {model_name} to {physical_relation_name}",
             )
             return (
-                f"Will attach {model_name} in {resolved_virtual_environment_name} "
-                f"to {physical_relation_name}.\n"
-                f"Attached {model_name} to {physical_relation_name}."
+                "Attach\n"
+                f"  model     {model_name}\n"
+                f"  VDE       {resolved_virtual_environment_name}\n"
+                f"  physical  {physical_relation_name}\n"
+                "  result    attached"
             )
 
         _record_reconcile_event(
