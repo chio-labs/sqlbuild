@@ -25,10 +25,13 @@ from sqlbuild.executor.janitor.models import (
     JanitorCheckpointCandidate,
     JanitorDeleteCandidate,
     JanitorDetachedVirtualEnvironmentCandidate,
+    JanitorExpiredLockCandidate,
+    JanitorExpiredVirtualEnvironmentCandidate,
     JanitorPlan,
     JanitorRelationKey,
     JanitorSkippedRelation,
     JanitorSkippedSchema,
+    JanitorStateBackupCandidate,
 )
 from sqlbuild.shared.helpers.scenario_artifact_names import is_scenario_artifact_physical_name
 
@@ -48,6 +51,11 @@ def build_janitor_plan(
     detached_virtual_environment_candidates: tuple[
         JanitorDetachedVirtualEnvironmentCandidate, ...
     ] = (),
+    expired_virtual_environment_candidates: tuple[
+        JanitorExpiredVirtualEnvironmentCandidate, ...
+    ] = (),
+    state_backup_candidates: tuple[JanitorStateBackupCandidate, ...] = (),
+    expired_lock_candidates: tuple[JanitorExpiredLockCandidate, ...] = (),
 ) -> JanitorPlan:
     """Build a desired-vs-warehouse cleanup plan for target schemas."""
 
@@ -60,6 +68,9 @@ def build_janitor_plan(
             retention_days=retention_days,
             checkpoint_candidates=checkpoint_candidates,
             detached_virtual_environment_candidates=detached_virtual_environment_candidates,
+            expired_virtual_environment_candidates=expired_virtual_environment_candidates,
+            state_backup_candidates=state_backup_candidates,
+            expired_lock_candidates=expired_lock_candidates,
             age_metadata_supported=adapter.supports_relation_age_metadata(),
         )
 
@@ -196,6 +207,9 @@ def build_janitor_plan(
         candidates=tuple(candidates),
         checkpoint_candidates=checkpoint_candidates,
         detached_virtual_environment_candidates=detached_virtual_environment_candidates,
+        expired_virtual_environment_candidates=expired_virtual_environment_candidates,
+        state_backup_candidates=state_backup_candidates,
+        expired_lock_candidates=expired_lock_candidates,
         skipped_relations=tuple(skipped_relations),
         skipped_schemas=tuple(skipped_schemas),
         scanned_schema_count=len(target_schemas),

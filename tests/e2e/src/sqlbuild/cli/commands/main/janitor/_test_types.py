@@ -85,6 +85,29 @@ class JanitorActiveVirtualEnvironmentProtectionE2ETestCase:
 
 
 @dataclass(frozen=True)
+class JanitorExpiredVirtualEnvironmentE2ETestCase:
+    """Test case for expired non-active VDE cleanup behavior."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+    expected_virtual_environment_names_after: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class JanitorStateCleanupE2ETestCase:
+    """Test case for state-only janitor cleanup behavior."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+    expected_backup_schema_count_after: int
+    expected_lock_count_after: int
+
+
+@dataclass(frozen=True)
 class JanitorInvalidConfigE2ETestCase:
     """Test case for invalid janitor config behavior."""
 

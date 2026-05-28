@@ -8,9 +8,12 @@ from sqlbuild.executor.janitor.models import (
     JanitorCheckpointCandidate,
     JanitorDeleteCandidate,
     JanitorDetachedVirtualEnvironmentCandidate,
+    JanitorExpiredLockCandidate,
+    JanitorExpiredVirtualEnvironmentCandidate,
     JanitorPlan,
     JanitorSkippedRelation,
     JanitorSkippedSchema,
+    JanitorStateBackupCandidate,
 )
 from sqlbuild.shared.helpers.colors import blue, blue_bold, dim, green, green_bold, yellow
 
@@ -69,6 +72,27 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
         else _value(detached_count, use_color=use_color)
     )
     stream.write(f"  {'detached VDEs pruned':<22} {rendered_detached}\n")
+    expired_vde_count: str = str(len(plan.expired_virtual_environment_candidates))
+    rendered_expired_vdes: str = (
+        yellow(expired_vde_count)
+        if use_color and plan.expired_virtual_environment_candidates
+        else _value(expired_vde_count, use_color=use_color)
+    )
+    stream.write(f"  {'expired VDEs pruned':<22} {rendered_expired_vdes}\n")
+    backup_count: str = str(len(plan.state_backup_candidates))
+    rendered_backups: str = (
+        yellow(backup_count)
+        if use_color and plan.state_backup_candidates
+        else _value(backup_count, use_color=use_color)
+    )
+    stream.write(f"  {'state backups pruned':<22} {rendered_backups}\n")
+    expired_lock_count: str = str(len(plan.expired_lock_candidates))
+    rendered_expired_locks: str = (
+        yellow(expired_lock_count)
+        if use_color and plan.expired_lock_candidates
+        else _value(expired_lock_count, use_color=use_color)
+    )
+    stream.write(f"  {'expired locks pruned':<22} {rendered_expired_locks}\n")
     skipped_count: str = _value(str(len(plan.skipped_relations)), use_color=use_color)
     stream.write(f"  {'objects skipped':<22} {skipped_count}\n")
 
@@ -106,6 +130,34 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
                 f"{_reason('detached virtual environment', use_color=use_color)}\n"
             )
 
+    if plan.expired_virtual_environment_candidates:
+        stream.write(f"\n{_section('Eligible expired VDEs', use_color=use_color)}\n")
+        expired_environment_candidate: JanitorExpiredVirtualEnvironmentCandidate
+        for expired_environment_candidate in plan.expired_virtual_environment_candidates:
+            environment_name: str = expired_environment_candidate.virtual_environment_name
+            stream.write(
+                f"  {_object(environment_name, use_color=use_color)}  "
+                f"{_reason('expired virtual environment', use_color=use_color)}\n"
+            )
+
+    if plan.state_backup_candidates:
+        stream.write(f"\n{_section('Eligible state backups', use_color=use_color)}\n")
+        state_backup_candidate: JanitorStateBackupCandidate
+        for state_backup_candidate in plan.state_backup_candidates:
+            stream.write(
+                f"  {_object(state_backup_candidate.backup_id, use_color=use_color)}  "
+                f"{_reason(state_backup_candidate.schema_name, use_color=use_color)}\n"
+            )
+
+    if plan.expired_lock_candidates:
+        stream.write(f"\n{_section('Eligible expired locks', use_color=use_color)}\n")
+        expired_lock_candidate: JanitorExpiredLockCandidate
+        for expired_lock_candidate in plan.expired_lock_candidates:
+            stream.write(
+                f"  {_object(expired_lock_candidate.lock_key, use_color=use_color)}  "
+                f"{_reason(expired_lock_candidate.owner_id, use_color=use_color)}\n"
+            )
+
     if plan.skipped_relations:
         stream.write(f"\n{_section('Skipped objects', use_color=use_color)}\n")
         skipped: JanitorSkippedRelation
@@ -120,8 +172,12 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
 def confirmation_text(plan: JanitorPlan) -> str:
     """Build the exact confirmation phrase for a janitor plan."""
 
-    state_candidate_count: int = len(plan.checkpoint_candidates) + len(
-        plan.detached_virtual_environment_candidates
+    state_candidate_count: int = (
+        len(plan.checkpoint_candidates)
+        + len(plan.detached_virtual_environment_candidates)
+        + len(plan.expired_virtual_environment_candidates)
+        + len(plan.state_backup_candidates)
+        + len(plan.expired_lock_candidates)
     )
     if state_candidate_count == 0:
         return f"delete {len(plan.candidates)} objects from {environment_label(plan)}"

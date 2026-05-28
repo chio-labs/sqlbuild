@@ -19,6 +19,7 @@ from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
 from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 from sqlbuild.spec.models.types import EnvironmentMode
 from sqlbuild.virtual.executor.main.promote import run_virtual_promote
@@ -39,8 +40,6 @@ def run_promote(
 ) -> int:
     """Execute the promote command."""
 
-    if no_color:
-        pass
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
@@ -57,14 +56,15 @@ def run_promote(
         project_dir=effective_project_dir,
         cli_vars=cli_vars,
     )
+    use_color: bool = not no_color and supports_color()
     planning_progress: PlanningProgressReporter = PlanningProgressReporter(
         stream=sys.stdout,
-        use_color=not no_color,
+        use_color=use_color,
     )
     connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
         adapter_name=adapter_name,
         stream=sys.stdout,
-        use_color=not no_color,
+        use_color=use_color,
     )
     status, promoted_models, remaining_stale = run_virtual_promote(
         project_dir=effective_project_dir,
@@ -96,7 +96,7 @@ def run_promote(
             promoted_models=promoted_models,
             remaining_stale=remaining_stale,
             verbose=verbose,
-            use_color=not no_color,
+            use_color=use_color,
         )
     )
     return 0

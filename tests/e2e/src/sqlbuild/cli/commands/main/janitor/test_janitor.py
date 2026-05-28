@@ -16,7 +16,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.janitor._test_types import (
     JanitorDetachedVirtualEnvironmentE2ETestCase,
     JanitorDetachedVirtualEnvironmentRetentionE2ETestCase,
     JanitorDisabledE2ETestCase,
+    JanitorExpiredVirtualEnvironmentE2ETestCase,
     JanitorInvalidConfigE2ETestCase,
+    JanitorStateCleanupE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.janitor.helpers import (
     create_janitor_demo_relations,
@@ -138,6 +140,9 @@ def test_given_stale_relations_when_running_janitor_then_it_deletes_only_tracked
         assert table_exists(db_path=db_path, table_name=table_name)
     for table_name in test_case.expected_missing_tables:
         assert not table_exists(db_path=db_path, table_name=table_name)
+    assert "Eligible expired VDEs" not in janitor_result.stdout
+    assert "Eligible state backups" not in janitor_result.stdout
+    assert "Eligible expired locks" not in janitor_result.stdout
 
 
 @pytest.mark.parametrize(
@@ -279,6 +284,158 @@ def test_given_virtual_checkpoint_refs_when_running_janitor_then_it_preserves_ph
         schema="dev__sqb_physical",
         table_name=protected_relation_name,
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorExpiredVirtualEnvironmentE2ETestCase(
+            description="virtual janitor prunes expired non-active VDEs",
+            janitor_command=("janitor", "--auto-approve"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "expired VDEs pruned",
+                "Eligible expired VDEs",
+                "pr  expired virtual environment",
+                "Deleted 0 objects and 1 state items.",
+            ),
+            expected_virtual_environment_names_after=("dev",),
+        )
+    ],
+    ids=["virtual janitor prunes expired non-active VDEs"],
+)
+def test_given_non_active_vde_when_running_janitor_then_it_prunes_expired_environment(
+    test_case: JanitorExpiredVirtualEnvironmentE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    repo_files: dict[str, str] = build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id")
+    repo_files["sqlbuild_project.toml"] += dedent(
+        """
+
+        [janitor]
+        enabled = true
+        retention_days = 0
+        delete_tracked_only = false
+        """
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_janitor_expired_vde",
+        repo_files=repo_files,
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+    (project_dir / "models" / "stg_orders.sql").write_text(
+        "MODEL ();\n\nSELECT 2 AS id\n",
+        encoding="utf-8",
+    )
+    pr_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--virtual-env", "pr"),
+        project_dir=project_dir,
+    )
+    assert pr_build_result.returncode == 0, pr_build_result.stdout + pr_build_result.stderr
+
+    janitor_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.janitor_command,
+        project_dir=project_dir,
+    )
+
+    assert janitor_result.returncode == test_case.expected_exit_code, (
+        janitor_result.stdout + janitor_result.stderr
+    )
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in janitor_result.stdout
+    assert query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT virtual_environment_name FROM sqlbuild_state.virtual_environments "
+            "ORDER BY virtual_environment_name"
+        ),
+    ) == [(name,) for name in test_case.expected_virtual_environment_names_after]
+    assert not table_exists(
+        db_path=project_dir / "warehouse.duckdb",
+        schema="dev__pr",
+        table_name="fact_orders",
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorStateCleanupE2ETestCase(
+            description="virtual janitor prunes old backups and expired locks",
+            janitor_command=("janitor", "--auto-approve"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "state backups pruned",
+                "expired locks pruned",
+                "Eligible state backups",
+                "Eligible expired locks",
+                "Deleted 0 objects and 2 state items.",
+            ),
+            expected_backup_schema_count_after=1,
+            expected_lock_count_after=0,
+        )
+    ],
+    ids=["virtual janitor prunes old backups and expired locks"],
+)
+def test_given_state_backups_and_expired_locks_when_running_janitor_then_state_is_pruned(
+    test_case: JanitorStateCleanupE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    repo_files: dict[str, str] = build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id")
+    repo_files["sqlbuild_project.toml"] += dedent(
+        """
+
+        [janitor]
+        enabled = true
+        retention_days = 0
+        delete_tracked_only = false
+        """
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_janitor_state_cleanup",
+        repo_files=repo_files,
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    assert run_sqb(command=("state", "migrate"), project_dir=project_dir).returncode == 0
+    execute_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql="UPDATE sqlbuild_state.state_versions SET schema_version = 2",
+    )
+    assert run_sqb(command=("state", "migrate"), project_dir=project_dir).returncode == 0
+    execute_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "INSERT INTO sqlbuild_state.locks "
+            "(lock_key, owner_id, expires_at, created_at, updated_at) VALUES "
+            "('virtual_env:stale', 'owner', TIMESTAMP '2000-01-01 00:00:00', "
+            "TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2000-01-01 00:00:00')"
+        ),
+    )
+
+    janitor_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.janitor_command,
+        project_dir=project_dir,
+    )
+
+    assert janitor_result.returncode == test_case.expected_exit_code, (
+        janitor_result.stdout + janitor_result.stderr
+    )
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in janitor_result.stdout
+    assert query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT COUNT(*) FROM information_schema.schemata "
+            "WHERE schema_name LIKE 'sqlbuild_state__backup_%'"
+        ),
+    ) == [(test_case.expected_backup_schema_count_after,)]
+    assert query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql="SELECT COUNT(*) FROM sqlbuild_state.locks",
+    ) == [(test_case.expected_lock_count_after,)]
 
 
 @pytest.mark.parametrize(
