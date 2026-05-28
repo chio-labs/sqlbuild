@@ -44,6 +44,15 @@ class VirtualBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class VirtualCustomMaterializationE2ETestCase:
+    """Test case for virtual custom materialization behavior."""
+
+    description: str
+    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
+    expected_ancestry_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class VirtualBuildSelectionGuardE2ETestCase:
     """Test case for virtual build selection guard behavior."""
 
