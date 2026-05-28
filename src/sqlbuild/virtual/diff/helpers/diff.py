@@ -15,7 +15,12 @@ from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.main.selection import resolve_project_selectors
 from sqlbuild.virtual.executor.main.rewrite import rewrite_virtual_project_model_targets
 from sqlbuild.virtual.planner.main.targets import build_virtual_target_from_physical_relation
-from sqlbuild.virtual.state.models import PhysicalRelationRecord, VirtualEnvironmentRefRecord
+from sqlbuild.virtual.state.models import (
+    PhysicalRelationRecord,
+    VirtualEnvironmentRecord,
+    VirtualEnvironmentRefRecord,
+)
+from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 
 
 def resolve_virtual_diff_model_names(
@@ -98,3 +103,17 @@ def rewrite_project_to_physical_relations(
         if model.name in relations
     }
     return rewrite_virtual_project_model_targets(project=project, rewritten_targets=targets)
+
+
+def non_finalized_environment_names(
+    environments: tuple[tuple[str, VirtualEnvironmentRecord | None], ...],
+) -> tuple[str, ...]:
+    return tuple(
+        name
+        for name, environment in environments
+        if environment is None or environment.status != VirtualEnvironmentStatus.FINALIZED
+    )
+
+
+def is_working_environment(environment: VirtualEnvironmentRecord | None) -> bool:
+    return environment is None or environment.status != VirtualEnvironmentStatus.FINALIZED

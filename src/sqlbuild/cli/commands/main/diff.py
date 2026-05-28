@@ -219,7 +219,15 @@ def _run_virtual_diff_cli(
         stream=sys.stdout,
         use_color=use_color,
     )
-    result, selected_names, skipped_names, from_stale, to_stale = run_virtual_diff(
+    (
+        result,
+        selected_names,
+        skipped_names,
+        from_stale,
+        to_stale,
+        from_working,
+        to_working,
+    ) = run_virtual_diff(
         project_dir=project_dir,
         discovered_inputs=discovered_inputs,
         adapter=adapter,
@@ -255,6 +263,8 @@ def _run_virtual_diff_cli(
         skipped_names=skipped_names,
         from_stale=from_stale,
         to_stale=to_stale,
+        from_working=from_working,
+        to_working=to_working,
         allow_partial_diff=allow_partial_diff,
         verbose=verbose,
         use_color=use_color,

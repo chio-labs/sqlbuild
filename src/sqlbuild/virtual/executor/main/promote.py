@@ -218,14 +218,6 @@ def run_virtual_promote(
                     code="S018",
                     help="Use --select for a coherent partial promotion from a working source VDE.",
                 )
-            if source_semantics.stale_model_names:
-                raise PlannerInputError(
-                    "whole-VDE promotion requires a source virtual environment that is current "
-                    "with the workspace; stale models: "
-                    + ", ".join(source_semantics.stale_model_names),
-                    code="S018",
-                    help="Build the source VDE or use --select for a coherent partial promotion.",
-                )
         source_ref_map: dict[str, str] = {ref.model_name: ref.version_hash for ref in source_refs}
         missing_source_refs: tuple[str, ...] = tuple(
             model_name for model_name in selected_model_names if model_name not in source_ref_map
@@ -247,6 +239,8 @@ def run_virtual_promote(
             if final_version_hashes.get(model.name)
             != target_semantics.expected_version_hashes.get(model.name)
         )
+        if not select:
+            stale_after = ()
         stale_upstreams: tuple[str, ...] = build_virtual_stale_required_upstream_closure(
             graph=graph,
             selected_model_names=selected_model_names,
