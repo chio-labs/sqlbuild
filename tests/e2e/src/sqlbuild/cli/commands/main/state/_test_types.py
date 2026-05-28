@@ -48,6 +48,14 @@ class StateModeGuardE2ETestCase:
 
 
 @dataclass(frozen=True)
+class StateSchemaCorruptionE2ETestCase:
+    description: str
+    mutation_sql: str
+    expected_exit_code: int
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class StateAdoptDetachE2ETestCase:
     description: str
     expected_adopt_fragment: str

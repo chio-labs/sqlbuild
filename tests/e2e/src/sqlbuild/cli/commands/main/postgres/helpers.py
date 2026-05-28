@@ -43,6 +43,34 @@ def build_postgres_project_toml(
     )
 
 
+def build_postgres_virtual_project_toml(
+    *, project_name: str, config: dict[str, object], state_schema: str, warehouse_schema: str
+) -> str:
+    return (
+        f'name = "{project_name}"\n'
+        'adapter = "postgres"\n'
+        'environment_mode = "virtual"\n'
+        'default_environment = "dev"\n\n'
+        "[connection]\n"
+        f'host = "{config["host"]}"\n'
+        f"port = {config['port']}\n"
+        f'dbname = "{config["dbname"]}"\n'
+        f'user = "{config["user"]}"\n'
+        f'password = "{config["password"]}"\n\n'
+        "[environments.dev]\n"
+        f'schema = "{warehouse_schema}"\n\n'
+        "[environments.dev.state]\n"
+        'backend = "postgres"\n'
+        f'schema = "{state_schema}"\n\n'
+        "[environments.dev.state.connection]\n"
+        f'host = "{config["host"]}"\n'
+        f"port = {config['port']}\n"
+        f'dbname = "{config["dbname"]}"\n'
+        f'user = "{config["user"]}"\n'
+        f'password = "{config["password"]}"\n'
+    )
+
+
 def build_postgres_source_deferral_project_toml(
     *, project_name: str, dev_schema_name: str, prod_schema_name: str, config: dict[str, object]
 ) -> str:

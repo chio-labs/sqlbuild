@@ -135,6 +135,7 @@ class PostgresReconcileE2ETestCase:
     expected_rows: tuple[tuple[object, ...], ...]
     expected_stdout_fragments: tuple[str, ...]
     expected_exit_code: int = 0
+    input_text: str = ""
 
 
 @dataclass(frozen=True)
@@ -197,5 +198,13 @@ class PostgresStateConnectionErrorE2ETestCase:
 @dataclass(frozen=True)
 class PostgresStateResetInvalidE2ETestCase:
     description: str
+    expected_exit_code: int
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class PostgresStateSchemaCorruptionE2ETestCase:
+    description: str
+    mutation_sql_template: str
     expected_exit_code: int
     expected_error_fragment: str
