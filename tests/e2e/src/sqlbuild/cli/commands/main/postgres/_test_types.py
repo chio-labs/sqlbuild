@@ -150,6 +150,7 @@ class PostgresVirtualSeedE2ETestCase:
     description: str
     expected_rows: tuple[tuple[object, ...], ...]
     expected_seed_strategy: str
+    incremental_strategy: str = "delete_insert"
     expected_exit_code: int = 0
 
 
