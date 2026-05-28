@@ -21,7 +21,6 @@ from sqlbuild.virtual.executor.helpers.rollback import (
     guard_partial_rollback_scope,
     publish_function_versions,
     read_function_versions,
-    read_model_versions,
     read_physical_relations,
     resolve_selected_model_names,
     resolve_target_checkpoint,
@@ -29,8 +28,6 @@ from sqlbuild.virtual.executor.helpers.rollback import (
     validate_physical_relations_exist,
 )
 from sqlbuild.virtual.executor.main.views import refresh_logical_vde_views
-from sqlbuild.virtual.planner.main.semantics import build_virtual_plan_semantics
-from sqlbuild.virtual.planner.models import VirtualPlanSemantics
 from sqlbuild.virtual.state.main.locks import acquire_virtual_environment_lease
 from sqlbuild.virtual.state.main.release_lock import release_state_lease
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
@@ -168,17 +165,6 @@ def run_virtual_rollback(
             schema=config.schema,
             checkpoint_id=target_checkpoint.checkpoint_id,
         )
-        current_model_versions: dict[str, Any] = read_model_versions(
-            backend=backend,
-            state_connection=state_connection,
-            schema=config.schema,
-            refs=current_refs,
-        )
-        current_semantics: VirtualPlanSemantics = build_virtual_plan_semantics(
-            graph=graph,
-            bound_refs=current_refs,
-            bound_model_versions=current_model_versions,
-        )
         selected_model_names: tuple[str, ...] = resolve_selected_model_names(
             graph=graph,
             select=select,
@@ -205,7 +191,7 @@ def run_virtual_rollback(
         stale_after: tuple[str, ...] = stale_after_rollback(
             graph=graph,
             final_version_hashes=final_version_hashes,
-            expected_version_hashes=current_semantics.expected_version_hashes,
+            expected_version_hashes=checkpoint_ref_map,
         )
         is_partial_scope: bool = bool(select or exclude)
         if is_partial_scope:
@@ -220,7 +206,7 @@ def run_virtual_rollback(
             stale_after = stale_after_rollback(
                 graph=graph,
                 final_version_hashes=final_version_hashes,
-                expected_version_hashes=current_semantics.expected_version_hashes,
+                expected_version_hashes=checkpoint_ref_map,
             )
             if stale_after and not allow_partial_rollback:
                 raise PlannerInputError(

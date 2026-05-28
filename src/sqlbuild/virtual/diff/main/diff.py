@@ -18,6 +18,8 @@ from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.virtual.diff.helpers.diff import (
     filter_models_with_changed_virtual_refs,
+    is_working_environment,
+    non_finalized_environment_names,
     read_physical_relations_for_refs,
     resolve_virtual_diff_model_names,
     rewrite_project_to_physical_relations,
@@ -28,6 +30,7 @@ from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     PhysicalRelationRecord,
+    VirtualEnvironmentRecord,
     VirtualEnvironmentRefRecord,
 )
 
@@ -61,6 +64,8 @@ def run_virtual_diff(
     tuple[str, ...],
     tuple[str, ...],
     tuple[str, ...],
+    bool,
+    bool,
 ]:
     """Run a diff between two VDEs in the active physical environment."""
 
@@ -92,6 +97,16 @@ def run_virtual_diff(
         inspect_start: float = time.perf_counter()
         if on_progress is not None:
             on_progress("Inspecting virtual state...")
+        from_environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
+            state_connection,
+            schema=config.schema,
+            virtual_environment_name=from_virtual_environment_name,
+        )
+        to_environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
+            state_connection,
+            schema=config.schema,
+            virtual_environment_name=to_virtual_environment_name,
+        )
         from_refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
             state_connection,
             schema=config.schema,
@@ -135,13 +150,16 @@ def run_virtual_diff(
             bound_model_versions=to_model_versions,
         )
         if not select and not allow_partial_diff:
-            stale: tuple[str, ...] = tuple(
-                sorted({*from_semantics.stale_model_names, *to_semantics.stale_model_names})
+            non_finalized: tuple[str, ...] = non_finalized_environment_names(
+                (
+                    (from_virtual_environment_name, from_environment),
+                    (to_virtual_environment_name, to_environment),
+                )
             )
-            if stale:
+            if non_finalized:
                 raise PlannerInputError(
-                    "whole-VDE virtual diff requires finalized VDEs; stale models: "
-                    + ", ".join(stale),
+                    "whole-VDE virtual diff requires finalized VDEs; non-finalized VDEs: "
+                    + ", ".join(non_finalized),
                     code="S012",
                     help="Re-run with --allow-partial-diff to inspect a working VDE.",
                 )
@@ -185,6 +203,8 @@ def run_virtual_diff(
             skipped_names,
             from_semantics.stale_model_names,
             to_semantics.stale_model_names,
+            is_working_environment(from_environment),
+            is_working_environment(to_environment),
         )
 
     left_project: CompiledProject = rewrite_project_to_physical_relations(
@@ -230,6 +250,8 @@ def run_virtual_diff(
         skipped_names,
         from_semantics.stale_model_names,
         to_semantics.stale_model_names,
+        is_working_environment(from_environment),
+        is_working_environment(to_environment),
     )
 
 
