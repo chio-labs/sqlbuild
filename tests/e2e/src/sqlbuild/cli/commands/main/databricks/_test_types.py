@@ -121,6 +121,14 @@ class DatabricksVirtualLifecycleE2ETestCase:
 
 
 @dataclass(frozen=True)
+class DatabricksVirtualSeedE2ETestCase:
+    description: str
+    expected_rows: tuple[tuple[str, ...], ...]
+    expected_seed_strategy: str
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
 class DatabricksReconcileE2ETestCase:
     description: str
     expected_rows: tuple[tuple[str, ...], ...]
