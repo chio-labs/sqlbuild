@@ -110,6 +110,7 @@ class BuildScheduler:
         on_node_start: Callable[[str, ExecutionResourceKind], None] | None,
         on_node_complete: Callable[[object], None] | None,
         on_progress: Callable[[str], None] | None,
+        before_model_materialize: Callable[[ModelPlanEntry, Any], None] | None = None,
         custom_materializations: dict[str, Callable[..., MaterializationResult]] | None = None,
         loader_functions: tuple[DiscoveredLoaderFunction, ...] = (),
         loader_is_reload: bool = False,
@@ -143,6 +144,9 @@ class BuildScheduler:
         self._on_node_start: Callable[[str, ExecutionResourceKind], None] | None = on_node_start
         self._on_node_complete: Callable[[object], None] | None = on_node_complete
         self._on_progress: Callable[[str], None] | None = on_progress
+        self._before_model_materialize: Callable[[ModelPlanEntry, Any], None] | None = (
+            before_model_materialize
+        )
         self._custom_materializations: dict[str, Callable[..., MaterializationResult]] = (
             custom_materializations or {}
         )
@@ -599,23 +603,33 @@ class BuildScheduler:
             sqlbuild_name=model_entry.name,
             sqlbuild_kind=model_entry.materialization_type,
         ):
-            result: ModelExecutionResult = _dispatch_model(
-                entry=model_entry,
-                adapter=self._adapter,
-                connection=connection,
-                plan=self._plan,
-                model_audits=model_audits,
-                promotion_mode=self._promotion_mode,
-                run_id=self._run_id,
-                query_change_tracking=self._query_change_tracking,
-                snapshots=self._snapshots,
-                allow_snapshot_schema_change=self._allow_snapshot_schema_change,
-                custom_materializations=self._custom_materializations,
-                environment=self._environment,
-                effective_vars=self._effective_vars,
-                warehouse_relations=self._warehouse_relations,
-                on_progress=self._on_sub_progress,
-            )
+            try:
+                if self._before_model_materialize is not None:
+                    self._before_model_materialize(model_entry, connection)
+                result: ModelExecutionResult = _dispatch_model(
+                    entry=model_entry,
+                    adapter=self._adapter,
+                    connection=connection,
+                    plan=self._plan,
+                    model_audits=model_audits,
+                    promotion_mode=self._promotion_mode,
+                    run_id=self._run_id,
+                    query_change_tracking=self._query_change_tracking,
+                    snapshots=self._snapshots,
+                    allow_snapshot_schema_change=self._allow_snapshot_schema_change,
+                    custom_materializations=self._custom_materializations,
+                    environment=self._environment,
+                    effective_vars=self._effective_vars,
+                    warehouse_relations=self._warehouse_relations,
+                    on_progress=self._on_sub_progress,
+                )
+            except Exception as error:
+                result = ModelExecutionResult(
+                    model_name=model_entry.name,
+                    status=ExecutionStatus.FAILED,
+                    error_code=BUILD_WORKER_FAILED_CODE,
+                    error_message=str(error),
+                )
         duration: int = int((time.monotonic() - start) * 1000)
         completed_result: ModelExecutionResult = dataclasses.replace(result, duration_ms=duration)
         log_debug_event(

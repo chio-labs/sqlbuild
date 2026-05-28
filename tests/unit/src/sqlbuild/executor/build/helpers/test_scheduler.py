@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -11,13 +12,14 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.compiler.planner.models import PlanOutput, SourceLoadPlanEntry
+from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput, SourceLoadPlanEntry
 from sqlbuild.executor.build.main.execute import execute_build_plan
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.spec.models.source import SourceEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.executor.build.helpers._test_types import (
+    BuildSchedulerModelHookTestCase,
     BuildSchedulerSourceLoadTestCase,
 )
 from tests.unit.src.sqlbuild.executor.build.helpers.helpers import (
@@ -42,6 +44,22 @@ BUILD_SCHEDULER_SOURCE_LOAD_TEST_CASES: list[BuildSchedulerSourceLoadTestCase] =
         expected_model_status=ExecutionStatus.SUCCESS,
         expected_execution_order=("raw_orders", "stg_orders"),
         expected_model_rows=((1, "loaded"),),
+    ),
+]
+
+BUILD_SCHEDULER_MODEL_HOOK_TEST_CASES: list[BuildSchedulerModelHookTestCase] = [
+    BuildSchedulerModelHookTestCase(
+        description="hook runs before model materialization",
+        hook_raises=False,
+        expected_model_status=ExecutionStatus.SUCCESS,
+        expected_events=("start:hook_model", "hook:hook_model"),
+        expected_model_rows=((1,),),
+    ),
+    BuildSchedulerModelHookTestCase(
+        description="hook failure marks model failed",
+        hook_raises=True,
+        expected_model_status=ExecutionStatus.FAILED,
+        expected_events=("start:hook_model", "hook:hook_model"),
     ),
 ]
 
@@ -118,4 +136,64 @@ def test_given_managed_source_node_when_build_runs_then_records_loader_and_block
     assert result.load_results[0].status == test_case.expected_load_status
     assert result.model_results[0].status == test_case.expected_model_status
     assert tuple(node_starts) == test_case.expected_execution_order
+    assert loaded_rows == test_case.expected_model_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    BUILD_SCHEDULER_MODEL_HOOK_TEST_CASES,
+    ids=[case.description for case in BUILD_SCHEDULER_MODEL_HOOK_TEST_CASES],
+)
+def test_given_model_materialize_hook_when_build_runs_then_it_prepares_or_fails_model(
+    test_case: BuildSchedulerModelHookTestCase,
+    tmp_path: Path,
+) -> None:
+    model_key: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.MODEL, "hook_model")
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: object = adapter.connect({"database": str(tmp_path / "scheduler_hook.duckdb")})
+    events: list[str] = []
+    plan: PlanOutput = PlanOutput(
+        execution_order=(model_key,),
+        selected_keys=frozenset({model_key}),
+        model_entries=(
+            build_model_plan_entry(
+                name="hook_model",
+                resolved_sql="SELECT id FROM hook_seed",
+            ),
+        ),
+    )
+
+    def before_model_materialize(entry: ModelPlanEntry, hook_connection: object) -> None:
+        events.append(f"hook:{entry.name}")
+        hook_actions: dict[bool, Callable[[], object]] = {
+            True: lambda: (_ for _ in ()).throw(RuntimeError("hook failed")),
+            False: lambda: adapter.execute(
+                hook_connection, "CREATE TABLE hook_seed AS SELECT 1 AS id"
+            ),
+        }
+        hook_actions[test_case.hook_raises]()
+
+    try:
+        result: BuildExecutionResult = execute_build_plan(
+            plan=plan,
+            adapter=adapter,
+            connection_config={"database": str(tmp_path / "scheduler_hook.duckdb")},
+            connections=(connection,),
+            scheduler_connection=connection,
+            promotion_mode=TablePromotionMode.DIRECT,
+            run_id="run-1",
+            run_audits=False,
+            run_tests=False,
+            on_node_start=lambda name, _kind: events.append(f"start:{name}"),
+            before_model_materialize=before_model_materialize,
+        )
+        loaded_rows: tuple[tuple[object, ...], ...] = fetch_rows_or_empty(
+            connection,
+            "SELECT id FROM hook_model ORDER BY id",
+        )
+    finally:
+        adapter.close(connection)
+
+    assert result.model_results[0].status == test_case.expected_model_status
+    assert tuple(events) == test_case.expected_events
     assert loaded_rows == test_case.expected_model_rows
