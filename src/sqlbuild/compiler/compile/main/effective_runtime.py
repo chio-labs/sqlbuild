@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from sqlbuild.compiler.compile.helpers.attachment import (
     build_effective_vars,
-    resolve_environment_config,
-    resolve_environment_name,
     resolve_run_id,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.spec.models.environments import (
+    resolve_environment_config,
+    resolve_environment_name,
+)
 from sqlbuild.spec.models.project import EnvironmentConfig
 
 

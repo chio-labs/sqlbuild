@@ -455,6 +455,70 @@ CASCADE_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
         expected_cascade_action={"fact_orders": BackfillAction.FULL},
         expected_cascade_root_cause={"fact_orders": "is_priority_order_py"},
     ),
+    BuildExecutionPlanTestCase(
+        description=(
+            "downstream local bounded policy replaces upstream full and propagates downstream"
+        ),
+        setup_sql=(
+            "CREATE TABLE staging.fact_orders AS SELECT 1 AS id",
+            "CREATE TABLE staging.order_metrics AS SELECT 1 AS id",
+        ),
+        model_targets={
+            "stg_orders": "staging",
+            "fact_orders": "staging",
+            "order_metrics": "staging",
+        },
+        model_configs={
+            "stg_orders": {"materialized": "table"},
+            "fact_orders": {
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "cursor": "id",
+                "cursor_type": "integer",
+                "unique_key": "id",
+                "query_change_backfill": "bounded-1d",
+            },
+            "order_metrics": {
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "cursor": "id",
+                "cursor_type": "integer",
+                "unique_key": "id",
+            },
+        },
+        model_queries={
+            "stg_orders": "SELECT 1 AS id",
+            "fact_orders": "SELECT id FROM stg_orders",
+            "order_metrics": "SELECT id FROM fact_orders",
+        },
+        model_deps={
+            "fact_orders": ("stg_orders",),
+            "order_metrics": ("fact_orders",),
+        },
+        full_refresh=False,
+        expected_action={
+            "stg_orders": PlanAction.CREATE_TABLE,
+            "fact_orders": PlanAction.INCREMENTAL_DELETE_INSERT,
+            "order_metrics": PlanAction.INCREMENTAL_DELETE_INSERT,
+        },
+        expected_reason={
+            "stg_orders": PlanReason.FIRST_RUN,
+            "fact_orders": PlanReason.NORMAL_INCREMENTAL,
+            "order_metrics": PlanReason.NORMAL_INCREMENTAL,
+        },
+        expected_cascade_action={
+            "fact_orders": BackfillAction.BOUNDED,
+            "order_metrics": BackfillAction.BOUNDED,
+        },
+        expected_cascade_duration={
+            "fact_orders": "1d",
+            "order_metrics": "1d",
+        },
+        expected_cascade_root_cause={
+            "fact_orders": "stg_orders",
+            "order_metrics": "stg_orders",
+        },
+    ),
 ]
 
 
@@ -506,6 +570,12 @@ def test_given_upstream_first_run_when_building_plan_then_cascades_to_downstream
         cascade: CascadeResult | None = entry_map[model_name].cascade
         assert cascade is not None
         assert cascade.effective_action == expected_cascade_action
+
+    expected_cascade_duration: str | None
+    for model_name, expected_cascade_duration in test_case.expected_cascade_duration.items():
+        cascade_for_duration: CascadeResult | None = entry_map[model_name].cascade
+        assert cascade_for_duration is not None
+        assert cascade_for_duration.effective_duration == expected_cascade_duration
 
     expected_root: str
     for model_name, expected_root in test_case.expected_cascade_root_cause.items():

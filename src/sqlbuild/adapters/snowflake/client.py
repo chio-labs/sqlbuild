@@ -391,6 +391,43 @@ class SnowflakeAdapter(BaseAdapter):
         for stmt in statements:
             self.execute(connection, stmt)
 
+    def move_or_copy_relation(
+        self,
+        connection: Any,
+        *,
+        source: str,
+        target: str,
+        remove_source: bool,
+        allow_copy_fallback: bool,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        source_parts: list[str] = source.split(".")
+        target_parts: list[str] = target.split(".")
+        if (
+            remove_source
+            and len(source_parts) >= 2
+            and len(target_parts) >= 2
+            and source_parts[:-2] == target_parts[:-2]
+        ):
+            statements: tuple[str, ...] = self.render_rename(source=source, target=target)
+            statement_recorder.record_many(statements)
+            stmt: str
+            for stmt in statements:
+                self.execute(connection, stmt)
+            return
+        if not allow_copy_fallback:
+            raise AdapterUserError("Snowflake relation move/copy requires --allow-copy")
+        statements: tuple[str, ...] = self.render_replace_table_from_relation(
+            target=target,
+            source=source,
+        )
+        if remove_source:
+            statements = (*statements, *self.render_drop(target=source))
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
     def append(
         self,
         connection: Any,
@@ -1412,6 +1449,9 @@ class SnowflakeAdapter(BaseAdapter):
     def supports_zero_copy_clone(self) -> bool:
         return True
 
+    def supports_durable_clone(self) -> bool:
+        return True
+
     def render_drop(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
         exists_clause: str = " IF EXISTS" if if_exists else ""
         return (
@@ -1435,6 +1475,58 @@ class SnowflakeAdapter(BaseAdapter):
         if hard_copy:
             return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
         return (f"CREATE OR REPLACE TABLE {target} CLONE {source}",)
+
+    def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
+        return (f"CREATE OR REPLACE TABLE {target} CLONE {source}",)
+
+    def render_query_with_cursor_bounds(
+        self,
+        *,
+        sql: str,
+        cursor_column: str,
+        cursor_start: str,
+        cursor_end: str,
+        cursor_type: str | None,
+    ) -> str:
+        return self._render_query_with_cursor_bounds_impl(
+            sql=sql,
+            cursor_column=cursor_column,
+            cursor_start=cursor_start,
+            cursor_end=cursor_end,
+            cursor_type=cursor_type,
+        )
+
+    def render_seed_select_before_cursor(
+        self,
+        *,
+        source: str,
+        cursor_column: str,
+        cursor_end_exclusive: str,
+        cursor_type: str | None,
+    ) -> str:
+        return self._render_seed_select_before_cursor_impl(
+            source=source,
+            cursor_column=cursor_column,
+            cursor_end_exclusive=cursor_end_exclusive,
+            cursor_type=cursor_type,
+        )
+
+    def relation_names_match(self, left: str, right: str) -> bool:
+        return self._relation_names_match_impl(left, right)
+
+    def durable_clone(
+        self,
+        connection: Any,
+        *,
+        source: str,
+        target: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_durable_clone(source=source, target=target)
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
 
     def load_seed(
         self,

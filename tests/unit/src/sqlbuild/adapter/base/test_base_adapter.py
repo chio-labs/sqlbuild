@@ -10,6 +10,7 @@ from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.models.core import FunctionArgument
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from tests.unit.src.sqlbuild.adapter.base._test_types import (
+    BaseAdapterDurableCloneTestCase,
     BaseAdapterExpressionInferenceProfileTestCase,
     BaseAdapterIdentifierLimitTestCase,
     BaseAdapterPythonFunctionSupportTestCase,
@@ -132,3 +133,32 @@ def test_given_base_adapter_when_getting_identifier_limit_then_returns_portable_
     adapter: BaseAdapter = ConcreteBaseAdapter()
 
     assert adapter.maximum_identifier_length() == test_case.expected_identifier_limit
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BaseAdapterDurableCloneTestCase(
+            description="renders durable clone as CTAS fallback by default",
+            source="prod.fact_orders",
+            target="dev.fact_orders",
+            expected_supports_durable_clone=False,
+            expected_statements=(
+                "CREATE OR REPLACE TABLE dev.fact_orders AS SELECT * FROM prod.fact_orders",
+            ),
+        )
+    ],
+    ids=["renders durable clone as CTAS fallback by default"],
+)
+def test_given_base_adapter_when_rendering_durable_clone_then_uses_copy_fallback(
+    test_case: BaseAdapterDurableCloneTestCase,
+) -> None:
+    adapter: BaseAdapter = ConcreteBaseAdapter()
+
+    result: tuple[str, ...] = adapter.render_durable_clone(
+        source=test_case.source,
+        target=test_case.target,
+    )
+
+    assert adapter.supports_durable_clone() is test_case.expected_supports_durable_clone
+    assert result == test_case.expected_statements

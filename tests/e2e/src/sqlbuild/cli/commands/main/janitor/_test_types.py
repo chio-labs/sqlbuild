@@ -29,6 +29,85 @@ class JanitorCleanupE2ETestCase:
 
 
 @dataclass(frozen=True)
+class JanitorCheckpointProtectionE2ETestCase:
+    """Test case for virtual checkpoint-protected janitor cleanup behavior."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class JanitorCheckpointRetentionE2ETestCase:
+    """Test case for virtual checkpoint pruning behavior."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_checkpoint_count_before: int
+    expected_checkpoint_count_after: int
+    expected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class JanitorDetachedVirtualEnvironmentE2ETestCase:
+    """Test case for detached VDE cleanup behavior."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+    expected_virtual_environment_count_after: int
+    expected_ref_count_after: int
+
+
+@dataclass(frozen=True)
+class JanitorDetachedVirtualEnvironmentRetentionE2ETestCase:
+    """Test case for detached VDE retention age behavior."""
+
+    description: str
+    retention_days: int
+    janitor_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+    expected_virtual_environment_count_after: int
+
+
+@dataclass(frozen=True)
+class JanitorActiveVirtualEnvironmentProtectionE2ETestCase:
+    """Test case for active VDE ref protection behavior."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class JanitorExpiredVirtualEnvironmentE2ETestCase:
+    """Test case for expired non-active VDE cleanup behavior."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+    expected_virtual_environment_names_after: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class JanitorStateCleanupE2ETestCase:
+    """Test case for state-only janitor cleanup behavior."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+    expected_backup_schema_count_after: int
+    expected_lock_count_after: int
+
+
+@dataclass(frozen=True)
 class JanitorInvalidConfigE2ETestCase:
     """Test case for invalid janitor config behavior."""
 

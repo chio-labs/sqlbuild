@@ -43,6 +43,8 @@ def build_model_entry(
     backfill_action: BackfillAction = BackfillAction.FULL,
     backfill_duration: str | None = None,
     previous_query_sql: str | None = None,
+    fingerprint_metadata_json: str | None = None,
+    previous_metadata_json: str | None = None,
     cursor_column: str | None = None,
     cursor_type: str | None = None,
     cursor_bounds: CursorBounds | None = None,
@@ -79,6 +81,8 @@ def build_model_entry(
         cursor_type=cursor_type,
         cursor_bounds=cursor_bounds,
         previous_query_sql=previous_query_sql,
+        fingerprint_metadata_json=fingerprint_metadata_json,
+        previous_metadata_json=previous_metadata_json,
         schema_findings=schema_findings,
         backfill=BackfillResult(action=backfill_action, duration=backfill_duration),
         cascade=cascade,
@@ -93,6 +97,7 @@ def build_plan_output(
     function_entries: tuple[FunctionPlanEntry, ...] = (),
     source_load_entries: tuple[SourceLoadPlanEntry, ...] = (),
     warnings: tuple[PlanWarning, ...] = (),
+    metadata: dict[str, object] | None = None,
 ) -> PlanOutput:
     """Build a minimal PlanOutput for formatter tests."""
 
@@ -107,6 +112,7 @@ def build_plan_output(
         source_load_entries=source_load_entries,
         selected_keys=selected_keys,
         warnings=warnings,
+        metadata={} if metadata is None else metadata,
     )
 
 

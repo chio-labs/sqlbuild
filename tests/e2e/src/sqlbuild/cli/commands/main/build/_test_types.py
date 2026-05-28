@@ -30,6 +30,77 @@ class BuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class VirtualBuildE2ETestCase:
+    """Test case for virtual build e2e behavior."""
+
+    description: str
+    expected_build_fragments: tuple[str, ...]
+    expected_plan_fragments: tuple[str, ...]
+    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
+    expected_ref_rows: tuple[tuple[object, ...], ...]
+    expected_physical_version_count: int | None = None
+    expected_default_plan_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_final_plan_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class VirtualBuildSelectionGuardE2ETestCase:
+    """Test case for virtual build selection guard behavior."""
+
+    description: str
+    blocked_command: tuple[str, ...]
+    expanded_command: tuple[str, ...]
+    expected_blocked_fragments: tuple[str, ...]
+    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
+
+
+@dataclass(frozen=True)
+class VirtualPromoteE2ETestCase:
+    """Test case for virtual promotion behavior."""
+
+    description: str
+    promote_command: tuple[str, ...]
+    expected_promote_fragments: tuple[str, ...]
+    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
+    blocked_command: tuple[str, ...] = field(default_factory=tuple)
+    expected_blocked_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class VirtualRollbackE2ETestCase:
+    """Test case for virtual rollback behavior."""
+
+    description: str
+    rollback_command: tuple[str, ...]
+    expected_rollback_fragments: tuple[str, ...]
+    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
+    expected_checkpoint_count: int
+    expected_exit_code: int = 0
+    expected_stderr_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class VirtualExplicitCheckpointRollbackE2ETestCase:
+    """Test case for explicit checkpoint rollback behavior."""
+
+    description: str
+    rollback_command_prefix: tuple[str, ...]
+    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
+
+
+@dataclass(frozen=True)
+class VirtualPartialRollbackE2ETestCase:
+    """Test case for partial rollback guard behavior."""
+
+    description: str
+    blocked_command: tuple[str, ...]
+    allowed_command: tuple[str, ...]
+    expected_blocked_stderr_fragments: tuple[str, ...]
+    expected_allowed_stdout_fragments: tuple[str, ...]
+    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
+
+
+@dataclass(frozen=True)
 class ModelBackedCursorBuildE2ETestCase:
     """Test case for model-backed cursor build e2e regression coverage."""
 
@@ -454,6 +525,15 @@ class PlanCommandBuildE2ETestCase:
     expected_exit_code: int
     expected_fragments: tuple[str, ...]
     expected_stream: str
+
+
+@dataclass(frozen=True)
+class VirtualModeGuardBuildE2ETestCase:
+    description: str
+    project_toml: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_error_fragment: str
 
 
 @dataclass(frozen=True)

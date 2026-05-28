@@ -174,6 +174,58 @@ SCENARIO_NO_SQL_VALIDATION_FLAG_ERROR_TEST_CASES: list[MainTestCase] = [
     ),
 ]
 
+STATE_DISPATCH_TEST_CASES: list[MainTestCase] = [
+    MainTestCase(
+        description="dispatches state rollback command through injected handler",
+        argv=[
+            "--project-dir",
+            "/tmp/demo",
+            "--no-color",
+            "state",
+            "rollback",
+            "--backup-id",
+            "b1",
+        ],
+        expected_exit_code=11,
+        expected_project_dir=Path("/tmp/demo"),
+        expected_no_color=True,
+        expected_state_command="rollback",
+        expected_state_backup_id="b1",
+    ),
+    MainTestCase(
+        description="dispatches state reset approval through injected handler",
+        argv=["state", "reset", "--auto-approve"],
+        expected_exit_code=12,
+        expected_state_command="reset",
+        expected_auto_approve=True,
+    ),
+    MainTestCase(
+        description="dispatches state checkpoints list through injected handler",
+        argv=["state", "checkpoints", "list", "--virtual-env", "dev"],
+        expected_exit_code=13,
+        expected_state_command="checkpoints",
+        expected_state_checkpoint_command="list",
+        expected_virtual_env="dev",
+    ),
+    MainTestCase(
+        description="dispatches state checkpoints show through injected handler",
+        argv=["state", "checkpoints", "show", "chk_1"],
+        expected_exit_code=14,
+        expected_state_command="checkpoints",
+        expected_state_checkpoint_command="show",
+        expected_state_checkpoint_id="chk_1",
+    ),
+    MainTestCase(
+        description="dispatches state checkpoints diff through injected handler",
+        argv=["state", "checkpoints", "diff", "chk_2", "--virtual-env", "dev"],
+        expected_exit_code=15,
+        expected_state_command="checkpoints",
+        expected_state_checkpoint_command="diff",
+        expected_state_checkpoint_id="chk_2",
+        expected_virtual_env="dev",
+    ),
+]
+
 COMPILE_DISPATCH_TEST_CASES: list[MainTestCase] = [
     MainTestCase(
         description="passes no sql validation flag to compile handler",
@@ -489,7 +541,19 @@ def test_given_dbt_without_subcommand_when_running_with_dependencies_then_it_ret
     [
         MainTestCase(
             description="dispatches clone command through injected handler",
-            argv=["clone", "--from", "prod", "--to", "dev", "--select", "orders"],
+            argv=[
+                "clone",
+                "--from",
+                "prod",
+                "--to",
+                "dev",
+                "--select",
+                "orders",
+                "--virtual-env",
+                "preview",
+                "--skip-locked",
+                "--verbose",
+            ],
             expected_exit_code=8,
         )
     ],
@@ -499,7 +563,19 @@ def test_given_clone_command_arguments_when_running_with_dependencies_then_it_di
     test_case: MainTestCase,
 ) -> None:
     received_args: list[
-        tuple[Path | None, bool, bool, str, str, bool, tuple[str, ...], tuple[str, ...]]
+        tuple[
+            Path | None,
+            bool,
+            bool,
+            str,
+            str,
+            bool,
+            str | None,
+            bool,
+            tuple[str, ...],
+            tuple[str, ...],
+            bool,
+        ]
     ] = []
 
     def run_clone(
@@ -509,8 +585,11 @@ def test_given_clone_command_arguments_when_running_with_dependencies_then_it_di
         from_environment: str,
         to_environment: str,
         hard_copy: bool,
+        virtual_env: str | None,
+        skip_locked: bool,
         select: tuple[str, ...],
         exclude: tuple[str, ...],
+        verbose: bool,
         cli_vars: dict[str, object],
     ) -> int:
         del cli_vars
@@ -522,8 +601,11 @@ def test_given_clone_command_arguments_when_running_with_dependencies_then_it_di
                 from_environment,
                 to_environment,
                 hard_copy,
+                virtual_env,
+                skip_locked,
                 select,
                 exclude,
+                verbose,
             )
         )
         return test_case.expected_exit_code
@@ -534,7 +616,9 @@ def test_given_clone_command_arguments_when_running_with_dependencies_then_it_di
     )
 
     assert exit_code == test_case.expected_exit_code
-    assert received_args == [(None, False, False, "prod", "dev", False, ("orders",), ())]
+    assert received_args == [
+        (None, False, False, "prod", "dev", False, "preview", True, ("orders",), (), True)
+    ]
 
 
 @pytest.mark.parametrize(
@@ -542,7 +626,14 @@ def test_given_clone_command_arguments_when_running_with_dependencies_then_it_di
     [
         MainTestCase(
             description="dispatches diff command through injected handler",
-            argv=["diff", "prod:dev", "--full", "--select", "orders"],
+            argv=[
+                "diff",
+                "prod:dev",
+                "--full",
+                "--select",
+                "orders",
+                "--allow-partial-diff",
+            ],
             expected_exit_code=6,
         )
     ],
@@ -566,6 +657,7 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
             tuple[str, ...],
             tuple[str, ...],
             bool,
+            bool,
         ]
     ] = []
 
@@ -584,6 +676,7 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
         exclude: tuple[str, ...],
         verbose: bool,
         cli_vars: dict[str, object],
+        allow_partial_diff: bool = False,
     ) -> int:
         del cli_vars
         received_args.append(
@@ -601,6 +694,7 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
                 select,
                 exclude,
                 verbose,
+                allow_partial_diff,
             )
         )
         return test_case.expected_exit_code
@@ -612,7 +706,184 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
 
     assert exit_code == test_case.expected_exit_code
     assert received_args == [
-        (None, False, False, "prod", "dev", True, False, None, None, None, ("orders",), (), False)
+        (
+            None,
+            False,
+            False,
+            "prod",
+            "dev",
+            True,
+            False,
+            None,
+            None,
+            None,
+            ("orders",),
+            (),
+            False,
+            True,
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="dispatches promote command through injected handler",
+            argv=[
+                "promote",
+                "--from",
+                "pr",
+                "--to",
+                "dev",
+                "--select",
+                "fact_orders",
+                "--include-stale-upstreams",
+                "--allow-partial-promotion",
+                "--verbose",
+            ],
+            expected_exit_code=7,
+        )
+    ],
+    ids=["dispatches promote command through injected handler"],
+)
+def test_given_promote_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[
+        tuple[
+            Path | None,
+            bool,
+            bool,
+            str,
+            str,
+            tuple[str, ...],
+            tuple[str, ...],
+            bool,
+            bool,
+            bool,
+        ]
+    ] = []
+
+    def run_promote(
+        project_dir: Path | None,
+        no_color: bool,
+        no_sql_validation: bool,
+        from_virtual_environment: str,
+        to_virtual_environment: str,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+        allow_partial_promotion: bool,
+        include_stale_upstreams: bool,
+        verbose: bool,
+        cli_vars: dict[str, object],
+    ) -> int:
+        del cli_vars
+        received_args.append(
+            (
+                project_dir,
+                no_color,
+                no_sql_validation,
+                from_virtual_environment,
+                to_virtual_environment,
+                select,
+                exclude,
+                allow_partial_promotion,
+                include_stale_upstreams,
+                verbose,
+            )
+        )
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_promote=run_promote),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [
+        (None, False, False, "pr", "dev", ("fact_orders",), (), True, True, True)
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="dispatches rollback command through injected handler",
+            argv=[
+                "rollback",
+                "--virtual-env",
+                "dev",
+                "--checkpoint-id",
+                "chk_1",
+                "--select",
+                "fact_orders",
+                "--allow-partial-rollback",
+                "--include-stale-upstreams",
+                "--verbose",
+            ],
+            expected_exit_code=7,
+        )
+    ],
+    ids=["dispatches rollback command through injected handler"],
+)
+def test_given_rollback_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[
+        tuple[
+            Path | None,
+            bool,
+            bool,
+            str | None,
+            bool,
+            str | None,
+            tuple[str, ...],
+            tuple[str, ...],
+            bool,
+            bool,
+        ]
+    ] = []
+
+    def run_rollback(
+        project_dir: Path | None,
+        no_color: bool,
+        no_sql_validation: bool,
+        virtual_environment: str | None,
+        verbose: bool,
+        checkpoint_id: str | None,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+        allow_partial_rollback: bool,
+        include_stale_upstreams: bool,
+        cli_vars: dict[str, object],
+    ) -> int:
+        del cli_vars
+        received_args.append(
+            (
+                project_dir,
+                no_color,
+                no_sql_validation,
+                virtual_environment,
+                verbose,
+                checkpoint_id,
+                select,
+                exclude,
+                allow_partial_rollback,
+                include_stale_upstreams,
+            )
+        )
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_rollback=run_rollback),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [
+        (None, False, False, "dev", True, "chk_1", ("fact_orders",), (), True, True)
     ]
 
 
@@ -1176,8 +1447,9 @@ def test_given_verbose_diff_arguments_when_running_then_it_dispatches_verbose_fl
         exclude: tuple[str, ...],
         verbose: bool,
         cli_vars: dict[str, object],
+        allow_partial_diff: bool = False,
     ) -> int:
-        del cli_vars
+        del cli_vars, allow_partial_diff
         del project_dir, no_color, no_sql_validation, from_environment, to_environment, full
         del schema_only, bounded, max_column_examples, max_row_only_examples, select, exclude
         received_verbose.append(verbose)
@@ -1233,8 +1505,9 @@ def test_given_diff_example_cap_arguments_when_running_then_it_dispatches_caps(
         exclude: tuple[str, ...],
         verbose: bool,
         cli_vars: dict[str, object],
+        allow_partial_diff: bool = False,
     ) -> int:
-        del cli_vars
+        del cli_vars, allow_partial_diff
         del project_dir, no_color, no_sql_validation, from_environment, to_environment, full
         del schema_only, bounded, select, exclude, verbose
         received_caps.append((max_column_examples, max_row_only_examples))
@@ -1282,6 +1555,75 @@ def test_given_janitor_command_arguments_when_running_with_dependencies_then_it_
 
     assert exit_code == test_case.expected_exit_code
     assert received_args == [(None, test_case.expected_no_color, True, 0)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    STATE_DISPATCH_TEST_CASES,
+    ids=[case.description for case in STATE_DISPATCH_TEST_CASES],
+)
+def test_given_state_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[
+        tuple[
+            Path | None,
+            str,
+            str | None,
+            bool,
+            bool,
+            str | None,
+            str | None,
+            str | None,
+            bool,
+        ]
+    ] = []
+
+    def run_state(
+        project_dir: Path | None,
+        state_command: str,
+        backup_id: str | None,
+        auto_approve: bool,
+        no_color: bool,
+        checkpoint_command: str | None,
+        checkpoint_id: str | None,
+        virtual_environment: str | None,
+        allow_copy: bool,
+    ) -> int:
+        received_args.append(
+            (
+                project_dir,
+                state_command,
+                backup_id,
+                auto_approve,
+                no_color,
+                checkpoint_command,
+                checkpoint_id,
+                virtual_environment,
+                allow_copy,
+            )
+        )
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_state=run_state),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [
+        (
+            test_case.expected_project_dir,
+            str(test_case.expected_state_command),
+            test_case.expected_state_backup_id,
+            test_case.expected_auto_approve,
+            test_case.expected_no_color,
+            test_case.expected_state_checkpoint_command,
+            test_case.expected_state_checkpoint_id,
+            test_case.expected_virtual_env,
+            False,
+        )
+    ]
 
 
 @pytest.mark.parametrize(
@@ -1524,7 +1866,9 @@ BUILD_EXECUTION_FLAG_TEST_CASES: list[MainTestCase] = [
 def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[bool, bool, bool, bool | None, bool, bool, bool, bool]] = []
+    received_args: list[
+        tuple[bool, bool, bool, str | None, bool | None, bool, bool, bool, bool]
+    ] = []
 
     def run_build(
         project_dir: Path | None,
@@ -1535,6 +1879,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         no_color: bool,
         fail_fast: bool,
         full_refresh: bool,
+        virtual_env: str | None,
         load_sources: bool | None,
         reload_sources: bool,
         allow_snapshot_full_refresh: bool,
@@ -1545,6 +1890,8 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         verbose: bool = False,
         debug: bool = False,
         cli_vars: dict[str, object] | None = None,
+        include_stale_upstreams: bool = False,
+        changes_only: bool = False,
         json_output: bool = False,
         json_output_path: Path | None = None,
     ) -> int:
@@ -1560,11 +1907,14 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         del cli_vars
         del json_output
         del json_output_path
+        del include_stale_upstreams
+        del changes_only
         received_args.append(
             (
                 no_color,
                 fail_fast,
                 full_refresh,
+                virtual_env,
                 load_sources,
                 reload_sources,
                 allow_snapshot_full_refresh,
@@ -1585,6 +1935,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
             test_case.expected_no_color,
             False,
             test_case.expected_full_refresh,
+            test_case.expected_virtual_env,
             test_case.expected_load_sources,
             test_case.expected_reload,
             test_case.expected_allow_snapshot_full_refresh,
@@ -1722,6 +2073,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
             object,
             bool,
             bool,
+            str | None,
             bool | None,
             bool,
             tuple[str, ...],
@@ -1739,12 +2091,15 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
         cursor_overrides: object,
         json_output: bool,
         full_refresh: bool,
+        virtual_env: str | None,
         load_sources: bool | None,
         no_color: bool,
         select: tuple[str, ...],
         exclude: tuple[str, ...],
         verbose: bool,
         cli_vars: dict[str, object],
+        include_stale_upstreams: bool = False,
+        changes_only: bool = False,
     ) -> int:
         received_args.append(
             (
@@ -1755,6 +2110,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
                 cursor_overrides,
                 json_output,
                 full_refresh,
+                virtual_env,
                 load_sources,
                 no_color,
                 select,
@@ -1775,6 +2131,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
     assert received_args[0][5:] == (
         False,
         False,
+        None,
         None,
         test_case.expected_no_color,
         test_case.expected_select,
@@ -1809,12 +2166,15 @@ def test_given_plan_load_flag_when_running_then_dispatches_expected_argument(
         cursor_overrides: object,
         json_output: bool,
         full_refresh: bool,
+        virtual_env: str | None,
         load_sources: bool | None,
         no_color: bool,
         select: tuple[str, ...],
         exclude: tuple[str, ...],
         verbose: bool,
         cli_vars: dict[str, object],
+        include_stale_upstreams: bool = False,
+        changes_only: bool = False,
     ) -> int:
         del (
             project_dir,
@@ -1824,11 +2184,14 @@ def test_given_plan_load_flag_when_running_then_dispatches_expected_argument(
             cursor_overrides,
             json_output,
             full_refresh,
+            virtual_env,
             no_color,
             select,
             exclude,
             verbose,
             cli_vars,
+            include_stale_upstreams,
+            changes_only,
         )
         received_load_sources.append(load_sources)
         return test_case.expected_exit_code
@@ -1869,12 +2232,15 @@ def test_given_select_file_when_running_then_dispatches_file_selectors(
         cursor_overrides: object,
         json_output: bool,
         full_refresh: bool,
+        virtual_env: str | None,
         load_sources: bool | None,
         no_color: bool,
         select: tuple[str, ...],
         exclude: tuple[str, ...],
         verbose: bool,
         cli_vars: dict[str, object],
+        include_stale_upstreams: bool = False,
+        changes_only: bool = False,
     ) -> int:
         del (
             project_dir,
@@ -1884,11 +2250,14 @@ def test_given_select_file_when_running_then_dispatches_file_selectors(
             cursor_overrides,
             json_output,
             full_refresh,
+            virtual_env,
             load_sources,
             no_color,
             exclude,
             verbose,
             cli_vars,
+            include_stale_upstreams,
+            changes_only,
         )
         received_selects.append(select)
         return test_case.expected_exit_code
@@ -1981,6 +2350,7 @@ def test_given_command_local_global_flags_when_running_main_then_it_returns_pars
 
     assert exit_code == test_case.expected_exit_code
     assert "error[C900]:" in rendered_stderr
+    assert rendered_stderr.endswith("\n\n")
 
 
 @pytest.mark.parametrize(
@@ -2006,6 +2376,7 @@ def test_given_parser_error_and_color_support_when_running_main_then_it_colorize
 
     assert exit_code == test_case.expected_exit_code
     assert "\033[31m\033[1merror[C900]:\033[0m" in rendered_stderr
+    assert rendered_stderr.endswith("\n\n")
 
 
 @pytest.mark.parametrize(
@@ -2032,6 +2403,7 @@ def test_given_parser_error_and_no_color_when_running_main_then_it_renders_plain
     assert exit_code == test_case.expected_exit_code
     assert "error[C900]:" in rendered_stderr
     assert "\033[31m" not in rendered_stderr
+    assert rendered_stderr.endswith("\n\n")
 
 
 @pytest.mark.parametrize(
@@ -2082,6 +2454,7 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
 
     assert exit_code == test_case.expected_exit_code
     assert test_case.expected_stderr_fragment in rendered_stderr
+    assert rendered_stderr.endswith("\n\n")
 
 
 @pytest.mark.parametrize(

@@ -22,6 +22,7 @@ SQLBuild is a SQL pipeline framework that validates SQL at compile time, blocks 
 - **Source loaders** - Load external data into source tables with Python functions. Supports incremental write strategies (table, append, delete\_insert, merge), cursor-based loading, loader-to-loader dependencies, and concurrent execution. Loaders run automatically during builds.
 - **Custom materializations** - Write materialization logic in Python with full framework integration, including audit hooks, schema change signals, and query change detection.
 - **Path-between selectors** - `--select fact_orders~daily_activity_rollup` selects every model on the shortest path between two nodes.
+- **Advanced virtual environments** - Optional state-backed workflows for low-copy branching, promotion, and rollback when your team is ready to operate a shared state store.
 
 ## Quick start
 
@@ -148,9 +149,6 @@ sqb scenario test
 sqb scenario test --select revenue__customer_refund --retain
 sqb scenario test --select tests/scenarios/revenue --exclude revenue__slow_refund
 ```
-
-Scenario selectors can be passed with repeated `--select` flags or with `--select-file`.
-Positional selectors are still accepted, but `--select` is the preferred form.
 
 Capture local replay snapshots as JSONL under `tests/_scenario_snapshots/<scenario_name>/`:
 

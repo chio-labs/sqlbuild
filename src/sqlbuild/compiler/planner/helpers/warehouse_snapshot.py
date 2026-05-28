@@ -24,7 +24,14 @@ from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
-from sqlbuild.compiler.planner.models import ModelCursorSnapshot, WarehouseSnapshot
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.helpers.buildability import check_buildability
+from sqlbuild.compiler.planner.models import (
+    MissingUpstream,
+    ModelCursorSnapshot,
+    PlannerScope,
+    WarehouseSnapshot,
+)
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.compiler.shared.helpers.sources import render_source_relation
 from sqlbuild.shared.types import SqlReferenceKind
@@ -62,6 +69,48 @@ class _CursorModelInfo:
     target_relation: str | None
     cursor_column: str
     upstreams: tuple[_UpstreamCursorInfo, ...]
+
+
+def build_warehouse_snapshot(
+    *,
+    project: CompiledProject,
+    adapter: BaseAdapter,
+    connection: Any,
+    scope: PlannerScope,
+    full_refresh: bool = False,
+    start_cursor_override: str | None = None,
+    end_cursor_override: str | None = None,
+    on_progress: Callable[[str], None] | None = None,
+    deferred_targets: dict[str, CompiledRelationTarget] | None = None,
+    deferred_relations: dict[str, RelationInfo] | None = None,
+) -> WarehouseSnapshot:
+    """Gather warehouse state and validate selected upstream availability."""
+
+    snapshot: WarehouseSnapshot = gather_warehouse_snapshot(
+        project=project,
+        adapter=adapter,
+        connection=connection,
+        execute=adapter.execute,
+        selected_keys=scope.selected_keys,
+        full_refresh=full_refresh,
+        start_cursor_override=start_cursor_override,
+        end_cursor_override=end_cursor_override,
+        on_progress=on_progress,
+        deferred_targets=deferred_targets,
+    )
+    missing: tuple[MissingUpstream, ...] = check_buildability(
+        selected_keys=scope.selected_keys,
+        upstream_deps=scope.upstream_deps,
+        snapshot=snapshot,
+        deferred_relations=deferred_relations,
+    )
+    if missing:
+        names: str = ", ".join(m.key.name for m in missing[:5])
+        raise PlannerInputError(
+            f"cannot build selected scope: {len(missing)} missing upstream dependencies ({names})",
+            code="S301",
+        )
+    return snapshot
 
 
 def gather_warehouse_snapshot(

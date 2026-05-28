@@ -41,6 +41,8 @@ def format_plan_json(plan: PlanOutput) -> str:
         "functions": functions,
         "warnings": warnings,
     }
+    if plan.metadata:
+        result["metadata"] = plan.metadata
     return json.dumps(result, indent=2)
 
 

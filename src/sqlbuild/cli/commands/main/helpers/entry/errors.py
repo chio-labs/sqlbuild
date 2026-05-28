@@ -19,7 +19,7 @@ class SqlbuildArgumentParser(argparse.ArgumentParser):
     def error(self, message: str) -> NoReturn:
         self.print_usage(sys.stderr)
         prefix: str = _style("error[C900]:", red_bold, use_color=self.use_color)
-        self.exit(2, f"{self.prog}: {prefix} {message}\n")
+        self.exit(2, f"{self.prog}: {prefix} {message}\n\n")
 
 
 def build_argument_parser_class(*, use_color: bool) -> type[SqlbuildArgumentParser]:
@@ -35,7 +35,9 @@ def format_expected_error(error: Exception, *, fallback_code: str, use_color: bo
     code: str = str(getattr(error, "code", fallback_code))
     message: str = str(getattr(error, "message", str(error)))
     help_text: str | None = getattr(error, "help", None)
-    return format_coded_error(code=code, message=message, help=help_text, use_color=use_color)
+    return (
+        format_coded_error(code=code, message=message, help=help_text, use_color=use_color) + "\n"
+    )
 
 
 def cli_error_use_color(

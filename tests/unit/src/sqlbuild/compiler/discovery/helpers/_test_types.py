@@ -20,19 +20,16 @@ class LoadProjectConfigTestCase:
     expected_connection: dict[str, str]
     expected_sqlglot: bool
     expected_max_concurrency: int
-    expected_materialized: str
+    expected_materialized: str | None
     expected_row_diff_exclude_columns: tuple[str, ...]
     expected_row_diff_tolerances: dict[str, object]
     expected_contract: str | None
-    expected_path_default_schema: str
+    expected_path_defaults: dict[str, dict[str, object]]
     expected_vars: dict[str, str]
-    expected_dev_connection: dict[str, object]
-    expected_dev_vars: dict[str, str]
-    expected_dev_schema: str
-    expected_dev_defer_sources_to: str | None
-    expected_allow_as_source: bool
+    expected_environments: dict[str, dict[str, object]]
     expected_janitor_enabled: bool
     expected_retention_days: int
+    expected_janitor_max_checkpoints: int
     expected_janitor_delete_tracked_only: bool
     expected_janitor_exclude_patterns: tuple[str, ...]
     expected_current_state_full_refresh: str = "deny"
@@ -53,6 +50,7 @@ class LoadProjectConfigTestCase:
     expected_dbt_target: str | None = None
     expected_dbt_target_path: str | None = None
     expected_auto_load_sources: bool = True
+    expected_environment_mode: str = "direct"
 
 
 @dataclass(frozen=True)

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.helpers.attachment import (
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.spec.models.environments import (
     resolve_environment_config,
     resolve_environment_name,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.models.project import EnvironmentConfig
 
 

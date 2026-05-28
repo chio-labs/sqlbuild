@@ -15,8 +15,6 @@ from sqlbuild.compiler.compile.helpers.attachment import (
     build_sql_function_inputs,
     build_test_inputs,
     index_generic_audit_definitions,
-    resolve_environment_config,
-    resolve_environment_name,
     resolve_run_id,
 )
 from sqlbuild.compiler.compile.helpers.macros import load_project_macros
@@ -39,6 +37,10 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
 )
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.spec.models.environments import (
+    resolve_environment_config,
+    resolve_environment_name,
+)
 from sqlbuild.spec.models.project import (
     EnvironmentConfig,
     SettingsConfig,

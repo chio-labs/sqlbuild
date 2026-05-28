@@ -60,6 +60,37 @@ def build_databricks_project_toml(*, project_name: str, schema_name: str) -> str
     )
 
 
+def build_databricks_virtual_project_toml(
+    *, project_name: str, schema_name: str, unsuffixed_virtual_env: str | None = None
+) -> str:
+    catalog_name: str = str(build_databricks_connection_config(schema=schema_name)["catalog"])
+    unsuffixed_line: str = (
+        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n'
+        if unsuffixed_virtual_env is not None
+        else ""
+    )
+    return (
+        f'name = "{project_name}"\n'
+        'adapter = "databricks"\n'
+        'environment_mode = "virtual"\n'
+        'default_environment = "dev"\n\n'
+        "[connection]\n"
+        'server_hostname = "${ENV:SQB_TEST_DATABRICKS_SERVER_HOSTNAME}"\n'
+        'http_path = "${ENV:SQB_TEST_DATABRICKS_HTTP_PATH}"\n'
+        'token = "${ENV:SQB_TEST_DATABRICKS_TOKEN}"\n'
+        'catalog = "${ENV:SQB_TEST_DATABRICKS_CATALOG}"\n\n'
+        "[environments.dev]\n"
+        f'database = "{catalog_name}"\n'
+        f'schema = "{schema_name}"\n\n'
+        "[environments.dev.state]\n"
+        'backend = "duckdb"\n'
+        'schema = "sqlbuild_state"\n'
+        f"{unsuffixed_line}\n"
+        "[environments.dev.state.connection]\n"
+        'database = "state.duckdb"\n'
+    )
+
+
 def prepare_databricks_waffle_shop(*, tmp_path: Path) -> tuple[Path, str]:
     """Prepare a Waffle Shop project wired to a unique Databricks schema."""
 

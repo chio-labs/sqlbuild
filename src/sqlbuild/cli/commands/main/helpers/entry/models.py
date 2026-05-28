@@ -40,15 +40,26 @@ class CliNamespace:
     no_color: bool = False
     fail_fast: bool = False
     full_refresh: bool = False
+    virtual_env: str | None = None
+    skip_locked: bool = False
+    include_stale_upstreams: bool = False
+    changes_only: bool = False
     load_sources: bool | None = None
     reload: bool = False
     allow_snapshot_full_refresh: bool = False
     allow_snapshot_schema_change: bool = False
+    allow_partial_promotion: bool = False
+    allow_partial_rollback: bool = False
+    rollback_checkpoint_id: str | None = None
     concurrency: int | None = None
     verbose: bool = False
     debug: bool = False
     auto_approve: bool = False
     retention_days: int | None = None
+    state_command: str | None = None
+    state_checkpoint_command: str | None = None
+    state_checkpoint_id: str | None = None
+    state_backup_id: str | None = None
     bounded: str | None = None
     max_column_examples: int | None = None
     max_row_only_examples: int | None = None
@@ -64,6 +75,10 @@ class CliNamespace:
     no_connection: bool = False
     full: bool = False
     schema_only: bool = False
+    allow_partial_diff: bool = False
+    reconcile_command: str | None = None
+    reconcile_model: str | None = None
+    reconcile_physical_relation: str | None = None
     playground_path: str = "sqlbuild-playground"
     playground_template: str = "waffle_shop"
     scenario_command: str | None = None
@@ -118,12 +133,15 @@ class CliEntrypointHandlers:
             CursorOverrides | None,
             bool,
             bool,
+            str | None,
             bool | None,
             bool,
             tuple[str, ...],
             tuple[str, ...],
             bool,
             dict[str, object],
+            bool,
+            bool,
         ],
         int,
     ]
@@ -142,6 +160,7 @@ class CliEntrypointHandlers:
             bool,
             bool,
             bool,
+            str | None,
             bool | None,
             bool,
             bool,
@@ -152,6 +171,8 @@ class CliEntrypointHandlers:
             bool,
             bool,
             dict[str, object],
+            bool,
+            bool,
             bool,
             Path | None,
         ],
@@ -245,8 +266,11 @@ class CliEntrypointHandlers:
             str,
             str,
             bool,
+            str | None,
+            bool,
             tuple[str, ...],
             tuple[str, ...],
+            bool,
             dict[str, object],
         ],
         int,
@@ -265,6 +289,52 @@ class CliEntrypointHandlers:
             int | None,
             tuple[str, ...],
             tuple[str, ...],
+            bool,
+            dict[str, object],
+            bool,
+        ],
+        int,
+    ]
+    run_reconcile: Callable[
+        [
+            Path | None,
+            bool,
+            str | None,
+            str | None,
+            str | None,
+            str | None,
+            bool,
+            dict[str, object],
+        ],
+        int,
+    ]
+    run_promote: Callable[
+        [
+            Path | None,
+            bool,
+            bool,
+            str,
+            str,
+            tuple[str, ...],
+            tuple[str, ...],
+            bool,
+            bool,
+            bool,
+            dict[str, object],
+        ],
+        int,
+    ]
+    run_rollback: Callable[
+        [
+            Path | None,
+            bool,
+            bool,
+            str | None,
+            bool,
+            str | None,
+            tuple[str, ...],
+            tuple[str, ...],
+            bool,
             bool,
             dict[str, object],
         ],
@@ -288,6 +358,9 @@ class CliEntrypointHandlers:
         int,
     ]
     run_janitor: Callable[[Path | None, bool, bool, int | None], int]
+    run_state: Callable[
+        [Path | None, str, str | None, bool, bool, str | None, str | None, str | None, bool], int
+    ]
     run_init: Callable[[Path | None], int]
     run_playground: Callable[[Path | None, str, str], int]
     run_skills_update: Callable[[Path | None, bool, tuple[str, ...], bool], int]

@@ -119,3 +119,35 @@ class SnowflakeSourceDeferralE2ETestCase:
     expected_loader_rows: tuple[tuple[object, ...], ...]
     command: tuple[str, ...] = ("--no-color", "build", "--select", "stg_orders")
     expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class SnowflakeVirtualSeedE2ETestCase:
+    description: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_seed_strategy: str
+
+
+@dataclass(frozen=True)
+class SnowflakeVirtualLifecycleE2ETestCase:
+    description: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_stdout_fragments: tuple[str, ...]
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class SnowflakeReconcileE2ETestCase:
+    description: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_stdout_fragments: tuple[str, ...]
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class SnowflakeJanitorDetachedVdeE2ETestCase:
+    description: str
+    expected_stdout_fragments: tuple[str, ...]
+    expected_virtual_environment_count_after: int
+    expected_ref_count_after: int
+    expected_return_code: int = 0

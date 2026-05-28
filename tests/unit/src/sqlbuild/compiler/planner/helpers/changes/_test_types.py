@@ -22,6 +22,7 @@ class DetectModelChangesTestCase:
     full_refresh: bool
     expected_change_kind: ChangeKind
     expected_backfill_action: BackfillAction
+    fingerprint_config_values: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)

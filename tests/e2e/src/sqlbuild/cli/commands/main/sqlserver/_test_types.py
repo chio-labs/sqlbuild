@@ -93,3 +93,36 @@ class SqlServerSnapshotApplyE2ETestCase:
     expected_current_delete_rows: tuple[tuple[object, ...], ...]
     expected_historical_timestamp_rows: tuple[tuple[object, ...], ...]
     expected_historical_check_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SqlServerVirtualLifecycleE2ETestCase:
+    description: str
+    expected_rows: tuple[tuple[str, ...], ...]
+    expected_stdout_fragments: tuple[str, ...]
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class SqlServerReconcileE2ETestCase:
+    description: str
+    expected_rows: tuple[tuple[str, ...], ...]
+    expected_stdout_fragments: tuple[str, ...]
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class SqlServerJanitorDetachedVdeE2ETestCase:
+    description: str
+    expected_stdout_fragments: tuple[str, ...]
+    expected_virtual_environment_count_after: int
+    expected_ref_count_after: int
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class SqlServerVirtualSeedE2ETestCase:
+    description: str
+    expected_rows: tuple[tuple[str, ...], ...]
+    expected_seed_strategy: str
+    expected_return_code: int = 0

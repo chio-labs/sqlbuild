@@ -109,6 +109,18 @@ class MaterializationMixin(ABC):
         ...
 
     @abstractmethod
+    def durable_clone(
+        self,
+        connection: Any,
+        *,
+        source: str,
+        target: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        """Clone/copy a relation into a durable independent target."""
+        ...
+
+    @abstractmethod
     def load_seed(
         self,
         connection: Any,

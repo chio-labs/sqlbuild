@@ -13,7 +13,7 @@ from sqlbuild.compiler.manifest.helpers.shared import (
     build_fqn,
 )
 from sqlbuild.compiler.planner.models import ModelPlanEntry
-from sqlbuild.compiler.shared.helpers.hashing import compute_query_hash
+from sqlbuild.shared.helpers.hashing import compute_query_hash
 
 
 def build_model_node(

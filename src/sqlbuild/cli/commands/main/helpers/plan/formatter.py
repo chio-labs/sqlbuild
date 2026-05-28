@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import difflib
+import json
 import re
 from collections import Counter
 from collections.abc import Callable, Sequence
@@ -40,12 +41,14 @@ from sqlbuild.shared.types import ExecutionResourceKind
 
 _REASON_GROUP_ORDER: tuple[PlanReason, ...] = (
     PlanReason.QUERY_CHANGED,
+    PlanReason.CONFIG_CHANGED,
     PlanReason.SCHEMA_CHANGED,
     PlanReason.FIRST_RUN,
 )
 
 _REASON_GROUP_LABELS: dict[PlanReason, str] = {
     PlanReason.QUERY_CHANGED: "Query changed",
+    PlanReason.CONFIG_CHANGED: "Config changed",
     PlanReason.SCHEMA_CHANGED: "Schema changed",
     PlanReason.FIRST_RUN: "First run",
 }
@@ -95,6 +98,13 @@ def format_plan(
             full_refresh=False,
         )
         lines.append(green_bold(header))
+
+    _format_virtual_metadata(
+        lines,
+        plan,
+        section_header_style=section_header_style,
+        display_options=resolved_display_options,
+    )
 
     _format_source_loads(
         lines,
@@ -468,6 +478,7 @@ def _format_detail_entry(
     )
     _append_policy_line(lines, entry)
     _append_schema_diff(lines, entry)
+    _append_config_diff(lines, entry)
     _append_query_diff(lines, entry)
 
 
@@ -531,8 +542,34 @@ def _append_query_diff(lines: list[str], entry: ModelPlanEntry) -> None:
 
     if entry.previous_query_sql is None:
         return
+    if entry.reason != PlanReason.QUERY_CHANGED:
+        return
     lines.append("    query diff:")
     lines.extend(_format_query_diff(entry.previous_query_sql, entry.fingerprint_query_sql))
+
+
+def _append_config_diff(lines: list[str], entry: ModelPlanEntry) -> None:
+    """Append version-identity config diff lines if metadata changed."""
+
+    if entry.reason != PlanReason.CONFIG_CHANGED:
+        return
+    if entry.previous_metadata_json is None or entry.fingerprint_metadata_json is None:
+        return
+    previous_config: str = _format_config_json(entry.previous_metadata_json)
+    current_config: str = _format_config_json(entry.fingerprint_metadata_json)
+    if previous_config == current_config:
+        return
+    lines.append("    config diff:")
+    lines.extend(_format_query_diff(previous_config, current_config))
+
+
+def _format_config_json(metadata_json: str) -> str:
+    try:
+        payload: object = json.loads(metadata_json)
+    except json.JSONDecodeError:
+        return metadata_json
+    config: object = payload.get("config", {}) if isinstance(payload, dict) else {}
+    return json.dumps(config, sort_keys=True, indent=2, default=str)
 
 
 def _action_text(entry: ModelPlanEntry) -> str:
@@ -586,6 +623,10 @@ def _plan_reason_text(reason: PlanReason) -> str:
 
     if reason == PlanReason.QUERY_CHANGED:
         return "query changed"
+    if reason == PlanReason.FUNCTION_CHANGED:
+        return "function changed"
+    if reason == PlanReason.CONFIG_CHANGED:
+        return "config changed"
     if reason == PlanReason.SCHEMA_CHANGED:
         return "schema changed"
     if reason == PlanReason.FIRST_RUN:
@@ -804,6 +845,79 @@ def _format_warnings(lines: list[str], plan: PlanOutput) -> None:
         if warning.model_name is not None:
             lines.append(f"  {blue_bold(warning.model_name)}")
         lines.append(f"  {yellow(f'- {warning.message}')}")
+
+
+def _format_virtual_metadata(
+    lines: list[str],
+    plan: PlanOutput,
+    *,
+    section_header_style: Callable[[str], str],
+    display_options: DisplayOptions,
+) -> None:
+    """Append a virtual planner metadata section when present."""
+
+    virtual_environment_name: object | None = plan.metadata.get("virtual_environment_name")
+    if not isinstance(virtual_environment_name, str):
+        return
+    virtual_environment_status: str = str(
+        plan.metadata.get("virtual_environment_status", "unknown")
+    )
+    raw_stale_model_names: object | None = plan.metadata.get("virtual_stale_model_names")
+    stale_model_names: tuple[str, ...] = (
+        tuple(str(item) for item in raw_stale_model_names)
+        if isinstance(raw_stale_model_names, (tuple, list))
+        else ()
+    )
+    raw_stale_root_names: object | None = plan.metadata.get("virtual_stale_root_names")
+    stale_root_names: tuple[str, ...] = (
+        tuple(str(item) for item in raw_stale_root_names)
+        if isinstance(raw_stale_root_names, (tuple, list))
+        else ()
+    )
+    raw_remaining_stale_model_names: object | None = plan.metadata.get(
+        "virtual_remaining_stale_model_names"
+    )
+    remaining_stale_model_names: tuple[str, ...] = (
+        tuple(str(item) for item in raw_remaining_stale_model_names)
+        if isinstance(raw_remaining_stale_model_names, (tuple, list))
+        else ()
+    )
+    lines.append("")
+    lines.append(section_header_style("Virtual environment"))
+    lines.append(f"  name: {virtual_environment_name}")
+    lines.append(f"  status: {virtual_environment_status}")
+    lines.append(f"  stale roots: {len(stale_root_names)}")
+    if stale_root_names:
+        stale_root_set: str = _format_capped_name_list(
+            stale_root_names,
+            display_options=display_options,
+        )
+        lines.append(f"  stale root set: {stale_root_set}")
+    lines.append(f"  stale models: {len(stale_model_names)}")
+    if stale_model_names:
+        stale_model_set: str = _format_capped_name_list(
+            stale_model_names,
+            display_options=display_options,
+        )
+        lines.append(f"  stale model set: {stale_model_set}")
+    if remaining_stale_model_names:
+        remaining_stale_set: str = _format_capped_name_list(
+            remaining_stale_model_names,
+            display_options=display_options,
+        )
+        lines.append(f"  remaining stale after selection: {remaining_stale_set}")
+
+
+def _format_capped_name_list(names: tuple[str, ...], *, display_options: DisplayOptions) -> str:
+    """Format a capped comma-separated name list."""
+
+    limit: int | None = display_options.max_entries_per_section
+    visible_names: tuple[str, ...] = names if limit is None else names[:limit]
+    remaining_count: int = len(names) - len(visible_names)
+    base: str = ", ".join(visible_names)
+    if remaining_count <= 0:
+        return base
+    return f"{base}, ... (+{remaining_count} more; use {display_options.overflow_flag} to show all)"
 
 
 def _resolve_name_column_width(plan: PlanOutput) -> int:

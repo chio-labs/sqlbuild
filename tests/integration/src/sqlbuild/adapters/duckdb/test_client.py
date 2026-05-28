@@ -968,6 +968,52 @@ def test_given_existing_table_when_renaming_then_new_name_exists(
 @pytest.mark.parametrize(
     "test_case",
     [
+        RenameTestCase(
+            description="move-or-copy uses native rename within one schema",
+            setup_sql=(
+                "CREATE SCHEMA move_native",
+                "CREATE TABLE move_native.original (id INTEGER)",
+                "INSERT INTO move_native.original VALUES (1)",
+            ),
+            source="move_native.original",
+            target="move_native.renamed",
+            expected_source_exists=False,
+            expected_target_exists=True,
+        ),
+    ],
+    ids=["move-or-copy uses native rename within one schema"],
+)
+def test_given_same_schema_table_when_moving_without_copy_then_native_rename_is_used(
+    test_case: RenameTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    statement: str
+    for statement in test_case.setup_sql:
+        connection.execute(statement)
+
+    adapter.move_or_copy_relation(
+        connection,
+        source=test_case.source,
+        target=test_case.target,
+        remove_source=True,
+        allow_copy_fallback=False,
+        statement_recorder=StatementRecorder(),
+    )
+
+    source_exists: bool = adapter.relation_exists(
+        connection, database=None, schema="move_native", name="original"
+    )
+    target_exists: bool = adapter.relation_exists(
+        connection, database=None, schema="move_native", name="renamed"
+    )
+    assert source_exists == test_case.expected_source_exists
+    assert target_exists == test_case.expected_target_exists
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         SwapTestCase(
             description="swaps two tables",
             setup_sql=(

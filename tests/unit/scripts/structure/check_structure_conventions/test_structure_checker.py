@@ -211,6 +211,27 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC027", "SC015"),
     ),
     CheckPathsTestCase(
+        description="allows private enum inside helpers module",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/helpers/worker.py": dedent(
+                """
+                from enum import StrEnum
+
+
+                class _WorkerKind(StrEnum):
+                    BASIC = "basic"
+
+
+                def run_worker() -> _WorkerKind:
+                    return _WorkerKind.BASIC
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=(),
+    ),
+    CheckPathsTestCase(
         description="allows private type alias outside types module",
         repo_files=compliant_repo_files()
         | {
@@ -442,6 +463,33 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=(),
     ),
     CheckPathsTestCase(
+        description="allows role package import from same package helpers",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/classes/__init__.py": '"""Widget classes."""\n',
+            "src/sqlbuild/example/widget/classes/runner.py": dedent(
+                """
+                from sqlbuild.example.widget.helpers.backfill.run import run_backfill
+
+
+                class WidgetRunner:
+                    def run(self) -> str:
+                        return run_backfill()
+                """
+            ).strip()
+            + "\n",
+            "src/sqlbuild/example/widget/helpers/backfill/__init__.py": '"""Backfill helpers."""\n',
+            "src/sqlbuild/example/widget/helpers/backfill/run.py": dedent(
+                """
+                def run_backfill() -> str:
+                    return "demo"
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=(),
+    ),
+    CheckPathsTestCase(
         description="allows one main entry to import another main entry",
         repo_files=compliant_repo_files()
         | {
@@ -460,6 +508,60 @@ TEST_CASES: list[CheckPathsTestCase] = [
                 """
                 def run_plan() -> str:
                     return "demo"
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=(),
+    ),
+    CheckPathsTestCase(
+        description="allows main entry import from same package classes",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/__init__.py": '"""Main entry modules."""\n',
+            "src/sqlbuild/example/widget/main/run.py": dedent(
+                """
+                from sqlbuild.example.widget.classes.runner import WidgetRunner
+
+
+                def run_widget() -> str:
+                    return WidgetRunner().run()
+                """
+            ).strip()
+            + "\n",
+            "src/sqlbuild/example/widget/classes/__init__.py": '"""Widget classes."""\n',
+            "src/sqlbuild/example/widget/classes/runner.py": dedent(
+                """
+                class WidgetRunner:
+                    def run(self) -> str:
+                        return "demo"
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=(),
+    ),
+    CheckPathsTestCase(
+        description="allows helpers import from same package classes",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/helpers/__init__.py": '"""Helpers."""\n',
+            "src/sqlbuild/example/widget/helpers/build.py": dedent(
+                """
+                from sqlbuild.example.widget.classes.runner import WidgetRunner
+
+
+                def build_widget() -> str:
+                    return WidgetRunner().run()
+                """
+            ).strip()
+            + "\n",
+            "src/sqlbuild/example/widget/classes/__init__.py": '"""Widget classes."""\n',
+            "src/sqlbuild/example/widget/classes/runner.py": dedent(
+                """
+                class WidgetRunner:
+                    def run(self) -> str:
+                        return "demo"
                 """
             ).strip()
             + "\n",

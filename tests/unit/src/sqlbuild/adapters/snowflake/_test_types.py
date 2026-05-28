@@ -31,6 +31,14 @@ class SnowflakeRenderCloneTestCase:
 
 
 @dataclass(frozen=True)
+class SnowflakeMoveOrCopyRelationTestCase:
+    description: str
+    source: str
+    target: str
+    expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class SnowflakeRenderIdentifierTestCase:
     description: str
     name: str

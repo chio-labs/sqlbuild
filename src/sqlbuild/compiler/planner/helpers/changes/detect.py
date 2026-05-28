@@ -6,9 +6,13 @@ import logging
 
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models.core import (
+    CompiledFunction,
     CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
     InferredColumn,
 )
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.helpers.changes.config import (
     get_config_dict,
@@ -21,18 +25,80 @@ from sqlbuild.compiler.planner.helpers.changes.policy import (
 )
 from sqlbuild.compiler.planner.helpers.changes.query import detect_query_change
 from sqlbuild.compiler.planner.helpers.changes.schema import detect_schema_changes
+from sqlbuild.compiler.planner.helpers.function_fingerprints import (
+    build_compiled_function_fingerprint_sql,
+    detect_function_change,
+)
+from sqlbuild.compiler.planner.main.version_identity_metadata import (
+    build_version_identity_metadata_json,
+)
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     ChangeDetectionResult,
+    FunctionChangeResult,
+    PlannerChangeResults,
+    PlannerScope,
     SchemaFinding,
     WarehouseSnapshot,
 )
-from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
-from sqlbuild.compiler.shared.helpers.hashing import (
+from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReason
+from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event, log_sql
+from sqlbuild.shared.helpers.hashing import (
     compute_ast_hash,
     compute_query_hash,
 )
-from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event, log_sql
+
+
+def detect_changes(
+    *,
+    project: CompiledProject,
+    scope: PlannerScope,
+    snapshot: WarehouseSnapshot,
+    full_refresh: bool,
+) -> PlannerChangeResults:
+    """Detect selected model and function changes."""
+
+    model_changes: dict[str, ChangeDetectionResult] = {}
+    key: CompiledObjectKey
+    for key in scope.execution_order:
+        if key not in scope.selected_keys or key.resource_type != CompiledResourceType.MODEL:
+            continue
+        model: CompiledModel | None = scope.models_by_name.get(key.name)
+        if model is None:
+            continue
+        model_changes[model.name] = detect_model_changes(
+            model=model,
+            snapshot=snapshot,
+            sqlglot_enabled=project.settings.sqlglot,
+            query_change_tracking=project.settings.query_change_tracking,
+            full_refresh=full_refresh,
+        )
+
+    function_changes: dict[str, FunctionChangeResult] = {}
+    function: CompiledFunction
+    for function in project.functions:
+        fingerprint_sql: str = build_compiled_function_fingerprint_sql(function)
+        if function.key not in scope.selected_keys:
+            function_changes[function.name] = FunctionChangeResult(
+                fingerprint_sql=fingerprint_sql,
+            )
+            continue
+        function_reason: PlanReason
+        function_backfill: BackfillResult
+        function_reason, function_backfill = detect_function_change(
+            function=function,
+            fingerprint_sql=fingerprint_sql,
+            snapshot=snapshot,
+            query_change_tracking=project.settings.query_change_tracking,
+            full_refresh=full_refresh,
+        )
+        function_changes[function.name] = FunctionChangeResult(
+            fingerprint_sql=fingerprint_sql,
+            reason=function_reason,
+            backfill=function_backfill,
+        )
+
+    return PlannerChangeResults(models=model_changes, functions=function_changes)
 
 
 def detect_model_changes(
@@ -46,12 +112,17 @@ def detect_model_changes(
     """Detect changes for one model and resolve backfill policy."""
 
     model_name: str = model.name
+    metadata_json: str = build_version_identity_metadata_json(
+        model_name=model.name,
+        config_values=model.config.values,
+    )
 
     if full_refresh:
         return ChangeDetectionResult(
             model_name=model_name,
             change_kind=ChangeKind.NO_CHANGE,
             backfill=BackfillResult(action=BackfillAction.FULL),
+            fingerprint_metadata_json=metadata_json,
         )
 
     relation_exists: bool = model_name in snapshot.existing_relations
@@ -62,9 +133,15 @@ def detect_model_changes(
             model_name=model_name,
             change_kind=ChangeKind.FIRST_RUN,
             backfill=BackfillResult(action=BackfillAction.FULL),
+            fingerprint_metadata_json=metadata_json,
         )
 
     query_changed: bool = False
+    config_changed: bool = (
+        fingerprint is not None
+        and fingerprint.metadata_json != "{}"
+        and metadata_json != fingerprint.metadata_json
+    )
     query_backfill: BackfillResult = BackfillResult(action=BackfillAction.WARN_ONLY)
     if query_change_tracking and fingerprint is not None:
         debug_logger: logging.Logger = logging.getLogger("sqlbuild.planner.changes")
@@ -130,6 +207,8 @@ def detect_model_changes(
         change_kind = ChangeKind.QUERY_CHANGED
     elif schema_findings:
         change_kind = ChangeKind.SCHEMA_CHANGED
+    elif config_changed:
+        change_kind = ChangeKind.CONFIG_CHANGED
     else:
         change_kind = ChangeKind.NO_CHANGE
 
@@ -137,6 +216,9 @@ def detect_model_changes(
         model_name=model_name,
         change_kind=change_kind,
         query_changed=query_changed,
+        config_changed=config_changed,
+        fingerprint_metadata_json=metadata_json,
+        previous_metadata_json=fingerprint.metadata_json if fingerprint is not None else None,
         schema_findings=schema_findings,
         backfill=backfill,
     )

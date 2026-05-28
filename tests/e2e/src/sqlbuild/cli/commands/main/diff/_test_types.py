@@ -20,3 +20,12 @@ class DiffKeyFailureE2ETestCase:
     description: str
     mutation_sql: tuple[str, ...]
     expected_stderr_fragment: str
+
+
+@dataclass(frozen=True)
+class VirtualDiffE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_stderr_fragments: tuple[str, ...] = field(default_factory=tuple)

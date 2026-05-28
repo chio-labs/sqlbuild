@@ -15,6 +15,7 @@ from sqlbuild.compiler.planner.types import (
     SchemaChangeKind,
     WarningSeverity,
 )
+from sqlbuild.shared.helpers.display import DisplayOptions
 from sqlbuild.spec.models.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers._test_types import (
     FormatPlanTestCase,
@@ -199,6 +200,33 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "+ discount",
             "added",
         ),
+    ),
+    FormatPlanTestCase(
+        description="config changed shows config diff without query diff",
+        plan_output=build_plan_output(
+            model_entries=(
+                build_model_entry(
+                    name="fact_orders",
+                    action=PlanAction.CREATE_TABLE,
+                    reason=PlanReason.CONFIG_CHANGED,
+                    previous_query_sql="SELECT order_id FROM raw",
+                    previous_metadata_json=(
+                        '{"config":{"materialized":"view"},"model_name":"fact_orders"}'
+                    ),
+                    fingerprint_metadata_json=(
+                        '{"config":{"materialized":"table"},"model_name":"fact_orders"}'
+                    ),
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "Config changed (1)",
+            "fact_orders",
+            "config diff:",
+            '"materialized": "view"',
+            '"materialized": "table"',
+        ),
+        unexpected_fragments=("query diff:",),
     ),
     FormatPlanTestCase(
         description="full rebuild hides cursor range placeholders",
@@ -414,7 +442,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
         ),
     ),
     FormatPlanTestCase(
-        description="upstream changed prefers root function query cause",
+        description="upstream changed prefers root function changed cause",
         plan_output=build_plan_output(
             model_entries=(
                 build_model_entry(
@@ -425,7 +453,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
                         effective_action=BackfillAction.FULL,
                         effective_duration=None,
                         root_cause="is_completed_order",
-                        root_reason=PlanReason.QUERY_CHANGED,
+                        root_reason=PlanReason.FUNCTION_CHANGED,
                         causes=(
                             CascadeCause(
                                 model_name="hourly_order_activity",
@@ -441,7 +469,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "Upstream changed (1)",
             "daily_activity_rollup",
             "full rebuild",
-            "cause: is_completed_order (query changed)",
+            "cause: is_completed_order (function changed)",
         ),
         unexpected_fragments=("cause: hourly_order_activity", "cause: is_completed_order (full)"),
     ),
@@ -634,6 +662,71 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "  order_status_index                 delete_insert (integer)",
         ),
     ),
+    FormatPlanTestCase(
+        description="virtual metadata shows roots first and caps stale model list",
+        plan_output=build_plan_output(
+            metadata={
+                "virtual_environment_name": "dev",
+                "virtual_environment_status": "working",
+                "virtual_stale_root_names": ("root_a", "root_b"),
+                "virtual_stale_model_names": tuple(f"model_{index:02d}" for index in range(55)),
+            },
+        ),
+        expected_fragments=(
+            "Virtual environment",
+            "name: dev",
+            "status: working",
+            "stale roots: 2",
+            "stale root set: root_a, root_b",
+            "stale models: 55",
+            "stale model set: model_00",
+            "... (+5 more; use --verbose to show all)",
+        ),
+        expected_ordered_fragments=(
+            "stale roots: 2",
+            "stale root set: root_a, root_b",
+            "stale models: 55",
+            "stale model set: model_00",
+        ),
+    ),
+    FormatPlanTestCase(
+        description="virtual metadata shows full stale sets in verbose output",
+        plan_output=build_plan_output(
+            metadata={
+                "virtual_environment_name": "dev",
+                "virtual_environment_status": "working",
+                "virtual_stale_root_names": tuple(f"root_{index:02d}" for index in range(3)),
+                "virtual_stale_model_names": tuple(f"model_{index:02d}" for index in range(3)),
+            },
+        ),
+        display_options=DisplayOptions(max_entries_per_section=None),
+        expected_fragments=(
+            "stale root set: root_00, root_01, root_02",
+            "stale model set: model_00, model_01, model_02",
+        ),
+        unexpected_fragments=("use --verbose",),
+    ),
+    FormatPlanTestCase(
+        description="virtual metadata shows remaining stale models after partial selection",
+        plan_output=build_plan_output(
+            metadata={
+                "virtual_environment_name": "dev",
+                "virtual_environment_status": "working",
+                "virtual_stale_root_names": ("stg_orders",),
+                "virtual_stale_model_names": ("fact_orders", "orders_rollup", "stg_orders"),
+                "virtual_remaining_stale_model_names": ("orders_rollup",),
+            },
+        ),
+        expected_fragments=(
+            "stale models: 3",
+            "stale model set: fact_orders, orders_rollup, stg_orders",
+            "remaining stale after selection: orders_rollup",
+        ),
+        expected_ordered_fragments=(
+            "stale model set: fact_orders, orders_rollup, stg_orders",
+            "remaining stale after selection: orders_rollup",
+        ),
+    ),
 ]
 
 
@@ -649,6 +742,7 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
         test_case.plan_output,
         full_refresh=test_case.full_refresh,
         use_color=False,
+        display_options=test_case.display_options,
     )
 
     fragment: str

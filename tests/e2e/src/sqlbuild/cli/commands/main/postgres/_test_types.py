@@ -107,3 +107,120 @@ class PostgresPartialSourceTypeEnforcementE2ETestCase:
     expected_rows: tuple[tuple[object, ...], ...]
     command: tuple[str, ...] = ("--no-color", "build", "--select", "stg_orders")
     expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class PostgresStateLifecycleE2ETestCase:
+    description: str
+    expected_exit_code: int
+    expected_schema_version: int
+    expected_init_fragment: str = "Virtual State Initialized"
+    expected_migrate_fragment: str = "Virtual State Migrated"
+    expected_rollback_fragment: str = "Virtual State Rolled Back"
+    expected_reset_fragment: str = "Virtual State Reset"
+
+
+@dataclass(frozen=True)
+class PostgresStateAdoptDetachE2ETestCase:
+    description: str
+    expected_exit_code: int
+    expected_rows_after_adopt: tuple[tuple[object, ...], ...]
+    expected_rows_after_detach: tuple[tuple[object, ...], ...]
+    expected_detached_status: str
+
+
+@dataclass(frozen=True)
+class PostgresStateAdoptDetachErrorE2ETestCase:
+    description: str
+    expected_exit_code: int
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class PostgresReconcileE2ETestCase:
+    description: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_stdout_fragments: tuple[str, ...]
+    expected_exit_code: int = 0
+    input_text: str = ""
+
+
+@dataclass(frozen=True)
+class PostgresVirtualSeedE2ETestCase:
+    description: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_seed_strategy: str
+    incremental_strategy: str = "delete_insert"
+    expected_exit_code: int = 0
+
+
+@dataclass(frozen=True)
+class PostgresVirtualRollbackE2ETestCase:
+    description: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_stdout_fragments: tuple[str, ...]
+    expected_checkpoint_count: int
+    expected_exit_code: int = 0
+
+
+@dataclass(frozen=True)
+class PostgresVirtualParityE2ETestCase:
+    description: str
+    expected_stdout_fragments: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
+    expected_exit_code: int = 0
+
+
+@dataclass(frozen=True)
+class PostgresJanitorDetachedVdeE2ETestCase:
+    description: str
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+    expected_virtual_environment_count_after: int
+    expected_ref_count_after: int
+
+
+@dataclass(frozen=True)
+class PostgresStateLifecycleErrorE2ETestCase:
+    description: str
+    allow_reset: bool
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class PostgresStateExplicitRollbackE2ETestCase:
+    description: str
+    expected_exit_code: int
+    expected_schema_version: int
+    expected_rollback_fragment: str = "Virtual State Rolled Back"
+
+
+@dataclass(frozen=True)
+class PostgresStateLocalOverrideE2ETestCase:
+    description: str
+    expected_exit_code: int
+    expected_schema_version: int
+
+
+@dataclass(frozen=True)
+class PostgresStateConnectionErrorE2ETestCase:
+    description: str
+    expected_exit_code: int
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class PostgresStateResetInvalidE2ETestCase:
+    description: str
+    expected_exit_code: int
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class PostgresStateSchemaCorruptionE2ETestCase:
+    description: str
+    mutation_sql_template: str
+    expected_exit_code: int
+    expected_error_fragment: str

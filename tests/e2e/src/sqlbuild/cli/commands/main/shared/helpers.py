@@ -73,6 +73,7 @@ def run_sqb(
     command: tuple[str, ...],
     project_dir: Path,
     env: Mapping[str, str] | None = None,
+    input_text: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run an sqb CLI command via subprocess and return the result."""
 
@@ -85,6 +86,7 @@ def run_sqb(
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        input=input_text,
         env=process_env,
         check=False,
     )
@@ -101,6 +103,18 @@ def query_duckdb(*, db_path: Path, sql: str) -> list[tuple[Any, ...]]:
     finally:
         connection.close()
     return result
+
+
+def execute_duckdb(*, db_path: Path, sql: str) -> None:
+    """Open a DuckDB file and execute a mutating statement."""
+
+    import duckdb
+
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(str(db_path))
+    try:
+        connection.execute(sql)
+    finally:
+        connection.close()
 
 
 def table_exists(*, db_path: Path, table_name: str, schema: str = "main") -> bool:

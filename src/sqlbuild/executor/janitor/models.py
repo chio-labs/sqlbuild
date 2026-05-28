@@ -38,6 +38,49 @@ class JanitorDeleteCandidate:
 
 
 @dataclass(frozen=True)
+class JanitorCheckpointCandidate:
+    """One retained-history checkpoint eligible for pruning."""
+
+    checkpoint_id: str
+    virtual_environment_name: str
+    created_at: datetime | None
+
+
+@dataclass(frozen=True)
+class JanitorDetachedVirtualEnvironmentCandidate:
+    """One detached virtual environment eligible for state cleanup."""
+
+    virtual_environment_name: str
+    updated_at: datetime | None
+
+
+@dataclass(frozen=True)
+class JanitorExpiredVirtualEnvironmentCandidate:
+    """One non-active virtual environment eligible for TTL cleanup."""
+
+    virtual_environment_name: str
+    updated_at: datetime | None
+
+
+@dataclass(frozen=True)
+class JanitorStateBackupCandidate:
+    """One state migration backup eligible for pruning."""
+
+    backup_id: str
+    schema_name: str
+    created_at: datetime | None
+
+
+@dataclass(frozen=True)
+class JanitorExpiredLockCandidate:
+    """One expired state lock eligible for pruning."""
+
+    lock_key: str
+    owner_id: str
+    expires_at: datetime
+
+
+@dataclass(frozen=True)
 class JanitorSkippedRelation:
     """One stale relation skipped by a safety rule."""
 
@@ -74,6 +117,15 @@ class JanitorPlan:
     environment_name: str | None
     retention_days: int
     candidates: tuple[JanitorDeleteCandidate, ...] = field(default_factory=tuple)
+    checkpoint_candidates: tuple[JanitorCheckpointCandidate, ...] = field(default_factory=tuple)
+    detached_virtual_environment_candidates: tuple[
+        JanitorDetachedVirtualEnvironmentCandidate, ...
+    ] = field(default_factory=tuple)
+    expired_virtual_environment_candidates: tuple[
+        JanitorExpiredVirtualEnvironmentCandidate, ...
+    ] = field(default_factory=tuple)
+    state_backup_candidates: tuple[JanitorStateBackupCandidate, ...] = field(default_factory=tuple)
+    expired_lock_candidates: tuple[JanitorExpiredLockCandidate, ...] = field(default_factory=tuple)
     skipped_relations: tuple[JanitorSkippedRelation, ...] = field(default_factory=tuple)
     skipped_schemas: tuple[JanitorSkippedSchema, ...] = field(default_factory=tuple)
     scanned_schema_count: int = 0
@@ -85,3 +137,12 @@ class JanitorExecutionResult:
     """Result from deleting janitor candidates."""
 
     deleted: tuple[JanitorDeleteCandidate, ...] = field(default_factory=tuple)
+    deleted_checkpoints: tuple[JanitorCheckpointCandidate, ...] = field(default_factory=tuple)
+    deleted_detached_virtual_environments: tuple[
+        JanitorDetachedVirtualEnvironmentCandidate, ...
+    ] = field(default_factory=tuple)
+    deleted_expired_virtual_environments: tuple[JanitorExpiredVirtualEnvironmentCandidate, ...] = (
+        field(default_factory=tuple)
+    )
+    deleted_state_backups: tuple[JanitorStateBackupCandidate, ...] = field(default_factory=tuple)
+    deleted_expired_locks: tuple[JanitorExpiredLockCandidate, ...] = field(default_factory=tuple)

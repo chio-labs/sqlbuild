@@ -49,6 +49,9 @@ class BaseAdapter(StrictAdapter):
     def supports_zero_copy_clone(self) -> bool:
         return False
 
+    def supports_durable_clone(self) -> bool:
+        return False
+
     def supports_relation_age_metadata(self) -> bool:
         return False
 
@@ -396,6 +399,76 @@ class BaseAdapter(StrictAdapter):
     ) -> tuple[str, ...]:
         del hard_copy
         return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+
+    def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
+        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+
+    def render_query_with_cursor_bounds(
+        self,
+        *,
+        sql: str,
+        cursor_column: str,
+        cursor_start: str,
+        cursor_end: str,
+        cursor_type: str | None,
+    ) -> str:
+        return self._render_query_with_cursor_bounds_impl(
+            sql=sql,
+            cursor_column=cursor_column,
+            cursor_start=cursor_start,
+            cursor_end=cursor_end,
+            cursor_type=cursor_type,
+        )
+
+    def render_seed_select_before_cursor(
+        self,
+        *,
+        source: str,
+        cursor_column: str,
+        cursor_end_exclusive: str,
+        cursor_type: str | None,
+    ) -> str:
+        return self._render_seed_select_before_cursor_impl(
+            source=source,
+            cursor_column=cursor_column,
+            cursor_end_exclusive=cursor_end_exclusive,
+            cursor_type=cursor_type,
+        )
+
+    def relation_names_match(self, left: str, right: str) -> bool:
+        return self._relation_names_match_impl(left, right)
+
+    def _render_query_with_cursor_bounds_impl(
+        self,
+        *,
+        sql: str,
+        cursor_column: str,
+        cursor_start: str,
+        cursor_end: str,
+        cursor_type: str | None,
+    ) -> str:
+        quoted_cursor: str = self.render_identifier(cursor_column)
+        start_literal: str = self.render_cursor_bound_literal(cursor_start, cursor_type)
+        end_literal: str = self.render_cursor_bound_literal(cursor_end, cursor_type)
+        return (
+            f"SELECT * FROM ({sql}) AS __sqlbuild_cursor_bounded "
+            f"WHERE {quoted_cursor} >= {start_literal} AND {quoted_cursor} < {end_literal}"
+        )
+
+    def _render_seed_select_before_cursor_impl(
+        self,
+        *,
+        source: str,
+        cursor_column: str,
+        cursor_end_exclusive: str,
+        cursor_type: str | None,
+    ) -> str:
+        quoted_cursor: str = self.render_identifier(cursor_column)
+        end_literal: str = self.render_cursor_bound_literal(cursor_end_exclusive, cursor_type)
+        return f"SELECT * FROM {source} WHERE {quoted_cursor} < {end_literal}"
+
+    def _relation_names_match_impl(self, left: str, right: str) -> bool:
+        return left.replace('"', "") == right.replace('"', "")
 
     def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:
         return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
@@ -1008,6 +1081,20 @@ class BaseAdapter(StrictAdapter):
         for stmt in statements:
             self.execute(connection, stmt)
 
+    def durable_clone(
+        self,
+        connection: Any,
+        *,
+        source: str,
+        target: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_durable_clone(source=source, target=target)
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
     def replace_table_from_relation(
         self,
         connection: Any,
@@ -1020,6 +1107,32 @@ class BaseAdapter(StrictAdapter):
             target=target,
             source=source,
         )
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def move_or_copy_relation(
+        self,
+        connection: Any,
+        *,
+        source: str,
+        target: str,
+        remove_source: bool,
+        allow_copy_fallback: bool,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        if not allow_copy_fallback:
+            raise AdapterUserError(
+                f"Adapter '{type(self).__name__}' requires explicit copy fallback permission "
+                "to move or copy relations"
+            )
+        statements: tuple[str, ...] = self.render_replace_table_from_relation(
+            target=target,
+            source=source,
+        )
+        if remove_source:
+            statements = (*statements, *self.render_drop(target=source))
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
