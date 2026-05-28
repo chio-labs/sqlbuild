@@ -210,8 +210,4 @@ def _object(text: str, *, use_color: bool) -> str:
 def _reason(text: str, *, use_color: bool) -> str:
     if not use_color:
         return text
-    if "referenced by a retained virtual checkpoint" in text:
-        return green(text)
-    if "referenced by an active or retained virtual environment" in text:
-        return green(text)
     return dim(text)

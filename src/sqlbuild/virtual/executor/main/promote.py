@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import uuid
 from collections.abc import Callable
 from datetime import timedelta
@@ -66,6 +67,7 @@ def run_virtual_promote(
 ) -> tuple[str, tuple[str, ...], tuple[str, ...]]:
     """Promote refs from one VDE to another and refresh target views."""
 
+    compile_start: float = time.perf_counter()
     if on_progress is not None:
         on_progress("Compiling project...")
     graph: ProjectGraph = build_project_graph(
@@ -76,7 +78,7 @@ def run_virtual_promote(
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     if on_progress is not None:
-        on_progress("Compiled project.")
+        on_progress(f"Compiled project. ({time.perf_counter() - compile_start:.2f}s)")
     active_environment_name: str | None = resolve_environment_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
@@ -97,6 +99,7 @@ def run_virtual_promote(
     lease: StateLockLease | None = None
     operation_id: str = f"promote:{uuid.uuid4()}"
     try:
+        inspect_start: float = time.perf_counter()
         if on_progress is not None:
             on_progress("Inspecting virtual state...")
         record_state_operation(
@@ -354,7 +357,7 @@ def run_virtual_promote(
             message=f"promoted {len(selected_model_names)} models",
         )
         if on_progress is not None:
-            on_progress("Inspected virtual state.")
+            on_progress(f"Inspected virtual state. ({time.perf_counter() - inspect_start:.2f}s)")
     except Exception as error:
         record_state_operation(
             backend,
@@ -378,6 +381,7 @@ def run_virtual_promote(
             )
         backend.close(state_connection)
 
+    refresh_start: float = time.perf_counter()
     if on_progress is not None:
         on_progress("Refreshing target VDE views...")
     refresh_logical_vde_views(
@@ -400,7 +404,7 @@ def run_virtual_promote(
             function_versions=function_versions,
         )
     if on_progress is not None:
-        on_progress("Refreshed target VDE views.")
+        on_progress(f"Refreshed target VDE views. ({time.perf_counter() - refresh_start:.2f}s)")
     return status.value, selected_model_names, stale_after
 
 
