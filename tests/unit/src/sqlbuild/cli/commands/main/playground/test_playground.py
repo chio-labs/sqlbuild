@@ -66,6 +66,38 @@ CREATE_PLAYGROUND_PROJECT_TEST_CASES: list[CreatePlaygroundProjectTestCase] = [
         ),
     ),
     CreatePlaygroundProjectTestCase(
+        description="creates Rivers playground from waffle shop template",
+        target_relative_path=Path("rivers_playground"),
+        template="rivers",
+        expected_files=(
+            Path("README.md"),
+            Path("sqlbuild_project.toml"),
+            Path("models/marts/fact_orders.sql"),
+            Path("sources/raw.yml"),
+            Path("loaders/waffle_sources.py"),
+            Path("rivers_pipeline/__init__.py"),
+            Path("rivers_pipeline/definitions.py"),
+            Path("rivers_pipeline/README.md"),
+        ),
+        unexpected_paths=(Path("target"),),
+        expected_file_fragments=(
+            (
+                Path("rivers_pipeline/definitions.py"),
+                (
+                    "import rivers as rs",
+                    "from sqlbuild.integrations.rivers import",
+                    "@sqlbuild_assets(project=SQLBUILD_PROJECT)",
+                    "repo = rs.CodeRepository",
+                    'rs.Job(\n            name="waffle_shop"',
+                ),
+            ),
+            (
+                Path("rivers_pipeline/README.md"),
+                ("rivers dev rivers_pipeline.definitions", "`waffle_shop` job"),
+            ),
+        ),
+    ),
+    CreatePlaygroundProjectTestCase(
         description="creates loader-focused waffle shop playground from packaged template",
         target_relative_path=Path("loader_waffle_shop_playground"),
         template="loader_waffle_shop",
@@ -171,6 +203,17 @@ RUN_PLAYGROUND_TEST_CASES: list[RunPlaygroundTestCase] = [
             "Project: demo_dagster_shop",
             "Example: waffle shop + Dagster",
             "dagster dev -f dagster/definitions.py",
+        ),
+    ),
+    RunPlaygroundTestCase(
+        description="prints Rivers next steps after creating Rivers playground",
+        target_path="demo_rivers_shop",
+        template="rivers",
+        expected_stdout_fragments=(
+            "SQLBuild playground created",
+            "Project: demo_rivers_shop",
+            "Example: waffle shop + Rivers",
+            "rivers dev rivers_pipeline.definitions",
         ),
     ),
     RunPlaygroundTestCase(

@@ -39,6 +39,8 @@ def run_playground(
     example_name: str = (
         "waffle shop + Dagster"
         if template == "dagster"
+        else "waffle shop + Rivers"
+        if template == "rivers"
         else "virtual environments waffle shop"
         if template == "virtual"
         else "loader-focused waffle shop"
@@ -65,4 +67,6 @@ def run_playground(
         print(f"{command_prefix}sqb audit")
     if template == "dagster":
         print(f"{command_prefix}DAGSTER_IS_DEV_CLI=1 dagster dev -f dagster/definitions.py")
+    if template == "rivers":
+        print(f"{command_prefix}rivers dev rivers_pipeline.definitions")
     return 0

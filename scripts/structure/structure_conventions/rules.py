@@ -145,7 +145,7 @@ def check_nested_runtime_package_direct_modules(
     relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
     if len(relative_parts) < 5 or relative_parts[:2] != ("src", "sqlbuild"):
         return []
-    if _is_dagster_integration_public_module(relative_parts):
+    if _is_orchestration_integration_public_module(relative_parts):
         return []
     if file_path.name == "main.py" and (
         relative_parts[:3]
@@ -345,7 +345,7 @@ def check_init_module(file_path: Path, module: ast.Module) -> list[Violation]:
 
     if file_path.name != "__init__.py":
         return []
-    if _is_dagster_integration_public_init(file_path):
+    if _is_orchestration_integration_public_init(file_path):
         return []
 
     if is_docstring_only_module(module):
@@ -1296,7 +1296,7 @@ def check_entry_module_shape(file_path: Path, module: ast.Module) -> list[Violat
 
     if not _is_entry_module(file_path):
         return []
-    if _is_dagster_integration_public_entry(file_path):
+    if _is_orchestration_integration_public_entry(file_path):
         return []
 
     public_function_nodes = [
@@ -1534,32 +1534,31 @@ def _is_direct_child_of_main_package(relative_parts: tuple[str, ...]) -> bool:
     )
 
 
-def _is_dagster_integration_public_module(relative_parts: tuple[str, ...]) -> bool:
+def _is_orchestration_integration_public_module(relative_parts: tuple[str, ...]) -> bool:
     return (
-        relative_parts[:4] == ("src", "sqlbuild", "integrations", "dagster")
-        and len(relative_parts) == 5
+        len(relative_parts) == 5
+        and relative_parts[:3] == ("src", "sqlbuild", "integrations")
+        and relative_parts[3] in {"dagster", "rivers"}
         and relative_parts[-1] in {"assets.py", "translator.py", "project.py", "resource.py"}
     )
 
 
-def _is_dagster_integration_public_init(file_path: Path) -> bool:
+def _is_orchestration_integration_public_init(file_path: Path) -> bool:
     parts: tuple[str, ...] = file_path.parts
-    return len(parts) >= 5 and parts[-5:] == (
-        "src",
-        "sqlbuild",
-        "integrations",
-        "dagster",
-        "__init__.py",
+    return (
+        len(parts) >= 5
+        and parts[-5:-2] == ("src", "sqlbuild", "integrations")
+        and parts[-2] in {"dagster", "rivers"}
+        and parts[-1] == "__init__.py"
     )
 
 
-def _is_dagster_integration_public_entry(file_path: Path) -> bool:
+def _is_orchestration_integration_public_entry(file_path: Path) -> bool:
     parts: tuple[str, ...] = file_path.parts
-    return len(parts) >= 5 and parts[-5:-1] == (
-        "src",
-        "sqlbuild",
-        "integrations",
-        "dagster",
+    return (
+        len(parts) >= 5
+        and parts[-5:-2] == ("src", "sqlbuild", "integrations")
+        and parts[-2] in {"dagster", "rivers"}
     )
 
 
