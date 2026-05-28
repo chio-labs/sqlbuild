@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     VirtualPartialRollbackE2ETestCase,
     VirtualPromoteE2ETestCase,
     VirtualRollbackE2ETestCase,
+    VirtualWaffleShopE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
     initialize_virtual_seeded_project,
@@ -26,6 +28,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     execute_duckdb,
     prepare_inline_project,
+    prepare_waffle_shop,
     query_duckdb,
     run_sqb,
     table_exists,
@@ -340,6 +343,140 @@ UNION ALL SELECT 3 AS id, 30 AS amount_cents
             "WHERE model_name = 'orders'"
         ),
     ) == list(test_case.expected_ancestry_rows)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualWaffleShopE2ETestCase(
+            description="full waffle shop fixture builds in virtual mode",
+            expected_view_names=(
+                "customer_status_snapshot",
+                "daily_activity_rollup",
+                "daily_order_partitioned",
+                "daily_revenue",
+                "dim_customers",
+                "fact_orders",
+                "hourly_activity_with_daily_context",
+                "hourly_order_activity",
+                "order_status_index",
+                "stg_customers",
+                "stg_orders",
+                "stg_payments",
+            ),
+            expected_function_names=(
+                "customer_orders",
+                "is_completed_order",
+                "is_completed_order_py",
+            ),
+            expected_query_results=(
+                (
+                    "SELECT order_id, customer_id, waffle_name, order_status "
+                    "FROM dev__dev.fact_orders ORDER BY order_id LIMIT 3",
+                    (
+                        (1, 1, "Classic Belgian", "completed"),
+                        (2, 1, "Cheddar Herb", "completed"),
+                        (3, 2, "Chicken and Waffle", "completed"),
+                    ),
+                ),
+                (
+                    "SELECT order_id, is_completed_order_py FROM dev__dev.fact_orders "
+                    "WHERE order_id IN (1, 10) ORDER BY order_id",
+                    ((1, True), (10, False)),
+                ),
+                (
+                    "SELECT order_id, waffle_name, line_total_cents, order_status, "
+                    "is_completed_order FROM dev__dev.customer_orders(1) ORDER BY order_id",
+                    (
+                        (1, "Classic Belgian", 1700, "completed", True),
+                        (2, "Cheddar Herb", 1050, "completed", True),
+                        (8, "Liege", 950, "completed", True),
+                    ),
+                ),
+                (
+                    "SELECT CAST(order_date AS VARCHAR), order_count, waffles_ordered, "
+                    "unique_customers FROM dev__dev.daily_order_partitioned ORDER BY order_date",
+                    (
+                        ("2026-04-01", 3, 6, 2),
+                        ("2026-04-02", 3, 3, 2),
+                        ("2026-04-03", 2, 3, 2),
+                        ("2026-04-04", 2, 6, 2),
+                    ),
+                ),
+            ),
+        )
+    ],
+    ids=["full waffle shop fixture builds in virtual mode"],
+)
+def test_given_waffle_shop_project_when_virtual_building_then_vde_outputs_are_queryable(
+    test_case: VirtualWaffleShopE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_waffle_shop(tmp_path)
+    (project_dir / "sqlbuild_project.toml").write_text(
+        """
+name = "waffle_shop"
+adapter = "duckdb"
+environment_mode = "virtual"
+default_environment = "dev"
+
+[connection]
+database = "waffle_shop.duckdb"
+
+[settings]
+default_audit_severity = "warn"
+
+[defaults]
+materialized = "table"
+
+[path_defaults.staging]
+materialized = "view"
+
+[environments.dev]
+schema = "dev"
+defer_sources_to = "dev"
+
+[environments.dev.state]
+backend = "duckdb"
+schema = "sqlbuild_state"
+
+[environments.dev.state.connection]
+database = "state.duckdb"
+""".lstrip(),
+        encoding="utf-8",
+    )
+    db_path: Path = project_dir / "waffle_shop.duckdb"
+    execution_json_path: Path = project_dir / "target" / "virtual-build.json"
+
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--json-output", str(execution_json_path)),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+    view_name: str
+    for view_name in test_case.expected_view_names:
+        assert table_exists(db_path=db_path, schema="dev__dev", table_name=view_name)
+
+    payload: dict[str, object] = json.loads(execution_json_path.read_text(encoding="utf-8"))
+    assets: list[dict[str, object]] = list(payload["assets"])  # type: ignore[arg-type]
+    function_assets: dict[str, dict[str, object]] = {
+        str(asset["name"]): asset for asset in assets if asset.get("kind") == "function"
+    }
+    function_name: str
+    for function_name in test_case.expected_function_names:
+        assert function_assets[function_name]["status"] == "success"
+
+    query_sql: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    for query_sql, expected_rows in test_case.expected_query_results:
+        assert query_duckdb(db_path=db_path, sql=query_sql) == list(expected_rows)
 
 
 @pytest.mark.parametrize(

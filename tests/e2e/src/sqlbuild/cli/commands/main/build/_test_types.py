@@ -53,6 +53,16 @@ class VirtualCustomMaterializationE2ETestCase:
 
 
 @dataclass(frozen=True)
+class VirtualWaffleShopE2ETestCase:
+    """Test case for full waffle shop virtual build behavior."""
+
+    description: str
+    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
+    expected_view_names: tuple[str, ...]
+    expected_function_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class VirtualBuildSelectionGuardE2ETestCase:
     """Test case for virtual build selection guard behavior."""
 
