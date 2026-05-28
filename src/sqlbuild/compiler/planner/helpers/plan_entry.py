@@ -30,7 +30,15 @@ from sqlbuild.compiler.planner.helpers.cursor_type_check import (
 from sqlbuild.compiler.planner.helpers.resolve.cursor import (
     compute_cursor_bounds,
 )
+from sqlbuild.compiler.planner.helpers.resolve.refs import (
+    apply_deferred_targets,
+    build_function_targets,
+    build_model_targets,
+    build_seed_targets,
+)
 from sqlbuild.compiler.planner.helpers.resolve.resolve import resolve_model_sql
+from sqlbuild.compiler.planner.helpers.source_deferral import build_source_read_map
+from sqlbuild.compiler.planner.helpers.source_load_nodes import build_source_load_map
 from sqlbuild.compiler.planner.helpers.strategy import (
     build_model_warnings,
     get_materialization_type,
@@ -45,7 +53,12 @@ from sqlbuild.compiler.planner.models import (
     CursorOverrides,
     ModelCursorSnapshot,
     ModelPlanEntry,
+    PlannerModelEntryResults,
+    PlannerRelationsContext,
+    PlannerResolvedActions,
+    PlannerScope,
     PlanWarning,
+    ResolvedModelAction,
     SchemaAction,
     WarehouseSnapshot,
 )
@@ -62,6 +75,7 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.compiler.shared.helpers.sources import render_source_relation
 from sqlbuild.shared.types import ExternalSqlReferenceResolver, SqlReferenceKind
+from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.schema import SchemaColumn
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -69,6 +83,62 @@ _MODELS_DIR_PREFIX: str = "models/"
 _IDEMPOTENT_MICROBATCH_STRATEGIES: frozenset[IncrementalStrategy] = frozenset(
     (IncrementalStrategy.DELETE_INSERT, IncrementalStrategy.MERGE)
 )
+
+
+def build_planner_relations_context(
+    *,
+    project: CompiledProject,
+    adapter: BaseAdapter,
+    connection: Any,
+    scope: PlannerScope,
+    deferred_targets: dict[str, CompiledRelationTarget] | None = None,
+    project_config: ProjectConfig | None = None,
+    local_config: LocalConfig | None = None,
+    defer_sources_to: str | None = None,
+    source_deferral_enabled: bool = True,
+) -> PlannerRelationsContext:
+    """Resolve relation targets and source metadata for plan entry construction."""
+
+    model_targets: dict[str, CompiledRelationTarget] = build_model_targets(project.models)
+    seed_targets: dict[str, CompiledRelationTarget] = build_seed_targets(project.seeds)
+    function_targets: dict[str, CompiledRelationTarget] = build_function_targets(project.functions)
+    if deferred_targets is not None:
+        apply_deferred_targets(
+            model_targets=model_targets,
+            seed_targets=seed_targets,
+            deferred_targets=deferred_targets,
+            selected_keys=scope.selected_keys,
+        )
+    source_map: dict[str, SourceEntry] = build_source_load_map(
+        project=project,
+        selected_keys=scope.selected_keys,
+    )
+    source_read_map: dict[str, SourceEntry] = (
+        build_source_read_map(
+            project=project,
+            source_map=source_map,
+            selected_keys=scope.selected_keys,
+            project_config=project_config,
+            local_config=local_config,
+            defer_sources_to=defer_sources_to,
+        )
+        if source_deferral_enabled
+        else source_map
+    )
+    return PlannerRelationsContext(
+        model_targets=model_targets,
+        seed_targets=seed_targets,
+        function_targets=function_targets,
+        source_map=source_map,
+        source_read_map=source_read_map,
+        source_warehouse_columns=gather_source_columns(
+            project=project,
+            adapter=adapter,
+            connection=connection,
+            source_entries=tuple(source_read_map.values()),
+        ),
+        star_exclude_keyword=adapter.star_exclude_keyword(),
+    )
 
 
 def plan_model(
@@ -91,7 +161,7 @@ def plan_model(
     backfill_override: BackfillResult | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> tuple[ModelPlanEntry, tuple[PlanWarning, ...]]:
-    """Build a plan entry and warnings for a single model."""
+    """Detect changes and build a plan entry and warnings for a single model."""
 
     change_result: ChangeDetectionResult = detect_model_changes(
         model=model,
@@ -100,6 +170,113 @@ def plan_model(
         query_change_tracking=query_change_tracking,
         full_refresh=full_refresh,
     )
+
+    return plan_model_from_change(
+        model=model,
+        snapshot=snapshot,
+        adapter=adapter,
+        model_targets=model_targets,
+        models_by_name=models_by_name,
+        seed_targets=seed_targets,
+        function_targets=function_targets,
+        source_map=source_map,
+        source_warehouse_columns=source_warehouse_columns,
+        star_exclude_keyword=star_exclude_keyword,
+        sqlglot_enabled=sqlglot_enabled,
+        full_refresh=full_refresh,
+        start_cursor_override=start_cursor_override,
+        end_cursor_override=end_cursor_override,
+        change_result=change_result,
+        backfill_override=backfill_override,
+        external_sql_reference_resolver=external_sql_reference_resolver,
+    )
+
+
+def build_plan_entries(
+    *,
+    project: CompiledProject,
+    adapter: BaseAdapter,
+    scope: PlannerScope,
+    snapshot: WarehouseSnapshot,
+    relations: PlannerRelationsContext,
+    resolved_actions: PlannerResolvedActions,
+    cursor_overrides: CursorOverrides | None,
+    full_refresh: bool,
+    start_cursor_override: str | None = None,
+    end_cursor_override: str | None = None,
+) -> PlannerModelEntryResults:
+    """Build model plan entries from snapshot and cascade-resolved actions."""
+
+    entries: list[ModelPlanEntry] = []
+    warnings: list[PlanWarning] = []
+    key: CompiledObjectKey
+    for key in scope.execution_order:
+        if key not in scope.selected_keys or key.name not in resolved_actions.models:
+            continue
+        model: CompiledModel | None = scope.models_by_name.get(key.name)
+        resolved: ResolvedModelAction = resolved_actions.models[key.name]
+        if model is None:
+            continue
+        resolved_start: str | None
+        resolved_end: str | None
+        resolved_start, resolved_end = resolve_cursor_overrides(
+            model=model,
+            cursor_overrides=cursor_overrides,
+            start_cursor_override=start_cursor_override,
+            end_cursor_override=end_cursor_override,
+        )
+        backfill_override: BackfillResult | None = (
+            resolved.backfill if resolved.backfill != resolved.change.backfill else None
+        )
+        entry: ModelPlanEntry
+        entry_warnings: tuple[PlanWarning, ...]
+        entry, entry_warnings = plan_model_from_change(
+            model=model,
+            snapshot=snapshot,
+            adapter=adapter,
+            model_targets=relations.model_targets,
+            models_by_name=scope.models_by_name,
+            seed_targets=relations.seed_targets,
+            function_targets=relations.function_targets,
+            source_map=relations.source_read_map,
+            source_warehouse_columns=relations.source_warehouse_columns,
+            star_exclude_keyword=relations.star_exclude_keyword,
+            sqlglot_enabled=project.settings.sqlglot,
+            full_refresh=full_refresh,
+            start_cursor_override=resolved_start,
+            end_cursor_override=resolved_end,
+            change_result=resolved.change,
+            backfill_override=backfill_override,
+            external_sql_reference_resolver=project.external_sql_reference_resolver,
+        )
+        if resolved.cascade is not None:
+            entry = replace(entry, cascade=resolved.cascade)
+        entries.append(entry)
+        warnings.extend(entry_warnings)
+    return PlannerModelEntryResults(entries=tuple(entries), warnings=tuple(warnings))
+
+
+def plan_model_from_change(
+    *,
+    model: CompiledModel,
+    snapshot: WarehouseSnapshot,
+    adapter: BaseAdapter,
+    model_targets: dict[str, CompiledRelationTarget],
+    models_by_name: dict[str, CompiledModel],
+    seed_targets: dict[str, CompiledRelationTarget],
+    function_targets: dict[str, CompiledRelationTarget],
+    source_map: dict[str, SourceEntry],
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
+    star_exclude_keyword: str,
+    sqlglot_enabled: bool,
+    full_refresh: bool,
+    start_cursor_override: str | None,
+    end_cursor_override: str | None,
+    change_result: ChangeDetectionResult,
+    backfill_override: BackfillResult | None = None,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+) -> tuple[ModelPlanEntry, tuple[PlanWarning, ...]]:
+    """Build a model plan entry from a resolved change result."""
 
     if backfill_override is not None:
         change_result = replace(change_result, backfill=backfill_override)
