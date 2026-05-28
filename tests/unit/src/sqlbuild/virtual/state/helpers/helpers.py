@@ -10,6 +10,7 @@ from sqlbuild.virtual.state.models import (
     PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
     ReconcileEventRecord,
+    StateBackupRecord,
     StateLockRecord,
     StateOperationEventRecord,
     StateOperationRecord,
@@ -267,3 +268,15 @@ class FakeStateBackend(StateBackend):
 
     def list_active_locks(self, connection: Any, *, schema: str) -> tuple[StateLockRecord, ...]:
         return ()
+
+    def list_expired_locks(self, connection: Any, *, schema: str) -> tuple[StateLockRecord, ...]:
+        return ()
+
+    def delete_lock(self, connection: Any, *, schema: str, lock_key: str) -> None:
+        return None
+
+    def list_state_backups(self, connection: Any, *, schema: str) -> tuple[StateBackupRecord, ...]:
+        return ()
+
+    def delete_state_backup(self, connection: Any, *, schema: str, backup_id: str) -> None:
+        return None
