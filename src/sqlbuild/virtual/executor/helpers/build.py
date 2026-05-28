@@ -12,6 +12,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo, StatementRecorder
 from sqlbuild.compiler.compile.models.core import (
+    CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
@@ -786,6 +787,7 @@ def _build_virtual_planner_select(
     selected_model_names: tuple[str, ...],
 ) -> tuple[str, ...]:
     selected: set[str] = set(selected_model_names)
+    selected_model_name_set: set[str] = set(selected_model_names)
     model_name: str
     for model_name in selected_model_names:
         start_key: CompiledObjectKey | None = graph.all_keys.get(model_name)
@@ -798,11 +800,21 @@ def _build_virtual_planner_select(
             if current in visited:
                 continue
             visited.add(current)
-            if current.resource_type == CompiledResourceType.SEED:
+            if current.resource_type in (CompiledResourceType.SEED, CompiledResourceType.FUNCTION):
                 selected.add(current.name)
             upstream_key: CompiledObjectKey
             for upstream_key in graph.upstream_deps.get(current, ()):  # pragma: no branch
                 stack.append(upstream_key)
+    function: CompiledFunction
+    for function in graph.project.functions:
+        dep: CompiledObjectKey
+        for dep in function.deps:
+            if (
+                dep.resource_type == CompiledResourceType.MODEL
+                and dep.name in selected_model_name_set
+            ):
+                selected.add(function.name)
+                break
     return tuple(sorted(selected))
 
 
