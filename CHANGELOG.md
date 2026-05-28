@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.24.0](https://github.com/chio-labs/sqlbuild/compare/v0.23.0...v0.24.0) (2026-05-28)
+
+
+### Features
+
+* add rivers integration ([82de30c](https://github.com/chio-labs/sqlbuild/commit/82de30ca29f4cde1deba35f08d6575fa82657c62))
+* add rivers integration ([9268beb](https://github.com/chio-labs/sqlbuild/commit/9268beb1cae3bd78f51f9e17241767c892d51722))
+
 ## [0.23.0](https://github.com/chio-labs/sqlbuild/compare/v0.22.1...v0.23.0) (2026-05-28)
 
 
