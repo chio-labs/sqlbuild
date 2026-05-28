@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.22.1](https://github.com/chio-labs/sqlbuild/compare/v0.22.0...v0.22.1) (2026-05-28)
+
+
+### Bug Fixes
+
+* gate virtual operations on state status ([a89f806](https://github.com/chio-labs/sqlbuild/commit/a89f8063a04c54174e67dcd0f812dae968cd01f1))
+* gate virtual operations on state status ([c2edad2](https://github.com/chio-labs/sqlbuild/commit/c2edad2c79a9e3806d3294b234f35676271a03b8))
+
 ## [0.22.0](https://github.com/chio-labs/sqlbuild/compare/v0.21.0...v0.22.0) (2026-05-28)
 
 
