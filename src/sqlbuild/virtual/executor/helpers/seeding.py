@@ -8,7 +8,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import ModelPlanEntry
-from sqlbuild.compiler.planner.types import IncrementalStrategy
+from sqlbuild.compiler.planner.types import IncrementalStrategy, PlanAction
 from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
 from sqlbuild.shared.helpers.naming import (
     resolve_qualified_name_parts,
@@ -31,7 +31,7 @@ def seed_virtual_physical_version(
     """Seed one incremental physical version target before DML execution."""
 
     recorder: StatementRecorder = StatementRecorder()
-    if entry.action not in INCREMENTAL_ACTIONS:
+    if not _should_seed_physical_version(entry=entry):
         return
     if parent_relation is None or version_hash is None:
         return
@@ -124,6 +124,10 @@ def _seed_physical_relation(
         statement_recorder=statement_recorder,
     )
     return "copy"
+
+
+def _should_seed_physical_version(*, entry: ModelPlanEntry) -> bool:
+    return entry.action in INCREMENTAL_ACTIONS or entry.action == PlanAction.CUSTOM
 
 
 def _requires_append_bounded_seed(*, entry: ModelPlanEntry) -> bool:

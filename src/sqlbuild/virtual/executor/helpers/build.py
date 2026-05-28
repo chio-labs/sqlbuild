@@ -20,6 +20,8 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
+from sqlbuild.compiler.pipeline.main.materializations import load_custom_materializations
+from sqlbuild.compiler.pipeline.main.prepare_versions import load_custom_prepare_version_functions
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.plan_entry import build_plan_output_from_model_changes_phase
@@ -33,12 +35,16 @@ from sqlbuild.compiler.planner.models import (
     PlannerWarehouseSnapshotResult,
     PlanOutput,
 )
-from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReason
+from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanAction, PlanReason
 from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
+from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
 from sqlbuild.executor.pipeline.main.run import run_build_pipeline
-from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
+from sqlbuild.shared.helpers.naming import (
+    resolve_qualified_name_parts,
+    resolve_target_qualified_name,
+)
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.environments import resolve_environment_config, resolve_environment_name
 from sqlbuild.spec.models.project import SnapshotsConfig
@@ -53,6 +59,7 @@ from sqlbuild.virtual.executor.helpers.rewrite import (
 )
 from sqlbuild.virtual.executor.helpers.seeding import seed_virtual_physical_version
 from sqlbuild.virtual.executor.models import (
+    VersionPrepareContext,
     VirtualBuildExecutionHooks,
     VirtualBuildPipelineResult,
 )
@@ -68,6 +75,7 @@ from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     ModelVersionRecord,
+    PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
     StateBackendConfig,
     VirtualEnvironmentFunctionRefRecord,
@@ -119,6 +127,12 @@ def run_virtual_build(
         no_sql_validation=no_sql_validation,
         cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
+    )
+    custom_materializations: dict[
+        str, Callable[[MaterializationContext], MaterializationResult]
+    ] = load_custom_materializations(discovered_inputs.materialization_files)
+    prepare_version_functions: dict[str, Callable[[VersionPrepareContext], None]] = (
+        load_custom_prepare_version_functions(discovered_inputs.materialization_files)
     )
     physical_environment_name: str | None = resolve_environment_name(
         project_config=discovered_inputs.project_config,
@@ -312,6 +326,10 @@ def run_virtual_build(
             config=config,
             bound_physical_relations=bound_physical_relations,
             expected_version_hashes=semantics.expected_version_hashes,
+            prepare_version_functions=prepare_version_functions,
+            run_id=rewritten_project.run_id,
+            environment=target_vde_name,
+            effective_vars=cli_vars or {},
         )
     )
     result: BuildExecutionResult = run_build_pipeline(
@@ -330,6 +348,7 @@ def run_virtual_build(
         on_node_complete=hooks.on_node_complete,
         on_sub_progress=hooks.on_sub_progress,
         before_model_materialize=before_model_materialize,
+        custom_materializations=custom_materializations,
         loader_functions=discovered_inputs.loader_functions,
         loader_is_reload=reload_sources,
         start_cursor_ts=start_cursor_ts,
@@ -372,9 +391,13 @@ def _build_before_model_materialize(
     config: StateBackendConfig,
     bound_physical_relations: dict[str, PhysicalRelationRecord],
     expected_version_hashes: dict[str, str],
+    prepare_version_functions: dict[str, Callable[[VersionPrepareContext], None]],
+    run_id: str,
+    environment: str,
+    effective_vars: dict[str, object],
 ) -> Callable[[ModelPlanEntry, Any], None]:
     def before_model_materialize(entry: ModelPlanEntry, connection: Any) -> None:
-        if entry.action not in INCREMENTAL_ACTIONS:
+        if entry.action not in INCREMENTAL_ACTIONS and entry.action != PlanAction.CUSTOM:
             return
         parent_relation: PhysicalRelationRecord | None = bound_physical_relations.get(entry.name)
         version_hash: str | None = expected_version_hashes.get(entry.name)
@@ -386,20 +409,109 @@ def _build_before_model_materialize(
             return
         state_connection: Any = backend.connect(config.connection)
         try:
-            seed_virtual_physical_version(
-                adapter=adapter,
-                connection=connection,
-                backend=backend,
-                state_connection=state_connection,
-                state_schema=config.schema,
-                entry=entry,
-                parent_relation=parent_relation,
-                version_hash=version_hash,
+            prepare_version: Callable[[VersionPrepareContext], None] | None = (
+                prepare_version_functions.get(entry.custom_materialization_name or "")
+                if entry.action == PlanAction.CUSTOM
+                else None
             )
+            if prepare_version is not None:
+                _prepare_custom_virtual_version(
+                    adapter=adapter,
+                    connection=connection,
+                    backend=backend,
+                    state_connection=state_connection,
+                    state_schema=config.schema,
+                    entry=entry,
+                    parent_relation=parent_relation,
+                    version_hash=version_hash,
+                    prepare_version=prepare_version,
+                    run_id=run_id,
+                    environment=environment,
+                    effective_vars=effective_vars,
+                )
+            else:
+                seed_virtual_physical_version(
+                    adapter=adapter,
+                    connection=connection,
+                    backend=backend,
+                    state_connection=state_connection,
+                    state_schema=config.schema,
+                    entry=entry,
+                    parent_relation=parent_relation,
+                    version_hash=version_hash,
+                )
         finally:
             backend.close(state_connection)
 
     return before_model_materialize
+
+
+def _prepare_custom_virtual_version(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    backend: Any,
+    state_connection: Any,
+    state_schema: str,
+    entry: ModelPlanEntry,
+    parent_relation: PhysicalRelationRecord,
+    version_hash: str,
+    prepare_version: Callable[[VersionPrepareContext], None],
+    run_id: str,
+    environment: str,
+    effective_vars: dict[str, object],
+) -> None:
+    recorder: StatementRecorder = StatementRecorder()
+    adapter.ensure_schema(
+        connection,
+        database=entry.target.database,
+        schema=entry.target.schema,
+        statement_recorder=recorder,
+    )
+    target: str = resolve_target_qualified_name(adapter=adapter, target=entry.target)
+    if adapter.relation_exists(
+        connection,
+        database=entry.target.database,
+        schema=entry.target.schema,
+        name=entry.target.name,
+    ):
+        adapter.drop(connection, target=target, if_exists=True, statement_recorder=recorder)
+    source: str = resolve_qualified_name_parts(
+        adapter=adapter,
+        database=parent_relation.database_name,
+        schema=parent_relation.schema_name,
+        name=parent_relation.relation_name,
+    )
+    prepare_version(
+        VersionPrepareContext(
+            adapter=adapter,
+            connection=connection,
+            prior_relation=source,
+            target=target,
+            target_database=entry.target.database,
+            target_schema=entry.target.schema,
+            target_name=entry.target.name,
+            config=dict(entry.custom_config),
+            placeholders=dict(entry.custom_placeholders),
+            run_id=run_id,
+            environment=environment,
+            vars=effective_vars,
+            unique_key=entry.unique_key,
+            declared_columns=entry.declared_columns,
+            statement_recorder=recorder,
+        )
+    )
+    backend.upsert_physical_relation_ancestry(
+        state_connection,
+        schema=state_schema,
+        record=PhysicalRelationAncestryRecord(
+            model_name=entry.name,
+            version_hash=version_hash,
+            parent_model_name=parent_relation.model_name,
+            parent_version_hash=parent_relation.version_hash,
+            seed_strategy="custom_prepare_version",
+        ),
+    )
 
 
 def _read_or_initialize_refs(

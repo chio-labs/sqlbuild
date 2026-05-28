@@ -4,11 +4,68 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
 from sqlbuild.shared.types import ExecutionResourceKind
+
+
+@dataclass(frozen=True)
+class VersionPrepareContext:
+    """Context provided to optional custom prepare_version() functions in virtual mode."""
+
+    adapter: BaseAdapter
+    connection: Any
+    prior_relation: str
+    target: str
+    target_database: str | None
+    target_schema: str | None
+    target_name: str
+    config: dict[str, Any]
+    placeholders: dict[str, str]
+    run_id: str
+    environment: str
+    vars: dict[str, object]
+    unique_key: tuple[str, ...]
+    declared_columns: tuple[ColumnInfo, ...]
+    statement_recorder: StatementRecorder = field(default_factory=StatementRecorder)
+
+    def execute_sql(self, sql: str) -> Any:
+        """Execute a SQL statement, recording it for runtime artifacts and verbose output."""
+        self.statement_recorder.record(sql)
+        return self.adapter.execute(self.connection, sql)
+
+    def log(self, message: str) -> None:
+        """Record a log message for verbose output."""
+        self.statement_recorder.log(message)
+
+    def qualify_name(
+        self,
+        name: str,
+        *,
+        database: str | None = None,
+        schema: str | None = None,
+    ) -> str:
+        """Return a fully-qualified relation name, preserving already-qualified input."""
+
+        if "." in name:
+            return name
+        return resolve_qualified_name_parts(
+            adapter=self.adapter,
+            database=self.target_database if database is None else database,
+            schema=self.target_schema if schema is None else schema,
+            name=name,
+        )
+
+    def qualify_in_target_schema(self, name: str) -> str:
+        """Return a relation name qualified into the target database/schema."""
+
+        return self.qualify_name(name)
 
 
 @dataclass(frozen=True)

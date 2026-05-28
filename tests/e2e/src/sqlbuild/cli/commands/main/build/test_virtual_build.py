@@ -8,6 +8,7 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     VirtualBuildE2ETestCase,
     VirtualBuildSelectionGuardE2ETestCase,
+    VirtualCustomMaterializationE2ETestCase,
     VirtualExplicitCheckpointRollbackE2ETestCase,
     VirtualPartialRollbackE2ETestCase,
     VirtualPromoteE2ETestCase,
@@ -19,6 +20,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
     rewrite_incremental_orders_model,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
+    build_virtual_plan_project_toml,
     build_virtual_plan_repo_files,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
@@ -221,6 +223,123 @@ def test_given_virtual_incremental_change_when_building_then_it_seeds_new_physic
         ),
     )
     assert ancestry_rows == [("orders", "copy")]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualCustomMaterializationE2ETestCase(
+            description="custom materialization prepare_version seeds changed physical target",
+            expected_query_results=(
+                (
+                    "SELECT id, amount_cents, version_marker FROM dev__dev.orders ORDER BY id",
+                    (
+                        (1, 10, "prepared"),
+                        (2, 21, "materialized"),
+                        (3, 30, "materialized"),
+                    ),
+                ),
+            ),
+            expected_ancestry_rows=(("custom_prepare_version",),),
+        )
+    ],
+    ids=["custom materialization prepare_version seeds changed physical target"],
+)
+def test_given_virtual_custom_materialization_when_model_changes_then_prepare_version_seeds_target(
+    test_case: VirtualCustomMaterializationE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_custom_materialization",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "materializations/merge_by_id.py": """
+from sqlbuild.executor.custom.models import (
+    MaterializationContext,
+    MaterializationResult,
+)
+from sqlbuild.virtual.executor.models import VersionPrepareContext
+
+
+def prepare_version(ctx: VersionPrepareContext) -> None:
+    ctx.execute_sql(
+        f"CREATE TABLE {ctx.target} AS "
+        f"SELECT id, amount_cents, 'prepared' AS version_marker FROM {ctx.prior_relation}"
+    )
+
+
+def materialize(ctx: MaterializationContext) -> MaterializationResult:
+    incoming = (
+        "SELECT id, amount_cents, 'materialized' AS version_marker "
+        f"FROM ({ctx.sql}) AS model_sql"
+    )
+    exists = ctx.adapter.relation_exists(
+        ctx.connection,
+        database=ctx.target_database,
+        schema=ctx.target_schema,
+        name=ctx.target_name,
+    )
+    if not exists:
+        ctx.execute_sql(f"CREATE TABLE {ctx.target} AS {incoming}")
+    else:
+        ctx.execute_sql(
+            f"DELETE FROM {ctx.target} WHERE id IN "
+            f"(SELECT id FROM ({ctx.sql}) AS model_sql)"
+        )
+        ctx.execute_sql(f"INSERT INTO {ctx.target} {incoming}")
+    return MaterializationResult(relation=ctx.target)
+""",
+            "models/orders.sql": """
+MODEL (materialized merge_by_id);
+
+SELECT 1 AS id, 10 AS amount_cents
+UNION ALL SELECT 2 AS id, 20 AS amount_cents
+""",
+        },
+    )
+
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    first_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert first_build_result.returncode == 0, first_build_result.stderr
+
+    (project_dir / "models" / "orders.sql").write_text(
+        """
+MODEL (materialized merge_by_id);
+
+SELECT 2 AS id, 21 AS amount_cents
+UNION ALL SELECT 3 AS id, 30 AS amount_cents
+""",
+        encoding="utf-8",
+    )
+
+    second_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+
+    assert second_build_result.returncode == 0, second_build_result.stderr
+    query_sql: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    for query_sql, expected_rows in test_case.expected_query_results:
+        assert query_duckdb(
+            db_path=project_dir / "warehouse.duckdb",
+            sql=query_sql,
+        ) == list(expected_rows)
+    assert query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT seed_strategy FROM sqlbuild_state.physical_relation_ancestry "
+            "WHERE model_name = 'orders'"
+        ),
+    ) == list(test_case.expected_ancestry_rows)
 
 
 @pytest.mark.parametrize(
