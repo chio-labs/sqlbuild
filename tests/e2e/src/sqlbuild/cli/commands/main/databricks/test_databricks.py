@@ -194,8 +194,11 @@ def test_given_virtual_incremental_change_when_building_on_databricks_then_seeds
             description="reconcile repair-view recreates databricks logical view",
             expected_rows=(("1",),),
             expected_stdout_fragments=(
-                "Will recreate logical view for orders in dev.",
-                "Repaired logical view for orders in dev.",
+                "Repair",
+                "model   orders",
+                "VDE     dev",
+                "action  recreate logical view from state",
+                "result  repaired",
             ),
         )
     ],

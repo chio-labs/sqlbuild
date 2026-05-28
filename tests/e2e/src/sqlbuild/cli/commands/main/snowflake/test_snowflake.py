@@ -191,8 +191,11 @@ def test_given_virtual_incremental_change_when_building_on_snowflake_then_seeds_
             description="reconcile repair-view recreates snowflake logical view",
             expected_rows=(("1",),),
             expected_stdout_fragments=(
-                "Will recreate logical view for orders in dev.",
-                "Repaired logical view for orders in dev.",
+                "Repair",
+                "model   orders",
+                "VDE     dev",
+                "action  recreate logical view from state",
+                "result  repaired",
             ),
         )
     ],
@@ -264,7 +267,7 @@ def test_given_missing_logical_view_when_repairing_on_snowflake_then_view_is_rec
         SnowflakeReconcileE2ETestCase(
             description="reconcile attach rebinds snowflake logical view",
             expected_rows=(("2",),),
-            expected_stdout_fragments=("Will attach orders in dev", "Attached orders to"),
+            expected_stdout_fragments=("Attach", "model     orders", "result    attached"),
         )
     ],
     ids=["reconcile attach rebinds snowflake logical view"],

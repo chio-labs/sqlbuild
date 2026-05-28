@@ -64,8 +64,11 @@ def test_given_healthy_virtual_environment_when_reconciling_then_report_is_clean
                 "fact_orders",
             ),
             expected_fragments=(
-                "Will recreate logical view for fact_orders in dev.",
-                "Repaired logical view for fact_orders in dev.",
+                "Repair",
+                "model   fact_orders",
+                "VDE     dev",
+                "action  recreate logical view from state",
+                "result  repaired",
             ),
             expected_query_results=(("SELECT id FROM dev__dev.fact_orders ORDER BY id", ((1,),)),),
         )
@@ -108,7 +111,13 @@ def test_given_missing_logical_view_when_repairing_then_it_is_recreated(
         ReconcileE2ETestCase(
             description="attach rebinds logical ref to tracked physical relation",
             command=(),
-            expected_fragments=("Will attach fact_orders in dev", "Attached fact_orders to"),
+            expected_fragments=(
+                "Attach",
+                "model     fact_orders",
+                "VDE       dev",
+                "physical",
+                "result    attached",
+            ),
             expected_query_results=(("SELECT id FROM dev__dev.fact_orders ORDER BY id", ((2,),)),),
             input_text="attach fact_orders\n",
         )
