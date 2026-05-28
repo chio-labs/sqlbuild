@@ -306,6 +306,87 @@ The definitions use `SqlBuildProject.prepare_if_dev()` to generate `target/sqlbu
 when Dagster starts in dev mode.
 """
 
+_RIVERS_DEFINITIONS: str = '''"""Rivers definitions for the SQLBuild waffle shop playground."""
+
+from __future__ import annotations
+
+import subprocess
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
+
+import rivers as rs
+
+from sqlbuild.integrations.rivers import SqlBuildProject, sqlbuild_assets
+
+PROJECT_DIR = Path(__file__).resolve().parent.parent
+SQLBUILD_PROJECT = SqlBuildProject(project_dir=PROJECT_DIR)
+
+if __name__ == "__main__":
+    SQLBUILD_PROJECT.prepare()
+else:
+    SQLBUILD_PROJECT.prepare_if_dev()
+
+
+@sqlbuild_assets(project=SQLBUILD_PROJECT)
+def waffle_shop_assets(context: Any) -> Iterator[Any]:
+    completed = subprocess.run(
+        ["sqb", "build"],
+        cwd=PROJECT_DIR,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(completed.stderr or completed.stdout)
+    for output_name in context.output_selection:
+        yield rs.Materialization(output_name=output_name)
+
+
+repo = rs.CodeRepository(
+    assets=[waffle_shop_assets],
+    jobs=[
+        rs.Job(
+            name="waffle_shop",
+            assets=[waffle_shop_assets],
+            executor=rs.Executor.in_process(),
+        ),
+    ],
+    default_executor=rs.Executor.in_process(),
+)
+
+
+if __name__ == "__main__":
+    result = repo.get_job("waffle_shop").execute()
+    raise SystemExit(0 if result.success else 1)
+'''
+
+_RIVERS_README: str = """# SQLBuild + Rivers playground
+
+This directory contains a Rivers repository definition for the generated SQLBuild
+waffle shop project.
+
+## Run Rivers
+
+Install SQLBuild with the Rivers extra, then start Rivers from the project root:
+
+```bash
+uv add "sqlbuild[rivers]"
+uv run rivers dev rivers_pipeline.definitions
+```
+
+You can also run a local materialization directly:
+
+```bash
+uv run python rivers_pipeline/definitions.py
+```
+
+The repository defines a `waffle_shop` job for UI-triggered materialization.
+
+The definitions use `SqlBuildProject.prepare_if_dev()` to generate `target/sqlbuild_dag.json`
+when `rivers dev` starts with `RIVERS_DEPLOYMENT=dev`.
+"""
+
 
 def create_playground_project(*, target_dir: Path, template: str = "waffle_shop") -> None:
     """Create a DuckDB-backed waffle shop playground project."""
@@ -338,6 +419,8 @@ def create_playground_project(*, target_dir: Path, template: str = "waffle_shop"
     _copy_tree(source=template_root, target=target_dir)
     if template == "dagster":
         _write_dagster_template_files(target_dir=target_dir)
+    if template == "rivers":
+        _write_rivers_template_files(target_dir=target_dir)
     if template == "virtual":
         _write_virtual_template_files(target_dir=target_dir)
 
@@ -364,6 +447,16 @@ def _write_dagster_template_files(*, target_dir: Path) -> None:
     dagster_dir.mkdir()
     (dagster_dir / "definitions.py").write_text(_DAGSTER_DEFINITIONS, encoding="utf-8")
     (dagster_dir / "README.md").write_text(_DAGSTER_README, encoding="utf-8")
+
+
+def _write_rivers_template_files(*, target_dir: Path) -> None:
+    rivers_dir: Path = target_dir / "rivers_pipeline"
+    rivers_dir.mkdir()
+    (rivers_dir / "__init__.py").write_text(
+        '"""Rivers playground definitions package."""\n', encoding="utf-8"
+    )
+    (rivers_dir / "definitions.py").write_text(_RIVERS_DEFINITIONS, encoding="utf-8")
+    (rivers_dir / "README.md").write_text(_RIVERS_README, encoding="utf-8")
 
 
 def _write_virtual_template_files(*, target_dir: Path) -> None:
