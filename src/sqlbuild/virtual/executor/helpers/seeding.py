@@ -17,69 +17,71 @@ from sqlbuild.shared.helpers.naming import (
 from sqlbuild.virtual.state.models import PhysicalRelationAncestryRecord, PhysicalRelationRecord
 
 
-def seed_virtual_physical_versions(
+def seed_virtual_physical_version(
     *,
     adapter: BaseAdapter,
     connection: Any,
     backend: Any,
     state_connection: Any,
     state_schema: str,
-    plan_entries: tuple[ModelPlanEntry, ...],
-    bound_physical_relations: dict[str, PhysicalRelationRecord],
-    expected_version_hashes: dict[str, str],
+    entry: ModelPlanEntry,
+    parent_relation: PhysicalRelationRecord | None,
+    version_hash: str | None,
 ) -> None:
-    """Seed selected incremental physical version targets before DML execution."""
+    """Seed one incremental physical version target before DML execution."""
 
     recorder: StatementRecorder = StatementRecorder()
-    for entry in plan_entries:
-        if entry.action not in INCREMENTAL_ACTIONS:
-            continue
-        parent_relation: PhysicalRelationRecord | None = bound_physical_relations.get(entry.name)
-        version_hash: str | None = expected_version_hashes.get(entry.name)
-        if parent_relation is None or version_hash is None:
-            continue
-        if parent_relation.version_hash == version_hash:
-            continue
-        if adapter.relation_exists(
-            connection,
-            database=entry.target.database,
-            schema=entry.target.schema,
-            name=entry.target.name,
-        ):
-            continue
+    if entry.action not in INCREMENTAL_ACTIONS:
+        return
+    if parent_relation is None or version_hash is None:
+        return
+    if parent_relation.version_hash == version_hash:
+        return
 
-        adapter.ensure_schema(
+    adapter.ensure_schema(
+        connection,
+        database=entry.target.database,
+        schema=entry.target.schema,
+        statement_recorder=recorder,
+    )
+    target: str = resolve_target_qualified_name(adapter=adapter, target=entry.target)
+    if adapter.relation_exists(
+        connection,
+        database=entry.target.database,
+        schema=entry.target.schema,
+        name=entry.target.name,
+    ):
+        adapter.drop(
             connection,
-            database=entry.target.database,
-            schema=entry.target.schema,
-            statement_recorder=recorder,
-        )
-        source: str = resolve_qualified_name_parts(
-            adapter=adapter,
-            database=parent_relation.database_name,
-            schema=parent_relation.schema_name,
-            name=parent_relation.relation_name,
-        )
-        target: str = resolve_target_qualified_name(adapter=adapter, target=entry.target)
-        seed_strategy: str = _seed_physical_relation(
-            adapter=adapter,
-            connection=connection,
-            source=source,
             target=target,
-            entry=entry,
+            if_exists=True,
             statement_recorder=recorder,
         )
-        backend.upsert_physical_relation_ancestry(
-            state_connection,
-            schema=state_schema,
-            record=PhysicalRelationAncestryRecord(
-                model_name=entry.name,
-                version_hash=version_hash,
-                parent_model_name=parent_relation.model_name,
-                parent_version_hash=parent_relation.version_hash,
-                seed_strategy=seed_strategy,
-            ),
-        )
+    source: str = resolve_qualified_name_parts(
+        adapter=adapter,
+        database=parent_relation.database_name,
+        schema=parent_relation.schema_name,
+        name=parent_relation.relation_name,
+    )
+    seed_strategy: str = _seed_physical_relation(
+        adapter=adapter,
+        connection=connection,
+        source=source,
+        target=target,
+        entry=entry,
+        statement_recorder=recorder,
+    )
+    backend.upsert_physical_relation_ancestry(
+        state_connection,
+        schema=state_schema,
+        record=PhysicalRelationAncestryRecord(
+            model_name=entry.name,
+            version_hash=version_hash,
+            parent_model_name=parent_relation.model_name,
+            parent_version_hash=parent_relation.version_hash,
+            seed_strategy=seed_strategy,
+        ),
+    )
 
 
 def _seed_physical_relation(

@@ -71,3 +71,12 @@ class SeedingStrategyTestCase:
     supports_durable_clone: bool
     expected_strategy: str
     expected_sql_fragment: str
+
+
+@dataclass(frozen=True)
+class SeedingIdempotencyTestCase:
+    description: str
+    target_exists: bool
+    expected_drop_count: int
+    expected_ancestry_count: int
+    expected_first_sql_prefix: str

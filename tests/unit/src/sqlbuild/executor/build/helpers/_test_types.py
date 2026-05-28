@@ -33,6 +33,15 @@ class BuildSchedulerSourceLoadTestCase:
 
 
 @dataclass(frozen=True)
+class BuildSchedulerModelHookTestCase:
+    description: str
+    hook_raises: bool
+    expected_model_status: ExecutionStatus
+    expected_events: tuple[str, ...]
+    expected_model_rows: tuple[tuple[object, ...], ...] = ()
+
+
+@dataclass(frozen=True)
 class BuildSourceNodeExecutionTestCase:
     description: str
     source_name: str
