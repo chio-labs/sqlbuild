@@ -64,6 +64,7 @@ def run_virtual_diff(
 ]:
     """Run a diff between two VDEs in the active physical environment."""
 
+    compile_start: float = time.perf_counter()
     if on_progress is not None:
         on_progress("Compiling project...")
     graph: ProjectGraph = build_project_graph(
@@ -74,7 +75,7 @@ def run_virtual_diff(
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     if on_progress is not None:
-        on_progress("Compiled project.")
+        on_progress(f"Compiled project. ({time.perf_counter() - compile_start:.2f}s)")
     selected_names: tuple[str, ...] = resolve_virtual_diff_model_names(
         graph=graph,
         select=select,
@@ -88,6 +89,7 @@ def run_virtual_diff(
     )
     state_connection: Any = backend.connect(config.connection)
     try:
+        inspect_start: float = time.perf_counter()
         if on_progress is not None:
             on_progress("Inspecting virtual state...")
         from_refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
@@ -156,7 +158,7 @@ def run_virtual_diff(
             refs=to_refs,
         )
         if on_progress is not None:
-            on_progress("Inspected virtual state.")
+            on_progress(f"Inspected virtual state. ({time.perf_counter() - inspect_start:.2f}s)")
     finally:
         backend.close(state_connection)
 

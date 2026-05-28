@@ -10,7 +10,7 @@ from typing import Any
 
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.shared.helpers.colors import green, green_bold, supports_color
+from sqlbuild.shared.helpers.colors import blue_bold, dim, green, green_bold, supports_color
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.constants import STATE_TABLE_COLUMNS
 from sqlbuild.virtual.state.exceptions import StateBackendConfigError
@@ -140,26 +140,51 @@ def _format_state_lifecycle_summary(
     state_label: str = green("State store:") if use_color else "State store:"
     tables_label: str = green("Tables:") if use_color else "Tables:"
     lines: list[str] = ["", rendered_title, "", state_label]
-    lines.append(f"  backend: {config.backend.value}")
-    lines.append(f"  schema: {config.schema}")
+    lines.append(_summary_row(label="backend", value=config.backend.value, use_color=use_color))
+    lines.append(_summary_row(label="schema", value=config.schema, use_color=use_color))
     database: object | None = config.connection.get("database")
     if database is not None:
-        lines.append(f"  database: {database}")
+        lines.append(_summary_row(label="database", value=str(database), use_color=use_color))
     if backup_id is not None:
-        lines.append(f"  backup: {backup_id}")
+        lines.append(_summary_row(label="backup", value=backup_id, use_color=use_color))
     lines.append("")
     lines.append(tables_label)
-    lines.append(f"  created/validated: {len(STATE_TABLE_COLUMNS)}")
     lines.append(
-        "  current state: model_versions, function_versions, physical_relations, "
-        "physical_relation_ancestry, virtual_environments, virtual_environment_refs, "
-        "virtual_environment_function_refs, locks"
+        _summary_row(
+            label="created/validated",
+            value=str(len(STATE_TABLE_COLUMNS)),
+            use_color=use_color,
+        )
     )
     lines.append(
-        "  history: virtual_environment_checkpoints, "
-        "virtual_environment_checkpoint_refs, "
-        "virtual_environment_checkpoint_function_refs, plan_runs, "
-        "virtual_environment_ref_events, reconcile_events, state_migration_events"
+        _summary_row(
+            label="current state",
+            value=(
+                "model_versions, function_versions, physical_relations, "
+                "physical_relation_ancestry, virtual_environments, virtual_environment_refs, "
+                "virtual_environment_function_refs, locks"
+            ),
+            use_color=use_color,
+            emphasize_value=False,
+        )
+    )
+    lines.append(
+        _summary_row(
+            label="history",
+            value=(
+                "virtual_environment_checkpoints, virtual_environment_checkpoint_refs, "
+                "virtual_environment_checkpoint_function_refs, plan_runs, "
+                "virtual_environment_ref_events, reconcile_events, state_migration_events"
+            ),
+            use_color=use_color,
+            emphasize_value=False,
+        )
     )
     lines.append("")
     return "\n".join(lines)
+
+
+def _summary_row(*, label: str, value: str, use_color: bool, emphasize_value: bool = True) -> str:
+    rendered_label: str = dim(f"{label}:") if use_color else f"{label}:"
+    rendered_value: str = blue_bold(value) if use_color and emphasize_value else value
+    return f"  {rendered_label:<24} {rendered_value}"

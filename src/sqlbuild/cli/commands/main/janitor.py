@@ -109,12 +109,13 @@ def run_janitor(
     adapter: BaseAdapter = resolve_adapter(
         effective_adapter_name, project_dir=effective_project_dir
     )
+    compile_start: float = time.perf_counter()
     status.start("Compiling project...")
     project: CompiledProject = compile_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
     )
-    status.complete("Compiled project.")
+    status.complete(f"Compiled project. ({time.perf_counter() - compile_start:.2f}s)")
     connection_config: dict[str, object] = resolve_connection_config(
         raw_config=project.effective_connection,
         project_dir=effective_project_dir,
@@ -125,11 +126,16 @@ def run_janitor(
         stream=sys.stdout,
         use_color=use_color,
     )
-    connection_progress.on_connection_start(1)
     connection_start: float = time.perf_counter()
-    connection: object = adapter.connect(connection_config)
+    connection_progress.on_connection_start(1)
+    try:
+        connection: object = adapter.connect(connection_config)
+    except BaseException:
+        connection_progress.on_connection_error(1, time.perf_counter() - connection_start)
+        raise
     connection_progress.on_connection_complete(1, time.perf_counter() - connection_start)
     try:
+        inspect_start: float = time.perf_counter()
         status.start("Inspecting warehouse state...")
         retention: CheckpointRetentionInspection | None = checkpoint_retention(
             project_dir=effective_project_dir,
@@ -206,7 +212,10 @@ def run_janitor(
             state_backup_candidates=state_backup_candidates(retention=state_retention),
             expired_lock_candidates=expired_lock_candidates(retention=state_retention),
         )
-        status.complete("Inspected warehouse state.", blank_line_after=True)
+        status.complete(
+            f"Inspected warehouse state. ({time.perf_counter() - inspect_start:.2f}s)",
+            blank_line_after=True,
+        )
         write_plan(plan=plan, stream=sys.stdout, use_color=use_color)
         if (
             not plan.candidates
@@ -306,7 +315,11 @@ def _confirm(*, plan: JanitorPlan) -> bool:
         sys.stdout.write(f"Retention: {plan.retention_days} days\n")
     sys.stdout.write(f"\nType `{expected}` to continue: ")
     sys.stdout.flush()
-    response: str = input()
+    try:
+        response: str = input()
+    except KeyboardInterrupt:
+        sys.stdout.write("\n")
+        return False
     return response == expected
 
 

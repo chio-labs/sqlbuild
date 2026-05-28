@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import uuid
 from collections.abc import Callable
 from datetime import timedelta
@@ -69,6 +70,7 @@ def run_virtual_rollback(
 ) -> tuple[str, tuple[str, ...], VirtualEnvironmentStatus]:
     """Rollback a VDE to the previous finalized checkpoint."""
 
+    compile_start: float = time.perf_counter()
     if on_progress is not None:
         on_progress("Compiling project...")
     graph: ProjectGraph = build_project_graph(
@@ -91,7 +93,7 @@ def run_virtual_rollback(
             environment_name=active_environment_name,
         ).state.unsuffixed_virtual_env
     if on_progress is not None:
-        on_progress("Compiled project.")
+        on_progress(f"Compiled project. ({time.perf_counter() - compile_start:.2f}s)")
     models_by_name: dict[str, CompiledModel] = {model.name: model for model in graph.project.models}
     config, backend = build_state_runtime(
         discovered_inputs=discovered_inputs,
@@ -100,6 +102,7 @@ def run_virtual_rollback(
     state_connection: Any = backend.connect(config.connection)
     lease: StateLockLease | None = None
     try:
+        inspect_start: float = time.perf_counter()
         if on_progress is not None:
             on_progress("Inspecting virtual state...")
         lease = acquire_virtual_environment_lease(
@@ -301,7 +304,7 @@ def run_virtual_rollback(
             )
         )
         if on_progress is not None:
-            on_progress("Inspected virtual state.")
+            on_progress(f"Inspected virtual state. ({time.perf_counter() - inspect_start:.2f}s)")
     finally:
         if lease is not None:
             release_state_lease(
@@ -312,6 +315,7 @@ def run_virtual_rollback(
             )
         backend.close(state_connection)
 
+    refresh_start: float = time.perf_counter()
     if on_progress is not None:
         on_progress("Refreshing target VDE views...")
     refresh_logical_vde_views(
@@ -334,5 +338,5 @@ def run_virtual_rollback(
             function_versions=function_versions,
         )
     if on_progress is not None:
-        on_progress("Refreshed target VDE views.")
+        on_progress(f"Refreshed target VDE views. ({time.perf_counter() - refresh_start:.2f}s)")
     return target_checkpoint.checkpoint_id, rolled_back_models, status
