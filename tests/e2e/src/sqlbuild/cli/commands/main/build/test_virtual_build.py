@@ -1262,7 +1262,7 @@ def test_given_partial_rollback_when_allowed_then_it_marks_vde_working(
                 "stg_orders",
             ),
             expected_allowed_stdout_fragments=(
-                "status               active",
+                "status               finalized",
                 "rolled back models   2",
             ),
             expected_query_results=(("SELECT id FROM dev__dev.fact_orders ORDER BY id", ((1,),)),),
@@ -1305,6 +1305,127 @@ def test_given_partial_rollback_missing_stale_upstreams_when_including_them_then
         assert fragment in rollback_result.stdout
     for sql, expected_rows in test_case.expected_query_results:
         assert query_duckdb(db_path=project_dir / "warehouse.duckdb", sql=sql) == list(
+            expected_rows
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualPartialRollbackE2ETestCase(
+            description="partial rollback matches checkpoint when workspace changed",
+            blocked_command=(),
+            allowed_command=(
+                "--no-color",
+                "rollback",
+                "--select",
+                "fact_orders",
+                "--include-stale-upstreams",
+            ),
+            expected_blocked_stderr_fragments=(),
+            expected_allowed_stdout_fragments=(
+                "status               finalized",
+                "rolled back models   2",
+            ),
+            expected_query_results=(("SELECT id FROM dev__dev.fact_orders ORDER BY id", ((1,),)),),
+        )
+    ],
+    ids=["partial rollback matches checkpoint when workspace changed"],
+)
+def test_given_partial_rollback_matches_checkpoint_when_workspace_changed_then_no_override_needed(
+    test_case: VirtualPartialRollbackE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_rollback_stale_workspace",
+        repo_files=build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id"),
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+    (project_dir / "models" / "stg_orders.sql").write_text(
+        "MODEL ();\n\nSELECT 2 AS id\n",
+        encoding="utf-8",
+    )
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+    (project_dir / "models" / "stg_orders.sql").write_text(
+        "MODEL ();\n\nSELECT 3 AS id\n",
+        encoding="utf-8",
+    )
+
+    rollback_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.allowed_command,
+        project_dir=project_dir,
+    )
+
+    assert rollback_result.returncode == 0, rollback_result.stdout + rollback_result.stderr
+    fragment: str
+    for fragment in test_case.expected_allowed_stdout_fragments:
+        assert fragment in rollback_result.stdout
+    for query_sql, expected_rows in test_case.expected_query_results:
+        assert query_duckdb(db_path=project_dir / "warehouse.duckdb", sql=query_sql) == list(
+            expected_rows
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualPromoteE2ETestCase(
+            description="finalized source promotes after workspace changes again",
+            promote_command=("--no-color", "promote", "--from", "pr", "--to", "dev"),
+            expected_promote_fragments=(
+                "Virtual promotion complete",
+                "target status          finalized",
+            ),
+            expected_query_results=(("SELECT id FROM dev__dev.stg_orders ORDER BY id", ((2,),)),),
+        )
+    ],
+    ids=["finalized source promotes after workspace changes again"],
+)
+def test_given_finalized_source_vde_when_workspace_changes_again_then_whole_promotion_succeeds(
+    test_case: VirtualPromoteE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_promote_finalized_stale_workspace",
+        repo_files=build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id"),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    default_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert default_build_result.returncode == 0, default_build_result.stderr
+    (project_dir / "models" / "stg_orders.sql").write_text(
+        "MODEL ();\n\nSELECT 2 AS id\n",
+        encoding="utf-8",
+    )
+    branch_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--virtual-env", "pr"),
+        project_dir=project_dir,
+    )
+    assert branch_build_result.returncode == 0, branch_build_result.stderr
+    (project_dir / "models" / "stg_orders.sql").write_text(
+        "MODEL ();\n\nSELECT 3 AS id\n",
+        encoding="utf-8",
+    )
+
+    promote_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.promote_command,
+        project_dir=project_dir,
+    )
+
+    assert promote_result.returncode == 0, promote_result.stdout + promote_result.stderr
+    for fragment in test_case.expected_promote_fragments:
+        assert fragment in promote_result.stdout
+    for query_sql, expected_rows in test_case.expected_query_results:
+        assert query_duckdb(db_path=project_dir / "warehouse.duckdb", sql=query_sql) == list(
             expected_rows
         )
 
