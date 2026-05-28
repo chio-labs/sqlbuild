@@ -184,12 +184,38 @@ class DetachedVirtualEnvironmentInspection:
 
 
 @dataclass(frozen=True)
+class ExpiredVirtualEnvironmentInspection:
+    """Non-active VDE cleanup inspection for janitor planning."""
+
+    cleanup_virtual_environments: tuple[VirtualEnvironmentRetentionRecord, ...]
+    cleanup_physical_relations: tuple[PhysicalRelationRecord, ...]
+    retained_physical_relations: tuple[PhysicalRelationRecord, ...]
+
+
+@dataclass(frozen=True)
+class StateJanitorInspection:
+    """State-only janitor cleanup candidates."""
+
+    state_backups: tuple[StateBackupRecord, ...]
+    expired_locks: tuple[StateLockRecord, ...]
+
+
+@dataclass(frozen=True)
 class StateLockRecord:
     """Current state row for one active lock."""
 
     lock_key: str
     owner_id: str
     expires_at: datetime
+
+
+@dataclass(frozen=True)
+class StateBackupRecord:
+    """One state migration backup schema."""
+
+    backup_id: str
+    schema_name: str
+    created_at: datetime | None = None
 
 
 @dataclass(frozen=True)

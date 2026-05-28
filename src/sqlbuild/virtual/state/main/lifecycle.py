@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.metadata
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +27,9 @@ def run_state_lifecycle(
     backup_id: str | None = None,
     auto_approve: bool = False,
     no_color: bool = False,
+    on_connection_start: Callable[[int], None] | None = None,
+    on_connection_complete: Callable[[int, float], None] | None = None,
+    on_connection_error: Callable[[int, float], None] | None = None,
 ) -> int:
     """Run a virtual state lifecycle command."""
 
@@ -36,9 +41,19 @@ def run_state_lifecycle(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
     )
-    backend: StateBackend = build_state_backend(config.backend)
-    connection: Any = backend.connect(config.connection)
     use_color: bool = not no_color and supports_color()
+    backend: StateBackend = build_state_backend(config.backend)
+    started_at: float = time.perf_counter()
+    if on_connection_start is not None:
+        on_connection_start(1)
+    try:
+        connection: Any = backend.connect(config.connection)
+    except BaseException:
+        if on_connection_error is not None:
+            on_connection_error(1, time.perf_counter() - started_at)
+        raise
+    if on_connection_complete is not None:
+        on_connection_complete(1, time.perf_counter() - started_at)
     try:
         if command == StateCommand.INIT:
             backend.initialize(

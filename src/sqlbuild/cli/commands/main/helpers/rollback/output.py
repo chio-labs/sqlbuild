@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.shared.helpers.colors import blue_bold, dim, green_bold
+from sqlbuild.shared.helpers.colors import blue_bold, dim, green_bold, yellow_bold
 
 _MODEL_SET_CAP: int = 20
 
@@ -21,6 +21,15 @@ def format_rollback_output(
     heading: str = (
         green_bold("Virtual rollback complete") if use_color else "Virtual rollback complete"
     )
+    environment_label: str = blue_bold(virtual_environment) if use_color else virtual_environment
+    checkpoint_label: str = blue_bold(checkpoint_id) if use_color else checkpoint_id
+    status_label: str = (
+        green_bold(status)
+        if use_color and status == "finalized"
+        else yellow_bold(status)
+        if use_color
+        else status
+    )
     model_count: str = (
         blue_bold(f"{len(rolled_back_models):,}") if use_color else f"{len(rolled_back_models):,}"
     )
@@ -28,9 +37,9 @@ def format_rollback_output(
         "",
         heading,
         "",
-        f"  virtual environment  {virtual_environment}",
-        f"  checkpoint           {checkpoint_id}",
-        f"  status               {status}",
+        f"  virtual environment  {environment_label}",
+        f"  checkpoint           {checkpoint_label}",
+        f"  status               {status_label}",
         f"  rolled back models   {model_count}",
     ]
     if rolled_back_models:

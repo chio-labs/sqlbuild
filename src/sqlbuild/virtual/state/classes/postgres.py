@@ -41,6 +41,7 @@ from sqlbuild.virtual.state.models import (
     PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
     ReconcileEventRecord,
+    StateBackupRecord,
     StateLockRecord,
     StateOperationEventRecord,
     StateOperationRecord,
@@ -1039,6 +1040,54 @@ class PostgresStateBackend(StateBackend):
         return tuple(
             StateLockRecord(lock_key=row[0], owner_id=row[1], expires_at=row[2]) for row in rows
         )
+
+    def list_expired_locks(self, connection: Any, *, schema: str) -> tuple[StateLockRecord, ...]:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT lock_key, owner_id, expires_at FROM "
+                f"{self._qualified_name(schema, LOCK_TABLE)} "
+                "WHERE expires_at <= CURRENT_TIMESTAMP ORDER BY lock_key"
+            )
+            rows: list[tuple[Any, ...]] = cursor.fetchall()
+        return tuple(
+            StateLockRecord(lock_key=row[0], owner_id=row[1], expires_at=row[2]) for row in rows
+        )
+
+    def delete_lock(self, connection: Any, *, schema: str, lock_key: str) -> None:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"DELETE FROM {self._qualified_name(schema, LOCK_TABLE)} WHERE lock_key = %s",
+                [lock_key],
+            )
+        connection.commit()
+
+    def list_state_backups(self, connection: Any, *, schema: str) -> tuple[StateBackupRecord, ...]:
+        prefix: str = f"{schema}__backup_%"
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT s.schema_name, e.backup_id, MAX(e.created_at) "
+                "FROM information_schema.schemata s "
+                f"LEFT JOIN {self._qualified_name(schema, STATE_MIGRATION_EVENTS_TABLE)} e "
+                "ON s.schema_name = %s || e.backup_id "
+                "WHERE s.schema_name LIKE %s "
+                "GROUP BY s.schema_name, e.backup_id ORDER BY s.schema_name DESC",
+                [f"{schema}__backup_", prefix],
+            )
+            rows: list[tuple[Any, ...]] = cursor.fetchall()
+        return tuple(
+            StateBackupRecord(
+                backup_id=row[1] or str(row[0]).removeprefix(f"{schema}__backup_"),
+                schema_name=row[0],
+                created_at=row[2],
+            )
+            for row in rows
+        )
+
+    def delete_state_backup(self, connection: Any, *, schema: str, backup_id: str) -> None:
+        backup_schema: str = self._backup_schema_name(schema=schema, backup_id_value=backup_id)
+        with connection.cursor() as cursor:
+            cursor.execute(f"DROP SCHEMA IF EXISTS {self._quote_identifier(backup_schema)} CASCADE")
+        connection.commit()
 
     def _latest_backup_id(self, connection: Any, *, schema: str) -> str:
         prefix: str = f"{schema}__backup_%"

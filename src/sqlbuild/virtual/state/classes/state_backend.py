@@ -12,6 +12,7 @@ from sqlbuild.virtual.state.models import (
     PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
     ReconcileEventRecord,
+    StateBackupRecord,
     StateLockRecord,
     StateOperationEventRecord,
     StateOperationRecord,
@@ -283,4 +284,24 @@ class StateBackend(ABC):
     @abstractmethod
     def list_active_locks(self, connection: Any, *, schema: str) -> tuple[StateLockRecord, ...]:
         """Return non-expired locks."""
+        ...
+
+    @abstractmethod
+    def list_expired_locks(self, connection: Any, *, schema: str) -> tuple[StateLockRecord, ...]:
+        """Return expired locks."""
+        ...
+
+    @abstractmethod
+    def delete_lock(self, connection: Any, *, schema: str, lock_key: str) -> None:
+        """Delete one lock by key."""
+        ...
+
+    @abstractmethod
+    def list_state_backups(self, connection: Any, *, schema: str) -> tuple[StateBackupRecord, ...]:
+        """Return state migration backup schemas known to the state store."""
+        ...
+
+    @abstractmethod
+    def delete_state_backup(self, connection: Any, *, schema: str, backup_id: str) -> None:
+        """Delete one state migration backup schema."""
         ...

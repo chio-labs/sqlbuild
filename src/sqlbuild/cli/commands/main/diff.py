@@ -30,6 +30,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.diff import run_diff_pipeline
 from sqlbuild.executor.diff.main.execute import execute_diff
 from sqlbuild.executor.diff.models import DiffExecutionResult
+from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 from sqlbuild.spec.models.types import EnvironmentMode
 from sqlbuild.virtual.diff.main.diff import run_virtual_diff
@@ -157,13 +158,14 @@ def run_diff(
     mode_label: str = (
         "schema-only" if schema_only else (f"bounded {bounded}" if bounded else "full")
     )
+    use_color: bool = not no_color and supports_color()
     print(
         render_diff_output(
             result=result,
             from_label=from_environment,
             to_label=to_environment,
             mode_label=mode_label,
-            use_color=not no_color,
+            use_color=use_color,
             verbose=verbose,
             max_column_examples=effective_max_column_examples,
             max_row_only_examples=effective_max_row_only_examples,
@@ -207,14 +209,15 @@ def _run_virtual_diff_cli(
         project_dir=project_dir,
         cli_vars=cli_vars,
     )
+    use_color: bool = not no_color and supports_color()
     planning_progress: PlanningProgressReporter = PlanningProgressReporter(
         stream=sys.stdout,
-        use_color=not no_color,
+        use_color=use_color,
     )
     connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
         adapter_name=effective_adapter_name,
         stream=sys.stdout,
-        use_color=not no_color,
+        use_color=use_color,
     )
     result, selected_names, skipped_names, from_stale, to_stale = run_virtual_diff(
         project_dir=project_dir,
@@ -254,7 +257,7 @@ def _run_virtual_diff_cli(
         to_stale=to_stale,
         allow_partial_diff=allow_partial_diff,
         verbose=verbose,
-        use_color=not no_color,
+        use_color=use_color,
     )
     print()
     print(header)
@@ -266,7 +269,7 @@ def _run_virtual_diff_cli(
                 from_label=from_virtual_environment,
                 to_label=to_virtual_environment,
                 mode_label=mode_label,
-                use_color=not no_color,
+                use_color=use_color,
                 verbose=verbose,
                 max_column_examples=effective_max_column_examples,
                 max_row_only_examples=effective_max_row_only_examples,
