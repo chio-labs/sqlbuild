@@ -5,14 +5,21 @@ from __future__ import annotations
 import re
 from datetime import timedelta
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner.helpers.changes.policy import resolve_query_change_backfill
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeCause,
     CascadeResult,
+    ChangeDetectionResult,
+    FunctionChangeResult,
+    PlannerChangeResults,
+    PlannerResolvedActions,
+    PlannerScope,
+    ResolvedModelAction,
 )
-from sqlbuild.compiler.planner.types import BackfillAction, PlanReason
+from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReason
 
 _DURATION_PATTERN: re.Pattern[str] = re.compile(r"^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$")
 
@@ -21,6 +28,76 @@ _ACTION_RANK: dict[BackfillAction, int] = {
     BackfillAction.BOUNDED: 1,
     BackfillAction.FULL: 2,
 }
+
+
+def resolve_cascades(
+    *,
+    scope: PlannerScope,
+    changes: PlannerChangeResults,
+) -> PlannerResolvedActions:
+    """Resolve effective model actions after upstream cascade propagation."""
+
+    effective_cascades: dict[str, CascadeResult] = {}
+    function_name: str
+    function_change: FunctionChangeResult
+    for function_name, function_change in changes.functions.items():
+        if function_change.backfill.action == BackfillAction.WARN_ONLY:
+            continue
+        effective_cascades[function_name] = build_self_cascade(
+            function_change.backfill,
+            root_cause=function_name,
+            root_reason=(
+                PlanReason.FUNCTION_CHANGED
+                if function_change.reason == PlanReason.QUERY_CHANGED
+                else function_change.reason
+            ),
+        )
+
+    model_cursor_types: dict[str, str | None] = {}
+    resolved: dict[str, ResolvedModelAction] = {}
+    key: CompiledObjectKey
+    for key in scope.execution_order:
+        if key not in scope.selected_keys or key.resource_type != CompiledResourceType.MODEL:
+            continue
+        model: CompiledModel | None = scope.models_by_name.get(key.name)
+        change: ChangeDetectionResult | None = changes.models.get(key.name)
+        if model is None or change is None:
+            continue
+        cursor_type: str | None = _get_config_str(model, "cursor_type")
+        model_cursor_types[model.name] = cursor_type
+        local_policy: str | None = _get_config_str(model, "query_change_backfill")
+        cascade: CascadeResult | None = resolve_cascade(
+            model_name=model.name,
+            own_backfill=change.backfill,
+            local_backfill=resolve_query_change_backfill(query_change_backfill=local_policy),
+            own_cursor_type=cursor_type,
+            upstream_keys=scope.upstream_deps.get(key, ()),
+            effective_cascades=effective_cascades,
+            model_cursor_types=model_cursor_types,
+        )
+        if cascade is None:
+            resolved[model.name] = ResolvedModelAction(
+                change=change,
+                backfill=change.backfill,
+            )
+            effective_cascades[model.name] = build_self_cascade(
+                change.backfill,
+                root_cause=model.name,
+                root_reason=_reason_for_change(change),
+            )
+            continue
+        backfill: BackfillResult = BackfillResult(
+            action=cascade.effective_action,
+            duration=cascade.effective_duration,
+        )
+        resolved[model.name] = ResolvedModelAction(
+            change=change,
+            backfill=backfill,
+            cascade=cascade,
+        )
+        effective_cascades[model.name] = cascade
+
+    return PlannerResolvedActions(models=resolved)
 
 
 def resolve_cascade(
@@ -217,6 +294,23 @@ def _backfill_rank(action: BackfillAction, duration: str | None) -> tuple[int, i
         if td is not None:
             duration_seconds = int(td.total_seconds())
     return (action_rank, duration_seconds)
+
+
+def _get_config_str(model: CompiledModel, key: str) -> str | None:
+    value: object | None = model.config.values.get(key)
+    return value if isinstance(value, str) else None
+
+
+def _reason_for_change(change: ChangeDetectionResult) -> PlanReason:
+    if change.change_kind == ChangeKind.QUERY_CHANGED:
+        return PlanReason.QUERY_CHANGED
+    if change.change_kind == ChangeKind.CONFIG_CHANGED:
+        return PlanReason.CONFIG_CHANGED
+    if change.change_kind == ChangeKind.SCHEMA_CHANGED:
+        return PlanReason.SCHEMA_CHANGED
+    if change.change_kind == ChangeKind.FIRST_RUN:
+        return PlanReason.FIRST_RUN
+    return PlanReason.NO_CHANGE
 
 
 def _parse_duration(duration: str) -> timedelta | None:

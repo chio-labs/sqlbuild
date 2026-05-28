@@ -20,8 +20,17 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.execution import build_execution_plan
-from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
+from sqlbuild.compiler.planner.main.plan_entry import build_plan_output_from_model_changes_phase
+from sqlbuild.compiler.planner.main.warehouse_snapshot import build_warehouse_snapshot_phase
+from sqlbuild.compiler.planner.models import (
+    BackfillResult,
+    ChangeDetectionResult,
+    CursorOverrides,
+    PlannerScope,
+    PlannerWarehouseSnapshotResult,
+    PlanOutput,
+)
+from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReason
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.pipeline.main.run import run_build_pipeline
@@ -38,13 +47,9 @@ from sqlbuild.virtual.executor.helpers.rewrite import (
     rewrite_project_function_targets,
     rewrite_project_model_targets,
 )
-from sqlbuild.virtual.executor.helpers.seeded_plan import (
-    build_virtual_execution_plan,
-)
 from sqlbuild.virtual.executor.helpers.seeding import seed_virtual_physical_versions
 from sqlbuild.virtual.executor.models import (
     VirtualBuildExecutionHooks,
-    VirtualBuildExecutionPlan,
     VirtualBuildPipelineResult,
 )
 from sqlbuild.virtual.planner.main.output import apply_virtual_plan_output
@@ -221,21 +226,36 @@ def run_virtual_build(
         if on_connection_complete is not None:
             on_connection_complete(1, time.monotonic() - connection_start)
         try:
-            plan_output: PlanOutput = build_execution_plan(
+            warehouse_result: PlannerWarehouseSnapshotResult = build_warehouse_snapshot_phase(
                 project=rewritten_project,
                 adapter=adapter,
                 connection=planning_connection,
                 select=effective_select,
                 exclude=(),
+                auto_load_sources=auto_load_sources,
+                full_refresh=full_refresh,
+                deferred_relations=deferred_relations,
+                on_progress=on_progress,
+            )
+            plan_output: PlanOutput = build_plan_output_from_model_changes_phase(
+                project=rewritten_project,
+                adapter=adapter,
+                connection=planning_connection,
+                scope=warehouse_result.scope,
+                snapshot=warehouse_result.snapshot,
+                model_changes=_build_virtual_model_changes(
+                    project=rewritten_project,
+                    scope=warehouse_result.scope,
+                    semantics=semantics,
+                    bound_physical_relations=bound_physical_relations,
+                    full_refresh=full_refresh,
+                ),
                 cursor_overrides=cursor_overrides,
                 full_refresh=full_refresh,
-                auto_load_sources=auto_load_sources,
                 reload_sources=reload_sources,
                 project_config=discovered_inputs.project_config,
                 local_config=discovered_inputs.local_config,
                 defer_sources_to=defer_sources_to,
-                deferred_relations=deferred_relations,
-                on_progress=on_progress,
             )
         finally:
             adapter.close(planning_connection)
@@ -268,19 +288,12 @@ def run_virtual_build(
         semantics=semantics,
         selected_model_names=selected_model_names,
     )
-    execution_plan: VirtualBuildExecutionPlan = build_virtual_execution_plan(
-        adapter=adapter,
-        direct_plan_output=plan_output,
-        bound_physical_relations=bound_physical_relations,
-        expected_version_hashes=semantics.expected_version_hashes,
-        cursor_overrides=cursor_overrides,
-    )
-    executor_plan_output: PlanOutput = execution_plan.build_executor_plan_output()
+    executor_plan_output: PlanOutput = plan_output
     effective_concurrency: int = (
         concurrency if concurrency is not None else rewritten_project.settings.concurrency
     )
     hooks: VirtualBuildExecutionHooks = (
-        on_plan_ready(rewritten_project, execution_plan.display_plan_output)
+        on_plan_ready(rewritten_project, plan_output)
         if on_plan_ready is not None
         else VirtualBuildExecutionHooks()
     )
@@ -337,8 +350,8 @@ def run_virtual_build(
     return VirtualBuildPipelineResult(
         project=rewritten_project,
         direct_plan_output=plan_output,
-        display_plan_output=execution_plan.display_plan_output,
-        execution_plan=execution_plan,
+        display_plan_output=plan_output,
+        execution_plan=executor_plan_output,
         execution_result=result,
     )
 
@@ -613,6 +626,90 @@ def _persist_successful_virtual_build(
         plan_output=plan_output,
         final_version_hashes=final_version_hashes,
     )
+
+
+def _build_virtual_model_changes(
+    *,
+    project: CompiledProject,
+    scope: PlannerScope,
+    semantics: VirtualPlanSemantics,
+    bound_physical_relations: dict[str, PhysicalRelationRecord],
+    full_refresh: bool,
+) -> dict[str, ChangeDetectionResult]:
+    changes: dict[str, ChangeDetectionResult] = {}
+    model: CompiledModel
+    for model in project.models:
+        if model.key not in scope.selected_keys:
+            continue
+        changes[model.name] = _build_virtual_model_change(
+            model=model,
+            semantics=semantics,
+            bound_physical_relations=bound_physical_relations,
+            full_refresh=full_refresh,
+        )
+    return changes
+
+
+def _build_virtual_model_change(
+    *,
+    model: CompiledModel,
+    semantics: VirtualPlanSemantics,
+    bound_physical_relations: dict[str, PhysicalRelationRecord],
+    full_refresh: bool,
+) -> ChangeDetectionResult:
+    metadata_json: str = semantics.expected_metadata_jsons.get(model.name, "{}")
+    previous_metadata_json: str | None = semantics.bound_metadata_jsons.get(model.name)
+    if full_refresh:
+        return ChangeDetectionResult(
+            model_name=model.name,
+            change_kind=ChangeKind.NO_CHANGE,
+            fingerprint_metadata_json=metadata_json,
+            previous_metadata_json=previous_metadata_json,
+            backfill=BackfillResult(action=BackfillAction.FULL),
+        )
+    if model.name not in bound_physical_relations:
+        return ChangeDetectionResult(
+            model_name=model.name,
+            change_kind=ChangeKind.FIRST_RUN,
+            fingerprint_metadata_json=metadata_json,
+            previous_metadata_json=previous_metadata_json,
+            backfill=BackfillResult(action=BackfillAction.FULL),
+        )
+    root_reason: PlanReason | None = semantics.stale_root_reasons.get(model.name)
+    if root_reason == PlanReason.CONFIG_CHANGED:
+        return ChangeDetectionResult(
+            model_name=model.name,
+            change_kind=ChangeKind.CONFIG_CHANGED,
+            config_changed=True,
+            fingerprint_metadata_json=metadata_json,
+            previous_metadata_json=previous_metadata_json,
+        )
+    if root_reason in (PlanReason.QUERY_CHANGED, PlanReason.FUNCTION_CHANGED):
+        return ChangeDetectionResult(
+            model_name=model.name,
+            change_kind=ChangeKind.QUERY_CHANGED,
+            query_changed=True,
+            fingerprint_metadata_json=metadata_json,
+            previous_metadata_json=previous_metadata_json,
+            backfill=_virtual_root_backfill(model),
+        )
+    return ChangeDetectionResult(
+        model_name=model.name,
+        change_kind=ChangeKind.NO_CHANGE,
+        fingerprint_metadata_json=metadata_json,
+        previous_metadata_json=previous_metadata_json,
+    )
+
+
+def _virtual_root_backfill(model: CompiledModel) -> BackfillResult:
+    raw_policy: object | None = model.config.values.get("query_change_backfill")
+    if raw_policy == BackfillAction.FULL:
+        return BackfillResult(action=BackfillAction.FULL)
+    if isinstance(raw_policy, str) and raw_policy.startswith("bounded-"):
+        duration: str = raw_policy.removeprefix("bounded-").strip()
+        if duration:
+            return BackfillResult(action=BackfillAction.BOUNDED, duration=duration)
+    return BackfillResult(action=BackfillAction.WARN_ONLY)
 
 
 def _create_logical_vde_views(
