@@ -36,3 +36,31 @@ def load_custom_materializations(
             )
         registry[mat_file.name] = materialize_fn
     return registry
+
+
+def load_custom_prepare_version_functions(
+    materialization_files: tuple[DiscoveredMaterializationFile, ...],
+) -> dict[str, Callable[..., None]]:
+    """Import discovered materialization modules and extract optional prepare_version callables."""
+
+    registry: dict[str, Callable[..., None]] = {}
+    mat_file: DiscoveredMaterializationFile
+    for mat_file in materialization_files:
+        spec: Any = importlib.util.spec_from_file_location(mat_file.name, mat_file.file_path)
+        if spec is None or spec.loader is None:
+            raise PlannerInputError(
+                f"materialization '{mat_file.name}' at {mat_file.file_path} "
+                f"could not be loaded as a Python module"
+            )
+        module: ModuleType = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        prepare_version_fn: Any = getattr(module, "prepare_version", None)
+        if prepare_version_fn is None:
+            continue
+        if not callable(prepare_version_fn):
+            raise PlannerInputError(
+                f"materialization '{mat_file.name}' at {mat_file.file_path} "
+                f"defines a non-callable 'prepare_version' attribute"
+            )
+        registry[mat_file.name] = prepare_version_fn
+    return registry

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from typing import Any
 
@@ -52,7 +52,7 @@ def execute_build_plan(
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None = None,
     on_node_complete: Callable[[object], None] | None = None,
     before_model_materialize: Callable[[ModelPlanEntry, Any], None] | None = None,
-    custom_materializations: dict[str, Callable[..., MaterializationResult]] | None = None,
+    custom_materializations: Mapping[str, Callable[..., MaterializationResult]] | None = None,
     loader_functions: tuple[DiscoveredLoaderFunction, ...] = (),
     loader_is_reload: bool = False,
     start_cursor_ts: datetime | None = None,
