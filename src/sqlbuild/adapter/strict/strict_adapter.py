@@ -48,6 +48,11 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def supports_durable_clone(self) -> bool:
+        """Return whether the adapter has a native durable clone primitive."""
+        ...
+
+    @abstractmethod
     def supports_relation_age_metadata(self) -> bool:
         """Return whether relation metadata includes reliable age information."""
         ...
@@ -243,6 +248,41 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
+        """Render SQL statements that clone/copy into a durable independent target."""
+        ...
+
+    @abstractmethod
+    def render_query_with_cursor_bounds(
+        self,
+        *,
+        sql: str,
+        cursor_column: str,
+        cursor_start: str,
+        cursor_end: str,
+        cursor_type: str | None,
+    ) -> str:
+        """Render a query wrapped with adapter-correct cursor bounds."""
+        ...
+
+    @abstractmethod
+    def render_seed_select_before_cursor(
+        self,
+        *,
+        source: str,
+        cursor_column: str,
+        cursor_end_exclusive: str,
+        cursor_type: str | None,
+    ) -> str:
+        """Render a seed-select query that keeps rows before a cursor bound."""
+        ...
+
+    @abstractmethod
+    def relation_names_match(self, left: str, right: str) -> bool:
+        """Return whether two relation name strings identify the same adapter relation."""
+        ...
+
+    @abstractmethod
     def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:
         """Render SQL statements that replace a target table from a source relation."""
         ...
@@ -257,6 +297,20 @@ class StrictAdapter(
         statement_recorder: StatementRecorder,
     ) -> None:
         """Replace a target table from a source relation."""
+        ...
+
+    @abstractmethod
+    def move_or_copy_relation(
+        self,
+        connection: Any,
+        *,
+        source: str,
+        target: str,
+        remove_source: bool,
+        allow_copy_fallback: bool,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        """Move a relation to a target, or copy it when explicit fallback is allowed."""
         ...
 
     @abstractmethod

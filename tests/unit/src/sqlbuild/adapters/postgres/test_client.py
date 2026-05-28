@@ -11,6 +11,7 @@ from tests.unit.src.sqlbuild.adapters.postgres._test_types import (
     PostgresAdapterDefaultsTestCase,
     PostgresDescribeRelationTestCase,
     PostgresLoadSeedTestCase,
+    PostgresMoveOrCopyRelationTestCase,
     PostgresRenderCreateFunctionTestCase,
     PostgresRenderCreateTableAsTestCase,
     PostgresRenderIdentifierTestCase,
@@ -129,6 +130,53 @@ def test_given_qualified_names_when_renaming_then_postgres_uses_unqualified_targ
     (statement,) = adapter.render_rename(source=test_case.source, target=test_case.target)
 
     assert statement == test_case.expected_statement
+
+
+POSTGRES_MOVE_OR_COPY_RELATION_TEST_CASES: list[PostgresMoveOrCopyRelationTestCase] = [
+    PostgresMoveOrCopyRelationTestCase(
+        description="moves table across schemas with rename before set schema",
+        source="public.fact_orders",
+        target="public__sqb_physical.fact_orders__v_abc123",
+        expected_statements=(
+            "ALTER TABLE public.fact_orders RENAME TO fact_orders__v_abc123",
+            "ALTER TABLE public.fact_orders__v_abc123 SET SCHEMA public__sqb_physical",
+        ),
+    ),
+    PostgresMoveOrCopyRelationTestCase(
+        description="moves table across schemas without renaming when names match",
+        source="public.fact_orders",
+        target="public__sqb_physical.fact_orders",
+        expected_statements=("ALTER TABLE public.fact_orders SET SCHEMA public__sqb_physical",),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    POSTGRES_MOVE_OR_COPY_RELATION_TEST_CASES,
+    ids=[case.description for case in POSTGRES_MOVE_OR_COPY_RELATION_TEST_CASES],
+)
+def test_given_cross_schema_table_move_when_moving_then_postgres_uses_native_move(
+    test_case: PostgresMoveOrCopyRelationTestCase,
+) -> None:
+    adapter: PostgresAdapter = PostgresAdapter()
+    cursor: FakePostgresCursor = FakePostgresCursor()
+    connection: FakePostgresConnection = FakePostgresConnection(cursor)
+    statement_recorder: StatementRecorder = StatementRecorder()
+
+    adapter.move_or_copy_relation(
+        connection,
+        source=test_case.source,
+        target=test_case.target,
+        remove_source=True,
+        allow_copy_fallback=False,
+        statement_recorder=statement_recorder,
+    )
+
+    assert tuple(connection.executed_sql) == test_case.expected_statements
+    assert tuple(event.content for event in statement_recorder.snapshot()) == (
+        test_case.expected_statements
+    )
 
 
 @pytest.mark.parametrize(

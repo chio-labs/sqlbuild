@@ -36,3 +36,11 @@ class SqlServerRenderCreateSchemaTestCase:
     description: str
     schema: str
     expected_statement: str
+
+
+@dataclass(frozen=True)
+class SqlServerMoveOrCopyRelationTestCase:
+    description: str
+    source: str
+    target: str
+    expected_statements: tuple[str, ...]

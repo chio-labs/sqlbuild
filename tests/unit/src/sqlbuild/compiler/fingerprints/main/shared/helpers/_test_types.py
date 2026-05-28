@@ -39,5 +39,6 @@ class BuildInsertSqlTestCase:
     ast_hash: str | None
     schema_fingerprint: str
     query_sql: str
+    metadata_json: str
     ts: str
     expected_contains: tuple[str, ...]

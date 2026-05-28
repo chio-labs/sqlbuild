@@ -12,7 +12,8 @@ COLUMN_RUN_ID: str = "run_id"
 COLUMN_QUERY_HASH: str = "query_hash"
 COLUMN_AST_HASH: str = "ast_hash"
 COLUMN_SCHEMA_FINGERPRINT: str = "schema_fingerprint"
-COLUMN_QUERY_SQL: str = "query_sql"
+COLUMN_QUERY_SQL_B64: str = "query_sql_b64"
+COLUMN_METADATA_JSON_B64: str = "metadata_json_b64"
 COLUMN_TIMESTAMP: str = "ts"
 
 FINGERPRINT_COLUMNS: tuple[str, ...] = (
@@ -24,6 +25,7 @@ FINGERPRINT_COLUMNS: tuple[str, ...] = (
     COLUMN_QUERY_HASH,
     COLUMN_AST_HASH,
     COLUMN_SCHEMA_FINGERPRINT,
-    COLUMN_QUERY_SQL,
+    COLUMN_QUERY_SQL_B64,
+    COLUMN_METADATA_JSON_B64,
     COLUMN_TIMESTAMP,
 )

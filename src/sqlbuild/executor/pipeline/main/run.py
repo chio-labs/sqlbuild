@@ -74,6 +74,7 @@ def run_build_pipeline(
     on_connection_complete: Callable[[int, float], None] | None = None,
     on_connection_error: Callable[[int, float], None] | None = None,
     use_color: bool = False,
+    query_change_tracking: bool | None = None,
 ) -> BuildExecutionResult:
     """Execute a full build pipeline: resolve settings, open connections, run plan, close."""
 
@@ -134,7 +135,11 @@ def run_build_pipeline(
             scheduler_connection=scheduler_connection,
             promotion_mode=promotion_mode,
             run_id=run_id,
-            query_change_tracking=settings.query_change_tracking,
+            query_change_tracking=(
+                settings.query_change_tracking
+                if query_change_tracking is None
+                else query_change_tracking
+            ),
             snapshots=snapshots or SnapshotsConfig(),
             allow_snapshot_schema_change=allow_snapshot_schema_change,
             run_audits=run_audits,

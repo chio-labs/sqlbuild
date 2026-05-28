@@ -12,3 +12,8 @@ class SourceWriteStrategy(StrEnum):
     DELETE_INSERT = "delete_insert"
     MERGE = "merge"
     TABLE = "table"
+
+
+class EnvironmentMode(StrEnum):
+    DIRECT = "direct"
+    VIRTUAL = "virtual"

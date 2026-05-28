@@ -5,14 +5,21 @@ from __future__ import annotations
 import re
 from datetime import timedelta
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner.helpers.changes.policy import resolve_query_change_backfill
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeCause,
     CascadeResult,
+    ChangeDetectionResult,
+    FunctionChangeResult,
+    PlannerChangeResults,
+    PlannerResolvedActions,
+    PlannerScope,
+    ResolvedModelAction,
 )
-from sqlbuild.compiler.planner.types import BackfillAction, PlanReason
+from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReason
 
 _DURATION_PATTERN: re.Pattern[str] = re.compile(r"^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$")
 
@@ -23,10 +30,81 @@ _ACTION_RANK: dict[BackfillAction, int] = {
 }
 
 
+def resolve_cascades(
+    *,
+    scope: PlannerScope,
+    changes: PlannerChangeResults,
+) -> PlannerResolvedActions:
+    """Resolve effective model actions after upstream cascade propagation."""
+
+    effective_cascades: dict[str, CascadeResult] = {}
+    function_name: str
+    function_change: FunctionChangeResult
+    for function_name, function_change in changes.functions.items():
+        if function_change.backfill.action == BackfillAction.WARN_ONLY:
+            continue
+        effective_cascades[function_name] = build_self_cascade(
+            function_change.backfill,
+            root_cause=function_name,
+            root_reason=(
+                PlanReason.FUNCTION_CHANGED
+                if function_change.reason == PlanReason.QUERY_CHANGED
+                else function_change.reason
+            ),
+        )
+
+    model_cursor_types: dict[str, str | None] = {}
+    resolved: dict[str, ResolvedModelAction] = {}
+    key: CompiledObjectKey
+    for key in scope.execution_order:
+        if key not in scope.selected_keys or key.resource_type != CompiledResourceType.MODEL:
+            continue
+        model: CompiledModel | None = scope.models_by_name.get(key.name)
+        change: ChangeDetectionResult | None = changes.models.get(key.name)
+        if model is None or change is None:
+            continue
+        cursor_type: str | None = _get_config_str(model, "cursor_type")
+        model_cursor_types[model.name] = cursor_type
+        local_policy: str | None = _get_config_str(model, "query_change_backfill")
+        cascade: CascadeResult | None = resolve_cascade(
+            model_name=model.name,
+            own_backfill=change.backfill,
+            local_backfill=resolve_query_change_backfill(query_change_backfill=local_policy),
+            own_cursor_type=cursor_type,
+            upstream_keys=scope.upstream_deps.get(key, ()),
+            effective_cascades=effective_cascades,
+            model_cursor_types=model_cursor_types,
+        )
+        if cascade is None:
+            resolved[model.name] = ResolvedModelAction(
+                change=change,
+                backfill=change.backfill,
+            )
+            effective_cascades[model.name] = build_self_cascade(
+                change.backfill,
+                root_cause=model.name,
+                root_reason=_reason_for_change(change),
+            )
+            continue
+        backfill: BackfillResult = BackfillResult(
+            action=cascade.effective_action,
+            duration=cascade.effective_duration,
+        )
+        resolved[model.name] = ResolvedModelAction(
+            change=change,
+            backfill=backfill,
+            cascade=cascade,
+        )
+        effective_cascades[model.name] = cascade
+
+    return PlannerResolvedActions(models=resolved)
+
+
 def resolve_cascade(
     *,
     model_name: str,
     own_backfill: BackfillResult,
+    local_backfill: BackfillResult,
     own_cursor_type: str | None,
     upstream_keys: tuple[CompiledObjectKey, ...],
     effective_cascades: dict[str, CascadeResult],
@@ -34,9 +112,9 @@ def resolve_cascade(
 ) -> CascadeResult | None:
     """Resolve the effective backfill for a model after upstream cascade propagation.
 
-    Returns None if no upstream produces a stronger effective window than the
-    model's own backfill. Returns a CascadeResult with the effective window,
-    all contributing upstream causes, and the nominated root decider.
+    Returns None if no upstream changes the model's effective propagated
+    backfill. Returns a CascadeResult with the effective window, all
+    contributing upstream causes, and the nominated root decider.
     """
 
     candidates: list[CascadeCause] = _gather_cascade_candidates(
@@ -49,13 +127,21 @@ def resolve_cascade(
     if not candidates:
         return None
 
-    winning: CascadeCause | None = _pick_winner(candidates=candidates, own_backfill=own_backfill)
+    winning: CascadeCause | None = _pick_winner(candidates=candidates)
     if winning is None:
         return None
 
+    resolved_backfill: BackfillResult = _resolve_effective_backfill(
+        own_backfill=own_backfill,
+        local_backfill=local_backfill,
+        incoming_cascade=winning,
+    )
+    if _backfills_match(resolved_backfill, own_backfill):
+        return None
+
     return CascadeResult(
-        effective_action=winning.effective_action,
-        effective_duration=winning.effective_duration,
+        effective_action=resolved_backfill.action,
+        effective_duration=resolved_backfill.duration,
         root_cause=winning.root_cause or winning.model_name,
         root_reason=winning.root_reason,
         causes=tuple(candidates),
@@ -145,26 +231,21 @@ def _gather_cascade_candidates(
 def _pick_winner(
     *,
     candidates: list[CascadeCause],
-    own_backfill: BackfillResult,
 ) -> CascadeCause | None:
-    """Pick the candidate that exceeds the model's own backfill.
+    """Pick the strongest incoming candidate.
 
-    Returns the most aggressive candidate, or None if no candidate exceeds the
-    model's own backfill. Among tied candidates, picks alphabetically by model
-    name.
+    Among tied candidates, pick alphabetically by model name.
     """
 
-    own_rank: tuple[int, int] = _backfill_rank(own_backfill.action, own_backfill.duration)
-
     best: CascadeCause | None = None
-    best_rank: tuple[int, int] = own_rank
+    best_rank: tuple[int, int] | None = None
 
     candidate: CascadeCause
     for candidate in candidates:
         candidate_rank: tuple[int, int] = _backfill_rank(
             candidate.effective_action, candidate.effective_duration
         )
-        if candidate_rank > best_rank:
+        if best_rank is None or candidate_rank > best_rank:
             best = candidate
             best_rank = candidate_rank
         elif candidate_rank == best_rank and best is not None:
@@ -172,6 +253,30 @@ def _pick_winner(
                 best = candidate
 
     return best
+
+
+def _resolve_effective_backfill(
+    *,
+    own_backfill: BackfillResult,
+    local_backfill: BackfillResult,
+    incoming_cascade: CascadeCause,
+) -> BackfillResult:
+    """Resolve the model's outgoing pressure from local and incoming state."""
+
+    if own_backfill.action != BackfillAction.WARN_ONLY:
+        return own_backfill
+    if local_backfill.action != BackfillAction.WARN_ONLY:
+        return local_backfill
+    return BackfillResult(
+        action=incoming_cascade.effective_action,
+        duration=incoming_cascade.effective_duration,
+    )
+
+
+def _backfills_match(a: BackfillResult, b: BackfillResult) -> bool:
+    """Return True when two backfill results resolve identically."""
+
+    return a.action == b.action and a.duration == b.duration
 
 
 def _backfill_rank(action: BackfillAction, duration: str | None) -> tuple[int, int]:
@@ -189,6 +294,23 @@ def _backfill_rank(action: BackfillAction, duration: str | None) -> tuple[int, i
         if td is not None:
             duration_seconds = int(td.total_seconds())
     return (action_rank, duration_seconds)
+
+
+def _get_config_str(model: CompiledModel, key: str) -> str | None:
+    value: object | None = model.config.values.get(key)
+    return value if isinstance(value, str) else None
+
+
+def _reason_for_change(change: ChangeDetectionResult) -> PlanReason:
+    if change.change_kind == ChangeKind.QUERY_CHANGED:
+        return PlanReason.QUERY_CHANGED
+    if change.change_kind == ChangeKind.CONFIG_CHANGED:
+        return PlanReason.CONFIG_CHANGED
+    if change.change_kind == ChangeKind.SCHEMA_CHANGED:
+        return PlanReason.SCHEMA_CHANGED
+    if change.change_kind == ChangeKind.FIRST_RUN:
+        return PlanReason.FIRST_RUN
+    return PlanReason.NO_CHANGE
 
 
 def _parse_duration(duration: str) -> timedelta | None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from textwrap import dedent
 
 import pytest
 
@@ -12,7 +13,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery._test_types import (
     BigQueryDiffE2ETestCase,
     BigQueryErrorE2ETestCase,
     BigQueryIntermediateDagStrategyE2ETestCase,
+    BigQueryJanitorDetachedVdeE2ETestCase,
     BigQueryModelBuildE2ETestCase,
+    BigQueryReconcileE2ETestCase,
     BigQueryScenarioLocalReplayE2ETestCase,
     BigQueryScenarioRemoteE2ETestCase,
     BigQuerySnapshotApplyE2ETestCase,
@@ -20,6 +23,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery._test_types import (
     BigQuerySourceDeferralE2ETestCase,
     BigQuerySourceLoaderSchemaEvolutionE2ETestCase,
     BigQuerySourceLoaderStrategiesE2ETestCase,
+    BigQueryVirtualLifecycleE2ETestCase,
+    BigQueryVirtualSeedE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.bigquery.helpers import (
     assert_bigquery_snapshot_apply_rows,
@@ -29,6 +34,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery.helpers import (
     build_bigquery_local_config,
     build_bigquery_project_toml,
     build_bigquery_source_deferral_project_toml,
+    build_bigquery_virtual_seed_project_toml,
     cleanup_bigquery_dataset,
     ensure_bigquery_dataset_ready,
     execute_bigquery_sql,
@@ -39,6 +45,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery.helpers import (
     prepare_bigquery_source_loader_strategies,
     prepare_bigquery_waffle_shop,
     relation_name,
+    virtual_seed_orders_model,
+    virtual_seed_source_yml,
     write_local_environment_override,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.load.helpers import (
@@ -60,6 +68,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     build_real_warehouse_existing_snapshot_project_files,
     build_real_warehouse_snapshot_project_files,
     prepare_inline_project,
+    query_duckdb,
     run_sqb,
     stringify_warehouse_rows,
 )
@@ -67,6 +76,443 @@ from tests.integration.src.sqlbuild.adapters.bigquery.helpers import (
     build_bigquery_connection_config,
     build_unique_dataset_name,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryVirtualSeedE2ETestCase(
+            description="virtual seeded incremental build uses clone on bigquery",
+            expected_rows=(("1", "10"), ("2", "21"), ("3", "31")),
+            expected_seed_strategy="durable_clone",
+        )
+    ],
+    ids=["virtual seeded incremental build uses clone on bigquery"],
+)
+def test_given_virtual_incremental_change_when_building_on_bigquery_then_seeds_with_clone(
+    test_case: BigQueryVirtualSeedE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    dataset_name: str = build_unique_dataset_name(prefix="sqlbuild_virtual_seed")
+    project_id: str = str(build_bigquery_connection_config(schema=dataset_name)["project"])
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="bigquery_virtual_seed",
+        repo_files={
+            "sqlbuild_project.toml": build_bigquery_virtual_seed_project_toml(
+                project_name="bigquery_virtual_seed",
+                dataset_name=dataset_name,
+            ),
+            "sources/raw.yml": virtual_seed_source_yml(dataset_name=dataset_name),
+            "models/orders.sql": virtual_seed_orders_model(amount_expression="amount_cents + 0"),
+        },
+    )
+    try:
+        ensure_bigquery_dataset_ready(dataset_name=dataset_name)
+        execute_bigquery_sql(
+            dataset_name=dataset_name,
+            sql=dedent(
+                f"""
+                CREATE OR REPLACE TABLE
+                  {relation_name(dataset_name=dataset_name, name="raw_orders")} AS
+                SELECT
+                  1 AS id,
+                  TIMESTAMP '2026-01-01 00:00:00 UTC' AS ordered_at,
+                  10 AS amount_cents
+                UNION ALL
+                SELECT 2, TIMESTAMP '2026-01-02 00:00:00 UTC', 20
+                """
+            ).strip(),
+        )
+        assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        (project_dir / "models" / "orders.sql").write_text(
+            virtual_seed_orders_model(amount_expression="amount_cents + 1"),
+            encoding="utf-8",
+        )
+        execute_bigquery_sql(
+            dataset_name=dataset_name,
+            sql=(
+                f"INSERT INTO {relation_name(dataset_name=dataset_name, name='raw_orders')} "
+                "VALUES (3, TIMESTAMP '2026-01-03 00:00:00 UTC', 30)"
+            ),
+        )
+
+        build_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "build",
+                "--start-cursor-ts",
+                "2026-01-02T00:00:00",
+                "--end-cursor-ts",
+                "2026-01-04T00:00:00",
+            ),
+            project_dir=project_dir,
+        )
+
+        assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+        assert (
+            stringify_warehouse_rows(
+                fetch_bigquery_rows(
+                    dataset_name=dataset_name,
+                    sql=(
+                        f"SELECT id, amount_cents FROM `{project_id}.{dataset_name}__dev.orders` "
+                        "ORDER BY id"
+                    ),
+                )
+            )
+            == test_case.expected_rows
+        )
+        assert query_duckdb(
+            db_path=project_dir / "state.duckdb",
+            sql=(
+                "SELECT seed_strategy FROM sqlbuild_state.physical_relation_ancestry "
+                "WHERE model_name = 'orders'"
+            ),
+        ) == [(test_case.expected_seed_strategy,)]
+    finally:
+        cleanup_bigquery_dataset(dataset_name=dataset_name)
+        cleanup_bigquery_dataset(dataset_name=f"{dataset_name}__dev")
+        cleanup_bigquery_dataset(dataset_name=f"{dataset_name}__sqb_physical")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryReconcileE2ETestCase(
+            description="reconcile repair-view recreates bigquery logical view",
+            expected_rows=(("1",),),
+            expected_stdout_fragments=(
+                "Repair",
+                "model   orders",
+                "VDE     dev",
+                "action  recreate logical view from state",
+                "result  repaired",
+            ),
+        )
+    ],
+    ids=["reconcile repair-view recreates bigquery logical view"],
+)
+def test_given_missing_logical_view_when_repairing_on_bigquery_then_view_is_recreated(
+    test_case: BigQueryReconcileE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    dataset_name: str = build_unique_dataset_name(prefix="sqlbuild_virtual_reconcile")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="bigquery_virtual_reconcile",
+        repo_files={
+            "sqlbuild_project.toml": build_bigquery_virtual_seed_project_toml(
+                project_name="bigquery_virtual_reconcile",
+                dataset_name=dataset_name,
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+    try:
+        ensure_bigquery_dataset_ready(dataset_name=dataset_name)
+        assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        execute_bigquery_sql(
+            dataset_name=dataset_name,
+            sql=f"DROP VIEW {relation_name(dataset_name=f'{dataset_name}__dev', name='orders')}",
+        )
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "reconcile",
+                "repair-view",
+                "--virtual-env",
+                "dev",
+                "--model",
+                "orders",
+            ),
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in result.stdout
+        assert (
+            stringify_warehouse_rows(
+                fetch_bigquery_rows(
+                    dataset_name=dataset_name,
+                    sql=(
+                        "SELECT id FROM "
+                        f"{relation_name(dataset_name=f'{dataset_name}__dev', name='orders')} "
+                        "ORDER BY id"
+                    ),
+                )
+            )
+            == test_case.expected_rows
+        )
+    finally:
+        cleanup_bigquery_dataset(dataset_name=dataset_name)
+        cleanup_bigquery_dataset(dataset_name=f"{dataset_name}__dev")
+        cleanup_bigquery_dataset(dataset_name=f"{dataset_name}__sqb_physical")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryReconcileE2ETestCase(
+            description="reconcile attach rebinds bigquery logical view",
+            expected_rows=(("2",),),
+            expected_stdout_fragments=("Attach", "model     orders", "result    attached"),
+        )
+    ],
+    ids=["reconcile attach rebinds bigquery logical view"],
+)
+def test_given_tracked_physical_relation_when_attaching_on_bigquery_then_view_is_rebound(
+    test_case: BigQueryReconcileE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    dataset_name: str = build_unique_dataset_name(prefix="sqlbuild_virtual_attach")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="bigquery_virtual_attach",
+        repo_files={
+            "sqlbuild_project.toml": build_bigquery_virtual_seed_project_toml(
+                project_name="bigquery_virtual_attach",
+                dataset_name=dataset_name,
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+    try:
+        ensure_bigquery_dataset_ready(dataset_name=dataset_name)
+        assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        (project_dir / "models" / "orders.sql").write_text(
+            "MODEL ();\n\nSELECT 2 AS id\n",
+            encoding="utf-8",
+        )
+        assert (
+            run_sqb(
+                command=("--no-color", "build", "--virtual-env", "pr"),
+                project_dir=project_dir,
+            ).returncode
+            == 0
+        )
+        project_id, physical_dataset_name, physical_relation_name = query_duckdb(
+            db_path=project_dir / "state.duckdb",
+            sql=(
+                "SELECT database_name, schema_name, relation_name "
+                "FROM sqlbuild_state.physical_relations "
+                "WHERE model_name = 'orders' ORDER BY updated_at DESC LIMIT 1"
+            ),
+        )[0]
+        physical_relation: str = f"`{project_id}.{physical_dataset_name}.{physical_relation_name}`"
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "reconcile",
+                "attach",
+                "--virtual-env",
+                "dev",
+                "--model",
+                "orders",
+                "--physical-relation",
+                physical_relation,
+                "--auto-approve",
+            ),
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in result.stdout
+        assert (
+            stringify_warehouse_rows(
+                fetch_bigquery_rows(
+                    dataset_name=dataset_name,
+                    sql=(
+                        "SELECT id FROM "
+                        f"{relation_name(dataset_name=f'{dataset_name}__dev', name='orders')} "
+                        "ORDER BY id"
+                    ),
+                )
+            )
+            == test_case.expected_rows
+        )
+    finally:
+        cleanup_bigquery_dataset(dataset_name=dataset_name)
+        cleanup_bigquery_dataset(dataset_name=f"{dataset_name}__dev")
+        cleanup_bigquery_dataset(dataset_name=f"{dataset_name}__pr")
+        cleanup_bigquery_dataset(dataset_name=f"{dataset_name}__sqb_physical")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryVirtualLifecycleE2ETestCase(
+            description="adopt and detach preserve bigquery logical table",
+            expected_rows=(("1",),),
+            expected_stdout_fragments=(
+                "Adopted 1 models into virtual environment dev.",
+                "Detached 1 models from virtual environment dev.",
+            ),
+        )
+    ],
+    ids=["adopt and detach preserve bigquery logical table"],
+)
+def test_given_stateless_table_when_adopting_and_detaching_on_bigquery_then_table_is_preserved(
+    test_case: BigQueryVirtualLifecycleE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    dataset_name: str = build_unique_dataset_name(prefix="sqlbuild_virtual_lifecycle")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="bigquery_virtual_lifecycle",
+        repo_files={
+            "sqlbuild_project.toml": build_bigquery_virtual_seed_project_toml(
+                project_name="bigquery_virtual_lifecycle",
+                dataset_name=dataset_name,
+                unsuffixed_virtual_env="dev",
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+    try:
+        ensure_bigquery_dataset_ready(dataset_name=dataset_name)
+        execute_bigquery_sql(
+            dataset_name=dataset_name,
+            sql=(
+                "CREATE OR REPLACE TABLE "
+                f"{relation_name(dataset_name=dataset_name, name='orders')} "
+                "AS SELECT 1 AS id"
+            ),
+        )
+        assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+        adopt_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "state", "adopt", "--allow-copy"),
+            project_dir=project_dir,
+            input_text="adopt dev\n",
+        )
+        detach_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "state", "detach", "--allow-copy"),
+            project_dir=project_dir,
+            input_text="detach dev\n",
+        )
+
+        assert adopt_result.returncode == test_case.expected_return_code, (
+            adopt_result.stdout + adopt_result.stderr
+        )
+        assert detach_result.returncode == test_case.expected_return_code, (
+            detach_result.stdout + detach_result.stderr
+        )
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in adopt_result.stdout + detach_result.stdout
+        assert (
+            stringify_warehouse_rows(
+                fetch_bigquery_rows(
+                    dataset_name=dataset_name,
+                    sql=(
+                        f"SELECT id FROM {relation_name(dataset_name=dataset_name, name='orders')} "
+                        "ORDER BY id"
+                    ),
+                )
+            )
+            == test_case.expected_rows
+        )
+    finally:
+        cleanup_bigquery_dataset(dataset_name=dataset_name)
+        cleanup_bigquery_dataset(dataset_name=f"{dataset_name}__sqb_physical")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryJanitorDetachedVdeE2ETestCase(
+            description="janitor prunes bigquery detached VDE refs and physical versions",
+            expected_stdout_fragments=(
+                "eligible for deletion",
+                "detached VDEs pruned",
+                "Eligible detached VDEs",
+                "dev  detached virtual environment",
+                "state items",
+            ),
+            expected_virtual_environment_count_after=0,
+            expected_ref_count_after=0,
+        )
+    ],
+    ids=["janitor prunes bigquery detached VDE refs and physical versions"],
+)
+def test_given_detached_vde_when_running_janitor_on_bigquery_then_refs_are_pruned(
+    test_case: BigQueryJanitorDetachedVdeE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    dataset_name: str = build_unique_dataset_name(prefix="sqlbuild_virtual_janitor")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="bigquery_virtual_janitor",
+        repo_files={
+            "sqlbuild_project.toml": (
+                build_bigquery_virtual_seed_project_toml(
+                    project_name="bigquery_virtual_janitor",
+                    dataset_name=dataset_name,
+                    unsuffixed_virtual_env="dev",
+                )
+                + "\n[janitor]\n"
+                + "enabled = true\n"
+                + "retention_days = 0\n"
+                + "delete_tracked_only = false\n"
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+    try:
+        ensure_bigquery_dataset_ready(dataset_name=dataset_name)
+        execute_bigquery_sql(
+            dataset_name=dataset_name,
+            sql=(
+                "CREATE OR REPLACE TABLE "
+                f"{relation_name(dataset_name=dataset_name, name='orders')} "
+                "AS SELECT 1 AS id"
+            ),
+        )
+        assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+        assert (
+            run_sqb(
+                command=("--no-color", "state", "adopt", "--allow-copy"),
+                project_dir=project_dir,
+                input_text="adopt dev\n",
+            ).returncode
+            == 0
+        )
+        assert (
+            run_sqb(
+                command=("--no-color", "state", "detach", "--allow-copy"),
+                project_dir=project_dir,
+                input_text="detach dev\n",
+            ).returncode
+            == 0
+        )
+
+        janitor_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "janitor", "--auto-approve"),
+            project_dir=project_dir,
+        )
+
+        assert janitor_result.returncode == test_case.expected_return_code, (
+            janitor_result.stdout + janitor_result.stderr
+        )
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in janitor_result.stdout
+        assert query_duckdb(
+            db_path=project_dir / "state.duckdb",
+            sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environments",
+        ) == [(test_case.expected_virtual_environment_count_after,)]
+        assert query_duckdb(
+            db_path=project_dir / "state.duckdb",
+            sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_refs",
+        ) == [(test_case.expected_ref_count_after,)]
+    finally:
+        cleanup_bigquery_dataset(dataset_name=dataset_name)
+        cleanup_bigquery_dataset(dataset_name=f"{dataset_name}__sqb_physical")
+
 
 BIGQUERY_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES: list[BigQueryScenarioLocalReplayE2ETestCase] = [
     BigQueryScenarioLocalReplayE2ETestCase(

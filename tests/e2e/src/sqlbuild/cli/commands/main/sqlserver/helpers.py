@@ -49,6 +49,40 @@ def build_sqlserver_project_toml(
     )
 
 
+def build_sqlserver_virtual_project_toml(
+    *,
+    project_name: str,
+    schema_name: str,
+    config: dict[str, object],
+    unsuffixed_virtual_env: str | None = None,
+) -> str:
+    unsuffixed_line: str = (
+        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n'
+        if unsuffixed_virtual_env is not None
+        else ""
+    )
+    return (
+        f'name = "{project_name}"\n'
+        'adapter = "sqlserver"\n'
+        'environment_mode = "virtual"\n'
+        'default_environment = "dev"\n\n'
+        "[connection]\n"
+        f'host = "{config["host"]}"\n'
+        f"port = {config['port']}\n"
+        f'database = "{config["database"]}"\n'
+        f'user = "{config["user"]}"\n'
+        f'password = "{config["password"]}"\n\n'
+        "[environments.dev]\n"
+        f'schema = "{schema_name}"\n\n'
+        "[environments.dev.state]\n"
+        'backend = "duckdb"\n'
+        'schema = "sqlbuild_state"\n'
+        f"{unsuffixed_line}\n"
+        "[environments.dev.state.connection]\n"
+        'database = "state.duckdb"\n'
+    )
+
+
 def build_sqlserver_source_deferral_project_toml(
     *, project_name: str, dev_schema_name: str, prod_schema_name: str, config: dict[str, object]
 ) -> str:

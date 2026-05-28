@@ -12,17 +12,22 @@ from tests.e2e.src.sqlbuild.cli.commands.main.databricks._test_types import (
     DatabricksDiffE2ETestCase,
     DatabricksErrorE2ETestCase,
     DatabricksIntermediateDagStrategyE2ETestCase,
+    DatabricksJanitorDetachedVdeE2ETestCase,
+    DatabricksReconcileE2ETestCase,
     DatabricksScenarioLocalReplayE2ETestCase,
     DatabricksScenarioRemoteE2ETestCase,
     DatabricksSnapshotApplyE2ETestCase,
     DatabricksSnapshotE2ETestCase,
     DatabricksSourceLoaderStrategiesE2ETestCase,
+    DatabricksVirtualLifecycleE2ETestCase,
+    DatabricksVirtualSeedE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.databricks.helpers import (
     assert_current_databricks_snapshot_rows,
     assert_databricks_snapshot_apply_rows,
     assert_databricks_snapshot_matrix_rows,
     build_databricks_project_toml,
+    build_databricks_virtual_project_toml,
     cleanup_databricks_schema,
     databricks_e2e_timing,
     databricks_relation_row_count,
@@ -55,10 +60,370 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     build_real_warehouse_existing_snapshot_project_files,
     build_real_warehouse_snapshot_project_files,
     prepare_inline_project,
+    query_duckdb,
     run_sqb,
     stringify_warehouse_rows,
 )
 from tests.integration.src.sqlbuild.adapters.databricks.helpers import build_unique_schema_name
+
+
+@pytest.mark.skip(reason="Databricks warehouse access is currently unavailable")
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksVirtualSeedE2ETestCase(
+            description="virtual seeded incremental build uses deep clone on databricks",
+            expected_rows=(("1", "10"), ("2", "21"), ("3", "31")),
+            expected_seed_strategy="durable_clone",
+        )
+    ],
+    ids=["virtual seeded incremental build uses deep clone on databricks"],
+)
+def test_given_virtual_incremental_change_when_building_on_databricks_then_seeds_with_deep_clone(
+    tmp_path: Path,
+    test_case: DatabricksVirtualSeedE2ETestCase,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_virtual_seed")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="databricks_virtual_seed",
+        repo_files={
+            "sqlbuild_project.toml": build_databricks_virtual_project_toml(
+                project_name="databricks_virtual_seed",
+                schema_name=schema_name,
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                f"    schema: {schema_name}\n"
+                "    table: raw_orders\n"
+            ),
+            "models/orders.sql": (
+                "MODEL (\n"
+                "  materialized incremental,\n"
+                "  incremental_strategy delete_insert,\n"
+                "  cursor ordered_at,\n"
+                "  cursor_type timestamp,\n"
+                "  cursor_grain day,\n"
+                "  query_change_backfill bounded-7d\n"
+                ");\n\n"
+                "SELECT id, ordered_at, amount_cents + 0 AS amount_cents\n"
+                'FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    try:
+        ensure_databricks_schema_ready(schema_name=schema_name)
+        execute_databricks_sql(
+            schema_name=schema_name,
+            sql=(
+                "CREATE OR REPLACE TABLE "
+                f"{relation_name(schema_name=schema_name, name='raw_orders')} AS "
+                "SELECT 1 AS id, TIMESTAMP '2026-01-01 00:00:00' AS ordered_at, "
+                "10 AS amount_cents UNION ALL "
+                "SELECT 2, TIMESTAMP '2026-01-02 00:00:00', 20"
+            ),
+        )
+        assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        (project_dir / "models" / "orders.sql").write_text(
+            (
+                "MODEL (\n"
+                "  materialized incremental,\n"
+                "  incremental_strategy delete_insert,\n"
+                "  cursor ordered_at,\n"
+                "  cursor_type timestamp,\n"
+                "  cursor_grain day,\n"
+                "  query_change_backfill bounded-7d\n"
+                ");\n\n"
+                "SELECT id, ordered_at, amount_cents + 1 AS amount_cents\n"
+                'FROM __source("raw_orders")\n'
+            ),
+            encoding="utf-8",
+        )
+        execute_databricks_sql(
+            schema_name=schema_name,
+            sql=(
+                f"INSERT INTO {relation_name(schema_name=schema_name, name='raw_orders')} "
+                "VALUES (3, TIMESTAMP '2026-01-03 00:00:00', 30)"
+            ),
+        )
+
+        build_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "build",
+                "--start-cursor-ts",
+                "2026-01-02T00:00:00",
+                "--end-cursor-ts",
+                "2026-01-04T00:00:00",
+            ),
+            project_dir=project_dir,
+        )
+
+        assert build_result.returncode == test_case.expected_return_code, (
+            build_result.stdout + build_result.stderr
+        )
+        rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+            schema_name=schema_name,
+            sql=(
+                f"SELECT id, amount_cents FROM "
+                f"{relation_name(schema_name=f'{schema_name}__dev', name='orders')} "
+                "ORDER BY id"
+            ),
+        )
+        assert stringify_warehouse_rows(rows) == test_case.expected_rows
+        assert query_duckdb(
+            db_path=project_dir / "state.duckdb",
+            sql=(
+                "SELECT seed_strategy FROM sqlbuild_state.physical_relation_ancestry "
+                "WHERE model_name = 'orders'"
+            ),
+        ) == [(test_case.expected_seed_strategy,)]
+    finally:
+        cleanup_databricks_schema(schema_name=schema_name)
+        cleanup_databricks_schema(schema_name=f"{schema_name}__dev")
+        cleanup_databricks_schema(schema_name=f"{schema_name}__sqb_physical")
+
+
+@pytest.mark.skip(reason="Databricks warehouse access is currently unavailable")
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksReconcileE2ETestCase(
+            description="reconcile repair-view recreates databricks logical view",
+            expected_rows=(("1",),),
+            expected_stdout_fragments=(
+                "Repair",
+                "model   orders",
+                "VDE     dev",
+                "action  recreate logical view from state",
+                "result  repaired",
+            ),
+        )
+    ],
+    ids=["reconcile repair-view recreates databricks logical view"],
+)
+def test_given_missing_logical_view_when_repairing_on_databricks_then_view_is_recreated(
+    tmp_path: Path,
+    test_case: DatabricksReconcileE2ETestCase,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_virtual_reconcile")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="databricks_virtual_reconcile",
+        repo_files={
+            "sqlbuild_project.toml": build_databricks_virtual_project_toml(
+                project_name="databricks_virtual_reconcile",
+                schema_name=schema_name,
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+    try:
+        ensure_databricks_schema_ready(schema_name=schema_name)
+        assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        execute_databricks_sql(
+            schema_name=schema_name,
+            sql=f"DROP VIEW {relation_name(schema_name=f'{schema_name}__dev', name='orders')}",
+        )
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "reconcile",
+                "repair-view",
+                "--virtual-env",
+                "dev",
+                "--model",
+                "orders",
+            ),
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in result.stdout
+        rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+            schema_name=schema_name,
+            sql=(
+                f"SELECT id FROM {relation_name(schema_name=f'{schema_name}__dev', name='orders')} "
+                "ORDER BY id"
+            ),
+        )
+        assert stringify_warehouse_rows(rows) == test_case.expected_rows
+    finally:
+        cleanup_databricks_schema(schema_name=schema_name)
+        cleanup_databricks_schema(schema_name=f"{schema_name}__dev")
+        cleanup_databricks_schema(schema_name=f"{schema_name}__sqb_physical")
+
+
+@pytest.mark.skip(reason="Databricks warehouse access is currently unavailable")
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksVirtualLifecycleE2ETestCase(
+            description="adopt and detach preserve databricks logical table",
+            expected_rows=(("1",),),
+            expected_stdout_fragments=(
+                "Adopted 1 models into virtual environment dev.",
+                "Detached 1 models from virtual environment dev.",
+            ),
+        )
+    ],
+    ids=["adopt and detach preserve databricks logical table"],
+)
+def test_given_stateless_table_when_adopting_and_detaching_on_databricks_then_table_is_preserved(
+    tmp_path: Path,
+    test_case: DatabricksVirtualLifecycleE2ETestCase,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_virtual_lifecycle")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="databricks_virtual_lifecycle",
+        repo_files={
+            "sqlbuild_project.toml": build_databricks_virtual_project_toml(
+                project_name="databricks_virtual_lifecycle",
+                schema_name=schema_name,
+                unsuffixed_virtual_env="dev",
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+    try:
+        ensure_databricks_schema_ready(schema_name=schema_name)
+        execute_databricks_sql(
+            schema_name=schema_name,
+            sql=(
+                f"CREATE OR REPLACE TABLE {relation_name(schema_name=schema_name, name='orders')} "
+                "AS SELECT 1 AS id"
+            ),
+        )
+        assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+        adopt_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "state", "adopt", "--allow-copy"),
+            project_dir=project_dir,
+            input_text="adopt dev\n",
+        )
+        detach_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "state", "detach", "--allow-copy"),
+            project_dir=project_dir,
+            input_text="detach dev\n",
+        )
+
+        assert adopt_result.returncode == test_case.expected_return_code, (
+            adopt_result.stdout + adopt_result.stderr
+        )
+        assert detach_result.returncode == test_case.expected_return_code, (
+            detach_result.stdout + detach_result.stderr
+        )
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in adopt_result.stdout + detach_result.stdout
+        rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+            schema_name=schema_name,
+            sql=(
+                f"SELECT id FROM {relation_name(schema_name=schema_name, name='orders')} "
+                "ORDER BY id"
+            ),
+        )
+        assert stringify_warehouse_rows(rows) == test_case.expected_rows
+    finally:
+        cleanup_databricks_schema(schema_name=schema_name)
+        cleanup_databricks_schema(schema_name=f"{schema_name}__sqb_physical")
+
+
+@pytest.mark.skip(reason="Databricks warehouse access is currently unavailable")
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksJanitorDetachedVdeE2ETestCase(
+            description="janitor prunes databricks detached VDE refs and physical versions",
+            expected_stdout_fragments=(
+                "eligible for deletion",
+                "detached VDEs pruned",
+                "Eligible detached VDEs",
+                "dev  detached virtual environment",
+                "state items",
+            ),
+            expected_virtual_environment_count_after=0,
+            expected_ref_count_after=0,
+        )
+    ],
+    ids=["janitor prunes databricks detached VDE refs and physical versions"],
+)
+def test_given_detached_vde_when_running_janitor_on_databricks_then_refs_are_pruned(
+    tmp_path: Path,
+    test_case: DatabricksJanitorDetachedVdeE2ETestCase,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_virtual_janitor")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="databricks_virtual_janitor",
+        repo_files={
+            "sqlbuild_project.toml": (
+                build_databricks_virtual_project_toml(
+                    project_name="databricks_virtual_janitor",
+                    schema_name=schema_name,
+                    unsuffixed_virtual_env="dev",
+                )
+                + "\n[janitor]\n"
+                + "enabled = true\n"
+                + "retention_days = 0\n"
+                + "delete_tracked_only = false\n"
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+    try:
+        ensure_databricks_schema_ready(schema_name=schema_name)
+        execute_databricks_sql(
+            schema_name=schema_name,
+            sql=(
+                f"CREATE OR REPLACE TABLE {relation_name(schema_name=schema_name, name='orders')} "
+                "AS SELECT 1 AS id"
+            ),
+        )
+        assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+        assert (
+            run_sqb(
+                command=("--no-color", "state", "adopt", "--allow-copy"),
+                project_dir=project_dir,
+                input_text="adopt dev\n",
+            ).returncode
+            == 0
+        )
+        assert (
+            run_sqb(
+                command=("--no-color", "state", "detach", "--allow-copy"),
+                project_dir=project_dir,
+                input_text="detach dev\n",
+            ).returncode
+            == 0
+        )
+
+        janitor_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "janitor", "--auto-approve"),
+            project_dir=project_dir,
+        )
+
+        assert janitor_result.returncode == test_case.expected_return_code, (
+            janitor_result.stdout + janitor_result.stderr
+        )
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in janitor_result.stdout
+        assert query_duckdb(
+            db_path=project_dir / "state.duckdb",
+            sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environments",
+        ) == [(test_case.expected_virtual_environment_count_after,)]
+        assert query_duckdb(
+            db_path=project_dir / "state.duckdb",
+            sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_refs",
+        ) == [(test_case.expected_ref_count_after,)]
+    finally:
+        cleanup_databricks_schema(schema_name=schema_name)
+        cleanup_databricks_schema(schema_name=f"{schema_name}__sqb_physical")
+
 
 DATABRICKS_INTERMEDIATE_DAG_STRATEGY_TEST_CASES: list[
     DatabricksIntermediateDagStrategyE2ETestCase

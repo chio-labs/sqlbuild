@@ -52,6 +52,9 @@ class DuckDbBackedAdapter(BaseAdapter):
     def supports_zero_copy_clone(self) -> bool:
         return False
 
+    def supports_durable_clone(self) -> bool:
+        return False
+
     def supports_relation_age_metadata(self) -> bool:
         return False
 
@@ -98,6 +101,39 @@ class DuckDbBackedAdapter(BaseAdapter):
             database=database,
             schema=schema,
         )
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def move_or_copy_relation(
+        self,
+        connection: Any,
+        *,
+        source: str,
+        target: str,
+        remove_source: bool,
+        allow_copy_fallback: bool,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        source_parent: str = source.rsplit(".", 1)[0] if "." in source else ""
+        target_parent: str = target.rsplit(".", 1)[0] if "." in target else ""
+        if remove_source and source_parent == target_parent:
+            self.rename(
+                connection,
+                source=source,
+                target=target,
+                statement_recorder=statement_recorder,
+            )
+            return
+        if not allow_copy_fallback:
+            raise AdapterUserError("DuckDB relation move/copy requires --allow-copy")
+        statements: tuple[str, ...] = self.render_replace_table_from_relation(
+            target=target,
+            source=source,
+        )
+        if remove_source:
+            statements = (*statements, *self.render_drop(target=source))
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -1288,6 +1324,44 @@ class DuckDbBackedAdapter(BaseAdapter):
         del hard_copy
         return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
 
+    def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
+        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+
+    def render_query_with_cursor_bounds(
+        self,
+        *,
+        sql: str,
+        cursor_column: str,
+        cursor_start: str,
+        cursor_end: str,
+        cursor_type: str | None,
+    ) -> str:
+        return self._render_query_with_cursor_bounds_impl(
+            sql=sql,
+            cursor_column=cursor_column,
+            cursor_start=cursor_start,
+            cursor_end=cursor_end,
+            cursor_type=cursor_type,
+        )
+
+    def render_seed_select_before_cursor(
+        self,
+        *,
+        source: str,
+        cursor_column: str,
+        cursor_end_exclusive: str,
+        cursor_type: str | None,
+    ) -> str:
+        return self._render_seed_select_before_cursor_impl(
+            source=source,
+            cursor_column=cursor_column,
+            cursor_end_exclusive=cursor_end_exclusive,
+            cursor_type=cursor_type,
+        )
+
+    def relation_names_match(self, left: str, right: str) -> bool:
+        return self._relation_names_match_impl(left, right)
+
     def clone(
         self,
         connection: Any,
@@ -1302,6 +1376,20 @@ class DuckDbBackedAdapter(BaseAdapter):
             target=target,
             hard_copy=hard_copy,
         )
+        statement_recorder.record_many(statements)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection, stmt)
+
+    def durable_clone(
+        self,
+        connection: Any,
+        *,
+        source: str,
+        target: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_durable_clone(source=source, target=target)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:

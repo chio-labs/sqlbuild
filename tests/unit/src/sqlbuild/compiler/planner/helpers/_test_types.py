@@ -496,6 +496,7 @@ class ResolveCascadeTestCase:
     own_cursor_type: str | None
     upstream_entries: tuple[tuple[str, BackfillAction, str | None, str | None], ...]
     expected_cascade: bool
+    local_policy: str | None = None
     expected_action: BackfillAction | None = None
     expected_duration: str | None = None
     expected_root_cause: str | None = None

@@ -10,6 +10,15 @@ from sqlbuild.spec.models.project import SnapshotsConfig
 
 
 @dataclass(frozen=True)
+class ModeGuardTestCase:
+    description: str
+    environment_mode: str
+    command_name: str
+    expected_error_fragment: str | None
+    defer_to: str | None = None
+
+
+@dataclass(frozen=True)
 class JsonOutputTestCase:
     description: str
     plan_output: PlanOutput

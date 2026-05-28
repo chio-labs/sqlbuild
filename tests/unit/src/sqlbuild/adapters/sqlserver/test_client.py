@@ -2,15 +2,18 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.adapters.sqlserver.client import SqlServerAdapter
 from sqlbuild.compiler.compile.models.core import FunctionArgument
 from tests.unit.src.sqlbuild.adapters.sqlserver._test_types import (
     SqlServerAdapterDefaultsTestCase,
+    SqlServerMoveOrCopyRelationTestCase,
     SqlServerRenderCreateFunctionTestCase,
     SqlServerRenderCreateSchemaTestCase,
     SqlServerRenderCreateTableAsTestCase,
     SqlServerRenderIdentifierTestCase,
 )
+from tests.unit.src.sqlbuild.adapters.sqlserver.helpers import FakeSqlServerConnection
 
 
 @pytest.mark.parametrize(
@@ -149,3 +152,40 @@ def test_given_schema_when_rendering_create_then_sqlserver_checks_sys_schemas(
     (statement,) = adapter.render_create_schema(database=None, schema=test_case.schema)
 
     assert statement == test_case.expected_statement
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerMoveOrCopyRelationTestCase(
+            description="moves table across schemas with transfer and rename",
+            source="[marts].[fact_orders]",
+            target="[marts__sqb_physical].[fact_orders__v_abc123]",
+            expected_statements=(
+                "ALTER SCHEMA [marts__sqb_physical] TRANSFER [marts].[fact_orders]",
+                "EXEC sp_rename '[marts__sqb_physical].[fact_orders]', 'fact_orders__v_abc123'",
+            ),
+        )
+    ],
+    ids=["moves table across schemas with transfer and rename"],
+)
+def test_given_cross_schema_table_move_when_moving_then_sqlserver_uses_native_transfer(
+    test_case: SqlServerMoveOrCopyRelationTestCase,
+) -> None:
+    adapter: SqlServerAdapter = SqlServerAdapter()
+    connection: FakeSqlServerConnection = FakeSqlServerConnection()
+    statement_recorder: StatementRecorder = StatementRecorder()
+
+    adapter.move_or_copy_relation(
+        connection,
+        source=test_case.source,
+        target=test_case.target,
+        remove_source=True,
+        allow_copy_fallback=False,
+        statement_recorder=statement_recorder,
+    )
+
+    assert tuple(connection.executed_sql) == test_case.expected_statements
+    assert tuple(event.content for event in statement_recorder.snapshot()) == (
+        test_case.expected_statements
+    )

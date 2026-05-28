@@ -14,6 +14,9 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.planner.main.version_identity_metadata import (
+    build_version_identity_metadata_json,
+)
 from sqlbuild.compiler.planner.models import WarehouseSnapshot
 from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers.changes._test_types import (
@@ -92,6 +95,11 @@ def _build_columns(
 def _build_fingerprints(test_case: DetectModelChangesTestCase) -> dict[str, Fingerprint]:
     if test_case.fingerprint_query_hash is None:
         return {}
+    fingerprint_config_values: dict[str, object] = (
+        test_case.config_values
+        if test_case.fingerprint_config_values is None
+        else test_case.fingerprint_config_values
+    )
     return {
         test_case.model_name: Fingerprint(
             model_name=test_case.model_name,
@@ -103,6 +111,10 @@ def _build_fingerprints(test_case: DetectModelChangesTestCase) -> dict[str, Fing
             ast_hash=test_case.fingerprint_ast_hash,
             schema_fingerprint="schema_a",
             query_sql="SELECT 1",
+            metadata_json=build_version_identity_metadata_json(
+                model_name=test_case.model_name,
+                config_values=fingerprint_config_values,
+            ),
             ts=_STUB_TS,
         )
     }

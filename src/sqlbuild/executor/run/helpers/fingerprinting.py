@@ -10,6 +10,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import ModelPlanEntry
+from sqlbuild.shared.helpers.hashing import compute_ast_hash, compute_query_hash
 
 
 def try_write_fingerprint(
@@ -33,8 +34,6 @@ def try_write_fingerprint(
         )
         return
     try:
-        normalized_sql: str = " ".join(entry.fingerprint_query_sql.split())
-        query_hash: str = hashlib.sha256(normalized_sql.encode()).hexdigest()
         schema_fp: str = hashlib.sha256(b"").hexdigest()
         fingerprint: Fingerprint = Fingerprint(
             model_name=entry.name,
@@ -42,10 +41,11 @@ def try_write_fingerprint(
             target_schema=entry.target.schema,
             target_name=entry.target.name,
             run_id=run_id,
-            query_hash=query_hash,
-            ast_hash=None,
+            query_hash=compute_query_hash(entry.fingerprint_query_sql),
+            ast_hash=compute_ast_hash(entry.fingerprint_query_sql),
             schema_fingerprint=schema_fp,
             query_sql=entry.fingerprint_query_sql,
+            metadata_json=entry.fingerprint_metadata_json or "{}",
             ts=datetime.now(tz=UTC),
         )
         execute_fn: Any = adapter.execute

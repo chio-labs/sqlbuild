@@ -15,6 +15,7 @@ from sqlbuild.compiler.auditing.types import (
     AuditSeverity,
 )
 from sqlbuild.compiler.compile.models.core import (
+    CompiledModel,
     CompiledObjectKey,
     CompiledRelationTarget,
     FunctionReturnColumn,
@@ -195,10 +196,89 @@ class ChangeDetectionResult:
     model_name: str
     change_kind: ChangeKind
     query_changed: bool = False
+    config_changed: bool = False
+    fingerprint_metadata_json: str | None = None
+    previous_metadata_json: str | None = None
     schema_findings: tuple[SchemaFinding, ...] = field(default_factory=tuple)
     backfill: BackfillResult = field(
         default_factory=lambda: BackfillResult(action=BackfillAction.WARN_ONLY)
     )
+
+
+@dataclass(frozen=True)
+class PlannerScope:
+    """Resolved graph scope for one planner invocation."""
+
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
+    downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
+    all_keys: dict[str, CompiledObjectKey]
+    models_by_name: dict[str, CompiledModel]
+    selected_keys: frozenset[CompiledObjectKey]
+    execution_order: tuple[CompiledObjectKey, ...]
+
+
+@dataclass(frozen=True)
+class PlannerWarehouseSnapshotResult:
+    """Warehouse discovery phase output with its resolved planning scope."""
+
+    scope: PlannerScope
+    snapshot: WarehouseSnapshot
+
+
+@dataclass(frozen=True)
+class PlannerRelationsContext:
+    """Resolved relation and source inputs for plan entry construction."""
+
+    model_targets: dict[str, CompiledRelationTarget]
+    seed_targets: dict[str, CompiledRelationTarget]
+    function_targets: dict[str, CompiledRelationTarget]
+    source_map: dict[str, SourceEntry]
+    source_read_map: dict[str, SourceEntry]
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]]
+    star_exclude_keyword: str
+
+
+@dataclass(frozen=True)
+class FunctionChangeResult:
+    """Per-function output from change detection."""
+
+    fingerprint_sql: str
+    reason: PlanReason = PlanReason.NO_CHANGE
+    backfill: BackfillResult = field(
+        default_factory=lambda: BackfillResult(action=BackfillAction.WARN_ONLY)
+    )
+
+
+@dataclass(frozen=True)
+class PlannerChangeResults:
+    """Change detection output for selected planner resources."""
+
+    models: dict[str, ChangeDetectionResult]
+    functions: dict[str, FunctionChangeResult]
+
+
+@dataclass(frozen=True)
+class ResolvedModelAction:
+    """Effective model change and backfill after cascade resolution."""
+
+    change: ChangeDetectionResult
+    backfill: BackfillResult
+    cascade: CascadeResult | None = None
+
+
+@dataclass(frozen=True)
+class PlannerResolvedActions:
+    """Cascade-resolved planning decisions keyed by model name."""
+
+    models: dict[str, ResolvedModelAction]
+
+
+@dataclass(frozen=True)
+class PlannerModelEntryResults:
+    """Model plan-entry phase output."""
+
+    entries: tuple[ModelPlanEntry, ...]
+    warnings: tuple[PlanWarning, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -264,6 +344,8 @@ class ModelPlanEntry:
     pre_hook: object = None
     post_hook: object = None
     previous_query_sql: str | None = None
+    fingerprint_metadata_json: str | None = None
+    previous_metadata_json: str | None = None
     schema_actions: tuple[SchemaAction, ...] = field(default_factory=tuple)
     schema_findings: tuple[SchemaFinding, ...] = field(default_factory=tuple)
     backfill: BackfillResult = field(
@@ -513,3 +595,4 @@ class PlanOutput:
     seed_targets: dict[str, CompiledRelationTarget] = field(default_factory=dict)
     function_targets: dict[str, CompiledRelationTarget] = field(default_factory=dict)
     source_map: dict[str, SourceEntry] = field(default_factory=dict)
+    metadata: dict[str, object] = field(default_factory=dict)

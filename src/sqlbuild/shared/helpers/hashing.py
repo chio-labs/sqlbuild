@@ -1,4 +1,4 @@
-"""Hash computation for fingerprint comparison."""
+"""Hash computation for query and schema fingerprints."""
 
 from __future__ import annotations
 
@@ -13,28 +13,21 @@ _WHITESPACE_RUN: re.Pattern[str] = re.compile(r"\s+")
 
 
 def normalize_query_sql(query_sql: str) -> str:
-    """Normalize query SQL for stable hashing.
-
-    Strips leading/trailing whitespace and collapses internal whitespace runs
-    to single spaces. Does not alter casing or identifiers.
-    """
+    """Normalize query SQL for stable hashing."""
 
     stripped: str = query_sql.strip()
     return _WHITESPACE_RUN.sub(" ", stripped)
 
 
 def compute_query_hash(query_sql: str) -> str:
-    """Compute a stable hash of compiled query SQL after normalization."""
+    """Compute a stable hash of query SQL after normalization."""
 
     normalized: str = normalize_query_sql(query_sql)
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def compute_ast_hash(query_sql: str) -> str | None:
-    """Compute a stable hash from the SQLGlot-normalized AST.
-
-    Returns None if SQLGlot is not available or the SQL cannot be parsed.
-    """
+    """Compute a stable hash from the SQLGlot-normalized AST."""
 
     sqlglot_module: Any | None = import_sqlglot()
     if sqlglot_module is None:

@@ -6,7 +6,7 @@ from sqlbuild.compiler.compile.models.core import CompiledModel
 from sqlbuild.compiler.planner.helpers.changes.detect import detect_model_changes
 from sqlbuild.compiler.planner.models import ChangeDetectionResult, WarehouseSnapshot
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
-from sqlbuild.compiler.shared.helpers.hashing import compute_query_hash
+from sqlbuild.shared.helpers.hashing import compute_query_hash
 from tests.unit.src.sqlbuild.compiler.planner.helpers.changes._test_helpers import (
     build_model_from_test_case,
     build_snapshot_from_test_case,
@@ -112,6 +112,40 @@ DETECT_MODEL_CHANGES_TEST_CASES: list[DetectModelChangesTestCase] = [
         warehouse_column_names=(),
         sqlglot_enabled=False,
         query_change_tracking=False,
+        full_refresh=False,
+        expected_change_kind=ChangeKind.NO_CHANGE,
+        expected_backfill_action=BackfillAction.WARN_ONLY,
+    ),
+    DetectModelChangesTestCase(
+        description="detects config change when version identity config differs",
+        model_name="orders",
+        query_sql=_QUERY_SQL,
+        config_values={"materialized": "table"},
+        fingerprint_config_values={"materialized": "view"},
+        schema_columns=(),
+        relation_exists=True,
+        fingerprint_query_hash=_MATCHING_HASH,
+        fingerprint_ast_hash=None,
+        warehouse_column_names=(),
+        sqlglot_enabled=False,
+        query_change_tracking=True,
+        full_refresh=False,
+        expected_change_kind=ChangeKind.CONFIG_CHANGED,
+        expected_backfill_action=BackfillAction.WARN_ONLY,
+    ),
+    DetectModelChangesTestCase(
+        description="ignores unknown config differences",
+        model_name="orders",
+        query_sql=_QUERY_SQL,
+        config_values={"future_default_flag": "off"},
+        fingerprint_config_values={},
+        schema_columns=(),
+        relation_exists=True,
+        fingerprint_query_hash=_MATCHING_HASH,
+        fingerprint_ast_hash=None,
+        warehouse_column_names=(),
+        sqlglot_enabled=False,
+        query_change_tracking=True,
         full_refresh=False,
         expected_change_kind=ChangeKind.NO_CHANGE,
         expected_backfill_action=BackfillAction.WARN_ONLY,

@@ -83,6 +83,7 @@ class FakeJanitorAdapter(BaseAdapter):
                     None,
                     "schema_hash",
                     base64.b64encode(b"SELECT 1").decode("ascii"),
+                    base64.b64encode(b"{}").decode("ascii"),
                     "2026-01-15T12:00:00",
                 )
             )
@@ -324,6 +325,48 @@ class FakeJanitorAdapter(BaseAdapter):
     ) -> int:
         raise NotImplementedError
 
+    def relation_names_match(self, left: str, right: str) -> bool:
+        return left == right
+
+    def render_query_with_cursor_bounds(
+        self,
+        *,
+        sql: str,
+        cursor_column: str,
+        cursor_start: str,
+        cursor_end: str | None,
+        cursor_type: object,
+    ) -> str:
+        raise NotImplementedError
+
+    def render_seed_select_before_cursor(
+        self,
+        *,
+        source: str,
+        cursor_column: str,
+        cursor_end_exclusive: str,
+        cursor_type: object,
+    ) -> str:
+        raise NotImplementedError
+
+
+class FailingDropAdapter(FakeJanitorAdapter):
+    def __init__(self, *, message: str) -> None:
+        super().__init__(relation_infos=())
+        self.message: str = message
+
+    def drop(
+        self,
+        connection: Any,
+        *,
+        target: str,
+        if_exists: bool = True,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        del connection, if_exists, statement_recorder
+        self.dropped_targets.append(target)
+        raise RuntimeError(self.message)
+
 
 class _FakeResult:
     def __init__(self, *, rows: tuple[tuple[Any, ...], ...]) -> None:
@@ -386,4 +429,15 @@ def build_project(*, source_schema: str | None = None) -> CompiledProject:
             ),
         ),
         sources=sources,
+    )
+
+
+def relation_info_for_test(*, schema: str, name: str) -> RelationInfo:
+    return RelationInfo(
+        database=None,
+        schema=schema,
+        name=name,
+        relation_type="table",
+        created_at=None,
+        last_altered_at=None,
     )

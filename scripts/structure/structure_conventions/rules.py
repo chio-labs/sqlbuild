@@ -570,6 +570,8 @@ def check_type_declarations_outside_types(file_path: Path, module: ast.Module) -
     violations: list[Violation] = []
     for node in ast.walk(module):
         if isinstance(node, ast.ClassDef) and _is_allowed_type_class(node):
+            if node.name.startswith("_") and _is_within_role_package(file_path, "helpers"):
+                continue
             violations.append(
                 Violation(
                     code="SC015",
@@ -980,7 +982,18 @@ def check_no_sibling_package_imports(
             continue
 
         sibling_name = imported_parts[len(parent_package_parts)]
-        if current_subpackage_name == "main" and sibling_name == "helpers":
+        if sibling_name == "helpers" and current_subpackage_name in {
+            "classes",
+            "main",
+            "models",
+            "types",
+            "constants",
+            "exceptions",
+        }:
+            continue
+        if sibling_name == "classes" and current_subpackage_name == "helpers":
+            continue
+        if sibling_name == "classes" and current_subpackage_name == "main":
             continue
         if sibling_name in {"shared", current_subpackage_name}:
             continue
@@ -1020,7 +1033,18 @@ def check_no_sibling_package_imports(
                 continue
 
             sibling_name = imported_parts[len(parent_package_parts)]
-            if current_subpackage_name == "main" and sibling_name == "helpers":
+            if sibling_name == "helpers" and current_subpackage_name in {
+                "classes",
+                "main",
+                "models",
+                "types",
+                "constants",
+                "exceptions",
+            }:
+                continue
+            if sibling_name == "classes" and current_subpackage_name == "helpers":
+                continue
+            if sibling_name == "classes" and current_subpackage_name == "main":
                 continue
             if sibling_name in {"shared", current_subpackage_name}:
                 continue

@@ -14,3 +14,16 @@ class RenderDiffOutputTestCase:
     max_column_examples: int
     max_row_only_examples: int
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RenderVirtualDiffHeaderTestCase:
+    description: str
+    selected_names: tuple[str, ...]
+    skipped_names: tuple[str, ...]
+    from_stale: tuple[str, ...]
+    to_stale: tuple[str, ...]
+    allow_partial_diff: bool
+    verbose: bool
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...] = ()

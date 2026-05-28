@@ -31,7 +31,7 @@ from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.helpers.function_fingerprints import (
     build_compiled_function_fingerprint_sql,
 )
-from sqlbuild.compiler.shared.helpers.hashing import compute_query_hash
+from sqlbuild.shared.helpers.hashing import compute_query_hash
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.project import SettingsConfig
 from sqlbuild.spec.models.schema import SchemaSeedEntry
