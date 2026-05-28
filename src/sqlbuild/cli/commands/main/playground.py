@@ -39,6 +39,8 @@ def run_playground(
     example_name: str = (
         "waffle shop + Dagster"
         if template == "dagster"
+        else "virtual environments waffle shop"
+        if template == "virtual"
         else "loader-focused waffle shop"
         if template == "loader_waffle_shop"
         else "waffle shop"
@@ -47,10 +49,20 @@ def run_playground(
     print()
     print(f"{try_label}:")
     print(f"{command_prefix}cd {display_path}")
-    print(f"{command_prefix}sqb compile")
-    print(f"{command_prefix}sqb build")
-    print(f"{command_prefix}sqb test")
-    print(f"{command_prefix}sqb audit")
+    if template == "virtual":
+        print(f"{command_prefix}sqb state init")
+        print(f"{command_prefix}sqb build")
+        print(f"{command_prefix}sqb build --virtual-env pr")
+        print(f"{command_prefix}sqb test")
+        print(f"{command_prefix}sqb audit")
+        print(f"{command_prefix}sqb scenario test")
+        print(f"{command_prefix}sqb diff dev:pr --schema-only")
+        print(f"{command_prefix}sqb promote --from pr --to dev")
+    else:
+        print(f"{command_prefix}sqb compile")
+        print(f"{command_prefix}sqb build")
+        print(f"{command_prefix}sqb test")
+        print(f"{command_prefix}sqb audit")
     if template == "dagster":
         print(f"{command_prefix}DAGSTER_IS_DEV_CLI=1 dagster dev -f dagster/definitions.py")
     return 0
