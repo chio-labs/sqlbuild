@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.23.0](https://github.com/chio-labs/sqlbuild/compare/v0.22.1...v0.23.0) (2026-05-28)
+
+
+### Features
+
+* support virtual custom materializations ([c9a1447](https://github.com/chio-labs/sqlbuild/commit/c9a144788ad77b301c830856d917a177234f359d))
+* support virtual custom materializations ([21bba32](https://github.com/chio-labs/sqlbuild/commit/21bba32086ca9ad5c175b7525679de76fced9752))
+
+
+### Bug Fixes
+
+* include virtual table functions ([68d2781](https://github.com/chio-labs/sqlbuild/commit/68d278112d008f1ece4eae744ca507dd52ad8347))
+* include virtual table functions ([b667184](https://github.com/chio-labs/sqlbuild/commit/b6671848990eb8a824faf2fe636197be26a08bd4))
+* seed virtual versions lazily ([0b2d683](https://github.com/chio-labs/sqlbuild/commit/0b2d683105a7777f94a4fd20675601d98811e632))
+* seed virtual versions lazily ([400c161](https://github.com/chio-labs/sqlbuild/commit/400c16109bd1bc1a805c9859083c628e10b160b1))
+
 ## [0.22.1](https://github.com/chio-labs/sqlbuild/compare/v0.22.0...v0.22.1) (2026-05-28)
 
 
