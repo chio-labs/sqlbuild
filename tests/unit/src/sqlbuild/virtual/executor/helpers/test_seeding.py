@@ -5,17 +5,27 @@ import pytest
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.planner.models import ModelPlanEntry
-from sqlbuild.virtual.executor.helpers.seeding import _seed_physical_relation
-from tests.unit.src.sqlbuild.virtual.executor.helpers._test_types import SeedingStrategyTestCase
+from sqlbuild.compiler.planner.types import PlanAction
+from sqlbuild.virtual.executor.helpers.seeding import (
+    _seed_physical_relation,
+    seed_virtual_physical_version,
+)
+from sqlbuild.virtual.state.models import PhysicalRelationAncestryRecord, PhysicalRelationRecord
+from tests.unit.src.sqlbuild.virtual.executor.helpers._test_types import (
+    SeedingIdempotencyTestCase,
+    SeedingStrategyTestCase,
+)
 from tests.unit.src.sqlbuild.virtual.executor.helpers.helpers import (
     build_seeded_incremental_plan_output,
 )
 
 
 class FakeSeedAdapter(BaseAdapter):
-    def __init__(self, *, supports_durable_clone: bool) -> None:
+    def __init__(self, *, supports_durable_clone: bool, target_exists: bool = False) -> None:
         self._supports_durable_clone = supports_durable_clone
+        self._target_exists = target_exists
         self.executed_sql: list[str] = []
+        self.drop_count: int = 0
 
     def connect(self, config: dict[str, object]) -> object:
         del config
@@ -34,6 +44,54 @@ class FakeSeedAdapter(BaseAdapter):
 
     def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
         return (f"CREATE TABLE {target} DEEP CLONE {source}",)
+
+    def relation_exists(
+        self,
+        connection: object,
+        *,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> bool:
+        del connection, database, schema, name
+        return self._target_exists
+
+    def ensure_schema(
+        self,
+        connection: object,
+        *,
+        database: str | None,
+        schema: str | None,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        del connection, database, schema, statement_recorder
+
+    def drop(
+        self,
+        connection: object,
+        *,
+        target: str,
+        if_exists: bool = True,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        del connection, if_exists, statement_recorder
+        self.drop_count += 1
+        self.executed_sql.append(f"DROP {target}")
+
+
+class FakeStateBackend:
+    def __init__(self) -> None:
+        self.ancestry_records: list[PhysicalRelationAncestryRecord] = []
+
+    def upsert_physical_relation_ancestry(
+        self,
+        connection: object,
+        *,
+        schema: str,
+        record: PhysicalRelationAncestryRecord,
+    ) -> None:
+        del connection, schema
+        self.ancestry_records.append(record)
 
 
 TEST_CASES: list[SeedingStrategyTestCase] = [
@@ -60,6 +118,23 @@ TEST_CASES: list[SeedingStrategyTestCase] = [
     ),
 ]
 
+IDEMPOTENCY_TEST_CASES: list[SeedingIdempotencyTestCase] = [
+    SeedingIdempotencyTestCase(
+        description="drops existing target before seeding",
+        target_exists=True,
+        expected_drop_count=1,
+        expected_ancestry_count=1,
+        expected_first_sql_prefix="DROP ",
+    ),
+    SeedingIdempotencyTestCase(
+        description="seeds missing target without drop",
+        target_exists=False,
+        expected_drop_count=0,
+        expected_ancestry_count=1,
+        expected_first_sql_prefix="CREATE OR REPLACE TABLE ",
+    ),
+]
+
 
 @pytest.mark.parametrize("test_case", TEST_CASES, ids=[case.description for case in TEST_CASES])
 def test_given_incremental_seed_context_when_seeding_then_selects_expected_strategy(
@@ -83,3 +158,43 @@ def test_given_incremental_seed_context_when_seeding_then_selects_expected_strat
 
     assert strategy == test_case.expected_strategy
     assert any(test_case.expected_sql_fragment in sql for sql in adapter.executed_sql)
+
+
+@pytest.mark.parametrize(
+    "test_case", IDEMPOTENCY_TEST_CASES, ids=[case.description for case in IDEMPOTENCY_TEST_CASES]
+)
+def test_given_incremental_target_when_seeding_then_existing_target_is_dropped_first(
+    test_case: SeedingIdempotencyTestCase,
+) -> None:
+    adapter: FakeSeedAdapter = FakeSeedAdapter(
+        supports_durable_clone=False,
+        target_exists=test_case.target_exists,
+    )
+    backend: FakeStateBackend = FakeStateBackend()
+    entry: ModelPlanEntry = build_seeded_incremental_plan_output(
+        incremental_strategy="delete_insert",
+        action=PlanAction.INCREMENTAL_DELETE_INSERT,
+    ).model_entries[0]
+    parent_relation: PhysicalRelationRecord = PhysicalRelationRecord(
+        model_name="orders",
+        version_hash="oldhash",
+        database_name="",
+        schema_name="dev__sqb_physical",
+        relation_name="orders__v_oldhash",
+        relation_type="table",
+    )
+
+    seed_virtual_physical_version(
+        adapter=adapter,
+        connection=object(),
+        backend=backend,
+        state_connection=object(),
+        state_schema="sqlbuild_state",
+        entry=entry,
+        parent_relation=parent_relation,
+        version_hash="newhash",
+    )
+
+    assert adapter.drop_count == test_case.expected_drop_count
+    assert len(backend.ancestry_records) == test_case.expected_ancestry_count
+    assert adapter.executed_sql[0].startswith(test_case.expected_first_sql_prefix)

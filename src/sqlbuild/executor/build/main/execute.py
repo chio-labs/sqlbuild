@@ -12,7 +12,7 @@ from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.helpers.indexes import build_execution_indexes
 from sqlbuild.executor.build.helpers.scheduler import BuildScheduler
@@ -51,6 +51,7 @@ def execute_build_plan(
     on_progress: Callable[[str], None] | None = None,
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None = None,
     on_node_complete: Callable[[object], None] | None = None,
+    before_model_materialize: Callable[[ModelPlanEntry, Any], None] | None = None,
     custom_materializations: dict[str, Callable[..., MaterializationResult]] | None = None,
     loader_functions: tuple[DiscoveredLoaderFunction, ...] = (),
     loader_is_reload: bool = False,
@@ -88,6 +89,7 @@ def execute_build_plan(
         on_node_start=on_node_start,
         on_node_complete=on_node_complete,
         on_progress=on_progress,
+        before_model_materialize=before_model_materialize,
         custom_materializations=custom_materializations,
         loader_functions=loader_functions,
         loader_is_reload=loader_is_reload,

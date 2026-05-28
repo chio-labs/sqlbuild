@@ -11,7 +11,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.executor.build.main.execute import execute_build_plan
 from sqlbuild.executor.build.main.external_source_loads import (
     run_external_source_loads_before_connections,
@@ -61,6 +61,7 @@ def run_build_pipeline(
     on_node_complete: Callable[[object], None] | None = None,
     on_progress: Callable[[str], None] | None = None,
     on_sub_progress: Callable[[str], None] | None = None,
+    before_model_materialize: Callable[[ModelPlanEntry, Any], None] | None = None,
     custom_materializations: dict[str, Callable[..., MaterializationResult]] | None = None,
     loader_functions: tuple[DiscoveredLoaderFunction, ...] = (),
     loader_is_reload: bool = False,
@@ -148,6 +149,7 @@ def run_build_pipeline(
             on_node_start=on_node_start,
             on_node_complete=on_node_complete,
             on_progress=on_progress,
+            before_model_materialize=before_model_materialize,
             custom_materializations=custom_materializations,
             loader_functions=loader_functions,
             loader_is_reload=loader_is_reload,

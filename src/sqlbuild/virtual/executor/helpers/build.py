@@ -28,11 +28,13 @@ from sqlbuild.compiler.planner.models import (
     BackfillResult,
     ChangeDetectionResult,
     CursorOverrides,
+    ModelPlanEntry,
     PlannerScope,
     PlannerWarehouseSnapshotResult,
     PlanOutput,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReason
+from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.pipeline.main.run import run_build_pipeline
@@ -49,7 +51,7 @@ from sqlbuild.virtual.executor.helpers.rewrite import (
     rewrite_project_function_targets,
     rewrite_project_model_targets,
 )
-from sqlbuild.virtual.executor.helpers.seeding import seed_virtual_physical_versions
+from sqlbuild.virtual.executor.helpers.seeding import seed_virtual_physical_version
 from sqlbuild.virtual.executor.models import (
     VirtualBuildExecutionHooks,
     VirtualBuildPipelineResult,
@@ -303,14 +305,14 @@ def run_virtual_build(
         if on_plan_ready is not None
         else VirtualBuildExecutionHooks()
     )
-    _seed_selected_physical_versions(
-        adapter=adapter,
-        connection_config=connection_config,
-        backend=backend,
-        config=config,
-        plan_output=executor_plan_output,
-        bound_physical_relations=bound_physical_relations,
-        expected_version_hashes=semantics.expected_version_hashes,
+    before_model_materialize: Callable[[ModelPlanEntry, Any], None] = (
+        _build_before_model_materialize(
+            adapter=adapter,
+            backend=backend,
+            config=config,
+            bound_physical_relations=bound_physical_relations,
+            expected_version_hashes=semantics.expected_version_hashes,
+        )
     )
     result: BuildExecutionResult = run_build_pipeline(
         plan=executor_plan_output,
@@ -327,6 +329,7 @@ def run_virtual_build(
         on_node_start=hooks.on_node_start,
         on_node_complete=hooks.on_node_complete,
         on_sub_progress=hooks.on_sub_progress,
+        before_model_materialize=before_model_materialize,
         loader_functions=discovered_inputs.loader_functions,
         loader_is_reload=reload_sources,
         start_cursor_ts=start_cursor_ts,
@@ -362,32 +365,41 @@ def run_virtual_build(
     )
 
 
-def _seed_selected_physical_versions(
+def _build_before_model_materialize(
     *,
     adapter: BaseAdapter,
-    connection_config: dict[str, object],
     backend: Any,
     config: StateBackendConfig,
-    plan_output: PlanOutput,
     bound_physical_relations: dict[str, PhysicalRelationRecord],
     expected_version_hashes: dict[str, str],
-) -> None:
-    warehouse_connection: Any = adapter.connect(connection_config)
-    state_connection: Any = backend.connect(config.connection)
-    try:
-        seed_virtual_physical_versions(
-            adapter=adapter,
-            connection=warehouse_connection,
-            backend=backend,
-            state_connection=state_connection,
-            state_schema=config.schema,
-            plan_entries=plan_output.model_entries,
-            bound_physical_relations=bound_physical_relations,
-            expected_version_hashes=expected_version_hashes,
-        )
-    finally:
-        backend.close(state_connection)
-        adapter.close(warehouse_connection)
+) -> Callable[[ModelPlanEntry, Any], None]:
+    def before_model_materialize(entry: ModelPlanEntry, connection: Any) -> None:
+        if entry.action not in INCREMENTAL_ACTIONS:
+            return
+        parent_relation: PhysicalRelationRecord | None = bound_physical_relations.get(entry.name)
+        version_hash: str | None = expected_version_hashes.get(entry.name)
+        if (
+            parent_relation is None
+            or version_hash is None
+            or parent_relation.version_hash == version_hash
+        ):
+            return
+        state_connection: Any = backend.connect(config.connection)
+        try:
+            seed_virtual_physical_version(
+                adapter=adapter,
+                connection=connection,
+                backend=backend,
+                state_connection=state_connection,
+                state_schema=config.schema,
+                entry=entry,
+                parent_relation=parent_relation,
+                version_hash=version_hash,
+            )
+        finally:
+            backend.close(state_connection)
+
+    return before_model_materialize
 
 
 def _read_or_initialize_refs(
