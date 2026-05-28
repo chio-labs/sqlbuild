@@ -13,6 +13,8 @@ def format_virtual_diff_header(
     skipped_names: tuple[str, ...],
     from_stale: tuple[str, ...],
     to_stale: tuple[str, ...],
+    from_working: bool,
+    to_working: bool,
     allow_partial_diff: bool,
     verbose: bool,
     use_color: bool,
@@ -27,8 +29,9 @@ def format_virtual_diff_header(
         len(selected_names) - len(skipped_names), use_color=use_color
     )
     skipped_count: str = _format_skipped_count(len(skipped_names), use_color=use_color)
-    working_label: str = "yes" if from_stale or to_stale else "no"
-    if from_stale or to_stale:
+    has_working_vde: bool = from_working or to_working
+    working_label: str = "yes" if has_working_vde else "no"
+    if has_working_vde:
         working_value: str = yellow_bold(working_label) if use_color else working_label
         if allow_partial_diff:
             suffix: str = dim(" (partial allowed)") if use_color else " (partial allowed)"
