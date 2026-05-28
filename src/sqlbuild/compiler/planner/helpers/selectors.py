@@ -152,14 +152,51 @@ def resolve_selectors(
             )
             excluded.update(resolved)
 
-    scoped: set[CompiledObjectKey] = selected - excluded
+    scoped: frozenset[CompiledObjectKey] = frozenset(selected - excluded)
+    return expand_required_build_resources(
+        selected_keys=scoped,
+        upstream=upstream,
+        downstream=downstream,
+        include_upstream_functions=True,
+        include_upstream_seeds=False,
+        include_downstream_functions=False,
+    )
+
+
+def expand_required_build_resources(
+    *,
+    selected_keys: frozenset[CompiledObjectKey],
+    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    include_upstream_functions: bool = True,
+    include_upstream_seeds: bool = False,
+    include_downstream_functions: bool = False,
+) -> frozenset[CompiledObjectKey]:
+    """Add non-model resources needed to build a coherent selected model scope."""
+
+    expanded: set[CompiledObjectKey] = set(selected_keys)
     key: CompiledObjectKey
-    for key in tuple(scoped):
+    for key in tuple(selected_keys):
         upstream_key: CompiledObjectKey
         for upstream_key in expand_upstream(key, upstream):
-            if upstream_key.resource_type == CompiledResourceType.FUNCTION:
-                scoped.add(upstream_key)
-    return frozenset(scoped)
+            if (
+                include_upstream_functions
+                and upstream_key.resource_type == CompiledResourceType.FUNCTION
+            ):
+                expanded.add(upstream_key)
+            if include_upstream_seeds and upstream_key.resource_type == CompiledResourceType.SEED:
+                expanded.add(upstream_key)
+    if not include_downstream_functions:
+        return frozenset(expanded)
+    selected_model_keys: frozenset[CompiledObjectKey] = frozenset(
+        key for key in selected_keys if key.resource_type == CompiledResourceType.MODEL
+    )
+    for key in selected_model_keys:
+        downstream_key: CompiledObjectKey
+        for downstream_key in downstream.get(key, ()):
+            if downstream_key.resource_type == CompiledResourceType.FUNCTION:
+                expanded.add(downstream_key)
+    return frozenset(expanded)
 
 
 def _resolve_token(
