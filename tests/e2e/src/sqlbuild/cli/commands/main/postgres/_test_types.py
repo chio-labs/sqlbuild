@@ -130,6 +130,13 @@ class PostgresStateAdoptDetachE2ETestCase:
 
 
 @dataclass(frozen=True)
+class PostgresStateAdoptDetachErrorE2ETestCase:
+    description: str
+    expected_exit_code: int
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class PostgresReconcileE2ETestCase:
     description: str
     expected_rows: tuple[tuple[object, ...], ...]
@@ -152,6 +159,14 @@ class PostgresVirtualRollbackE2ETestCase:
     expected_rows: tuple[tuple[object, ...], ...]
     expected_stdout_fragments: tuple[str, ...]
     expected_checkpoint_count: int
+    expected_exit_code: int = 0
+
+
+@dataclass(frozen=True)
+class PostgresVirtualParityE2ETestCase:
+    description: str
+    expected_stdout_fragments: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
     expected_exit_code: int = 0
 
 

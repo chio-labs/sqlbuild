@@ -32,6 +32,7 @@ from sqlbuild.spec.models.project import SnapshotsConfig
 from sqlbuild.virtual.executor.helpers.functions import build_function_version_record
 from sqlbuild.virtual.executor.helpers.rewrite import (
     build_rewritten_model_targets,
+    build_target_from_physical_relation,
     build_virtual_target,
     relation_type_for_model,
     rewrite_project_function_targets,
@@ -207,36 +208,60 @@ def run_virtual_build(
         for model_name, relation in bound_physical_relations.items()
     }
 
-    if on_connection_start is not None:
-        on_connection_start(1)
-    connection_start: float = time.monotonic()
-    try:
-        planning_connection: Any = adapter.connect(connection_config)
-    except Exception:
-        if on_connection_error is not None:
-            on_connection_error(1, time.monotonic() - connection_start)
-        raise
-    if on_connection_complete is not None:
-        on_connection_complete(1, time.monotonic() - connection_start)
-    try:
-        plan_output: PlanOutput = build_execution_plan(
-            project=rewritten_project,
-            adapter=adapter,
-            connection=planning_connection,
-            select=effective_select,
-            exclude=(),
-            cursor_overrides=cursor_overrides,
-            full_refresh=full_refresh,
-            auto_load_sources=auto_load_sources,
-            reload_sources=reload_sources,
-            project_config=discovered_inputs.project_config,
-            local_config=discovered_inputs.local_config,
-            defer_sources_to=defer_sources_to,
-            deferred_relations=deferred_relations,
-            on_progress=on_progress,
+    if effective_select:
+        if on_connection_start is not None:
+            on_connection_start(1)
+        connection_start: float = time.monotonic()
+        try:
+            planning_connection: Any = adapter.connect(connection_config)
+        except Exception:
+            if on_connection_error is not None:
+                on_connection_error(1, time.monotonic() - connection_start)
+            raise
+        if on_connection_complete is not None:
+            on_connection_complete(1, time.monotonic() - connection_start)
+        try:
+            plan_output: PlanOutput = build_execution_plan(
+                project=rewritten_project,
+                adapter=adapter,
+                connection=planning_connection,
+                select=effective_select,
+                exclude=(),
+                cursor_overrides=cursor_overrides,
+                full_refresh=full_refresh,
+                auto_load_sources=auto_load_sources,
+                reload_sources=reload_sources,
+                project_config=discovered_inputs.project_config,
+                local_config=discovered_inputs.local_config,
+                defer_sources_to=defer_sources_to,
+                deferred_relations=deferred_relations,
+                on_progress=on_progress,
+            )
+        finally:
+            adapter.close(planning_connection)
+    else:
+        plan_output = PlanOutput(
+            execution_order=tuple(graph.upstream_deps),
+            upstream_deps=graph.upstream_deps,
+            downstream_deps=graph.downstream_deps,
+            model_targets={
+                model.name: (
+                    build_target_from_physical_relation(
+                        adapter=adapter,
+                        relation=bound_physical_relations[model.name],
+                        fallback_target=model.target,
+                    )
+                    if model.name in bound_physical_relations
+                    else model.target
+                )
+                for model in graph.project.models
+            },
+            function_targets={
+                function.name: function.target for function in graph.project.functions
+            },
+            seed_targets={seed.name: seed.target for seed in graph.project.seeds},
+            source_map={source.name: source.source_entry for source in graph.project.sources},
         )
-    finally:
-        adapter.close(planning_connection)
     plan_output = apply_virtual_plan_output(
         plan_output=plan_output,
         environment_name=target_vde_name,

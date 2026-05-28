@@ -44,8 +44,18 @@ def build_postgres_project_toml(
 
 
 def build_postgres_virtual_project_toml(
-    *, project_name: str, config: dict[str, object], state_schema: str, warehouse_schema: str
+    *,
+    project_name: str,
+    config: dict[str, object],
+    state_schema: str,
+    warehouse_schema: str,
+    unsuffixed_virtual_env: str | None = None,
 ) -> str:
+    unsuffixed_line: str = (
+        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n'
+        if unsuffixed_virtual_env is not None
+        else ""
+    )
     return (
         f'name = "{project_name}"\n'
         'adapter = "postgres"\n'
@@ -61,13 +71,82 @@ def build_postgres_virtual_project_toml(
         f'schema = "{warehouse_schema}"\n\n'
         "[environments.dev.state]\n"
         'backend = "postgres"\n'
-        f'schema = "{state_schema}"\n\n'
+        f'schema = "{state_schema}"\n'
+        f"{unsuffixed_line}\n"
         "[environments.dev.state.connection]\n"
         f'host = "{config["host"]}"\n'
         f"port = {config['port']}\n"
         f'dbname = "{config["dbname"]}"\n'
         f'user = "{config["user"]}"\n'
         f'password = "{config["password"]}"\n'
+    )
+
+
+def build_postgres_virtual_plan_repo_files(
+    *,
+    project_name: str,
+    config: dict[str, object],
+    state_schema: str,
+    warehouse_schema: str,
+    stg_orders_sql: str,
+    dim_customers_sql: str = "SELECT 1 AS customer_id",
+    extra_project_toml: str = "",
+) -> dict[str, str]:
+    return {
+        "sqlbuild_project.toml": build_postgres_virtual_project_toml(
+            project_name=project_name,
+            config=config,
+            state_schema=state_schema,
+            warehouse_schema=warehouse_schema,
+        )
+        + extra_project_toml,
+        "models/stg_orders.sql": f"MODEL ();\n\n{stg_orders_sql}\n",
+        "models/fact_orders.sql": 'MODEL ();\n\nSELECT id FROM __ref("stg_orders")\n',
+        "models/dim_customers.sql": f"MODEL ();\n\n{dim_customers_sql}\n",
+    }
+
+
+def build_postgres_virtual_clone_project_toml(
+    *,
+    project_name: str,
+    config: dict[str, object],
+    prod_state_schema: str,
+    dev_state_schema: str,
+    prod_warehouse_schema: str,
+    dev_warehouse_schema: str,
+) -> str:
+    connection_toml: str = (
+        f'host = "{config["host"]}"\n'
+        f"port = {config['port']}\n"
+        f'dbname = "{config["dbname"]}"\n'
+        f'user = "{config["user"]}"\n'
+        f'password = "{config["password"]}"\n'
+    )
+    return (
+        f'name = "{project_name}"\n'
+        'adapter = "postgres"\n'
+        'environment_mode = "virtual"\n'
+        'default_environment = "dev"\n\n'
+        "[connection]\n"
+        f"{connection_toml}\n"
+        "[environments.prod]\n"
+        f'schema = "{prod_warehouse_schema}"\n\n'
+        "[environments.prod.clone]\n"
+        "allow_as_source = true\n\n"
+        "[environments.prod.state]\n"
+        'backend = "postgres"\n'
+        f'schema = "{prod_state_schema}"\n\n'
+        "[environments.prod.state.connection]\n"
+        f"{connection_toml}\n"
+        "[environments.dev]\n"
+        f'schema = "{dev_warehouse_schema}"\n\n'
+        "[environments.dev.clone]\n"
+        "allow_as_target = true\n\n"
+        "[environments.dev.state]\n"
+        'backend = "postgres"\n'
+        f'schema = "{dev_state_schema}"\n\n'
+        "[environments.dev.state.connection]\n"
+        f"{connection_toml}"
     )
 
 
