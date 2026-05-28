@@ -12,19 +12,18 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo, StatementRecorder
 from sqlbuild.compiler.compile.models.core import (
-    CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationTarget,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.main.materializations import load_custom_materializations
 from sqlbuild.compiler.pipeline.main.prepare_versions import load_custom_prepare_version_functions
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.main.build_resources import expand_build_resource_selection
 from sqlbuild.compiler.planner.main.plan_entry import build_plan_output_from_model_changes_phase
 from sqlbuild.compiler.planner.main.warehouse_snapshot import build_warehouse_snapshot_phase
 from sqlbuild.compiler.planner.models import (
@@ -786,36 +785,20 @@ def _build_virtual_planner_select(
     graph: ProjectGraph,
     selected_model_names: tuple[str, ...],
 ) -> tuple[str, ...]:
-    selected: set[str] = set(selected_model_names)
-    selected_model_name_set: set[str] = set(selected_model_names)
-    model_name: str
-    for model_name in selected_model_names:
-        start_key: CompiledObjectKey | None = graph.all_keys.get(model_name)
-        if start_key is None:
-            continue
-        stack: list[CompiledObjectKey] = list(graph.upstream_deps.get(start_key, ()))
-        visited: set[CompiledObjectKey] = set()
-        while stack:
-            current: CompiledObjectKey = stack.pop()
-            if current in visited:
-                continue
-            visited.add(current)
-            if current.resource_type in (CompiledResourceType.SEED, CompiledResourceType.FUNCTION):
-                selected.add(current.name)
-            upstream_key: CompiledObjectKey
-            for upstream_key in graph.upstream_deps.get(current, ()):  # pragma: no branch
-                stack.append(upstream_key)
-    function: CompiledFunction
-    for function in graph.project.functions:
-        dep: CompiledObjectKey
-        for dep in function.deps:
-            if (
-                dep.resource_type == CompiledResourceType.MODEL
-                and dep.name in selected_model_name_set
-            ):
-                selected.add(function.name)
-                break
-    return tuple(sorted(selected))
+    selected_model_keys: frozenset[CompiledObjectKey] = frozenset(
+        key
+        for model_name in selected_model_names
+        if (key := graph.all_keys.get(model_name)) is not None
+    )
+    expanded_keys: frozenset[CompiledObjectKey] = expand_build_resource_selection(
+        selected_keys=selected_model_keys,
+        upstream=graph.upstream_deps,
+        downstream=graph.downstream_deps,
+        include_upstream_functions=True,
+        include_upstream_seeds=True,
+        include_downstream_functions=True,
+    )
+    return tuple(sorted(key.name for key in expanded_keys))
 
 
 def _build_virtual_model_change(
