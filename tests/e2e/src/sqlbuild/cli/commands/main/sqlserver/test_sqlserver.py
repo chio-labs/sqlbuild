@@ -41,6 +41,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver._test_types import (
     SqlServerSourceLoaderE2ETestCase,
     SqlServerSourceLoaderStrategiesE2ETestCase,
     SqlServerVirtualLifecycleE2ETestCase,
+    SqlServerVirtualSeedE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver.helpers import (
     adapt_sqlserver_project_files,
@@ -105,6 +106,132 @@ def test_given_waffle_shop_when_running_full_build_on_sqlserver_then_expected_ta
         assert int(str(rows[0][0])) == test_case.expected_row_count
     finally:
         cleanup_sqlserver_schema(schema_name=schema_name, config=config)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerVirtualSeedE2ETestCase(
+            description="virtual seeded incremental build uses copy on sqlserver",
+            expected_rows=(("1", "10"), ("2", "21"), ("3", "31")),
+            expected_seed_strategy="copy",
+        )
+    ],
+    ids=["virtual seeded incremental build uses copy on sqlserver"],
+)
+def test_given_virtual_incremental_change_when_building_on_sqlserver_then_seeds_with_copy(
+    tmp_path: Path,
+    test_case: SqlServerVirtualSeedE2ETestCase,
+) -> None:
+    config: dict[str, object] = build_sqlserver_config()
+    schema_name: str = build_unique_schema_name(prefix="sqb_virtual_seed")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="sqlserver_virtual_seed",
+        repo_files={
+            "sqlbuild_project.toml": build_sqlserver_virtual_project_toml(
+                project_name="sqlserver_virtual_seed",
+                schema_name=schema_name,
+                config=config,
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                f"    schema: {schema_name}\n"
+                "    table: raw_orders\n"
+            ),
+            "models/orders.sql": (
+                "MODEL (\n"
+                "  materialized incremental,\n"
+                "  incremental_strategy delete_insert,\n"
+                "  cursor ordered_at,\n"
+                "  cursor_type timestamp,\n"
+                "  cursor_grain day,\n"
+                "  query_change_backfill bounded-7d\n"
+                ");\n\n"
+                "SELECT id, ordered_at, amount_cents + 0 AS amount_cents\n"
+                'FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    ensure_sqlserver_schema_ready(schema_name=schema_name, config=config)
+
+    try:
+        execute_sqlserver_sql(
+            sql=(
+                f"CREATE TABLE {relation_name(schema_name=schema_name, name='raw_orders')} ("
+                "id INT, ordered_at DATETIME2, amount_cents INT)"
+            ),
+            config=config,
+        )
+        execute_sqlserver_sql(
+            sql=(
+                f"INSERT INTO {relation_name(schema_name=schema_name, name='raw_orders')} VALUES "
+                "(1, '2026-01-01T00:00:00', 10), "
+                "(2, '2026-01-02T00:00:00', 20)"
+            ),
+            config=config,
+        )
+        assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        (project_dir / "models" / "orders.sql").write_text(
+            (
+                "MODEL (\n"
+                "  materialized incremental,\n"
+                "  incremental_strategy delete_insert,\n"
+                "  cursor ordered_at,\n"
+                "  cursor_type timestamp,\n"
+                "  cursor_grain day,\n"
+                "  query_change_backfill bounded-7d\n"
+                ");\n\n"
+                "SELECT id, ordered_at, amount_cents + 1 AS amount_cents\n"
+                'FROM __source("raw_orders")\n'
+            ),
+            encoding="utf-8",
+        )
+        execute_sqlserver_sql(
+            sql=(
+                f"INSERT INTO {relation_name(schema_name=schema_name, name='raw_orders')} "
+                "VALUES (3, '2026-01-03T00:00:00', 30)"
+            ),
+            config=config,
+        )
+
+        build_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "build",
+                "--start-cursor-ts",
+                "2026-01-02T00:00:00",
+                "--end-cursor-ts",
+                "2026-01-04T00:00:00",
+            ),
+            project_dir=project_dir,
+        )
+
+        assert build_result.returncode == test_case.expected_return_code, (
+            build_result.stdout + build_result.stderr
+        )
+        rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
+            sql=(
+                f"SELECT id, amount_cents FROM "
+                f"{relation_name(schema_name=f'{schema_name}__dev', name='orders')} "
+                "ORDER BY id"
+            ),
+            config=config,
+        )
+        assert stringify_warehouse_rows(rows) == test_case.expected_rows
+        assert query_duckdb(
+            db_path=project_dir / "state.duckdb",
+            sql=(
+                "SELECT seed_strategy FROM sqlbuild_state.physical_relation_ancestry "
+                "WHERE model_name = 'orders'"
+            ),
+        ) == [(test_case.expected_seed_strategy,)]
+    finally:
+        cleanup_sqlserver_schema(schema_name=schema_name, config=config)
+        cleanup_sqlserver_schema(schema_name=f"{schema_name}__dev", config=config)
+        cleanup_sqlserver_schema(schema_name=f"{schema_name}__sqb_physical", config=config)
 
 
 @pytest.mark.parametrize(

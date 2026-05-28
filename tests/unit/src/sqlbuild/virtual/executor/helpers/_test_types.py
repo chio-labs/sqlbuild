@@ -39,3 +39,12 @@ class SeededPlanAdaptationTestCase:
     incremental_strategy: str
     expected_action: str
     expected_sql_fragment: str
+
+
+@dataclass(frozen=True)
+class SeedingStrategyTestCase:
+    description: str
+    incremental_strategy: str
+    supports_durable_clone: bool
+    expected_strategy: str
+    expected_sql_fragment: str

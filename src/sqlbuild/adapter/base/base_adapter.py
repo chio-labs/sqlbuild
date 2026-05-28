@@ -403,6 +403,41 @@ class BaseAdapter(StrictAdapter):
     def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
         return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
 
+    def render_query_with_cursor_bounds(
+        self,
+        *,
+        sql: str,
+        cursor_column: str,
+        cursor_start: str,
+        cursor_end: str,
+        cursor_type: str | None,
+    ) -> str:
+        return self._render_query_with_cursor_bounds_impl(
+            sql=sql,
+            cursor_column=cursor_column,
+            cursor_start=cursor_start,
+            cursor_end=cursor_end,
+            cursor_type=cursor_type,
+        )
+
+    def render_seed_select_before_cursor(
+        self,
+        *,
+        source: str,
+        cursor_column: str,
+        cursor_end_exclusive: str,
+        cursor_type: str | None,
+    ) -> str:
+        return self._render_seed_select_before_cursor_impl(
+            source=source,
+            cursor_column=cursor_column,
+            cursor_end_exclusive=cursor_end_exclusive,
+            cursor_type=cursor_type,
+        )
+
+    def relation_names_match(self, left: str, right: str) -> bool:
+        return self._relation_names_match_impl(left, right)
+
     def _render_query_with_cursor_bounds_impl(
         self,
         *,

@@ -20,6 +20,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.databricks._test_types import (
     DatabricksSnapshotE2ETestCase,
     DatabricksSourceLoaderStrategiesE2ETestCase,
     DatabricksVirtualLifecycleE2ETestCase,
+    DatabricksVirtualSeedE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.databricks.helpers import (
     assert_current_databricks_snapshot_rows,
@@ -64,6 +65,125 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     stringify_warehouse_rows,
 )
 from tests.integration.src.sqlbuild.adapters.databricks.helpers import build_unique_schema_name
+
+
+@pytest.mark.skip(reason="Databricks warehouse access is currently unavailable")
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksVirtualSeedE2ETestCase(
+            description="virtual seeded incremental build uses deep clone on databricks",
+            expected_rows=(("1", "10"), ("2", "21"), ("3", "31")),
+            expected_seed_strategy="durable_clone",
+        )
+    ],
+    ids=["virtual seeded incremental build uses deep clone on databricks"],
+)
+def test_given_virtual_incremental_change_when_building_on_databricks_then_seeds_with_deep_clone(
+    tmp_path: Path,
+    test_case: DatabricksVirtualSeedE2ETestCase,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_virtual_seed")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="databricks_virtual_seed",
+        repo_files={
+            "sqlbuild_project.toml": build_databricks_virtual_project_toml(
+                project_name="databricks_virtual_seed",
+                schema_name=schema_name,
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                f"    schema: {schema_name}\n"
+                "    table: raw_orders\n"
+            ),
+            "models/orders.sql": (
+                "MODEL (\n"
+                "  materialized incremental,\n"
+                "  incremental_strategy delete_insert,\n"
+                "  cursor ordered_at,\n"
+                "  cursor_type timestamp,\n"
+                "  cursor_grain day,\n"
+                "  query_change_backfill bounded-7d\n"
+                ");\n\n"
+                "SELECT id, ordered_at, amount_cents + 0 AS amount_cents\n"
+                'FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    try:
+        ensure_databricks_schema_ready(schema_name=schema_name)
+        execute_databricks_sql(
+            schema_name=schema_name,
+            sql=(
+                "CREATE OR REPLACE TABLE "
+                f"{relation_name(schema_name=schema_name, name='raw_orders')} AS "
+                "SELECT 1 AS id, TIMESTAMP '2026-01-01 00:00:00' AS ordered_at, "
+                "10 AS amount_cents UNION ALL "
+                "SELECT 2, TIMESTAMP '2026-01-02 00:00:00', 20"
+            ),
+        )
+        assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        (project_dir / "models" / "orders.sql").write_text(
+            (
+                "MODEL (\n"
+                "  materialized incremental,\n"
+                "  incremental_strategy delete_insert,\n"
+                "  cursor ordered_at,\n"
+                "  cursor_type timestamp,\n"
+                "  cursor_grain day,\n"
+                "  query_change_backfill bounded-7d\n"
+                ");\n\n"
+                "SELECT id, ordered_at, amount_cents + 1 AS amount_cents\n"
+                'FROM __source("raw_orders")\n'
+            ),
+            encoding="utf-8",
+        )
+        execute_databricks_sql(
+            schema_name=schema_name,
+            sql=(
+                f"INSERT INTO {relation_name(schema_name=schema_name, name='raw_orders')} "
+                "VALUES (3, TIMESTAMP '2026-01-03 00:00:00', 30)"
+            ),
+        )
+
+        build_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "build",
+                "--start-cursor-ts",
+                "2026-01-02T00:00:00",
+                "--end-cursor-ts",
+                "2026-01-04T00:00:00",
+            ),
+            project_dir=project_dir,
+        )
+
+        assert build_result.returncode == test_case.expected_return_code, (
+            build_result.stdout + build_result.stderr
+        )
+        rows: tuple[tuple[object, ...], ...] = fetch_databricks_rows(
+            schema_name=schema_name,
+            sql=(
+                f"SELECT id, amount_cents FROM "
+                f"{relation_name(schema_name=f'{schema_name}__dev', name='orders')} "
+                "ORDER BY id"
+            ),
+        )
+        assert stringify_warehouse_rows(rows) == test_case.expected_rows
+        assert query_duckdb(
+            db_path=project_dir / "state.duckdb",
+            sql=(
+                "SELECT seed_strategy FROM sqlbuild_state.physical_relation_ancestry "
+                "WHERE model_name = 'orders'"
+            ),
+        ) == [(test_case.expected_seed_strategy,)]
+    finally:
+        cleanup_databricks_schema(schema_name=schema_name)
+        cleanup_databricks_schema(schema_name=f"{schema_name}__dev")
+        cleanup_databricks_schema(schema_name=f"{schema_name}__sqb_physical")
 
 
 @pytest.mark.skip(reason="Databricks warehouse access is currently unavailable")

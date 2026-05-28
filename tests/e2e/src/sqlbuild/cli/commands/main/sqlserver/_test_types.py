@@ -118,3 +118,11 @@ class SqlServerJanitorDetachedVdeE2ETestCase:
     expected_virtual_environment_count_after: int
     expected_ref_count_after: int
     expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class SqlServerVirtualSeedE2ETestCase:
+    description: str
+    expected_rows: tuple[tuple[str, ...], ...]
+    expected_seed_strategy: str
+    expected_return_code: int = 0

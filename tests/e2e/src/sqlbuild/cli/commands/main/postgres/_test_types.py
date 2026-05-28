@@ -138,6 +138,23 @@ class PostgresReconcileE2ETestCase:
 
 
 @dataclass(frozen=True)
+class PostgresVirtualSeedE2ETestCase:
+    description: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_seed_strategy: str
+    expected_exit_code: int = 0
+
+
+@dataclass(frozen=True)
+class PostgresVirtualRollbackE2ETestCase:
+    description: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_stdout_fragments: tuple[str, ...]
+    expected_checkpoint_count: int
+    expected_exit_code: int = 0
+
+
+@dataclass(frozen=True)
 class PostgresJanitorDetachedVdeE2ETestCase:
     description: str
     expected_exit_code: int
@@ -160,7 +177,7 @@ class PostgresStateExplicitRollbackE2ETestCase:
     description: str
     expected_exit_code: int
     expected_schema_version: int
-    expected_rollback_fragment: str = "Rolled back virtual state schema"
+    expected_rollback_fragment: str = "Virtual State Rolled Back"
 
 
 @dataclass(frozen=True)
