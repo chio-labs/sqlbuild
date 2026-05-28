@@ -41,6 +41,9 @@ sqlserver = [
 ingestr = [
   "ingestr>=1.0.0",
 ]
+rivers = [
+  "rivers>=0.1.4",
+]
 
 [project.scripts]
 sqb = "sqlbuild.cli.commands.main.entry:main"
