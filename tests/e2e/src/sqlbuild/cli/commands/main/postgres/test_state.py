@@ -2304,16 +2304,25 @@ def test_given_postgres_partial_rollback_missing_stale_upstreams_when_including_
         )
 
 
+POSTGRES_VIRTUAL_SEED_E2E_TEST_CASES: tuple[PostgresVirtualSeedE2ETestCase, ...] = (
+    PostgresVirtualSeedE2ETestCase(
+        description="postgres virtual seeded incremental build uses copy",
+        expected_rows=((1, 10), (2, 21), (3, 31)),
+        expected_seed_strategy="copy",
+    ),
+    PostgresVirtualSeedE2ETestCase(
+        description="postgres virtual append bounded seeded build uses bounded copy",
+        expected_rows=((1, 10), (2, 21), (3, 31)),
+        expected_seed_strategy="bounded_append_copy",
+        incremental_strategy="append",
+    ),
+)
+
+
 @pytest.mark.parametrize(
     "test_case",
-    [
-        PostgresVirtualSeedE2ETestCase(
-            description="postgres virtual seeded incremental build uses copy",
-            expected_rows=((1, 10), (2, 21), (3, 31)),
-            expected_seed_strategy="copy",
-        )
-    ],
-    ids=["postgres virtual seeded incremental build uses copy"],
+    POSTGRES_VIRTUAL_SEED_E2E_TEST_CASES,
+    ids=[case.description for case in POSTGRES_VIRTUAL_SEED_E2E_TEST_CASES],
 )
 def test_given_postgres_virtual_incremental_change_when_building_then_seeds_with_copy(
     test_case: PostgresVirtualSeedE2ETestCase,
@@ -2358,7 +2367,7 @@ def test_given_postgres_virtual_incremental_change_when_building_then_seeds_with
             "models/orders.sql": (
                 "MODEL (\n"
                 "  materialized incremental,\n"
-                "  incremental_strategy delete_insert,\n"
+                f"  incremental_strategy {test_case.incremental_strategy},\n"
                 "  cursor ordered_at,\n"
                 "  cursor_type timestamp,\n"
                 "  cursor_grain day,\n"
@@ -2398,7 +2407,7 @@ def test_given_postgres_virtual_incremental_change_when_building_then_seeds_with
             (
                 "MODEL (\n"
                 "  materialized incremental,\n"
-                "  incremental_strategy delete_insert,\n"
+                f"  incremental_strategy {test_case.incremental_strategy},\n"
                 "  cursor ordered_at,\n"
                 "  cursor_type timestamp,\n"
                 "  cursor_grain day,\n"
@@ -3064,12 +3073,258 @@ def test_given_postgres_virtual_diff_and_promotion_when_running_then_matches_duc
     "test_case",
     [
         PostgresVirtualParityE2ETestCase(
+            description="postgres virtual promotion publishes function definitions",
+            expected_stdout_fragments=(
+                "Virtual promotion complete",
+                "pr -> dev",
+                "target status          finalized",
+            ),
+            expected_rows=((True,),),
+        )
+    ],
+    ids=["postgres virtual promotion publishes function definitions"],
+)
+def test_given_postgres_function_change_when_promoting_then_publishes_function_definition(
+    test_case: PostgresVirtualParityE2ETestCase,
+    tmp_path: Path,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    state_schema: str = build_unique_schema_name(prefix="sqb_state_e2e")
+    warehouse_schema: str = build_unique_schema_name(prefix="sqb_virtual_func_promote")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_virtual_function_promote",
+        repo_files=build_postgres_virtual_plan_repo_files(
+            project_name="postgres_virtual_function_promote",
+            config=postgres_e2e_config,
+            state_schema=state_schema,
+            warehouse_schema=warehouse_schema,
+            stg_orders_sql="SELECT 7 AS id",
+        )
+        | {
+            "models/fact_orders.sql": (
+                "MODEL (materialized view);\n\n"
+                'SELECT __udf("is_large_order")(id) AS is_large FROM __ref("stg_orders")\n'
+            ),
+            "functions/sql/is_large_order.sql": (
+                "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, "
+                "query_change_backfill full);\n\n"
+                "SELECT amount > 9\n"
+            ),
+        },
+    )
+
+    try:
+        assert (
+            run_sqb(command=("--no-color", "state", "init"), project_dir=project_dir).returncode
+            == 0
+        )
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        assert fetch_postgres_rows(
+            sql=(
+                "SELECT "
+                f"{
+                    quoted_relation_name(
+                        schema_name=f'{warehouse_schema}__dev',
+                        name='is_large_order',
+                    )
+                }"
+                "(7)"
+            ),
+            config=postgres_e2e_config,
+        ) == ((False,),)
+        function_refs_relation: str = quoted_relation_name(
+            schema_name=state_schema,
+            name="virtual_environment_function_refs",
+        )
+        initial_dev_function_hash: str = str(
+            fetch_postgres_rows(
+                sql=(
+                    f"SELECT version_hash FROM {function_refs_relation} "
+                    "WHERE virtual_environment_name = 'dev' "
+                    "AND function_name = 'is_large_order'"
+                ),
+                config=postgres_e2e_config,
+            )[0][0]
+        )
+
+        (project_dir / "functions" / "sql" / "is_large_order.sql").write_text(
+            "FUNCTION ("
+            "arguments (amount INTEGER), returns BOOLEAN, query_change_backfill full"
+            ");\n\n"
+            "SELECT amount > 5\n",
+            encoding="utf-8",
+        )
+        assert (
+            run_sqb(
+                command=("--no-color", "build", "--virtual-env", "pr"),
+                project_dir=project_dir,
+            ).returncode
+            == 0
+        )
+        assert (
+            fetch_postgres_rows(
+                sql=(
+                    "SELECT is_large FROM "
+                    f"{
+                        quoted_relation_name(
+                            schema_name=f'{warehouse_schema}__pr',
+                            name='fact_orders',
+                        )
+                    }"
+                ),
+                config=postgres_e2e_config,
+            )
+            == test_case.expected_rows
+        )
+        assert fetch_postgres_rows(
+            sql=(
+                "SELECT is_large FROM "
+                f"{
+                    quoted_relation_name(
+                        schema_name=f'{warehouse_schema}__dev',
+                        name='fact_orders',
+                    )
+                }"
+            ),
+            config=postgres_e2e_config,
+        ) == ((False,),)
+        pr_function_hash: str = str(
+            fetch_postgres_rows(
+                sql=(
+                    f"SELECT version_hash FROM {function_refs_relation} "
+                    "WHERE virtual_environment_name = 'pr' "
+                    "AND function_name = 'is_large_order'"
+                ),
+                config=postgres_e2e_config,
+            )[0][0]
+        )
+        assert pr_function_hash != initial_dev_function_hash
+
+        promote_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "promote", "--from", "pr", "--to", "dev"),
+            project_dir=project_dir,
+        )
+        assert promote_result.returncode == test_case.expected_exit_code, promote_result.stderr
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in promote_result.stdout
+        assert fetch_postgres_rows(
+            sql=(
+                f"SELECT function_name, version_hash FROM {function_refs_relation} "
+                "WHERE virtual_environment_name = 'dev'"
+            ),
+            config=postgres_e2e_config,
+        ) == (("is_large_order", pr_function_hash),)
+        assert (
+            fetch_postgres_rows(
+                sql=(
+                    "SELECT is_large FROM "
+                    f"{
+                        quoted_relation_name(
+                            schema_name=f'{warehouse_schema}__dev',
+                            name='fact_orders',
+                        )
+                    }"
+                ),
+                config=postgres_e2e_config,
+            )
+            == test_case.expected_rows
+        )
+        assert (
+            fetch_postgres_rows(
+                sql=(
+                    "SELECT "
+                    f"{
+                        quoted_relation_name(
+                            schema_name=f'{warehouse_schema}__dev',
+                            name='is_large_order',
+                        )
+                    }"
+                    "(7)"
+                ),
+                config=postgres_e2e_config,
+            )
+            == test_case.expected_rows
+        )
+    finally:
+        cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(schema_name=warehouse_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__dev", config=postgres_e2e_config
+        )
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__pr", config=postgres_e2e_config
+        )
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__sqb_physical",
+            config=postgres_e2e_config,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresVirtualParityE2ETestCase(
+            description="postgres direct mode promotion guard",
+            expected_stdout_fragments=("promote requires environment_mode = 'virtual'",),
+            expected_exit_code=1,
+        )
+    ],
+    ids=["postgres direct mode promotion guard"],
+)
+def test_given_postgres_direct_mode_project_when_promoting_then_fails_with_mode_error(
+    test_case: PostgresVirtualParityE2ETestCase,
+    tmp_path: Path,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    warehouse_schema: str = build_unique_schema_name(prefix="sqb_direct_promote")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_direct_promote_guard",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "postgres_direct_promote_guard"\n'
+                'adapter = "postgres"\n'
+                'default_environment = "dev"\n\n'
+                "[connection]\n"
+                f'host = "{postgres_e2e_config["host"]}"\n'
+                f"port = {postgres_e2e_config['port']}\n"
+                f'dbname = "{postgres_e2e_config["dbname"]}"\n'
+                f'user = "{postgres_e2e_config["user"]}"\n'
+                f'password = "{postgres_e2e_config["password"]}"\n\n'
+                "[environments.dev]\n"
+                f'schema = "{warehouse_schema}"\n'
+            ),
+            "models/stg_orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+
+    try:
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "promote", "--from", "pr", "--to", "dev"),
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+        assert test_case.expected_stdout_fragments[0] in result.stderr
+    finally:
+        cleanup_postgres_state_schemas(schema_name=warehouse_schema, config=postgres_e2e_config)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresVirtualParityE2ETestCase(
             description="postgres virtual clone parity",
             expected_stdout_fragments=(
                 "mode                 workspace fingerprints",
                 "source state         not used",
                 "target refs          unchanged",
                 "hydrated             3",
+                "mode                 target VDE refs",
+                "target VDE           dev",
+                "hydrated             1",
+                "already present      2",
                 "missing in source    1",
                 "model version 'stg_orders:",
                 "is locked",
@@ -3178,6 +3433,81 @@ def test_given_postgres_virtual_clone_when_running_then_matches_duckdb_parity(
             config=postgres_e2e_config,
         ) == ((0,),)
 
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        dev_ref_rows_before: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
+            sql=(
+                "SELECT model_name, version_hash FROM "
+                f"{
+                    quoted_relation_name(
+                        schema_name=dev_state_schema,
+                        name='virtual_environment_refs',
+                    )
+                } "
+                "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
+            ),
+            config=postgres_e2e_config,
+        )
+        execute_postgres_sql(
+            sql=(
+                "DROP TABLE "
+                f"{
+                    quoted_relation_name(
+                        schema_name=f'{dev_warehouse_schema}__sqb_physical',
+                        name=f'stg_orders__v_{stg_hash[:8]}',
+                    )
+                } "
+                "CASCADE"
+            ),
+            config=postgres_e2e_config,
+        )
+        target_ref_clone: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "clone",
+                "--from",
+                "prod",
+                "--to",
+                "dev",
+                "--virtual-env",
+                "dev",
+            ),
+            project_dir=project_dir,
+        )
+        assert target_ref_clone.returncode == test_case.expected_exit_code, target_ref_clone.stderr
+        for fragment in test_case.expected_stdout_fragments[4:8]:
+            assert fragment in target_ref_clone.stdout
+        assert (
+            fetch_postgres_rows(
+                sql=(
+                    "SELECT model_name, version_hash FROM "
+                    f"{
+                        quoted_relation_name(
+                            schema_name=dev_state_schema,
+                            name='virtual_environment_refs',
+                        )
+                    } "
+                    "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
+                ),
+                config=postgres_e2e_config,
+            )
+            == dev_ref_rows_before
+        )
+        assert (
+            fetch_postgres_rows(
+                sql=(
+                    "SELECT id FROM "
+                    f"{
+                        quoted_relation_name(
+                            schema_name=f'{dev_warehouse_schema}__sqb_physical',
+                            name=f'stg_orders__v_{stg_hash[:8]}',
+                        )
+                    }"
+                ),
+                config=postgres_e2e_config,
+            )
+            == test_case.expected_rows
+        )
+
         execute_postgres_sql(
             sql=(
                 "DROP TABLE "
@@ -3205,7 +3535,7 @@ def test_given_postgres_virtual_clone_when_running_then_matches_duckdb_parity(
             project_dir=project_dir,
         )
         assert missing_result.returncode == 1
-        assert test_case.expected_stdout_fragments[4] in missing_result.stdout
+        assert test_case.expected_stdout_fragments[8] in missing_result.stdout
         execute_postgres_sql(
             sql=(
                 "CREATE TABLE "
@@ -3243,7 +3573,7 @@ def test_given_postgres_virtual_clone_when_running_then_matches_duckdb_parity(
             project_dir=project_dir,
         )
         assert locked_result.returncode == 1
-        for fragment in test_case.expected_stdout_fragments[5:7]:
+        for fragment in test_case.expected_stdout_fragments[9:11]:
             assert fragment in locked_result.stderr
         skip_locked_result: subprocess.CompletedProcess[str] = run_sqb(
             command=("--no-color", "clone", "--from", "prod", "--to", "dev", "--skip-locked"),
@@ -3252,7 +3582,7 @@ def test_given_postgres_virtual_clone_when_running_then_matches_duckdb_parity(
         assert skip_locked_result.returncode == test_case.expected_exit_code, (
             skip_locked_result.stderr
         )
-        for fragment in test_case.expected_stdout_fragments[7:]:
+        for fragment in test_case.expected_stdout_fragments[11:]:
             assert fragment in skip_locked_result.stdout
     finally:
         cleanup_postgres_state_schemas(schema_name=prod_state_schema, config=postgres_e2e_config)
