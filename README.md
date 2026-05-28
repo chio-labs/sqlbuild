@@ -149,9 +149,6 @@ sqb scenario test --select revenue__customer_refund --retain
 sqb scenario test --select tests/scenarios/revenue --exclude revenue__slow_refund
 ```
 
-Scenario selectors can be passed with repeated `--select` flags or with `--select-file`.
-Positional selectors are still accepted, but `--select` is the preferred form.
-
 Capture local replay snapshots as JSONL under `tests/_scenario_snapshots/<scenario_name>/`:
 
 ```bash
