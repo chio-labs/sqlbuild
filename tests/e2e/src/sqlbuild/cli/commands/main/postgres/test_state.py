@@ -15,10 +15,12 @@ from tests.e2e.src.sqlbuild.cli.commands.main.postgres._test_types import (
     PostgresStateLifecycleErrorE2ETestCase,
     PostgresStateLocalOverrideE2ETestCase,
     PostgresStateResetInvalidE2ETestCase,
+    PostgresStateSchemaCorruptionE2ETestCase,
     PostgresVirtualRollbackE2ETestCase,
     PostgresVirtualSeedE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.postgres.helpers import (
+    build_postgres_virtual_project_toml,
     build_unique_schema_name,
     cleanup_postgres_state_schemas,
     execute_postgres_sql,
@@ -422,6 +424,202 @@ def test_given_postgres_detached_vde_when_running_janitor_then_refs_and_physical
 @pytest.mark.parametrize(
     "test_case",
     [
+        PostgresJanitorDetachedVdeE2ETestCase(
+            description="postgres janitor prunes expired non-active VDE",
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "expired VDEs pruned",
+                "Eligible expired VDEs",
+                "pr  expired virtual environment",
+                "state items",
+            ),
+            expected_virtual_environment_count_after=1,
+            expected_ref_count_after=1,
+        )
+    ],
+    ids=["postgres janitor prunes expired non-active VDE"],
+)
+def test_given_postgres_non_active_vde_when_running_janitor_then_it_prunes_expired_environment(
+    test_case: PostgresJanitorDetachedVdeE2ETestCase,
+    tmp_path: Path,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    state_schema: str = build_unique_schema_name(prefix="sqb_state_e2e")
+    warehouse_schema: str = build_unique_schema_name(prefix="sqb_virtual_e2e")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_janitor_expired_vde",
+        repo_files={
+            "sqlbuild_project.toml": build_postgres_virtual_project_toml(
+                project_name="postgres_janitor_expired_vde",
+                config=postgres_e2e_config,
+                state_schema=state_schema,
+                warehouse_schema=warehouse_schema,
+            )
+            + "\n[janitor]\nenabled = true\nretention_days = 0\ndelete_tracked_only = false\n",
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+
+    try:
+        assert (
+            run_sqb(command=("--no-color", "state", "init"), project_dir=project_dir).returncode
+            == 0
+        )
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        (project_dir / "models" / "orders.sql").write_text(
+            "MODEL ();\n\nSELECT 2 AS id\n",
+            encoding="utf-8",
+        )
+        assert (
+            run_sqb(
+                command=("--no-color", "build", "--virtual-env", "pr"), project_dir=project_dir
+            ).returncode
+            == 0
+        )
+
+        janitor_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "janitor", "--auto-approve"),
+            project_dir=project_dir,
+        )
+
+        assert janitor_result.returncode == test_case.expected_exit_code, (
+            janitor_result.stdout + janitor_result.stderr
+        )
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in janitor_result.stdout
+        assert fetch_postgres_rows(
+            sql=(
+                "SELECT COUNT(*) FROM "
+                f"{quoted_relation_name(schema_name=state_schema, name='virtual_environments')}"
+            ),
+            config=postgres_e2e_config,
+        ) == ((test_case.expected_virtual_environment_count_after,),)
+        assert fetch_postgres_rows(
+            sql=(
+                "SELECT COUNT(*) FROM "
+                f"{quoted_relation_name(schema_name=state_schema, name='virtual_environment_refs')}"
+            ),
+            config=postgres_e2e_config,
+        ) == ((test_case.expected_ref_count_after,),)
+    finally:
+        cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(schema_name=warehouse_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__dev",
+            config=postgres_e2e_config,
+        )
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__pr",
+            config=postgres_e2e_config,
+        )
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__sqb_physical",
+            config=postgres_e2e_config,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresJanitorDetachedVdeE2ETestCase(
+            description="postgres janitor prunes old state backups and expired locks",
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "state backups pruned",
+                "expired locks pruned",
+                "Eligible state backups",
+                "Eligible expired locks",
+                "state items",
+            ),
+            expected_virtual_environment_count_after=1,
+            expected_ref_count_after=0,
+        )
+    ],
+    ids=["postgres janitor prunes old state backups and expired locks"],
+)
+def test_given_postgres_state_backups_and_expired_locks_when_running_janitor_then_state_is_pruned(
+    test_case: PostgresJanitorDetachedVdeE2ETestCase,
+    tmp_path: Path,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    state_schema: str = build_unique_schema_name(prefix="sqb_state_e2e")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_janitor_state_cleanup",
+        repo_files={
+            "sqlbuild_project.toml": build_postgres_state_project_toml(
+                project_name="postgres_janitor_state_cleanup",
+                config=postgres_e2e_config,
+                state_schema=state_schema,
+            )
+            + "\n[janitor]\nenabled = true\nretention_days = 0\ndelete_tracked_only = false\n"
+        },
+    )
+
+    try:
+        assert (
+            run_sqb(command=("--no-color", "state", "init"), project_dir=project_dir).returncode
+            == 0
+        )
+        assert (
+            run_sqb(command=("--no-color", "state", "migrate"), project_dir=project_dir).returncode
+            == 0
+        )
+        execute_postgres_sql(
+            sql=(
+                "UPDATE "
+                f"{quoted_relation_name(schema_name=state_schema, name='state_versions')} "
+                "SET schema_version = 2"
+            ),
+            config=postgres_e2e_config,
+        )
+        assert (
+            run_sqb(command=("--no-color", "state", "migrate"), project_dir=project_dir).returncode
+            == 0
+        )
+        execute_postgres_sql(
+            sql=(
+                "INSERT INTO "
+                f"{quoted_relation_name(schema_name=state_schema, name='locks')} "
+                "(lock_key, owner_id, expires_at, created_at, updated_at) VALUES "
+                "('virtual_env:stale', 'owner', TIMESTAMP '2000-01-01', "
+                "TIMESTAMP '2000-01-01', TIMESTAMP '2000-01-01')"
+            ),
+            config=postgres_e2e_config,
+        )
+
+        janitor_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "janitor", "--auto-approve"),
+            project_dir=project_dir,
+        )
+
+        assert janitor_result.returncode == test_case.expected_exit_code, (
+            janitor_result.stdout + janitor_result.stderr
+        )
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in janitor_result.stdout
+        assert fetch_postgres_rows(
+            sql=(
+                "SELECT COUNT(*) FROM information_schema.schemata "
+                f"WHERE schema_name LIKE '{state_schema}__backup_%'"
+            ),
+            config=postgres_e2e_config,
+        ) == ((test_case.expected_virtual_environment_count_after,),)
+        assert fetch_postgres_rows(
+            sql=(
+                "SELECT COUNT(*) FROM "
+                f"{quoted_relation_name(schema_name=state_schema, name='locks')}"
+            ),
+            config=postgres_e2e_config,
+        ) == ((test_case.expected_ref_count_after,),)
+    finally:
+        cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         PostgresVirtualRollbackE2ETestCase(
             description="postgres rollback restores previous finalized checkpoint",
             expected_rows=((1,),),
@@ -564,6 +762,334 @@ def test_given_postgres_finalized_checkpoints_when_rolling_back_then_refs_and_vi
             )
             == test_case.expected_rows
         )
+    finally:
+        cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(schema_name=warehouse_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__dev",
+            config=postgres_e2e_config,
+        )
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__sqb_physical",
+            config=postgres_e2e_config,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresVirtualRollbackE2ETestCase(
+            description="postgres rollback blocks when checkpoint physical relation is missing",
+            expected_rows=(),
+            expected_stdout_fragments=(
+                "error[S024]",
+                "checkpoint references missing warehouse relation",
+            ),
+            expected_checkpoint_count=2,
+            expected_exit_code=1,
+        )
+    ],
+    ids=["postgres rollback blocks when checkpoint physical relation is missing"],
+)
+def test_given_postgres_checkpoint_physical_relation_missing_when_rolling_back_then_it_blocks(
+    test_case: PostgresVirtualRollbackE2ETestCase,
+    tmp_path: Path,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    state_schema: str = build_unique_schema_name(prefix="sqb_state_e2e")
+    warehouse_schema: str = build_unique_schema_name(prefix="sqb_virtual_rollback")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_virtual_rollback_missing_physical",
+        repo_files={
+            "sqlbuild_project.toml": build_postgres_virtual_project_toml(
+                project_name="postgres_virtual_rollback_missing_physical",
+                config=postgres_e2e_config,
+                state_schema=state_schema,
+                warehouse_schema=warehouse_schema,
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+
+    try:
+        assert (
+            run_sqb(command=("--no-color", "state", "init"), project_dir=project_dir).returncode
+            == 0
+        )
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        (project_dir / "models" / "orders.sql").write_text(
+            "MODEL ();\n\nSELECT 2 AS id\n",
+            encoding="utf-8",
+        )
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        checkpoints_relation: str = quoted_relation_name(
+            schema_name=state_schema,
+            name="virtual_environment_checkpoints",
+        )
+        checkpoint_refs_relation: str = quoted_relation_name(
+            schema_name=state_schema,
+            name="virtual_environment_checkpoint_refs",
+        )
+        physical_relations_relation: str = quoted_relation_name(
+            schema_name=state_schema,
+            name="physical_relations",
+        )
+        checkpoint_rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
+            sql=f"SELECT checkpoint_id FROM {checkpoints_relation}",
+            config=postgres_e2e_config,
+        )
+        assert len(checkpoint_rows) == test_case.expected_checkpoint_count
+        physical_schema_name, physical_relation_name = fetch_postgres_rows(
+            sql=(
+                f"SELECT pr.schema_name, pr.relation_name FROM {checkpoints_relation} cp "
+                f"JOIN {checkpoint_refs_relation} cr "
+                "ON cp.checkpoint_id = cr.checkpoint_id JOIN "
+                f"{physical_relations_relation} pr "
+                "ON pr.model_name = cr.model_name AND pr.version_hash = cr.version_hash "
+                "WHERE cp.virtual_environment_name = 'dev' AND cr.model_name = 'orders' "
+                "ORDER BY cp.created_at ASC LIMIT 1"
+            ),
+            config=postgres_e2e_config,
+        )[0]
+        missing_relation: str = quoted_relation_name(
+            schema_name=str(physical_schema_name),
+            name=str(physical_relation_name),
+        )
+        execute_postgres_sql(
+            sql=f"DROP TABLE {missing_relation} CASCADE",
+            config=postgres_e2e_config,
+        )
+
+        rollback_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "rollback"),
+            project_dir=project_dir,
+        )
+
+        assert rollback_result.returncode == test_case.expected_exit_code
+        combined_output: str = rollback_result.stdout + rollback_result.stderr
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in combined_output
+    finally:
+        cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(schema_name=warehouse_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__dev",
+            config=postgres_e2e_config,
+        )
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__sqb_physical",
+            config=postgres_e2e_config,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresVirtualRollbackE2ETestCase(
+            description="postgres rollback blocks when no previous checkpoint exists",
+            expected_rows=(),
+            expected_stdout_fragments=(
+                "error[S021]",
+                "no previous finalized checkpoint is available for rollback",
+            ),
+            expected_checkpoint_count=1,
+            expected_exit_code=1,
+        )
+    ],
+    ids=["postgres rollback blocks when no previous checkpoint exists"],
+)
+def test_given_postgres_only_current_checkpoint_when_rolling_back_then_it_blocks(
+    test_case: PostgresVirtualRollbackE2ETestCase,
+    tmp_path: Path,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    state_schema: str = build_unique_schema_name(prefix="sqb_state_e2e")
+    warehouse_schema: str = build_unique_schema_name(prefix="sqb_virtual_rollback")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_virtual_rollback_no_previous",
+        repo_files={
+            "sqlbuild_project.toml": build_postgres_virtual_project_toml(
+                project_name="postgres_virtual_rollback_no_previous",
+                config=postgres_e2e_config,
+                state_schema=state_schema,
+                warehouse_schema=warehouse_schema,
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+
+    try:
+        assert (
+            run_sqb(command=("--no-color", "state", "init"), project_dir=project_dir).returncode
+            == 0
+        )
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        checkpoints_relation: str = quoted_relation_name(
+            schema_name=state_schema,
+            name="virtual_environment_checkpoints",
+        )
+        assert (
+            len(
+                fetch_postgres_rows(
+                    sql=f"SELECT checkpoint_id FROM {checkpoints_relation}",
+                    config=postgres_e2e_config,
+                )
+            )
+            == test_case.expected_checkpoint_count
+        )
+
+        rollback_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "rollback"),
+            project_dir=project_dir,
+        )
+
+        assert rollback_result.returncode == test_case.expected_exit_code
+        combined_output: str = rollback_result.stdout + rollback_result.stderr
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in combined_output
+    finally:
+        cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(schema_name=warehouse_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__dev",
+            config=postgres_e2e_config,
+        )
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__sqb_physical",
+            config=postgres_e2e_config,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresVirtualRollbackE2ETestCase(
+            description="postgres rollback blocks when target VDE lock exists",
+            expected_rows=(),
+            expected_stdout_fragments=("virtual environment 'dev' is locked",),
+            expected_checkpoint_count=2,
+            expected_exit_code=1,
+        )
+    ],
+    ids=["postgres rollback blocks when target VDE lock exists"],
+)
+def test_given_postgres_target_virtual_environment_lock_when_rolling_back_then_it_blocks(
+    test_case: PostgresVirtualRollbackE2ETestCase,
+    tmp_path: Path,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    state_schema: str = build_unique_schema_name(prefix="sqb_state_e2e")
+    warehouse_schema: str = build_unique_schema_name(prefix="sqb_virtual_rollback")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_virtual_rollback_locked_target",
+        repo_files={
+            "sqlbuild_project.toml": build_postgres_virtual_project_toml(
+                project_name="postgres_virtual_rollback_locked_target",
+                config=postgres_e2e_config,
+                state_schema=state_schema,
+                warehouse_schema=warehouse_schema,
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+
+    try:
+        assert (
+            run_sqb(command=("--no-color", "state", "init"), project_dir=project_dir).returncode
+            == 0
+        )
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        (project_dir / "models" / "orders.sql").write_text(
+            "MODEL ();\n\nSELECT 2 AS id\n",
+            encoding="utf-8",
+        )
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        execute_postgres_sql(
+            sql=(
+                "INSERT INTO "
+                f"{quoted_relation_name(schema_name=state_schema, name='locks')} "
+                "(lock_key, owner_id, expires_at, created_at, updated_at) VALUES "
+                "('virtual_env:dev', 'test-owner', TIMESTAMP '2999-01-01', "
+                "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            ),
+            config=postgres_e2e_config,
+        )
+
+        rollback_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "rollback", "--virtual-env", "dev"),
+            project_dir=project_dir,
+        )
+
+        assert rollback_result.returncode == test_case.expected_exit_code
+        combined_output: str = rollback_result.stdout + rollback_result.stderr
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in combined_output
+    finally:
+        cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(schema_name=warehouse_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__dev",
+            config=postgres_e2e_config,
+        )
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__sqb_physical",
+            config=postgres_e2e_config,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresVirtualRollbackE2ETestCase(
+            description="postgres checkpoint show blocks for unknown checkpoint",
+            expected_rows=(),
+            expected_stdout_fragments=("error[C905]", "unknown checkpoint 'missing'"),
+            expected_checkpoint_count=1,
+            expected_exit_code=1,
+        )
+    ],
+    ids=["postgres checkpoint show blocks for unknown checkpoint"],
+)
+def test_given_postgres_unknown_checkpoint_when_showing_checkpoint_then_it_blocks(
+    test_case: PostgresVirtualRollbackE2ETestCase,
+    tmp_path: Path,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    state_schema: str = build_unique_schema_name(prefix="sqb_state_e2e")
+    warehouse_schema: str = build_unique_schema_name(prefix="sqb_virtual_rollback")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_virtual_checkpoint_unknown",
+        repo_files={
+            "sqlbuild_project.toml": build_postgres_virtual_project_toml(
+                project_name="postgres_virtual_checkpoint_unknown",
+                config=postgres_e2e_config,
+                state_schema=state_schema,
+                warehouse_schema=warehouse_schema,
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+
+    try:
+        assert (
+            run_sqb(command=("--no-color", "state", "init"), project_dir=project_dir).returncode
+            == 0
+        )
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "state", "checkpoints", "show", "missing"),
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_exit_code
+        combined_output: str = result.stdout + result.stderr
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in combined_output
     finally:
         cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
         cleanup_postgres_state_schemas(schema_name=warehouse_schema, config=postgres_e2e_config)
@@ -976,6 +1502,790 @@ def test_given_postgres_tracked_physical_relation_when_attaching_then_view_is_re
 
 @pytest.mark.parametrize(
     "test_case",
+    [
+        PostgresReconcileE2ETestCase(
+            description="postgres reconcile repair-view blocks missing physical relation",
+            expected_rows=(),
+            expected_stdout_fragments=(
+                "missing physical relation: orders",
+                "error[C252]: missing physical relation for 'orders'",
+            ),
+            expected_exit_code=1,
+        )
+    ],
+    ids=["postgres reconcile repair-view blocks missing physical relation"],
+)
+def test_given_postgres_missing_physical_relation_when_repairing_then_it_blocks(
+    test_case: PostgresReconcileE2ETestCase,
+    tmp_path: Path,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    state_schema: str = build_unique_schema_name(prefix="sqb_state_e2e")
+    warehouse_schema: str = build_unique_schema_name(prefix="sqb_virtual_e2e")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_reconcile_missing_physical",
+        repo_files={
+            "sqlbuild_project.toml": build_postgres_virtual_project_toml(
+                project_name="postgres_reconcile_missing_physical",
+                config=postgres_e2e_config,
+                state_schema=state_schema,
+                warehouse_schema=warehouse_schema,
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+
+    try:
+        assert (
+            run_sqb(command=("--no-color", "state", "init"), project_dir=project_dir).returncode
+            == 0
+        )
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        physical_schema_name, physical_relation_name = fetch_postgres_rows(
+            sql=(
+                "SELECT schema_name, relation_name FROM "
+                f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
+                "WHERE model_name = 'orders' ORDER BY updated_at DESC LIMIT 1"
+            ),
+            config=postgres_e2e_config,
+        )[0]
+        missing_relation: str = quoted_relation_name(
+            schema_name=str(physical_schema_name),
+            name=str(physical_relation_name),
+        )
+        execute_postgres_sql(
+            sql=f"DROP TABLE {missing_relation} CASCADE",
+            config=postgres_e2e_config,
+        )
+
+        report_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "reconcile", "--virtual-env", "dev"),
+            project_dir=project_dir,
+        )
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "reconcile",
+                "repair-view",
+                "--virtual-env",
+                "dev",
+                "--model",
+                "orders",
+            ),
+            project_dir=project_dir,
+        )
+
+        combined_output: str = (
+            report_result.stdout + report_result.stderr + result.stdout + result.stderr
+        )
+        assert result.returncode == test_case.expected_exit_code, combined_output
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in combined_output
+        assert "Traceback" not in combined_output
+    finally:
+        cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(schema_name=warehouse_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__dev",
+            config=postgres_e2e_config,
+        )
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__sqb_physical",
+            config=postgres_e2e_config,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresReconcileE2ETestCase(
+            description="postgres reconcile attach blocks untracked physical relation",
+            expected_rows=(),
+            expected_stdout_fragments=("is not a tracked relation",),
+            expected_exit_code=1,
+        )
+    ],
+    ids=["postgres reconcile attach blocks untracked physical relation"],
+)
+def test_given_postgres_untracked_physical_relation_when_attaching_then_it_blocks(
+    test_case: PostgresReconcileE2ETestCase,
+    tmp_path: Path,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    state_schema: str = build_unique_schema_name(prefix="sqb_state_e2e")
+    warehouse_schema: str = build_unique_schema_name(prefix="sqb_virtual_e2e")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_reconcile_attach_untracked",
+        repo_files={
+            "sqlbuild_project.toml": build_postgres_virtual_project_toml(
+                project_name="postgres_reconcile_attach_untracked",
+                config=postgres_e2e_config,
+                state_schema=state_schema,
+                warehouse_schema=warehouse_schema,
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+
+    try:
+        assert (
+            run_sqb(command=("--no-color", "state", "init"), project_dir=project_dir).returncode
+            == 0
+        )
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        physical_schema: str = f"{warehouse_schema}__sqb_physical"
+        untracked_relation: str = quoted_relation_name(
+            schema_name=physical_schema,
+            name="untracked_orders",
+        )
+        execute_postgres_sql(
+            sql=f"CREATE TABLE {untracked_relation} AS SELECT 9 AS id",
+            config=postgres_e2e_config,
+        )
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "reconcile",
+                "attach",
+                "--auto-approve",
+                "--virtual-env",
+                "dev",
+                "--model",
+                "orders",
+                "--physical-relation",
+                untracked_relation,
+            ),
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in result.stdout + result.stderr
+    finally:
+        cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(schema_name=warehouse_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__dev",
+            config=postgres_e2e_config,
+        )
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__sqb_physical",
+            config=postgres_e2e_config,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresReconcileE2ETestCase(
+            description="postgres reconcile attach blocks wrong-model tracked physical relation",
+            expected_rows=(),
+            expected_stdout_fragments=("is not a tracked relation for 'orders'",),
+            expected_exit_code=1,
+        )
+    ],
+    ids=["postgres reconcile attach blocks wrong-model tracked physical relation"],
+)
+def test_given_postgres_wrong_model_physical_relation_when_attaching_then_refs_are_unchanged(
+    test_case: PostgresReconcileE2ETestCase,
+    tmp_path: Path,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    state_schema: str = build_unique_schema_name(prefix="sqb_state_e2e")
+    warehouse_schema: str = build_unique_schema_name(prefix="sqb_virtual_e2e")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_reconcile_attach_wrong_model",
+        repo_files={
+            "sqlbuild_project.toml": build_postgres_virtual_project_toml(
+                project_name="postgres_reconcile_attach_wrong_model",
+                config=postgres_e2e_config,
+                state_schema=state_schema,
+                warehouse_schema=warehouse_schema,
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+            "models/customers.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+
+    try:
+        assert (
+            run_sqb(command=("--no-color", "state", "init"), project_dir=project_dir).returncode
+            == 0
+        )
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        refs_relation: str = quoted_relation_name(
+            schema_name=state_schema,
+            name="virtual_environment_refs",
+        )
+        original_refs: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
+            sql=(
+                f"SELECT version_hash FROM {refs_relation} "
+                "WHERE virtual_environment_name = 'dev' AND model_name = 'orders'"
+            ),
+            config=postgres_e2e_config,
+        )
+        physical_schema_name, physical_relation_name = fetch_postgres_rows(
+            sql=(
+                "SELECT schema_name, relation_name FROM "
+                f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
+                "WHERE model_name = 'customers' ORDER BY updated_at DESC LIMIT 1"
+            ),
+            config=postgres_e2e_config,
+        )[0]
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "reconcile",
+                "attach",
+                "--auto-approve",
+                "--virtual-env",
+                "dev",
+                "--model",
+                "orders",
+                "--physical-relation",
+                quoted_relation_name(
+                    schema_name=str(physical_schema_name),
+                    name=str(physical_relation_name),
+                ),
+            ),
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in result.stdout + result.stderr
+        assert (
+            fetch_postgres_rows(
+                sql=(
+                    f"SELECT version_hash FROM {refs_relation} "
+                    "WHERE virtual_environment_name = 'dev' AND model_name = 'orders'"
+                ),
+                config=postgres_e2e_config,
+            )
+            == original_refs
+        )
+    finally:
+        cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(schema_name=warehouse_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__dev",
+            config=postgres_e2e_config,
+        )
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__sqb_physical",
+            config=postgres_e2e_config,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresReconcileE2ETestCase(
+            description="postgres reconcile attach cancellation leaves refs unchanged",
+            expected_rows=(),
+            expected_stdout_fragments=("reconcile attach cancelled",),
+            expected_exit_code=1,
+            input_text="nope\n",
+        )
+    ],
+    ids=["postgres reconcile attach cancellation leaves refs unchanged"],
+)
+def test_given_postgres_wrong_confirmation_when_attaching_then_refs_are_unchanged(
+    test_case: PostgresReconcileE2ETestCase,
+    tmp_path: Path,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    state_schema: str = build_unique_schema_name(prefix="sqb_state_e2e")
+    warehouse_schema: str = build_unique_schema_name(prefix="sqb_virtual_e2e")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_reconcile_attach_cancelled",
+        repo_files={
+            "sqlbuild_project.toml": build_postgres_virtual_project_toml(
+                project_name="postgres_reconcile_attach_cancelled",
+                config=postgres_e2e_config,
+                state_schema=state_schema,
+                warehouse_schema=warehouse_schema,
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+
+    try:
+        assert (
+            run_sqb(command=("--no-color", "state", "init"), project_dir=project_dir).returncode
+            == 0
+        )
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        refs_relation: str = quoted_relation_name(
+            schema_name=state_schema,
+            name="virtual_environment_refs",
+        )
+        original_refs: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
+            sql=(
+                f"SELECT version_hash FROM {refs_relation} "
+                "WHERE virtual_environment_name = 'dev' AND model_name = 'orders'"
+            ),
+            config=postgres_e2e_config,
+        )
+        physical_schema_name, physical_relation_name = fetch_postgres_rows(
+            sql=(
+                "SELECT schema_name, relation_name FROM "
+                f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
+                "WHERE model_name = 'orders' ORDER BY updated_at DESC LIMIT 1"
+            ),
+            config=postgres_e2e_config,
+        )[0]
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "reconcile",
+                "attach",
+                "--virtual-env",
+                "dev",
+                "--model",
+                "orders",
+                "--physical-relation",
+                quoted_relation_name(
+                    schema_name=str(physical_schema_name),
+                    name=str(physical_relation_name),
+                ),
+            ),
+            project_dir=project_dir,
+            input_text=test_case.input_text,
+        )
+
+        assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in result.stdout + result.stderr
+        assert (
+            fetch_postgres_rows(
+                sql=(
+                    f"SELECT version_hash FROM {refs_relation} "
+                    "WHERE virtual_environment_name = 'dev' AND model_name = 'orders'"
+                ),
+                config=postgres_e2e_config,
+            )
+            == original_refs
+        )
+    finally:
+        cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(schema_name=warehouse_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__dev",
+            config=postgres_e2e_config,
+        )
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__sqb_physical",
+            config=postgres_e2e_config,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresReconcileE2ETestCase(
+            description="postgres repair-view blocks logical target table",
+            expected_rows=(),
+            expected_stdout_fragments=("logical target for 'orders' is a table",),
+            expected_exit_code=1,
+        )
+    ],
+    ids=["postgres repair-view blocks logical target table"],
+)
+def test_given_postgres_logical_target_table_when_repairing_then_it_blocks(
+    test_case: PostgresReconcileE2ETestCase,
+    tmp_path: Path,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    state_schema: str = build_unique_schema_name(prefix="sqb_state_e2e")
+    warehouse_schema: str = build_unique_schema_name(prefix="sqb_virtual_e2e")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_reconcile_repair_table_block",
+        repo_files={
+            "sqlbuild_project.toml": build_postgres_virtual_project_toml(
+                project_name="postgres_reconcile_repair_table_block",
+                config=postgres_e2e_config,
+                state_schema=state_schema,
+                warehouse_schema=warehouse_schema,
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+
+    try:
+        assert (
+            run_sqb(command=("--no-color", "state", "init"), project_dir=project_dir).returncode
+            == 0
+        )
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        logical_relation: str = quoted_relation_name(
+            schema_name=f"{warehouse_schema}__dev",
+            name="orders",
+        )
+        execute_postgres_sql(
+            sql=f"DROP VIEW {logical_relation}; CREATE TABLE {logical_relation} AS SELECT 1 AS id",
+            config=postgres_e2e_config,
+        )
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "reconcile",
+                "repair-view",
+                "--virtual-env",
+                "dev",
+                "--model",
+                "orders",
+            ),
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in result.stdout + result.stderr
+    finally:
+        cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(schema_name=warehouse_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__dev",
+            config=postgres_e2e_config,
+        )
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__sqb_physical",
+            config=postgres_e2e_config,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresReconcileE2ETestCase(
+            description="postgres attach blocks logical target table before ref update",
+            expected_rows=(),
+            expected_stdout_fragments=("logical target for 'orders' is a table",),
+            expected_exit_code=1,
+        )
+    ],
+    ids=["postgres attach blocks logical target table before ref update"],
+)
+def test_given_postgres_logical_target_table_when_attaching_then_refs_are_unchanged(
+    test_case: PostgresReconcileE2ETestCase,
+    tmp_path: Path,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    state_schema: str = build_unique_schema_name(prefix="sqb_state_e2e")
+    warehouse_schema: str = build_unique_schema_name(prefix="sqb_virtual_e2e")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_reconcile_attach_table_block",
+        repo_files={
+            "sqlbuild_project.toml": build_postgres_virtual_project_toml(
+                project_name="postgres_reconcile_attach_table_block",
+                config=postgres_e2e_config,
+                state_schema=state_schema,
+                warehouse_schema=warehouse_schema,
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+
+    try:
+        assert (
+            run_sqb(command=("--no-color", "state", "init"), project_dir=project_dir).returncode
+            == 0
+        )
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        refs_relation: str = quoted_relation_name(
+            schema_name=state_schema,
+            name="virtual_environment_refs",
+        )
+        original_refs: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
+            sql=(
+                f"SELECT version_hash FROM {refs_relation} "
+                "WHERE virtual_environment_name = 'dev' AND model_name = 'orders'"
+            ),
+            config=postgres_e2e_config,
+        )
+        physical_schema_name, physical_relation_name = fetch_postgres_rows(
+            sql=(
+                "SELECT schema_name, relation_name FROM "
+                f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
+                "WHERE model_name = 'orders' ORDER BY updated_at DESC LIMIT 1"
+            ),
+            config=postgres_e2e_config,
+        )[0]
+        logical_relation: str = quoted_relation_name(
+            schema_name=f"{warehouse_schema}__dev",
+            name="orders",
+        )
+        execute_postgres_sql(
+            sql=f"DROP VIEW {logical_relation}; CREATE TABLE {logical_relation} AS SELECT 1 AS id",
+            config=postgres_e2e_config,
+        )
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "reconcile",
+                "attach",
+                "--auto-approve",
+                "--virtual-env",
+                "dev",
+                "--model",
+                "orders",
+                "--physical-relation",
+                quoted_relation_name(
+                    schema_name=str(physical_schema_name),
+                    name=str(physical_relation_name),
+                ),
+            ),
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in result.stdout + result.stderr
+        assert (
+            fetch_postgres_rows(
+                sql=(
+                    f"SELECT version_hash FROM {refs_relation} "
+                    "WHERE virtual_environment_name = 'dev' AND model_name = 'orders'"
+                ),
+                config=postgres_e2e_config,
+            )
+            == original_refs
+        )
+    finally:
+        cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(schema_name=warehouse_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__dev",
+            config=postgres_e2e_config,
+        )
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__sqb_physical",
+            config=postgres_e2e_config,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresReconcileE2ETestCase(
+            description="postgres repair-view blocks when target vde is locked",
+            expected_rows=(),
+            expected_stdout_fragments=("virtual environment 'dev' is locked",),
+            expected_exit_code=1,
+        )
+    ],
+    ids=["postgres repair-view blocks when target vde is locked"],
+)
+def test_given_postgres_target_virtual_environment_lock_when_repairing_then_it_blocks(
+    test_case: PostgresReconcileE2ETestCase,
+    tmp_path: Path,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    state_schema: str = build_unique_schema_name(prefix="sqb_state_e2e")
+    warehouse_schema: str = build_unique_schema_name(prefix="sqb_virtual_e2e")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_reconcile_repair_locked",
+        repo_files={
+            "sqlbuild_project.toml": build_postgres_virtual_project_toml(
+                project_name="postgres_reconcile_repair_locked",
+                config=postgres_e2e_config,
+                state_schema=state_schema,
+                warehouse_schema=warehouse_schema,
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+
+    try:
+        assert (
+            run_sqb(command=("--no-color", "state", "init"), project_dir=project_dir).returncode
+            == 0
+        )
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        logical_relation: str = quoted_relation_name(
+            schema_name=f"{warehouse_schema}__dev",
+            name="orders",
+        )
+        execute_postgres_sql(
+            sql=f"DROP VIEW {logical_relation}",
+            config=postgres_e2e_config,
+        )
+        execute_postgres_sql(
+            sql=(
+                "INSERT INTO "
+                f"{quoted_relation_name(schema_name=state_schema, name='locks')} "
+                "(lock_key, owner_id, expires_at, created_at, updated_at) VALUES "
+                "('virtual_env:dev', 'test-owner', TIMESTAMP '2999-01-01', "
+                "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            ),
+            config=postgres_e2e_config,
+        )
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "reconcile",
+                "repair-view",
+                "--virtual-env",
+                "dev",
+                "--model",
+                "orders",
+            ),
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in result.stdout + result.stderr
+        assert fetch_postgres_rows(
+            sql=(
+                "SELECT COUNT(*) FROM information_schema.tables "
+                f"WHERE table_schema = '{warehouse_schema}__dev' AND table_name = 'orders'"
+            ),
+            config=postgres_e2e_config,
+        ) == ((0,),)
+    finally:
+        cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(schema_name=warehouse_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__dev",
+            config=postgres_e2e_config,
+        )
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__sqb_physical",
+            config=postgres_e2e_config,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresReconcileE2ETestCase(
+            description="postgres attach blocks when target vde is locked",
+            expected_rows=(),
+            expected_stdout_fragments=("virtual environment 'dev' is locked",),
+            expected_exit_code=1,
+        )
+    ],
+    ids=["postgres attach blocks when target vde is locked"],
+)
+def test_given_postgres_target_virtual_environment_lock_when_attaching_then_refs_are_unchanged(
+    test_case: PostgresReconcileE2ETestCase,
+    tmp_path: Path,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    state_schema: str = build_unique_schema_name(prefix="sqb_state_e2e")
+    warehouse_schema: str = build_unique_schema_name(prefix="sqb_virtual_e2e")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_reconcile_attach_locked",
+        repo_files={
+            "sqlbuild_project.toml": build_postgres_virtual_project_toml(
+                project_name="postgres_reconcile_attach_locked",
+                config=postgres_e2e_config,
+                state_schema=state_schema,
+                warehouse_schema=warehouse_schema,
+            ),
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+        },
+    )
+
+    try:
+        assert (
+            run_sqb(command=("--no-color", "state", "init"), project_dir=project_dir).returncode
+            == 0
+        )
+        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        refs_relation: str = quoted_relation_name(
+            schema_name=state_schema,
+            name="virtual_environment_refs",
+        )
+        original_refs: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
+            sql=(
+                f"SELECT version_hash FROM {refs_relation} "
+                "WHERE virtual_environment_name = 'dev' AND model_name = 'orders'"
+            ),
+            config=postgres_e2e_config,
+        )
+        physical_schema_name, physical_relation_name = fetch_postgres_rows(
+            sql=(
+                "SELECT schema_name, relation_name FROM "
+                f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
+                "WHERE model_name = 'orders' ORDER BY updated_at DESC LIMIT 1"
+            ),
+            config=postgres_e2e_config,
+        )[0]
+        execute_postgres_sql(
+            sql=(
+                "INSERT INTO "
+                f"{quoted_relation_name(schema_name=state_schema, name='locks')} "
+                "(lock_key, owner_id, expires_at, created_at, updated_at) VALUES "
+                "('virtual_env:dev', 'test-owner', TIMESTAMP '2999-01-01', "
+                "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            ),
+            config=postgres_e2e_config,
+        )
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "reconcile",
+                "attach",
+                "--auto-approve",
+                "--virtual-env",
+                "dev",
+                "--model",
+                "orders",
+                "--physical-relation",
+                quoted_relation_name(
+                    schema_name=str(physical_schema_name),
+                    name=str(physical_relation_name),
+                ),
+            ),
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in result.stdout + result.stderr
+        assert (
+            fetch_postgres_rows(
+                sql=(
+                    f"SELECT version_hash FROM {refs_relation} "
+                    "WHERE virtual_environment_name = 'dev' AND model_name = 'orders'"
+                ),
+                config=postgres_e2e_config,
+            )
+            == original_refs
+        )
+    finally:
+        cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(schema_name=warehouse_schema, config=postgres_e2e_config)
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__dev",
+            config=postgres_e2e_config,
+        )
+        cleanup_postgres_state_schemas(
+            schema_name=f"{warehouse_schema}__sqb_physical",
+            config=postgres_e2e_config,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
     POSTGRES_STATE_LIFECYCLE_ERROR_E2E_TEST_CASES,
     ids=[case.description for case in POSTGRES_STATE_LIFECYCLE_ERROR_E2E_TEST_CASES],
 )
@@ -1007,6 +2317,230 @@ def test_given_postgres_state_config_when_running_blocked_state_command_then_cli
 
         result: subprocess.CompletedProcess[str] = run_sqb(
             command=test_case.command,
+            project_dir=project_dir,
+        )
+
+        assert_state_cli_error(
+            result=result,
+            expected_exit_code=test_case.expected_exit_code,
+            expected_error_fragment=test_case.expected_error_fragment,
+        )
+    finally:
+        cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
+
+
+POSTGRES_STATE_SCHEMA_CORRUPTION_E2E_TEST_CASES: tuple[
+    PostgresStateSchemaCorruptionE2ETestCase, ...
+] = (
+    PostgresStateSchemaCorruptionE2ETestCase(
+        description="postgres migrate blocks cleanly when required state table is missing",
+        mutation_sql_template="DROP TABLE {virtual_environment_refs}",
+        expected_exit_code=1,
+        expected_error_fragment="Cannot backup invalid state schema",
+    ),
+    PostgresStateSchemaCorruptionE2ETestCase(
+        description="postgres migrate blocks cleanly when required state column is missing",
+        mutation_sql_template='ALTER TABLE {state_versions} DROP COLUMN "updated_at"',
+        expected_exit_code=1,
+        expected_error_fragment="Cannot backup invalid state schema",
+    ),
+    PostgresStateSchemaCorruptionE2ETestCase(
+        description="postgres migrate blocks cleanly when required state column has wrong type",
+        mutation_sql_template=(
+            'ALTER TABLE {state_versions} ALTER COLUMN "schema_version" '
+            'TYPE text USING "schema_version"::text'
+        ),
+        expected_exit_code=1,
+        expected_error_fragment="Cannot backup invalid state schema",
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    POSTGRES_STATE_SCHEMA_CORRUPTION_E2E_TEST_CASES,
+    ids=[case.description for case in POSTGRES_STATE_SCHEMA_CORRUPTION_E2E_TEST_CASES],
+)
+def test_given_corrupt_postgres_state_schema_when_migrating_then_cli_blocks_cleanly(
+    test_case: PostgresStateSchemaCorruptionE2ETestCase,
+    tmp_path: Path,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    state_schema: str = build_unique_schema_name(prefix="sqb_state_e2e")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_state_schema_corruption",
+        repo_files={
+            "sqlbuild_project.toml": build_postgres_state_project_toml(
+                project_name="postgres_state_schema_corruption",
+                config=postgres_e2e_config,
+                state_schema=state_schema,
+            )
+        },
+    )
+
+    try:
+        init_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "state", "init"),
+            project_dir=project_dir,
+        )
+        assert init_result.returncode == 0, init_result.stdout + init_result.stderr
+        execute_postgres_sql(
+            sql=test_case.mutation_sql_template.format(
+                state_versions=quoted_relation_name(
+                    schema_name=state_schema,
+                    name="state_versions",
+                ),
+                virtual_environment_refs=quoted_relation_name(
+                    schema_name=state_schema,
+                    name="virtual_environment_refs",
+                ),
+            ),
+            config=postgres_e2e_config,
+        )
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "state", "migrate"),
+            project_dir=project_dir,
+        )
+
+        assert_state_cli_error(
+            result=result,
+            expected_exit_code=test_case.expected_exit_code,
+            expected_error_fragment=test_case.expected_error_fragment,
+        )
+    finally:
+        cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresStateResetInvalidE2ETestCase(
+            description="postgres explicit rollback blocks cleanly when backup schema is deleted",
+            expected_exit_code=1,
+            expected_error_fragment="backup_",
+        )
+    ],
+    ids=["postgres explicit rollback blocks cleanly when backup schema is deleted"],
+)
+def test_given_deleted_postgres_state_backup_when_rolling_back_then_it_blocks_cleanly(
+    test_case: PostgresStateResetInvalidE2ETestCase,
+    tmp_path: Path,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    state_schema: str = build_unique_schema_name(prefix="sqb_state_e2e")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_state_deleted_backup",
+        repo_files={
+            "sqlbuild_project.toml": build_postgres_state_project_toml(
+                project_name="postgres_state_deleted_backup",
+                config=postgres_e2e_config,
+                state_schema=state_schema,
+            )
+        },
+    )
+
+    try:
+        assert (
+            run_sqb(command=("--no-color", "state", "init"), project_dir=project_dir).returncode
+            == 0
+        )
+        assert (
+            run_sqb(command=("--no-color", "state", "migrate"), project_dir=project_dir).returncode
+            == 0
+        )
+        events_relation: str = quoted_relation_name(
+            schema_name=state_schema,
+            name="state_migration_events",
+        )
+        backup_id: str = str(
+            fetch_postgres_rows(
+                sql=(
+                    f"SELECT backup_id FROM {events_relation} "
+                    "WHERE action = 'backup' ORDER BY created_at DESC LIMIT 1"
+                ),
+                config=postgres_e2e_config,
+            )[0][0]
+        )
+        execute_postgres_sql(
+            sql=f"DROP SCHEMA {quote_identifier(f'{state_schema}__backup_{backup_id}')} CASCADE",
+            config=postgres_e2e_config,
+        )
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "state", "rollback", "--backup-id", backup_id),
+            project_dir=project_dir,
+        )
+
+        assert_state_cli_error(
+            result=result,
+            expected_exit_code=test_case.expected_exit_code,
+            expected_error_fragment=test_case.expected_error_fragment,
+        )
+    finally:
+        cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresStateResetInvalidE2ETestCase(
+            description="postgres latest rollback blocks cleanly when backup schema is deleted",
+            expected_exit_code=1,
+            expected_error_fragment="No state backup is available for rollback",
+        )
+    ],
+    ids=["postgres latest rollback blocks cleanly when backup schema is deleted"],
+)
+def test_given_deleted_latest_postgres_state_backup_when_rolling_back_then_it_blocks_cleanly(
+    test_case: PostgresStateResetInvalidE2ETestCase,
+    tmp_path: Path,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    state_schema: str = build_unique_schema_name(prefix="sqb_state_e2e")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_state_deleted_latest_backup",
+        repo_files={
+            "sqlbuild_project.toml": build_postgres_state_project_toml(
+                project_name="postgres_state_deleted_latest_backup",
+                config=postgres_e2e_config,
+                state_schema=state_schema,
+            )
+        },
+    )
+
+    try:
+        assert (
+            run_sqb(command=("--no-color", "state", "init"), project_dir=project_dir).returncode
+            == 0
+        )
+        assert (
+            run_sqb(command=("--no-color", "state", "migrate"), project_dir=project_dir).returncode
+            == 0
+        )
+        events_relation: str = quoted_relation_name(
+            schema_name=state_schema,
+            name="state_migration_events",
+        )
+        backup_id: str = str(
+            fetch_postgres_rows(
+                sql=(
+                    f"SELECT backup_id FROM {events_relation} "
+                    "WHERE action = 'backup' ORDER BY created_at DESC LIMIT 1"
+                ),
+                config=postgres_e2e_config,
+            )[0][0]
+        )
+        execute_postgres_sql(
+            sql=f"DROP SCHEMA {quote_identifier(f'{state_schema}__backup_{backup_id}')} CASCADE",
+            config=postgres_e2e_config,
+        )
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "state", "rollback"),
             project_dir=project_dir,
         )
 

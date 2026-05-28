@@ -18,6 +18,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.state._test_types import (
     StateLifecycleErrorE2ETestCase,
     StateLocalOverrideE2ETestCase,
     StateModeGuardE2ETestCase,
+    StateSchemaCorruptionE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.state.helpers import assert_state_cli_error
 
@@ -258,6 +259,196 @@ database = "state.duckdb"
 
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "state", "rollback", "--backup-id", backup_id),
+        project_dir=project_dir,
+    )
+
+    assert_state_cli_error(
+        result=result,
+        expected_exit_code=test_case.expected_exit_code,
+        expected_error_fragment=test_case.expected_error_fragment,
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StateModeGuardE2ETestCase(
+            description="latest rollback blocks cleanly when backup schema is deleted",
+            project_toml="",
+            expected_exit_code=1,
+            expected_error_fragment="No state backup is available for rollback",
+        )
+    ],
+    ids=["latest rollback blocks cleanly when backup schema is deleted"],
+)
+def test_given_deleted_latest_duckdb_state_backup_when_rolling_back_then_it_blocks_cleanly(
+    test_case: StateModeGuardE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="duckdb_state_deleted_latest_backup",
+        repo_files={
+            "sqlbuild_project.toml": """
+name = "duckdb_state_deleted_latest_backup"
+adapter = "duckdb"
+environment_mode = "virtual"
+default_environment = "dev"
+
+[connection]
+database = "warehouse.duckdb"
+
+[environments.dev.state]
+backend = "duckdb"
+schema = "sqlbuild_state"
+
+[environments.dev.state.connection]
+database = "state.duckdb"
+""".lstrip()
+        },
+    )
+    state_db_path: Path = project_dir / "state.duckdb"
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    assert run_sqb(command=("state", "migrate"), project_dir=project_dir).returncode == 0
+    backup_id: str = str(
+        query_duckdb(
+            db_path=state_db_path,
+            sql=(
+                "SELECT backup_id FROM sqlbuild_state.state_migration_events "
+                "WHERE action = 'backup' ORDER BY created_at DESC LIMIT 1"
+            ),
+        )[0][0]
+    )
+    execute_duckdb(
+        db_path=state_db_path,
+        sql=f'DROP SCHEMA "sqlbuild_state__backup_{backup_id}" CASCADE',
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "state", "rollback"),
+        project_dir=project_dir,
+    )
+
+    assert_state_cli_error(
+        result=result,
+        expected_exit_code=test_case.expected_exit_code,
+        expected_error_fragment=test_case.expected_error_fragment,
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StateModeGuardE2ETestCase(
+            description="migrate blocks cleanly when required state table is missing",
+            project_toml="",
+            expected_exit_code=1,
+            expected_error_fragment="Cannot backup invalid state schema",
+        )
+    ],
+    ids=["migrate blocks cleanly when required state table is missing"],
+)
+def test_given_missing_duckdb_state_table_when_migrating_then_cli_blocks_cleanly(
+    test_case: StateModeGuardE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="duckdb_state_missing_table",
+        repo_files={
+            "sqlbuild_project.toml": """
+name = "duckdb_state_missing_table"
+adapter = "duckdb"
+environment_mode = "virtual"
+default_environment = "dev"
+
+[connection]
+database = "warehouse.duckdb"
+
+[environments.dev.state]
+backend = "duckdb"
+schema = "sqlbuild_state"
+
+[environments.dev.state.connection]
+database = "state.duckdb"
+""".lstrip()
+        },
+    )
+    state_db_path: Path = project_dir / "state.duckdb"
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    execute_duckdb(
+        db_path=state_db_path,
+        sql='DROP TABLE "sqlbuild_state"."virtual_environment_refs"',
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "state", "migrate"),
+        project_dir=project_dir,
+    )
+
+    assert_state_cli_error(
+        result=result,
+        expected_exit_code=test_case.expected_exit_code,
+        expected_error_fragment=test_case.expected_error_fragment,
+    )
+
+
+DUCKDB_STATE_SCHEMA_CORRUPTION_E2E_TEST_CASES: tuple[StateSchemaCorruptionE2ETestCase, ...] = (
+    StateSchemaCorruptionE2ETestCase(
+        description="migrate blocks cleanly when required state column is missing",
+        mutation_sql='ALTER TABLE "sqlbuild_state"."state_versions" DROP COLUMN "updated_at"',
+        expected_exit_code=1,
+        expected_error_fragment="Cannot backup invalid state schema",
+    ),
+    StateSchemaCorruptionE2ETestCase(
+        description="migrate blocks cleanly when required state column has wrong type",
+        mutation_sql=(
+            'ALTER TABLE "sqlbuild_state"."state_versions" '
+            'ALTER COLUMN "schema_version" SET DATA TYPE TEXT'
+        ),
+        expected_exit_code=1,
+        expected_error_fragment="Cannot backup invalid state schema",
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    DUCKDB_STATE_SCHEMA_CORRUPTION_E2E_TEST_CASES,
+    ids=[case.description for case in DUCKDB_STATE_SCHEMA_CORRUPTION_E2E_TEST_CASES],
+)
+def test_given_corrupt_duckdb_state_schema_when_migrating_then_cli_blocks_cleanly(
+    test_case: StateSchemaCorruptionE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="duckdb_state_schema_corruption",
+        repo_files={
+            "sqlbuild_project.toml": """
+name = "duckdb_state_schema_corruption"
+adapter = "duckdb"
+environment_mode = "virtual"
+default_environment = "dev"
+
+[connection]
+database = "warehouse.duckdb"
+
+[environments.dev.state]
+backend = "duckdb"
+schema = "sqlbuild_state"
+
+[environments.dev.state.connection]
+database = "state.duckdb"
+""".lstrip()
+        },
+    )
+    state_db_path: Path = project_dir / "state.duckdb"
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    execute_duckdb(db_path=state_db_path, sql=test_case.mutation_sql)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "state", "migrate"),
         project_dir=project_dir,
     )
 

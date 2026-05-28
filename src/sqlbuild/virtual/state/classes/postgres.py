@@ -207,6 +207,8 @@ class PostgresStateBackend(StateBackend):
             schema=schema,
             backup_id_value=backup_id_value,
         )
+        if not self._schema_exists(connection, schema=backup_schema):
+            raise StateBackupNotFoundError(f"State backup schema '{backup_schema}' does not exist")
         with connection.cursor() as cursor:
             cursor.execute("BEGIN")
             try:
@@ -1101,6 +1103,15 @@ class PostgresStateBackend(StateBackend):
         if row is None:
             raise StateBackupNotFoundError("No state backup is available for rollback")
         return row[0].removeprefix(f"{schema}__backup_")
+
+    def _schema_exists(self, connection: Any, *, schema: str) -> bool:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT schema_name FROM information_schema.schemata WHERE schema_name = %s",
+                [schema],
+            )
+            row: tuple[str] | None = cursor.fetchone()
+        return row is not None
 
     def _record_event(
         self,

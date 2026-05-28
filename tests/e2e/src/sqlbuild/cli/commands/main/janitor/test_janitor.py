@@ -441,6 +441,113 @@ def test_given_state_backups_and_expired_locks_when_running_janitor_then_state_i
 @pytest.mark.parametrize(
     "test_case",
     [
+        JanitorStateCleanupE2ETestCase(
+            description="virtual janitor keeps state cleanup refs when warehouse cleanup fails",
+            janitor_command=("janitor", "--auto-approve"),
+            expected_exit_code=1,
+            expected_stdout_fragments=("simulated janitor drop failure",),
+            expected_backup_schema_count_after=0,
+            expected_lock_count_after=1,
+        )
+    ],
+    ids=["virtual janitor keeps state cleanup refs when warehouse cleanup fails"],
+)
+def test_given_warehouse_cleanup_failure_when_running_janitor_then_state_cleanup_is_skipped(
+    test_case: JanitorStateCleanupE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    repo_files: dict[str, str] = build_virtual_plan_repo_files(stg_orders_sql="SELECT 1 AS id")
+    repo_files["sqlbuild_project.toml"] += dedent(
+        """
+
+        [janitor]
+        enabled = true
+        retention_days = 0
+        delete_tracked_only = false
+        """
+    )
+    repo_files["adapters/failing_janitor_duckdb.py"] = (
+        "from typing import Any\n"
+        "from sqlbuild.adapter.shared.exceptions import AdapterUserError\n"
+        "from sqlbuild.adapter.shared.models import StatementRecorder\n"
+        "from sqlbuild.adapters.duckdb.client import DuckDbAdapter\n\n"
+        "class FailingJanitorDuckDbAdapter(DuckDbAdapter):\n"
+        "    adapter_name = 'failing_janitor_duckdb'\n\n"
+        "    def drop(\n"
+        "        self,\n"
+        "        connection: Any,\n"
+        "        *,\n"
+        "        target: str,\n"
+        "        if_exists: bool = True,\n"
+        "        statement_recorder: StatementRecorder,\n"
+        "    ) -> None:\n"
+        "        raise AdapterUserError('simulated janitor drop failure')\n"
+        "\n"
+        "    def drop_view(\n"
+        "        self,\n"
+        "        connection: Any,\n"
+        "        *,\n"
+        "        target: str,\n"
+        "        if_exists: bool = True,\n"
+        "        statement_recorder: StatementRecorder,\n"
+        "    ) -> None:\n"
+        "        raise AdapterUserError('simulated janitor drop failure')\n"
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_janitor_warehouse_cleanup_failure",
+        repo_files=repo_files,
+    )
+    state_db_path: Path = project_dir / "state.duckdb"
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    execute_duckdb(
+        db_path=state_db_path,
+        sql=(
+            "INSERT INTO sqlbuild_state.virtual_environments "
+            "(virtual_environment_name, status, baseline_virtual_environment_name, "
+            "created_at, updated_at, finalized_at) VALUES "
+            "('stale', 'finalized', NULL, TIMESTAMP '2000-01-01 00:00:00', "
+            "TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2000-01-01 00:00:00')"
+        ),
+    )
+    execute_duckdb(
+        db_path=state_db_path,
+        sql=(
+            "INSERT INTO sqlbuild_state.locks "
+            "(lock_key, owner_id, expires_at, created_at, updated_at) VALUES "
+            "('virtual_env:stale', 'owner', TIMESTAMP '2000-01-01 00:00:00', "
+            "TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2000-01-01 00:00:00')"
+        ),
+    )
+    (project_dir / "sqlbuild_local.toml").write_text(
+        'adapter = "failing_janitor_duckdb"\n', encoding="utf-8"
+    )
+
+    janitor_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.janitor_command,
+        project_dir=project_dir,
+    )
+
+    assert janitor_result.returncode == test_case.expected_exit_code
+    combined_output: str = janitor_result.stdout + janitor_result.stderr
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in combined_output
+    assert query_duckdb(
+        db_path=state_db_path,
+        sql=(
+            "SELECT COUNT(*) FROM sqlbuild_state.virtual_environments "
+            "WHERE virtual_environment_name = 'stale'"
+        ),
+    ) == [(1,)]
+    assert query_duckdb(
+        db_path=state_db_path,
+        sql="SELECT COUNT(*) FROM sqlbuild_state.locks WHERE lock_key = 'virtual_env:stale'",
+    ) == [(test_case.expected_lock_count_after,)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         JanitorCheckpointRetentionE2ETestCase(
             description="virtual janitor prunes old checkpoints and newly unprotected physicals",
             janitor_command=("janitor", "--auto-approve"),
