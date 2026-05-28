@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.22.0](https://github.com/chio-labs/sqlbuild/compare/v0.21.0...v0.22.0) (2026-05-28)
+
+
+### Features
+
+* add virtual playground template ([9aa01a4](https://github.com/chio-labs/sqlbuild/commit/9aa01a4d292faaf75059bb25aa4771eae5a7c948))
+* add virtual playground template ([a4ce508](https://github.com/chio-labs/sqlbuild/commit/a4ce5088f62ea1ebe0f6077ebdfc8357f2edbf06))
+
 ## [0.21.0](https://github.com/chio-labs/sqlbuild/compare/v0.20.1...v0.21.0) (2026-05-28)
 
 
