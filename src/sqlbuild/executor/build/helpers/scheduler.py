@@ -7,7 +7,7 @@ import logging
 import queue
 import time
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Any
@@ -111,7 +111,7 @@ class BuildScheduler:
         on_node_complete: Callable[[object], None] | None,
         on_progress: Callable[[str], None] | None,
         before_model_materialize: Callable[[ModelPlanEntry, Any], None] | None = None,
-        custom_materializations: dict[str, Callable[..., MaterializationResult]] | None = None,
+        custom_materializations: Mapping[str, Callable[..., MaterializationResult]] | None = None,
         loader_functions: tuple[DiscoveredLoaderFunction, ...] = (),
         loader_is_reload: bool = False,
         start_cursor_ts: datetime | None = None,
@@ -147,7 +147,7 @@ class BuildScheduler:
         self._before_model_materialize: Callable[[ModelPlanEntry, Any], None] | None = (
             before_model_materialize
         )
-        self._custom_materializations: dict[str, Callable[..., MaterializationResult]] = (
+        self._custom_materializations: Mapping[str, Callable[..., MaterializationResult]] = (
             custom_materializations or {}
         )
         self._loader_functions_by_name: dict[str, DiscoveredLoaderFunction] = {
@@ -800,7 +800,7 @@ def _dispatch_model(
     query_change_tracking: bool,
     snapshots: SnapshotsConfig,
     allow_snapshot_schema_change: bool,
-    custom_materializations: dict[str, Callable[..., MaterializationResult]] | None = None,
+    custom_materializations: Mapping[str, Callable[..., MaterializationResult]] | None = None,
     environment: str = "",
     effective_vars: dict[str, object] | None = None,
     warehouse_relations: dict[str, RelationInfo] | None = None,
@@ -810,7 +810,7 @@ def _dispatch_model(
 
     if entry.action == PlanAction.CUSTOM:
         mat_name: str | None = entry.custom_materialization_name
-        registry: dict[str, Callable[..., MaterializationResult]] = custom_materializations or {}
+        registry: Mapping[str, Callable[..., MaterializationResult]] = custom_materializations or {}
         if mat_name is None or mat_name not in registry:
             return ModelExecutionResult(
                 model_name=entry.name,
