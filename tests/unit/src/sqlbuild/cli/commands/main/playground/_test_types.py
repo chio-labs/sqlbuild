@@ -20,3 +20,4 @@ class RunPlaygroundTestCase:
     target_path: str
     expected_stdout_fragments: tuple[str, ...]
     template: str = "waffle_shop"
+    expected_color_fragments: tuple[str, ...] = ()
