@@ -10,3 +10,5 @@ class InitScaffoldTestCase:
     expected_directories: tuple[str, ...]
     expected_gitkeep_files: tuple[str, ...]
     expected_config_fragment: str
+    expected_stdout_fragments: tuple[str, ...] = ()
+    expected_color_fragments: tuple[str, ...] = ()
