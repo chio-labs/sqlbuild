@@ -53,6 +53,13 @@ from tests.unit.src.sqlbuild.cli.commands.main.helpers.debug._test_types import 
                 "\n"
             ),
             expected_json_fragment='"success": false',
+            expected_color_fragments=(
+                "\033[32m\033[1mSQLBuild Diagnostics\033[0m",
+                "\033[1mRuntime:\033[0m",
+                "\033[32m[OK found and valid]\033[0m",
+                "\033[31m[ERROR authentication failed]\033[0m",
+                "\033[2m[SKIP connection failed]\033[0m",
+            ),
         )
     ],
     ids=["renders aligned text and json checks"],
@@ -61,9 +68,12 @@ def test_given_debug_result_when_formatting_then_renders_expected_outputs(
     test_case: DebugOutputTestCase,
 ) -> None:
     text: str = format_debug_text(test_case.result, use_color=False)
+    color_text: str = format_debug_text(test_case.result, use_color=True)
     json_text: str = format_debug_json(test_case.result)
 
     assert text == test_case.expected_text
     assert test_case.expected_json_fragment in json_text
     assert '"status": "ERROR"' in json_text
     assert '"status_message": "authentication failed"' in json_text
+    for fragment in test_case.expected_color_fragments:
+        assert fragment in color_text
