@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from _pytest.capture import CaptureResult
 
+from sqlbuild.cli.commands.main import playground as playground_command
 from sqlbuild.cli.commands.main.helpers.playground.copy import create_playground_project
 from sqlbuild.cli.commands.main.playground import run_playground
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
@@ -327,3 +328,37 @@ def test_given_playground_command_when_running_then_it_prints_next_steps(
         assert expected_fragment in captured.out
     assert (tmp_path / test_case.target_path / "sqlbuild_project.toml").is_file()
     assert (tmp_path / test_case.target_path / ".agents/skills/sqlbuild/SKILL.md").is_file()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RunPlaygroundTestCase(
+            description="styles key playground next step elements",
+            target_path="demo_color_shop",
+            expected_stdout_fragments=(),
+            expected_color_fragments=(
+                "\033[32m\033[1mSQLBuild playground created\033[0m",
+                "  \033[34m\033[1mProject\033[0m: demo_color_shop",
+                "\033[32m\033[1mTry\033[0m:",
+                "\033[2m  \033[0msqb compile",
+            ),
+        )
+    ],
+    ids=["styles key playground next step elements"],
+)
+def test_given_color_terminal_when_running_playground_command_then_it_styles_key_elements(
+    test_case: RunPlaygroundTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(playground_command, "supports_color", lambda: True)
+
+    exit_code: int = run_playground(tmp_path, test_case.target_path, template=test_case.template)
+
+    captured: CaptureResult[str] = capsys.readouterr()
+    assert exit_code == 0
+    expected_fragment: str
+    for expected_fragment in test_case.expected_color_fragments:
+        assert expected_fragment in captured.out

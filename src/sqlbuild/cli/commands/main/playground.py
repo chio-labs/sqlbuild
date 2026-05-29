@@ -6,7 +6,8 @@ from pathlib import Path
 
 from sqlbuild.cli.commands.main.helpers.playground.copy import create_playground_project
 from sqlbuild.cli.commands.main.helpers.skills.update import update_sqlbuild_skills
-from sqlbuild.shared.helpers.colors import blue_bold, dim, green_bold, supports_color
+from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.colors import supports_color
 
 
 def run_playground(
@@ -23,14 +24,13 @@ def run_playground(
     update_sqlbuild_skills(project_dir=target_dir)
     display_path: str = str(target_path)
     use_color: bool = supports_color()
-    heading: str = (
-        green_bold("SQLBuild playground created") if use_color else "SQLBuild playground created"
-    )
-    project_label: str = blue_bold("Project") if use_color else "Project"
-    adapter_label: str = blue_bold("Adapter") if use_color else "Adapter"
-    example_label: str = blue_bold("Example") if use_color else "Example"
-    try_label: str = green_bold("Try") if use_color else "Try"
-    command_prefix: str = dim("  ") if use_color else "  "
+    style: CliStyle = CliStyle(use_color=use_color)
+    heading: str = style.title("SQLBuild playground created")
+    project_label: str = style.value("Project")
+    adapter_label: str = style.value("Adapter")
+    example_label: str = style.value("Example")
+    try_label: str = style.title("Try")
+    command_prefix: str = style.command("  ")
 
     print(heading)
     print()
