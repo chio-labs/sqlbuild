@@ -24,3 +24,10 @@ class CliStyleTestCase:
     expected_status_skip: str
     expected_dbt_section: str
     expected_dbt_object_name: str
+
+
+@dataclass(frozen=True)
+class CliDocumentTestCase:
+    description: str
+    use_color: bool
+    expected_rendered: str

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from sqlbuild.cli.commands.main.helpers.init.scaffold import scaffold_blank_project
 from sqlbuild.cli.commands.main.helpers.skills.update import update_sqlbuild_skills
+from sqlbuild.shared.helpers.cli_document import CliDocument
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.colors import supports_color
 
@@ -32,21 +33,19 @@ def run_init(project_dir: Path | None) -> int:
 
     use_color: bool = supports_color()
     style: CliStyle = CliStyle(use_color=use_color)
-    heading: str = style.title("SQLBuild project created")
-    project_label: str = style.value("Project")
-    config_label: str = style.value("Config")
-    next_steps_label: str = style.section("Next steps")
-    print(heading)
-    print()
-    print(f"  {project_label}: {project_name}")
-    print(f"  {config_label}:  sqlbuild_project.toml")
-    print()
-    print(f"{next_steps_label}:")
-    print("  1. Add sources to sources/")
-    print("  2. Add seeds to seeds/ or loaders to loaders/")
-    print("  3. Add functions to functions/ or macros to macros/")
-    print("  4. Add models to models/staging/ and models/marts/")
-    print("  5. Add tests to tests/unit/ or tests/scenarios/")
-    print(f"  6. {style.command('sqb compile')}")
-    print(f"  7. {style.command('sqb build')}")
+    doc: CliDocument = CliDocument(style)
+    doc.header("SQLBuild project created")
+    doc.blank()
+    doc.field("Project", project_name)
+    doc.field("Config", "sqlbuild_project.toml", value_padding="  ")
+    doc.blank()
+    doc.section("Next steps")
+    doc.line("  1. Add sources to sources/")
+    doc.line("  2. Add seeds to seeds/ or loaders to loaders/")
+    doc.line("  3. Add functions to functions/ or macros to macros/")
+    doc.line("  4. Add models to models/staging/ and models/marts/")
+    doc.line("  5. Add tests to tests/unit/ or tests/scenarios/")
+    doc.command_line("  6. ", "sqb compile")
+    doc.command_line("  7. ", "sqb build")
+    print(doc.render(), end="")
     return 0
