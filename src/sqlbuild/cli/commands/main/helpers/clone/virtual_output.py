@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from sqlbuild.shared.helpers.colors import blue_bold, dim, green_bold, yellow_bold
+from sqlbuild.shared.helpers.cli_document import CliDocument
+from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.virtual.executor.models import VirtualCloneResult
 
 
@@ -11,52 +12,61 @@ def render_virtual_clone_output(
 ) -> None:
     """Render virtual physical-version hydration output."""
 
-    title: str = green_bold("Virtual clone") if use_color else "Virtual clone"
-    source: str = blue_bold(result.source_environment) if use_color else result.source_environment
-    target: str = blue_bold(result.target_environment) if use_color else result.target_environment
-    print()
-    print(f"{title}  {source} -> {target}")
-    print(f"  mode                 {result.mode}")
+    style: CliStyle = CliStyle(use_color=use_color)
+    doc: CliDocument = CliDocument(style)
+    source: str = style.object_name(result.source_environment)
+    target: str = style.object_name(result.target_environment)
+    doc.blank()
+    doc.header("Virtual clone", suffix=f"{source} -> {target}")
+    doc.line(f"  mode                 {result.mode}")
     if result.target_virtual_environment is not None:
-        print(f"  target VDE           {result.target_virtual_environment}")
-    print("  source state         not used")
-    print("  target refs          unchanged")
-    print(f"  selected models      {_count(result.selected_count, use_color=use_color)}")
-    print(f"  found in source      {_count(result.found_count, use_color=use_color)}")
-    print(f"  hydrated             {_count(result.hydrated_count, use_color=use_color)}")
-    print(f"  already present      {_count(result.reused_count, use_color=use_color)}")
-    missing: str = _warn_count(result.missing_count, use_color=use_color)
-    skipped: str = _warn_count(result.skipped_locked_count, use_color=use_color)
-    print(f"  missing in source    {missing}")
-    print(f"  skipped locked       {skipped}")
-    _print_set(
-        result=result, action="missing", label="missing", use_color=use_color, verbose=verbose
+        doc.line(f"  target VDE           {result.target_virtual_environment}")
+    doc.line("  source state         not used")
+    doc.line("  target refs          unchanged")
+    doc.line(f"  selected models      {_count(result.selected_count, style=style)}")
+    doc.line(f"  found in source      {_count(result.found_count, style=style)}")
+    doc.line(f"  hydrated             {_count(result.hydrated_count, style=style)}")
+    doc.line(f"  already present      {_count(result.reused_count, style=style)}")
+    missing: str = _warn_count(result.missing_count, style=style)
+    skipped: str = _warn_count(result.skipped_locked_count, style=style)
+    doc.line(f"  missing in source    {missing}")
+    doc.line(f"  skipped locked       {skipped}")
+    _append_set(
+        doc=doc, result=result, action="missing", label="missing", style=style, verbose=verbose
     )
-    _print_set(
+    _append_set(
+        doc=doc,
         result=result,
         action="skipped_locked",
         label="skipped locked",
-        use_color=use_color,
+        style=style,
         verbose=verbose,
     )
+    print(doc.render(), end="")
 
 
 def is_virtual_clone_success(result: VirtualCloneResult) -> bool:
     return result.missing_count == 0
 
 
-def _count(count: int, *, use_color: bool) -> str:
+def _count(count: int, *, style: CliStyle) -> str:
     value: str = f"{count:,}"
-    return blue_bold(value) if use_color else value
+    return style.value(value)
 
 
-def _warn_count(count: int, *, use_color: bool) -> str:
+def _warn_count(count: int, *, style: CliStyle) -> str:
     value: str = f"{count:,}"
-    return yellow_bold(value) if use_color and count else value
+    return style.warning_strong(value) if count else value
 
 
-def _print_set(
-    *, result: VirtualCloneResult, action: str, label: str, use_color: bool, verbose: bool
+def _append_set(
+    *,
+    doc: CliDocument,
+    result: VirtualCloneResult,
+    action: str,
+    label: str,
+    style: CliStyle,
+    verbose: bool,
 ) -> None:
     names: tuple[str, ...] = tuple(
         item.model_name for item in result.item_results if item.action == action
@@ -64,8 +74,8 @@ def _print_set(
     if not names:
         return
     limit: int = len(names) if verbose else 20
-    rendered_label: str = dim(label) if use_color else label
-    print(f"  {rendered_label}: " + ", ".join(names[:limit]))
+    rendered_label: str = style.muted(label)
+    doc.line(f"  {rendered_label}: " + ", ".join(names[:limit]))
     if len(names) > limit:
         suffix: str = f"  ... {len(names) - limit:,} more; use --verbose to show all"
-        print(dim(suffix) if use_color else suffix)
+        doc.line(style.muted(suffix))
