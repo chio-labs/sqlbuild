@@ -22,6 +22,13 @@ class RunCompilePipelineIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class CompileProgressIntegrationTestCase:
+    description: str
+    project_files: dict[str, str]
+    expected_progress_prefixes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DeferToIntegrationTestCase:
     description: str
     project_files: dict[str, str]
