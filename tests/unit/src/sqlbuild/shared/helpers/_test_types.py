@@ -19,6 +19,7 @@ class CliStyleTestCase:
     expected_section: str
     expected_label: str
     expected_value: str
+    expected_accent: str
     expected_success: str
     expected_success_strong: str
     expected_warning: str
