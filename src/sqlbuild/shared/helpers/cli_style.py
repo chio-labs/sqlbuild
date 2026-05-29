@@ -20,7 +20,9 @@ default_cli_theme: CliTheme = CliTheme(
     object_name=TextStyle(_BLUE + _BOLD),
     command=TextStyle(_DIM),
     success=TextStyle(_GREEN),
+    success_strong=TextStyle(_GREEN + _BOLD),
     warning=TextStyle(_YELLOW),
+    warning_strong=TextStyle(_YELLOW + _BOLD),
     error=TextStyle(_RED),
     skipped=TextStyle(_DIM),
     muted=TextStyle(_DIM),
@@ -62,8 +64,14 @@ class CliStyle:
     def success(self, text: str) -> str:
         return self.theme.success.apply(text, use_color=self.use_color)
 
+    def success_strong(self, text: str) -> str:
+        return self.theme.success_strong.apply(text, use_color=self.use_color)
+
     def warning(self, text: str) -> str:
         return self.theme.warning.apply(text, use_color=self.use_color)
+
+    def warning_strong(self, text: str) -> str:
+        return self.theme.warning_strong.apply(text, use_color=self.use_color)
 
     def error(self, text: str) -> str:
         return self.theme.error.apply(text, use_color=self.use_color)

@@ -53,5 +53,6 @@ class CliDocument:
             prefix: str = f"  {index}. " if numbered else self._style.command("  ")
             self.command_line(prefix, command, style_command=style_command)
 
-    def render(self) -> str:
-        return "\n".join(self._lines) + "\n"
+    def render(self, *, trailing_newline: bool = True) -> str:
+        rendered: str = "\n".join(self._lines)
+        return rendered + "\n" if trailing_newline else rendered

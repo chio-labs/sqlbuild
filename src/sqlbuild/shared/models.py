@@ -44,7 +44,9 @@ class CliTheme:
     object_name: TextStyle
     command: TextStyle
     success: TextStyle
+    success_strong: TextStyle
     warning: TextStyle
+    warning_strong: TextStyle
     error: TextStyle
     skipped: TextStyle
     muted: TextStyle

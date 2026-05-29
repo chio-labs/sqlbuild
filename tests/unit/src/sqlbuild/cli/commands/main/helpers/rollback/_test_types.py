@@ -4,11 +4,10 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class FormatPromoteOutputTestCase:
+class FormatRollbackOutputTestCase:
     description: str
     status: str
-    promoted_models: tuple[str, ...]
-    remaining_stale: tuple[str, ...]
+    rolled_back_models: tuple[str, ...]
     verbose: bool
     expected_fragments: tuple[str, ...]
     expected_color_fragments: tuple[str, ...] = ()
