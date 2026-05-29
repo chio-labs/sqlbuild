@@ -13,6 +13,9 @@ TEST_CASES: list[CliStyleTestCase] = [
         expected_section="Section",
         expected_label="Label",
         expected_value="Value",
+        expected_success="Success",
+        expected_warning="Warning",
+        expected_error="Error",
         expected_status_ok="OK",
         expected_status_error="ERROR",
         expected_status_skip="SKIP",
@@ -26,6 +29,9 @@ TEST_CASES: list[CliStyleTestCase] = [
         expected_section="\033[1mSection\033[0m",
         expected_label="\033[2mLabel\033[0m",
         expected_value="\033[34m\033[1mValue\033[0m",
+        expected_success="\033[32mSuccess\033[0m",
+        expected_warning="\033[33mWarning\033[0m",
+        expected_error="\033[31mError\033[0m",
         expected_status_ok="\033[32mOK\033[0m",
         expected_status_error="\033[31mERROR\033[0m",
         expected_status_skip="\033[2mSKIP\033[0m",
@@ -49,6 +55,9 @@ def test_given_cli_style_when_rendering_semantic_roles_then_returns_expected_tex
     assert style.section("Section") == test_case.expected_section
     assert style.label("Label") == test_case.expected_label
     assert style.value("Value") == test_case.expected_value
+    assert style.success("Success") == test_case.expected_success
+    assert style.warning("Warning") == test_case.expected_warning
+    assert style.error("Error") == test_case.expected_error
     assert style.status("OK") == test_case.expected_status_ok
     assert style.status("ERROR") == test_case.expected_status_error
     assert style.status("SKIP") == test_case.expected_status_skip
@@ -66,6 +75,9 @@ def test_given_cli_style_when_rendering_semantic_roles_then_returns_expected_tex
             expected_section="",
             expected_label="",
             expected_value="",
+            expected_success="",
+            expected_warning="",
+            expected_error="",
             expected_status_ok="\033[32m[OK found]\033[0m",
             expected_status_error="\033[31m[ERROR failed]\033[0m",
             expected_status_skip="\033[2m[SKIP blocked]\033[0m",
