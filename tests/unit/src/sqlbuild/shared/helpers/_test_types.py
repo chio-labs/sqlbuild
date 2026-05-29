@@ -25,6 +25,9 @@ class CliStyleTestCase:
     expected_warning: str
     expected_warning_strong: str
     expected_error: str
+    expected_error_strong: str
+    expected_error_muted: str
+    expected_log_label: str
     expected_status_ok: str
     expected_status_error: str
     expected_status_skip: str

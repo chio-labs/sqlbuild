@@ -25,6 +25,9 @@ default_cli_theme: CliTheme = CliTheme(
     warning=TextStyle(_YELLOW),
     warning_strong=TextStyle(_YELLOW + _BOLD),
     error=TextStyle(_RED),
+    error_strong=TextStyle(_RED + _BOLD),
+    error_muted=TextStyle(_RED + _DIM),
+    log_label=TextStyle(_BLUE + _DIM),
     skipped=TextStyle(_DIM),
     muted=TextStyle(_DIM),
     dbt_section=TextStyle(_ORANGE + _BOLD),
@@ -79,6 +82,15 @@ class CliStyle:
 
     def error(self, text: str) -> str:
         return self.theme.error.apply(text, use_color=self.use_color)
+
+    def error_strong(self, text: str) -> str:
+        return self.theme.error_strong.apply(text, use_color=self.use_color)
+
+    def error_muted(self, text: str) -> str:
+        return self.theme.error_muted.apply(text, use_color=self.use_color)
+
+    def log_label(self, text: str) -> str:
+        return self.theme.log_label.apply(text, use_color=self.use_color)
 
     def dbt_section(self, text: str) -> str:
         return self.theme.dbt_section.apply(text, use_color=self.use_color)

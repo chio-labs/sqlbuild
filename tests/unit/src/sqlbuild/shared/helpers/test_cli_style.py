@@ -19,6 +19,9 @@ TEST_CASES: list[CliStyleTestCase] = [
         expected_warning="Warning",
         expected_warning_strong="Warning strong",
         expected_error="Error",
+        expected_error_strong="Error strong",
+        expected_error_muted="error",
+        expected_log_label="log",
         expected_status_ok="OK",
         expected_status_error="ERROR",
         expected_status_skip="SKIP",
@@ -38,6 +41,9 @@ TEST_CASES: list[CliStyleTestCase] = [
         expected_warning="\033[33mWarning\033[0m",
         expected_warning_strong="\033[33m\033[1mWarning strong\033[0m",
         expected_error="\033[31mError\033[0m",
+        expected_error_strong="\033[31m\033[1mError strong\033[0m",
+        expected_error_muted="\033[31m\033[2merror\033[0m",
+        expected_log_label="\033[34m\033[2mlog\033[0m",
         expected_status_ok="\033[32mOK\033[0m",
         expected_status_error="\033[31mERROR\033[0m",
         expected_status_skip="\033[2mSKIP\033[0m",
@@ -67,6 +73,9 @@ def test_given_cli_style_when_rendering_semantic_roles_then_returns_expected_tex
     assert style.warning("Warning") == test_case.expected_warning
     assert style.warning_strong("Warning strong") == test_case.expected_warning_strong
     assert style.error("Error") == test_case.expected_error
+    assert style.error_strong("Error strong") == test_case.expected_error_strong
+    assert style.error_muted("error") == test_case.expected_error_muted
+    assert style.log_label("log") == test_case.expected_log_label
     assert style.status("OK") == test_case.expected_status_ok
     assert style.status("ERROR") == test_case.expected_status_error
     assert style.status("SKIP") == test_case.expected_status_skip
@@ -90,6 +99,9 @@ def test_given_cli_style_when_rendering_semantic_roles_then_returns_expected_tex
             expected_warning="",
             expected_warning_strong="",
             expected_error="",
+            expected_error_strong="",
+            expected_error_muted="",
+            expected_log_label="",
             expected_status_ok="\033[32m[OK found]\033[0m",
             expected_status_error="\033[31m[ERROR failed]\033[0m",
             expected_status_skip="\033[2m[SKIP blocked]\033[0m",
