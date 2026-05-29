@@ -17,6 +17,7 @@ default_cli_theme: CliTheme = CliTheme(
     section=TextStyle(_BOLD),
     label=TextStyle(_DIM),
     value=TextStyle(_BLUE + _BOLD),
+    accent=TextStyle(_BLUE),
     object_name=TextStyle(_BLUE + _BOLD),
     command=TextStyle(_DIM),
     success=TextStyle(_GREEN),
@@ -51,6 +52,9 @@ class CliStyle:
 
     def value(self, text: str) -> str:
         return self.theme.value.apply(text, use_color=self.use_color)
+
+    def accent(self, text: str) -> str:
+        return self.theme.accent.apply(text, use_color=self.use_color)
 
     def object_name(self, text: str) -> str:
         return self.theme.object_name.apply(text, use_color=self.use_color)

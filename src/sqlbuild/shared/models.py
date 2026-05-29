@@ -41,6 +41,7 @@ class CliTheme:
     section: TextStyle
     label: TextStyle
     value: TextStyle
+    accent: TextStyle
     object_name: TextStyle
     command: TextStyle
     success: TextStyle
