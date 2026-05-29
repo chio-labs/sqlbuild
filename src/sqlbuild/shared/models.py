@@ -49,6 +49,9 @@ class CliTheme:
     warning: TextStyle
     warning_strong: TextStyle
     error: TextStyle
+    error_strong: TextStyle
+    error_muted: TextStyle
+    log_label: TextStyle
     skipped: TextStyle
     muted: TextStyle
     dbt_section: TextStyle
