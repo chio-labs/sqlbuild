@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,7 @@ def run_compile_pipeline_for_project(
     defer_to: str | None = None,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
+    on_progress: Callable[[str], None] | None = None,
 ) -> CompilePipelineResult:
     """Discover a project and run the real compile pipeline."""
 
@@ -33,6 +35,7 @@ def run_compile_pipeline_for_project(
         defer_to=defer_to,
         select=select,
         exclude=exclude,
+        on_progress=on_progress,
     )
 
 
