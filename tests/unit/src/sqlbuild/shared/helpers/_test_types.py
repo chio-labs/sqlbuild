@@ -19,6 +19,9 @@ class CliStyleTestCase:
     expected_section: str
     expected_label: str
     expected_value: str
+    expected_success: str
+    expected_warning: str
+    expected_error: str
     expected_status_ok: str
     expected_status_error: str
     expected_status_skip: str

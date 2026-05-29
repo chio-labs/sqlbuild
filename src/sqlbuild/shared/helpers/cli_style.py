@@ -59,6 +59,15 @@ class CliStyle:
     def muted(self, text: str) -> str:
         return self.theme.muted.apply(text, use_color=self.use_color)
 
+    def success(self, text: str) -> str:
+        return self.theme.success.apply(text, use_color=self.use_color)
+
+    def warning(self, text: str) -> str:
+        return self.theme.warning.apply(text, use_color=self.use_color)
+
+    def error(self, text: str) -> str:
+        return self.theme.error.apply(text, use_color=self.use_color)
+
     def dbt_section(self, text: str) -> str:
         return self.theme.dbt_section.apply(text, use_color=self.use_color)
 
