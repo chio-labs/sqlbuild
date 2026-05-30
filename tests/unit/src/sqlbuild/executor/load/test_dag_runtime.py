@@ -6,11 +6,18 @@ import queue
 
 import pytest
 
-from sqlbuild.executor.load.helpers.dag_runtime import load_dag_worker
-from sqlbuild.executor.load.models import LoadExecutionIndexes, LoadExecutionResult
+from sqlbuild.executor.load.helpers.dag_runtime import (
+    build_load_dag_state,
+    complete_dag_source,
+    load_dag_worker,
+)
+from sqlbuild.executor.load.models import LoadDagState, LoadExecutionIndexes, LoadExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.spec.models.source import SourceEntry
-from tests.unit.src.sqlbuild.executor.load._test_types import LoadDagWorkerFailureTestCase
+from tests.unit.src.sqlbuild.executor.load._test_types import (
+    LoadDagStateSchedulingTestCase,
+    LoadDagWorkerFailureTestCase,
+)
 from tests.unit.src.sqlbuild.executor.load.helpers import LoaderContextTestAdapter
 
 LOAD_DAG_WORKER_FAILURE_TEST_CASES: list[LoadDagWorkerFailureTestCase] = [
@@ -29,6 +36,61 @@ LOAD_DAG_WORKER_FAILURE_TEST_CASES: list[LoadDagWorkerFailureTestCase] = [
         expected_error_fragment="missing_customer_loader",
     ),
 ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadDagStateSchedulingTestCase(
+            description="unlocks loader downstream source after upstream success completion",
+            source_names=("fetch_orders", "raw_orders"),
+            upstream_names={"fetch_orders": (), "raw_orders": ("fetch_orders",)},
+            downstream_names={"fetch_orders": ("raw_orders",), "raw_orders": ()},
+            completed_source_name="fetch_orders",
+            expected_initial_ready=("fetch_orders",),
+            expected_final_ready=("fetch_orders", "raw_orders"),
+            expected_callback_sources=("fetch_orders",),
+        )
+    ],
+    ids=["unlocks loader downstream source after upstream success completion"],
+)
+def test_given_load_dag_state_when_completing_source_then_uses_generic_scheduler(
+    test_case: LoadDagStateSchedulingTestCase,
+) -> None:
+    sources: tuple[SourceEntry, ...] = tuple(
+        SourceEntry(name=source_name, loader=f"{source_name}_loader")
+        for source_name in test_case.source_names
+    )
+    results: list[LoadExecutionResult | None] = [None] * len(sources)
+    completed_results: list[LoadExecutionResult] = []
+    state: LoadDagState = build_load_dag_state(
+        sources=sources,
+        results=results,
+        source_index_by_name={source.name: index for index, source in enumerate(sources)},
+        upstream_names=test_case.upstream_names,
+        downstream_names=test_case.downstream_names,
+    )
+
+    assert tuple(state.ready) == test_case.expected_initial_ready
+
+    result: LoadExecutionResult = LoadExecutionResult(
+        source_name=test_case.completed_source_name,
+        loader_name=f"{test_case.completed_source_name}_loader",
+        status=ExecutionStatus.SUCCESS,
+        target=test_case.completed_source_name,
+    )
+    complete_dag_source(
+        source_name=test_case.completed_source_name,
+        result=result,
+        state=state,
+        on_load_complete=completed_results.append,
+    )
+
+    assert tuple(state.ready) == test_case.expected_final_ready
+    assert tuple(completed.source_name for completed in completed_results) == (
+        test_case.expected_callback_sources
+    )
+    assert results[0] == result
 
 
 @pytest.mark.parametrize(
