@@ -9,10 +9,16 @@ import pytest
 from sqlbuild.compiler.discovery.exceptions import PythonNodeDiscoveryError
 from sqlbuild.compiler.discovery.helpers.filesystem import (
     discover_asset_functions,
+    discover_check_functions,
     discover_task_functions,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredAssetFunction, DiscoveredTaskFunction
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredAssetFunction,
+    DiscoveredCheckFunction,
+    DiscoveredTaskFunction,
+)
 from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
+    DiscoverCheckFunctionsTestCase,
     DiscoverTaskAssetFunctionsTestCase,
 )
 
@@ -69,6 +75,52 @@ def ignored_init_asset(ctx):
         expected_asset_dependency_counts=(),
         expected_asset_column_names=(),
         expected_asset_lineage_columns=(),
+    ),
+]
+
+CHECK_TEST_CASES: list[DiscoverCheckFunctionsTestCase] = [
+    DiscoverCheckFunctionsTestCase(
+        description="discovers decorated checks from explicit folder",
+        files={
+            "assets/exports.py": """
+from sqlbuild.assets import asset
+
+@asset
+def export_customers(ctx):
+    return {"uri": "s3://exports/customers.parquet"}
+""",
+            "checks/exports.py": """
+from sqlbuild.checks import check
+from assets.exports import export_customers
+
+@check(depends_on=export_customers, severity="warn", tags=("exports",))
+def export_customers_exists(ctx):
+    return True
+
+def helper():
+    return None
+""",
+            "checks/__init__.py": """
+from sqlbuild.checks import check
+from assets.exports import export_customers
+
+@check(depends_on=export_customers)
+def ignored_init_check(ctx):
+    return True
+""",
+        },
+        expected_check_names=("export_customers_exists",),
+        expected_check_dependency_counts=(1,),
+        expected_check_severities=("warn",),
+        expected_check_tags=(("exports",),),
+    ),
+    DiscoverCheckFunctionsTestCase(
+        description="returns empty tuple when check folder does not exist",
+        files={},
+        expected_check_names=(),
+        expected_check_dependency_counts=(),
+        expected_check_severities=(),
+        expected_check_tags=(),
     ),
 ]
 
@@ -141,3 +193,29 @@ def test_given_python_node_import_error_when_discovering_then_raises_clear_error
 
     with pytest.raises(PythonNodeDiscoveryError, match=test_case.expected_error_fragment):
         discover_task_functions(project_dir=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    CHECK_TEST_CASES,
+    ids=[case.description for case in CHECK_TEST_CASES],
+)
+def test_given_project_dir_when_discovering_checks_then_returns_expected(
+    test_case: DiscoverCheckFunctionsTestCase,
+    tmp_path: Path,
+) -> None:
+    relative_path: str
+    contents: str
+    for relative_path, contents in test_case.files.items():
+        file_path: Path = tmp_path / relative_path
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(contents, encoding="utf-8")
+
+    checks: tuple[DiscoveredCheckFunction, ...] = discover_check_functions(project_dir=tmp_path)
+
+    assert tuple(check.name for check in checks) == test_case.expected_check_names
+    assert tuple(len(check.depends_on) for check in checks) == (
+        test_case.expected_check_dependency_counts
+    )
+    assert tuple(check.severity.value for check in checks) == test_case.expected_check_severities
+    assert tuple(check.tags for check in checks) == test_case.expected_check_tags

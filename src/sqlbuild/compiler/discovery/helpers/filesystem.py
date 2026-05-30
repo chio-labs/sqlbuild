@@ -10,6 +10,7 @@ from pathlib import Path
 from types import ModuleType
 
 from sqlbuild.assets import get_asset_definition
+from sqlbuild.checks import get_check_definition
 from sqlbuild.compiler.discovery.exceptions import (
     LoaderDiscoveryError,
     PythonNodeDiscoveryError,
@@ -31,6 +32,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredAdapterFile,
     DiscoveredAssetFunction,
     DiscoveredAuditFile,
+    DiscoveredCheckFunction,
     DiscoveredLoaderFunction,
     DiscoveredMacroFile,
     DiscoveredMaterializationFile,
@@ -50,7 +52,7 @@ from sqlbuild.compiler.shared.constants import (
     YAML_FILE_SUFFIXES,
 )
 from sqlbuild.loaders import LoaderDefinition, get_loader_definition
-from sqlbuild.shared.models import AssetDefinition, TaskDefinition
+from sqlbuild.shared.models import AssetDefinition, CheckDefinition, TaskDefinition
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
 from sqlbuild.tasks import get_task_definition
@@ -444,6 +446,46 @@ def discover_asset_functions(*, project_dir: Path) -> tuple[DiscoveredAssetFunct
                     meta=definition.meta,
                     columns=definition.columns,
                     column_lineage=definition.column_lineage,
+                )
+            )
+    return tuple(discovered)
+
+
+def discover_check_functions(*, project_dir: Path) -> tuple[DiscoveredCheckFunction, ...]:
+    """Discover decorated check functions under checks/."""
+
+    checks_root: Path = project_dir / "checks"
+    if not checks_root.is_dir():
+        return ()
+
+    discovered: list[DiscoveredCheckFunction] = []
+    file_path: Path
+    for file_path in sorted(checks_root.rglob("*.py")):
+        if file_path.stem == "__init__":
+            continue
+        module: ModuleType = _load_python_node_module(
+            file_path=file_path,
+            project_dir=project_dir,
+            node_folder="checks",
+        )
+        for _, value in inspect.getmembers(module, inspect.isfunction):
+            if value.__module__ != module.__name__:
+                continue
+            definition: CheckDefinition | None = get_check_definition(value)
+            if definition is None:
+                continue
+            discovered.append(
+                DiscoveredCheckFunction(
+                    file_path=file_path,
+                    relative_path=file_path.relative_to(project_dir),
+                    name=definition.name,
+                    function=value,
+                    depends_on=definition.depends_on,
+                    severity=definition.severity,
+                    tags=definition.tags,
+                    group=definition.group,
+                    description=definition.description,
+                    meta=definition.meta,
                 )
             )
     return tuple(discovered)

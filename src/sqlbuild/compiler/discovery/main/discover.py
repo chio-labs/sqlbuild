@@ -9,6 +9,7 @@ from sqlbuild.compiler.discovery.helpers.filesystem import (
     discover_adapter_file,
     discover_asset_functions,
     discover_audit_files,
+    discover_check_functions,
     discover_loader_functions,
     discover_macro_files,
     discover_materialization_files,
@@ -72,6 +73,7 @@ def discover_project_inputs(*, project_dir: Path) -> DiscoveredProjectInputs:
         loader_functions=loader_functions,
         task_functions=discover_task_functions(project_dir=project_dir),
         asset_functions=discover_asset_functions(project_dir=project_dir),
+        check_functions=discover_check_functions(project_dir=project_dir),
         adapter_file=discover_adapter_file(project_dir=project_dir),
     )
     validate_discovered_inputs(discovered_inputs)

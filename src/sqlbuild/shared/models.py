@@ -6,6 +6,7 @@ from pathlib import Path
 
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.shared.constants import DEFAULT_MAX_DISPLAY_ENTRIES
+from sqlbuild.shared.types import PythonCheckSeverity
 from sqlbuild.spec.models.source import SourceColumnEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy
 
@@ -116,6 +117,19 @@ class AssetDefinition:
     meta: dict[str, object] | None = None
     columns: tuple[SourceColumnEntry, ...] = ()
     column_lineage: dict[str, tuple[ColumnLineageRef, ...]] | None = None
+
+
+@dataclass(frozen=True)
+class CheckDefinition:
+    """Metadata attached to a decorated SQLBuild check function."""
+
+    name: str
+    depends_on: tuple[Callable[..., object], ...]
+    severity: PythonCheckSeverity = PythonCheckSeverity.ERROR
+    tags: tuple[str, ...] = ()
+    group: str | None = None
+    description: str | None = None
+    meta: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)

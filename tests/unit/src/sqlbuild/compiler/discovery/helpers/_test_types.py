@@ -286,3 +286,13 @@ class DiscoverTaskAssetFunctionsTestCase:
     expected_asset_column_names: tuple[tuple[str, ...], ...]
     expected_asset_lineage_columns: tuple[tuple[str, ...], ...]
     expected_error_fragment: str = ""
+
+
+@dataclass(frozen=True)
+class DiscoverCheckFunctionsTestCase:
+    description: str
+    files: dict[str, str]
+    expected_check_names: tuple[str, ...]
+    expected_check_dependency_counts: tuple[int, ...]
+    expected_check_severities: tuple[str, ...]
+    expected_check_tags: tuple[tuple[str, ...], ...]

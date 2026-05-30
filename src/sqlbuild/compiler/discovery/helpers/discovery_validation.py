@@ -5,9 +5,12 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
+from sqlbuild.assets import get_asset_definition
+from sqlbuild.checks import get_check_definition
 from sqlbuild.compiler.discovery.exceptions import DiscoveryConflictError, SeedDiscoveryError
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAssetFunction,
+    DiscoveredCheckFunction,
     DiscoveredLoaderFunction,
     DiscoveredProjectInputs,
     DiscoveredSchemaFile,
@@ -18,8 +21,16 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredTaskFunction,
 )
 from sqlbuild.compiler.shared.constants import RESERVED_MODEL_NAMES
+from sqlbuild.loaders import get_loader_definition
+from sqlbuild.shared.models import (
+    AssetDefinition,
+    CheckDefinition,
+    LoaderDefinition,
+    TaskDefinition,
+)
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.tasks import get_task_definition
 
 
 def validate_discovered_inputs(discovered_inputs: DiscoveredProjectInputs) -> None:
@@ -33,6 +44,7 @@ def validate_discovered_inputs(discovered_inputs: DiscoveredProjectInputs) -> No
         loader_functions=discovered_inputs.loader_functions,
         task_functions=discovered_inputs.task_functions,
         asset_functions=discovered_inputs.asset_functions,
+        check_functions=discovered_inputs.check_functions,
     )
     _validate_source_loader_name_collisions(
         source_files=discovered_inputs.source_files,
@@ -43,6 +55,12 @@ def validate_discovered_inputs(discovered_inputs: DiscoveredProjectInputs) -> No
         loader_functions=discovered_inputs.loader_functions,
         task_functions=discovered_inputs.task_functions,
         asset_functions=discovered_inputs.asset_functions,
+    )
+    _validate_check_dependencies(
+        loader_functions=discovered_inputs.loader_functions,
+        task_functions=discovered_inputs.task_functions,
+        asset_functions=discovered_inputs.asset_functions,
+        check_functions=discovered_inputs.check_functions,
     )
     _validate_source_loader_references(
         source_files=discovered_inputs.source_files,
@@ -136,19 +154,21 @@ def _validate_unique_python_node_names(
     loader_functions: tuple[DiscoveredLoaderFunction, ...],
     task_functions: tuple[DiscoveredTaskFunction, ...],
     asset_functions: tuple[DiscoveredAssetFunction, ...],
+    check_functions: tuple[DiscoveredCheckFunction, ...],
 ) -> None:
     seen_names: dict[str, str] = {}
     for nodes in (
         loader_functions,
         task_functions,
         asset_functions,
+        check_functions,
     ):
         for node in nodes:
             existing_path: str | None = seen_names.get(node.name)
             if existing_path is not None:
                 raise DiscoveryConflictError(
                     f"Duplicate Python node found for '{node.name}' in "
-                    f"{existing_path} and {node.relative_path}; loader, task, and asset "
+                    f"{existing_path} and {node.relative_path}; loader, task, asset, and check "
                     "names must be globally unique"
                 )
             seen_names[node.name] = str(node.relative_path)
@@ -279,14 +299,17 @@ def _validate_python_node_dependencies(
         *task_functions,
         *asset_functions,
     )
-    node_by_function: dict[
-        object, DiscoveredLoaderFunction | DiscoveredTaskFunction | DiscoveredAssetFunction
+    node_by_dependency_key: dict[
+        object | tuple[str, str],
+        DiscoveredLoaderFunction | DiscoveredTaskFunction | DiscoveredAssetFunction,
     ] = {node.function: node for node in nodes}
+    for node in nodes:
+        node_by_dependency_key[("name", node.name)] = node
     node: DiscoveredLoaderFunction | DiscoveredTaskFunction | DiscoveredAssetFunction
     for node in nodes:
         dependency: object
         for dependency in node.depends_on:
-            if dependency not in node_by_function:
+            if _python_node_dependency_key(dependency) not in node_by_dependency_key:
                 raise DiscoveryConflictError(
                     f"Python node '{node.name}' depends on an unknown Python node; "
                     "use function references to decorated loaders, tasks, or assets"
@@ -307,12 +330,69 @@ def _validate_python_node_dependencies(
         visiting.add(current.name)
         dependency: object
         for dependency in current.depends_on:
-            visit(node_by_function[dependency], (*path, current.name))
+            visit(
+                node_by_dependency_key[_python_node_dependency_key(dependency)],
+                (*path, current.name),
+            )
         visiting.remove(current.name)
         visited.add(current.name)
 
     for node in nodes:
         visit(node, ())
+
+
+def _validate_check_dependencies(
+    *,
+    loader_functions: tuple[DiscoveredLoaderFunction, ...],
+    task_functions: tuple[DiscoveredTaskFunction, ...],
+    asset_functions: tuple[DiscoveredAssetFunction, ...],
+    check_functions: tuple[DiscoveredCheckFunction, ...],
+) -> None:
+    allowed_dependency_keys: frozenset[object | tuple[str, str]] = frozenset(
+        ("name", node.name) for node in (*loader_functions, *task_functions, *asset_functions)
+    )
+    check_dependency_keys: frozenset[object | tuple[str, str]] = frozenset(
+        ("name", check_function.name) for check_function in check_functions
+    )
+    check_function: DiscoveredCheckFunction
+    for check_function in check_functions:
+        dependency: object
+        for dependency in check_function.depends_on:
+            dependency_key: object | tuple[str, str] = _python_node_dependency_key(dependency)
+            if dependency_key in check_dependency_keys:
+                raise DiscoveryConflictError(
+                    f"Check '{check_function.name}' depends on another check; checks may "
+                    "depend on loaders, tasks, and assets only"
+                )
+            if dependency_key not in allowed_dependency_keys:
+                raise DiscoveryConflictError(
+                    f"Check '{check_function.name}' depends on an unknown Python node; "
+                    "use function references to decorated loaders, tasks, or assets"
+                )
+
+
+def _python_node_dependency_key(dependency: object) -> object | tuple[str, str]:
+    loader_definition: LoaderDefinition | None = (
+        get_loader_definition(dependency) if callable(dependency) else None
+    )
+    if loader_definition is not None:
+        return ("name", loader_definition.name)
+    task_definition: TaskDefinition | None = (
+        get_task_definition(dependency) if callable(dependency) else None
+    )
+    if task_definition is not None:
+        return ("name", task_definition.name)
+    asset_definition: AssetDefinition | None = (
+        get_asset_definition(dependency) if callable(dependency) else None
+    )
+    if asset_definition is not None:
+        return ("name", asset_definition.name)
+    check_definition: CheckDefinition | None = (
+        get_check_definition(dependency) if callable(dependency) else None
+    )
+    if check_definition is not None:
+        return ("name", check_definition.name)
+    return dependency
 
 
 def _validate_unique_schema_model_names(schema_files: tuple[DiscoveredSchemaFile, ...]) -> None:
