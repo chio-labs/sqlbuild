@@ -15,7 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_waff
 TEST_CASES: list[PlanCommandBuildE2ETestCase] = [
     PlanCommandBuildE2ETestCase(
         description="plan select no-color scopes to marts",
-        command=("--no-color", "plan", "--select", "path:marts"),
+        command=("--no-color", "plan", "--select", "path:models/marts"),
         expected_exit_code=0,
         expected_fragments=(
             "Plan ready (10 selected)",
@@ -30,7 +30,14 @@ TEST_CASES: list[PlanCommandBuildE2ETestCase] = [
     ),
     PlanCommandBuildE2ETestCase(
         description="plan exclude removes marts branch from selected scope",
-        command=("--no-color", "plan", "--select", "/marts", "--exclude", "hourly_order_activity"),
+        command=(
+            "--no-color",
+            "plan",
+            "--select",
+            "/models/marts",
+            "--exclude",
+            "hourly_order_activity",
+        ),
         expected_exit_code=0,
         expected_fragments=(
             "Plan ready (9 selected)",

@@ -44,7 +44,7 @@ PLAN_CLI_TEST_CASES: list[DbtPlanCliTestCase] = [
         expected_anchor_terms=("fact_orders+",),
     ),
     DbtPlanCliTestCase(
-        description="reports dbt path translation for SQLBuild model paths",
+        description="routes explicit model path for SQLBuild model paths",
         command=("dbt", "plan", "--json", "--select", "path:models/marts"),
         expected_selected_models=(
             "deprecated_orders",
@@ -54,7 +54,7 @@ PLAN_CLI_TEST_CASES: list[DbtPlanCliTestCase] = [
         ),
         expected_dbt_skipped=False,
         expected_sqlbuild_skipped=False,
-        expected_path_translations=(("path:models/marts", "path:marts"),),
+        expected_path_translations=(),
     ),
     DbtPlanCliTestCase(
         description="reports mixed dbt and SQLBuild tag matches",

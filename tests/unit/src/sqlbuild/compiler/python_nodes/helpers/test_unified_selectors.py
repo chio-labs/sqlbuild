@@ -51,6 +51,41 @@ PYTHON_SQL_SELECTOR_TEST_CASES: list[PythonSqlSelectorTestCase] = [
         expected_python_node_names=frozenset({"prepare_orders", "export_orders"}),
     ),
     PythonSqlSelectorTestCase(
+        description="selects explicit models root path as SQL models",
+        select=("path:models",),
+        exclude=(),
+        expected_sql_names=frozenset({"orders"}),
+        expected_python_node_names=frozenset(),
+    ),
+    PythonSqlSelectorTestCase(
+        description="selects explicit Python task path",
+        select=("path:tasks",),
+        exclude=(),
+        expected_sql_names=frozenset(),
+        expected_python_node_names=frozenset({"prepare_orders"}),
+    ),
+    PythonSqlSelectorTestCase(
+        description="selects explicit Python asset path",
+        select=("path:assets",),
+        exclude=(),
+        expected_sql_names=frozenset(),
+        expected_python_node_names=frozenset({"export_orders"}),
+    ),
+    PythonSqlSelectorTestCase(
+        description="selects explicit Python asset slash path",
+        select=("assets/",),
+        exclude=(),
+        expected_sql_names=frozenset(),
+        expected_python_node_names=frozenset({"export_orders"}),
+    ),
+    PythonSqlSelectorTestCase(
+        description="selects explicit Python asset leading slash path",
+        select=("/assets",),
+        exclude=(),
+        expected_sql_names=frozenset(),
+        expected_python_node_names=frozenset({"export_orders"}),
+    ),
+    PythonSqlSelectorTestCase(
         description="selects loaded source with required terminal loader",
         select=("source:raw_orders",),
         exclude=(),
@@ -96,18 +131,35 @@ def test_given_unified_selectors_when_resolving_then_returns_sql_and_python_sele
     assert result.python_node_names == test_case.expected_python_node_names
 
 
+PYTHON_SQL_SELECTOR_ERROR_TEST_CASES: list[PythonSqlSelectorErrorTestCase] = [
+    PythonSqlSelectorErrorTestCase(
+        description="raises when selector matches no SQL resource or Python node",
+        select=("missing",),
+        exclude=(),
+        expected_error_type=ValueError,
+        expected_error_fragment="unknown selector name 'missing'",
+    ),
+    PythonSqlSelectorErrorTestCase(
+        description="raises when path selector omits explicit root",
+        select=("path:marts",),
+        exclude=(),
+        expected_error_type=ValueError,
+        expected_error_fragment="path selectors require an explicit root",
+    ),
+    PythonSqlSelectorErrorTestCase(
+        description="raises when slash path selector omits explicit root",
+        select=("/marts",),
+        exclude=(),
+        expected_error_type=ValueError,
+        expected_error_fragment="path selectors require an explicit root",
+    ),
+]
+
+
 @pytest.mark.parametrize(
     "test_case",
-    [
-        PythonSqlSelectorErrorTestCase(
-            description="raises when selector matches no SQL resource or Python node",
-            select=("missing",),
-            exclude=(),
-            expected_error_type=ValueError,
-            expected_error_fragment="unknown selector name 'missing'",
-        )
-    ],
-    ids=["raises when selector matches no SQL resource or Python node"],
+    PYTHON_SQL_SELECTOR_ERROR_TEST_CASES,
+    ids=[case.description for case in PYTHON_SQL_SELECTOR_ERROR_TEST_CASES],
 )
 def test_given_unknown_unified_selector_when_resolving_then_raises_clear_error(
     test_case: PythonSqlSelectorErrorTestCase,

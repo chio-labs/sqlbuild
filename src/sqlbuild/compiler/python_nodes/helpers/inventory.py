@@ -51,6 +51,7 @@ def build_python_node_graph(*, discovered_inputs: DiscoveredProjectInputs) -> Py
         upstream_deps=build_python_node_upstream_deps(nodes=nodes, edges=dependency_edges),
         downstream_deps=build_python_node_downstream_deps(nodes=nodes, edges=dependency_edges),
         tag_index=build_python_node_tag_index(nodes=nodes),
+        path_index=build_python_node_path_index(nodes=nodes),
         nodes_by_name={node.name: node for node in nodes},
         nodes_by_typed_selector={_typed_selector(node): node for node in nodes},
     )
@@ -151,6 +152,12 @@ def build_python_node_tag_index(
         for tag in node.tags:
             index.setdefault(tag, set()).add(node.name)
     return {tag: frozenset(names) for tag, names in index.items()}
+
+
+def build_python_node_path_index(*, nodes: tuple[DiscoveredPythonNode, ...]) -> dict[str, str]:
+    """Build a node-name-to-folder lookup from discovered Python node relative paths."""
+
+    return {node.name: node.relative_path.parent.as_posix() for node in nodes}
 
 
 def _build_loader_node(loader: DiscoveredLoaderFunction) -> DiscoveredPythonNode:
