@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from sqlbuild.shared.helpers.colors import blue_bold, dim, green_bold, yellow_bold
+from sqlbuild.shared.helpers.cli_document import CliDocument
+from sqlbuild.shared.helpers.cli_style import CliStyle
 
 _MODEL_SET_CAP: int = 20
 
@@ -19,63 +20,54 @@ def format_promote_output(
 ) -> str:
     """Format virtual promotion output."""
 
-    title: str = (
-        green_bold("Virtual promotion complete") if use_color else "Virtual promotion complete"
-    )
-    from_label: str = blue_bold(from_virtual_environment) if use_color else from_virtual_environment
-    to_label: str = blue_bold(to_virtual_environment) if use_color else to_virtual_environment
+    style: CliStyle = CliStyle(use_color=use_color)
+    from_label: str = style.object_name(from_virtual_environment)
+    to_label: str = style.object_name(to_virtual_environment)
     status_label: str = "finalized" if status == "finalized" else "working"
     status_value: str = (
-        green_bold(status_label)
-        if use_color and status_label == "finalized"
-        else yellow_bold(status_label)
-        if use_color
-        else status_label
+        style.success_strong(status_label)
+        if status_label == "finalized"
+        else style.warning_strong(status_label)
     )
-    promoted_count: str = (
-        blue_bold(f"{len(promoted_models):,}") if use_color else f"{len(promoted_models):,}"
-    )
+    promoted_count: str = style.value(f"{len(promoted_models):,}")
     remaining_count: str = (
-        yellow_bold(f"{len(remaining_stale):,}")
-        if use_color and remaining_stale
+        style.warning_strong(f"{len(remaining_stale):,}")
+        if remaining_stale
         else f"{len(remaining_stale):,}"
     )
-    lines: list[str] = [
-        "",
-        f"{title}  {from_label} -> {to_label}",
-        f"  target status          {status_value}",
-        f"  promoted models        {promoted_count}",
-    ]
+    doc: CliDocument = CliDocument(style)
+    doc.blank()
+    doc.header("Virtual promotion complete", suffix=f"{from_label} -> {to_label}")
+    doc.line(f"  target status          {status_value}")
+    doc.line(f"  promoted models        {promoted_count}")
     if promoted_models:
-        lines.extend(
-            _format_model_set_lines(
-                label="promoted model set",
-                model_names=promoted_models,
-                verbose=verbose,
-                use_color=use_color,
-            )
-        )
-    lines.append(f"  remaining stale models {remaining_count}")
+        for line in _format_model_set_lines(
+            label="promoted model set",
+            model_names=promoted_models,
+            verbose=verbose,
+            style=style,
+        ):
+            doc.line(line)
+    doc.line(f"  remaining stale models {remaining_count}")
     if remaining_stale:
-        lines.extend(
-            _format_model_set_lines(
-                label="remaining stale set",
-                model_names=remaining_stale,
-                verbose=verbose,
-                use_color=use_color,
-            )
-        )
-    return "\n".join(lines)
+        for line in _format_model_set_lines(
+            label="remaining stale set",
+            model_names=remaining_stale,
+            verbose=verbose,
+            style=style,
+        ):
+            doc.line(line)
+    return doc.render(trailing_newline=False)
 
 
 def _format_model_set_lines(
-    *, label: str, model_names: tuple[str, ...], verbose: bool, use_color: bool
+    *, label: str, model_names: tuple[str, ...], verbose: bool, style: CliStyle
 ) -> list[str]:
     visible: tuple[str, ...] = model_names if verbose else model_names[:_MODEL_SET_CAP]
-    label_text: str = dim(label) if use_color else label
+    label_text: str = style.muted(label)
     lines: list[str] = [f"  {label_text}: " + ", ".join(visible)]
     remaining: int = len(model_names) - len(visible)
     if remaining > 0:
         help_text: str = f"  ... {remaining:,} more; use --verbose to show all"
-        lines.append(dim(help_text) if use_color else help_text)
+        lines.append(style.muted(help_text))
     return lines

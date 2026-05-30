@@ -40,6 +40,40 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC001",),
     ),
     CheckPathsTestCase(
+        description="reports raw color helper import outside style layer",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/load.py": dedent(
+                """
+                from sqlbuild.shared.helpers.colors import green_bold, supports_color
+
+
+                def load_example() -> str:
+                    return green_bold(str(supports_color()))
+                """
+            ).strip()
+            + "\n"
+        },
+        expected_violation_codes=("SC041",),
+    ),
+    CheckPathsTestCase(
+        description="allows supports color helper import",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/load.py": dedent(
+                """
+                from sqlbuild.shared.helpers.colors import supports_color
+
+
+                def load_example() -> bool:
+                    return supports_color()
+                """
+            ).strip()
+            + "\n"
+        },
+        expected_violation_codes=(),
+    ),
+    CheckPathsTestCase(
         description="reports flat runtime main module under nested package",
         repo_files=compliant_repo_files()
         | {
@@ -947,10 +981,14 @@ TEST_CASES: list[CheckPathsTestCase] = [
         | {
             "src/sqlbuild/shared/__init__.py": '"""Shared."""\n',
             "src/sqlbuild/shared/helpers/__init__.py": '"""Shared helpers."""\n',
-            "src/sqlbuild/shared/helpers/colors.py": dedent(
+            "src/sqlbuild/shared/helpers/cli_style.py": dedent(
                 """
-                def blue(text: str) -> str:
-                    return text
+                class CliStyle:
+                    def __init__(self, *, use_color: bool) -> None:
+                        self.use_color = use_color
+
+                    def accent(self, text: str) -> str:
+                        return text
                 """
             ).strip()
             + "\n",
@@ -958,11 +996,11 @@ TEST_CASES: list[CheckPathsTestCase] = [
             "src/sqlbuild/example/discovery/main/__init__.py": '"""Discovery entries."""\n',
             "src/sqlbuild/example/discovery/main/discover.py": dedent(
                 """
-                from sqlbuild.shared.helpers.colors import blue
+                from sqlbuild.shared.helpers.cli_style import CliStyle
 
 
                 def discover_name() -> str:
-                    return blue("demo")
+                    return CliStyle(use_color=False).accent("demo")
                 """
             ).strip()
             + "\n",

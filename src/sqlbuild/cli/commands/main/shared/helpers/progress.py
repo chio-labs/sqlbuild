@@ -6,6 +6,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass
+from typing import TextIO
 
 from sqlbuild.adapter.shared.models import LifeCycleEvent
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
@@ -27,16 +28,8 @@ from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.coded_errors import format_coded_error
-from sqlbuild.shared.helpers.colors import (
-    blue_dim,
-    colorize_completion,
-    colorize_status,
-    dim,
-    red_bold,
-    red_dim,
-    yellow_bold,
-)
 from sqlbuild.shared.helpers.materialization_labels import (
     materialization_type_display,
     model_execution_annotation,
@@ -108,6 +101,7 @@ class BuildProgressCallbacks:
         )
         self._counter: int = 0
         self._use_color: bool = use_color
+        self._style: CliStyle = CliStyle(use_color=use_color)
         self._verbose: bool = verbose
         self._debug: bool = debug
         self._is_tty: bool = hasattr(sys.stdout, "isatty") and sys.stdout.isatty() and not debug
@@ -169,7 +163,7 @@ class BuildProgressCallbacks:
         self._stream.write("\n")
         sql_line: str
         for sql_line in _format_display_sql(sql).split("\n"):
-            styled: str = dim(f"    {sql_line}") if self._use_color else f"    {sql_line}"
+            styled: str = self._style.muted(f"    {sql_line}")
             self._stream.write(f"{styled}\n")
         self._stream.write("\n")
 
@@ -177,14 +171,14 @@ class BuildProgressCallbacks:
         """Write a log message with indent and muted styling."""
 
         lines: list[str] = message.splitlines() or [""]
-        prefix: str = blue_dim("    log  ") if self._use_color else "    log  "
-        first_content: str = dim(lines[0]) if self._use_color else lines[0]
+        prefix: str = self._style.log_label("    log  ")
+        first_content: str = self._style.muted(lines[0])
         styled_first: str = f"{prefix}{first_content}"
         self._stream.write(f"\n{styled_first}\n")
         line: str
         for line in lines[1:]:
             continuation: str = f"         {line}"
-            styled_continuation: str = dim(continuation) if self._use_color else continuation
+            styled_continuation: str = self._style.muted(continuation)
             self._stream.write(f"{styled_continuation}\n")
 
     def on_node_start(self, name: str, resource_kind: ExecutionResourceKind) -> None:
@@ -204,10 +198,7 @@ class BuildProgressCallbacks:
     def _write_spinner_line(self) -> None:
         ctr: str = f"{self._counter + 1}/{self._total}".rjust(len(str(self._total)) * 2 + 1)
         display_type: str = materialization_type_display(self._current_node_type)
-        status: str = colorize_status(
-            _ACTIVE_SPINNER_FRAMES[self._spinner_frame_index],
-            use_color=self._use_color,
-        )
+        status: str = self._style.status(_ACTIVE_SPINNER_FRAMES[self._spinner_frame_index])
         self._spinner_frame_index = (self._spinner_frame_index + 1) % len(_ACTIVE_SPINNER_FRAMES)
         name_display: str = _truncate_name(self._current_node_name, self._name_width)
         if self._current_sub_message:
@@ -279,10 +270,7 @@ class BuildProgressCallbacks:
         ctr: str = f"{self._counter}/{self._total}".rjust(len(str(self._total)) * 2 + 1)
 
         if isinstance(node_result, SeedExecutionResult):
-            status: str = colorize_status(
-                _execution_status_display(node_result.status),
-                use_color=self._use_color,
-            )
+            status: str = self._style.status(_execution_status_display(node_result.status))
             duration: str = _format_duration(node_result.duration_ms)
             seed_name: str = _truncate_name(node_result.seed_name, self._name_width)
             self._write_top_level_result_line(
@@ -302,10 +290,7 @@ class BuildProgressCallbacks:
             return
 
         if isinstance(node_result, FunctionExecutionResult):
-            status: str = colorize_status(
-                _execution_status_display(node_result.status),
-                use_color=self._use_color,
-            )
+            status: str = self._style.status(_execution_status_display(node_result.status))
             duration: str = _format_duration(node_result.duration_ms)
             function_name: str = _truncate_name(node_result.function_name, self._name_width)
             self._write_top_level_result_line(
@@ -325,10 +310,7 @@ class BuildProgressCallbacks:
             return
 
         if isinstance(node_result, LoadExecutionResult):
-            status = colorize_status(
-                _execution_status_display(node_result.status),
-                use_color=self._use_color,
-            )
+            status = self._style.status(_execution_status_display(node_result.status))
             duration = _format_duration(node_result.duration_ms)
             source_name: str = _truncate_name(node_result.source_name, self._name_width)
             detail: str = f"  rows={node_result.rows_loaded:,}"
@@ -367,10 +349,7 @@ class BuildProgressCallbacks:
             name_display = f"{model_result.model_name}  ({annotation})"
         name_display = _truncate_name(name_display, self._name_width)
 
-        status: str = colorize_status(
-            _execution_status_display(model_result.status),
-            use_color=self._use_color,
-        )
+        status: str = self._style.status(_execution_status_display(model_result.status))
         duration: str = _format_duration(model_result.duration_ms)
         detail: str = ""
         if model_result.status == ExecutionStatus.FAILED and model_result.failed_phase is not None:
@@ -411,10 +390,7 @@ class BuildProgressCallbacks:
             model_result.model_name
         )
         if test_result is not None:
-            test_status: str = colorize_status(
-                _test_outcome_display(test_result.outcome),
-                use_color=self._use_color,
-            )
+            test_status: str = self._style.status(_test_outcome_display(test_result.outcome))
             test_name: str = test_result.test_name
             self._stream.write(
                 f"{sub_pad}{'test':<{_TYPE_WIDTH}}{test_name:<{sub_nw}} {test_status}\n"
@@ -423,10 +399,7 @@ class BuildProgressCallbacks:
             check_type_width: int = _TYPE_WIDTH - 2
             step_result: StepResult
             for step_result in test_result.step_results:
-                check_status: str = colorize_status(
-                    _test_outcome_display(step_result.outcome),
-                    use_color=self._use_color,
-                )
+                check_status: str = self._style.status(_test_outcome_display(step_result.outcome))
                 check_name: str = format_check_name(step_result.model_name)
                 check_detail: str = format_check_detail(step_result)
                 self._stream.write(
@@ -440,9 +413,7 @@ class BuildProgressCallbacks:
 
         entry: _AuditDisplayEntry
         for entry in display_audits:
-            audit_status: str = colorize_status(
-                _audit_outcome_display(entry.outcome), use_color=self._use_color
-            )
+            audit_status: str = self._style.status(_audit_outcome_display(entry.outcome))
             audit_name: str = _truncate_name(entry.display_name, sub_nw)
             audit_detail: str = ""
             if entry.outcome != AuditOutcome.PASS and entry.total_row_count > 0:
@@ -480,7 +451,7 @@ class BuildProgressCallbacks:
         self, *, error_code: str | None, error_message: str, error_help: str | None = None
     ) -> None:
         pad: str = " " * self._prefix_width
-        label: str = red_dim("error") if self._use_color else "error"
+        label: str = self._style.error_muted("error")
         message: str = _format_result_error(
             error_code=error_code,
             error_message=error_message,
@@ -504,6 +475,17 @@ def format_build_header(*, command: str, target: str | None, concurrency: int) -
     return "".join(parts)
 
 
+def write_execution_header(
+    *, stream: TextIO, command: str, target: str | None, concurrency: int, use_color: bool
+) -> None:
+    """Write the shared execution header for command progress output."""
+
+    style: CliStyle = CliStyle(use_color=use_color)
+    header: str = format_build_header(command=command, target=target, concurrency=concurrency)
+    stream.write(f"{style.object_name('Execution')}  {style.muted(header)}\n\n")
+    stream.flush()
+
+
 def format_build_footer(
     *,
     result: BuildExecutionResult,
@@ -511,13 +493,14 @@ def format_build_footer(
     use_color: bool,
 ) -> str:
     lines: list[str] = []
+    style: CliStyle = CliStyle(use_color=use_color)
 
     if result.status == BuildStatus.FAILED:
-        lines.append(colorize_completion("Completed with errors.", use_color=use_color))
+        lines.append(style.error("Completed with errors."))
     elif result.warning_count > 0:
-        lines.append(colorize_completion("Completed with warnings.", use_color=use_color))
+        lines.append(style.warning("Completed with warnings."))
     else:
-        lines.append(colorize_completion("Completed successfully.", use_color=use_color))
+        lines.append(style.success("Completed successfully."))
 
     pass_count: int = 0
     warn_count: int = 0
@@ -574,18 +557,18 @@ def format_build_footer(
         f"SKIP={skip_count}  TOTAL={total_count}  ({elapsed_str})"
     )
 
-    failure_lines: list[str] = _format_failure_details(result, use_color=use_color)
+    failure_lines: list[str] = _format_failure_details(result, style=style)
     if failure_lines:
         lines.extend(failure_lines)
 
-    warning_lines: list[str] = _format_warning_details(result, use_color=use_color)
+    warning_lines: list[str] = _format_warning_details(result, style=style)
     if warning_lines:
         lines.extend(warning_lines)
 
     return "\n".join(lines)
 
 
-def _format_failure_details(result: BuildExecutionResult, *, use_color: bool) -> list[str]:
+def _format_failure_details(result: BuildExecutionResult, *, style: CliStyle) -> list[str]:
     lines: list[str] = []
     has_failures: bool = False
 
@@ -595,7 +578,7 @@ def _format_failure_details(result: BuildExecutionResult, *, use_color: bool) ->
             continue
         if not has_failures:
             lines.append("")
-            lines.append(red_bold("Failures:") if use_color else "Failures:")
+            lines.append(style.error_strong("Failures:"))
             lines.append("")
             has_failures = True
         lines.append(f"  {seed_result.seed_name}  (seed)")
@@ -605,7 +588,7 @@ def _format_failure_details(result: BuildExecutionResult, *, use_color: bool) ->
                     error_code=seed_result.error_code,
                     error_message=seed_result.error_message,
                     error_help=seed_result.error_help,
-                    use_color=use_color,
+                    style=style,
                 )
             )
         lines.append("")
@@ -616,7 +599,7 @@ def _format_failure_details(result: BuildExecutionResult, *, use_color: bool) ->
             continue
         if not has_failures:
             lines.append("")
-            lines.append(red_bold("Failures:") if use_color else "Failures:")
+            lines.append(style.error_strong("Failures:"))
             lines.append("")
             has_failures = True
         phase_str: str = f"  ({model_result.failed_phase})" if model_result.failed_phase else ""
@@ -627,7 +610,7 @@ def _format_failure_details(result: BuildExecutionResult, *, use_color: bool) ->
                     error_code=model_result.error_code,
                     error_message=model_result.error_message,
                     error_help=model_result.error_help,
-                    use_color=use_color,
+                    style=style,
                 )
             )
         if model_result.staging_relation is not None:
@@ -640,7 +623,7 @@ def _format_failure_details(result: BuildExecutionResult, *, use_color: bool) ->
             continue
         if not has_failures:
             lines.append("")
-            lines.append(red_bold("Failures:") if use_color else "Failures:")
+            lines.append(style.error_strong("Failures:"))
             lines.append("")
             has_failures = True
         lines.append(f"  {function_result.function_name}  (function)")
@@ -650,7 +633,7 @@ def _format_failure_details(result: BuildExecutionResult, *, use_color: bool) ->
                     error_code=function_result.error_code,
                     error_message=function_result.error_message,
                     error_help=function_result.error_help,
-                    use_color=use_color,
+                    style=style,
                 )
             )
         lines.append("")
@@ -661,7 +644,7 @@ def _format_failure_details(result: BuildExecutionResult, *, use_color: bool) ->
             continue
         if not has_failures:
             lines.append("")
-            lines.append(red_bold("Failures:") if use_color else "Failures:")
+            lines.append(style.error_strong("Failures:"))
             lines.append("")
             has_failures = True
         lines.append(f"  {test_r.test_name}  (test)")
@@ -671,7 +654,7 @@ def _format_failure_details(result: BuildExecutionResult, *, use_color: bool) ->
                     error_code=test_r.error_code,
                     error_message=test_r.error_message,
                     error_help=test_r.error_help,
-                    use_color=use_color,
+                    style=style,
                 )
             )
         lines.append("")
@@ -679,7 +662,7 @@ def _format_failure_details(result: BuildExecutionResult, *, use_color: bool) ->
     return lines
 
 
-def _format_warning_details(result: BuildExecutionResult, *, use_color: bool) -> list[str]:
+def _format_warning_details(result: BuildExecutionResult, *, style: CliStyle) -> list[str]:
     lines: list[str] = []
     has_warnings: bool = False
 
@@ -700,7 +683,7 @@ def _format_warning_details(result: BuildExecutionResult, *, use_color: bool) ->
         if model_warnings:
             if not has_warnings:
                 lines.append("")
-                lines.append(yellow_bold("Warnings:") if use_color else "Warnings:")
+                lines.append(style.warning_strong("Warnings:"))
                 lines.append("")
                 has_warnings = True
             lines.append(f"  {model_result.model_name}")
@@ -715,7 +698,7 @@ def _format_warning_details(result: BuildExecutionResult, *, use_color: bool) ->
             continue
         if not has_warnings:
             lines.append("")
-            lines.append(yellow_bold("Warnings:") if use_color else "Warnings:")
+            lines.append(style.warning_strong("Warnings:"))
             lines.append("")
             has_warnings = True
         lines.append(f"  {function_result.function_name}  (function)")
@@ -734,15 +717,15 @@ def _inspection_relation_message(relation_name: str) -> str:
 
 
 def _format_failure_error_block(
-    *, error_code: str | None, error_message: str, error_help: str | None, use_color: bool
+    *, error_code: str | None, error_message: str, error_help: str | None, style: CliStyle
 ) -> list[str]:
     lines: list[str] = []
-    label: str = red_dim("error") if use_color else "error"
+    label: str = style.error_muted("error")
     message: str = _format_result_error(
         error_code=error_code,
         error_message=error_message,
         error_help=error_help,
-        use_color=use_color,
+        use_color=style.use_color,
     )
     formatted_line: str
     for index, formatted_line in enumerate(_format_error_lines(message)):

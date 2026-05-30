@@ -38,6 +38,12 @@ class CompileTextOutputTestCase:
 
 
 @dataclass(frozen=True)
+class CompileTextColorTestCase:
+    description: str
+    expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class CompileJsonDiagnosticsTestCase:
     description: str
     model_sql: str

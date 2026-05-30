@@ -6,15 +6,16 @@ import json
 
 from sqlbuild.cli.commands.main.helpers.debug.models import DebugLine, DebugResult
 from sqlbuild.cli.commands.main.helpers.debug.types import DebugCheckStatus
-from sqlbuild.shared.helpers.colors import bold, dim, green, green_bold, red
+from sqlbuild.shared.helpers.cli_style import CliStyle
 
 
 def format_debug_text(result: DebugResult, *, use_color: bool) -> str:
-    header: str = green_bold("SQLBuild Diagnostics") if use_color else "SQLBuild Diagnostics"
+    style: CliStyle = CliStyle(use_color=use_color)
+    header: str = style.title("SQLBuild Diagnostics")
     lines: list[str] = ["", header, ""]
-    _append_section(lines, "Runtime", result.runtime, use_color=use_color)
-    _append_section(lines, "Configuration", result.configuration, use_color=use_color)
-    _append_section(lines, "Connection", result.connection, use_color=use_color)
+    _append_section(lines, "Runtime", result.runtime, style=style)
+    _append_section(lines, "Configuration", result.configuration, style=style)
+    _append_section(lines, "Connection", result.connection, style=style)
     return "\n".join(lines) + "\n"
 
 
@@ -31,31 +32,25 @@ def format_debug_json(result: DebugResult) -> str:
 
 
 def _append_section(
-    lines: list[str], section_name: str, section_lines: tuple[DebugLine, ...], *, use_color: bool
+    lines: list[str], section_name: str, section_lines: tuple[DebugLine, ...], *, style: CliStyle
 ) -> None:
-    rendered_section_name: str = bold(f"{section_name}:") if use_color else f"{section_name}:"
+    rendered_section_name: str = style.section(f"{section_name}:")
     lines.append(rendered_section_name)
     line: DebugLine
     for line in section_lines:
         message: str = line.message
         if line.status is not None:
             status_message: str = line.status_message or line.message
-            status: str = _format_status(line.status, status_message, use_color=use_color)
+            status: str = _format_status(line.status, status_message, style=style)
             message = status if not message else f"{message} {status}"
         lines.append(f"  {line.label}: {message}")
     lines.append("")
 
 
-def _format_status(status: DebugCheckStatus, message: str, *, use_color: bool) -> str:
+def _format_status(status: DebugCheckStatus, message: str, *, style: CliStyle) -> str:
     status_text: str = "OK" if status == DebugCheckStatus.OK else status.value
     rendered: str = f"[{status_text} {message}]"
-    if not use_color:
-        return rendered
-    if status == DebugCheckStatus.OK:
-        return green(rendered)
-    if status == DebugCheckStatus.ERROR:
-        return red(rendered)
-    return dim(rendered)
+    return style.status(status_text, rendered)
 
 
 def _line_to_json(line: DebugLine) -> dict[str, str]:

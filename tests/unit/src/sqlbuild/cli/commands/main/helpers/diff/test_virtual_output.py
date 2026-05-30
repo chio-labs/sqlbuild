@@ -25,6 +25,13 @@ TEST_CASES: list[RenderVirtualDiffHeaderTestCase] = [
             "unchanged refs skipped  1",
             "working VDEs            yes (partial allowed)",
         ),
+        expected_color_fragments=(
+            "\033[32m\033[1mVirtual diff\033[0m",
+            "\033[34m\033[1mdev\033[0m -> \033[34m\033[1mpr\033[0m",
+            "selected models         \033[34m\033[1m3\033[0m",
+            "unchanged refs skipped  \033[2m1\033[0m",
+            "working VDEs            \033[33m\033[1myes\033[0m\033[2m (partial allowed)\033[0m",
+        ),
         unexpected_fragments=("not current with workspace",),
     ),
     RenderVirtualDiffHeaderTestCase(
@@ -68,9 +75,24 @@ def test_given_virtual_diff_metadata_when_formatting_header_then_expected_detail
         verbose=test_case.verbose,
         use_color=False,
     )
+    color_result: str = format_virtual_diff_header(
+        from_virtual_environment="dev",
+        to_virtual_environment="pr",
+        selected_names=test_case.selected_names,
+        skipped_names=test_case.skipped_names,
+        from_stale=test_case.from_stale,
+        to_stale=test_case.to_stale,
+        from_working=test_case.from_working,
+        to_working=test_case.to_working,
+        allow_partial_diff=test_case.allow_partial_diff,
+        verbose=test_case.verbose,
+        use_color=True,
+    )
 
     fragment: str
     for fragment in test_case.expected_fragments:
         assert fragment in result
     for fragment in test_case.unexpected_fragments:
         assert fragment not in result
+    for fragment in test_case.expected_color_fragments:
+        assert fragment in color_result

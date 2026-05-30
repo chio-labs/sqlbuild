@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
+
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
@@ -27,9 +30,13 @@ def build_project_graph(
     no_sql_validation: bool = False,
     cli_vars: dict[str, object] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    on_progress: Callable[[str], None] | None = None,
 ) -> ProjectGraph:
     """Build the static dependency graph for a compiled project."""
 
+    if on_progress is not None:
+        on_progress("Compiling project...")
+    compile_start: float = time.monotonic()
     project: CompiledProject = build_compiled_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
@@ -37,6 +44,8 @@ def build_project_graph(
         cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
+    if on_progress is not None:
+        on_progress(f"Compiled project. ({time.monotonic() - compile_start:.2f}s)")
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
         build_static_upstream_deps(project)
     )

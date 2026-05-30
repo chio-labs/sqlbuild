@@ -57,7 +57,8 @@ from sqlbuild.executor.janitor.models import (
     JanitorPlan,
     JanitorRelationKey,
 )
-from sqlbuild.shared.helpers.colors import green, supports_color
+from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
 from sqlbuild.spec.models.environments import resolve_environment_config
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
@@ -284,7 +285,8 @@ def run_janitor(
             )
         else:
             deleted_message = f"Deleted {len(result.deleted)} objects."
-        sys.stdout.write((green(deleted_message) if use_color else deleted_message) + "\n")
+        style: CliStyle = CliStyle(use_color=use_color)
+        sys.stdout.write(style.success(deleted_message) + "\n")
         return 0
     finally:
         adapter.close(connection)

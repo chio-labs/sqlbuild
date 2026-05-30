@@ -6,6 +6,7 @@ from sqlbuild.cli.commands.main.helpers.compile.models import WrittenTarget
 from sqlbuild.cli.commands.main.helpers.compile.output import format_compile_text
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
+    CompileTextColorTestCase,
     CompileTextOutputTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
@@ -66,3 +67,47 @@ def test_given_compiled_project_when_formatting_compile_text_then_matches_expect
         assert fragment in output
     for fragment in test_case.unexpected_fragments:
         assert fragment not in output
+    assert "\033[" not in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CompileTextColorTestCase(
+            description="styles compile summary and model rows semantically",
+            expected_fragments=(
+                "\033[32m\033[1mCompile ready (3 models)\033[0m",
+                "\033[34m\033[1mshort",
+                "\033[32mOK\033[0m",
+                "\033[2m0 columns\033[0m",
+                "\033[32m\033[1mCompiled:\033[0m",
+                "\033[2mWrote:\033[0m",
+            ),
+        ),
+    ],
+    ids=["styles compile summary and model rows semantically"],
+)
+def test_given_compiled_project_when_formatting_compile_text_with_color_then_styles_semantic_parts(
+    test_case: CompileTextColorTestCase,
+) -> None:
+    graph: ProjectGraph = build_compile_output_graph(
+        model_names=build_compile_output_model_names(3)
+    )
+    output: str = format_compile_text(
+        graph=graph,
+        written=WrittenTarget(
+            model_count=3,
+            seed_count=0,
+            function_count=0,
+            audit_count=0,
+            test_count=0,
+            target_dir=graph.project.models[0].relative_path.parent.parent / "target",
+        ),
+        manifest=False,
+        lineage=None,
+        diagnostics=(),
+        use_color=True,
+    )
+
+    for fragment in test_case.expected_fragments:
+        assert fragment in output

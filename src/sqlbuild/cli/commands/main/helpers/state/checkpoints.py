@@ -7,7 +7,9 @@ from pathlib import Path
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.shared.helpers.colors import blue, blue_bold, dim, green, green_bold, supports_color
+from sqlbuild.shared.helpers.cli_document import CliDocument
+from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.environments import resolve_environment_name
 from sqlbuild.virtual.state.main.checkpoint_refs import get_virtual_environment_checkpoint_refs
 from sqlbuild.virtual.state.main.environment_refs import get_virtual_environment_refs
@@ -45,7 +47,7 @@ def run_state_checkpoints(
             "state checkpoints requires --virtual-env or a default environment",
             code="C903",
         )
-    use_color: bool = not no_color and supports_color()
+    style: CliStyle = CliStyle(use_color=not no_color and supports_color())
     if command == "list":
         checkpoints: tuple[VirtualEnvironmentCheckpointRecord, ...] = (
             list_virtual_environment_checkpoints(
@@ -58,7 +60,7 @@ def run_state_checkpoints(
             _format_checkpoint_list(
                 virtual_environment_name=resolved_environment_name,
                 checkpoints=checkpoints,
-                use_color=use_color,
+                style=style,
             )
         )
         return 0
@@ -78,7 +80,7 @@ def run_state_checkpoints(
             _format_checkpoint_show(
                 checkpoint_id=checkpoint_id,
                 refs=refs,
-                use_color=use_color,
+                style=style,
             )
         )
         return 0
@@ -105,7 +107,7 @@ def run_state_checkpoints(
                 checkpoint_id=checkpoint_id,
                 current_refs=current_refs,
                 checkpoint_refs=checkpoint_refs,
-                use_color=use_color,
+                style=style,
             )
         )
         return 0
@@ -116,56 +118,48 @@ def _format_checkpoint_list(
     *,
     virtual_environment_name: str,
     checkpoints: tuple[VirtualEnvironmentCheckpointRecord, ...],
-    use_color: bool,
+    style: CliStyle,
 ) -> str:
-    title: str = (
-        green_bold("Virtual environment checkpoints")
-        if use_color
-        else "Virtual environment checkpoints"
+    document: CliDocument = CliDocument(style)
+    document.blank()
+    document.header(
+        "Virtual environment checkpoints", suffix=style.object_name(virtual_environment_name)
     )
-    env_label: str = blue_bold(virtual_environment_name) if use_color else virtual_environment_name
-    lines: list[str] = ["", f"{title}  {env_label}", ""]
+    document.blank()
     if not checkpoints:
-        lines.append("  no checkpoints")
-        lines.append("")
-        return "\n".join(lines)
+        document.line("  no checkpoints")
+        document.blank()
+        return document.render(trailing_newline=False)
     checkpoint: VirtualEnvironmentCheckpointRecord
     for checkpoint in checkpoints:
         created_at: str = (
             str(checkpoint.created_at) if checkpoint.created_at is not None else "unknown"
         )
-        checkpoint_label: str = (
-            blue(checkpoint.checkpoint_id) if use_color else checkpoint.checkpoint_id
-        )
-        created_label: str = dim(created_at) if use_color else created_at
-        lines.append(f"  {checkpoint_label}  {created_label}")
-    lines.append("")
-    return "\n".join(lines)
+        document.line(f"  {style.accent(checkpoint.checkpoint_id)}  {style.muted(created_at)}")
+    document.blank()
+    return document.render(trailing_newline=False)
 
 
 def _format_checkpoint_show(
     *,
     checkpoint_id: str,
     refs: tuple[VirtualEnvironmentCheckpointRefRecord, ...],
-    use_color: bool,
+    style: CliStyle,
 ) -> str:
-    title: str = (
-        green_bold("Virtual environment checkpoint")
-        if use_color
-        else "Virtual environment checkpoint"
-    )
-    checkpoint_label: str = blue(checkpoint_id) if use_color else checkpoint_id
-    refs_label: str = green("Refs") if use_color else "Refs"
-    lines: list[str] = ["", title, "", f"  checkpoint           {checkpoint_label}", "", refs_label]
+    document: CliDocument = CliDocument(style)
+    document.blank()
+    document.header("Virtual environment checkpoint")
+    document.blank()
+    document.line(f"  checkpoint           {style.accent(checkpoint_id)}")
+    document.blank()
+    document.line(style.success("Refs"))
     ref: VirtualEnvironmentCheckpointRefRecord
     for ref in refs:
-        model_label: str = (
-            blue_bold(f"{ref.model_name:<24}") if use_color else f"{ref.model_name:<24}"
+        document.line(
+            f"  {style.object_name(f'{ref.model_name:<24}')} {style.muted(ref.version_hash)}"
         )
-        hash_label: str = dim(ref.version_hash) if use_color else ref.version_hash
-        lines.append(f"  {model_label} {hash_label}")
-    lines.append("")
-    return "\n".join(lines)
+    document.blank()
+    return document.render(trailing_newline=False)
 
 
 def _format_checkpoint_diff(
@@ -174,14 +168,8 @@ def _format_checkpoint_diff(
     checkpoint_id: str,
     current_refs: tuple[VirtualEnvironmentRefRecord, ...],
     checkpoint_refs: tuple[VirtualEnvironmentCheckpointRefRecord, ...],
-    use_color: bool,
+    style: CliStyle,
 ) -> str:
-    title: str = (
-        green_bold("Virtual environment checkpoint diff")
-        if use_color
-        else "Virtual environment checkpoint diff"
-    )
-    env_label: str = blue_bold(virtual_environment_name) if use_color else virtual_environment_name
     current_ref_map: dict[str, str] = {ref.model_name: ref.version_hash for ref in current_refs}
     checkpoint_ref_map: dict[str, str] = {
         ref.model_name: ref.version_hash for ref in checkpoint_refs
@@ -199,48 +187,45 @@ def _format_checkpoint_diff(
     checkpoint_only: tuple[str, ...] = tuple(
         sorted(model_name for model_name in checkpoint_ref_map if model_name not in current_ref_map)
     )
-    lines: list[str] = [
-        "",
-        f"{title}  {env_label}",
-        "",
-        f"  checkpoint       {_value(checkpoint_id, use_color=use_color)}",
-        f"  changed refs     {_value(f'{len(changed):,}', use_color=use_color)}",
-        f"  current only     {_value(f'{len(current_only):,}', use_color=use_color)}",
-        f"  checkpoint only  {_value(f'{len(checkpoint_only):,}', use_color=use_color)}",
-    ]
+    document: CliDocument = CliDocument(style)
+    document.blank()
+    document.header(
+        "Virtual environment checkpoint diff", suffix=style.object_name(virtual_environment_name)
+    )
+    document.blank()
+    document.line(f"  {'checkpoint':<16} {style.accent(checkpoint_id)}")
+    document.line(f"  {'changed refs':<16} {style.accent(f'{len(changed):,}')}")
+    document.line(f"  {'current only':<16} {style.accent(f'{len(current_only):,}')}")
+    document.line(f"  {'checkpoint only':<16} {style.accent(f'{len(checkpoint_only):,}')}")
     _append_ref_diff_lines(
-        lines, "Changed refs", changed, current_ref_map, checkpoint_ref_map, use_color
+        document, "Changed refs", changed, current_ref_map, checkpoint_ref_map, style
     )
     _append_ref_diff_lines(
-        lines, "Current only", current_only, current_ref_map, checkpoint_ref_map, use_color
+        document, "Current only", current_only, current_ref_map, checkpoint_ref_map, style
     )
     _append_ref_diff_lines(
-        lines, "Checkpoint only", checkpoint_only, current_ref_map, checkpoint_ref_map, use_color
+        document, "Checkpoint only", checkpoint_only, current_ref_map, checkpoint_ref_map, style
     )
-    lines.append("")
-    return "\n".join(lines)
+    document.blank()
+    return document.render(trailing_newline=False)
 
 
 def _append_ref_diff_lines(
-    lines: list[str],
+    document: CliDocument,
     label: str,
     model_names: tuple[str, ...],
     current_ref_map: dict[str, str],
     checkpoint_ref_map: dict[str, str],
-    use_color: bool,
+    style: CliStyle,
 ) -> None:
     if not model_names:
         return
-    lines.append("")
-    lines.append(green(label) if use_color else label)
+    document.blank()
+    document.line(style.success(label))
     for model_name in model_names:
         current_hash: str = current_ref_map.get(model_name, "<missing>")
         checkpoint_hash: str = checkpoint_ref_map.get(model_name, "<missing>")
-        model_label: str = blue_bold(f"{model_name:<24}") if use_color else f"{model_name:<24}"
-        current_label: str = dim(current_hash) if use_color else current_hash
-        checkpoint_label: str = dim(checkpoint_hash) if use_color else checkpoint_hash
-        lines.append(f"  {model_label} {current_label} -> {checkpoint_label}")
-
-
-def _value(text: str, *, use_color: bool) -> str:
-    return blue(text) if use_color else text
+        model_label: str = style.object_name(f"{model_name:<24}")
+        current_label: str = style.muted(current_hash)
+        checkpoint_label: str = style.muted(checkpoint_hash)
+        document.line(f"  {model_label} {current_label} -> {checkpoint_label}")

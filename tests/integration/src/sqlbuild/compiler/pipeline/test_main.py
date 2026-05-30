@@ -12,11 +12,13 @@ from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compi
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     AppendCursorPipelineIntegrationTestCase,
+    CompileProgressIntegrationTestCase,
     DeferToIntegrationTestCase,
     ExpectedModelEntry,
     RunCompilePipelineIntegrationTestCase,
@@ -206,6 +208,74 @@ def test_given_project_files_when_running_compile_pipeline_then_produces_valid_o
         assert expected.expected_manifest_compiled_code_fragment in compiled_code
 
     validate_manifest_against_dbt_schema(result.manifest)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CompileProgressIntegrationTestCase(
+            description="reports compile progress from compile pipeline",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_TOML,
+                "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS order_id",
+            },
+            expected_progress_prefixes=("Compiling project...", "Compiled project."),
+        )
+    ],
+    ids=["reports compile progress from compile pipeline"],
+)
+def test_given_progress_callback_when_running_compile_pipeline_then_reports_compile_progress(
+    test_case: CompileProgressIntegrationTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    progress_messages: list[str] = []
+    write_repo_files(tmp_path, test_case.project_files)
+
+    run_compile_pipeline_for_project(
+        project_dir=tmp_path,
+        adapter=DuckDbAdapter(),
+        on_progress=progress_messages.append,
+    )
+
+    expected_prefix: str
+    for expected_prefix in test_case.expected_progress_prefixes:
+        assert any(message.startswith(expected_prefix) for message in progress_messages)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CompileProgressIntegrationTestCase(
+            description="reports compile progress from project graph build",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_TOML,
+                "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS order_id",
+            },
+            expected_progress_prefixes=("Compiling project...", "Compiled project."),
+        )
+    ],
+    ids=["reports compile progress from project graph build"],
+)
+def test_given_progress_callback_when_building_project_graph_then_reports_compile_progress(
+    test_case: CompileProgressIntegrationTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    progress_messages: list[str] = []
+    write_repo_files(tmp_path, test_case.project_files)
+    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+
+    build_project_graph(
+        discovered_inputs=discovered_inputs,
+        adapter=DuckDbAdapter(),
+        no_sql_validation=True,
+        on_progress=progress_messages.append,
+    )
+
+    expected_prefix: str
+    for expected_prefix in test_case.expected_progress_prefixes:
+        assert any(message.startswith(expected_prefix) for message in progress_messages)
 
 
 @pytest.mark.parametrize(

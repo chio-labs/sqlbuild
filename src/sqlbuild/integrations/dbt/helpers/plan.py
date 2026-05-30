@@ -12,14 +12,7 @@ from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt.models import DbtInteropPlan, DbtInteropSelectionResult, DbtLsNode
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSkipReason
 from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
-from sqlbuild.shared.helpers.colors import (
-    blue,
-    blue_bold,
-    green_bold,
-    orange,
-    orange_bold,
-    yellow_bold,
-)
+from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.display import DisplayOptions, append_overflow_line, visible_entries
 
 _ANSI_ESCAPE_PATTERN: re.Pattern[str] = re.compile(r"\033\[[0-9;]*m")
@@ -79,7 +72,8 @@ def format_dbt_interop_plan(
     selected_count: int = len(
         frozenset((*plan.dbt_selected_unique_ids, *plan.selection.dbt_required_unique_ids))
     ) + len(plan.selection.sqlbuild_model_names)
-    lines.append(green_bold(f"Plan ready ({selected_count} selected)"))
+    style: CliStyle = CliStyle(use_color=True)
+    lines.append(style.success_strong(f"Plan ready ({selected_count} selected)"))
     lines.append("")
     _format_dbt_section(lines, plan, display_options=resolved_display_options)
     lines.append("")
@@ -134,10 +128,11 @@ def format_dbt_interop_plan_json(plan: DbtInteropPlan) -> str:
 def _format_dbt_section(
     lines: list[str], plan: DbtInteropPlan, *, display_options: DisplayOptions
 ) -> None:
+    style: CliStyle = CliStyle(use_color=True)
     dbt_count: int = len(
         frozenset((*plan.dbt_selected_unique_ids, *plan.selection.dbt_required_unique_ids))
     )
-    lines.append(orange_bold(f"dbt ({dbt_count} selected)"))
+    lines.append(style.dbt_section(f"dbt ({dbt_count} selected)"))
     if plan.dbt_skip_reason is not None:
         lines.append("  skipped: no dbt work selected")
         return
@@ -177,9 +172,10 @@ def _format_dbt_selected_nodes(
         nodes_by_type[_dbt_resource_type_label(node.resource_type)].append(node)
     section_label: str
     nodes: list[DbtLsNode]
+    style: CliStyle = CliStyle(use_color=True)
     for section_label, nodes in sorted(nodes_by_type.items()):
         lines.append("")
-        lines.append(f"  {orange(f'{section_label} ({len(nodes)})')}")
+        lines.append(f"  {style.dbt_label(f'{section_label} ({len(nodes)})')}")
         labels: tuple[str, ...] = tuple(_dbt_node_display_name(node) for node in nodes)
         name_width: int = resolve_name_column_width(labels)
         visible_nodes: Sequence[DbtLsNode] = visible_entries(nodes, options=display_options)
@@ -189,7 +185,7 @@ def _format_dbt_selected_nodes(
                 "    "
                 + format_aligned_name_value(
                     plain_name=name,
-                    styled_name=orange_bold(name),
+                    styled_name=style.dbt_object_name(name),
                     value=node.resource_type or "resource",
                     name_column_width=name_width,
                 )
@@ -210,8 +206,9 @@ def _format_sqlbuild_section(
     use_color: bool,
     display_options: DisplayOptions,
 ) -> None:
+    style: CliStyle = CliStyle(use_color=True)
     sqlbuild_count: int = len(plan.selection.sqlbuild_model_names)
-    lines.append(blue_bold(f"SQLBuild ({sqlbuild_count} selected)"))
+    lines.append(style.object_name(f"SQLBuild ({sqlbuild_count} selected)"))
     if plan.sqlbuild_skip_reason is not None:
         lines.append("  skipped: no SQLBuild work selected")
         return
@@ -226,7 +223,7 @@ def _format_sqlbuild_section(
         use_color=use_color,
         include_header=False,
         display_options=display_options,
-        section_header_style=blue,
+        section_header_style=style.accent,
     )
     if not sqlbuild_plan:
         return
@@ -242,6 +239,7 @@ def _format_sqlbuild_section(
 def _format_sqlbuild_model_fallback(
     lines: list[str], plan: DbtInteropPlan, *, display_options: DisplayOptions
 ) -> None:
+    style: CliStyle = CliStyle(use_color=True)
     name_width: int = resolve_name_column_width(plan.selection.sqlbuild_model_names)
     visible_models: Sequence[str] = visible_entries(
         plan.selection.sqlbuild_model_names, options=display_options
@@ -252,7 +250,7 @@ def _format_sqlbuild_model_fallback(
             "  "
             + format_aligned_name_value(
                 plain_name=model_name,
-                styled_name=blue_bold(model_name),
+                styled_name=style.object_name(model_name),
                 value="model",
                 name_column_width=name_width,
             )
@@ -271,8 +269,9 @@ def _format_anchor_section(
 ) -> None:
     if not plan.selection.dbt_anchor_terms:
         return
+    style: CliStyle = CliStyle(use_color=True)
     lines.append("")
-    lines.append(green_bold(f"dbt anchors ({len(plan.selection.dbt_anchor_terms)})"))
+    lines.append(style.success_strong(f"dbt anchors ({len(plan.selection.dbt_anchor_terms)})"))
     term: str
     for term in plan.selection.dbt_anchor_terms:
         unique_ids: tuple[str, ...] = plan.selection.dbt_anchor_unique_ids_by_term.get(term, ())
@@ -293,8 +292,11 @@ def _format_anchor_section(
 def _format_path_translation_section(lines: list[str], plan: DbtInteropPlan) -> None:
     if not plan.selection.path_translations:
         return
+    style: CliStyle = CliStyle(use_color=True)
     lines.append("")
-    lines.append(green_bold(f"Path translations ({len(plan.selection.path_translations)})"))
+    lines.append(
+        style.success_strong(f"Path translations ({len(plan.selection.path_translations)})")
+    )
     original: str
     translated: str
     for original, translated in plan.selection.path_translations:
@@ -304,8 +306,9 @@ def _format_path_translation_section(lines: list[str], plan: DbtInteropPlan) -> 
 def _format_warning_section(lines: list[str], plan: DbtInteropPlan) -> None:
     if not plan.warnings:
         return
+    style: CliStyle = CliStyle(use_color=True)
     lines.append("")
-    lines.append(yellow_bold(f"Warnings ({len(plan.warnings)})"))
+    lines.append(style.warning_strong(f"Warnings ({len(plan.warnings)})"))
     warning: str
     for warning in plan.warnings:
         lines.append(f"  - {warning}")

@@ -24,7 +24,7 @@ from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
 )
 from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
-from sqlbuild.cli.commands.main.shared.helpers.progress import format_build_header
+from sqlbuild.cli.commands.main.shared.helpers.progress import write_execution_header
 from sqlbuild.cli.commands.main.shared.helpers.status import TransientStatusReporter
 from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -42,14 +42,9 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCaptureRunResult,
 )
 from sqlbuild.shared.constants import SCENARIO_CLI_SQL_VALIDATION_REQUIRED
+from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.coded_errors import format_coded_error
-from sqlbuild.shared.helpers.colors import (
-    blue_bold,
-    colorize_status,
-    dim,
-    green_bold,
-    supports_color,
-)
+from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.project import (
     resolve_effective_adapter_name,
     resolve_effective_scenario_config,
@@ -105,11 +100,6 @@ def run_scenario_capture(
     use_color: bool = not no_color and supports_color()
     progress_stream: TextIO = sys.stdout
     target_label: str | None = " ".join(selectors) if selectors else None
-    execution_header: str = format_build_header(
-        command="sqb scenario capture", target=target_label, concurrency=1
-    )
-    execution_label: str = blue_bold("Execution") if use_color else "Execution"
-    header_detail: str = dim(execution_header) if use_color else execution_header
     connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
         adapter_name=adapter_name,
         stream=progress_stream,
@@ -119,7 +109,14 @@ def run_scenario_capture(
         stream=progress_stream,
         use_color=use_color,
     )
-    progress_stream.write(f"\n{execution_label}  {header_detail}\n\n")
+    progress_stream.write("\n")
+    write_execution_header(
+        stream=progress_stream,
+        command="sqb scenario capture",
+        target=target_label,
+        concurrency=1,
+        use_color=use_color,
+    )
     progress_stream.write(f"{scenario_snapshot_capture_warning(force=force)}\n\n")
     progress_stream.flush()
 
@@ -144,7 +141,8 @@ def run_scenario_capture(
         project_dir=effective_project_dir,
     )
     header: str = f"Scenario Capture ({len(scenarios)} selected)"
-    styled_header: str = green_bold(header) if use_color else header
+    style: CliStyle = CliStyle(use_color=use_color)
+    styled_header: str = style.success_strong(header)
     progress_stream.write(f"\n{styled_header}\n\n")
     progress_stream.flush()
     scenario_status: TransientStatusReporter = TransientStatusReporter(
@@ -271,7 +269,8 @@ def _write_capture_result(
     use_color: bool,
 ) -> None:
     status_text: str = "PASS" if result.status == SUCCESS_STATUS else "FAIL"
-    status: str = colorize_status(status_text, use_color=use_color)
+    style: CliStyle = CliStyle(use_color=use_color)
+    status: str = style.status(status_text)
     detail: str = _capture_detail(result)
     stream.write(f"{result.scenario_name:<{_SCENARIO_NAME_WIDTH}} {status}{detail}\n")
     if result.error_message:
@@ -316,7 +315,8 @@ def _write_capture_relation_rows(
     relation_result: ScenarioSnapshotCaptureRelationResult
     for relation_result in capture_result.relation_results:
         status_text: str = "PASS" if relation_result.status == SUCCESS_STATUS else "FAIL"
-        status: str = colorize_status(status_text, use_color=use_color)
+        style: CliStyle = CliStyle(use_color=use_color)
+        status: str = style.status(status_text)
         row_label: str = "row" if relation_result.row_count == 1 else "rows"
         detail: str = (
             f"  {relation_result.row_count} {row_label}, "

@@ -116,6 +116,9 @@ def _build_result(
     on_progress: Callable[[str], None] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> CompilePipelineResult:
+    if on_progress is not None:
+        on_progress("Compiling project...")
+    compile_start: float = time.monotonic()
     project: CompiledProject = build_compiled_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
@@ -123,6 +126,8 @@ def _build_result(
         cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
+    if on_progress is not None:
+        on_progress(f"Compiled project. ({time.monotonic() - compile_start:.2f}s)")
 
     deferred_targets: dict[str, CompiledRelationTarget] | None = None
     deferred_relations: dict[str, RelationInfo] | None = None

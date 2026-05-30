@@ -24,6 +24,14 @@ TEST_CASES: list[FormatPromoteOutputTestCase] = [
             "... 5 more; use --verbose to show all",
             "remaining stale models 0",
         ),
+        expected_color_fragments=(
+            "\033[32m\033[1mVirtual promotion complete\033[0m",
+            "\033[34m\033[1mpr\033[0m -> \033[34m\033[1mdev\033[0m",
+            "target status          \033[32m\033[1mfinalized\033[0m",
+            "promoted models        \033[34m\033[1m25\033[0m",
+            "\033[2mpromoted model set\033[0m: model_00",
+            "\033[2m  ... 5 more; use --verbose to show all\033[0m",
+        ),
         unexpected_fragments=("model_24",),
     ),
     FormatPromoteOutputTestCase(
@@ -61,9 +69,20 @@ def test_given_promotion_summary_when_formatting_then_output_is_capped_and_statu
         verbose=test_case.verbose,
         use_color=False,
     )
+    color_result: str = format_promote_output(
+        from_virtual_environment="pr",
+        to_virtual_environment="dev",
+        status=test_case.status,
+        promoted_models=test_case.promoted_models,
+        remaining_stale=test_case.remaining_stale,
+        verbose=test_case.verbose,
+        use_color=True,
+    )
 
     fragment: str
     for fragment in test_case.expected_fragments:
         assert fragment in result
     for fragment in test_case.unexpected_fragments:
         assert fragment not in result
+    for fragment in test_case.expected_color_fragments:
+        assert fragment in color_result

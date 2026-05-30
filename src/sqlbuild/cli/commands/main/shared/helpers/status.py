@@ -11,7 +11,7 @@ from rich.console import Console
 from rich.status import Status
 
 from sqlbuild.shared.exceptions.errors import SharedInputError
-from sqlbuild.shared.helpers.colors import dim
+from sqlbuild.shared.helpers.cli_style import CliStyle
 
 
 class TransientStatusReporter:
@@ -26,6 +26,7 @@ class TransientStatusReporter:
     ) -> None:
         self._stream: TextIO = stream
         self._use_color: bool = use_color
+        self._style: CliStyle = CliStyle(use_color=use_color)
         self._enabled: bool = enabled and hasattr(stream, "isatty") and stream.isatty()
         self._console: Console | None = (
             Console(file=stream, no_color=(not use_color)) if self._enabled else None
@@ -70,7 +71,7 @@ class TransientStatusReporter:
             self._status = None
 
     def _write_message(self, message: str, *, dim_output: bool) -> None:
-        formatted_message: str = dim(message) if dim_output and self._use_color else message
+        formatted_message: str = self._style.muted(message) if dim_output else message
         self._stream.write(f"{formatted_message}\n")
         self._stream.flush()
 

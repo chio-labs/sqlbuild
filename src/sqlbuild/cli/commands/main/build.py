@@ -30,7 +30,7 @@ from sqlbuild.cli.commands.main.shared.helpers.planning_progress import Planning
 from sqlbuild.cli.commands.main.shared.helpers.progress import (
     BuildProgressCallbacks,
     format_build_footer,
-    format_build_header,
+    write_execution_header,
 )
 from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import write_runtime_target
 from sqlbuild.cli.commands.main.shared.helpers.snapshot_full_refresh import (
@@ -46,7 +46,7 @@ from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.pipeline.main.run import run_build_pipeline
-from sqlbuild.shared.helpers.colors import blue_bold, dim, supports_color
+from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 from sqlbuild.spec.models.types import EnvironmentMode
 
@@ -200,13 +200,13 @@ def run_build(
     effective_concurrency: int = (
         concurrency if concurrency is not None else pipeline_result.project.settings.concurrency
     )
-    header: str = format_build_header(
-        command="sqb build", target=None, concurrency=effective_concurrency
+    write_execution_header(
+        stream=progress_stream,
+        command="sqb build",
+        target=None,
+        concurrency=effective_concurrency,
+        use_color=use_color,
     )
-    execution_label: str = blue_bold("Execution") if use_color else "Execution"
-    header_detail: str = dim(header) if use_color else header
-    progress_stream.write(f"{execution_label}  {header_detail}\n\n")
-    progress_stream.flush()
 
     has_external_source_loads: bool = any(
         entry.integration_kind is not None for entry in plan_output.source_load_entries

@@ -10,7 +10,8 @@ from typing import Any
 
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.shared.helpers.colors import blue_bold, dim, green, green_bold, supports_color
+from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.constants import STATE_TABLE_COLUMNS
 from sqlbuild.virtual.state.exceptions import StateBackendConfigError
@@ -136,9 +137,10 @@ def _format_state_lifecycle_summary(
     use_color: bool,
     backup_id: str | None = None,
 ) -> str:
-    rendered_title: str = green_bold(title) if use_color else title
-    state_label: str = green("State store:") if use_color else "State store:"
-    tables_label: str = green("Tables:") if use_color else "Tables:"
+    style: CliStyle = CliStyle(use_color=use_color)
+    rendered_title: str = style.success_strong(title)
+    state_label: str = style.success("State store:")
+    tables_label: str = style.success("Tables:")
     lines: list[str] = ["", rendered_title, "", state_label]
     lines.append(_summary_row(label="backend", value=config.backend.value, use_color=use_color))
     lines.append(_summary_row(label="schema", value=config.schema, use_color=use_color))
@@ -185,6 +187,7 @@ def _format_state_lifecycle_summary(
 
 
 def _summary_row(*, label: str, value: str, use_color: bool, emphasize_value: bool = True) -> str:
-    rendered_label: str = dim(f"{label}:") if use_color else f"{label}:"
-    rendered_value: str = blue_bold(value) if use_color and emphasize_value else value
+    style: CliStyle = CliStyle(use_color=use_color)
+    rendered_label: str = style.muted(f"{label}:")
+    rendered_value: str = style.object_name(value) if emphasize_value else value
     return f"  {rendered_label:<24} {rendered_value}"
