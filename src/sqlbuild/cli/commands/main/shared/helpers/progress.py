@@ -11,8 +11,8 @@ from typing import TextIO
 from sqlbuild.adapter.shared.models import LifeCycleEvent
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from sqlbuild.cli.commands.main.helpers.sql_test_progress import (
-    format_check_detail,
-    format_check_name,
+    format_expectation_detail,
+    format_expectation_name,
 )
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -143,13 +143,13 @@ class BuildProgressCallbacks:
                 if getattr(chain_step, "expected_cte_sql", None):
                     max_name_len = max(
                         max_name_len,
-                        len(format_check_name(str(getattr(chain_step, "model_name", "")))),
+                        len(format_expectation_name(str(getattr(chain_step, "model_name", "")))),
                     )
             assertion: object
             for assertion in getattr(test_entry, "assertions", ()):
                 max_name_len = max(
                     max_name_len,
-                    len(format_check_name(f"assertion {getattr(assertion, 'name', '')}")),
+                    len(format_expectation_name(f"assertion {getattr(assertion, 'name', '')}")),
                 )
         self._name_width: int = max(max_name_len + _NAME_PADDING, _MIN_NAME_WIDTH)
 
@@ -395,16 +395,18 @@ class BuildProgressCallbacks:
             self._stream.write(
                 f"{sub_pad}{'test':<{_TYPE_WIDTH}}{test_name:<{sub_nw}} {test_status}\n"
             )
-            check_pad: str = f"{sub_pad}  "
-            check_type_width: int = _TYPE_WIDTH - 2
+            expectation_pad: str = f"{sub_pad}  "
+            expectation_type_width: int = _TYPE_WIDTH - 2
             step_result: StepResult
             for step_result in test_result.step_results:
-                check_status: str = self._style.status(_test_outcome_display(step_result.outcome))
-                check_name: str = format_check_name(step_result.model_name)
-                check_detail: str = format_check_detail(step_result)
+                expectation_status: str = self._style.status(
+                    _test_outcome_display(step_result.outcome)
+                )
+                expectation_name: str = format_expectation_name(step_result.model_name)
+                expectation_detail: str = format_expectation_detail(step_result)
                 self._stream.write(
-                    f"{check_pad}{'check':<{check_type_width}}{check_name:<{sub_nw}} "
-                    f"{check_status}{check_detail}\n"
+                    f"{expectation_pad}{'expect':<{expectation_type_width}}"
+                    f"{expectation_name:<{sub_nw}} {expectation_status}{expectation_detail}\n"
                 )
 
         display_audits: list[_AuditDisplayEntry] = _aggregate_audit_results(

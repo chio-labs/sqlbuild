@@ -72,11 +72,11 @@ SQLGLOT_CHAIN_TEST_CASES: list[SqlglotChainSqlTestE2ETestCase] = [
                 "Execution  sqb test  (concurrency: 1)",
                 "Connecting to duckdb...",
                 "Connected to duckdb.",
-                "check   expected stg_orders",
-                "check   expected fact_orders",
-                "check   expected macro calculates line total cents",
-                "check   expected udf detects completed orders",
-                "check   expected table_fn returns customer orders",
+                "expect  expected stg_orders",
+                "expect  expected fact_orders",
+                "expect  expected macro calculates line total cents",
+                "expect  expected udf detects completed orders",
+                "expect  expected table_fn returns customer orders",
             ),
             expected_ordered_stdout_fragments=(
                 "Execution  sqb test  (concurrency: 1)",
@@ -140,8 +140,8 @@ def test_given_chain_sql_test_when_running_test_then_generated_sql_is_valid(
 
     assert test_result.returncode == 0, test_result.stdout + test_result.stderr
     assert "PASS=1" in test_result.stdout
-    assert "check   expected stg_orders" in test_result.stdout
-    assert "check   expected fact_orders" in test_result.stdout
+    assert "expect  expected stg_orders" in test_result.stdout
+    assert "expect  expected fact_orders" in test_result.stdout
     runtime_artifact_sql: str = (
         project_dir
         / "target"
@@ -186,7 +186,7 @@ def test_given_chain_sql_test_when_running_test_then_generated_sql_is_valid(
             expected_stdout_fragment="PASS=1",
             expected_stdout_fragments=(
                 "normalizes status",
-                "check   expected macro normalizes status",
+                "expect  expected macro normalizes status",
             ),
         )
     ],
@@ -240,7 +240,7 @@ def test_given_macro_sql_test_when_running_test_then_actual_and_expected_are_com
             description="assertion-only SQL unit test passes when assertion returns zero rows",
             expected_exit_code=0,
             expected_stdout_fragment="PASS=1",
-            expected_stdout_fragments=("orders_assert", "check   assertion no_negative_orders"),
+            expected_stdout_fragments=("orders_assert", "expect  assertion no_negative_orders"),
         )
     ],
     ids=["assertion-only SQL unit test passes when assertion returns zero rows"],
@@ -281,7 +281,7 @@ def test_given_assertion_only_sql_test_when_assertion_returns_zero_rows_then_it_
             expected_stdout_fragment="FAIL=1",
             expected_stdout_fragments=(
                 "orders_assert",
-                "check   assertion no_negative_orders",
+                "expect  assertion no_negative_orders",
                 "FAIL  1 row",
                 "test 'orders_assert' failed for models: assertion no_negative_orders",
             ),

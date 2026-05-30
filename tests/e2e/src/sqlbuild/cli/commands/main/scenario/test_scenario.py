@@ -44,19 +44,19 @@ SCENARIO_CLI_TEST_CASES: list[ScenarioCliE2ETestCase] = [
             "Execution  sqb scenario test  (target: order_totals_pass, concurrency: 1)",
             "Scenario (1 selected)",
             "order_totals_pass",
-            "check     expected order_totals",
+            "expect    expected order_totals",
             "PASS=1  FAIL=0  TOTAL=1",
         ),
         expected_retained_prefix_count=0,
     ),
     ScenarioCliE2ETestCase(
-        description="runs assertion scenario and reports passing assertion check",
+        description="runs assertion scenario and reports passing assertion expectation",
         command=("--no-color", "scenario", "test", "orders_assert_pass"),
         expected_exit_code=0,
         expected_stdout_fragments=(
             "Scenario (1 selected)",
             "orders_assert_pass",
-            "check     assertion no_negative_orders",
+            "expect    assertion no_negative_orders",
             "PASS=1  FAIL=0  TOTAL=1",
         ),
         expected_retained_prefix_count=0,
@@ -73,7 +73,7 @@ SCENARIO_CLI_TEST_CASES: list[ScenarioCliE2ETestCase] = [
         expected_stdout_fragments=(
             "Scenario (1 selected)",
             "orders_assert_pass",
-            "check     assertion no_negative_orders",
+            "expect    assertion no_negative_orders",
             "PASS=1  FAIL=0  TOTAL=1",
         ),
         expected_retained_prefix_count=0,
@@ -92,8 +92,8 @@ SCENARIO_CLI_TEST_CASES: list[ScenarioCliE2ETestCase] = [
             "Scenario (2 selected)",
             "order_totals_pass",
             "orders_assert_pass",
-            "check     expected order_totals",
-            "check     assertion no_negative_orders",
+            "expect    expected order_totals",
+            "expect    assertion no_negative_orders",
             "PASS=2  FAIL=0  TOTAL=2",
         ),
         expected_retained_prefix_count=0,
@@ -105,7 +105,7 @@ SCENARIO_CLI_TEST_CASES: list[ScenarioCliE2ETestCase] = [
         expected_stdout_fragments=(
             "Scenario (1 selected)",
             "orders_assert_pass",
-            "check     assertion no_negative_orders",
+            "expect    assertion no_negative_orders",
             "PASS=1  FAIL=0  TOTAL=1",
         ),
         expected_retained_prefix_count=0,
@@ -117,7 +117,7 @@ SCENARIO_CLI_TEST_CASES: list[ScenarioCliE2ETestCase] = [
         expected_stdout_fragments=(
             "Scenario (1 selected)",
             "orders_assert_pass",
-            "check     assertion no_negative_orders",
+            "expect    assertion no_negative_orders",
             "PASS=1  FAIL=0  TOTAL=1",
         ),
         expected_retained_prefix_count=0,
@@ -130,7 +130,7 @@ SCENARIO_CLI_TEST_CASES: list[ScenarioCliE2ETestCase] = [
             "Scenario (1 selected)",
             "order_totals_pass",
             "Retained relations:",
-            "check     expected order_totals",
+            "expect    expected order_totals",
             "source raw_orders -> __sqb_",
             "model  orders -> __sqb_",
             "model  order_totals -> __sqb_",
@@ -145,10 +145,10 @@ SCENARIO_CLI_TEST_CASES: list[ScenarioCliE2ETestCase] = [
         expected_stdout_fragments=(
             "Scenario (1 selected)",
             "order_totals_fail",
-            "error[X506]: scenario 'order_totals_fail' expected check for model "
+            "error[X506]: scenario 'order_totals_fail' expected comparison for model "
             "'order_totals' failed: actual=1 expected=1 mismatched=1",
             "= help: Compare the expected CTE with the retained scenario model relation.",
-            "check     expected order_totals",
+            "expect    expected order_totals",
             "expected order_totals:",
             "Rerun with --retain to inspect scenario-owned artifacts.",
             "PASS=0  FAIL=1  TOTAL=1",
@@ -235,7 +235,7 @@ SCENARIO_LOCAL_DUCKDB_TEST_CASES: tuple[ScenarioLocalRetainE2ETestCase, ...] = (
             "order_totals_fail",
             "FAIL",
             "error[X506]:",
-            "check     expected order_totals",
+            "expect    expected order_totals",
             "PASS=0  FAIL=1  ERROR=0  SKIP=0  TOTAL=1",
         ),
         retained_duckdb_relative_path=Path("target/run/scenarios/order_totals_fail/local.duckdb"),
@@ -797,11 +797,11 @@ SCENARIO_RUNTIME_ARTIFACT_TEST_CASES: list[ScenarioRuntimeArtifactTestCase] = [
         ),
     ),
     ScenarioRuntimeArtifactTestCase(
-        description="writes expected check SQL under target run scenarios",
+        description="writes expected comparison SQL under target run scenarios",
         command=("--no-color", "scenario", "test", "order_totals_pass"),
         expected_exit_code=0,
         artifact_relative_path=Path(
-            "target/run/scenarios/order_totals_pass/checks/expected__order_totals.sql"
+            "target/run/scenarios/order_totals_pass/expectations/expected__order_totals.sql"
         ),
         expected_artifact_fragments=(
             "WITH __actual AS",
@@ -849,13 +849,13 @@ SCENARIO_LOCAL_RUNTIME_ARTIFACT_TEST_CASES: list[ScenarioLocalRuntimeArtifactTes
         ),
     ),
     ScenarioLocalRuntimeArtifactTestCase(
-        description="writes local expected check artifact",
+        description="writes local expected comparison artifact",
         scenario_name="order_totals_pass",
         capture_command=("--no-color", "scenario", "capture", "order_totals_pass"),
         command=("--no-color", "scenario", "test", "order_totals_pass", "--local"),
         expected_exit_code=0,
         artifact_relative_path=Path(
-            "target/run/scenarios/order_totals_pass/local/checks/expected__order_totals.sql"
+            "target/run/scenarios/order_totals_pass/local/expectations/expected__order_totals.sql"
         ),
         expected_artifact_fragments=(
             "WITH __actual AS",
@@ -1118,8 +1118,8 @@ def test_given_local_snapshot_sync_when_running_local_scenario_then_captures_exp
                 "order_totals_pass",
                 "orders_assert_pass",
                 "order_totals_fail",
-                "check     expected order_totals",
-                "check     assertion no_negative_orders",
+                "expect    expected order_totals",
+                "expect    assertion no_negative_orders",
                 "PASS=2  FAIL=1  TOTAL=3",
             ),
             expected_retained_prefix_count=0,
@@ -1316,13 +1316,13 @@ def test_given_local_scenario_command_when_sql_validation_disabled_then_fails_cl
                 "Connecting to duckdb...",
                 "Running scenarios...",
                 "daily_revenue_minimal",
-                "check     expected daily_revenue",
-                "check     assertion no_negative_revenue",
+                "expect    expected daily_revenue",
+                "expect    assertion no_negative_revenue",
                 "daily_revenue_multi_order",
-                "check     assertion positive_average_order_value",
+                "expect    assertion positive_average_order_value",
                 "fact_order_retained_artifacts",
-                "check     expected scenario_order_prices",
-                "check     assertion positive_line_total",
+                "expect    expected scenario_order_prices",
+                "expect    assertion positive_line_total",
                 "PASS=3  FAIL=0  TOTAL=3",
             ),
             expected_retained_prefix_count=0,
@@ -1367,8 +1367,8 @@ def test_given_waffle_shop_fixture_when_running_scenario_test_then_scenarios_pas
             expected_stdout_fragments=(
                 "Scenario (1 selected)",
                 "fact_order_retained_artifacts",
-                "check     expected scenario_order_prices",
-                "check     assertion positive_line_total",
+                "expect    expected scenario_order_prices",
+                "expect    assertion positive_line_total",
                 "Retained relations:",
                 "source raw_orders -> __sqb_",
                 "ref    stg_payments -> __sqb_",
