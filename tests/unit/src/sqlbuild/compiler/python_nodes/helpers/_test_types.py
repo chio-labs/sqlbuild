@@ -59,3 +59,22 @@ class PythonNodeSelectorErrorTestCase:
     exclude: tuple[str, ...]
     expected_error_type: type[Exception]
     expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
+class PythonSqlSelectorTestCase:
+    description: str
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    expected_sql_names: frozenset[str]
+    expected_python_node_names: frozenset[str]
+
+
+@dataclass(frozen=True)
+class PythonSqlSelectorErrorTestCase:
+    description: str
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    expected_error_type: type[Exception]
+    expected_error_fragment: str | None = None
+    python_graph_case: str = "default"

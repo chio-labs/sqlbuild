@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.shared.models import ColumnLineageRef, RetryPolicy
@@ -91,6 +92,14 @@ class PythonNodeGraph:
     tag_index: dict[str, frozenset[str]]
     nodes_by_name: dict[str, DiscoveredPythonNode]
     nodes_by_typed_selector: dict[str, DiscoveredPythonNode]
+
+
+@dataclass(frozen=True)
+class PythonSqlSelection:
+    """Unified selector result across compiled SQL resources and Python nodes."""
+
+    sql_keys: frozenset[CompiledObjectKey]
+    python_node_names: frozenset[str]
 
 
 @dataclass(frozen=True)
