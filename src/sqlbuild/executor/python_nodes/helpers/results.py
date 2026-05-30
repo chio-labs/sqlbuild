@@ -9,12 +9,31 @@ from sqlbuild.compiler.python_nodes.types import (
     SkipMode,
 )
 from sqlbuild.executor.python_nodes.models import (
+    PythonCheckResult,
     PythonNodeExecutionResult,
     PythonNodeFanInDecision,
     PythonNodeResult,
     PythonNodeSkipResult,
 )
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.shared.types import PythonCheckSeverity
+
+
+def normalize_python_check_return(
+    *,
+    returned: object,
+    default_severity: PythonCheckSeverity,
+) -> PythonCheckResult:
+    """Normalize a raw Python check return value into a check result."""
+
+    if isinstance(returned, PythonCheckResult):
+        return returned
+    if isinstance(returned, bool):
+        return PythonCheckResult(
+            passed=returned,
+            severity=default_severity,
+        )
+    raise ExecutorInputError("Python checks must return PythonCheckResult, True, or False")
 
 
 def normalize_python_node_return(

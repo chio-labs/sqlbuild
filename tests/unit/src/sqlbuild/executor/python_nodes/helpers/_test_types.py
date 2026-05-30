@@ -6,6 +6,7 @@ from sqlbuild.compiler.python_nodes.types import (
     PythonNodeStatus,
     SkipMode,
 )
+from sqlbuild.shared.types import PythonCheckSeverity
 
 
 @dataclass(frozen=True)
@@ -102,3 +103,35 @@ class PythonNodeRetryExecutorTestCase:
     expected_error_fragment: str | None
     expected_attempts: int
     expected_sleeps: tuple[float, ...]
+
+
+@dataclass(frozen=True)
+class PythonCheckReturnNormalizationTestCase:
+    description: str
+    returned: object
+    default_severity: PythonCheckSeverity
+    expected_passed: bool
+    expected_message: str | None
+    expected_metadata: dict[str, object]
+    expected_severity: PythonCheckSeverity | None
+
+
+@dataclass(frozen=True)
+class PythonCheckReturnNormalizationErrorTestCase:
+    description: str
+    returned: object
+    default_severity: PythonCheckSeverity
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class PythonCheckContextResultTestCase:
+    description: str
+    message: str | None
+    metadata: dict[str, object]
+    expected_passed: tuple[bool, bool, bool]
+    expected_messages: tuple[str | None, str | None, str | None]
+    expected_metadata: tuple[dict[str, object], dict[str, object], dict[str, object]]
+    expected_severities: tuple[
+        PythonCheckSeverity | None, PythonCheckSeverity | None, PythonCheckSeverity | None
+    ]
