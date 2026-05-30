@@ -34,6 +34,13 @@ class ColumnLineageRefSpec(TypedDict):
     column: str
 
 
+class PythonCheckSeverity(StrEnum):
+    """Severity for Python check results."""
+
+    ERROR = "error"
+    WARN = "warn"
+
+
 class SqlReferenceKind(StrEnum):
     REF = "ref"
     SEED = "seed"

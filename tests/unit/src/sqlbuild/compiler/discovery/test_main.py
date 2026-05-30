@@ -76,6 +76,14 @@ from sqlbuild.assets import asset
 def export_customers(ctx):
     return {"uri": "s3://exports/customers.parquet"}
 """,
+                "checks/exports.py": """
+from sqlbuild.checks import check
+from assets.exports import export_customers
+
+@check(depends_on=export_customers, severity="warn")
+def export_customers_exists(ctx):
+    return True
+""",
                 "target/manifest.json": '{"metadata": {"dbt_schema_version": "v12"}}\n',
                 "adapter.py": "class ExampleAdapter:\n    pass\n",
                 "sqlbuild_local.toml": 'environment = "dev"\n',
@@ -110,6 +118,7 @@ def export_customers(ctx):
             expected_adapter_path="adapter.py",
             expected_task_names=("fetch_window",),
             expected_asset_names=("export_customers",),
+            expected_check_names=("export_customers_exists",),
         )
     ],
     ids=["discovers raw project inputs across authored project surfaces"],
@@ -233,6 +242,10 @@ def test_given_project_repo_slice_when_discovering_inputs_then_it_returns_expect
     assert (
         tuple(asset_function.name for asset_function in discovered_inputs.asset_functions)
         == test_case.expected_asset_names
+    )
+    assert (
+        tuple(check_function.name for check_function in discovered_inputs.check_functions)
+        == test_case.expected_check_names
     )
     assert (
         None
@@ -511,6 +524,28 @@ def export_customers(ctx):
         expected_error_fragment="Duplicate Python node found for 'export_customers'",
     ),
     DiscoverProjectInputsErrorTestCase(
+        description="raises when check name collides with task name",
+        repo_files=base_repo_files()
+        | {
+            "tasks/export_customers.py": """
+from sqlbuild.tasks import task
+
+@task
+def export_customers(ctx):
+    return None
+""",
+            "checks/export_customers.py": """
+from sqlbuild.checks import check
+from tasks.export_customers import export_customers
+
+@check(depends_on=export_customers, name="export_customers")
+def export_customers_check(ctx):
+    return True
+""",
+        },
+        expected_error_fragment="Duplicate Python node found for 'export_customers'",
+    ),
+    DiscoverProjectInputsErrorTestCase(
         description="raises when task dependency is not decorated",
         repo_files=base_repo_files()
         | {
@@ -545,6 +580,49 @@ fetch_window = task(depends_on=enrich_window)(fetch_window)
 """,
         },
         expected_error_fragment="Python node dependency cycle detected",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when check dependency is not decorated",
+        repo_files=base_repo_files()
+        | {
+            "checks/exports.py": """
+from sqlbuild.checks import check
+
+def export_customers(ctx):
+    return None
+
+@check(depends_on=export_customers)
+def export_customers_exists(ctx):
+    return True
+""",
+        },
+        expected_error_fragment="Check 'export_customers_exists' depends on an unknown Python node",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when check depends on check",
+        repo_files=base_repo_files()
+        | {
+            "assets/exports.py": """
+from sqlbuild.assets import asset
+
+@asset
+def export_customers(ctx):
+    return None
+""",
+            "checks/exports.py": """
+from sqlbuild.checks import check
+from assets.exports import export_customers
+
+@check(depends_on=export_customers)
+def export_customers_exists(ctx):
+    return True
+
+@check(depends_on=export_customers_exists)
+def export_customers_recent(ctx):
+    return True
+""",
+        },
+        expected_error_fragment="Check 'export_customers_recent' depends on another check",
     ),
     DiscoverProjectInputsErrorTestCase(
         description="raises when seeds are declared outside seeds directory",
