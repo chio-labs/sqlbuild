@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.python_nodes.types import (
     PythonNodeFanInAction,
     PythonNodeKind,
     PythonNodeStatus,
     SkipMode,
 )
+from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
 
 
 @dataclass(frozen=True)
@@ -51,3 +57,108 @@ class PythonNodeFanInDecision:
 
     action: PythonNodeFanInAction
     reason: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class BasePythonNodeContext:
+    """Shared runtime helpers for framework-owned Python nodes."""
+
+    adapter: BaseAdapter
+    connection_config: dict[str, object]
+    connection: Any
+    run_id: str
+    environment: str | None
+    vars: dict[str, object]
+    is_reload: bool
+    logger: logging.Logger
+    statement_recorder: StatementRecorder
+    default_database: str | None = None
+    default_schema: str | None = None
+    use_color: bool = False
+    start_cursor_ts: datetime | None = None
+    end_cursor_ts: datetime | None = None
+    start_cursor_int: int | None = None
+    end_cursor_int: int | None = None
+
+    def execute_sql(self, sql: str) -> Any:
+        self.statement_recorder.record(sql)
+        return self.adapter.execute(self.connection, sql)
+
+    def query(self, sql: str) -> Any:
+        self.statement_recorder.record(sql)
+        return self.adapter.execute(self.connection, sql)
+
+    def log(self, message: str) -> None:
+        self.statement_recorder.log(message)
+        self.logger.info(message)
+
+    def qualify_name(
+        self,
+        name: str,
+        *,
+        database: str | None = None,
+        schema: str | None = None,
+    ) -> str:
+        """Return a qualified relation name, preserving already-qualified input."""
+
+        if "." in name:
+            return name
+        return resolve_qualified_name_parts(
+            adapter=self.adapter,
+            database=self.default_database if database is None else database,
+            schema=self.default_schema if schema is None else schema,
+            name=name,
+        )
+
+    def skip(
+        self,
+        reason: str,
+        *,
+        mode: SkipMode = SkipMode.DOWNSTREAM,
+        metadata: dict[str, object] | None = None,
+    ) -> PythonNodeSkipResult:
+        """Return a skip signal for the current Python node."""
+
+        return PythonNodeSkipResult(
+            reason=reason,
+            mode=mode,
+            metadata={} if metadata is None else metadata,
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class TaskContext(BasePythonNodeContext):
+    """Runtime context passed to a SQLBuild task function."""
+
+    def result(
+        self,
+        payload: object | None = None,
+        *,
+        metadata: dict[str, object] | None = None,
+    ) -> PythonNodeResult:
+        """Return a successful task result."""
+
+        return PythonNodeResult(
+            payload=payload,
+            metadata={} if metadata is None else metadata,
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class AssetContext(BasePythonNodeContext):
+    """Runtime context passed to a SQLBuild asset function."""
+
+    def result(
+        self,
+        payload: object | None = None,
+        *,
+        metadata: dict[str, object] | None = None,
+        materialized: bool | None = None,
+    ) -> PythonNodeResult:
+        """Return a successful asset result."""
+
+        return PythonNodeResult(
+            payload=payload,
+            metadata={} if metadata is None else metadata,
+            materialized=materialized,
+        )

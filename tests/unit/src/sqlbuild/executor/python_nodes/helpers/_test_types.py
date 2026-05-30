@@ -56,3 +56,20 @@ class PythonNodeReturnNormalizationErrorTestCase:
     kind: PythonNodeKind
     returned: object
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class PythonNodeContextHelperTestCase:
+    description: str
+    raw_name: str
+    database: str | None
+    schema: str | None
+    expected_qualified_name: str
+    expected_execute_result: str
+    expected_query_result: str
+    expected_recorded_events: tuple[str, ...]
+    expected_logger_name: str
+    expected_run_id: str
+    expected_environment: str | None
+    expected_vars: dict[str, object]
+    expected_error_fragment: str = ""
