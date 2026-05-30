@@ -9,7 +9,7 @@ from pathlib import Path
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
-from sqlbuild.shared.models import ColumnLineageRef
+from sqlbuild.shared.models import ColumnLineageRef, RetryPolicy
 from sqlbuild.shared.types import PythonCheckSeverity
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry, SourceLocation
@@ -192,6 +192,7 @@ class DiscoveredTaskFunction:
     group: str | None = None
     description: str | None = None
     meta: dict[str, object] | None = None
+    retry: RetryPolicy | None = None
 
 
 @dataclass(frozen=True)
@@ -209,6 +210,7 @@ class DiscoveredAssetFunction:
     meta: dict[str, object] | None = None
     columns: tuple[SourceColumnEntry, ...] = field(default_factory=tuple)
     column_lineage: dict[str, tuple[ColumnLineageRef, ...]] | None = None
+    retry: RetryPolicy | None = None
 
 
 @dataclass(frozen=True)

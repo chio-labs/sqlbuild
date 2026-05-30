@@ -92,3 +92,13 @@ class PythonNodeExecutorTestCase:
     expected_payloads: tuple[object | None, ...]
     expected_materialized: tuple[bool | None, ...]
     expected_error_fragments: tuple[str | None, ...]
+
+
+@dataclass(frozen=True)
+class PythonNodeRetryExecutorTestCase:
+    description: str
+    expected_status: PythonNodeStatus
+    expected_payload: object | None
+    expected_error_fragment: str | None
+    expected_attempts: int
+    expected_sleeps: tuple[float, ...]

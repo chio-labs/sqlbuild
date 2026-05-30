@@ -143,6 +143,19 @@ def export_after_failure(ctx: AssetContext) -> object:
     return ctx.result(payload={"uri": "should-not-run"}, materialized=True)
 
 
+class FlakyTask:
+    def __init__(self, failures_before_success: int, exception_type: type[Exception]) -> None:
+        self.failures_before_success: int = failures_before_success
+        self.exception_type: type[Exception] = exception_type
+        self.attempts: int = 0
+
+    def __call__(self, ctx: TaskContext) -> object:
+        self.attempts += 1
+        if self.attempts <= self.failures_before_success:
+            raise self.exception_type("transient failure")
+        return ctx.result(payload={"attempts": self.attempts})
+
+
 def loader_only_attribute_names() -> tuple[str, ...]:
     return (
         "target",
