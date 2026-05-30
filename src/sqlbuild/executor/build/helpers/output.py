@@ -9,11 +9,6 @@ from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.build.helpers.color import (
-    blue_dim,
-    colorize_completion,
-    colorize_status,
-)
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
     FunctionExecutionResult,
@@ -25,6 +20,7 @@ from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
+from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.coded_errors import format_coded_error
 from sqlbuild.shared.helpers.materialization_labels import (
     model_execution_annotation,
@@ -191,7 +187,8 @@ def _format_seed_line(
 ) -> str:
     counter_str: str = f"{counter}/{total}".rjust(len(str(total)) * 2 + 1)
     status: str = _execution_status_to_display(seed_result.status)
-    colored_status: str = colorize_status(status, use_color=use_color)
+    style: CliStyle = CliStyle(use_color=use_color)
+    colored_status: str = style.status(status)
     duration: str = _format_duration(seed_result.duration_ms)
     return format_aligned_name_value(
         plain_name=seed_result.seed_name,
@@ -218,7 +215,8 @@ def _format_model_line(
         name_and_annotation = f"{model_result.model_name}  ({annotation})"
 
     status: str = _execution_status_to_display(model_result.status)
-    colored_status: str = colorize_status(status, use_color=use_color)
+    style: CliStyle = CliStyle(use_color=use_color)
+    colored_status: str = style.status(status)
     duration: str = _format_duration(model_result.duration_ms)
     detail: str = ""
     if model_result.status == ExecutionStatus.FAILED and model_result.failed_phase is not None:
@@ -269,15 +267,16 @@ def _format_log_block(message: str, *, use_color: bool) -> list[str]:
     """Format a log message with indent for verbose output."""
 
     line: str = f"    log  {message}"
-    if use_color:
-        line = blue_dim(line)
+    style: CliStyle = CliStyle(use_color=use_color)
+    line = style.log_label(line)
     return ["", line, ""]
 
 
 def _format_sub_line(
     *, sub_type: str, name: str, status: str, use_color: bool, name_width: int
 ) -> str:
-    colored_status: str = colorize_status(status, use_color=use_color)
+    style: CliStyle = CliStyle(use_color=use_color)
+    colored_status: str = style.status(status)
     padding: str = " " * 10
     return format_aligned_name_value(
         plain_name=name,
@@ -316,7 +315,8 @@ def _format_test_check_sub_line(
             detail = f"  {step_result.actual_row_count} {row_label}"
         else:
             detail = f"  {step_result.mismatched_row_count} mismatched"
-    colored_status: str = colorize_status(f"{status}{detail}", use_color=use_color)
+    style: CliStyle = CliStyle(use_color=use_color)
+    colored_status: str = style.status(status, f"{status}{detail}")
     name: str = _format_test_check_name(step_result.model_name)
     return format_aligned_name_value(
         plain_name=name,
@@ -335,10 +335,10 @@ def _format_test_check_name(model_name: str) -> str:
 
 def _format_completion_message(status: BuildStatus, warning_count: int, *, use_color: bool) -> str:
     if status == BuildStatus.FAILED:
-        return colorize_completion("Completed with errors.", use_color=use_color)
+        return CliStyle(use_color=use_color).error("Completed with errors.")
     if warning_count > 0:
-        return colorize_completion("Completed with warnings.", use_color=use_color)
-    return colorize_completion("Completed successfully.", use_color=use_color)
+        return CliStyle(use_color=use_color).warning("Completed with warnings.")
+    return CliStyle(use_color=use_color).success("Completed successfully.")
 
 
 def _top_level_name_width(*, result: BuildExecutionResult, plan: PlanOutput) -> int:
