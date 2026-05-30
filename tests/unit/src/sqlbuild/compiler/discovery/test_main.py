@@ -546,6 +546,129 @@ def export_customers_check(ctx):
         expected_error_fragment="Duplicate Python node found for 'export_customers'",
     ),
     DiscoverProjectInputsErrorTestCase(
+        description="raises when model name collides with task name",
+        repo_files=base_repo_files()
+        | {
+            "models/marts/export_customers.sql": "MODEL ();\n\nselect 1\n",
+            "tasks/export_customers.py": """
+from sqlbuild.tasks import task
+
+@task
+def export_customers(ctx):
+    return None
+""",
+        },
+        expected_error_fragment=(
+            "Selectable resource name 'export_customers' is declared as both model"
+        ),
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when seed name collides with asset name",
+        repo_files=base_repo_files()
+        | {
+            "seeds/schema.yml": """
+seeds:
+  - name: export_customers
+    columns:
+      - name: customer_id
+        type: INTEGER
+""".strip()
+            + "\n",
+            "seeds/export_customers.csv": "customer_id\n1\n",
+            "assets/export_customers.py": """
+from sqlbuild.assets import asset
+
+@asset
+def export_customers(ctx):
+    return None
+""",
+        },
+        expected_error_fragment=(
+            "Selectable resource name 'export_customers' is declared as both seed"
+        ),
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when source name collides with check name",
+        repo_files=base_repo_files()
+        | {
+            "sources/raw.yml": """
+sources:
+  - name: export_customers_exists
+    table: export_customers_exists
+""".strip()
+            + "\n",
+            "tasks/export_customers.py": """
+from sqlbuild.tasks import task
+
+@task
+def export_customers(ctx):
+    return None
+""",
+            "checks/export_customers.py": """
+from sqlbuild.checks import check
+from tasks.export_customers import export_customers
+
+@check(depends_on=export_customers)
+def export_customers_exists(ctx):
+    return True
+""",
+        },
+        expected_error_fragment=(
+            "Selectable resource name 'export_customers_exists' is declared as both source"
+        ),
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when sql function name collides with python function name",
+        repo_files=base_repo_files()
+        | {
+            "functions/sql/is_large_order.sql": """
+FUNCTION (
+  arguments (amount INTEGER),
+  returns BOOLEAN,
+);
+
+amount > 100
+""".strip()
+            + "\n",
+            "functions/python/is_large_order.py": """
+from sqlbuild.functions import udf
+
+@udf(arguments={"amount": "INTEGER"}, returns="BOOLEAN", runtime_version="3.11")
+def main(amount):
+    return amount > 100
+""".strip()
+            + "\n",
+        },
+        expected_error_fragment=(
+            "Selectable resource name 'is_large_order' is declared as both function"
+        ),
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when function name collides with loader name",
+        repo_files=base_repo_files()
+        | {
+            "functions/sql/raw_orders_loader.sql": """
+FUNCTION (
+  arguments (amount INTEGER),
+  returns BOOLEAN,
+);
+
+amount > 100
+""".strip()
+            + "\n",
+            "loaders/raw_orders_loader.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_orders_loader(ctx):
+    return []
+""",
+        },
+        expected_error_fragment=(
+            "Selectable resource name 'raw_orders_loader' is declared as both function"
+        ),
+    ),
+    DiscoverProjectInputsErrorTestCase(
         description="raises when task dependency is not decorated",
         repo_files=base_repo_files()
         | {

@@ -13,9 +13,11 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredCheckFunction,
     DiscoveredLoaderFunction,
     DiscoveredProjectInputs,
+    DiscoveredPythonFunctionFile,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
+    DiscoveredSqlFunctionFile,
     DiscoveredSqlModelFile,
     DiscoveredSqlScenarioFile,
     DiscoveredTaskFunction,
@@ -80,6 +82,17 @@ def validate_discovered_inputs(discovered_inputs: DiscoveredProjectInputs) -> No
     _validate_declared_seed_files(
         schema_files=discovered_inputs.schema_files,
         seed_files=discovered_inputs.seed_files,
+    )
+    _validate_unique_selectable_resource_names(
+        model_files=discovered_inputs.model_files,
+        source_files=discovered_inputs.source_files,
+        schema_files=discovered_inputs.schema_files,
+        sql_function_files=discovered_inputs.sql_function_files,
+        python_function_files=discovered_inputs.python_function_files,
+        loader_functions=discovered_inputs.loader_functions,
+        task_functions=discovered_inputs.task_functions,
+        asset_functions=discovered_inputs.asset_functions,
+        check_functions=discovered_inputs.check_functions,
     )
     _validate_path_defaults_match_models(
         path_defaults=discovered_inputs.project_config.path_defaults,
@@ -467,6 +480,99 @@ def _validate_logical_relation_name_is_available(
         raise DiscoveryConflictError(
             f"Logical relation name '{name}' is declared as both {existing_entry[0]} "
             f"in {existing_entry[1]} and {kind} in {path}"
+        )
+    seen_names[name] = (kind, path)
+
+
+def _validate_unique_selectable_resource_names(
+    *,
+    model_files: tuple[DiscoveredSqlModelFile, ...],
+    source_files: tuple[DiscoveredSourceFile, ...],
+    schema_files: tuple[DiscoveredSchemaFile, ...],
+    sql_function_files: tuple[DiscoveredSqlFunctionFile, ...],
+    python_function_files: tuple[DiscoveredPythonFunctionFile, ...],
+    loader_functions: tuple[DiscoveredLoaderFunction, ...],
+    task_functions: tuple[DiscoveredTaskFunction, ...],
+    asset_functions: tuple[DiscoveredAssetFunction, ...],
+    check_functions: tuple[DiscoveredCheckFunction, ...],
+) -> None:
+    seen_names: dict[str, tuple[str, str]] = {}
+
+    model_file: DiscoveredSqlModelFile
+    for model_file in model_files:
+        _validate_selectable_resource_name_is_available(
+            seen_names=seen_names,
+            name=model_file.file_path.stem,
+            kind="model",
+            path=str(model_file.relative_path),
+        )
+
+    source_file: DiscoveredSourceFile
+    for source_file in source_files:
+        source_entry: SourceEntry
+        for source_entry in source_file.source_entries:
+            _validate_selectable_resource_name_is_available(
+                seen_names=seen_names,
+                name=source_entry.name,
+                kind="source",
+                path=str(source_file.relative_path),
+            )
+
+    schema_file: DiscoveredSchemaFile
+    for schema_file in schema_files:
+        seed_entry: SchemaSeedEntry
+        for seed_entry in schema_file.seed_entries:
+            _validate_selectable_resource_name_is_available(
+                seen_names=seen_names,
+                name=seed_entry.name,
+                kind="seed",
+                path=str(schema_file.relative_path),
+            )
+
+    sql_function_file: DiscoveredSqlFunctionFile
+    for sql_function_file in sql_function_files:
+        _validate_selectable_resource_name_is_available(
+            seen_names=seen_names,
+            name=sql_function_file.file_path.stem,
+            kind="function",
+            path=str(sql_function_file.relative_path),
+        )
+
+    python_function_file: DiscoveredPythonFunctionFile
+    for python_function_file in python_function_files:
+        _validate_selectable_resource_name_is_available(
+            seen_names=seen_names,
+            name=python_function_file.file_path.stem,
+            kind="function",
+            path=str(python_function_file.relative_path),
+        )
+
+    node: (
+        DiscoveredLoaderFunction
+        | DiscoveredTaskFunction
+        | DiscoveredAssetFunction
+        | DiscoveredCheckFunction
+    )
+    for node in (*loader_functions, *task_functions, *asset_functions, *check_functions):
+        _validate_selectable_resource_name_is_available(
+            seen_names=seen_names,
+            name=node.name,
+            kind=node.__class__.__name__.removeprefix("Discovered")
+            .removesuffix("Function")
+            .lower(),
+            path=str(node.relative_path),
+        )
+
+
+def _validate_selectable_resource_name_is_available(
+    *, seen_names: dict[str, tuple[str, str]], name: str, kind: str, path: str
+) -> None:
+    existing_entry: tuple[str, str] | None = seen_names.get(name)
+    if existing_entry is not None:
+        raise DiscoveryConflictError(
+            f"Selectable resource name '{name}' is declared as both {existing_entry[0]} "
+            f"in {existing_entry[1]} and {kind} in {path}; model, source, seed, function, "
+            "loader, task, asset, and check names must be globally unique"
         )
     seen_names[name] = (kind, path)
 
