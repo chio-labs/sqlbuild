@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sqlbuild.shared.models import ColumnLineageRef
+from sqlbuild.shared.models import ColumnLineageRef, RetryPolicy
 from sqlbuild.shared.types import PythonCheckSeverity
 
 
@@ -13,6 +13,7 @@ class TaskDecoratorMetadataTestCase:
     expected_group: str | None
     expected_description: str | None
     expected_meta: dict[str, object] | None
+    expected_retry: RetryPolicy | None = None
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,7 @@ class AssetDecoratorMetadataTestCase:
     expected_column_types: tuple[str | None, ...]
     expected_column_descriptions: tuple[str | None, ...]
     expected_column_lineage: dict[str, tuple[ColumnLineageRef, ...]]
+    expected_retry: RetryPolicy | None = None
 
 
 @dataclass(frozen=True)

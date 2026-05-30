@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import random
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -34,6 +36,7 @@ from sqlbuild.executor.shared.helpers.python_node_scheduler import (
     build_python_node_ready_queue,
     unlock_downstream_python_nodes,
 )
+from sqlbuild.shared.models import RetryPolicy
 
 
 def execute_python_nodes(
@@ -51,6 +54,8 @@ def execute_python_nodes(
     default_schema: str | None = None,
     logger: logging.Logger | None = None,
     run_state: PythonNodeRunState | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+    monotonic: Callable[[], float] = time.monotonic,
 ) -> PythonNodeExecutorResult:
     """Execute task/asset nodes in dependency order within the current process."""
 
@@ -98,6 +103,8 @@ def execute_python_nodes(
             default_schema=default_schema,
             logger=logger,
             run_state=resolved_run_state,
+            sleep=sleep,
+            monotonic=monotonic,
         )
         resolved_run_state.record_result(node_function=node.function, result=result)
         results_by_name[node.name] = result
@@ -133,6 +140,8 @@ def _execute_ready_node(
     default_schema: str | None,
     logger: logging.Logger | None,
     run_state: PythonNodeRunState,
+    sleep: Callable[[float], None],
+    monotonic: Callable[[], float],
 ) -> PythonNodeExecutionResult:
     node_kind: PythonNodeKind = _node_kind(node)
     decision: PythonNodeFanInDecision = evaluate_python_node_fan_in(
@@ -169,7 +178,13 @@ def _execute_ready_node(
         run_state=run_state,
     )
     try:
-        returned: object = node.function(context)
+        returned: object = _call_node_with_retry(
+            node=node,
+            context=context,
+            retry_policy=node.retry,
+            sleep=sleep,
+            monotonic=monotonic,
+        )
     except Exception as error:
         return build_python_node_failure_result(
             node_name=node.name,
@@ -181,6 +196,47 @@ def _execute_ready_node(
         kind=node_kind,
         returned=returned,
     )
+
+
+def _call_node_with_retry(
+    *,
+    node: ExecutablePythonNode,
+    context: TaskContext | AssetContext,
+    retry_policy: RetryPolicy | None,
+    sleep: Callable[[float], None],
+    monotonic: Callable[[], float],
+) -> object:
+    if retry_policy is None:
+        return node.function(context)
+    start_time: float = monotonic()
+    attempt: int = 1
+    while True:
+        try:
+            return node.function(context)
+        except retry_policy.retry_on:
+            if attempt >= retry_policy.max_attempts:
+                raise
+            delay_seconds: float = _retry_delay_seconds(
+                retry_policy=retry_policy,
+                retry_index=attempt - 1,
+            )
+            if retry_policy.max_elapsed_seconds is not None:
+                elapsed_seconds: float = monotonic() - start_time
+                if elapsed_seconds + delay_seconds > retry_policy.max_elapsed_seconds:
+                    raise
+            sleep(delay_seconds)
+            attempt += 1
+
+
+def _retry_delay_seconds(*, retry_policy: RetryPolicy, retry_index: int) -> float:
+    delay_seconds: float = retry_policy.initial_delay_seconds * (
+        retry_policy.backoff_multiplier**retry_index
+    )
+    if retry_policy.max_delay_seconds is not None:
+        delay_seconds = min(delay_seconds, retry_policy.max_delay_seconds)
+    if retry_policy.jitter:
+        return random.uniform(0, delay_seconds)
+    return delay_seconds
 
 
 def _build_context(

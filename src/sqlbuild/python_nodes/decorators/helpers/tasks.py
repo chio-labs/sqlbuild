@@ -6,7 +6,7 @@ import inspect
 from collections.abc import Callable, Sequence
 from typing import Any, cast, overload
 
-from sqlbuild.shared.models import TaskDefinition
+from sqlbuild.shared.models import RetryPolicy, TaskDefinition
 
 
 def _decorate_task(
@@ -18,6 +18,7 @@ def _decorate_task(
     group: str | None = None,
     description: str | None = None,
     meta: dict[str, object] | None = None,
+    retry: RetryPolicy | None = None,
 ) -> Callable[..., object]:
     task_function: Any = cast(Any, function)
     definition: TaskDefinition = TaskDefinition(
@@ -27,6 +28,7 @@ def _decorate_task(
         group=group,
         description=description if description is not None else inspect.getdoc(function),
         meta=meta,
+        retry=retry,
     )
     task_function.__sqlbuild_task__ = definition
     return function
@@ -47,6 +49,7 @@ def task(
     group: str | None = None,
     description: str | None = None,
     meta: dict[str, object] | None = None,
+    retry: RetryPolicy | None = None,
 ) -> Callable[[Callable[..., object]], Callable[..., object]]: ...
 
 
@@ -62,6 +65,7 @@ def task(
     group: str | None = None,
     description: str | None = None,
     meta: dict[str, object] | None = None,
+    retry: RetryPolicy | None = None,
 ) -> Callable[..., object] | Callable[[Callable[..., object]], Callable[..., object]]:
     """Mark a Python function as a SQLBuild task."""
 
@@ -75,6 +79,7 @@ def task(
             group=group,
             description=description,
             meta=meta,
+            retry=retry,
         )
 
     def decorate(inner: Callable[..., object]) -> Callable[..., object]:
@@ -86,6 +91,7 @@ def task(
             group=group,
             description=description,
             meta=meta,
+            retry=retry,
         )
 
     return decorate

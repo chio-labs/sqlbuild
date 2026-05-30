@@ -6,7 +6,7 @@ import inspect
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, cast, overload
 
-from sqlbuild.shared.models import AssetDefinition, ColumnLineageRef
+from sqlbuild.shared.models import AssetDefinition, ColumnLineageRef, RetryPolicy
 from sqlbuild.shared.types import ColumnLineageRefSpec, PythonNodeColumnSpec
 from sqlbuild.spec.models.source import SourceColumnEntry
 
@@ -22,6 +22,7 @@ def _decorate_asset(
     meta: dict[str, object] | None = None,
     columns: Sequence[PythonNodeColumnSpec | SourceColumnEntry] = (),
     column_lineage: Mapping[str, Sequence[ColumnLineageRefSpec | ColumnLineageRef]] | None = None,
+    retry: RetryPolicy | None = None,
 ) -> Callable[..., object]:
     asset_function: Any = cast(Any, function)
     definition: AssetDefinition = AssetDefinition(
@@ -33,6 +34,7 @@ def _decorate_asset(
         meta=meta,
         columns=_normalize_columns(columns),
         column_lineage=_normalize_column_lineage(column_lineage),
+        retry=retry,
     )
     asset_function.__sqlbuild_asset__ = definition
     return function
@@ -55,6 +57,7 @@ def asset(
     meta: dict[str, object] | None = None,
     columns: Sequence[PythonNodeColumnSpec | SourceColumnEntry] = (),
     column_lineage: Mapping[str, Sequence[ColumnLineageRefSpec | ColumnLineageRef]] | None = None,
+    retry: RetryPolicy | None = None,
 ) -> Callable[[Callable[..., object]], Callable[..., object]]: ...
 
 
@@ -72,6 +75,7 @@ def asset(
     meta: dict[str, object] | None = None,
     columns: Sequence[PythonNodeColumnSpec | SourceColumnEntry] = (),
     column_lineage: Mapping[str, Sequence[ColumnLineageRefSpec | ColumnLineageRef]] | None = None,
+    retry: RetryPolicy | None = None,
 ) -> Callable[..., object] | Callable[[Callable[..., object]], Callable[..., object]]:
     """Mark a Python function as a SQLBuild asset."""
 
@@ -87,6 +91,7 @@ def asset(
             meta=meta,
             columns=columns,
             column_lineage=column_lineage,
+            retry=retry,
         )
 
     def decorate(inner: Callable[..., object]) -> Callable[..., object]:
@@ -100,6 +105,7 @@ def asset(
             meta=meta,
             columns=columns,
             column_lineage=column_lineage,
+            retry=retry,
         )
 
     return decorate

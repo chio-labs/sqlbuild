@@ -405,6 +405,7 @@ def discover_task_functions(*, project_dir: Path) -> tuple[DiscoveredTaskFunctio
                     group=definition.group,
                     description=definition.description,
                     meta=definition.meta,
+                    retry=definition.retry,
                 )
             )
     return tuple(discovered)
@@ -446,6 +447,7 @@ def discover_asset_functions(*, project_dir: Path) -> tuple[DiscoveredAssetFunct
                     meta=definition.meta,
                     columns=definition.columns,
                     column_lineage=definition.column_lineage,
+                    retry=definition.retry,
                 )
             )
     return tuple(discovered)

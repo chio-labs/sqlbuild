@@ -10,6 +10,7 @@ from sqlbuild.shared.models import (
     AssetDefinition,
     CheckDefinition,
     ColumnLineageRef,
+    RetryPolicy,
     TaskDefinition,
 )
 from sqlbuild.shared.types import PythonCheckSeverity
@@ -33,6 +34,12 @@ from tests.unit.src.sqlbuild.python_nodes.decorators.helpers import upstream_ass
             expected_group="ingestion",
             expected_description="Fetch an API window.",
             expected_meta={"owner": "data-eng"},
+            expected_retry=RetryPolicy(
+                max_attempts=3,
+                retry_on=[TimeoutError, ConnectionError],
+                initial_delay_seconds=0.5,
+                jitter=False,
+            ),
         )
     ],
     ids=["stores task metadata and normalizes single dependency"],
@@ -46,6 +53,7 @@ def test_given_task_decorator_when_reading_definition_then_returns_metadata(
         tags=test_case.expected_tags,
         group=test_case.expected_group,
         meta=test_case.expected_meta,
+        retry=test_case.expected_retry,
     )
     def fetch_window(_ctx: object) -> dict[str, object]:
         """Fetch an API window."""
@@ -61,6 +69,7 @@ def test_given_task_decorator_when_reading_definition_then_returns_metadata(
         group=test_case.expected_group,
         description=test_case.expected_description,
         meta=test_case.expected_meta,
+        retry=test_case.expected_retry,
     )
     assert definition is not None
     assert len(definition.depends_on) == test_case.expected_dep_count
@@ -85,6 +94,7 @@ def test_given_task_decorator_when_reading_definition_then_returns_metadata(
                 "customer_id": (ColumnLineageRef(node="dim_customers", column="customer_id"),),
                 "email": (ColumnLineageRef(node="dim_customers", column="email"),),
             },
+            expected_retry=RetryPolicy(max_attempts=2, retry_on=TimeoutError, jitter=False),
         )
     ],
     ids=["stores asset schema metadata and column lineage"],
@@ -112,6 +122,7 @@ def test_given_asset_decorator_when_reading_definition_then_returns_metadata(
             "customer_id": [{"node": "dim_customers", "column": "customer_id"}],
             "email": [{"node": "dim_customers", "column": "email"}],
         },
+        retry=test_case.expected_retry,
     )
     def export_customers(_ctx: object) -> dict[str, object]:
         return {"uri": "s3://exports/customers.parquet"}
@@ -126,6 +137,7 @@ def test_given_asset_decorator_when_reading_definition_then_returns_metadata(
     assert definition.group == test_case.expected_group
     assert definition.description == test_case.expected_description
     assert definition.meta == test_case.expected_meta
+    assert definition.retry == test_case.expected_retry
     assert tuple(column.name for column in definition.columns) == test_case.expected_column_names
     assert tuple(column.type for column in definition.columns) == test_case.expected_column_types
     assert tuple(column.description for column in definition.columns) == (
