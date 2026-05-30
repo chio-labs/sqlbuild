@@ -73,3 +73,22 @@ class PythonNodeContextHelperTestCase:
     expected_environment: str | None
     expected_vars: dict[str, object]
     expected_error_fragment: str = ""
+
+
+@dataclass(frozen=True)
+class PythonNodeRunStateTestCase:
+    description: str
+    expected_payload: object
+    expected_metadata: dict[str, object]
+    expected_default: object
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class PythonNodeExecutorTestCase:
+    description: str
+    expected_names: tuple[str, ...]
+    expected_statuses: tuple[PythonNodeStatus, ...]
+    expected_payloads: tuple[object | None, ...]
+    expected_materialized: tuple[bool | None, ...]
+    expected_error_fragments: tuple[str | None, ...]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -15,6 +16,8 @@ from sqlbuild.compiler.python_nodes.types import (
     PythonNodeStatus,
     SkipMode,
 )
+from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
 
 
@@ -59,6 +62,69 @@ class PythonNodeFanInDecision:
     reason: str | None = None
 
 
+@dataclass
+class PythonNodeRunState:
+    """Same-run result store for Python DAG nodes."""
+
+    results_by_function: dict[Callable[..., object], PythonNodeExecutionResult] = field(
+        default_factory=dict
+    )
+
+    def record_result(
+        self,
+        *,
+        node_function: Callable[..., object],
+        result: PythonNodeExecutionResult,
+    ) -> None:
+        self.results_by_function[node_function] = result
+
+    def payload(
+        self,
+        node_function: Callable[..., object],
+        *,
+        default: object = MISSING_DEFAULT,
+    ) -> object:
+        result: PythonNodeExecutionResult | None = self.results_by_function.get(node_function)
+        if result is None:
+            if default is not MISSING_DEFAULT:
+                return default
+            raise ExecutorInputError("No same-run payload found for Python node")
+        if result.status != PythonNodeStatus.SUCCESS:
+            if default is not MISSING_DEFAULT:
+                return default
+            raise ExecutorInputError(
+                f"Python node '{result.node_name}' did not produce a successful payload"
+            )
+        return result.payload
+
+    def metadata(
+        self,
+        node_function: Callable[..., object],
+        *,
+        default: object = MISSING_DEFAULT,
+    ) -> dict[str, object] | object:
+        result: PythonNodeExecutionResult | None = self.results_by_function.get(node_function)
+        if result is None:
+            if default is not MISSING_DEFAULT:
+                return default
+            raise ExecutorInputError("No same-run metadata found for Python node")
+        if result.status != PythonNodeStatus.SUCCESS:
+            if default is not MISSING_DEFAULT:
+                return default
+            raise ExecutorInputError(
+                f"Python node '{result.node_name}' did not produce successful metadata"
+            )
+        return result.metadata
+
+
+@dataclass(frozen=True)
+class PythonNodeExecutorResult:
+    """Result bundle for one in-process Python-node executor run."""
+
+    results: tuple[PythonNodeExecutionResult, ...]
+    run_state: PythonNodeRunState
+
+
 @dataclass(frozen=True, kw_only=True)
 class BasePythonNodeContext:
     """Shared runtime helpers for framework-owned Python nodes."""
@@ -72,6 +138,7 @@ class BasePythonNodeContext:
     is_reload: bool
     logger: logging.Logger
     statement_recorder: StatementRecorder
+    run_state: PythonNodeRunState | None = None
     default_database: str | None = None
     default_schema: str | None = None
     use_color: bool = False
@@ -124,6 +191,34 @@ class BasePythonNodeContext:
             mode=mode,
             metadata={} if metadata is None else metadata,
         )
+
+    def payload(
+        self,
+        node_function: Callable[..., object],
+        *,
+        default: object = MISSING_DEFAULT,
+    ) -> object:
+        """Return a same-run upstream payload by Python node function reference."""
+
+        if self.run_state is None:
+            if default is not MISSING_DEFAULT:
+                return default
+            raise ExecutorInputError("No Python node run state is available")
+        return self.run_state.payload(node_function, default=default)
+
+    def metadata(
+        self,
+        node_function: Callable[..., object],
+        *,
+        default: object = MISSING_DEFAULT,
+    ) -> dict[str, object] | object:
+        """Return same-run upstream metadata by Python node function reference."""
+
+        if self.run_state is None:
+            if default is not MISSING_DEFAULT:
+                return default
+            raise ExecutorInputError("No Python node run state is available")
+        return self.run_state.metadata(node_function, default=default)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -9,11 +9,18 @@ import pytest
 
 from sqlbuild.adapter.shared.models import LifeCycleEvent, StatementRecorder
 from sqlbuild.assets import AssetContext
-from sqlbuild.compiler.python_nodes.types import SkipMode
-from sqlbuild.executor.python_nodes.models import PythonNodeResult, PythonNodeSkipResult
+from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus, SkipMode
+from sqlbuild.executor.python_nodes.models import (
+    PythonNodeExecutionResult,
+    PythonNodeResult,
+    PythonNodeRunState,
+    PythonNodeSkipResult,
+)
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.tasks import TaskContext
 from tests.unit.src.sqlbuild.executor.python_nodes.helpers._test_types import (
     PythonNodeContextHelperTestCase,
+    PythonNodeRunStateTestCase,
 )
 from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import (
     PythonNodeContextTestAdapter,
@@ -21,6 +28,8 @@ from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import (
     build_asset_context,
     build_task_context,
     loader_only_attribute_names,
+    skipped_upstream_task,
+    upstream_task,
 )
 
 
@@ -196,3 +205,88 @@ def test_given_task_context_when_inspecting_api_then_loader_only_fields_are_abse
     assert not hasattr(context, loader_only_attribute_names()[5])
     assert not hasattr(context, loader_only_attribute_names()[6])
     assert not hasattr(context, loader_only_attribute_names()[7])
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonNodeRunStateTestCase(
+            description="reads same-run upstream payload and metadata",
+            expected_payload={"file": "orders.json"},
+            expected_metadata={"row_count": 3},
+            expected_default={"fallback": True},
+            expected_error_fragment="did not produce a successful payload",
+        )
+    ],
+    ids=["reads same-run upstream payload and metadata"],
+)
+def test_given_context_with_run_state_when_reading_upstream_outputs_then_returns_values(
+    test_case: PythonNodeRunStateTestCase,
+) -> None:
+    run_state: PythonNodeRunState = PythonNodeRunState()
+    run_state.record_result(
+        node_function=upstream_task,
+        result=PythonNodeExecutionResult(
+            node_name="upstream_task",
+            kind=PythonNodeKind.TASK,
+            status=PythonNodeStatus.SUCCESS,
+            payload=test_case.expected_payload,
+            metadata=test_case.expected_metadata,
+        ),
+    )
+    run_state.record_result(
+        node_function=skipped_upstream_task,
+        result=PythonNodeExecutionResult(
+            node_name="skipped_upstream_task",
+            kind=PythonNodeKind.TASK,
+            status=PythonNodeStatus.SKIPPED,
+            skip_mode=SkipMode.DOWNSTREAM,
+            skip_reason="No rows",
+        ),
+    )
+    context: AssetContext = build_asset_context(
+        adapter=PythonNodeContextTestAdapter(),
+        statement_recorder=StatementRecorder(),
+        logger_name="sqlbuild.asset.export_customers",
+        run_state=run_state,
+    )
+
+    assert context.payload(upstream_task) == test_case.expected_payload
+    assert context.metadata(upstream_task) == test_case.expected_metadata
+    assert context.payload(lambda _ctx: None, default=test_case.expected_default) == (
+        test_case.expected_default
+    )
+    assert context.metadata(lambda _ctx: None, default=test_case.expected_default) == (
+        test_case.expected_default
+    )
+    with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
+        context.payload(skipped_upstream_task)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonNodeRunStateTestCase(
+            description="raises when no same-run state is available",
+            expected_payload=None,
+            expected_metadata={},
+            expected_default="fallback",
+            expected_error_fragment="No Python node run state is available",
+        )
+    ],
+    ids=["raises when no same-run state is available"],
+)
+def test_given_context_without_run_state_when_reading_payload_then_raises_or_returns_default(
+    test_case: PythonNodeRunStateTestCase,
+) -> None:
+    context: TaskContext = build_task_context(
+        adapter=PythonNodeContextTestAdapter(),
+        statement_recorder=StatementRecorder(),
+        logger_name="sqlbuild.task.fetch_orders",
+    )
+
+    assert context.payload(upstream_task, default=test_case.expected_default) == (
+        test_case.expected_default
+    )
+    with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
+        context.payload(upstream_task)
