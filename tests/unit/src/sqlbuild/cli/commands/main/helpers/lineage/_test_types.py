@@ -38,6 +38,7 @@ class LineageOutputTestCase:
     description: str
     output_format: str
     expected_output: str
+    expected_color_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,7 @@ class ColumnLineageOutputTestCase:
     description: str
     output_format: str
     expected_output: str
+    expected_color_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

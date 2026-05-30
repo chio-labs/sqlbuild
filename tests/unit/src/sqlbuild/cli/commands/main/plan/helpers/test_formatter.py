@@ -18,6 +18,7 @@ from sqlbuild.compiler.planner.types import (
 from sqlbuild.shared.helpers.display import DisplayOptions
 from sqlbuild.spec.models.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers._test_types import (
+    FormatPlanColorTestCase,
     FormatPlanTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers.helpers import (
@@ -755,3 +756,52 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
         current_index: int = result.index(fragment)
         assert current_index > previous_index, result
         previous_index = current_index
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FormatPlanColorTestCase(
+            description="styles header names warnings and diffs semantically",
+            plan_output=build_plan_output(
+                model_entries=(
+                    build_model_entry(
+                        name="dim_customers",
+                        action=PlanAction.CREATE_TABLE,
+                        reason=PlanReason.SCHEMA_CHANGED,
+                        schema_findings=(
+                            build_schema_finding(
+                                kind=SchemaChangeKind.COLUMN_ADDED,
+                                column_name="discount",
+                                expected_type="FLOAT",
+                            ),
+                        ),
+                        previous_query_sql="SELECT old_column FROM raw",
+                    ),
+                ),
+                warnings=(
+                    build_warning(
+                        model_name="dim_customers",
+                        message="schema change requires rebuild",
+                        severity=WarningSeverity.WARNING,
+                    ),
+                ),
+            ),
+            expected_fragments=(
+                "\033[32m\033[1mPlan ready (1 selected)\033[0m",
+                "\033[34m\033[1mdim_customers\033[0m",
+                "\033[32m      + discount  FLOAT   (added)\033[0m",
+                "\033[33m\033[1mWarnings (1)\033[0m",
+                "\033[33m- schema change requires rebuild\033[0m",
+            ),
+        ),
+    ],
+    ids=["styles header names warnings and diffs semantically"],
+)
+def test_given_plan_output_when_formatting_with_color_then_styles_semantic_parts(
+    test_case: FormatPlanColorTestCase,
+) -> None:
+    result: str = format_plan(test_case.plan_output, use_color=True)
+
+    for fragment in test_case.expected_fragments:
+        assert fragment in result, f"Expected '{fragment}' in output:\n{result}"

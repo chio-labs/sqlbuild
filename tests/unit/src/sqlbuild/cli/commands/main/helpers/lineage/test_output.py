@@ -35,6 +35,12 @@ LINEAGE_OUTPUT_TEST_CASES: list[LineageOutputTestCase] = [
             "│   └── source  raw_orders  sources/raw.yml\n"
             "└── seed  waffle_types  seeds/waffle_types.csv"
         ),
+        expected_color_fragments=(
+            "\033[34m\033[1mLineage\033[0m",
+            "\033[2mmodel\033[0m  \033[1mfact_orders\033[0m",
+            "\033[2mupstream\033[0m",
+            "\033[2m├── \033[0m\033[2mmodel\033[0m  \033[1mstg_orders\033[0m",
+        ),
     ),
     LineageOutputTestCase(
         description="renders list output as aligned edge list",
@@ -55,6 +61,12 @@ COLUMN_LINEAGE_OUTPUT_TEST_CASES: list[ColumnLineageOutputTestCase] = [
             "Column trace  fact_orders.line_total_cents  upstream\n\n"
             "  <- stg_orders.quantity (expression)\n"
             "  <- wide_model_1.line_total_cents (from SELECT *)"
+        ),
+        expected_color_fragments=(
+            "\033[34m\033[1mColumn trace\033[0m",
+            "\033[1mfact_orders.line_total_cents\033[0m",
+            "\033[2mupstream\033[0m",
+            "\033[2m<-\033[0m \033[1mstg_orders.quantity\033[0m",
         ),
     ),
     ColumnLineageOutputTestCase(
@@ -141,6 +153,77 @@ def test_given_column_lineage_trace_when_formatting_then_returns_expected_output
     result: str = renderers[test_case.output_format](trace)
 
     assert result == test_case.expected_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LineageOutputTestCase(
+            description="styles lineage tree semantic parts",
+            output_format="tree",
+            expected_output="",
+            expected_color_fragments=(
+                "\033[34m\033[1mLineage\033[0m",
+                "\033[2mmodel\033[0m  \033[1mfact_orders\033[0m",
+                "\033[2mupstream\033[0m",
+                "\033[2m├── \033[0m\033[2mmodel\033[0m  \033[1mstg_orders\033[0m",
+            ),
+        ),
+    ],
+    ids=["styles lineage tree semantic parts"],
+)
+def test_given_lineage_graph_when_formatting_with_color_then_styles_semantic_parts(
+    test_case: LineageOutputTestCase,
+) -> None:
+    graph: ProjectGraph = build_lineage_test_graph()
+    lineage_graph: LineageGraph = select_target_lineage(
+        graph=graph,
+        target="fact_orders",
+        direction="upstream",
+        depth=None,
+    )
+    color_renderers: dict[str, Callable[[LineageGraph], str]] = {
+        "tree": lambda graph: format_lineage_tree(graph, use_color=True),
+        "list": lambda graph: format_lineage_list(graph, use_color=True),
+    }
+
+    color_result: str = color_renderers[test_case.output_format](lineage_graph)
+
+    for fragment in test_case.expected_color_fragments:
+        assert fragment in color_result
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ColumnLineageOutputTestCase(
+            description="styles column lineage tree semantic parts",
+            output_format="tree",
+            expected_output="",
+            expected_color_fragments=(
+                "\033[34m\033[1mColumn trace\033[0m",
+                "\033[1mfact_orders.line_total_cents\033[0m",
+                "\033[2mupstream\033[0m",
+                "\033[2m<-\033[0m \033[1mstg_orders.quantity\033[0m",
+            ),
+        ),
+    ],
+    ids=["styles column lineage tree semantic parts"],
+)
+def test_given_column_lineage_trace_when_formatting_with_color_then_styles_semantic_parts(
+    test_case: ColumnLineageOutputTestCase,
+) -> None:
+    trace: ColumnLineageTrace = build_column_lineage_trace()
+    color_renderers: dict[str, Callable[[ColumnLineageTrace], str]] = {
+        "tree": lambda trace: format_column_lineage_tree(trace, use_color=True),
+        "list": lambda trace: format_column_lineage_list(trace, use_color=True),
+        "json": format_column_lineage_json,
+    }
+
+    color_result: str = color_renderers[test_case.output_format](trace)
+
+    for fragment in test_case.expected_color_fragments:
+        assert fragment in color_result
 
 
 @pytest.mark.parametrize(

@@ -29,7 +29,7 @@ from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
 )
 from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
-from sqlbuild.cli.commands.main.shared.helpers.progress import format_build_header
+from sqlbuild.cli.commands.main.shared.helpers.progress import write_execution_header
 from sqlbuild.cli.commands.main.shared.helpers.scenario_runtime_target_writer import (
     write_local_scenario_runtime_target,
     write_scenario_runtime_target,
@@ -62,14 +62,9 @@ from sqlbuild.shared.constants import (
     SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
     SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
 )
+from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.coded_errors import format_coded_error
-from sqlbuild.shared.helpers.colors import (
-    blue_bold,
-    colorize_status,
-    dim,
-    green_bold,
-    supports_color,
-)
+from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.project import (
     resolve_effective_adapter_name,
     resolve_effective_scenario_config,
@@ -153,13 +148,6 @@ def run_scenario(
     use_color: bool = not no_color and supports_color()
     progress_stream: TextIO = sys.stderr if json_output else sys.stdout
     target_label: str | None = " ".join(selectors) if selectors else None
-    execution_header: str = format_build_header(
-        command="sqb scenario test --local" if local else "sqb scenario test",
-        target=target_label,
-        concurrency=1,
-    )
-    execution_label: str = blue_bold("Execution") if use_color else "Execution"
-    header_detail: str = dim(execution_header) if use_color else execution_header
     connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
         adapter_name=adapter_name,
         stream=progress_stream,
@@ -169,8 +157,14 @@ def run_scenario(
         stream=progress_stream,
         use_color=use_color,
     )
-    progress_stream.write(f"\n{execution_label}  {header_detail}\n\n")
-    progress_stream.flush()
+    progress_stream.write("\n")
+    write_execution_header(
+        stream=progress_stream,
+        command="sqb scenario test --local" if local else "sqb scenario test",
+        target=target_label,
+        concurrency=1,
+        use_color=use_color,
+    )
 
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered_inputs,
@@ -231,7 +225,8 @@ def run_scenario(
             )
             return capture_exit_code
     header: str = f"Scenario ({len(scenarios)} selected)"
-    styled_header: str = green_bold(header) if use_color else header
+    style: CliStyle = CliStyle(use_color=use_color)
+    styled_header: str = style.success_strong(header)
     progress_stream.write(f"\n{styled_header}\n\n")
     progress_stream.flush()
     scenario_status: TransientStatusReporter = TransientStatusReporter(
@@ -414,7 +409,8 @@ def _sync_local_snapshots(
     )
     phase_name: str = "Refresh" if refresh else "Sync"
     header: str = f"Snapshot {phase_name} ({len(capture_scenarios)} selected)"
-    styled_header: str = green_bold(header) if use_color else header
+    style: CliStyle = CliStyle(use_color=use_color)
+    styled_header: str = style.success_strong(header)
     progress_stream.write(f"\n{styled_header}\n\n")
     progress_stream.write(f"{scenario_snapshot_capture_warning(force=force)}\n\n")
     progress_stream.flush()
@@ -499,7 +495,8 @@ def _complete_snapshot_sync(
         scenario_status.close()
     success_status_text: str = "REFRESHED" if refresh else "CAPTURED"
     status_text: str = success_status_text if result.status == SUCCESS_STATUS else "FAIL"
-    status: str = colorize_status(status_text, use_color=use_color)
+    style: CliStyle = CliStyle(use_color=use_color)
+    status: str = style.status(status_text)
     detail: str = _snapshot_capture_detail(result)
     progress_stream.write(f"{result.scenario_name:<{_SCENARIO_NAME_WIDTH}} {status}{detail}\n")
     if result.error_message:
@@ -532,7 +529,8 @@ def _write_snapshot_capture_relation_rows(
     relation_result: ScenarioSnapshotCaptureRelationResult
     for relation_result in result.capture_result.relation_results:
         status_text: str = "PASS" if relation_result.status == SUCCESS_STATUS else "FAIL"
-        status: str = colorize_status(status_text, use_color=use_color)
+        style: CliStyle = CliStyle(use_color=use_color)
+        status: str = style.status(status_text)
         row_label: str = "row" if relation_result.row_count == 1 else "rows"
         detail: str = (
             f"  {relation_result.row_count} {row_label}, "
@@ -644,7 +642,8 @@ def _write_scenario_result(*, result: ScenarioRunResult, stream: TextIO, use_col
         if result.status == SUCCESS_STATUS
         else "FAIL"
     )
-    status: str = colorize_status(status_text, use_color=use_color)
+    style: CliStyle = CliStyle(use_color=use_color)
+    status: str = style.status(status_text)
     stream.write(f"{result.scenario_name:<{_SCENARIO_NAME_WIDTH}} {status}\n")
     if result.error_message:
         rendered_error_message: str = _render_result_error(
@@ -677,7 +676,8 @@ def _write_checks(*, result: ScenarioRunResult, stream: TextIO, use_color: bool)
     expected: ScenarioExpectedCheckExecutionResult
     for expected in result.expected_results:
         status_text: str = "FAIL" if expected.status == FAILED_STATUS else "PASS"
-        status: str = colorize_status(status_text, use_color=use_color)
+        style: CliStyle = CliStyle(use_color=use_color)
+        status: str = style.status(status_text)
         detail: str = ""
         if expected.status == FAILED_STATUS:
             detail = f"  {expected.mismatched_row_count} mismatched"
@@ -697,7 +697,8 @@ def _write_checks(*, result: ScenarioRunResult, stream: TextIO, use_color: bool)
     assertion: ScenarioAssertionCheckExecutionResult
     for assertion in result.assertion_results:
         status_text = "FAIL" if assertion.status == FAILED_STATUS else "PASS"
-        status = colorize_status(status_text, use_color=use_color)
+        style = CliStyle(use_color=use_color)
+        status = style.status(status_text)
         row_label: str = "row" if assertion.failing_row_count == 1 else "rows"
         detail = ""
         if assertion.status == FAILED_STATUS:
