@@ -188,6 +188,8 @@ def _resolve_single(
     parsed: ParsedSelector | PathSelector = parse_project_selector(raw)
     if isinstance(parsed, PathSelector):
         return _resolve_sql(raw=raw, project_graph=project_graph)
+    if parsed.kind == SelectorKind.PATH:
+        return _resolve_path(raw=raw, project_graph=project_graph, python_graph=python_graph)
     if parsed.kind in _SQL_SELECTOR_KINDS:
         return _resolve_sql(raw=raw, project_graph=project_graph)
     if parsed.kind in _PYTHON_SELECTOR_KINDS:
@@ -242,6 +244,25 @@ def _resolve_tag(
         tag_value: str = parsed.value if isinstance(parsed, ParsedSelector) else raw
         raise PlannerInputError(f"no SQL resources or Python nodes found with tag '{tag_value}'")
     return frozenset(atoms)
+
+
+def _resolve_path(
+    *, raw: str, project_graph: ProjectGraph, python_graph: PythonNodeGraph
+) -> frozenset[_SelectionAtom]:
+    parsed: ParsedSelector | PathSelector = parse_project_selector(raw)
+    if not isinstance(parsed, ParsedSelector):
+        raise PlannerInputError(f"unsupported path selector '{raw}'")
+    folder: str = parsed.value.replace("\\", "/").strip("/")
+    root: str = folder.split("/", 1)[0]
+    if root == "models":
+        return _resolve_sql(raw=raw, project_graph=project_graph)
+    if root in {"tasks", "assets", "checks", "loaders"}:
+        return _resolve_python(raw=raw, python_graph=python_graph)
+    raise PlannerInputError(
+        "path selectors require an explicit root: use 'models/', 'tasks/', 'assets/', "
+        "'checks/', or 'loaders/'",
+        code="S012",
+    )
 
 
 def _resolve_name(

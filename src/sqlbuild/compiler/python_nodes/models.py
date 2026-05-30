@@ -90,6 +90,7 @@ class PythonNodeGraph:
     upstream_deps: dict[str, tuple[str, ...]]
     downstream_deps: dict[str, tuple[str, ...]]
     tag_index: dict[str, frozenset[str]]
+    path_index: dict[str, str]
     nodes_by_name: dict[str, DiscoveredPythonNode]
     nodes_by_typed_selector: dict[str, DiscoveredPythonNode]
 

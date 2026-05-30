@@ -69,6 +69,9 @@ def _resolve_single(*, raw: str, graph: PythonNodeGraph) -> frozenset[str]:
     if parsed.kind == SelectorKind.TAG:
         return _resolve_tag(parsed=parsed, graph=graph)
 
+    if parsed.kind == SelectorKind.PATH:
+        return _resolve_path(parsed=parsed, graph=graph)
+
     node_name: str | None = _lookup_node_name(parsed=parsed, graph=graph)
     if node_name is None:
         raise PlannerInputError(f"unknown Python node selector '{parsed.value}'", code="S007")
@@ -79,6 +82,45 @@ def _resolve_single(*, raw: str, graph: PythonNodeGraph) -> frozenset[str]:
     if parsed.downstream:
         result.update(_expand_downstream(name=node_name, graph=graph))
     return frozenset(result)
+
+
+def _resolve_path(*, parsed: ParsedSelector, graph: PythonNodeGraph) -> frozenset[str]:
+    folder: str = parsed.value.replace("\\", "/").strip("/")
+    _validate_python_path_root(folder)
+    matched_names: frozenset[str] = frozenset(
+        name
+        for name, node_folder in graph.path_index.items()
+        if _path_matches(indexed_folder=node_folder, selector_folder=folder)
+    )
+    if not matched_names:
+        raise PlannerInputError(f"no Python nodes found under path '{folder}'", code="S009")
+
+    result: set[str] = set(matched_names)
+    node_name: str
+    if parsed.upstream:
+        for node_name in matched_names:
+            result.update(_expand_upstream(name=node_name, graph=graph))
+    if parsed.downstream:
+        for node_name in matched_names:
+            result.update(_expand_downstream(name=node_name, graph=graph))
+    return frozenset(result)
+
+
+def _path_matches(*, indexed_folder: str, selector_folder: str) -> bool:
+    if selector_folder == "":
+        return True
+    return indexed_folder == selector_folder or indexed_folder.startswith(f"{selector_folder}/")
+
+
+def _validate_python_path_root(folder: str) -> None:
+    root: str = folder.split("/", 1)[0]
+    if root in {"tasks", "assets", "checks", "loaders", "models"}:
+        return
+    raise PlannerInputError(
+        "path selectors require an explicit root: use 'models/', 'tasks/', 'assets/', "
+        "'checks/', or 'loaders/'",
+        code="S012",
+    )
 
 
 def _resolve_tag(*, parsed: ParsedSelector, graph: PythonNodeGraph) -> frozenset[str]:

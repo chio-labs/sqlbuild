@@ -92,6 +92,42 @@ PYTHON_NODE_SELECTOR_TEST_CASES: list[PythonNodeSelectorTestCase] = [
         expected_names=frozenset({"prepare_orders", "export_orders"}),
     ),
     PythonNodeSelectorTestCase(
+        description="selects Python nodes by explicit tasks path",
+        select=("path:tasks",),
+        exclude=(),
+        expected_names=frozenset({"prepare_orders"}),
+    ),
+    PythonNodeSelectorTestCase(
+        description="selects Python nodes by explicit loaders path",
+        select=("path:loaders",),
+        exclude=(),
+        expected_names=frozenset({"load_events"}),
+    ),
+    PythonNodeSelectorTestCase(
+        description="selects Python nodes by explicit assets path",
+        select=("path:assets",),
+        exclude=(),
+        expected_names=frozenset({"export_orders"}),
+    ),
+    PythonNodeSelectorTestCase(
+        description="selects Python nodes by explicit assets slash path",
+        select=("assets/",),
+        exclude=(),
+        expected_names=frozenset({"export_orders"}),
+    ),
+    PythonNodeSelectorTestCase(
+        description="selects Python nodes by leading slash assets path",
+        select=("/assets",),
+        exclude=(),
+        expected_names=frozenset({"export_orders"}),
+    ),
+    PythonNodeSelectorTestCase(
+        description="selects Python nodes by explicit checks path with upstream expansion",
+        select=("+path:checks",),
+        exclude=(),
+        expected_names=frozenset({"prepare_orders", "export_orders", "check_orders_export"}),
+    ),
+    PythonNodeSelectorTestCase(
         description="selects tagged Python nodes with downstream expansion",
         select=("tag:exports+",),
         exclude=(),
@@ -153,6 +189,20 @@ PYTHON_NODE_SELECTOR_ERROR_TEST_CASES: list[PythonNodeSelectorErrorTestCase] = [
         exclude=(),
         expected_error_type=ValueError,
         expected_error_fragment="no Python nodes found with tag 'missing'",
+    ),
+    PythonNodeSelectorErrorTestCase(
+        description="raises when path selector omits explicit root",
+        select=("path:missing",),
+        exclude=(),
+        expected_error_type=ValueError,
+        expected_error_fragment="path selectors require an explicit root",
+    ),
+    PythonNodeSelectorErrorTestCase(
+        description="raises when explicit path selector matches no Python nodes",
+        select=("path:tasks/missing",),
+        exclude=(),
+        expected_error_type=ValueError,
+        expected_error_fragment="no Python nodes found under path 'tasks/missing'",
     ),
     PythonNodeSelectorErrorTestCase(
         description="raises when SQL source selector is used for Python nodes",

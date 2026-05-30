@@ -49,7 +49,7 @@ TEST_CASES: list[DiffSelectorIntegrationTestCase] = [
     ),
     DiffSelectorIntegrationTestCase(
         description="path selector returns models under folder",
-        select=("path:staging",),
+        select=("path:models/staging",),
         exclude=(),
         expected_model_names=frozenset(("stg_orders", "stg_customers")),
     ),
@@ -85,7 +85,7 @@ TEST_CASES: list[DiffSelectorIntegrationTestCase] = [
     ),
     DiffSelectorIntegrationTestCase(
         description="comma selector intersects resolved sets",
-        select=("tag:core,path:marts",),
+        select=("tag:core,path:models/marts",),
         exclude=(),
         expected_model_names=frozenset(("fact_orders",)),
     ),
