@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.python_nodes.types import (
     PythonNodeFanInAction,
     PythonNodeKind,
@@ -13,20 +14,67 @@ from sqlbuild.compiler.python_nodes.types import (
 from sqlbuild.executor.python_nodes.helpers.results import (
     build_python_node_failure_result,
     evaluate_python_node_fan_in,
+    normalize_python_check_return,
     normalize_python_node_return,
 )
 from sqlbuild.executor.python_nodes.models import (
+    CheckContext,
+    PythonCheckResult,
     PythonNodeExecutionResult,
     PythonNodeFanInDecision,
     PythonNodeResult,
     PythonNodeSkipResult,
 )
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.shared.types import PythonCheckSeverity
 from tests.unit.src.sqlbuild.executor.python_nodes.helpers._test_types import (
+    PythonCheckContextResultTestCase,
+    PythonCheckReturnNormalizationErrorTestCase,
+    PythonCheckReturnNormalizationTestCase,
     PythonNodeFailureResultTestCase,
     PythonNodeFanInPolicyTestCase,
     PythonNodeReturnNormalizationErrorTestCase,
     PythonNodeReturnNormalizationTestCase,
 )
+from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import (
+    PythonNodeContextTestAdapter,
+    build_check_context,
+)
+
+CHECK_RETURN_NORMALIZATION_TEST_CASES: list[PythonCheckReturnNormalizationTestCase] = [
+    PythonCheckReturnNormalizationTestCase(
+        description="preserves explicit check result metadata",
+        returned=PythonCheckResult(
+            passed=False,
+            message="Export file is missing",
+            metadata={"uri": "s3://exports/customers.parquet"},
+            severity=PythonCheckSeverity.WARN,
+        ),
+        default_severity=PythonCheckSeverity.ERROR,
+        expected_passed=False,
+        expected_message="Export file is missing",
+        expected_metadata={"uri": "s3://exports/customers.parquet"},
+        expected_severity=PythonCheckSeverity.WARN,
+    ),
+    PythonCheckReturnNormalizationTestCase(
+        description="normalizes true shorthand as pass",
+        returned=True,
+        default_severity=PythonCheckSeverity.ERROR,
+        expected_passed=True,
+        expected_message=None,
+        expected_metadata={},
+        expected_severity=PythonCheckSeverity.ERROR,
+    ),
+    PythonCheckReturnNormalizationTestCase(
+        description="normalizes false shorthand as failure",
+        returned=False,
+        default_severity=PythonCheckSeverity.WARN,
+        expected_passed=False,
+        expected_message=None,
+        expected_metadata={},
+        expected_severity=PythonCheckSeverity.WARN,
+    ),
+]
 
 RETURN_NORMALIZATION_TEST_CASES: list[PythonNodeReturnNormalizationTestCase] = [
     PythonNodeReturnNormalizationTestCase(
@@ -82,6 +130,107 @@ RETURN_NORMALIZATION_TEST_CASES: list[PythonNodeReturnNormalizationTestCase] = [
         expected_skip_reason="No new source rows",
     ),
 ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    CHECK_RETURN_NORMALIZATION_TEST_CASES,
+    ids=[case.description for case in CHECK_RETURN_NORMALIZATION_TEST_CASES],
+)
+def test_given_python_check_return_when_normalizing_then_returns_check_result(
+    test_case: PythonCheckReturnNormalizationTestCase,
+) -> None:
+    result: PythonCheckResult = normalize_python_check_return(
+        returned=test_case.returned,
+        default_severity=test_case.default_severity,
+    )
+
+    assert result.passed == test_case.expected_passed
+    assert result.message == test_case.expected_message
+    assert result.metadata == test_case.expected_metadata
+    assert result.severity == test_case.expected_severity
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonCheckReturnNormalizationErrorTestCase(
+            description="rejects none check return",
+            returned=None,
+            default_severity=PythonCheckSeverity.ERROR,
+            expected_error_fragment="Python checks must return",
+        )
+    ],
+    ids=["rejects none check return"],
+)
+def test_given_invalid_python_check_return_when_normalizing_then_raises(
+    test_case: PythonCheckReturnNormalizationErrorTestCase,
+) -> None:
+    with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
+        normalize_python_check_return(
+            returned=test_case.returned,
+            default_severity=test_case.default_severity,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonCheckContextResultTestCase(
+            description="builds pass fail and warn check results",
+            message="Export row count below threshold",
+            metadata={"row_count": 3, "threshold": 10},
+            expected_passed=(True, False, False),
+            expected_messages=(
+                "Export row count below threshold",
+                "Export row count below threshold",
+                "Export row count below threshold",
+            ),
+            expected_metadata=(
+                {"row_count": 3, "threshold": 10},
+                {"row_count": 3, "threshold": 10},
+                {"row_count": 3, "threshold": 10},
+            ),
+            expected_severities=(None, None, PythonCheckSeverity.WARN),
+        )
+    ],
+    ids=["builds pass fail and warn check results"],
+)
+def test_given_check_context_when_building_results_then_returns_check_results(
+    test_case: PythonCheckContextResultTestCase,
+) -> None:
+    context: CheckContext = build_check_context(
+        adapter=PythonNodeContextTestAdapter(),
+        statement_recorder=StatementRecorder(),
+        logger_name="sqlbuild.check.export_customers_exists",
+    )
+
+    pass_result: PythonCheckResult = context.pass_(
+        test_case.message,
+        metadata=test_case.metadata,
+    )
+    fail_result: PythonCheckResult = context.fail(
+        test_case.message or "failed",
+        metadata=test_case.metadata,
+    )
+    warn_result: PythonCheckResult = context.warn(
+        test_case.message or "warned",
+        metadata=test_case.metadata,
+    )
+
+    assert (pass_result.passed, fail_result.passed, warn_result.passed) == (
+        test_case.expected_passed
+    )
+    assert (pass_result.message, fail_result.message, warn_result.message) == (
+        test_case.expected_messages
+    )
+    assert (pass_result.metadata, fail_result.metadata, warn_result.metadata) == (
+        test_case.expected_metadata
+    )
+    assert (pass_result.severity, fail_result.severity, warn_result.severity) == (
+        test_case.expected_severities
+    )
+
 
 FAN_IN_POLICY_TEST_CASES: list[PythonNodeFanInPolicyTestCase] = [
     PythonNodeFanInPolicyTestCase(

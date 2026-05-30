@@ -8,6 +8,7 @@ from typing import Any, cast
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.assets import AssetContext
+from sqlbuild.checks import CheckContext
 from sqlbuild.executor.python_nodes.models import BasePythonNodeContext, PythonNodeRunState
 from sqlbuild.executor.shared.helpers.python_node_scheduler import unlock_downstream_python_nodes
 from sqlbuild.tasks import TaskContext
@@ -80,6 +81,29 @@ def build_asset_context(
     run_state: PythonNodeRunState | None = None,
 ) -> AssetContext:
     return AssetContext(
+        adapter=adapter,
+        connection_config={"warehouse": "dev"},
+        connection=object(),
+        run_id="test_run",
+        environment="dev",
+        vars={"batch": "hourly"},
+        is_reload=False,
+        logger=logging.getLogger(logger_name),
+        statement_recorder=statement_recorder,
+        run_state=run_state,
+        default_database="default_db",
+        default_schema="default_schema",
+    )
+
+
+def build_check_context(
+    *,
+    adapter: PythonNodeContextTestAdapter,
+    statement_recorder: StatementRecorder,
+    logger_name: str,
+    run_state: PythonNodeRunState | None = None,
+) -> CheckContext:
+    return CheckContext(
         adapter=adapter,
         connection_config={"warehouse": "dev"},
         connection=object(),

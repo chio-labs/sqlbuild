@@ -19,6 +19,7 @@ from sqlbuild.compiler.python_nodes.types import (
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
+from sqlbuild.shared.types import PythonCheckSeverity
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,16 @@ class PythonNodeSkipResult:
     reason: str
     mode: SkipMode = SkipMode.DOWNSTREAM
     metadata: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class PythonCheckResult:
+    """User-facing result returned by a Python check node."""
+
+    passed: bool
+    message: str | None = None
+    metadata: dict[str, object] = field(default_factory=dict)
+    severity: PythonCheckSeverity | None = None
 
 
 @dataclass(frozen=True)
@@ -256,4 +267,52 @@ class AssetContext(BasePythonNodeContext):
             payload=payload,
             metadata={} if metadata is None else metadata,
             materialized=materialized,
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class CheckContext(BasePythonNodeContext):
+    """Runtime context passed to a SQLBuild check function."""
+
+    def pass_(
+        self,
+        message: str | None = None,
+        *,
+        metadata: dict[str, object] | None = None,
+    ) -> PythonCheckResult:
+        """Return a passing check result."""
+
+        return PythonCheckResult(
+            passed=True,
+            message=message,
+            metadata={} if metadata is None else metadata,
+        )
+
+    def fail(
+        self,
+        message: str,
+        *,
+        metadata: dict[str, object] | None = None,
+    ) -> PythonCheckResult:
+        """Return a failing check result using the check's configured severity."""
+
+        return PythonCheckResult(
+            passed=False,
+            message=message,
+            metadata={} if metadata is None else metadata,
+        )
+
+    def warn(
+        self,
+        message: str,
+        *,
+        metadata: dict[str, object] | None = None,
+    ) -> PythonCheckResult:
+        """Return a warning check result regardless of decorator severity."""
+
+        return PythonCheckResult(
+            passed=False,
+            message=message,
+            metadata={} if metadata is None else metadata,
+            severity=PythonCheckSeverity.WARN,
         )
