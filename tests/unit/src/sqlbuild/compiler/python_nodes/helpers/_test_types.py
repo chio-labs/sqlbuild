@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
+from sqlbuild.compiler.planner.models import ParsedSelector
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 
 
@@ -34,3 +35,27 @@ class PythonNodeGraphInventoryTestCase:
     expected_task_tags: tuple[str, ...]
     expected_asset_column_names: tuple[str, ...]
     expected_check_severity: str
+
+
+@dataclass(frozen=True)
+class PythonNodeSelectorTestCase:
+    description: str
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    expected_names: frozenset[str]
+
+
+@dataclass(frozen=True)
+class PythonNodeParseSelectorTestCase:
+    description: str
+    raw: str
+    expected_result: ParsedSelector
+
+
+@dataclass(frozen=True)
+class PythonNodeSelectorErrorTestCase:
+    description: str
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    expected_error_type: type[Exception]
+    expected_error_fragment: str | None = None

@@ -16,6 +16,10 @@ from sqlbuild.compiler.planner.types import SelectorKind
 _SELECTOR_KIND_BY_PREFIX: dict[str, SelectorKind] = {
     SelectorKind.SEED: SelectorKind.SEED,
     SelectorKind.SOURCE: SelectorKind.SOURCE,
+    SelectorKind.TASK: SelectorKind.TASK,
+    SelectorKind.ASSET: SelectorKind.ASSET,
+    SelectorKind.LOADER: SelectorKind.LOADER,
+    SelectorKind.CHECK: SelectorKind.CHECK,
     SelectorKind.TAG: SelectorKind.TAG,
     SelectorKind.PATH: SelectorKind.PATH,
 }
