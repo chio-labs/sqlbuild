@@ -20,6 +20,12 @@ from sqlbuild.executor.diff.models import DiffExecutionResult, ModelDiffResult
 
 _WIDTH: int = 110
 _TOP_CHANGED_COLUMNS: int = 5
+_RICH_TITLE_STYLE: str = "bold"
+_RICH_OBJECT_STYLE: str = "bold cyan"
+_RICH_SECTION_STYLE: str = "bold"
+_RICH_ADDED_STYLE: str = "green"
+_RICH_REMOVED_STYLE: str = "red"
+_RICH_MUTED_STYLE: str = "dim"
 
 
 def render_diff_output(
@@ -42,18 +48,20 @@ def render_diff_output(
         else:
             console.print(
                 Panel(
-                    Text("SQLBuild Diff Summary", style="bold", justify="center"),
+                    Text("SQLBuild Diff Summary", style=_RICH_TITLE_STYLE, justify="center"),
                     box=box.HEAVY,
                 )
             )
-            console.print(Text(f"{from_label} vs {to_label}", style="bold cyan", justify="center"))
+            console.print(
+                Text(f"{from_label} vs {to_label}", style=_RICH_OBJECT_STYLE, justify="center")
+            )
             console.print(Text(f"selected models: {len(result.model_results):,}", justify="center"))
             console.print()
             model_result: ModelDiffResult
             for index, model_result in enumerate(result.model_results):
                 if index > 0:
                     console.print()
-                    console.print(Text("─" * _WIDTH, style="dim"))
+                    console.print(Text("─" * _WIDTH, style=_RICH_MUTED_STYLE))
                     console.print()
                 _render_model_result(
                     console=console,
@@ -161,7 +169,7 @@ def _render_model_result(
 
 def _render_overview(*, model_result: ModelDiffResult, mode_label: str) -> RenderableType:
     table: Table = Table.grid(padding=(0, 2))
-    table.add_column(style="bold cyan", justify="right")
+    table.add_column(style=_RICH_OBJECT_STYLE, justify="right")
     table.add_column()
     table.add_row("Model", model_result.name)
     table.add_row("Key", _primary_key_label(model_result))
@@ -231,8 +239,8 @@ def _render_schema_summary(model_result: ModelDiffResult) -> RenderableType:
 
 
 def _print_section(*, console: Console, title: str, content: RenderableType) -> None:
-    console.print(Text(title, style="bold"))
-    console.print(Text("▔" * len(title), style="bold"))
+    console.print(Text(title, style=_RICH_SECTION_STYLE))
+    console.print(Text("▔" * len(title), style=_RICH_SECTION_STYLE))
     console.print(content)
     console.print()
 
@@ -258,7 +266,7 @@ def _render_rows(*, rows: RowDiffResult, from_label: str, to_label: str) -> Rend
         right_box.add_column()
 
     if rows.left_only_count > 0:
-        left_box.add_row(*([Text("-", style="red")] * 5))
+        left_box.add_row(*([Text("-", style=_RICH_REMOVED_STYLE)] * 5))
         left_box.add_section()
     if rows.equal_count > 0:
         left_box.add_row(*([" "] * 5))
@@ -270,7 +278,7 @@ def _render_rows(*, rows: RowDiffResult, from_label: str, to_label: str) -> Rend
         right_box.add_row(*([" "] * 5))
         right_box.add_section()
     if rows.right_only_count > 0:
-        right_box.add_row(*([Text("+", style="green")] * 5))
+        right_box.add_row(*([Text("+", style=_RICH_ADDED_STYLE)] * 5))
 
     renderables.append(left_box)
     renderables.append(_render_row_separator(rows))
@@ -297,10 +305,10 @@ def _render_row_separator(rows: RowDiffResult) -> RenderableType:
         joined.append("\n")
     if rows.equal_count > 0:
         joined.append("╌" * 3)
-        joined.append(Text(" = ", style="bold"))
+        joined.append(Text(" = ", style=_RICH_SECTION_STYLE))
     if rows.unequal_count > 0:
         joined.append("╌" * 3)
-        joined.append(Text(" ≠ ", style="bold"))
+        joined.append(Text(" ≠ ", style=_RICH_SECTION_STYLE))
     joined.append("╌" * 3)
     return Group(*joined)
 
@@ -374,7 +382,7 @@ def _render_changed_columns(
     if not mismatched_columns:
         return Text("No changed columns.", style="italic")
     table: Table = Table(show_header=False)
-    table.add_column(style="cyan", max_width=32, overflow="fold")
+    table.add_column(style=_RICH_OBJECT_STYLE, max_width=32, overflow="fold")
     table.add_column(justify="right")
     table.add_column(justify="right")
     visible_columns: tuple[RowDiffColumnResult, ...] = mismatched_columns[:_TOP_CHANGED_COLUMNS]
@@ -392,9 +400,12 @@ def _render_changed_columns(
     if len(mismatched_columns) > len(visible_columns):
         table.add_section()
         table.add_row(
-            Text("...", style="dim"),
-            Text(f"and {len(mismatched_columns) - len(visible_columns):,} more", style="dim"),
-            Text("", style="dim"),
+            Text("...", style=_RICH_MUTED_STYLE),
+            Text(
+                f"and {len(mismatched_columns) - len(visible_columns):,} more",
+                style=_RICH_MUTED_STYLE,
+            ),
+            Text("", style=_RICH_MUTED_STYLE),
         )
     if not verbose:
         example_content: RenderableType | None = _render_examples(
@@ -408,7 +419,7 @@ def _render_changed_columns(
                 "",
                 example_content,
                 "",
-                Text("Use --verbose to show more example row changes.", style="dim"),
+                Text("Use --verbose to show more example row changes.", style=_RICH_MUTED_STYLE),
             )
         return table
     return table
@@ -444,7 +455,7 @@ def _render_examples(
     for column_name in sorted(grouped_examples):
         if visible_column_names is not None and column_name not in visible_column_names:
             continue
-        blocks.append(Text(column_name, style="bold cyan"))
+        blocks.append(Text(column_name, style=_RICH_OBJECT_STYLE))
         all_examples: list[str] = grouped_examples[column_name]
         visible_examples: list[str] = all_examples[:max_column_examples]
         example: str
@@ -454,7 +465,7 @@ def _render_examples(
             blocks.append(
                 Text(
                     f"  showing {len(visible_examples):,} of {len(all_examples):,} examples",
-                    style="dim",
+                    style=_RICH_MUTED_STYLE,
                 )
             )
         blocks.append("")
@@ -481,7 +492,7 @@ def _render_side_only_samples(
         blocks.append(
             Text(
                 truncation_message,
-                style="dim",
+                style=_RICH_MUTED_STYLE,
             )
         )
     return Group(*blocks) if blocks else Text("No side-only samples collected.", style="italic")

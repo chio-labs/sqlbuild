@@ -34,7 +34,7 @@ from sqlbuild.executor.pipeline.main.run import (
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSqlbuildTestAction
-from sqlbuild.shared.helpers.colors import blue_bold, dim
+from sqlbuild.shared.helpers.cli_style import CliStyle
 
 
 def execute_sqlbuild_build_work(
@@ -58,8 +58,9 @@ def execute_sqlbuild_build_work(
     header: str = format_build_header(
         command=f"sqb {command.value}", target=None, concurrency=effective_concurrency
     )
-    execution_label: str = blue_bold("SQLBuild execution") if use_color else "SQLBuild execution"
-    header_detail: str = dim(header) if use_color else header
+    style: CliStyle = CliStyle(use_color=use_color)
+    execution_label: str = style.object_name("SQLBuild execution")
+    header_detail: str = style.muted(header)
     output_stream.write(f"{execution_label}  {header_detail}\n\n")
     output_stream.flush()
     execution_connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
@@ -143,8 +144,9 @@ def _execute_sqlbuild_tests(
     use_color: bool,
 ) -> int:
     header: str = format_build_header(command="sqb test", target=None, concurrency=1)
-    execution_label: str = blue_bold("SQLBuild execution") if use_color else "SQLBuild execution"
-    header_detail: str = dim(header) if use_color else header
+    style: CliStyle = CliStyle(use_color=use_color)
+    execution_label: str = style.object_name("SQLBuild execution")
+    header_detail: str = style.muted(header)
     output_stream.write(f"{execution_label}  {header_detail}\n\n")
     test_count: int = len(plan_output.test_entries)
     model_count: int = len({step.model_name for e in plan_output.test_entries for step in e.chain})
@@ -211,8 +213,9 @@ def _execute_sqlbuild_audits(
     use_color: bool,
 ) -> int:
     header: str = format_build_header(command="sqb audit", target=None, concurrency=1)
-    execution_label: str = blue_bold("SQLBuild execution") if use_color else "SQLBuild execution"
-    header_detail: str = dim(header) if use_color else header
+    style: CliStyle = CliStyle(use_color=use_color)
+    execution_label: str = style.object_name("SQLBuild execution")
+    header_detail: str = style.muted(header)
     output_stream.write(f"{execution_label}  {header_detail}\n\n")
     audit_count: int = len(plan_output.audit_entries)
     model_count: int = len(

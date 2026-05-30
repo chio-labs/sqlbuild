@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.commands.main.shared.helpers.colors import colorize_status
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
+from sqlbuild.shared.helpers.cli_style import CliStyle
 
 
 def render_clone_output(
@@ -15,6 +15,7 @@ def render_clone_output(
     to_environment: str,
     use_color: bool,
 ) -> None:
+    style: CliStyle = CliStyle(use_color=use_color)
     print(f"sqb clone  from={from_environment} to={to_environment}\n")
     name_column_width: int = resolve_name_column_width(
         tuple(item.name for item in result.item_results)
@@ -26,7 +27,7 @@ def render_clone_output(
             status_text = "WARN"
         if item.status == CloneStatus.FAILED:
             status_text = "FAIL"
-        rendered_status: str = colorize_status(status_text, use_color=use_color)
+        rendered_status: str = style.status(status_text)
         print(
             format_aligned_name_value(
                 plain_name=item.name,

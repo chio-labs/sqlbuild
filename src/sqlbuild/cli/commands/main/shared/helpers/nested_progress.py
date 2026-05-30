@@ -6,8 +6,8 @@ import threading
 from typing import TextIO
 
 from sqlbuild.cli.commands.main.shared.models import NestedProgressChildRow
+from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.coded_errors import format_coded_error
-from sqlbuild.shared.helpers.colors import bold, colorize_status
 
 _LABEL_WIDTH: int = 10
 _NAME_WIDTH: int = 50
@@ -42,6 +42,7 @@ class NestedCommandProgressCallbacks:
         self._label: str = label
         self._stream: TextIO = stream
         self._use_color: bool = use_color
+        self._style: CliStyle = CliStyle(use_color=use_color)
         self._name_width: int = max(_NAME_WIDTH, name_width)
         self._is_tty: bool = hasattr(stream, "isatty") and stream.isatty()
         self._counter: int = 0
@@ -61,7 +62,7 @@ class NestedCommandProgressCallbacks:
         self._active_group_is_new = group_name != self._current_group
         if self._active_group_is_new:
             self._current_group = group_name
-            group_header: str = bold(group_name) if self._use_color else group_name
+            group_header: str = self._style.section(group_name)
             prefix: str = "\n" if self._counter > 0 else ""
             self._stream.write(f"{prefix}{group_header}\n")
             self._stream.flush()
@@ -91,13 +92,13 @@ class NestedCommandProgressCallbacks:
 
         self._counter += 1
 
-        status: str = colorize_status(status_text, use_color=self._use_color)
+        status: str = self._style.status(status_text)
         self._stream.write(
             f"    {self._label:<{_LABEL_WIDTH}}{item_name:<{self._name_width}} {status}{detail}\n"
         )
         child_row: NestedProgressChildRow
         for child_row in child_rows:
-            child_status: str = colorize_status(child_row.status_text, use_color=self._use_color)
+            child_status: str = self._style.status(child_row.status_text)
             self._stream.write(
                 f"      {child_row.label:<{_LABEL_WIDTH - 2}}"
                 f"{child_row.name:<{self._name_width}} "
@@ -114,10 +115,7 @@ class NestedCommandProgressCallbacks:
         self._stream.flush()
 
     def _write_spinner_line(self) -> None:
-        spinner: str = colorize_status(
-            _ACTIVE_SPINNER_FRAMES[self._spinner_frame_index],
-            use_color=self._use_color,
-        )
+        spinner: str = self._style.status(_ACTIVE_SPINNER_FRAMES[self._spinner_frame_index])
         self._spinner_frame_index = (self._spinner_frame_index + 1) % len(_ACTIVE_SPINNER_FRAMES)
         name: str = self._active_name
         with self._write_lock:
