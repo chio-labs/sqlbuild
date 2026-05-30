@@ -42,9 +42,15 @@ def build_python_node_graph(*, discovered_inputs: DiscoveredProjectInputs) -> Py
         asset_functions=discovered_inputs.asset_functions,
         check_functions=discovered_inputs.check_functions,
     )
+    dependency_edges: tuple[PythonNodeDependencyEdge, ...] = build_python_node_dependency_edges(
+        nodes=nodes
+    )
     return PythonNodeGraph(
         nodes=nodes,
-        dependency_edges=build_python_node_dependency_edges(nodes=nodes),
+        dependency_edges=dependency_edges,
+        upstream_deps=build_python_node_upstream_deps(nodes=nodes, edges=dependency_edges),
+        downstream_deps=build_python_node_downstream_deps(nodes=nodes, edges=dependency_edges),
+        tag_index=build_python_node_tag_index(nodes=nodes),
         nodes_by_name={node.name: node for node in nodes},
         nodes_by_typed_selector={_typed_selector(node): node for node in nodes},
     )
@@ -105,6 +111,46 @@ def build_python_node_dependency_edges(
                 )
             )
     return tuple(edges)
+
+
+def build_python_node_upstream_deps(
+    *, nodes: tuple[DiscoveredPythonNode, ...], edges: tuple[PythonNodeDependencyEdge, ...]
+) -> dict[str, tuple[str, ...]]:
+    """Return upstream Python-node dependency names keyed by downstream node name."""
+
+    upstream: dict[str, list[str]] = {node.name: [] for node in nodes}
+    edge: PythonNodeDependencyEdge
+    for edge in edges:
+        upstream.setdefault(edge.downstream_name, []).append(edge.upstream_name)
+        upstream.setdefault(edge.upstream_name, [])
+    return {name: tuple(values) for name, values in upstream.items()}
+
+
+def build_python_node_downstream_deps(
+    *, nodes: tuple[DiscoveredPythonNode, ...], edges: tuple[PythonNodeDependencyEdge, ...]
+) -> dict[str, tuple[str, ...]]:
+    """Return downstream Python-node dependency names keyed by upstream node name."""
+
+    downstream: dict[str, list[str]] = {node.name: [] for node in nodes}
+    edge: PythonNodeDependencyEdge
+    for edge in edges:
+        downstream.setdefault(edge.upstream_name, []).append(edge.downstream_name)
+        downstream.setdefault(edge.downstream_name, [])
+    return {name: tuple(values) for name, values in downstream.items()}
+
+
+def build_python_node_tag_index(
+    *, nodes: tuple[DiscoveredPythonNode, ...]
+) -> dict[str, frozenset[str]]:
+    """Build a tag-to-node-name lookup for tagged Python nodes."""
+
+    index: dict[str, set[str]] = {}
+    node: DiscoveredPythonNode
+    for node in nodes:
+        tag: str
+        for tag in node.tags:
+            index.setdefault(tag, set()).add(node.name)
+    return {tag: frozenset(names) for tag, names in index.items()}
 
 
 def _build_loader_node(loader: DiscoveredLoaderFunction) -> DiscoveredPythonNode:
