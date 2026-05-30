@@ -85,6 +85,40 @@ class LoaderDefinition:
 
 
 @dataclass(frozen=True)
+class ColumnLineageRef:
+    """Graph-based upstream column reference for declared Python-node lineage."""
+
+    node: str
+    column: str
+
+
+@dataclass(frozen=True)
+class TaskDefinition:
+    """Metadata attached to a decorated SQLBuild task function."""
+
+    name: str
+    depends_on: tuple[Callable[..., object], ...] = ()
+    tags: tuple[str, ...] = ()
+    group: str | None = None
+    description: str | None = None
+    meta: dict[str, object] | None = None
+
+
+@dataclass(frozen=True)
+class AssetDefinition:
+    """Metadata attached to a decorated SQLBuild asset function."""
+
+    name: str
+    depends_on: tuple[Callable[..., object], ...] = ()
+    tags: tuple[str, ...] = ()
+    group: str | None = None
+    description: str | None = None
+    meta: dict[str, object] | None = None
+    columns: tuple[SourceColumnEntry, ...] = ()
+    column_lineage: dict[str, tuple[ColumnLineageRef, ...]] | None = None
+
+
+@dataclass(frozen=True)
 class ParsedScenarioArtifactName:
     """Parsed physical name for one scenario-owned artifact."""
 
