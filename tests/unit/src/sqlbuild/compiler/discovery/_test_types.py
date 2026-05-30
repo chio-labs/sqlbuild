@@ -29,6 +29,8 @@ class DiscoverProjectInputsTestCase:
     expected_macro_paths: tuple[str, ...]
     expected_loader_names: tuple[str, ...]
     expected_adapter_path: str | None
+    expected_task_names: tuple[str, ...] = ()
+    expected_asset_names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

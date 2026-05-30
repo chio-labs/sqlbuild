@@ -79,3 +79,9 @@ class LoaderDiscoveryError(DiscoveryError):
     """Raised when project source loaders cannot be discovered."""
 
     code: str = "D010"
+
+
+class PythonNodeDiscoveryError(DiscoveryError):
+    """Raised when project Python nodes cannot be discovered."""
+
+    code: str = "D011"

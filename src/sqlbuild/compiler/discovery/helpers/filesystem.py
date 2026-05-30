@@ -9,7 +9,12 @@ from importlib.machinery import ModuleSpec
 from pathlib import Path
 from types import ModuleType
 
-from sqlbuild.compiler.discovery.exceptions import LoaderDiscoveryError, SchemaParseError
+from sqlbuild.assets import get_asset_definition
+from sqlbuild.compiler.discovery.exceptions import (
+    LoaderDiscoveryError,
+    PythonNodeDiscoveryError,
+    SchemaParseError,
+)
 from sqlbuild.compiler.discovery.helpers.python_functions import parse_python_function
 from sqlbuild.compiler.discovery.helpers.sql_audits import parse_sql_audit_file
 from sqlbuild.compiler.discovery.helpers.sql_functions import parse_function_sql
@@ -24,6 +29,7 @@ from sqlbuild.compiler.discovery.helpers.yml_schema import parse_schema_yml
 from sqlbuild.compiler.discovery.helpers.yml_sources import parse_sources_yml
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAdapterFile,
+    DiscoveredAssetFunction,
     DiscoveredAuditFile,
     DiscoveredLoaderFunction,
     DiscoveredMacroFile,
@@ -36,6 +42,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlModelFile,
     DiscoveredSqlScenarioFile,
     DiscoveredSqlTestFile,
+    DiscoveredTaskFunction,
 )
 from sqlbuild.compiler.shared.constants import (
     SCHEMA_FILE_NAME,
@@ -43,8 +50,10 @@ from sqlbuild.compiler.shared.constants import (
     YAML_FILE_SUFFIXES,
 )
 from sqlbuild.loaders import LoaderDefinition, get_loader_definition
+from sqlbuild.shared.models import AssetDefinition, TaskDefinition
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.tasks import get_task_definition
 
 
 def discover_model_files(
@@ -360,6 +369,86 @@ def discover_loader_functions(*, project_dir: Path) -> tuple[DiscoveredLoaderFun
     return tuple(discovered)
 
 
+def discover_task_functions(*, project_dir: Path) -> tuple[DiscoveredTaskFunction, ...]:
+    """Discover decorated task functions under tasks/."""
+
+    tasks_root: Path = project_dir / "tasks"
+    if not tasks_root.is_dir():
+        return ()
+
+    discovered: list[DiscoveredTaskFunction] = []
+    file_path: Path
+    for file_path in sorted(tasks_root.rglob("*.py")):
+        if file_path.stem == "__init__":
+            continue
+        module: ModuleType = _load_python_node_module(
+            file_path=file_path,
+            project_dir=project_dir,
+            node_folder="tasks",
+        )
+        for _, value in inspect.getmembers(module, inspect.isfunction):
+            if value.__module__ != module.__name__:
+                continue
+            definition: TaskDefinition | None = get_task_definition(value)
+            if definition is None:
+                continue
+            discovered.append(
+                DiscoveredTaskFunction(
+                    file_path=file_path,
+                    relative_path=file_path.relative_to(project_dir),
+                    name=definition.name,
+                    function=value,
+                    depends_on=definition.depends_on,
+                    tags=definition.tags,
+                    group=definition.group,
+                    description=definition.description,
+                    meta=definition.meta,
+                )
+            )
+    return tuple(discovered)
+
+
+def discover_asset_functions(*, project_dir: Path) -> tuple[DiscoveredAssetFunction, ...]:
+    """Discover decorated asset functions under assets/."""
+
+    assets_root: Path = project_dir / "assets"
+    if not assets_root.is_dir():
+        return ()
+
+    discovered: list[DiscoveredAssetFunction] = []
+    file_path: Path
+    for file_path in sorted(assets_root.rglob("*.py")):
+        if file_path.stem == "__init__":
+            continue
+        module: ModuleType = _load_python_node_module(
+            file_path=file_path,
+            project_dir=project_dir,
+            node_folder="assets",
+        )
+        for _, value in inspect.getmembers(module, inspect.isfunction):
+            if value.__module__ != module.__name__:
+                continue
+            definition: AssetDefinition | None = get_asset_definition(value)
+            if definition is None:
+                continue
+            discovered.append(
+                DiscoveredAssetFunction(
+                    file_path=file_path,
+                    relative_path=file_path.relative_to(project_dir),
+                    name=definition.name,
+                    function=value,
+                    depends_on=definition.depends_on,
+                    tags=definition.tags,
+                    group=definition.group,
+                    description=definition.description,
+                    meta=definition.meta,
+                    columns=definition.columns,
+                    column_lineage=definition.column_lineage,
+                )
+            )
+    return tuple(discovered)
+
+
 def _load_loader_module(*, file_path: Path, project_dir: Path) -> ModuleType:
     module_name: str = "sqlbuild_project_loader_" + "_".join(
         file_path.relative_to(project_dir).with_suffix("").parts
@@ -376,6 +465,28 @@ def _load_loader_module(*, file_path: Path, project_dir: Path) -> ModuleType:
     except Exception as error:
         raise LoaderDiscoveryError(
             f"Failed to import source loader file {file_path.relative_to(project_dir)}: {error}"
+        ) from error
+    finally:
+        sys.path = old_path
+    return module
+
+
+def _load_python_node_module(*, file_path: Path, project_dir: Path, node_folder: str) -> ModuleType:
+    module_name: str = "sqlbuild_project_python_node_" + "_".join(
+        file_path.relative_to(project_dir).with_suffix("").parts
+    )
+    spec: ModuleSpec | None = importlib.util.spec_from_file_location(module_name, file_path)
+    if spec is None or spec.loader is None:
+        raise PythonNodeDiscoveryError(f"Could not load Python node file {file_path}")
+    module: ModuleType = importlib.util.module_from_spec(spec)
+    old_path: list[str] = list(sys.path)
+    sys.path.insert(0, str(project_dir))
+    try:
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+    except Exception as error:
+        raise PythonNodeDiscoveryError(
+            f"Failed to import Python node file {file_path.relative_to(project_dir)}: {error}"
         ) from error
     finally:
         sys.path = old_path

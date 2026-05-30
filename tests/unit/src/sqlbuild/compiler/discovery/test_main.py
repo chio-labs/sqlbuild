@@ -62,6 +62,20 @@ from sqlbuild.loaders import loader
 def raw_orders_loader(ctx):
     return []
 """,
+                "tasks/windows.py": """
+from sqlbuild.tasks import task
+
+@task(tags=("api",), group="ingestion")
+def fetch_window(ctx):
+    return {"window": "today"}
+""",
+                "assets/exports.py": """
+from sqlbuild.assets import asset
+
+@asset(columns=[{"name": "customer_id", "type": "string"}])
+def export_customers(ctx):
+    return {"uri": "s3://exports/customers.parquet"}
+""",
                 "target/manifest.json": '{"metadata": {"dbt_schema_version": "v12"}}\n',
                 "adapter.py": "class ExampleAdapter:\n    pass\n",
                 "sqlbuild_local.toml": 'environment = "dev"\n',
@@ -94,6 +108,8 @@ def raw_orders_loader(ctx):
             expected_macro_paths=("macros/name_helpers.py",),
             expected_loader_names=("raw_orders_loader",),
             expected_adapter_path="adapter.py",
+            expected_task_names=("fetch_window",),
+            expected_asset_names=("export_customers",),
         )
     ],
     ids=["discovers raw project inputs across authored project surfaces"],
@@ -209,6 +225,14 @@ def test_given_project_repo_slice_when_discovering_inputs_then_it_returns_expect
     assert (
         tuple(loader_function.name for loader_function in discovered_inputs.loader_functions)
         == test_case.expected_loader_names
+    )
+    assert (
+        tuple(task_function.name for task_function in discovered_inputs.task_functions)
+        == test_case.expected_task_names
+    )
+    assert (
+        tuple(asset_function.name for asset_function in discovered_inputs.asset_functions)
+        == test_case.expected_asset_names
     )
     assert (
         None
@@ -464,6 +488,63 @@ def raw_orders_loader(ctx):
 """,
         },
         expected_error_fragment="terminal source loader write and schema config must be declared",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when task and asset names are duplicated",
+        repo_files=base_repo_files()
+        | {
+            "tasks/export_customers.py": """
+from sqlbuild.tasks import task
+
+@task
+def export_customers(ctx):
+    return None
+""",
+            "assets/export_customers.py": """
+from sqlbuild.assets import asset
+
+@asset
+def export_customers(ctx):
+    return None
+""",
+        },
+        expected_error_fragment="Duplicate Python node found for 'export_customers'",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when task dependency is not decorated",
+        repo_files=base_repo_files()
+        | {
+            "tasks/windows.py": """
+from sqlbuild.tasks import task
+
+def fetch_window(ctx):
+    return None
+
+@task(depends_on=fetch_window)
+def export_window(ctx):
+    return None
+""",
+        },
+        expected_error_fragment="Python node 'export_window' depends on an unknown Python node",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when task and asset dependencies contain a cycle",
+        repo_files=base_repo_files()
+        | {
+            "tasks/windows.py": """
+from sqlbuild.tasks import task
+
+def fetch_window(ctx):
+    return None
+
+@task(depends_on=fetch_window)
+def enrich_window(ctx):
+    return None
+
+fetch_window = task(depends_on=enrich_window)(fetch_window)
+""",
+        },
+        expected_error_fragment="Python node dependency cycle detected",
     ),
     DiscoverProjectInputsErrorTestCase(
         description="raises when seeds are declared outside seeds directory",

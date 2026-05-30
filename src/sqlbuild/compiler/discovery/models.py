@@ -9,6 +9,7 @@ from pathlib import Path
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
+from sqlbuild.shared.models import ColumnLineageRef
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry, SourceLocation
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
@@ -178,6 +179,38 @@ class DiscoveredLoaderFunction:
 
 
 @dataclass(frozen=True)
+class DiscoveredTaskFunction:
+    """A discovered project task function."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    function: Callable[..., object]
+    depends_on: tuple[Callable[..., object], ...] = field(default_factory=tuple)
+    tags: tuple[str, ...] = field(default_factory=tuple)
+    group: str | None = None
+    description: str | None = None
+    meta: dict[str, object] | None = None
+
+
+@dataclass(frozen=True)
+class DiscoveredAssetFunction:
+    """A discovered project asset function."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    function: Callable[..., object]
+    depends_on: tuple[Callable[..., object], ...] = field(default_factory=tuple)
+    tags: tuple[str, ...] = field(default_factory=tuple)
+    group: str | None = None
+    description: str | None = None
+    meta: dict[str, object] | None = None
+    columns: tuple[SourceColumnEntry, ...] = field(default_factory=tuple)
+    column_lineage: dict[str, tuple[ColumnLineageRef, ...]] | None = None
+
+
+@dataclass(frozen=True)
 class DiscoveredProjectInputs:
     """All raw project inputs discovered from disk before semantic resolution."""
 
@@ -195,4 +228,6 @@ class DiscoveredProjectInputs:
     macro_files: tuple[DiscoveredMacroFile, ...] = field(default_factory=tuple)
     materialization_files: tuple[DiscoveredMaterializationFile, ...] = field(default_factory=tuple)
     loader_functions: tuple[DiscoveredLoaderFunction, ...] = field(default_factory=tuple)
+    task_functions: tuple[DiscoveredTaskFunction, ...] = field(default_factory=tuple)
+    asset_functions: tuple[DiscoveredAssetFunction, ...] = field(default_factory=tuple)
     adapter_file: DiscoveredAdapterFile | None = None

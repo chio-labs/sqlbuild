@@ -7,6 +7,7 @@ from pathlib import Path
 from sqlbuild.compiler.discovery.helpers.discovery_validation import validate_discovered_inputs
 from sqlbuild.compiler.discovery.helpers.filesystem import (
     discover_adapter_file,
+    discover_asset_functions,
     discover_audit_files,
     discover_loader_functions,
     discover_macro_files,
@@ -18,6 +19,7 @@ from sqlbuild.compiler.discovery.helpers.filesystem import (
     discover_seed_files,
     discover_source_files,
     discover_sql_function_files,
+    discover_task_functions,
     discover_test_files,
 )
 from sqlbuild.compiler.discovery.helpers.integration_loaders import (
@@ -68,6 +70,8 @@ def discover_project_inputs(*, project_dir: Path) -> DiscoveredProjectInputs:
         macro_files=discover_macro_files(project_dir=project_dir),
         materialization_files=discover_materialization_files(project_dir=project_dir),
         loader_functions=loader_functions,
+        task_functions=discover_task_functions(project_dir=project_dir),
+        asset_functions=discover_asset_functions(project_dir=project_dir),
         adapter_file=discover_adapter_file(project_dir=project_dir),
     )
     validate_discovered_inputs(discovered_inputs)
