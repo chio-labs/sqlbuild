@@ -11,3 +11,4 @@ class DebugOutputTestCase:
     result: DebugResult
     expected_text: str
     expected_json_fragment: str
+    expected_color_fragments: tuple[str, ...] = ()

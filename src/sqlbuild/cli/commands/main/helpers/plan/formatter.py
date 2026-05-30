@@ -26,15 +26,7 @@ from sqlbuild.compiler.planner.types import (
     WarningSeverity,
 )
 from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
-from sqlbuild.shared.helpers.colors import (
-    blue_bold,
-    green,
-    green_bold,
-    light_green,
-    red,
-    yellow,
-    yellow_bold,
-)
+from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.display import DisplayOptions, append_overflow_line, visible_entries
 from sqlbuild.shared.helpers.materialization_labels import model_materialization_label
 from sqlbuild.shared.types import ExecutionResourceKind
@@ -68,13 +60,15 @@ def format_plan(
     use_color: bool = True,
     include_header: bool = True,
     display_options: DisplayOptions | None = None,
-    section_header_style: Callable[[str], str] = light_green,
+    section_header_style: Callable[[str], str] | None = None,
 ) -> str:
     """Format plan output grouped by reason with inline detail."""
 
     lines: list[str] = []
 
     resolved_display_options: DisplayOptions = display_options or DisplayOptions()
+    style: CliStyle = CliStyle(use_color=True)
+    resolved_section_header_style: Callable[[str], str] = section_header_style or style.plan_section
 
     if full_refresh:
         _format_full_refresh(
@@ -82,7 +76,7 @@ def format_plan(
             plan,
             include_header=include_header,
             display_options=resolved_display_options,
-            section_header_style=section_header_style,
+            section_header_style=resolved_section_header_style,
         )
         result: str = "\n".join(lines)
         return result if use_color else _strip_ansi(result)
@@ -97,12 +91,12 @@ def format_plan(
             source_load_entries=plan.source_load_entries,
             full_refresh=False,
         )
-        lines.append(green_bold(header))
+        lines.append(style.success_strong(header))
 
     _format_virtual_metadata(
         lines,
         plan,
-        section_header_style=section_header_style,
+        section_header_style=resolved_section_header_style,
         display_options=resolved_display_options,
     )
 
@@ -111,7 +105,7 @@ def format_plan(
         plan,
         name_column_width=name_column_width,
         display_options=resolved_display_options,
-        section_header_style=section_header_style,
+        section_header_style=resolved_section_header_style,
     )
 
     normal: list[ModelPlanEntry] = _collect_normal(active)
@@ -123,7 +117,7 @@ def format_plan(
         plan,
         name_column_width=name_column_width,
         display_options=resolved_display_options,
-        section_header_style=section_header_style,
+        section_header_style=resolved_section_header_style,
     )
 
     reason: PlanReason
@@ -133,7 +127,7 @@ def format_plan(
             continue
         label: str = _REASON_GROUP_LABELS[reason]
         lines.append("")
-        lines.append(section_header_style(f"{label} ({len(entries)})"))
+        lines.append(resolved_section_header_style(f"{label} ({len(entries)})"))
         entry: ModelPlanEntry
         visible: Sequence[ModelPlanEntry] = visible_entries(
             entries, options=resolved_display_options
@@ -150,7 +144,7 @@ def format_plan(
 
     if cascade:
         lines.append("")
-        lines.append(section_header_style(f"Upstream changed ({len(cascade)})"))
+        lines.append(resolved_section_header_style(f"Upstream changed ({len(cascade)})"))
         entry_c: ModelPlanEntry
         visible_cascade: Sequence[ModelPlanEntry] = visible_entries(
             cascade, options=resolved_display_options
@@ -172,7 +166,7 @@ def format_plan(
             normal,
             name_column_width=name_column_width,
             display_options=resolved_display_options,
-            section_header_style=section_header_style,
+            section_header_style=resolved_section_header_style,
         )
 
     _format_routine_functions(
@@ -180,14 +174,14 @@ def format_plan(
         plan,
         name_column_width=name_column_width,
         display_options=resolved_display_options,
-        section_header_style=section_header_style,
+        section_header_style=resolved_section_header_style,
     )
 
     _format_seeds(
         lines,
         plan,
         display_options=resolved_display_options,
-        section_header_style=section_header_style,
+        section_header_style=resolved_section_header_style,
     )
     _format_warnings(lines, plan)
 
@@ -211,7 +205,7 @@ def _format_full_refresh(
 
     if include_header:
         lines.append(
-            green_bold(
+            CliStyle(use_color=True).success_strong(
                 _plan_ready_header(
                     selected_count=selected_count,
                     source_load_entries=plan.source_load_entries,
@@ -838,13 +832,14 @@ def _format_warnings(lines: list[str], plan: PlanOutput) -> None:
     ]
     if not warning_entries:
         return
+    style: CliStyle = CliStyle(use_color=True)
     lines.append("")
-    lines.append(yellow_bold(f"Warnings ({len(warning_entries)})"))
+    lines.append(style.warning_strong(f"Warnings ({len(warning_entries)})"))
     warning: PlanWarning
     for warning in warning_entries:
         if warning.model_name is not None:
-            lines.append(f"  {blue_bold(warning.model_name)}")
-        lines.append(f"  {yellow(f'- {warning.message}')}")
+            lines.append(f"  {style.object_name(warning.model_name)}")
+        lines.append(f"  {style.warning(f'- {warning.message}')}")
 
 
 def _format_virtual_metadata(
@@ -927,9 +922,10 @@ def _resolve_name_column_width(plan: PlanOutput) -> int:
 
 
 def _format_name_value_line(name: str, value: str, *, name_column_width: int) -> str:
+    style: CliStyle = CliStyle(use_color=True)
     return format_aligned_name_value(
         plain_name=name,
-        styled_name=blue_bold(name),
+        styled_name=style.object_name(name),
         value=value,
         name_column_width=name_column_width,
     )
@@ -938,6 +934,7 @@ def _format_name_value_line(name: str, value: str, *, name_column_width: int) ->
 def _format_schema_findings(findings: tuple[SchemaFinding, ...]) -> list[str]:
     """Format schema findings as indented diff lines."""
 
+    style: CliStyle = CliStyle(use_color=True)
     lines: list[str] = []
     finding: SchemaFinding
     for finding in findings:
@@ -950,11 +947,11 @@ def _format_schema_findings(findings: tuple[SchemaFinding, ...]) -> list[str]:
         kind_label: str = _schema_kind_label(finding.kind)
         line: str = f"      {symbol} {finding.column_name}{type_info}   ({kind_label})"
         if finding.kind == SchemaChangeKind.COLUMN_ADDED:
-            lines.append(green(line))
+            lines.append(style.success(line))
         elif finding.kind == SchemaChangeKind.COLUMN_REMOVED:
-            lines.append(red(line))
+            lines.append(style.error(line))
         elif finding.kind == SchemaChangeKind.COLUMN_TYPE_CHANGED:
-            lines.append(yellow(line))
+            lines.append(style.warning(line))
         else:
             lines.append(line)
     return lines
@@ -975,6 +972,7 @@ def _schema_kind_label(kind: SchemaChangeKind) -> str:
 def _format_query_diff(previous: str, current: str) -> list[str]:
     """Format a unified diff between previous and current SQL."""
 
+    style: CliStyle = CliStyle(use_color=True)
     previous_lines: list[str] = previous.splitlines(keepends=True)
     current_lines: list[str] = current.splitlines(keepends=True)
     diff_lines: list[str] = list(
@@ -986,9 +984,9 @@ def _format_query_diff(previous: str, current: str) -> list[str]:
         stripped: str = line.rstrip("\n")
         formatted: str = f"      {stripped}"
         if stripped.startswith("+") and not stripped.startswith("+++"):
-            result.append(green(formatted))
+            result.append(style.success(formatted))
         elif stripped.startswith("-") and not stripped.startswith("---"):
-            result.append(red(formatted))
+            result.append(style.error(formatted))
         else:
             result.append(formatted)
     return result

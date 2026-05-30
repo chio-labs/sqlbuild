@@ -127,6 +127,7 @@ def run_virtual_build(
         no_sql_validation=no_sql_validation,
         cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
+        on_progress=on_progress,
     )
     custom_materializations: dict[
         str, Callable[[MaterializationContext], MaterializationResult]

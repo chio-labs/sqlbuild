@@ -42,6 +42,47 @@ def check_no_relative_imports(file_path: Path, module: ast.Module) -> list[Viola
     return violations
 
 
+def check_no_raw_color_helper_imports(file_path: Path, module: ast.Module) -> list[Violation]:
+    """Reject direct raw color helper imports outside low-level styling modules."""
+
+    if file_path.as_posix().endswith("src/sqlbuild/shared/helpers/colors.py"):
+        return []
+
+    violations: list[Violation] = []
+    for node in ast.walk(module):
+        if isinstance(node, ast.ImportFrom) and node.module == "sqlbuild.shared.helpers.colors":
+            imported_names: set[str] = {alias.name for alias in node.names}
+            raw_names: set[str] = imported_names - {"supports_color"}
+            if raw_names:
+                violations.append(
+                    Violation(
+                        code="SC041",
+                        path=file_path,
+                        line=node.lineno,
+                        message=(
+                            "runtime output modules must use CliStyle instead of raw color "
+                            "helpers; only supports_color may be imported from "
+                            "sqlbuild.shared.helpers.colors"
+                        ),
+                    )
+                )
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "sqlbuild.shared.helpers.colors":
+                    violations.append(
+                        Violation(
+                            code="SC041",
+                            path=file_path,
+                            line=node.lineno,
+                            message=(
+                                "runtime output modules must not import "
+                                "sqlbuild.shared.helpers.colors directly; use CliStyle"
+                            ),
+                        )
+                    )
+    return violations
+
+
 def check_banned_generic_filename(file_path: Path) -> list[Violation]:
     """Reject vague generic module names in runtime and script code."""
 

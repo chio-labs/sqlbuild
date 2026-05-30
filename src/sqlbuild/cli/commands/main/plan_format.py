@@ -6,7 +6,6 @@ from collections.abc import Callable
 
 from sqlbuild.cli.commands.main.helpers.plan.formatter import format_plan as _format_plan
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.shared.helpers.colors import light_green
 from sqlbuild.shared.helpers.display import DisplayOptions
 
 
@@ -16,7 +15,7 @@ def format_plan(
     use_color: bool = True,
     include_header: bool = True,
     display_options: DisplayOptions | None = None,
-    section_header_style: Callable[[str], str] = light_green,
+    section_header_style: Callable[[str], str] | None = None,
 ) -> str:
     """Format a SQLBuild plan."""
 

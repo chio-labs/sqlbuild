@@ -6,7 +6,8 @@ import sys
 import time
 from typing import IO
 
-from sqlbuild.executor.build.helpers.color import colorize_status, supports_color
+from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.colors import supports_color
 
 
 class BuildConsole:
@@ -22,6 +23,7 @@ class BuildConsole:
         self._stream: IO[str] = stream or sys.stdout
         self._is_tty: bool = hasattr(self._stream, "isatty") and self._stream.isatty()
         self._use_color: bool = use_color if use_color is not None else supports_color()
+        self._style: CliStyle = CliStyle(use_color=self._use_color)
         self._total: int = total
         self._counter: int = 0
         self._current_name: str | None = None
@@ -48,7 +50,7 @@ class BuildConsole:
         self._start_time = time.monotonic()
         if self._is_tty:
             counter_str: str = self._format_counter(self._counter + 1)
-            status: str = colorize_status("...", use_color=self._use_color)
+            status: str = self._style.status("...")
             line: str = f"  {counter_str}  {resource_type:<6} {name:<40} {status}"
             self._stream.write(f"\r{line}")
             self._stream.flush()

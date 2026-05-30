@@ -14,7 +14,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtLsNode,
 )
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
-from sqlbuild.shared.helpers.colors import dim, orange_bold
+from sqlbuild.shared.helpers.cli_style import CliStyle
 
 
 def execute_dbt_commands(
@@ -34,11 +34,10 @@ def execute_dbt_commands(
         progress_stream.flush()
         return 0
     argv: tuple[str, ...] = merged_argv
-    dbt_execution_label: str = orange_bold("dbt execution") if use_color else "dbt execution"
+    style: CliStyle = CliStyle(use_color=use_color)
+    dbt_execution_label: str = style.dbt_execution_label("dbt execution")
     dbt_execution_detail_text: str = " ".join(argv[:2]) if len(argv) >= 2 else argv[0]
-    dbt_execution_detail: str = (
-        dim(dbt_execution_detail_text) if use_color else dbt_execution_detail_text
-    )
+    dbt_execution_detail: str = style.muted(dbt_execution_detail_text)
     progress_stream.write(f"{dbt_execution_label}  {dbt_execution_detail}\n\n")
     progress_stream.write(f"Running dbt: {' '.join(argv)}\n")
     progress_stream.flush()

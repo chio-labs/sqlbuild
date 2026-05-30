@@ -6,7 +6,9 @@ from pathlib import Path
 
 from sqlbuild.cli.commands.main.helpers.playground.copy import create_playground_project
 from sqlbuild.cli.commands.main.helpers.skills.update import update_sqlbuild_skills
-from sqlbuild.shared.helpers.colors import blue_bold, dim, green_bold, supports_color
+from sqlbuild.shared.helpers.cli_document import CliDocument
+from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.colors import supports_color
 
 
 def run_playground(
@@ -23,19 +25,7 @@ def run_playground(
     update_sqlbuild_skills(project_dir=target_dir)
     display_path: str = str(target_path)
     use_color: bool = supports_color()
-    heading: str = (
-        green_bold("SQLBuild playground created") if use_color else "SQLBuild playground created"
-    )
-    project_label: str = blue_bold("Project") if use_color else "Project"
-    adapter_label: str = blue_bold("Adapter") if use_color else "Adapter"
-    example_label: str = blue_bold("Example") if use_color else "Example"
-    try_label: str = green_bold("Try") if use_color else "Try"
-    command_prefix: str = dim("  ") if use_color else "  "
-
-    print(heading)
-    print()
-    print(f"  {project_label}: {display_path}")
-    print(f"  {adapter_label}: DuckDB")
+    style: CliStyle = CliStyle(use_color=use_color)
     example_name: str = (
         "waffle shop + Dagster"
         if template == "dagster"
@@ -47,26 +37,34 @@ def run_playground(
         if template == "loader_waffle_shop"
         else "waffle shop"
     )
-    print(f"  {example_label}: {example_name}")
-    print()
-    print(f"{try_label}:")
-    print(f"{command_prefix}cd {display_path}")
+    doc: CliDocument = CliDocument(style)
+    doc.header("SQLBuild playground created")
+    doc.blank()
+    doc.field("Project", display_path)
+    doc.field("Adapter", "DuckDB")
+    doc.field("Example", example_name)
+    doc.blank()
+    doc.title_section("Try")
+    commands: list[str] = [f"cd {display_path}"]
     if template == "virtual":
-        print(f"{command_prefix}sqb state init")
-        print(f"{command_prefix}sqb build")
-        print(f"{command_prefix}sqb build --virtual-env pr")
-        print(f"{command_prefix}sqb test")
-        print(f"{command_prefix}sqb audit")
-        print(f"{command_prefix}sqb scenario test")
-        print(f"{command_prefix}sqb diff dev:pr --schema-only")
-        print(f"{command_prefix}sqb promote --from pr --to dev")
+        commands.extend(
+            [
+                "sqb state init",
+                "sqb build",
+                "sqb build --virtual-env pr",
+                "sqb test",
+                "sqb audit",
+                "sqb scenario test",
+                "sqb diff dev:pr --schema-only",
+                "sqb promote --from pr --to dev",
+            ]
+        )
     else:
-        print(f"{command_prefix}sqb compile")
-        print(f"{command_prefix}sqb build")
-        print(f"{command_prefix}sqb test")
-        print(f"{command_prefix}sqb audit")
+        commands.extend(["sqb compile", "sqb build", "sqb test", "sqb audit"])
     if template == "dagster":
-        print(f"{command_prefix}DAGSTER_IS_DEV_CLI=1 dagster dev -f dagster/definitions.py")
+        commands.append("DAGSTER_IS_DEV_CLI=1 dagster dev -f dagster/definitions.py")
     if template == "rivers":
-        print(f"{command_prefix}rivers dev rivers_pipeline.definitions")
+        commands.append("rivers dev rivers_pipeline.definitions")
+    doc.commands(tuple(commands), style_command=False)
+    print(doc.render(), end="")
     return 0

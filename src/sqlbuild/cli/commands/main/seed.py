@@ -19,7 +19,7 @@ from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
 )
-from sqlbuild.cli.commands.main.shared.helpers.progress import format_build_header
+from sqlbuild.cli.commands.main.shared.helpers.progress import write_execution_header
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
@@ -27,14 +27,9 @@ from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.build.types import ExecutionStatus
 from sqlbuild.executor.pipeline.main.run import run_seed_pipeline
+from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.coded_errors import format_coded_error
-from sqlbuild.shared.helpers.colors import (
-    blue_bold,
-    colorize_status,
-    dim,
-    green_bold,
-    supports_color,
-)
+from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
@@ -97,21 +92,23 @@ def run_seed(
         concurrency if concurrency is not None else pipeline_result.project.settings.concurrency,
     )
     seed_count: int = len(pipeline_result.plan_output.seed_entries)
+    style: CliStyle = CliStyle(use_color=use_color)
     ready_header: str = f"Seed ready ({seed_count} selected)"
-    styled_ready_header: str = green_bold(ready_header) if use_color else ready_header
+    styled_ready_header: str = style.success_strong(ready_header)
     progress_stream.write(f"\n{styled_ready_header}\n\n")
     seeds_header: str = f"Seeds ({seed_count})"
-    styled_seeds_header: str = green_bold(seeds_header) if use_color else seeds_header
+    styled_seeds_header: str = style.success_strong(seeds_header)
     progress_stream.write(f"{styled_seeds_header}\n")
     for seed_entry in pipeline_result.plan_output.seed_entries:
         progress_stream.write(f"  {seed_entry.name}\n")
-    execution_header: str = format_build_header(
-        command="sqb seed", target=None, concurrency=effective_concurrency
+    progress_stream.write("\n")
+    write_execution_header(
+        stream=progress_stream,
+        command="sqb seed",
+        target=None,
+        concurrency=effective_concurrency,
+        use_color=use_color,
     )
-    execution_label: str = blue_bold("Execution") if use_color else "Execution"
-    header_detail: str = dim(execution_header) if use_color else execution_header
-    progress_stream.write(f"\n{execution_label}  {header_detail}\n\n")
-    progress_stream.flush()
 
     start: float = time.monotonic()
     on_complete: Callable[[SeedExecutionResult], None] = _build_on_complete(
@@ -171,7 +168,8 @@ def _build_on_complete(
 ) -> Callable[[SeedExecutionResult], None]:
     def _on_complete(result: SeedExecutionResult) -> None:
         status_text: str = "OK" if result.status == ExecutionStatus.SUCCESS else "FAIL"
-        status: str = colorize_status(status_text, use_color=use_color)
+        style: CliStyle = CliStyle(use_color=use_color)
+        status: str = style.status(status_text)
         duration: str = ""
         if result.duration_ms is not None:
             seconds: float = result.duration_ms / 1000.0

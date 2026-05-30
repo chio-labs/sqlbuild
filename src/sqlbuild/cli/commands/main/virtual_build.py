@@ -26,7 +26,7 @@ from sqlbuild.cli.commands.main.shared.helpers.planning_progress import (
 from sqlbuild.cli.commands.main.shared.helpers.progress import (
     BuildProgressCallbacks,
     format_build_footer,
-    format_build_header,
+    write_execution_header,
 )
 from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import write_runtime_target
 from sqlbuild.cli.commands.main.shared.helpers.snapshot_full_refresh import (
@@ -35,7 +35,6 @@ from sqlbuild.cli.commands.main.shared.helpers.snapshot_full_refresh import (
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.executor.build.types import BuildStatus
-from sqlbuild.shared.helpers.colors import blue_bold, dim
 from sqlbuild.shared.helpers.display import DisplayOptions
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.virtual.executor.main.build import run_virtual_build as run_virtual_build_pipeline
@@ -189,8 +188,10 @@ def run_virtual_build(
 
 
 def _write_execution_header(*, stream: TextIO, concurrency: int, use_color: bool) -> None:
-    header: str = format_build_header(command="sqb build", target=None, concurrency=concurrency)
-    execution_label: str = blue_bold("Execution") if use_color else "Execution"
-    header_detail: str = dim(header) if use_color else header
-    stream.write(f"{execution_label}  {header_detail}\n\n")
-    stream.flush()
+    write_execution_header(
+        stream=stream,
+        command="sqb build",
+        target=None,
+        concurrency=concurrency,
+        use_color=use_color,
+    )

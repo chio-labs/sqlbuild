@@ -16,6 +16,7 @@ from sqlbuild.cli.commands.main.shared.helpers.progress import (
     _AuditDisplayEntry,
     _truncate_name,
     format_build_footer,
+    write_execution_header,
 )
 from sqlbuild.cli.commands.main.shared.models import NestedProgressChildRow
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
@@ -41,6 +42,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import
     BuildProgressModelOutputTestCase,
     BuildProgressSpinnerLifecycleTestCase,
     BuildProgressSqlTestRowsTestCase,
+    ExecutionHeaderTestCase,
     NestedProgressChildRowsTestCase,
     TruncateNameTestCase,
 )
@@ -241,6 +243,7 @@ BUILD_FOOTER_TEST_CASES: list[BuildFooterTestCase] = [
             "is_completed_order  (function)",
             "warehouse said no",
         ),
+        unexpected_fragments=("\033[",),
     ),
     BuildFooterTestCase(
         description="failed seed result includes failure count and error",
@@ -259,6 +262,7 @@ BUILD_FOOTER_TEST_CASES: list[BuildFooterTestCase] = [
             "waffle_types  (seed)",
             "failed to load seed CSV",
         ),
+        unexpected_fragments=("\033[",),
     ),
     BuildFooterTestCase(
         description="function warning appears in summary and warnings section",
@@ -282,6 +286,46 @@ BUILD_FOOTER_TEST_CASES: list[BuildFooterTestCase] = [
             "is_completed_order_py  (function)",
             "fingerprint write skipped",
         ),
+        unexpected_fragments=("\033[",),
+    ),
+    BuildFooterTestCase(
+        description="warning footer uses semantic colors",
+        result=BuildExecutionResult(
+            status=BuildStatus.SUCCESS,
+            function_results=(
+                FunctionExecutionResult(
+                    function_name="is_completed_order_py",
+                    status=ExecutionStatus.SUCCESS,
+                    warning_messages=("fingerprint write skipped",),
+                ),
+            ),
+            success_count=1,
+            warning_count=1,
+        ),
+        expected_fragments=(
+            "\033[33mCompleted with warnings.\033[0m",
+            "\033[33m\033[1mWarnings:\033[0m",
+        ),
+        use_color=True,
+    ),
+    BuildFooterTestCase(
+        description="failure footer uses semantic colors",
+        result=BuildExecutionResult(
+            status=BuildStatus.FAILED,
+            function_results=(
+                FunctionExecutionResult(
+                    function_name="is_completed_order",
+                    status=ExecutionStatus.FAILED,
+                    error_message="warehouse said no",
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "\033[31mCompleted with errors.\033[0m",
+            "\033[31m\033[1mFailures:\033[0m",
+            "\033[31m\033[2merror\033[0m",
+        ),
+        use_color=True,
     ),
     BuildFooterTestCase(
         description="footer failure error text truncates after four lines",
@@ -304,7 +348,27 @@ BUILD_FOOTER_TEST_CASES: list[BuildFooterTestCase] = [
             "line three",
             "line four...",
         ),
-        unexpected_fragments=("line five should not appear",),
+        unexpected_fragments=("line five should not appear", "\033["),
+    ),
+]
+
+EXECUTION_HEADER_TEST_CASES: list[ExecutionHeaderTestCase] = [
+    ExecutionHeaderTestCase(
+        description="renders no-color execution header",
+        command="sqb build",
+        target=None,
+        concurrency=1,
+        use_color=False,
+        expected_output="Execution  sqb build  (concurrency: 1)\n\n",
+    ),
+    ExecutionHeaderTestCase(
+        description="renders colored execution header",
+        command="sqb build",
+        target=None,
+        concurrency=1,
+        use_color=True,
+        expected_output="\033[34m\033[1mExecution\033[0m  "
+        "\033[2msqb build  (concurrency: 1)\033[0m\n\n",
     ),
 ]
 
@@ -323,7 +387,7 @@ BUILD_PROGRESS_FAILURE_OUTPUT_TEST_CASES: list[BuildProgressFailureOutputTestCas
             "0.03s",
             "error     failed to load seed CSV",
         ),
-        unexpected_fragments=("0.03s  failed to load seed CSV",),
+        unexpected_fragments=("0.03s  failed to load seed CSV", "\033["),
     ),
     BuildProgressFailureOutputTestCase(
         description="failed function writes multiline error detail below result row",
@@ -343,7 +407,22 @@ BUILD_PROGRESS_FAILURE_OUTPUT_TEST_CASES: list[BuildProgressFailureOutputTestCas
             "error     003001 (42501): SQL access control error:",
             "          Insufficient privileges to operate on schema 'TEST'.",
         ),
-        unexpected_fragments=("0.11s  003001",),
+        unexpected_fragments=("0.11s  003001", "\033["),
+    ),
+    BuildProgressFailureOutputTestCase(
+        description="failed function colors status and error label semantically",
+        node_result=FunctionExecutionResult(
+            function_name="is_completed_order",
+            status=ExecutionStatus.FAILED,
+            duration_ms=110,
+            error_message="warehouse said no",
+        ),
+        expected_fragments=(
+            "\033[31mFAIL\033[0m",
+            "\033[31m\033[2merror\033[0m",
+            "warehouse said no",
+        ),
+        use_color=True,
     ),
     BuildProgressFailureOutputTestCase(
         description="failed model keeps phase on row and writes error below",
@@ -360,7 +439,7 @@ BUILD_PROGRESS_FAILURE_OUTPUT_TEST_CASES: list[BuildProgressFailureOutputTestCas
             "0.42s  staging",
             "error     relation raw_orders does not exist",
         ),
-        unexpected_fragments=("staging  relation raw_orders does not exist",),
+        unexpected_fragments=("staging  relation raw_orders does not exist", "\033["),
     ),
     BuildProgressFailureOutputTestCase(
         description="live error detail truncates after four lines",
@@ -378,7 +457,7 @@ BUILD_PROGRESS_FAILURE_OUTPUT_TEST_CASES: list[BuildProgressFailureOutputTestCas
             "          line three",
             "          line four...",
         ),
-        unexpected_fragments=("line five should not appear",),
+        unexpected_fragments=("line five should not appear", "\033["),
     ),
 ]
 
@@ -403,6 +482,60 @@ BUILD_PROGRESS_ACTIVE_SPINNER_TEST_CASES: list[BuildProgressActiveSpinnerTestCas
         node_type=ExecutionResourceKind.SNAPSHOT,
         expected_fragments=("snapshot", "customer_snapshot", "⠋"),
         unexpected_fragments=("table",),
+    ),
+]
+
+BUILD_PROGRESS_MODEL_OUTPUT_TEST_CASES: list[BuildProgressModelOutputTestCase] = [
+    BuildProgressModelOutputTestCase(
+        description="completed snapshot row shows strategy and historical shape annotation",
+        node_result=ModelExecutionResult(
+            model_name="customer_snapshot",
+            status=ExecutionStatus.SUCCESS,
+            duration_ms=120,
+        ),
+        plan_output=build_progress_snapshot_plan_output(
+            observed_at_column="loaded_at",
+            historical_input="changes",
+        ),
+        expected_fragments=(
+            "snapshot  customer_snapshot  (timestamp, historical changes)",
+            "OK",
+            "0.12s",
+        ),
+        unexpected_fragments=("table",),
+    ),
+    BuildProgressModelOutputTestCase(
+        description="completed model row uses semantic status color",
+        node_result=ModelExecutionResult(
+            model_name="fact_orders",
+            status=ExecutionStatus.SUCCESS,
+            duration_ms=100,
+        ),
+        plan_output=PlanOutput(),
+        expected_fragments=("\033[32mOK\033[0m", "0.10s"),
+        use_color=True,
+    ),
+]
+
+BUILD_PROGRESS_LOAD_LOG_TEST_CASES: list[BuildProgressLoadLogTestCase] = [
+    BuildProgressLoadLogTestCase(
+        description="completed source load renders multiline lifecycle logs",
+        expected_fragments=(
+            "source    raw_orders",
+            "log  ingestr stdout",
+            "         Starting data ingestion",
+            "         Rows: 3",
+        ),
+        unexpected_fragments=("\033[",),
+    ),
+    BuildProgressLoadLogTestCase(
+        description="completed source load colors log label and content semantically",
+        expected_fragments=(
+            "\033[34m\033[2m    log  \033[0m",
+            "\033[2mingestr stdout\033[0m",
+            "\033[2m         Starting data ingestion\033[0m",
+        ),
+        use_color=True,
     ),
 ]
 
@@ -505,7 +638,9 @@ def test_given_audit_results_when_aggregating_then_produces_expected_entries(
 def test_given_failed_resource_result_when_formatting_footer_then_includes_error(
     test_case: BuildFooterTestCase,
 ) -> None:
-    footer: str = format_build_footer(result=test_case.result, elapsed=1.25, use_color=False)
+    footer: str = format_build_footer(
+        result=test_case.result, elapsed=1.25, use_color=test_case.use_color
+    )
 
     expected_fragment: str
     for expected_fragment in test_case.expected_fragments:
@@ -513,6 +648,27 @@ def test_given_failed_resource_result_when_formatting_footer_then_includes_error
     unexpected_fragment: str
     for unexpected_fragment in test_case.unexpected_fragments:
         assert unexpected_fragment not in footer
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    EXECUTION_HEADER_TEST_CASES,
+    ids=[case.description for case in EXECUTION_HEADER_TEST_CASES],
+)
+def test_given_execution_context_when_writing_header_then_renders_expected_output(
+    test_case: ExecutionHeaderTestCase,
+) -> None:
+    stream: StringIO = StringIO()
+
+    write_execution_header(
+        stream=stream,
+        command=test_case.command,
+        target=test_case.target,
+        concurrency=test_case.concurrency,
+        use_color=test_case.use_color,
+    )
+
+    assert stream.getvalue() == test_case.expected_output
 
 
 @pytest.mark.parametrize(
@@ -528,7 +684,7 @@ def test_given_failed_top_level_node_when_reporting_progress_then_writes_error_d
     monkeypatch.setattr("sys.stdout", stream)
     callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
         plan=PlanOutput(),
-        use_color=False,
+        use_color=test_case.use_color,
     )
 
     callbacks.on_node_complete(test_case.node_result)
@@ -544,27 +700,8 @@ def test_given_failed_top_level_node_when_reporting_progress_then_writes_error_d
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        BuildProgressModelOutputTestCase(
-            description="completed snapshot row shows strategy and historical shape annotation",
-            node_result=ModelExecutionResult(
-                model_name="customer_snapshot",
-                status=ExecutionStatus.SUCCESS,
-                duration_ms=120,
-            ),
-            plan_output=build_progress_snapshot_plan_output(
-                observed_at_column="loaded_at",
-                historical_input="changes",
-            ),
-            expected_fragments=(
-                "snapshot  customer_snapshot  (timestamp, historical changes)",
-                "OK",
-                "0.12s",
-            ),
-            unexpected_fragments=("table",),
-        )
-    ],
-    ids=["completed snapshot row shows strategy and historical shape annotation"],
+    BUILD_PROGRESS_MODEL_OUTPUT_TEST_CASES,
+    ids=[case.description for case in BUILD_PROGRESS_MODEL_OUTPUT_TEST_CASES],
 )
 def test_given_model_node_when_reporting_progress_then_writes_materialization_label(
     test_case: BuildProgressModelOutputTestCase,
@@ -574,7 +711,7 @@ def test_given_model_node_when_reporting_progress_then_writes_materialization_la
     monkeypatch.setattr("sys.stdout", stream)
     callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
         plan=test_case.plan_output,
-        use_color=False,
+        use_color=test_case.use_color,
     )
 
     callbacks.on_node_complete(test_case.node_result)
@@ -590,18 +727,8 @@ def test_given_model_node_when_reporting_progress_then_writes_materialization_la
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        BuildProgressLoadLogTestCase(
-            description="completed source load renders multiline lifecycle logs",
-            expected_fragments=(
-                "source    raw_orders",
-                "log  ingestr stdout",
-                "         Starting data ingestion",
-                "         Rows: 3",
-            ),
-        )
-    ],
-    ids=["completed source load renders multiline lifecycle logs"],
+    BUILD_PROGRESS_LOAD_LOG_TEST_CASES,
+    ids=[case.description for case in BUILD_PROGRESS_LOAD_LOG_TEST_CASES],
 )
 def test_given_source_load_logs_when_reporting_progress_then_writes_indented_log_block(
     test_case: BuildProgressLoadLogTestCase,
@@ -611,7 +738,7 @@ def test_given_source_load_logs_when_reporting_progress_then_writes_indented_log
     monkeypatch.setattr("sys.stdout", stream)
     callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
         plan=PlanOutput(),
-        use_color=False,
+        use_color=test_case.use_color,
     )
 
     callbacks.on_node_complete(

@@ -2,38 +2,42 @@
 
 from __future__ import annotations
 
-from sqlbuild.shared.helpers.colors import blue_bold, dim, green, green_bold
+from sqlbuild.shared.helpers.cli_document import CliDocument
+from sqlbuild.shared.helpers.cli_style import CliStyle
 
 
 def format_reconcile_output(*, message: str, use_color: bool) -> str:
     """Format virtual reconcile output."""
 
-    title: str = green_bold("Virtual reconcile") if use_color else "Virtual reconcile"
-    rendered_message: str = _format_reconcile_message(message=message, use_color=use_color)
-    return "\n" + title + "\n\n" + rendered_message + "\n"
+    style: CliStyle = CliStyle(use_color=use_color)
+    doc: CliDocument = CliDocument(style)
+    doc.blank()
+    doc.header("Virtual reconcile")
+    doc.blank()
+    doc.line(_format_reconcile_message(message=message, style=style))
+    return doc.render()
 
 
-def _format_reconcile_message(*, message: str, use_color: bool) -> str:
-    if not use_color:
+def _format_reconcile_message(*, message: str, style: CliStyle) -> str:
+    if not style.use_color:
         return message
     if "no issues" in message:
-        return blue_bold(message)
+        return style.value(message)
     lines: list[str] = message.splitlines()
     if not lines or lines[0] not in {"Repair", "Attach"}:
         return message
-    formatted: list[str] = [green(lines[0])]
+    formatted: list[str] = [style.success(lines[0])]
     for line in lines[1:]:
         stripped: str = line.strip()
         label, _, value = stripped.partition("  ")
-        formatted.append(
-            f"  {dim(f'{label:<8}')} {_format_reconcile_value(label=label, value=value.strip())}"
-        )
+        rendered_value: str = _format_reconcile_value(label=label, value=value.strip(), style=style)
+        formatted.append(f"  {style.muted(f'{label:<8}')} {rendered_value}")
     return "\n".join(formatted)
 
 
-def _format_reconcile_value(*, label: str, value: str) -> str:
+def _format_reconcile_value(*, label: str, value: str, style: CliStyle) -> str:
     if label in {"model", "VDE", "physical"}:
-        return blue_bold(value)
+        return style.object_name(value)
     if label == "result":
-        return green(value)
+        return style.success(value)
     return value

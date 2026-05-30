@@ -52,6 +52,17 @@ class BuildFooterTestCase:
     result: BuildExecutionResult
     expected_fragments: tuple[str, ...]
     unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
+    use_color: bool = False
+
+
+@dataclass(frozen=True)
+class ExecutionHeaderTestCase:
+    description: str
+    command: str
+    target: str | None
+    concurrency: int
+    use_color: bool
+    expected_output: str
 
 
 @dataclass(frozen=True)
@@ -60,6 +71,7 @@ class BuildProgressFailureOutputTestCase:
     node_result: object
     expected_fragments: tuple[str, ...]
     unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
+    use_color: bool = False
 
 
 @dataclass(frozen=True)
@@ -69,6 +81,7 @@ class BuildProgressModelOutputTestCase:
     plan_output: PlanOutput
     expected_fragments: tuple[str, ...]
     unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
+    use_color: bool = False
 
 
 @dataclass(frozen=True)
@@ -112,6 +125,7 @@ class BuildProgressLoadLogTestCase:
     description: str
     expected_fragments: tuple[str, ...]
     unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
+    use_color: bool = False
 
 
 @dataclass(frozen=True)

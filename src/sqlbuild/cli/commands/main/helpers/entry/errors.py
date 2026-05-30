@@ -7,8 +7,8 @@ import sys
 from collections.abc import Callable, Sequence
 from typing import NoReturn
 
+from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.coded_errors import format_coded_error
-from sqlbuild.shared.helpers.colors import red_bold
 
 
 class SqlbuildArgumentParser(argparse.ArgumentParser):
@@ -18,7 +18,8 @@ class SqlbuildArgumentParser(argparse.ArgumentParser):
 
     def error(self, message: str) -> NoReturn:
         self.print_usage(sys.stderr)
-        prefix: str = _style("error[C900]:", red_bold, use_color=self.use_color)
+        style: CliStyle = CliStyle(use_color=self.use_color)
+        prefix: str = style.error_strong("error[C900]:")
         self.exit(2, f"{self.prog}: {prefix} {message}\n\n")
 
 
@@ -47,9 +48,3 @@ def cli_error_use_color(
 ) -> bool:
     raw_args: Sequence[str] = sys.argv[1:] if argv is None else argv
     return "--no-color" not in raw_args and supports_color()
-
-
-def _style(text: str, styler: Callable[[str], str], *, use_color: bool) -> str:
-    if not use_color:
-        return text
-    return styler(text)

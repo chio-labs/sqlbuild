@@ -11,4 +11,5 @@ class FormatPromoteOutputTestCase:
     remaining_stale: tuple[str, ...]
     verbose: bool
     expected_fragments: tuple[str, ...]
+    expected_color_fragments: tuple[str, ...] = ()
     unexpected_fragments: tuple[str, ...] = ()
