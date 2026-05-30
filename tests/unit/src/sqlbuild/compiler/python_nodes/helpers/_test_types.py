@@ -22,3 +22,15 @@ class PythonLoaderNodeConversionTestCase:
     expected_column_names: tuple[str, ...]
     expected_contract: str | None
     expected_connection_mode: LoaderConnectionMode
+
+
+@dataclass(frozen=True)
+class PythonNodeGraphInventoryTestCase:
+    description: str
+    expected_names: tuple[str, ...]
+    expected_kinds: tuple[PythonNodeKind, ...]
+    expected_typed_selectors: tuple[str, ...]
+    expected_dependency_edges: tuple[tuple[str, str], ...]
+    expected_task_tags: tuple[str, ...]
+    expected_asset_column_names: tuple[str, ...]
+    expected_check_severity: str

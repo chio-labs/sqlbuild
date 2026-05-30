@@ -8,6 +8,8 @@ from pathlib import Path
 
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
+from sqlbuild.shared.models import ColumnLineageRef, RetryPolicy
+from sqlbuild.shared.types import PythonCheckSeverity
 from sqlbuild.spec.models.source import SourceColumnEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy
 
@@ -26,6 +28,29 @@ class DiscoveredPythonLoaderMetadata:
 
 
 @dataclass(frozen=True)
+class DiscoveredPythonTaskMetadata:
+    """Task-specific metadata carried by an internal Python task node."""
+
+    retry: RetryPolicy | None = None
+
+
+@dataclass(frozen=True)
+class DiscoveredPythonAssetMetadata:
+    """Asset-specific metadata carried by an internal Python asset node."""
+
+    columns: tuple[SourceColumnEntry, ...] = field(default_factory=tuple)
+    column_lineage: dict[str, tuple[ColumnLineageRef, ...]] | None = None
+    retry: RetryPolicy | None = None
+
+
+@dataclass(frozen=True)
+class DiscoveredPythonCheckMetadata:
+    """Check-specific metadata carried by an internal Python check node."""
+
+    severity: PythonCheckSeverity = PythonCheckSeverity.ERROR
+
+
+@dataclass(frozen=True)
 class DiscoveredPythonNode:
     """Shared internal view of a discovered Python DAG node."""
 
@@ -38,7 +63,11 @@ class DiscoveredPythonNode:
     tags: tuple[str, ...] = field(default_factory=tuple)
     group: str | None = None
     description: str | None = None
+    meta: dict[str, object] | None = None
     loader: DiscoveredPythonLoaderMetadata | None = None
+    task: DiscoveredPythonTaskMetadata | None = None
+    asset: DiscoveredPythonAssetMetadata | None = None
+    check: DiscoveredPythonCheckMetadata | None = None
 
 
 @dataclass(frozen=True)
@@ -49,6 +78,16 @@ class PythonNodeDependencyEdge:
     downstream_name: str
     upstream_function: Callable[..., object]
     downstream_function: Callable[..., object]
+
+
+@dataclass(frozen=True)
+class PythonNodeGraph:
+    """Internal graph inventory for discovered executable Python nodes."""
+
+    nodes: tuple[DiscoveredPythonNode, ...]
+    dependency_edges: tuple[PythonNodeDependencyEdge, ...]
+    nodes_by_name: dict[str, DiscoveredPythonNode]
+    nodes_by_typed_selector: dict[str, DiscoveredPythonNode]
 
 
 @dataclass(frozen=True)
