@@ -107,6 +107,20 @@ class LoadDagWorkerFailureTestCase:
 
 
 @dataclass(frozen=True)
+class LoadDagStateSchedulingTestCase:
+    """One loader DAG state scheduling behavior case."""
+
+    description: str
+    source_names: tuple[str, ...]
+    upstream_names: dict[str, tuple[str, ...]]
+    downstream_names: dict[str, tuple[str, ...]]
+    completed_source_name: str
+    expected_initial_ready: tuple[str, ...]
+    expected_final_ready: tuple[str, ...]
+    expected_callback_sources: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ExternalLoadPipelineTestCase:
     """One external loader pipeline behavior case."""
 
