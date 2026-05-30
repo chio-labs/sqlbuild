@@ -19,3 +19,10 @@ class FormatPlanTestCase:
     expected_fragments: tuple[str, ...] = field(default_factory=tuple)
     unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
     expected_ordered_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class FormatPlanColorTestCase:
+    description: str
+    plan_output: PlanOutput
+    expected_fragments: tuple[str, ...]

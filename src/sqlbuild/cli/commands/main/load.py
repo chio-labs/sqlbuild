@@ -23,7 +23,7 @@ from sqlbuild.cli.commands.main.shared.helpers.parsers import (
     parse_cursor_integer,
     parse_cursor_timestamp,
 )
-from sqlbuild.cli.commands.main.shared.helpers.progress import format_build_header
+from sqlbuild.cli.commands.main.shared.helpers.progress import write_execution_header
 from sqlbuild.compiler.compile.main.effective_environment import build_effective_environment_config
 from sqlbuild.compiler.compile.main.effective_runtime import build_effective_runtime_config
 from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config
@@ -32,13 +32,8 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.executor.load.main.run import run_load_pipeline
 from sqlbuild.executor.load.models import LoadExecutionResult
-from sqlbuild.shared.helpers.colors import (
-    blue_bold,
-    colorize_status,
-    dim,
-    green_bold,
-    supports_color,
-)
+from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -70,14 +65,15 @@ def run_load(
         ),
     )
     use_color: bool = not no_color and supports_color()
+    style: CliStyle = CliStyle(use_color=use_color)
     progress_stream: TextIO = sys.stderr if json_output else sys.stdout
     ready_header: str = f"Load ready ({len(selected_sources)} selected)"
-    styled_ready_header: str = green_bold(ready_header) if use_color else ready_header
+    styled_ready_header: str = style.success_strong(ready_header)
     progress_stream.write(f"\n{styled_ready_header}\n\n")
     progress_stream.flush()
     if not selected_sources:
         message: str = "  No managed sources selected."
-        progress_stream.write((dim(message) if use_color else message) + "\n")
+        progress_stream.write(style.muted(message) + "\n")
         progress_stream.write("\nCompleted successfully.\n")
         progress_stream.write("PASS=0  WARN=0  FAIL=0  SKIP=0  TOTAL=0  (0.00s)\n")
         progress_stream.flush()
@@ -117,13 +113,13 @@ def run_load(
     )
     if loader_entries:
         loaders_header: str = f"Loaders ({len(loader_entries)})"
-        styled_loaders_header: str = green_bold(loaders_header) if use_color else loaders_header
+        styled_loaders_header: str = style.success_strong(loaders_header)
         progress_stream.write(f"{styled_loaders_header}\n")
         for source in loader_entries:
             progress_stream.write(f"  {source.name}\n")
         progress_stream.write("\n")
     sources_header: str = f"Sources ({len(source_entries)})"
-    styled_sources_header: str = green_bold(sources_header) if use_color else sources_header
+    styled_sources_header: str = style.success_strong(sources_header)
     progress_stream.write(f"{styled_sources_header}\n")
     source: SourceEntry
     for source in source_entries:
@@ -149,13 +145,13 @@ def run_load(
         blank_line_after_complete=True,
         use_color=use_color,
     )
-    execution_header: str = format_build_header(
-        command="sqb load", target=None, concurrency=effective_concurrency
+    write_execution_header(
+        stream=progress_stream,
+        command="sqb load",
+        target=None,
+        concurrency=effective_concurrency,
+        use_color=use_color,
     )
-    execution_label: str = blue_bold("Execution") if use_color else "Execution"
-    header_detail: str = dim(execution_header) if use_color else execution_header
-    progress_stream.write(f"{execution_label}  {header_detail}\n\n")
-    progress_stream.flush()
     results: tuple[LoadExecutionResult, ...] = run_load_pipeline(
         sources=selected_sources,
         loader_functions=discovered_inputs.loader_functions,
@@ -212,7 +208,8 @@ def _build_on_complete(
             if result.status.value == "skipped"
             else "FAIL"
         )
-        status: str = colorize_status(status_text, use_color=use_color)
+        style: CliStyle = CliStyle(use_color=use_color)
+        status: str = style.status(status_text)
         duration: str = ""
         if result.duration_ms is not None:
             duration = f"{result.duration_ms / 1000.0:.2f}s"

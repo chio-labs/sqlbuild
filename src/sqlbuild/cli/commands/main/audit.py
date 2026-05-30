@@ -20,7 +20,7 @@ from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
 )
 from sqlbuild.cli.commands.main.shared.helpers.nested_progress import NestedCommandProgressCallbacks
 from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
-from sqlbuild.cli.commands.main.shared.helpers.progress import format_build_header
+from sqlbuild.cli.commands.main.shared.helpers.progress import write_execution_header
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -29,7 +29,8 @@ from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.pipeline.main.run import run_audit_pipeline
-from sqlbuild.shared.helpers.colors import blue_bold, dim, green_bold, supports_color
+from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
@@ -64,9 +65,6 @@ def run_audit(
     )
     use_color: bool = not no_color and supports_color()
     progress_stream: TextIO = sys.stderr if json_output else sys.stdout
-    execution_header: str = format_build_header(command="sqb audit", target=None, concurrency=1)
-    execution_label: str = blue_bold("Execution") if use_color else "Execution"
-    header_detail: str = dim(execution_header) if use_color else execution_header
     connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
         adapter_name=resolve_effective_adapter_name(
             project_config=discovered_inputs.project_config,
@@ -79,8 +77,14 @@ def run_audit(
         stream=progress_stream,
         use_color=use_color,
     )
-    progress_stream.write(f"\n{execution_label}  {header_detail}\n\n")
-    progress_stream.flush()
+    progress_stream.write("\n")
+    write_execution_header(
+        stream=progress_stream,
+        command="sqb audit",
+        target=None,
+        concurrency=1,
+        use_color=use_color,
+    )
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
@@ -109,7 +113,8 @@ def run_audit(
         }
     )
     header: str = f"Audit ({audit_count} selected, {model_count} models)"
-    styled_header: str = green_bold(header) if use_color else header
+    style: CliStyle = CliStyle(use_color=use_color)
+    styled_header: str = style.success_strong(header)
     progress: NestedCommandProgressCallbacks = NestedCommandProgressCallbacks(
         total=audit_count,
         label="audit",

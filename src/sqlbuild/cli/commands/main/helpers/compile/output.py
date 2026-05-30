@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
@@ -26,7 +25,7 @@ from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic, RelatedLoca
 from sqlbuild.compiler.diagnostics.types import DiagnosticSeverity
 from sqlbuild.compiler.lineage.models import ModelColumnLineage, ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.shared.helpers.colors import blue_bold, dim, green, green_bold, red, yellow
+from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.spec.models.schema import SourceLocation
 
 _HUMAN_MODEL_LIMIT: int = 100
@@ -46,12 +45,9 @@ def format_compile_text(
 ) -> str:
     """Format human-readable compile output."""
 
+    style: CliStyle = CliStyle(use_color=use_color)
     lines: list[str] = [
-        _style(
-            f"Compile ready ({_count_label(len(graph.project.models), 'model')})",
-            green_bold,
-            use_color,
-        ),
+        style.success_strong(f"Compile ready ({_count_label(len(graph.project.models), 'model')})"),
         "",
     ]
     visible_models: tuple[CompiledModel, ...] = graph.project.models[:_HUMAN_MODEL_LIMIT]
@@ -60,55 +56,48 @@ def format_compile_text(
     for model in visible_models:
         model_name: str = _fit(model.name, width=model_name_width)
         status: str = "FAIL" if model.name in error_models else "OK"
-        status_styler: Callable[[str], str] = red if status == "FAIL" else green
         lines.append(
-            f"  {_style(model_name, blue_bold, use_color)} "
-            f"{_style(status, status_styler, use_color)} "
-            f"{_style(f'{_column_count(model)} columns', dim, use_color)}"
+            f"  {style.object_name(model_name)} "
+            f"{style.status(status)} "
+            f"{style.muted(f'{_column_count(model)} columns')}"
         )
     hidden_model_count: int = len(graph.project.models) - len(visible_models)
     if hidden_model_count > 0:
         lines.append("")
         lines.append(
             "  "
-            + _style(
-                f"Showing {len(visible_models)} of {len(graph.project.models)} models.",
-                dim,
-                use_color,
-            )
+            + style.muted(f"Showing {len(visible_models)} of {len(graph.project.models)} models.")
         )
-        lines.append("  " + _style("Use --json for the full compile report.", dim, use_color))
+        lines.append("  " + style.muted("Use --json for the full compile report."))
     lines.append("")
     if diagnostics:
         lines.append(
             _format_diagnostics_text(
                 diagnostics,
                 source_texts=_model_source_texts(graph.project.models),
-                use_color=use_color,
+                style=style,
             )
         )
         lines.append("")
     error_count: int = _diagnostic_count(diagnostics, DiagnosticSeverity.ERROR)
     warning_count: int = _diagnostic_count(diagnostics, DiagnosticSeverity.WARNING)
     lines.append(
-        f"  {_style('Compiled:', green_bold, use_color)} "
+        f"  {style.success_strong('Compiled:')} "
         f"{_count_label(len(graph.project.models), 'model')}, "
         f"{_count_label(len(graph.project.seeds), 'seed')}, "
         f"{_count_label(len(graph.project.functions), 'function')}, "
         f"{_count_label(error_count, 'error')}, "
         f"{_count_label(warning_count, 'warning')}"
     )
-    lines.append(
-        f"  {_style('Wrote:', dim, use_color)} {_relative_target_path(_compiled_sql_dir(written))}/"
-    )
+    lines.append(f"  {style.muted('Wrote:')} {_relative_target_path(_compiled_sql_dir(written))}/")
     if manifest:
-        lines.append(f"  {_style('Wrote:', dim, use_color)} target/manifest.json")
+        lines.append(f"  {style.muted('Wrote:')} target/manifest.json")
     if (
         lineage is None
         and graph.project.settings.sqlglot
         and lineage_mode != CompileLineageMode.NONE
     ):
-        lines.append(f"  {_style('Column lineage:', yellow, use_color)} unavailable")
+        lines.append(f"  {style.warning('Column lineage:')} unavailable")
     return "\n" + "\n".join(lines) + "\n"
 
 
@@ -365,7 +354,7 @@ def _location_to_json(location: SourceLocation) -> dict[str, object]:
 
 
 def _format_diagnostics_text(
-    diagnostics: tuple[CompilerDiagnostic, ...], *, source_texts: dict[Path, str], use_color: bool
+    diagnostics: tuple[CompilerDiagnostic, ...], *, source_texts: dict[Path, str], style: CliStyle
 ) -> str:
     lines: list[str] = []
     for diagnostic in diagnostics:
@@ -373,7 +362,7 @@ def _format_diagnostics_text(
             _format_diagnostic_text(
                 diagnostic,
                 source_texts=source_texts,
-                use_color=use_color,
+                style=style,
             )
         )
         lines.append("")
@@ -383,17 +372,17 @@ def _format_diagnostics_text(
 
 
 def _format_diagnostic_text(
-    diagnostic: CompilerDiagnostic, *, source_texts: dict[Path, str], use_color: bool
+    diagnostic: CompilerDiagnostic, *, source_texts: dict[Path, str], style: CliStyle
 ) -> list[str]:
     header: str = f"{diagnostic.severity}[{diagnostic.code}]: {diagnostic.message}"
-    lines: list[str] = [_style(header, _diagnostic_styler(diagnostic), use_color)]
+    lines: list[str] = [_style_diagnostic(header, diagnostic, style=style)]
     if diagnostic.resource_name is not None:
         label: str = "model"
         resource: str = diagnostic.resource_name
         if diagnostic.resource_type is not None and str(diagnostic.resource_type) != "model":
             label = "resource"
             resource = f"{diagnostic.resource_type}: {resource}"
-        lines.append(f"  {label}: {_style(resource, blue_bold, use_color)}")
+        lines.append(f"  {label}: {style.object_name(resource)}")
     if diagnostic.location is not None:
         lines.extend(
             _format_location_block(
@@ -414,7 +403,7 @@ def _format_diagnostic_text(
             )
         )
     if diagnostic.help is not None:
-        lines.append(f"  {_style('= help:', dim, use_color)} {diagnostic.help}")
+        lines.append(f"  {style.muted('= help:')} {diagnostic.help}")
     return lines
 
 
@@ -464,12 +453,12 @@ def _model_source_texts(models: tuple[CompiledModel, ...]) -> dict[Path, str]:
     return {model.relative_path: model.authored_sql for model in models if model.authored_sql}
 
 
-def _diagnostic_styler(diagnostic: CompilerDiagnostic) -> Callable[[str], str]:
+def _style_diagnostic(text: str, diagnostic: CompilerDiagnostic, *, style: CliStyle) -> str:
     if diagnostic.severity == DiagnosticSeverity.ERROR:
-        return red
+        return style.error(text)
     if diagnostic.severity == DiagnosticSeverity.WARNING:
-        return yellow
-    return dim
+        return style.warning(text)
+    return style.muted(text)
 
 
 def _serialize_key(key: CompiledObjectKey) -> dict[str, str]:
@@ -515,9 +504,3 @@ def _sqlbuild_version() -> str:
         return version("sqlbuild")
     except PackageNotFoundError:
         return "unknown"
-
-
-def _style(text: str, styler: Callable[[str], str], use_color: bool) -> str:
-    if not use_color:
-        return text
-    return styler(text)
