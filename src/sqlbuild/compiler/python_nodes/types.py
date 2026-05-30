@@ -27,3 +27,11 @@ class SkipMode(StrEnum):
 
     SELF = "self"
     DOWNSTREAM = "downstream"
+
+
+class PythonNodeFanInAction(StrEnum):
+    """How a Python node should proceed after evaluating upstream outcomes."""
+
+    RUN = "run"
+    SKIP = "skip"
+    BLOCK = "block"
