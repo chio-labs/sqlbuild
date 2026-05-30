@@ -10,9 +10,9 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,
-    ScenarioAssertionCheckPlan,
+    ScenarioAssertionExpectationPlan,
     ScenarioExecutionPlan,
-    ScenarioExpectedCheckPlan,
+    ScenarioExpectedExpectationPlan,
     ScenarioFixturePlan,
     ScenarioGraphPlan,
     ScenarioRelationMap,
@@ -201,8 +201,8 @@ def build_duckdb_expected_check_plan(*, expected_sql: str) -> ScenarioExecutionP
             ),
             model_targets={"daily_revenue": model_target},
         ),
-        expected_checks=(
-            ScenarioExpectedCheckPlan(
+        expected_expectations=(
+            ScenarioExpectedExpectationPlan(
                 model_name="daily_revenue",
                 actual_target=model_target,
                 expected_sql=expected_sql,
@@ -233,8 +233,8 @@ def build_duckdb_assertion_check_plan(*, assertion_sql: str) -> ScenarioExecutio
                 hash_prefix=HASH_PREFIX,
             ),
         ),
-        assertion_checks=(
-            ScenarioAssertionCheckPlan(
+        assertion_expectations=(
+            ScenarioAssertionExpectationPlan(
                 name="no_unknown_customers",
                 sql=assertion_sql,
             ),

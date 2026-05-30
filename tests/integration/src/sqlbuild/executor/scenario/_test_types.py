@@ -41,7 +41,7 @@ class ScenarioModelBuildIntegrationTestCase:
 
 
 @dataclass(frozen=True)
-class ScenarioExpectedCheckIntegrationTestCase:
+class ScenarioExpectedExpectationIntegrationTestCase:
     description: str
     expected_sql: str
     expected_status: ExecutionStatus
@@ -51,7 +51,7 @@ class ScenarioExpectedCheckIntegrationTestCase:
 
 
 @dataclass(frozen=True)
-class ScenarioAssertionCheckIntegrationTestCase:
+class ScenarioAssertionExpectationIntegrationTestCase:
     description: str
     assertion_sql: str
     expected_status: ExecutionStatus

@@ -19,8 +19,8 @@ from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario.models import (
-    ScenarioAssertionCheckExecutionResult,
-    ScenarioExpectedCheckExecutionResult,
+    ScenarioAssertionExpectationExecutionResult,
+    ScenarioExpectedExpectationExecutionResult,
     ScenarioRunResult,
     ScenarioSnapshotCaptureRelationResult,
     ScenarioSnapshotCaptureRunResult,
@@ -459,7 +459,7 @@ def _format_scenario_result(result: ScenarioRunResult) -> dict[str, object]:
 
 
 def _format_scenario_expected(
-    result: ScenarioExpectedCheckExecutionResult,
+    result: ScenarioExpectedExpectationExecutionResult,
 ) -> dict[str, object]:
     return _drop_none(
         {
@@ -476,7 +476,7 @@ def _format_scenario_expected(
 
 
 def _format_scenario_assertion(
-    result: ScenarioAssertionCheckExecutionResult,
+    result: ScenarioAssertionExpectationExecutionResult,
 ) -> dict[str, object]:
     return _drop_none(
         {

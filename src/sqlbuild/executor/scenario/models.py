@@ -240,7 +240,7 @@ class ScenarioCleanupExecutionResult:
 
 
 @dataclass(frozen=True)
-class ScenarioExpectedCheckExecutionResult:
+class ScenarioExpectedExpectationExecutionResult:
     """Outcome of comparing one scenario model relation to expected SQL."""
 
     scenario_name: str
@@ -255,7 +255,7 @@ class ScenarioExpectedCheckExecutionResult:
 
 
 @dataclass(frozen=True)
-class ScenarioAssertionCheckExecutionResult:
+class ScenarioAssertionExpectationExecutionResult:
     """Outcome of executing one zero-row scenario assertion."""
 
     scenario_name: str
@@ -286,10 +286,10 @@ class ScenarioRunResult:
     seed_results: tuple[SeedExecutionResult, ...] = field(default_factory=tuple)
     function_results: tuple[FunctionExecutionResult, ...] = field(default_factory=tuple)
     model_results: tuple[ModelExecutionResult, ...] = field(default_factory=tuple)
-    expected_results: tuple[ScenarioExpectedCheckExecutionResult, ...] = field(
+    expected_results: tuple[ScenarioExpectedExpectationExecutionResult, ...] = field(
         default_factory=tuple
     )
-    assertion_results: tuple[ScenarioAssertionCheckExecutionResult, ...] = field(
+    assertion_results: tuple[ScenarioAssertionExpectationExecutionResult, ...] = field(
         default_factory=tuple
     )
     prepare_cleanup_result: ScenarioCleanupExecutionResult | None = None

@@ -125,7 +125,7 @@ def format_build_output(
             step_result: StepResult
             for step_result in test_result.step_results:
                 lines.append(
-                    _format_test_check_sub_line(
+                    _format_test_expectation_sub_line(
                         step_result,
                         use_color=use_color,
                         name_width=sub_name_width,
@@ -304,7 +304,7 @@ def _format_audit_sub_line(entry: _AuditDisplayEntry, *, use_color: bool, name_w
     )
 
 
-def _format_test_check_sub_line(
+def _format_test_expectation_sub_line(
     step_result: StepResult, *, use_color: bool, name_width: int
 ) -> str:
     status: str = _test_outcome_to_status(step_result.outcome)
@@ -317,17 +317,17 @@ def _format_test_check_sub_line(
             detail = f"  {step_result.mismatched_row_count} mismatched"
     style: CliStyle = CliStyle(use_color=use_color)
     colored_status: str = style.status(status, f"{status}{detail}")
-    name: str = _format_test_check_name(step_result.model_name)
+    name: str = _format_test_expectation_name(step_result.model_name)
     return format_aligned_name_value(
         plain_name=name,
         styled_name=name,
         value=colored_status,
         name_column_width=name_width,
-        prefix=f"{'':>14}{'check':<4} ",
+        prefix=f"{'':>14}{'expect':<6} ",
     )
 
 
-def _format_test_check_name(model_name: str) -> str:
+def _format_test_expectation_name(model_name: str) -> str:
     if model_name.startswith("assertion "):
         return model_name
     return f"expected {model_name}"
@@ -363,7 +363,7 @@ def _sub_name_width(result: BuildExecutionResult) -> int:
         names.append(test_result.test_name)
         step_result: StepResult
         for step_result in test_result.step_results:
-            names.append(_format_test_check_name(step_result.model_name))
+            names.append(_format_test_expectation_name(step_result.model_name))
     model_result: ModelExecutionResult
     for model_result in result.model_results:
         audit_entry: _AuditDisplayEntry

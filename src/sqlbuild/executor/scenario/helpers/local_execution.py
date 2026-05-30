@@ -13,18 +13,18 @@ from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.models import (
     FunctionPlanEntry,
     ModelPlanEntry,
-    ScenarioAssertionCheckPlan,
+    ScenarioAssertionExpectationPlan,
     ScenarioExecutionPlan,
-    ScenarioExpectedCheckPlan,
+    ScenarioExpectedExpectationPlan,
     ScenarioRelationPlan,
 )
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.build.models import FunctionExecutionResult
 from sqlbuild.executor.functions.main.execute import execute_function
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.scenario.helpers.checks import (
-    execute_scenario_assertion_checks,
-    execute_scenario_expected_checks,
+from sqlbuild.executor.scenario.helpers.expectations import (
+    execute_scenario_assertion_expectations,
+    execute_scenario_expected_expectations,
 )
 from sqlbuild.executor.scenario.helpers.local_snapshots import (
     load_scenario_snapshot_into_duckdb,
@@ -41,8 +41,8 @@ from sqlbuild.executor.scenario.helpers.snapshots import (
     classify_scenario_snapshot_state,
 )
 from sqlbuild.executor.scenario.models import (
-    ScenarioAssertionCheckExecutionResult,
-    ScenarioExpectedCheckExecutionResult,
+    ScenarioAssertionExpectationExecutionResult,
+    ScenarioExpectedExpectationExecutionResult,
     ScenarioLocalSnapshotLoadedRelation,
     ScenarioLocalSnapshotLoadResult,
     ScenarioRunResult,
@@ -223,33 +223,33 @@ def _build_local_execution_plan(
             )
         )
 
-    expected_checks: list[ScenarioExpectedCheckPlan] = []
-    expected_check: ScenarioExpectedCheckPlan
-    for expected_check in scenario_plan.expected_checks:
+    expected_expectations: list[ScenarioExpectedExpectationPlan] = []
+    expected_expectation: ScenarioExpectedExpectationPlan
+    for expected_expectation in scenario_plan.expected_expectations:
         expected_sql: str = replace_local_relations(
-            sql=expected_check.expected_sql,
+            sql=expected_expectation.expected_sql,
             relation_replacements=relation_replacements,
         )
         expected_sql = transpile_sql_for_local_duckdb(
             sql=expected_sql,
             source_dialect=source_dialect,
             scenario_name=scenario_plan.name,
-            resource_kind="expected check",
-            resource_name=expected_check.model_name,
+            resource_kind="expected comparison",
+            resource_name=expected_expectation.model_name,
         )
-        expected_checks.append(
+        expected_expectations.append(
             replace(
-                expected_check,
-                actual_target=relation_plan.model_targets[expected_check.model_name],
+                expected_expectation,
+                actual_target=relation_plan.model_targets[expected_expectation.model_name],
                 expected_sql=expected_sql,
             )
         )
 
-    assertion_checks: list[ScenarioAssertionCheckPlan] = []
-    assertion_check: ScenarioAssertionCheckPlan
-    for assertion_check in scenario_plan.assertion_checks:
+    assertion_expectations: list[ScenarioAssertionExpectationPlan] = []
+    assertion_expectation: ScenarioAssertionExpectationPlan
+    for assertion_expectation in scenario_plan.assertion_expectations:
         assertion_sql: str = replace_local_relations(
-            sql=assertion_check.sql,
+            sql=assertion_expectation.sql,
             relation_replacements=relation_replacements,
         )
         assertion_sql = transpile_sql_for_local_duckdb(
@@ -257,9 +257,9 @@ def _build_local_execution_plan(
             source_dialect=source_dialect,
             scenario_name=scenario_plan.name,
             resource_kind="assertion",
-            resource_name=assertion_check.name,
+            resource_name=assertion_expectation.name,
         )
-        assertion_checks.append(replace(assertion_check, sql=assertion_sql))
+        assertion_expectations.append(replace(assertion_expectation, sql=assertion_sql))
 
     return replace(
         scenario_plan,
@@ -268,8 +268,8 @@ def _build_local_execution_plan(
         seed_entries=(),
         function_entries=tuple(function_entries),
         model_entries=tuple(model_entries),
-        expected_checks=tuple(expected_checks),
-        assertion_checks=tuple(assertion_checks),
+        expected_expectations=tuple(expected_expectations),
+        assertion_expectations=tuple(assertion_expectations),
     )
 
 
@@ -324,17 +324,17 @@ def _execute_local_plan(
             error_message=_first_error(local_model_results),
         )
 
-    expected_results: tuple[ScenarioExpectedCheckExecutionResult, ...]
+    expected_results: tuple[ScenarioExpectedExpectationExecutionResult, ...]
     expected_results = _with_local_expected_check_error_codes(
-        execute_scenario_expected_checks(
+        execute_scenario_expected_expectations(
             scenario_plan=scenario_plan,
             adapter=adapter,
             connection=connection,
         )
     )
-    assertion_results: tuple[ScenarioAssertionCheckExecutionResult, ...]
+    assertion_results: tuple[ScenarioAssertionExpectationExecutionResult, ...]
     assertion_results = _with_local_assertion_check_error_codes(
-        execute_scenario_assertion_checks(
+        execute_scenario_assertion_expectations(
             scenario_plan=scenario_plan,
             adapter=adapter,
             connection=connection,
@@ -562,8 +562,8 @@ def _local_result(
     loaded_relations: tuple[ScenarioLocalSnapshotLoadedRelation, ...] = (),
     function_results: tuple[FunctionExecutionResult, ...] = (),
     model_results: tuple[ModelExecutionResult, ...] = (),
-    expected_results: tuple[ScenarioExpectedCheckExecutionResult, ...] = (),
-    assertion_results: tuple[ScenarioAssertionCheckExecutionResult, ...] = (),
+    expected_results: tuple[ScenarioExpectedExpectationExecutionResult, ...] = (),
+    assertion_results: tuple[ScenarioAssertionExpectationExecutionResult, ...] = (),
     error_code: str | None = None,
     error_help: str | None = None,
     error_message: str | None = None,
@@ -641,10 +641,10 @@ def _with_local_model_error_codes(
 
 
 def _with_local_expected_check_error_codes(
-    results: tuple[ScenarioExpectedCheckExecutionResult, ...],
-) -> tuple[ScenarioExpectedCheckExecutionResult, ...]:
-    remapped_results: list[ScenarioExpectedCheckExecutionResult] = []
-    result: ScenarioExpectedCheckExecutionResult
+    results: tuple[ScenarioExpectedExpectationExecutionResult, ...],
+) -> tuple[ScenarioExpectedExpectationExecutionResult, ...]:
+    remapped_results: list[ScenarioExpectedExpectationExecutionResult] = []
+    result: ScenarioExpectedExpectationExecutionResult
     for result in results:
         if result.error_code == SCENARIO_EXEC_EXPECTED_ERRORED:
             remapped_results.append(
@@ -660,10 +660,10 @@ def _with_local_expected_check_error_codes(
 
 
 def _with_local_assertion_check_error_codes(
-    results: tuple[ScenarioAssertionCheckExecutionResult, ...],
-) -> tuple[ScenarioAssertionCheckExecutionResult, ...]:
-    remapped_results: list[ScenarioAssertionCheckExecutionResult] = []
-    result: ScenarioAssertionCheckExecutionResult
+    results: tuple[ScenarioAssertionExpectationExecutionResult, ...],
+) -> tuple[ScenarioAssertionExpectationExecutionResult, ...]:
+    remapped_results: list[ScenarioAssertionExpectationExecutionResult] = []
+    result: ScenarioAssertionExpectationExecutionResult
     for result in results:
         if result.error_code == SCENARIO_EXEC_ASSERTION_ERRORED:
             remapped_results.append(

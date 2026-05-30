@@ -540,7 +540,7 @@ class ScenarioFixturePlan:
 
 
 @dataclass(frozen=True)
-class ScenarioExpectedCheckPlan:
+class ScenarioExpectedExpectationPlan:
     """Expected-output comparison inputs for one scenario target model."""
 
     model_name: str
@@ -549,7 +549,7 @@ class ScenarioExpectedCheckPlan:
 
 
 @dataclass(frozen=True)
-class ScenarioAssertionCheckPlan:
+class ScenarioAssertionExpectationPlan:
     """Zero-row assertion SQL for one scenario assertion CTE."""
 
     name: str
@@ -568,8 +568,12 @@ class ScenarioExecutionPlan:
     seed_entries: tuple[SeedPlanEntry, ...] = field(default_factory=tuple)
     function_entries: tuple[FunctionPlanEntry, ...] = field(default_factory=tuple)
     model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
-    expected_checks: tuple[ScenarioExpectedCheckPlan, ...] = field(default_factory=tuple)
-    assertion_checks: tuple[ScenarioAssertionCheckPlan, ...] = field(default_factory=tuple)
+    expected_expectations: tuple[ScenarioExpectedExpectationPlan, ...] = field(
+        default_factory=tuple
+    )
+    assertion_expectations: tuple[ScenarioAssertionExpectationPlan, ...] = field(
+        default_factory=tuple
+    )
 
 
 @dataclass(frozen=True)
