@@ -8,7 +8,7 @@ from sqlbuild.diagnostics.shared.constants import (
     FILE_LOG_DATE_FORMAT,
     SQL_SEPARATOR,
 )
-from sqlbuild.shared.helpers.colors import blue_bold, blue_dim, dim
+from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.diagnostics_logging import LOGGER_ROOT_NAME
 
 _SQL_EVENT_FIELD: str = "sqlbuild_sql"
@@ -44,7 +44,8 @@ class DiagnosticsConsoleFormatter(logging.Formatter):
             return _append_exception(record, header)
         if _render_sql_inline(sql):
             return _append_exception(record, f"{header}  {sql.strip()}")
-        separator: str = dim(SQL_SEPARATOR) if self._use_color else SQL_SEPARATOR
+        style: CliStyle = CliStyle(use_color=self._use_color)
+        separator: str = style.muted(SQL_SEPARATOR)
         return _append_exception(
             record,
             f"{header}\n{separator}\n{sql.rstrip()}\n{separator}",
@@ -65,15 +66,16 @@ def _short_logger_name(name: str) -> str:
 
 
 def _format_console_header(record: logging.LogRecord, *, use_color: bool) -> str:
+    style: CliStyle = CliStyle(use_color=use_color)
     level_tag: str = f"[{record.levelname.lower()}]"
     context_message: str | None = _format_context_message(record, use_color=use_color)
     if context_message is None:
         scope: str = _short_logger_name(record.name)
-        colored_scope: str = blue_bold(scope) if use_color else scope
+        colored_scope: str = style.object_name(scope)
         context_message = f"{colored_scope} {_normalize_console_message(record.getMessage())}"
     if not use_color:
         return f"{level_tag} {context_message}"
-    return f"{blue_dim(level_tag)} {context_message}"
+    return f"{style.log_label(level_tag)} {context_message}"
 
 
 def _normalize_console_message(message: str) -> str:
@@ -127,9 +129,7 @@ def _format_context_tokens(record: logging.LogRecord) -> list[str]:
 
 
 def _colorable_name(*, name: str, use_color: bool) -> str:
-    if not use_color:
-        return name
-    return blue_bold(name)
+    return CliStyle(use_color=use_color).object_name(name)
 
 
 def _get_record_sql(record: logging.LogRecord) -> str | None:

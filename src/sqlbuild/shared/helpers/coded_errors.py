@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-
-from sqlbuild.shared.helpers.colors import dim, red_bold
+from sqlbuild.shared.helpers.cli_style import CliStyle
 
 
 def error_code(error: BaseException, *, fallback_code: str) -> str:
@@ -31,15 +29,10 @@ def format_coded_error(
 ) -> str:
     """Render a result-stored coded error consistently with CLI expected errors."""
 
-    prefix: str = _style(f"error[{code}]:", red_bold, use_color=use_color)
+    style: CliStyle = CliStyle(use_color=use_color)
+    prefix: str = style.error_strong(f"error[{code}]:")
     rendered: str = f"{prefix} {message}"
     if help is not None:
-        help_label: str = _style("= help:", dim, use_color=use_color)
+        help_label: str = style.muted("= help:")
         rendered = f"{rendered}\n  {help_label} {help}"
     return rendered
-
-
-def _style(text: str, styler: Callable[[str], str], *, use_color: bool) -> str:
-    if not use_color:
-        return text
-    return styler(text)
