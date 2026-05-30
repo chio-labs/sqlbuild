@@ -14,6 +14,7 @@ TEST_CASES: list[CliStyleTestCase] = [
         expected_label="Label",
         expected_value="Value",
         expected_accent="Accent",
+        expected_plan_section="Plan section",
         expected_success="Success",
         expected_success_strong="Success strong",
         expected_warning="Warning",
@@ -36,6 +37,7 @@ TEST_CASES: list[CliStyleTestCase] = [
         expected_label="\033[2mLabel\033[0m",
         expected_value="\033[34m\033[1mValue\033[0m",
         expected_accent="\033[34mAccent\033[0m",
+        expected_plan_section="\033[92mPlan section\033[0m",
         expected_success="\033[32mSuccess\033[0m",
         expected_success_strong="\033[32m\033[1mSuccess strong\033[0m",
         expected_warning="\033[33mWarning\033[0m",
@@ -68,6 +70,7 @@ def test_given_cli_style_when_rendering_semantic_roles_then_returns_expected_tex
     assert style.label("Label") == test_case.expected_label
     assert style.value("Value") == test_case.expected_value
     assert style.accent("Accent") == test_case.expected_accent
+    assert style.plan_section("Plan section") == test_case.expected_plan_section
     assert style.success("Success") == test_case.expected_success
     assert style.success_strong("Success strong") == test_case.expected_success_strong
     assert style.warning("Warning") == test_case.expected_warning
@@ -94,6 +97,7 @@ def test_given_cli_style_when_rendering_semantic_roles_then_returns_expected_tex
             expected_label="",
             expected_value="",
             expected_accent="",
+            expected_plan_section="",
             expected_success="",
             expected_success_strong="",
             expected_warning="",

@@ -27,7 +27,6 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
 from sqlbuild.shared.helpers.cli_style import CliStyle
-from sqlbuild.shared.helpers.colors import light_green
 from sqlbuild.shared.helpers.display import DisplayOptions, append_overflow_line, visible_entries
 from sqlbuild.shared.helpers.materialization_labels import model_materialization_label
 from sqlbuild.shared.types import ExecutionResourceKind
@@ -61,7 +60,7 @@ def format_plan(
     use_color: bool = True,
     include_header: bool = True,
     display_options: DisplayOptions | None = None,
-    section_header_style: Callable[[str], str] = light_green,
+    section_header_style: Callable[[str], str] | None = None,
 ) -> str:
     """Format plan output grouped by reason with inline detail."""
 
@@ -69,6 +68,7 @@ def format_plan(
 
     resolved_display_options: DisplayOptions = display_options or DisplayOptions()
     style: CliStyle = CliStyle(use_color=True)
+    resolved_section_header_style: Callable[[str], str] = section_header_style or style.plan_section
 
     if full_refresh:
         _format_full_refresh(
@@ -76,7 +76,7 @@ def format_plan(
             plan,
             include_header=include_header,
             display_options=resolved_display_options,
-            section_header_style=section_header_style,
+            section_header_style=resolved_section_header_style,
         )
         result: str = "\n".join(lines)
         return result if use_color else _strip_ansi(result)
@@ -96,7 +96,7 @@ def format_plan(
     _format_virtual_metadata(
         lines,
         plan,
-        section_header_style=section_header_style,
+        section_header_style=resolved_section_header_style,
         display_options=resolved_display_options,
     )
 
@@ -105,7 +105,7 @@ def format_plan(
         plan,
         name_column_width=name_column_width,
         display_options=resolved_display_options,
-        section_header_style=section_header_style,
+        section_header_style=resolved_section_header_style,
     )
 
     normal: list[ModelPlanEntry] = _collect_normal(active)
@@ -117,7 +117,7 @@ def format_plan(
         plan,
         name_column_width=name_column_width,
         display_options=resolved_display_options,
-        section_header_style=section_header_style,
+        section_header_style=resolved_section_header_style,
     )
 
     reason: PlanReason
@@ -127,7 +127,7 @@ def format_plan(
             continue
         label: str = _REASON_GROUP_LABELS[reason]
         lines.append("")
-        lines.append(section_header_style(f"{label} ({len(entries)})"))
+        lines.append(resolved_section_header_style(f"{label} ({len(entries)})"))
         entry: ModelPlanEntry
         visible: Sequence[ModelPlanEntry] = visible_entries(
             entries, options=resolved_display_options
@@ -144,7 +144,7 @@ def format_plan(
 
     if cascade:
         lines.append("")
-        lines.append(section_header_style(f"Upstream changed ({len(cascade)})"))
+        lines.append(resolved_section_header_style(f"Upstream changed ({len(cascade)})"))
         entry_c: ModelPlanEntry
         visible_cascade: Sequence[ModelPlanEntry] = visible_entries(
             cascade, options=resolved_display_options
@@ -166,7 +166,7 @@ def format_plan(
             normal,
             name_column_width=name_column_width,
             display_options=resolved_display_options,
-            section_header_style=section_header_style,
+            section_header_style=resolved_section_header_style,
         )
 
     _format_routine_functions(
@@ -174,14 +174,14 @@ def format_plan(
         plan,
         name_column_width=name_column_width,
         display_options=resolved_display_options,
-        section_header_style=section_header_style,
+        section_header_style=resolved_section_header_style,
     )
 
     _format_seeds(
         lines,
         plan,
         display_options=resolved_display_options,
-        section_header_style=section_header_style,
+        section_header_style=resolved_section_header_style,
     )
     _format_warnings(lines, plan)
 

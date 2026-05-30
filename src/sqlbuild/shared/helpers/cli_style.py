@@ -10,6 +10,7 @@ _RED: str = "\033[31m"
 _GREEN: str = "\033[32m"
 _YELLOW: str = "\033[33m"
 _BLUE: str = "\033[34m"
+_LIGHT_GREEN: str = "\033[92m"
 _ORANGE: str = "\033[38;5;208m"
 
 default_cli_theme: CliTheme = CliTheme(
@@ -18,6 +19,7 @@ default_cli_theme: CliTheme = CliTheme(
     label=TextStyle(_DIM),
     value=TextStyle(_BLUE + _BOLD),
     accent=TextStyle(_BLUE),
+    plan_section=TextStyle(_LIGHT_GREEN),
     object_name=TextStyle(_BLUE + _BOLD),
     command=TextStyle(_DIM),
     success=TextStyle(_GREEN),
@@ -58,6 +60,9 @@ class CliStyle:
 
     def accent(self, text: str) -> str:
         return self.theme.accent.apply(text, use_color=self.use_color)
+
+    def plan_section(self, text: str) -> str:
+        return self.theme.plan_section.apply(text, use_color=self.use_color)
 
     def object_name(self, text: str) -> str:
         return self.theme.object_name.apply(text, use_color=self.use_color)
