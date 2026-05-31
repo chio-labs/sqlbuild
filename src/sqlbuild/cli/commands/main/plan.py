@@ -140,12 +140,18 @@ def run_plan(
             on_connection_error=connection_progress.on_connection_error,
             on_progress=planning_progress.on_progress,
             external_sql_reference_resolver=external_sql_reference_resolver,
+            resolve_python_run_selectors=True,
         )
 
     plan_output: PlanOutput = pipeline_result.plan_output
 
     if json_output:
-        print(format_plan_json(plan_output))
+        print(
+            format_plan_json(
+                plan_output,
+                python_plan_entries=pipeline_result.python_plan_entries,
+            )
+        )
         return 0
 
     display_options: DisplayOptions = DisplayOptions(
@@ -158,6 +164,7 @@ def run_plan(
             full_refresh=full_refresh,
             use_color=use_color,
             display_options=display_options,
+            python_plan_entries=pipeline_result.python_plan_entries,
         )
         + "\n"
     )

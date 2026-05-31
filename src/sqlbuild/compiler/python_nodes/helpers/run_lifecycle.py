@@ -25,6 +25,7 @@ def build_python_sql_run_lifecycle_plan(
         upstream_name
         for loader_name in selected_loader_names
         for upstream_name in _upstream_closure(node_name=loader_name, python_graph=python_graph)
+        if upstream_name in selected_python_names
         if python_graph.nodes_by_name[upstream_name].kind
         in {PythonNodeKind.TASK, PythonNodeKind.ASSET, PythonNodeKind.LOADER}
     )

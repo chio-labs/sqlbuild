@@ -59,6 +59,7 @@ def resolve_python_sql_selectors(
     exclude: tuple[str, ...],
     project_graph: ProjectGraph,
     python_graph: PythonNodeGraph,
+    validate_dependencies: bool = True,
 ) -> PythonSqlSelection:
     """Resolve selectors across compiled SQL resources and executable Python nodes."""
 
@@ -83,12 +84,29 @@ def resolve_python_sql_selectors(
         python_graph=python_graph,
     )
     selected -= excluded
-    selected.update(
-        _required_terminal_loader_atoms(
+    if validate_dependencies:
+        _validate_selected_dependencies(
             selected_atoms=selected, project_graph=project_graph, python_graph=python_graph
         )
-    )
     return _build_selection(selected)
+
+
+def validate_python_sql_selection_dependencies(
+    *,
+    selection: PythonSqlSelection,
+    project_graph: ProjectGraph,
+    python_graph: PythonNodeGraph,
+) -> None:
+    """Validate that a resolved SQL/Python selection contains required Python deps."""
+
+    _validate_selected_dependencies(
+        selected_atoms={
+            *(_sql_atom(key) for key in selection.sql_keys),
+            *(_python_atom(name) for name in selection.python_node_names),
+        },
+        project_graph=project_graph,
+        python_graph=python_graph,
+    )
 
 
 def validate_python_sql_boundaries(
@@ -250,20 +268,66 @@ def _resolve_single(
     *, raw: str, project_graph: ProjectGraph, python_graph: PythonNodeGraph
 ) -> frozenset[_SelectionAtom]:
     parsed: ParsedSelector | PathSelector = parse_project_selector(raw)
+    atoms: frozenset[_SelectionAtom]
     if isinstance(parsed, PathSelector):
-        return _resolve_sql(raw=raw, project_graph=project_graph)
+        atoms = _resolve_sql(raw=raw, project_graph=project_graph)
+        if parsed.upstream:
+            atoms = atoms | frozenset(
+                _required_terminal_loader_atoms(
+                    selected_atoms=set(atoms),
+                    project_graph=project_graph,
+                    python_graph=python_graph,
+                )
+            )
+        return atoms
     if parsed.kind == SelectorKind.PATH:
-        return _resolve_path(raw=raw, project_graph=project_graph, python_graph=python_graph)
+        atoms = _resolve_path(raw=raw, project_graph=project_graph, python_graph=python_graph)
+        if parsed.upstream:
+            atoms = atoms | frozenset(
+                _required_terminal_loader_atoms(
+                    selected_atoms=set(atoms),
+                    project_graph=project_graph,
+                    python_graph=python_graph,
+                )
+            )
+        return atoms
     if parsed.kind in _SQL_SELECTOR_KINDS:
-        return _resolve_sql(raw=raw, project_graph=project_graph)
+        atoms = _resolve_sql(raw=raw, project_graph=project_graph)
+        if parsed.upstream:
+            atoms = atoms | frozenset(
+                _required_terminal_loader_atoms(
+                    selected_atoms=set(atoms),
+                    project_graph=project_graph,
+                    python_graph=python_graph,
+                )
+            )
+        return atoms
     if parsed.kind in _PYTHON_SELECTOR_KINDS:
         return _resolve_python(raw=raw, python_graph=python_graph)
     if parsed.kind == SelectorKind.TAG:
-        return _resolve_tag(raw=raw, project_graph=project_graph, python_graph=python_graph)
+        atoms = _resolve_tag(raw=raw, project_graph=project_graph, python_graph=python_graph)
+        if parsed.upstream:
+            atoms = atoms | frozenset(
+                _required_terminal_loader_atoms(
+                    selected_atoms=set(atoms),
+                    project_graph=project_graph,
+                    python_graph=python_graph,
+                )
+            )
+        return atoms
     if parsed.kind == SelectorKind.NAME:
-        return _resolve_name(
+        atoms = _resolve_name(
             raw=raw, parsed=parsed, project_graph=project_graph, python_graph=python_graph
         )
+        if parsed.upstream:
+            atoms = atoms | frozenset(
+                _required_terminal_loader_atoms(
+                    selected_atoms=set(atoms),
+                    project_graph=project_graph,
+                    python_graph=python_graph,
+                )
+            )
+        return atoms
     raise PlannerInputError(f"unsupported selector '{raw}'")
 
 
@@ -385,6 +449,41 @@ def _required_terminal_loader_atoms(
             )
         )
     return required
+
+
+def _validate_selected_dependencies(
+    *,
+    selected_atoms: set[_SelectionAtom],
+    project_graph: ProjectGraph,
+    python_graph: PythonNodeGraph,
+) -> None:
+    selected_python_names: frozenset[str] = frozenset(
+        atom.value for atom in selected_atoms if isinstance(atom.value, str)
+    )
+    source_loader_by_name: dict[str, str] = _source_loader_by_name(project_graph=project_graph)
+    atom: _SelectionAtom
+    for atom in selected_atoms:
+        if not isinstance(atom.value, CompiledObjectKey):
+            continue
+        if atom.value.resource_type != CompiledResourceType.SOURCE:
+            continue
+        loader_name: str | None = source_loader_by_name.get(atom.value.name)
+        if loader_name is None or loader_name in selected_python_names:
+            continue
+        raise PlannerInputError(
+            f"Source '{atom.value.name}' requires loader '{loader_name}', but that loader was "
+            "not selected; select it directly or use upstream expansion"
+        )
+    node_name: str
+    for node_name in selected_python_names:
+        upstream_name: str
+        for upstream_name in python_graph.upstream_deps.get(node_name, ()):
+            if upstream_name in selected_python_names:
+                continue
+            raise PlannerInputError(
+                f"Python node '{node_name}' depends on unselected Python node "
+                f"'{upstream_name}'; select it directly or use upstream expansion"
+            )
 
 
 def _python_upstream_closure(*, node_name: str, python_graph: PythonNodeGraph) -> frozenset[str]:

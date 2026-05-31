@@ -6,6 +6,7 @@ import pytest
 
 from sqlbuild.cli.commands.main.helpers.plan.formatter import format_plan
 from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import CascadeCause, CascadeResult, CursorBounds
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
@@ -15,6 +16,7 @@ from sqlbuild.compiler.planner.types import (
     SchemaChangeKind,
     WarningSeverity,
 )
+from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunRegion
 from sqlbuild.shared.helpers.display import DisplayOptions
 from sqlbuild.spec.models.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers._test_types import (
@@ -369,6 +371,46 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "Plan ready (1 selected, 1 source to load)",
             "Sources to load (1)",
             "raw_orders",
+        ),
+    ),
+    FormatPlanTestCase(
+        description="plan shows python lifecycle sections",
+        plan_output=build_plan_output(
+            model_entries=(build_model_entry(name="fact_orders", action=PlanAction.CREATE_TABLE),),
+            source_load_entries=(build_source_load_entry(name="raw_orders"),),
+        ),
+        python_plan_entries=(
+            PythonPlanEntry(
+                name="prepare_orders",
+                kind=PythonNodeKind.TASK,
+                region=PythonRunRegion.PRE_SQL_INGRESS,
+            ),
+            PythonPlanEntry(
+                name="publish_orders",
+                kind=PythonNodeKind.ASSET,
+                region=PythonRunRegion.PRE_SQL_INGRESS,
+            ),
+            PythonPlanEntry(
+                name="profile_fact_orders",
+                kind=PythonNodeKind.TASK,
+                region=PythonRunRegion.SQL_READ_PYTHON,
+            ),
+        ),
+        expected_fragments=(
+            "Plan ready (1 selected, 1 source to load, 3 Python nodes)",
+            "Python ingress (2)",
+            "prepare_orders",
+            "task",
+            "publish_orders",
+            "asset",
+            "Python read-side (1)",
+            "profile_fact_orders",
+        ),
+        expected_ordered_fragments=(
+            "Python ingress (2)",
+            "Sources to load (1)",
+            "First run (1)",
+            "Python read-side (1)",
         ),
     ),
     FormatPlanTestCase(
@@ -744,6 +786,7 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
         full_refresh=test_case.full_refresh,
         use_color=False,
         display_options=test_case.display_options,
+        python_plan_entries=test_case.python_plan_entries,
     )
 
     fragment: str
