@@ -357,6 +357,72 @@ def test_given_virtual_read_side_python_failure_when_building_then_prints_python
     "test_case",
     [
         VirtualPythonBuildE2ETestCase(
+            description="prints read-side Python skip rows",
+            project_name="virtual_python_read_side_skip",
+            plan_command=(),
+            build_command=("--no-color", "build", "--select", "+fact_orders"),
+            expected_build_exit_code=0,
+            expected_build_fragments=(
+                "python    task      skip_fact_orders",
+                "SKIP",
+                "profile not needed",
+            ),
+        )
+    ],
+    ids=["prints read-side Python skip rows"],
+)
+def test_given_virtual_read_side_python_skip_when_building_then_prints_python_skip_row(
+    test_case: VirtualPythonBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "virtual_python_read_side_skip"\n'
+                'adapter = "duckdb"\n'
+                'environment_mode = "virtual"\n'
+                'default_environment = "dev"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n\n'
+                "[environments.dev]\n"
+                'schema = "dev"\n\n'
+                "[environments.dev.state]\n"
+                'backend = "duckdb"\n'
+                'schema = "sqlbuild_state"\n\n'
+                "[environments.dev.state.connection]\n"
+                'database = "state.duckdb"\n'
+            ),
+            "models/fact_orders.sql": "MODEL (materialized table);\n\nSELECT 7 AS order_id\n",
+            "tasks/profile.py": (
+                "from sqlbuild.refs import model\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task(depends_on=model('fact_orders'))\n"
+                "def skip_fact_orders(ctx):\n"
+                "    return ctx.skip('profile not needed')\n"
+            ),
+        },
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"), project_dir=project_dir
+    )
+    assert init_result.returncode == 0, init_result.stdout + init_result.stderr
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.build_command,
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == test_case.expected_build_exit_code
+    for fragment in test_case.expected_build_fragments:
+        assert fragment in build_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualPythonBuildE2ETestCase(
             description="no-python only runs loader-side Python nodes",
             project_name="virtual_no_python_nodes_build",
             plan_command=("--no-color", "plan", "--select", "+fact_orders", "--no-python"),

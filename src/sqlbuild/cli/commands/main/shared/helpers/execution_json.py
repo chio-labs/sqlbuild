@@ -48,17 +48,37 @@ def write_execution_json_output(
         sys.stdout.flush()
 
 
-def format_build_execution_json(*, result: BuildExecutionResult, plan: PlanOutput) -> str:
+def format_build_execution_json(
+    *,
+    result: BuildExecutionResult,
+    plan: PlanOutput,
+    python_node_results: tuple[PythonNodeExecutionResult, ...] = (),
+) -> str:
     """Format build command execution results as JSON."""
 
+    python_fail_count: int = _python_node_result_count(
+        results=python_node_results, status=PythonNodeStatus.FAILED
+    )
+    python_success_count: int = _python_node_result_count(
+        results=python_node_results, status=PythonNodeStatus.SUCCESS
+    )
+    python_skipped_count: int = _python_node_result_count(
+        results=python_node_results, status=PythonNodeStatus.SKIPPED
+    )
+    status: BuildStatus = (
+        BuildStatus.FAILED
+        if result.status == BuildStatus.FAILED or python_fail_count
+        else result.status
+    )
     return _format_execution_json(
         command="build",
-        status=result.status.value,
+        status=status.value,
         assets=(
             *_format_model_assets(results=result.model_results, plan=plan),
             *_format_seed_assets(results=result.seed_results, plan=plan),
             *_format_function_assets(results=result.function_results, plan=plan),
             *_format_load_assets(results=result.load_results),
+            *_format_python_node_assets(results=python_node_results),
         ),
         checks=(
             *_format_sql_test_checks(result.test_results),
@@ -71,9 +91,9 @@ def format_build_execution_json(*, result: BuildExecutionResult, plan: PlanOutpu
             ),
         ),
         summary={
-            "success_count": result.success_count,
-            "failure_count": result.failure_count,
-            "skipped_count": result.skipped_count,
+            "success_count": result.success_count + python_success_count,
+            "failure_count": result.failure_count + python_fail_count,
+            "skipped_count": result.skipped_count + python_skipped_count,
             "warning_count": result.warning_count,
         },
     )
@@ -87,20 +107,14 @@ def format_run_execution_json(
 ) -> str:
     """Format run command execution results as JSON."""
 
-    python_fail_count: int = sum(
-        1
-        for python_result in python_node_results
-        if python_result.status == PythonNodeStatus.FAILED
+    python_fail_count: int = _python_node_result_count(
+        results=python_node_results, status=PythonNodeStatus.FAILED
     )
-    python_success_count: int = sum(
-        1
-        for python_result in python_node_results
-        if python_result.status == PythonNodeStatus.SUCCESS
+    python_success_count: int = _python_node_result_count(
+        results=python_node_results, status=PythonNodeStatus.SUCCESS
     )
-    python_skipped_count: int = sum(
-        1
-        for python_result in python_node_results
-        if python_result.status == PythonNodeStatus.SKIPPED
+    python_skipped_count: int = _python_node_result_count(
+        results=python_node_results, status=PythonNodeStatus.SKIPPED
     )
     status: BuildStatus = (
         BuildStatus.FAILED
@@ -273,6 +287,12 @@ def _format_execution_json(
     if scenarios:
         payload["scenarios"] = scenarios
     return json.dumps(payload, indent=2) + "\n"
+
+
+def _python_node_result_count(
+    *, results: tuple[PythonNodeExecutionResult, ...], status: PythonNodeStatus
+) -> int:
+    return sum(1 for python_result in results if python_result.status == status)
 
 
 def _format_model_assets(
