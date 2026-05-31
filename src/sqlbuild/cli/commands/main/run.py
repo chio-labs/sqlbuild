@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any, TextIO
+from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compile_target
@@ -12,6 +12,10 @@ from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import (
     ConnectionProgressReporter,
+)
+from sqlbuild.cli.commands.main.shared.helpers.direct_python_lifecycle import (
+    DirectPythonLifecycleState,
+    prepare_direct_python_lifecycle,
 )
 from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
     format_run_execution_json,
@@ -33,12 +37,7 @@ from sqlbuild.cli.commands.main.shared.helpers.progress import (
     write_execution_header,
 )
 from sqlbuild.cli.commands.main.shared.helpers.python_nodes import (
-    load_result_key,
-    python_node_result_names,
     python_node_results_failed,
-    sql_loader_functions_for_lifecycle_handoff,
-    task_asset_python_node_names,
-    write_python_node_results,
 )
 from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import write_runtime_target
 from sqlbuild.cli.commands.main.shared.helpers.snapshot_full_refresh import (
@@ -48,29 +47,13 @@ from sqlbuild.compiler.compile.main.effective_settings import build_effective_se
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
-from sqlbuild.compiler.pipeline.main.relation_targets import build_python_relation_targets
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
-from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
-from sqlbuild.compiler.python_nodes.main.run_lifecycle import build_python_sql_run_lifecycle
-from sqlbuild.compiler.python_nodes.models import (
-    PythonNodeGraph,
-    PythonSqlRunLifecyclePlan,
-    PythonSqlRunSelection,
-)
-from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.executor.build.models import BuildExecutionResult
-from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
-from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.pipeline.main.run import run_build_pipeline
-from sqlbuild.executor.python_nodes.main.ingress import run_ingress_python_loader_nodes
-from sqlbuild.executor.python_nodes.main.read_side import create_read_side_python_execution_tracker
-from sqlbuild.executor.python_nodes.models import (
-    PythonIngressLoaderExecutorResult,
-    PythonNodeExecutionResult,
-)
+from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.shared.helpers.colors import supports_color
-from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
@@ -212,146 +195,28 @@ def run_run(
         use_color=use_color,
     )
 
-    all_task_asset_names: frozenset[str] = (
-        task_asset_python_node_names(
-            selected_names=pipeline_result.python_node_names,
-            discovered_inputs=discovered_inputs,
-        )
-        if include_python
-        else frozenset()
-    )
-    python_graph: PythonNodeGraph = build_discovered_python_node_graph(
-        discovered_inputs=discovered_inputs
-    )
-    planned_source_loader_names: frozenset[str] = frozenset(
-        entry.loader
-        for entry in plan_output.source_load_entries
-        if entry.loader in python_graph.nodes_by_name
-        and python_graph.nodes_by_name[entry.loader].kind == PythonNodeKind.LOADER
-    )
-    lifecycle_plan: PythonSqlRunLifecyclePlan = build_python_sql_run_lifecycle(
-        selection=PythonSqlRunSelection(
-            sql_keys=frozenset(plan_output.upstream_deps),
-            python_node_names=pipeline_result.python_node_names | planned_source_loader_names,
-        ),
-        python_graph=python_graph,
-    )
-    relation_targets: dict[SqlResourceRef, str] = build_python_relation_targets(
-        adapter=adapter,
-        project=pipeline_result.project,
+    python_lifecycle: DirectPythonLifecycleState = prepare_direct_python_lifecycle(
+        discovered_inputs=discovered_inputs,
+        pipeline_result=pipeline_result,
         plan_output=plan_output,
+        adapter=adapter,
+        connection_config=connection_config,
+        include_python=include_python,
+        reload_sources=reload_sources,
+        start_cursor_ts=parse_cursor_timestamp((cursor_overrides or CursorOverrides()).start_ts),
+        end_cursor_ts=parse_cursor_timestamp((cursor_overrides or CursorOverrides()).end_ts),
+        start_cursor_int=parse_cursor_integer((cursor_overrides or CursorOverrides()).start_int),
+        end_cursor_int=parse_cursor_integer((cursor_overrides or CursorOverrides()).end_int),
+        use_color=use_color,
+        progress_stream=progress_stream,
+        on_node_start=callbacks.on_node_start,
+        on_node_complete=callbacks.on_node_complete,
     )
-    selected_ingress_names: frozenset[str] = lifecycle_plan.ingress_python_node_names
-    ingress_connection: object | None = None
-    ingress_python_results: tuple[PythonNodeExecutionResult, ...] = ()
-    ingress_load_results: tuple[LoadExecutionResult, ...] = ()
-    if selected_ingress_names:
-        ingress_connection = adapter.connect(connection_config)
-        try:
-            ingress_result: PythonIngressLoaderExecutorResult = run_ingress_python_loader_nodes(
-                python_graph=python_graph,
-                selected_python_names=selected_ingress_names,
-                loader_functions=discovered_inputs.loader_functions,
-                source_map=plan_output.source_map,
-                adapter=adapter,
-                connection_config=connection_config,
-                connection=ingress_connection,
-                run_id=pipeline_result.project.run_id,
-                environment=pipeline_result.project.effective_environment_name,
-                vars=pipeline_result.project.effective_vars,
-                is_reload=reload_sources,
-                default_database=adapter.default_database(),
-                default_schema=adapter.default_schema(),
-                start_cursor_ts=parse_cursor_timestamp(
-                    (cursor_overrides or CursorOverrides()).start_ts
-                ),
-                end_cursor_ts=parse_cursor_timestamp(
-                    (cursor_overrides or CursorOverrides()).end_ts
-                ),
-                start_cursor_int=parse_cursor_integer(
-                    (cursor_overrides or CursorOverrides()).start_int
-                ),
-                end_cursor_int=parse_cursor_integer(
-                    (cursor_overrides or CursorOverrides()).end_int
-                ),
-                use_color=use_color,
-                on_node_start=callbacks.on_node_start,
-                on_node_complete=callbacks.on_node_complete,
-                relation_targets=relation_targets,
-            )
-        finally:
-            adapter.close(ingress_connection)
-        ingress_python_results = ingress_result.python_results
-        ingress_load_results = ingress_result.load_results
-        write_python_node_results(
-            stream=progress_stream,
-            results=ingress_python_results,
-            use_color=use_color,
-        )
-    read_side_names: frozenset[str] = (
-        all_task_asset_names
-        - lifecycle_plan.ingress_python_node_names
-        - python_node_result_names(ingress_python_results)
-    )
-    read_side_connection: object | None = None
-    read_side_tracker: Any | None = None
-    if read_side_names:
-        read_side_connection = adapter.connect(connection_config)
-        read_side_tracker = create_read_side_python_execution_tracker(
-            python_graph=python_graph,
-            selected_python_names=read_side_names,
-            adapter=adapter,
-            connection_config=connection_config,
-            connection=read_side_connection,
-            run_id=pipeline_result.project.run_id,
-            environment=pipeline_result.project.effective_environment_name,
-            vars=pipeline_result.project.effective_vars,
-            is_reload=reload_sources,
-            default_database=adapter.default_database(),
-            default_schema=adapter.default_schema(),
-            relation_targets=relation_targets,
-            start_cursor_ts=parse_cursor_timestamp(
-                (cursor_overrides or CursorOverrides()).start_ts
-            ),
-            end_cursor_ts=parse_cursor_timestamp((cursor_overrides or CursorOverrides()).end_ts),
-            start_cursor_int=parse_cursor_integer(
-                (cursor_overrides or CursorOverrides()).start_int
-            ),
-            end_cursor_int=parse_cursor_integer((cursor_overrides or CursorOverrides()).end_int),
-        )
-        read_side_tracker.dispatch_ready_python_nodes()
-        initial_read_side_results: tuple[PythonNodeExecutionResult, ...] = read_side_tracker.results
-        if initial_read_side_results:
-            write_python_node_results(
-                stream=progress_stream,
-                results=initial_read_side_results,
-                use_color=use_color,
-            )
-
-    def on_node_complete_with_read_side(node_result: object) -> None:
-        callbacks.on_node_complete(node_result)
-        if read_side_tracker is None:
-            return
-        previous_names: frozenset[str] = python_node_result_names(read_side_tracker.results)
-        read_side_tracker.record_sql_result(node_result)
-        new_results: tuple[PythonNodeExecutionResult, ...] = tuple(
-            result for result in read_side_tracker.results if result.node_name not in previous_names
-        )
-        if new_results:
-            write_python_node_results(
-                stream=progress_stream,
-                results=new_results,
-                use_color=use_color,
-            )
-
     result: BuildExecutionResult
-    ingress_failed: bool = any(
-        load_result.status == ExecutionStatus.FAILED for load_result in ingress_load_results
-    )
-    if ingress_failed:
+    if python_lifecycle.ingress_failed:
         result = BuildExecutionResult(
             status=BuildStatus.FAILED,
-            load_results=ingress_load_results,
+            load_results=python_lifecycle.ingress_load_results,
         )
     else:
         result = run_build_pipeline(
@@ -367,19 +232,14 @@ def run_run(
             fail_fast=fail_fast,
             max_concurrency=effective_concurrency,
             on_node_start=callbacks.on_node_start,
-            on_node_complete=on_node_complete_with_read_side,
+            on_node_complete=python_lifecycle.on_node_complete,
             on_sub_progress=callbacks.on_sub_progress,
             custom_materializations=pipeline_result.custom_materializations,
-            loader_functions=sql_loader_functions_for_lifecycle_handoff(
-                discovered_inputs=discovered_inputs,
-                ingress_loader_names=lifecycle_plan.ingress_loader_names,
-            ),
+            loader_functions=python_lifecycle.loader_functions,
             loader_is_reload=reload_sources,
-            precompleted_keys=frozenset(
-                load_result_key(plan=plan_output, result=load_result)
-                for load_result in ingress_load_results
-            ),
-            initial_load_results=ingress_load_results,
+            precompleted_keys=python_lifecycle.precompleted_keys,
+            initial_load_results=python_lifecycle.ingress_load_results,
+            initial_failed_keys=python_lifecycle.blocked_keys,
             start_cursor_ts=parse_cursor_timestamp(
                 (cursor_overrides or CursorOverrides()).start_ts
             ),
@@ -393,25 +253,8 @@ def run_run(
             on_connection_error=execution_connection_progress.on_connection_error,
             use_color=use_color,
         )
-    if read_side_connection is not None:
-        adapter.close(read_side_connection)
-    if read_side_tracker is not None:
-        finalized_read_side_results: tuple[PythonNodeExecutionResult, ...] = (
-            read_side_tracker.finalize_unrun_python_nodes()
-        )
-        if finalized_read_side_results:
-            write_python_node_results(
-                stream=progress_stream,
-                results=finalized_read_side_results,
-                use_color=use_color,
-            )
-    read_side_python_results: tuple[PythonNodeExecutionResult, ...] = (
-        () if read_side_tracker is None else read_side_tracker.results
-    )
-    python_results: tuple[PythonNodeExecutionResult, ...] = (
-        *ingress_python_results,
-        *read_side_python_results,
-    )
+    python_lifecycle.finalize()
+    python_results: tuple[PythonNodeExecutionResult, ...] = python_lifecycle.python_results
     write_runtime_target(
         target_dir=effective_project_dir / "target",
         plan_output=plan_output,

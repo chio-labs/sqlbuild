@@ -42,6 +42,24 @@ class PythonBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class DirectPythonBuildHardeningE2ETestCase:
+    """Test case for direct build Python lifecycle hardening behavior."""
+
+    description: str
+    project_name: str
+    command: tuple[str, ...]
+    repo_files: dict[str, str]
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+    expected_absent_tables: tuple[str, ...] = field(default_factory=tuple)
+    expected_present_tables: tuple[str, ...] = field(default_factory=tuple)
+    expected_markers: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    expected_absent_paths: tuple[str, ...] = field(default_factory=tuple)
+    expected_json_assets: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    expected_json_status: str | None = None
+
+
+@dataclass(frozen=True)
 class VirtualBuildE2ETestCase:
     """Test case for virtual build e2e behavior."""
 
