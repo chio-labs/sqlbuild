@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.pipeline.models import ProjectGraph, PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
     FunctionPlanEntry,
@@ -17,7 +17,9 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import PlanReason
 
 
-def format_plan_json(plan: PlanOutput) -> str:
+def format_plan_json(
+    plan: PlanOutput, *, python_plan_entries: tuple[PythonPlanEntry, ...] = ()
+) -> str:
     """Serialize a PlanOutput to JSON."""
 
     models: list[dict[str, object]] = [_serialize_model_entry(e) for e in plan.model_entries]
@@ -29,16 +31,21 @@ def format_plan_json(plan: PlanOutput) -> str:
         _serialize_source_load_entry(e) for e in plan.source_load_entries
     ]
     warnings: list[dict[str, object]] = [_serialize_warning(w) for w in plan.warnings]
+    python_nodes: list[dict[str, object]] = [
+        _serialize_python_plan_entry(entry) for entry in python_plan_entries
+    ]
 
     result: dict[str, object] = {
         "selected_count": len(plan.model_entries)
         + len(plan.seed_entries)
         + len(plan.function_entries),
         "source_load_count": len(source_loads),
+        "python_node_count": len(python_nodes),
         "models": models,
         "seeds": seeds,
         "source_loads": source_loads,
         "functions": functions,
+        "python_nodes": python_nodes,
         "warnings": warnings,
     }
     if plan.metadata:
@@ -241,3 +248,11 @@ def _serialize_warning(warning: PlanWarning) -> dict[str, object]:
     if warning.model_name is not None:
         result["model_name"] = warning.model_name
     return result
+
+
+def _serialize_python_plan_entry(entry: PythonPlanEntry) -> dict[str, object]:
+    return {
+        "name": entry.name,
+        "kind": entry.kind.value,
+        "region": entry.region.value,
+    }

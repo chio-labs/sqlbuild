@@ -160,7 +160,12 @@ def run_run(
     plan_output: PlanOutput = pipeline_result.plan_output
     plan_stream: TextIO = sys.stderr if debug or json_output else sys.stdout
 
-    plan_text: str = format_plan(plan_output, full_refresh=full_refresh, use_color=use_color)
+    plan_text: str = format_plan(
+        plan_output,
+        full_refresh=full_refresh,
+        use_color=use_color,
+        python_plan_entries=pipeline_result.python_plan_entries,
+    )
     plan_stream.write("\n" + plan_text + "\n\n")
     plan_stream.flush()
 

@@ -31,14 +31,22 @@ from sqlbuild.compiler.pipeline.helpers.graph import (
     build_static_upstream_deps,
 )
 from sqlbuild.compiler.pipeline.helpers.materializations import load_custom_materializations
+from sqlbuild.compiler.pipeline.helpers.python_plan_entries import build_python_plan_entries
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult, ProjectGraph
+from sqlbuild.compiler.pipeline.models import CompilePipelineResult, ProjectGraph, PythonPlanEntry
 from sqlbuild.compiler.planner.main.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
+from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
+from sqlbuild.compiler.python_nodes.main.run_lifecycle import build_python_sql_run_lifecycle
 from sqlbuild.compiler.python_nodes.main.run_selection import (
     resolve_python_sql_run_selection_from_inputs,
 )
-from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
+from sqlbuild.compiler.python_nodes.models import (
+    PythonNodeGraph,
+    PythonSqlRunLifecyclePlan,
+    PythonSqlRunSelection,
+)
+from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.project import EnvironmentConfig, resolve_effective_adapter_name
 
@@ -168,8 +176,9 @@ def _build_result(
 
     selected_sql_keys: frozenset[CompiledObjectKey] | None = None
     selected_python_node_names: frozenset[str] = frozenset()
+    run_selection: PythonSqlRunSelection | None = None
     if resolve_python_run_selectors:
-        run_selection: PythonSqlRunSelection = resolve_python_sql_run_selection_from_inputs(
+        run_selection = resolve_python_sql_run_selection_from_inputs(
             select=select,
             exclude=exclude,
             project_graph=_build_project_graph(project=project),
@@ -214,6 +223,28 @@ def _build_result(
     custom_materializations: dict[str, Any] = load_custom_materializations(
         discovered_inputs.materialization_files
     )
+    python_plan_entries: tuple[PythonPlanEntry, ...] = ()
+    if run_selection is not None:
+        python_graph: PythonNodeGraph = build_discovered_python_node_graph(
+            discovered_inputs=discovered_inputs
+        )
+        planned_source_loader_names: frozenset[str] = frozenset(
+            entry.loader
+            for entry in plan_output.source_load_entries
+            if entry.loader in python_graph.nodes_by_name
+            and python_graph.nodes_by_name[entry.loader].kind == PythonNodeKind.LOADER
+        )
+        lifecycle_plan: PythonSqlRunLifecyclePlan = build_python_sql_run_lifecycle(
+            selection=PythonSqlRunSelection(
+                sql_keys=run_selection.sql_keys,
+                python_node_names=run_selection.python_node_names | planned_source_loader_names,
+            ),
+            python_graph=python_graph,
+        )
+        python_plan_entries = build_python_plan_entries(
+            lifecycle_plan=lifecycle_plan,
+            python_graph=python_graph,
+        )
 
     return CompilePipelineResult(
         project=project,
@@ -221,6 +252,7 @@ def _build_result(
         manifest=manifest,
         custom_materializations=custom_materializations,
         python_node_names=selected_python_node_names,
+        python_plan_entries=python_plan_entries,
     )
 
 

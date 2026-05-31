@@ -25,15 +25,15 @@ PYTHON_SQL_RUN_SELECTOR_TEST_CASES: list[PythonSqlSelectorTestCase] = [
         expected_python_node_names=frozenset({"load_events", "prepare_orders", "export_orders"}),
     ),
     PythonSqlSelectorTestCase(
-        description="selects explicit Python asset path for run",
-        select=("path:assets",),
+        description="selects expanded Python asset path for run",
+        select=("+path:assets",),
         exclude=(),
         expected_sql_names=frozenset(),
         expected_python_node_names=frozenset({"prepare_orders", "export_orders"}),
     ),
     PythonSqlSelectorTestCase(
-        description="preserves source terminal loader requirement for run",
-        select=("source:raw_orders",),
+        description="selects expanded source terminal loader requirement for run",
+        select=("+source:raw_orders",),
         exclude=(),
         expected_sql_names=frozenset({"raw_orders"}),
         expected_python_node_names=frozenset({"prepare_orders", "load_events"}),
@@ -77,6 +77,24 @@ PYTHON_SQL_RUN_SELECTOR_ERROR_TEST_CASES: list[PythonSqlSelectorErrorTestCase] =
         exclude=(),
         expected_error_type=ValueError,
         expected_error_fragment="sqb run does not execute Python checks: check_orders_export",
+    ),
+    PythonSqlSelectorErrorTestCase(
+        description="rejects direct asset path with unselected Python dependency for run",
+        select=("path:assets",),
+        exclude=(),
+        expected_error_type=ValueError,
+        expected_error_fragment=(
+            "Python node 'export_orders' depends on unselected Python node 'prepare_orders'"
+        ),
+    ),
+    PythonSqlSelectorErrorTestCase(
+        description="rejects direct source with unselected terminal loader for run",
+        select=("source:raw_orders",),
+        exclude=(),
+        expected_error_type=ValueError,
+        expected_error_fragment=(
+            "Source 'raw_orders' requires loader 'load_events', but that loader was not selected"
+        ),
     ),
 ]
 

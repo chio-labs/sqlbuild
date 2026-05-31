@@ -369,7 +369,7 @@ def test_given_task_loader_source_model_chain_when_running_model_then_task_runs_
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "fact_orders"),
+        command=("--no-color", "run", "--select", "+fact_orders"),
         project_dir=project_dir,
     )
 
@@ -569,7 +569,7 @@ def test_given_task_asset_task_chain_when_running_final_task_then_chain_executes
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "notify_orders"),
+        command=("--no-color", "run", "--select", "+notify_orders"),
         project_dir=project_dir,
     )
 
@@ -645,7 +645,7 @@ def test_given_source_task_asset_selection_when_running_run_then_task_reads_load
             "--no-color",
             "run",
             "--select",
-            "raw_orders summarize_loaded_orders publish_loaded_orders",
+            "+raw_orders summarize_loaded_orders publish_loaded_orders",
         ),
         project_dir=project_dir,
     )
@@ -921,7 +921,7 @@ def test_given_task_depends_on_source_when_running_run_then_task_runs_after_sour
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "raw_orders profile_raw_orders"),
+        command=("--no-color", "run", "--select", "+raw_orders profile_raw_orders"),
         project_dir=project_dir,
     )
 
@@ -1132,7 +1132,7 @@ def test_given_task_asset_depend_on_intermediate_loader_when_running_run_then_lo
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "loader:stage_orders publish_stage_orders"),
+        command=("--no-color", "run", "--select", "+publish_stage_orders"),
         project_dir=project_dir,
     )
 
@@ -1220,7 +1220,7 @@ def test_given_loader_task_loader_chain_when_running_model_then_region_1_orders_
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "fact_orders loader:load_window_orders"),
+        command=("--no-color", "run", "--select", "+fact_orders"),
         project_dir=project_dir,
     )
 
@@ -1303,7 +1303,7 @@ def test_given_task_asset_loader_chain_when_running_model_then_region_1_orders_c
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "fact_orders"),
+        command=("--no-color", "run", "--select", "+fact_orders"),
         project_dir=project_dir,
     )
 
@@ -1389,7 +1389,7 @@ def test_given_loader_asset_loader_chain_when_running_model_then_region_1_orders
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "fact_orders loader:load_window_orders"),
+        command=("--no-color", "run", "--select", "+fact_orders"),
         project_dir=project_dir,
     )
 
@@ -1462,7 +1462,7 @@ def test_given_loader_loader_chain_when_running_model_then_region_1_orders_chain
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "fact_orders loader:load_window_orders"),
+        command=("--no-color", "run", "--select", "+fact_orders"),
         project_dir=project_dir,
     )
 
@@ -1586,7 +1586,7 @@ def test_given_loader_task_asset_loader_model_task_asset_task_spine_when_running
             "--no-color",
             "run",
             "--select",
-            "loader:load_window_orders fact_orders notify_fact_orders",
+            "+fact_orders +notify_fact_orders",
         ),
         project_dir=project_dir,
     )

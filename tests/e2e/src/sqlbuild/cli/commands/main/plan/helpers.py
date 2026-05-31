@@ -24,6 +24,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentRefRecord,
 )
 from sqlbuild.virtual.state.types import ModelVersionStatus, VirtualEnvironmentStatus
+from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_inline_project
 
 
 def build_virtual_plan_project_toml() -> str:
@@ -53,6 +54,78 @@ def build_virtual_plan_repo_files(
         "models/fact_orders.sql": 'MODEL ();\n\nSELECT id FROM __ref("stg_orders")\n',
         "models/dim_customers.sql": f"MODEL ();\n\n{dim_customers_sql}\n",
     }
+
+
+def prepare_python_lifecycle_plan_project(*, tmp_path: Path) -> Path:
+    return prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="python_lifecycle_plan_project",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "python_lifecycle_plan_project"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "loaders/window.py": (
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(\n"
+                "    target='window_orders',\n"
+                "    write_strategy='table',\n"
+                "    columns=[{'name': 'order_id', 'type': 'INTEGER'}],\n"
+                ")\n"
+                "def load_window_orders(ctx):\n"
+                "    return [{'order_id': 7}]\n"
+            ),
+            "tasks/prepare.py": (
+                "from loaders.window import load_window_orders\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task(depends_on=load_window_orders)\n"
+                "def prepare_orders(ctx):\n"
+                "    return ctx.result(payload={'order_id': 7})\n"
+            ),
+            "assets/prepare.py": (
+                "from tasks.prepare import prepare_orders\n"
+                "from sqlbuild.assets import asset\n\n"
+                "@asset(depends_on=prepare_orders)\n"
+                "def publish_prepared_orders(ctx):\n"
+                "    return ctx.result(payload=ctx.payload(prepare_orders), materialized=True)\n"
+            ),
+            "loaders/raw.py": (
+                "from assets.prepare import publish_prepared_orders\n"
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(depends_on=(publish_prepared_orders,))\n"
+                "def load_raw_orders(ctx):\n"
+                "    return [{'order_id': 7}]\n"
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    loader: load_raw_orders\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+            ),
+            "models/fact_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+            "tasks/profile.py": (
+                "from sqlbuild.refs import model\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task(depends_on=model('fact_orders'))\n"
+                "def profile_fact_orders(ctx):\n"
+                "    return ctx.result(payload={'rows': 1})\n"
+            ),
+            "tasks/notify.py": (
+                "from tasks.profile import profile_fact_orders\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task(depends_on=profile_fact_orders)\n"
+                "def notify_fact_orders(ctx):\n"
+                "    return ctx.result(metadata=ctx.payload(profile_fact_orders))\n"
+            ),
+        },
+    )
 
 
 def seed_matching_virtual_refs(
