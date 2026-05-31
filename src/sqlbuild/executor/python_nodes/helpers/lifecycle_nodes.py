@@ -10,24 +10,24 @@ from sqlbuild.compiler.python_nodes.models import (
 from sqlbuild.executor.shared.models.lifecycle_scheduler import LifecycleExecutionNode
 
 
-def build_region_1_lifecycle_nodes(
+def build_ingress_lifecycle_nodes(
     *, plan: PythonSqlRunLifecyclePlan, python_graph: PythonNodeGraph
 ) -> tuple[LifecycleExecutionNode, ...]:
     """Build schedulable pre-SQL Python/loader nodes from a lifecycle plan."""
 
     return _build_python_lifecycle_nodes(
-        selected_names=plan.region_1_python_node_names,
+        selected_names=plan.ingress_python_node_names,
         python_graph=python_graph,
     )
 
 
-def build_region_2_python_lifecycle_nodes(
+def build_read_side_python_lifecycle_nodes(
     *, plan: PythonSqlRunLifecyclePlan, python_graph: PythonNodeGraph
 ) -> tuple[LifecycleExecutionNode, ...]:
     """Build schedulable SQL-read Python nodes from a lifecycle plan."""
 
     return _build_python_lifecycle_nodes(
-        selected_names=plan.region_2_python_node_names,
+        selected_names=plan.read_side_python_node_names,
         python_graph=python_graph,
     )
 

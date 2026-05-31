@@ -19,7 +19,7 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
     WarningSeverity,
 )
-from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunRegion
+from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunPhase
 from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers.helpers import (
     build_model_entry,
     build_plan_output,
@@ -130,12 +130,12 @@ PLAN_JSON_TEST_CASES: list[JsonOutputTestCase] = [
             PythonPlanEntry(
                 name="prepare_orders",
                 kind=PythonNodeKind.TASK,
-                region=PythonRunRegion.PRE_SQL_INGRESS,
+                phase=PythonRunPhase.PRE_SQL_INGRESS,
             ),
             PythonPlanEntry(
                 name="export_orders",
                 kind=PythonNodeKind.ASSET,
-                region=PythonRunRegion.SQL_READ_PYTHON,
+                phase=PythonRunPhase.READ_SIDE,
             ),
         ),
         expected_keys=("python_node_count", "python_nodes"),
@@ -143,10 +143,10 @@ PLAN_JSON_TEST_CASES: list[JsonOutputTestCase] = [
             '"python_node_count": 2',
             '"name": "prepare_orders"',
             '"kind": "task"',
-            '"region": "pre_sql_ingress"',
+            '"phase": "pre_sql_ingress"',
             '"name": "export_orders"',
             '"kind": "asset"',
-            '"region": "sql_read_python"',
+            '"phase": "read_side"',
         ),
     ),
 ]

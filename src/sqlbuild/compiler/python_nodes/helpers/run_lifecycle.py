@@ -21,7 +21,7 @@ def build_python_sql_run_lifecycle_plan(
         for name in selected_python_names
         if python_graph.nodes_by_name[name].kind == PythonNodeKind.LOADER
     )
-    region_1_names: frozenset[str] = selected_loader_names | frozenset(
+    ingress_names: frozenset[str] = selected_loader_names | frozenset(
         upstream_name
         for loader_name in selected_loader_names
         for upstream_name in _upstream_closure(node_name=loader_name, python_graph=python_graph)
@@ -29,16 +29,16 @@ def build_python_sql_run_lifecycle_plan(
         if python_graph.nodes_by_name[upstream_name].kind
         in {PythonNodeKind.TASK, PythonNodeKind.ASSET, PythonNodeKind.LOADER}
     )
-    region_2_names: frozenset[str] = frozenset(
+    read_side_names: frozenset[str] = frozenset(
         name
-        for name in selected_python_names - region_1_names
+        for name in selected_python_names - ingress_names
         if python_graph.nodes_by_name[name].kind in {PythonNodeKind.TASK, PythonNodeKind.ASSET}
     )
     return PythonSqlRunLifecyclePlan(
-        region_1_python_node_names=region_1_names,
-        region_1_loader_names=selected_loader_names,
-        region_2_sql_keys=selection.sql_keys,
-        region_2_python_node_names=region_2_names,
+        ingress_python_node_names=ingress_names,
+        ingress_loader_names=selected_loader_names,
+        read_side_sql_keys=selection.sql_keys,
+        read_side_python_node_names=read_side_names,
     )
 
 

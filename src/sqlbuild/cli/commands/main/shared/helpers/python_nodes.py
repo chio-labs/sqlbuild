@@ -30,9 +30,9 @@ def task_asset_python_node_names(
 def sql_loader_functions_for_lifecycle_handoff(
     *,
     discovered_inputs: DiscoveredProjectInputs,
-    region_1_loader_names: frozenset[str],
+    ingress_loader_names: frozenset[str],
 ) -> tuple[DiscoveredLoaderFunction, ...]:
-    """Return SQL-stage loaders after Region 1 handled mixed Python dependencies."""
+    """Return SQL-stage loaders after Python ingress handled mixed dependencies."""
 
     loader_functions: frozenset[object] = frozenset(
         loader.function for loader in discovered_inputs.loader_functions
@@ -43,7 +43,7 @@ def sql_loader_functions_for_lifecycle_handoff(
             depends_on=tuple(
                 dependency
                 for dependency in loader.depends_on
-                if dependency in loader_functions or loader.name not in region_1_loader_names
+                if dependency in loader_functions or loader.name not in ingress_loader_names
             ),
         )
         for loader in discovered_inputs.loader_functions

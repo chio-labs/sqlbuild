@@ -8,13 +8,170 @@ from typing import Any
 
 import pytest
 
-from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import BuildE2ETestCase
+from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
+    BuildE2ETestCase,
+    PythonBuildE2ETestCase,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    prepare_inline_project,
     prepare_waffle_shop,
     query_duckdb,
     run_sqb,
     table_exists,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonBuildE2ETestCase(
+            description="build executes full Python SQL Python spine in lifecycle order",
+            expected_exit_code=0,
+            expected_execution_fragments=(
+                "Python ingress (2)",
+                "Python read-side (3)",
+                "python    task      prepare_orders",
+                "python    asset     publish_prepared_orders",
+                "python    task      profile_fact_orders",
+                "python    asset     export_fact_orders",
+                "python    task      notify_fact_orders",
+            ),
+            expected_table_names=("window_orders", "raw_orders", "fact_orders"),
+            expected_notify_text="7",
+            expected_fact_orders_rows=((7,),),
+        )
+    ],
+    ids=["build executes full Python SQL Python spine in lifecycle order"],
+)
+def test_given_python_sql_python_spine_when_building_then_orders_python_around_sql(
+    test_case: PythonBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="python_sql_python_spine_build_project",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "python_sql_python_spine_build_project"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "python_sql_python_spine_build_project.duckdb"\n'
+            ),
+            "loaders/window.py": (
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(\n"
+                "    target='window_orders',\n"
+                "    write_strategy='table',\n"
+                "    columns=[{'name': 'order_id', 'type': 'INTEGER'}],\n"
+                ")\n"
+                "def load_window_orders(ctx):\n"
+                "    return [{'order_id': 7}]\n"
+            ),
+            "tasks/prepare.py": (
+                "from loaders.window import load_window_orders\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task(depends_on=load_window_orders)\n"
+                "def prepare_orders(ctx):\n"
+                "    rows = ctx.query('SELECT order_id FROM window_orders').fetchall()\n"
+                "    return ctx.result(payload={'order_id': rows[0][0]})\n"
+            ),
+            "assets/prepare.py": (
+                "from pathlib import Path\n"
+                "from tasks.prepare import prepare_orders\n"
+                "from sqlbuild.assets import asset\n\n"
+                "@asset(depends_on=prepare_orders)\n"
+                "def publish_prepared_orders(ctx):\n"
+                "    payload = ctx.payload(prepare_orders)\n"
+                "    marker = Path(__file__).parents[1].joinpath('prepared_order_id.txt')\n"
+                "    marker.write_text(str(payload['order_id']))\n"
+                "    return ctx.result(payload=payload, materialized=True)\n"
+            ),
+            "loaders/raw.py": (
+                "from pathlib import Path\n"
+                "from assets.prepare import publish_prepared_orders\n"
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(depends_on=(publish_prepared_orders,))\n"
+                "def load_raw_orders(ctx):\n"
+                "    marker = Path(__file__).parents[1].joinpath('prepared_order_id.txt')\n"
+                "    return [{'order_id': int(marker.read_text())}]\n"
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    loader: load_raw_orders\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+            ),
+            "models/fact_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+            "tasks/profile.py": (
+                "from sqlbuild.refs import model\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task(depends_on=model('fact_orders'))\n"
+                "def profile_fact_orders(ctx):\n"
+                "    relation = ctx.relation(model('fact_orders'))\n"
+                "    order_id = ctx.query(f'SELECT order_id FROM {relation}').fetchall()[0][0]\n"
+                "    return ctx.result(payload={'order_id': order_id}, metadata={'rows': 1})\n"
+            ),
+            "assets/export.py": (
+                "from tasks.profile import profile_fact_orders\n"
+                "from sqlbuild.assets import asset\n\n"
+                "@asset(depends_on=profile_fact_orders)\n"
+                "def export_fact_orders(ctx):\n"
+                "    payload = ctx.payload(profile_fact_orders)\n"
+                "    return ctx.result(payload=payload, metadata={'exported': True})\n"
+            ),
+            "tasks/notify.py": (
+                "from pathlib import Path\n"
+                "from assets.export import export_fact_orders\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task(depends_on=export_fact_orders)\n"
+                "def notify_fact_orders(ctx):\n"
+                "    payload = ctx.payload(export_fact_orders)\n"
+                "    output = Path(__file__).parents[1].joinpath('notify.txt')\n"
+                "    output.write_text(str(payload['order_id']))\n"
+                "    return ctx.result(metadata={'notified': True})\n"
+            ),
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "+fact_orders +notify_fact_orders"),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    fragment: str
+    for fragment in test_case.expected_execution_fragments:
+        assert fragment in result.stdout
+    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
+    assert execution_output.index("window_orders") < execution_output.index("prepare_orders")
+    assert execution_output.index("prepare_orders") < execution_output.index(
+        "publish_prepared_orders"
+    )
+    assert execution_output.index("raw_orders") < execution_output.index("fact_orders")
+    assert execution_output.index("fact_orders") < execution_output.index("profile_fact_orders")
+    assert execution_output.index("profile_fact_orders") < execution_output.index(
+        "export_fact_orders"
+    )
+    assert execution_output.index("export_fact_orders") < execution_output.index(
+        "notify_fact_orders"
+    )
+    assert (project_dir / "notify.txt").read_text(encoding="utf-8") == (
+        test_case.expected_notify_text
+    )
+    db_path: Path = project_dir / "python_sql_python_spine_build_project.duckdb"
+    table_name: str
+    for table_name in test_case.expected_table_names:
+        assert table_exists(db_path=db_path, table_name=table_name)
+    rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=db_path,
+        sql="SELECT order_id FROM fact_orders",
+    )
+    assert tuple(rows) == test_case.expected_fact_orders_rows
 
 
 @pytest.mark.parametrize(

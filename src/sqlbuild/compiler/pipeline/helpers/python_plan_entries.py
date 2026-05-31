@@ -8,7 +8,7 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonNodeGraph,
     PythonSqlRunLifecyclePlan,
 )
-from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunRegion
+from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunPhase
 
 
 def build_python_plan_entries(
@@ -19,7 +19,7 @@ def build_python_plan_entries(
     entries: list[PythonPlanEntry] = []
     node_name: str
     for node_name in _ordered_python_names(
-        selected_names=lifecycle_plan.region_1_python_node_names,
+        selected_names=lifecycle_plan.ingress_python_node_names,
         python_graph=python_graph,
     ):
         node: DiscoveredPythonNode = python_graph.nodes_by_name[node_name]
@@ -28,11 +28,11 @@ def build_python_plan_entries(
                 PythonPlanEntry(
                     name=node.name,
                     kind=node.kind,
-                    region=PythonRunRegion.PRE_SQL_INGRESS,
+                    phase=PythonRunPhase.PRE_SQL_INGRESS,
                 )
             )
     for node_name in _ordered_python_names(
-        selected_names=lifecycle_plan.region_2_python_node_names,
+        selected_names=lifecycle_plan.read_side_python_node_names,
         python_graph=python_graph,
     ):
         node = python_graph.nodes_by_name[node_name]
@@ -41,7 +41,7 @@ def build_python_plan_entries(
                 PythonPlanEntry(
                     name=node.name,
                     kind=node.kind,
-                    region=PythonRunRegion.SQL_READ_PYTHON,
+                    phase=PythonRunPhase.READ_SIDE,
                 )
             )
     return tuple(entries)

@@ -291,8 +291,8 @@ def test_given_virtual_python_nodes_when_building_then_runs_loader_and_read_side
     "test_case",
     [
         VirtualPythonBuildE2ETestCase(
-            description="prints Region 2 Python failure rows",
-            project_name="virtual_python_region_2_failure",
+            description="prints read-side Python failure rows",
+            project_name="virtual_python_read_side_failure",
             plan_command=(),
             build_command=("--no-color", "build", "--select", "+fact_orders"),
             expected_build_exit_code=1,
@@ -303,9 +303,9 @@ def test_given_virtual_python_nodes_when_building_then_runs_loader_and_read_side
             ),
         )
     ],
-    ids=["prints Region 2 Python failure rows"],
+    ids=["prints read-side Python failure rows"],
 )
-def test_given_virtual_region_2_python_failure_when_building_then_prints_python_failure_row(
+def test_given_virtual_read_side_python_failure_when_building_then_prints_python_failure_row(
     test_case: VirtualPythonBuildE2ETestCase,
     tmp_path: Path,
 ) -> None:
@@ -314,7 +314,7 @@ def test_given_virtual_region_2_python_failure_when_building_then_prints_python_
         project_name=test_case.project_name,
         repo_files={
             "sqlbuild_project.toml": (
-                'name = "virtual_python_region_2_failure"\n'
+                'name = "virtual_python_read_side_failure"\n'
                 'adapter = "duckdb"\n'
                 'environment_mode = "virtual"\n'
                 'default_environment = "dev"\n\n'

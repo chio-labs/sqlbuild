@@ -107,7 +107,7 @@ class PythonNodeLifecycleNodeBuildTestCase:
 
 
 @dataclass(frozen=True)
-class Region1PythonLoaderExecutorTestCase:
+class PythonIngressLoaderExecutorTestCase:
     description: str
     selected_names: frozenset[str]
     expected_python_names: tuple[str, ...]
@@ -118,7 +118,7 @@ class Region1PythonLoaderExecutorTestCase:
 
 
 @dataclass(frozen=True)
-class Region2PythonTrackerTestCase:
+class ReadSidePythonTrackerTestCase:
     description: str
     selected_names: frozenset[str]
     completed_sql_names: tuple[str, ...]

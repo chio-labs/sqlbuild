@@ -11,7 +11,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
 )
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput, SeedPlanEntry
-from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunRegion
+from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunPhase
 
 
 @dataclass(frozen=True)
@@ -20,7 +20,7 @@ class PythonPlanEntry:
 
     name: str
     kind: PythonNodeKind
-    region: PythonRunRegion
+    phase: PythonRunPhase
 
 
 @dataclass(frozen=True)

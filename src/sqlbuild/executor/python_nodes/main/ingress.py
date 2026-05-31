@@ -1,4 +1,4 @@
-"""Public executor entrypoint for Region 1 Python/loader nodes."""
+"""Public executor entrypoint for Python ingress loader nodes."""
 
 from __future__ import annotations
 
@@ -9,16 +9,16 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
-from sqlbuild.executor.python_nodes.helpers.region_1_execution import (
-    execute_region_1_python_loader_nodes,
+from sqlbuild.executor.python_nodes.helpers.ingress_execution import (
+    execute_ingress_python_loader_nodes,
 )
-from sqlbuild.executor.python_nodes.models import Region1PythonLoaderExecutorResult
+from sqlbuild.executor.python_nodes.models import PythonIngressLoaderExecutorResult
 from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 
 
-def run_region_1_python_loader_nodes(
+def run_ingress_python_loader_nodes(
     *,
     python_graph: PythonNodeGraph,
     selected_python_names: frozenset[str],
@@ -41,10 +41,10 @@ def run_region_1_python_loader_nodes(
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None = None,
     on_node_complete: Callable[[object], None] | None = None,
     relation_targets: dict[SqlResourceRef, str] | None = None,
-) -> Region1PythonLoaderExecutorResult:
-    """Execute Region 1 task/asset/loader nodes in lifecycle order."""
+) -> PythonIngressLoaderExecutorResult:
+    """Execute Python ingress task/asset/loader nodes in lifecycle order."""
 
-    return execute_region_1_python_loader_nodes(
+    return execute_ingress_python_loader_nodes(
         python_graph=python_graph,
         selected_python_names=selected_python_names,
         loader_functions=loader_functions,

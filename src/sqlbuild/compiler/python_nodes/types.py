@@ -37,8 +37,8 @@ class PythonNodeFanInAction(StrEnum):
     BLOCK = "block"
 
 
-class PythonRunRegion(StrEnum):
-    """Lifecycle-aware run executor region."""
+class PythonRunPhase(StrEnum):
+    """Lifecycle-aware Python execution phase."""
 
     PRE_SQL_INGRESS = "pre_sql_ingress"
-    SQL_READ_PYTHON = "sql_read_python"
+    READ_SIDE = "read_side"

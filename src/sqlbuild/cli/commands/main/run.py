@@ -63,11 +63,11 @@ from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.pipeline.main.run import run_build_pipeline
-from sqlbuild.executor.python_nodes.main.region_1 import run_region_1_python_loader_nodes
-from sqlbuild.executor.python_nodes.main.region_2 import create_region_2_python_execution_tracker
+from sqlbuild.executor.python_nodes.main.ingress import run_ingress_python_loader_nodes
+from sqlbuild.executor.python_nodes.main.read_side import create_read_side_python_execution_tracker
 from sqlbuild.executor.python_nodes.models import (
+    PythonIngressLoaderExecutorResult,
     PythonNodeExecutionResult,
-    Region1PythonLoaderExecutorResult,
 )
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.shared.models import SqlResourceRef
@@ -241,21 +241,21 @@ def run_run(
         project=pipeline_result.project,
         plan_output=plan_output,
     )
-    selected_region_1_names: frozenset[str] = lifecycle_plan.region_1_python_node_names
-    region_1_connection: object | None = None
-    region_1_python_results: tuple[PythonNodeExecutionResult, ...] = ()
-    region_1_load_results: tuple[LoadExecutionResult, ...] = ()
-    if selected_region_1_names:
-        region_1_connection = adapter.connect(connection_config)
+    selected_ingress_names: frozenset[str] = lifecycle_plan.ingress_python_node_names
+    ingress_connection: object | None = None
+    ingress_python_results: tuple[PythonNodeExecutionResult, ...] = ()
+    ingress_load_results: tuple[LoadExecutionResult, ...] = ()
+    if selected_ingress_names:
+        ingress_connection = adapter.connect(connection_config)
         try:
-            region_1_result: Region1PythonLoaderExecutorResult = run_region_1_python_loader_nodes(
+            ingress_result: PythonIngressLoaderExecutorResult = run_ingress_python_loader_nodes(
                 python_graph=python_graph,
-                selected_python_names=selected_region_1_names,
+                selected_python_names=selected_ingress_names,
                 loader_functions=discovered_inputs.loader_functions,
                 source_map=plan_output.source_map,
                 adapter=adapter,
                 connection_config=connection_config,
-                connection=region_1_connection,
+                connection=ingress_connection,
                 run_id=pipeline_result.project.run_id,
                 environment=pipeline_result.project.effective_environment_name,
                 vars=pipeline_result.project.effective_vars,
@@ -280,29 +280,29 @@ def run_run(
                 relation_targets=relation_targets,
             )
         finally:
-            adapter.close(region_1_connection)
-        region_1_python_results = region_1_result.python_results
-        region_1_load_results = region_1_result.load_results
+            adapter.close(ingress_connection)
+        ingress_python_results = ingress_result.python_results
+        ingress_load_results = ingress_result.load_results
         write_python_node_results(
             stream=progress_stream,
-            results=region_1_python_results,
+            results=ingress_python_results,
             use_color=use_color,
         )
-    region_2_names: frozenset[str] = (
+    read_side_names: frozenset[str] = (
         all_task_asset_names
-        - lifecycle_plan.region_1_python_node_names
-        - python_node_result_names(region_1_python_results)
+        - lifecycle_plan.ingress_python_node_names
+        - python_node_result_names(ingress_python_results)
     )
-    region_2_connection: object | None = None
-    region_2_tracker: Any | None = None
-    if region_2_names:
-        region_2_connection = adapter.connect(connection_config)
-        region_2_tracker = create_region_2_python_execution_tracker(
+    read_side_connection: object | None = None
+    read_side_tracker: Any | None = None
+    if read_side_names:
+        read_side_connection = adapter.connect(connection_config)
+        read_side_tracker = create_read_side_python_execution_tracker(
             python_graph=python_graph,
-            selected_python_names=region_2_names,
+            selected_python_names=read_side_names,
             adapter=adapter,
             connection_config=connection_config,
-            connection=region_2_connection,
+            connection=read_side_connection,
             run_id=pipeline_result.project.run_id,
             environment=pipeline_result.project.effective_environment_name,
             vars=pipeline_result.project.effective_vars,
@@ -319,23 +319,23 @@ def run_run(
             ),
             end_cursor_int=parse_cursor_integer((cursor_overrides or CursorOverrides()).end_int),
         )
-        region_2_tracker.dispatch_ready_python_nodes()
-        initial_region_2_results: tuple[PythonNodeExecutionResult, ...] = region_2_tracker.results
-        if initial_region_2_results:
+        read_side_tracker.dispatch_ready_python_nodes()
+        initial_read_side_results: tuple[PythonNodeExecutionResult, ...] = read_side_tracker.results
+        if initial_read_side_results:
             write_python_node_results(
                 stream=progress_stream,
-                results=initial_region_2_results,
+                results=initial_read_side_results,
                 use_color=use_color,
             )
 
-    def on_node_complete_with_region_2(node_result: object) -> None:
+    def on_node_complete_with_read_side(node_result: object) -> None:
         callbacks.on_node_complete(node_result)
-        if region_2_tracker is None:
+        if read_side_tracker is None:
             return
-        previous_names: frozenset[str] = python_node_result_names(region_2_tracker.results)
-        region_2_tracker.record_sql_result(node_result)
+        previous_names: frozenset[str] = python_node_result_names(read_side_tracker.results)
+        read_side_tracker.record_sql_result(node_result)
         new_results: tuple[PythonNodeExecutionResult, ...] = tuple(
-            result for result in region_2_tracker.results if result.node_name not in previous_names
+            result for result in read_side_tracker.results if result.node_name not in previous_names
         )
         if new_results:
             write_python_node_results(
@@ -345,13 +345,13 @@ def run_run(
             )
 
     result: BuildExecutionResult
-    region_1_failed: bool = any(
-        load_result.status == ExecutionStatus.FAILED for load_result in region_1_load_results
+    ingress_failed: bool = any(
+        load_result.status == ExecutionStatus.FAILED for load_result in ingress_load_results
     )
-    if region_1_failed:
+    if ingress_failed:
         result = BuildExecutionResult(
             status=BuildStatus.FAILED,
-            load_results=region_1_load_results,
+            load_results=ingress_load_results,
         )
     else:
         result = run_build_pipeline(
@@ -367,19 +367,19 @@ def run_run(
             fail_fast=fail_fast,
             max_concurrency=effective_concurrency,
             on_node_start=callbacks.on_node_start,
-            on_node_complete=on_node_complete_with_region_2,
+            on_node_complete=on_node_complete_with_read_side,
             on_sub_progress=callbacks.on_sub_progress,
             custom_materializations=pipeline_result.custom_materializations,
             loader_functions=sql_loader_functions_for_lifecycle_handoff(
                 discovered_inputs=discovered_inputs,
-                region_1_loader_names=lifecycle_plan.region_1_loader_names,
+                ingress_loader_names=lifecycle_plan.ingress_loader_names,
             ),
             loader_is_reload=reload_sources,
             precompleted_keys=frozenset(
                 load_result_key(plan=plan_output, result=load_result)
-                for load_result in region_1_load_results
+                for load_result in ingress_load_results
             ),
-            initial_load_results=region_1_load_results,
+            initial_load_results=ingress_load_results,
             start_cursor_ts=parse_cursor_timestamp(
                 (cursor_overrides or CursorOverrides()).start_ts
             ),
@@ -393,24 +393,24 @@ def run_run(
             on_connection_error=execution_connection_progress.on_connection_error,
             use_color=use_color,
         )
-    if region_2_connection is not None:
-        adapter.close(region_2_connection)
-    if region_2_tracker is not None:
-        finalized_region_2_results: tuple[PythonNodeExecutionResult, ...] = (
-            region_2_tracker.finalize_unrun_python_nodes()
+    if read_side_connection is not None:
+        adapter.close(read_side_connection)
+    if read_side_tracker is not None:
+        finalized_read_side_results: tuple[PythonNodeExecutionResult, ...] = (
+            read_side_tracker.finalize_unrun_python_nodes()
         )
-        if finalized_region_2_results:
+        if finalized_read_side_results:
             write_python_node_results(
                 stream=progress_stream,
-                results=finalized_region_2_results,
+                results=finalized_read_side_results,
                 use_color=use_color,
             )
-    region_2_python_results: tuple[PythonNodeExecutionResult, ...] = (
-        () if region_2_tracker is None else region_2_tracker.results
+    read_side_python_results: tuple[PythonNodeExecutionResult, ...] = (
+        () if read_side_tracker is None else read_side_tracker.results
     )
     python_results: tuple[PythonNodeExecutionResult, ...] = (
-        *region_1_python_results,
-        *region_2_python_results,
+        *ingress_python_results,
+        *read_side_python_results,
     )
     write_runtime_target(
         target_dir=effective_project_dir / "target",

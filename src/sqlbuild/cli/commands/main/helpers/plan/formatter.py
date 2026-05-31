@@ -26,7 +26,7 @@ from sqlbuild.compiler.planner.types import (
     SchemaChangeKind,
     WarningSeverity,
 )
-from sqlbuild.compiler.python_nodes.types import PythonRunRegion
+from sqlbuild.compiler.python_nodes.types import PythonRunPhase
 from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.display import DisplayOptions, append_overflow_line, visible_entries
@@ -109,9 +109,7 @@ def format_plan(
 
     _format_python_plan_entries(
         lines,
-        entries=_python_plan_entries_for_region(
-            python_plan_entries, PythonRunRegion.PRE_SQL_INGRESS
-        ),
+        entries=_python_plan_entries_for_phase(python_plan_entries, PythonRunPhase.PRE_SQL_INGRESS),
         label="Python ingress",
         name_column_width=name_column_width,
         display_options=resolved_display_options,
@@ -204,9 +202,7 @@ def format_plan(
 
     _format_python_plan_entries(
         lines,
-        entries=_python_plan_entries_for_region(
-            python_plan_entries, PythonRunRegion.SQL_READ_PYTHON
-        ),
+        entries=_python_plan_entries_for_phase(python_plan_entries, PythonRunPhase.READ_SIDE),
         label="Python read-side",
         name_column_width=name_column_width,
         display_options=resolved_display_options,
@@ -249,9 +245,7 @@ def _format_full_refresh(
 
     _format_python_plan_entries(
         lines,
-        entries=_python_plan_entries_for_region(
-            python_plan_entries, PythonRunRegion.PRE_SQL_INGRESS
-        ),
+        entries=_python_plan_entries_for_phase(python_plan_entries, PythonRunPhase.PRE_SQL_INGRESS),
         label="Python ingress",
         name_column_width=name_column_width,
         display_options=display_options,
@@ -297,9 +291,7 @@ def _format_full_refresh(
 
     _format_python_plan_entries(
         lines,
-        entries=_python_plan_entries_for_region(
-            python_plan_entries, PythonRunRegion.SQL_READ_PYTHON
-        ),
+        entries=_python_plan_entries_for_phase(python_plan_entries, PythonRunPhase.READ_SIDE),
         label="Python read-side",
         name_column_width=name_column_width,
         display_options=display_options,
@@ -337,10 +329,10 @@ def _plan_ready_header(
     return f"Plan ready ({', '.join(parts)})"
 
 
-def _python_plan_entries_for_region(
-    entries: tuple[PythonPlanEntry, ...], region: PythonRunRegion
+def _python_plan_entries_for_phase(
+    entries: tuple[PythonPlanEntry, ...], phase: PythonRunPhase
 ) -> tuple[PythonPlanEntry, ...]:
-    return tuple(entry for entry in entries if entry.region == region)
+    return tuple(entry for entry in entries if entry.phase == phase)
 
 
 def _format_python_plan_entries(

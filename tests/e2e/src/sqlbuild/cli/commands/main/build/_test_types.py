@@ -30,6 +30,18 @@ class BuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class PythonBuildE2ETestCase:
+    """Test case for direct build Python-node behavior."""
+
+    description: str
+    expected_exit_code: int
+    expected_execution_fragments: tuple[str, ...]
+    expected_table_names: tuple[str, ...]
+    expected_notify_text: str
+    expected_fact_orders_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class VirtualBuildE2ETestCase:
     """Test case for virtual build e2e behavior."""
 
