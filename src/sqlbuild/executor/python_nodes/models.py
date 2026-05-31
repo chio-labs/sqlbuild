@@ -151,7 +151,7 @@ class PythonNodeExecutorResult:
 
 
 @dataclass(frozen=True)
-class Region1PythonLoaderExecutorResult:
+class PythonIngressLoaderExecutorResult:
     """Result bundle for pre-SQL Python/loader lifecycle execution."""
 
     python_results: tuple[PythonNodeExecutionResult, ...]

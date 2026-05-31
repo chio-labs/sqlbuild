@@ -254,5 +254,5 @@ def _serialize_python_plan_entry(entry: PythonPlanEntry) -> dict[str, object]:
     return {
         "name": entry.name,
         "kind": entry.kind.value,
-        "region": entry.region.value,
+        "phase": entry.phase.value,
     }

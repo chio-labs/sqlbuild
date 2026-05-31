@@ -31,13 +31,13 @@ RUN_LIFECYCLE_TEST_CASES: list[PythonSqlRunLifecycleTestCase] = [
             ),
             python_node_names=frozenset({"prepare_orders", "load_events"}),
         ),
-        expected_region_1_python_names=frozenset({"prepare_orders", "load_events"}),
-        expected_region_1_loader_names=frozenset({"load_events"}),
-        expected_region_2_python_names=frozenset(),
-        expected_region_2_sql_names=frozenset({"raw_orders"}),
+        expected_ingress_python_names=frozenset({"prepare_orders", "load_events"}),
+        expected_ingress_loader_names=frozenset({"load_events"}),
+        expected_read_side_python_names=frozenset(),
+        expected_read_side_sql_names=frozenset({"raw_orders"}),
     ),
     PythonSqlRunLifecycleTestCase(
-        description="classifies read only asset into sql python region",
+        description="classifies read only asset into read-side Python",
         python_graph_case="orders",
         selection=PythonSqlRunSelection(
             sql_keys=frozenset(
@@ -45,10 +45,10 @@ RUN_LIFECYCLE_TEST_CASES: list[PythonSqlRunLifecycleTestCase] = [
             ),
             python_node_names=frozenset({"export_orders"}),
         ),
-        expected_region_1_python_names=frozenset(),
-        expected_region_1_loader_names=frozenset(),
-        expected_region_2_python_names=frozenset({"export_orders"}),
-        expected_region_2_sql_names=frozenset({"orders"}),
+        expected_ingress_python_names=frozenset(),
+        expected_ingress_loader_names=frozenset(),
+        expected_read_side_python_names=frozenset({"export_orders"}),
+        expected_read_side_sql_names=frozenset({"orders"}),
     ),
     PythonSqlRunLifecycleTestCase(
         description="classifies intermediate loader dependency into pre sql ingress",
@@ -59,10 +59,10 @@ RUN_LIFECYCLE_TEST_CASES: list[PythonSqlRunLifecycleTestCase] = [
             ),
             python_node_names=frozenset({"fetch_pages", "export_orders"}),
         ),
-        expected_region_1_python_names=frozenset({"fetch_pages"}),
-        expected_region_1_loader_names=frozenset({"fetch_pages"}),
-        expected_region_2_python_names=frozenset({"export_orders"}),
-        expected_region_2_sql_names=frozenset({"fetch_pages"}),
+        expected_ingress_python_names=frozenset({"fetch_pages"}),
+        expected_ingress_loader_names=frozenset({"fetch_pages"}),
+        expected_read_side_python_names=frozenset({"export_orders"}),
+        expected_read_side_sql_names=frozenset({"fetch_pages"}),
     ),
 ]
 
@@ -72,7 +72,7 @@ RUN_LIFECYCLE_TEST_CASES: list[PythonSqlRunLifecycleTestCase] = [
     RUN_LIFECYCLE_TEST_CASES,
     ids=[case.description for case in RUN_LIFECYCLE_TEST_CASES],
 )
-def test_given_run_selection_when_building_lifecycle_plan_then_classifies_regions(
+def test_given_run_selection_when_building_lifecycle_plan_then_classifies_phases(
     test_case: PythonSqlRunLifecycleTestCase,
 ) -> None:
     graph: PythonNodeGraph = build_python_node_graph_for_case(test_case.python_graph_case)
@@ -82,9 +82,9 @@ def test_given_run_selection_when_building_lifecycle_plan_then_classifies_region
         python_graph=graph,
     )
 
-    assert result.region_1_python_node_names == test_case.expected_region_1_python_names
-    assert result.region_1_loader_names == test_case.expected_region_1_loader_names
-    assert result.region_2_python_node_names == test_case.expected_region_2_python_names
-    assert frozenset(key.name for key in result.region_2_sql_keys) == (
-        test_case.expected_region_2_sql_names
+    assert result.ingress_python_node_names == test_case.expected_ingress_python_names
+    assert result.ingress_loader_names == test_case.expected_ingress_loader_names
+    assert result.read_side_python_node_names == test_case.expected_read_side_python_names
+    assert frozenset(key.name for key in result.read_side_sql_keys) == (
+        test_case.expected_read_side_sql_names
     )

@@ -265,88 +265,88 @@ def python_graph_for_lifecycle_case(case_name: str) -> PythonNodeGraph:
     raise ValueError(f"unknown lifecycle graph case: {case_name}")
 
 
-REGION_1_CALLS: list[str] = []
+INGRESS_CALLS: list[str] = []
 
 
-def reset_region_1_calls() -> None:
-    REGION_1_CALLS.clear()
+def reset_ingress_calls() -> None:
+    INGRESS_CALLS.clear()
 
 
-def region_1_calls() -> tuple[str, ...]:
-    return tuple(REGION_1_CALLS)
+def ingress_calls() -> tuple[str, ...]:
+    return tuple(INGRESS_CALLS)
 
 
-def prepare_region_1_orders(ctx: TaskContext) -> object:
-    REGION_1_CALLS.append("prepare_region_1_orders")
+def prepare_ingress_orders(ctx: TaskContext) -> object:
+    INGRESS_CALLS.append("prepare_ingress_orders")
     return ctx.result(payload={"prepared": True})
 
 
-def load_region_1_orders(_ctx: object) -> object:
-    REGION_1_CALLS.append("load_region_1_orders")
+def load_ingress_orders(_ctx: object) -> object:
+    INGRESS_CALLS.append("load_ingress_orders")
     return None
 
 
-def build_region_1_task_loader_graph() -> PythonNodeGraph:
+def build_ingress_task_loader_graph() -> PythonNodeGraph:
     return build_python_node_graph(
         discovered_inputs=DiscoveredProjectInputs(
             project_config=ProjectConfig(name="demo", adapter="duckdb"),
             local_config=LocalConfig(),
-            loader_functions=(region_1_loader_function(),),
-            task_functions=(region_1_task_function(),),
+            loader_functions=(ingress_loader_function(),),
+            task_functions=(ingress_task_function(),),
         )
     )
 
 
-def region_1_task_function() -> DiscoveredTaskFunction:
+def ingress_task_function() -> DiscoveredTaskFunction:
     return DiscoveredTaskFunction(
         file_path=Path("/project/tasks/orders.py"),
         relative_path=Path("tasks/orders.py"),
-        name="prepare_region_1_orders",
-        function=prepare_region_1_orders,
+        name="prepare_ingress_orders",
+        function=prepare_ingress_orders,
     )
 
 
-def region_1_loader_function() -> DiscoveredLoaderFunction:
+def ingress_loader_function() -> DiscoveredLoaderFunction:
     return DiscoveredLoaderFunction(
         file_path=Path("/project/loaders/orders.py"),
         relative_path=Path("loaders/orders.py"),
-        name="load_region_1_orders",
-        function=load_region_1_orders,
-        depends_on=(prepare_region_1_orders,),
+        name="load_ingress_orders",
+        function=load_ingress_orders,
+        depends_on=(prepare_ingress_orders,),
     )
 
 
-def region_1_source_map() -> dict[str, SourceEntry]:
+def ingress_source_map() -> dict[str, SourceEntry]:
     return {
         "raw_orders": SourceEntry(
             name="raw_orders",
-            loader="load_region_1_orders",
+            loader="load_ingress_orders",
         )
     }
 
 
-REGION_2_CALLS: list[str] = []
+READ_SIDE_CALLS: list[str] = []
 
 
-def reset_region_2_calls() -> None:
-    REGION_2_CALLS.clear()
+def reset_read_side_calls() -> None:
+    READ_SIDE_CALLS.clear()
 
 
-def region_2_calls() -> tuple[str, ...]:
-    return tuple(REGION_2_CALLS)
+def read_side_calls() -> tuple[str, ...]:
+    return tuple(READ_SIDE_CALLS)
 
 
 def profile_stg_orders(ctx: TaskContext) -> object:
-    REGION_2_CALLS.append("profile_stg_orders")
+    READ_SIDE_CALLS.append("profile_stg_orders")
     return ctx.result(payload={"profiled": True})
 
 
 def export_stg_profile(ctx: AssetContext) -> object:
-    REGION_2_CALLS.append("export_stg_profile")
+    READ_SIDE_CALLS.append("export_stg_profile")
     return ctx.result(payload=ctx.payload(profile_stg_orders), materialized=False)
 
 
-def build_region_2_sql_task_asset_graph() -> PythonNodeGraph:
+def build_read_side_sql_task_asset_graph() -> PythonNodeGraph:
     return build_python_node_graph(
         discovered_inputs=DiscoveredProjectInputs(
             project_config=ProjectConfig(name="demo", adapter="duckdb"),

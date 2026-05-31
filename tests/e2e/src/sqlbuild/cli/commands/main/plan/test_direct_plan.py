@@ -169,22 +169,22 @@ def test_given_python_lifecycle_project_when_planning_json_then_includes_python_
     assert nodes_by_name["prepare_orders"] == {
         "name": "prepare_orders",
         "kind": "task",
-        "region": "pre_sql_ingress",
+        "phase": "pre_sql_ingress",
     }
     assert nodes_by_name["publish_prepared_orders"] == {
         "name": "publish_prepared_orders",
         "kind": "asset",
-        "region": "pre_sql_ingress",
+        "phase": "pre_sql_ingress",
     }
     assert nodes_by_name["profile_fact_orders"] == {
         "name": "profile_fact_orders",
         "kind": "task",
-        "region": "sql_read_python",
+        "phase": "read_side",
     }
     assert nodes_by_name["notify_fact_orders"] == {
         "name": "notify_fact_orders",
         "kind": "task",
-        "region": "sql_read_python",
+        "phase": "read_side",
     }
 
 

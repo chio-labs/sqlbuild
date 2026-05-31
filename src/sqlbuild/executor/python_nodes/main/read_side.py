@@ -1,4 +1,4 @@
-"""Public executor entrypoint for Region 2 SQL-read Python tracking."""
+"""Public executor entrypoint for Python read-side SQL-read Python tracking."""
 
 from __future__ import annotations
 
@@ -7,11 +7,13 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
-from sqlbuild.executor.python_nodes.helpers.region_2_execution import Region2PythonExecutionTracker
+from sqlbuild.executor.python_nodes.helpers.read_side_execution import (
+    ReadSidePythonExecutionTracker,
+)
 from sqlbuild.shared.models import SqlResourceRef
 
 
-def create_region_2_python_execution_tracker(
+def create_read_side_python_execution_tracker(
     *,
     python_graph: PythonNodeGraph,
     selected_python_names: frozenset[str],
@@ -29,10 +31,10 @@ def create_region_2_python_execution_tracker(
     end_cursor_ts: datetime | None = None,
     start_cursor_int: int | None = None,
     end_cursor_int: int | None = None,
-) -> Region2PythonExecutionTracker:
-    """Create a Region 2 Python execution tracker."""
+) -> ReadSidePythonExecutionTracker:
+    """Create a read-side Python execution tracker."""
 
-    return Region2PythonExecutionTracker(
+    return ReadSidePythonExecutionTracker(
         python_graph=python_graph,
         selected_python_names=selected_python_names,
         adapter=adapter,

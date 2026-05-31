@@ -88,7 +88,7 @@ class PythonSqlRunLifecycleTestCase:
     description: str
     python_graph_case: str
     selection: PythonSqlRunSelection
-    expected_region_1_python_names: frozenset[str]
-    expected_region_1_loader_names: frozenset[str]
-    expected_region_2_python_names: frozenset[str]
-    expected_region_2_sql_names: frozenset[str]
+    expected_ingress_python_names: frozenset[str]
+    expected_ingress_loader_names: frozenset[str]
+    expected_read_side_python_names: frozenset[str]
+    expected_read_side_sql_names: frozenset[str]

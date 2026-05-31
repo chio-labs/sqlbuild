@@ -52,11 +52,11 @@ from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
 from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.pipeline.main.run import run_build_pipeline
-from sqlbuild.executor.python_nodes.main.region_1 import run_region_1_python_loader_nodes
-from sqlbuild.executor.python_nodes.main.region_2 import create_region_2_python_execution_tracker
+from sqlbuild.executor.python_nodes.main.ingress import run_ingress_python_loader_nodes
+from sqlbuild.executor.python_nodes.main.read_side import create_read_side_python_execution_tracker
 from sqlbuild.executor.python_nodes.models import (
+    PythonIngressLoaderExecutorResult,
     PythonNodeExecutionResult,
-    Region1PythonLoaderExecutorResult,
 )
 from sqlbuild.shared.helpers.naming import (
     resolve_qualified_name_parts,
@@ -368,19 +368,19 @@ def run_virtual_build(
         if on_plan_ready is not None
         else VirtualBuildExecutionHooks()
     )
-    region_1_python_results: tuple[PythonNodeExecutionResult, ...] = ()
-    region_1_load_results: tuple[LoadExecutionResult, ...] = ()
-    if lifecycle_plan.region_1_python_node_names:
-        region_1_connection: Any = adapter.connect(connection_config)
+    ingress_python_results: tuple[PythonNodeExecutionResult, ...] = ()
+    ingress_load_results: tuple[LoadExecutionResult, ...] = ()
+    if lifecycle_plan.ingress_python_node_names:
+        ingress_connection: Any = adapter.connect(connection_config)
         try:
-            region_1_result: Region1PythonLoaderExecutorResult = run_region_1_python_loader_nodes(
+            ingress_result: PythonIngressLoaderExecutorResult = run_ingress_python_loader_nodes(
                 python_graph=python_graph,
-                selected_python_names=lifecycle_plan.region_1_python_node_names,
+                selected_python_names=lifecycle_plan.ingress_python_node_names,
                 loader_functions=discovered_inputs.loader_functions,
                 source_map=plan_output.source_map,
                 adapter=adapter,
                 connection_config=connection_config,
-                connection=region_1_connection,
+                connection=ingress_connection,
                 run_id=rewritten_project.run_id,
                 environment=target_vde_name,
                 vars=rewritten_project.effective_vars,
@@ -396,9 +396,9 @@ def run_virtual_build(
                 relation_targets=relation_targets,
             )
         finally:
-            adapter.close(region_1_connection)
-        region_1_python_results = region_1_result.python_results
-        region_1_load_results = region_1_result.load_results
+            adapter.close(ingress_connection)
+        ingress_python_results = ingress_result.python_results
+        ingress_load_results = ingress_result.load_results
     before_model_materialize: Callable[[ModelPlanEntry, Any], None] = (
         _build_before_model_materialize(
             adapter=adapter,
@@ -412,12 +412,12 @@ def run_virtual_build(
             effective_vars=cli_vars or {},
         )
     )
-    region_1_failed: bool = any(
-        load_result.status == ExecutionStatus.FAILED for load_result in region_1_load_results
-    ) or any(result.status == PythonNodeStatus.FAILED for result in region_1_python_results)
-    if region_1_failed:
+    ingress_failed: bool = any(
+        load_result.status == ExecutionStatus.FAILED for load_result in ingress_load_results
+    ) or any(result.status == PythonNodeStatus.FAILED for result in ingress_python_results)
+    if ingress_failed:
         result: BuildExecutionResult = BuildExecutionResult(
-            status=BuildStatus.FAILED, load_results=region_1_load_results
+            status=BuildStatus.FAILED, load_results=ingress_load_results
         )
     else:
         result = run_build_pipeline(
@@ -439,14 +439,14 @@ def run_virtual_build(
             custom_materializations=custom_materializations,
             loader_functions=_sql_loader_functions_for_lifecycle_handoff(
                 discovered_inputs=discovered_inputs,
-                region_1_loader_names=lifecycle_plan.region_1_loader_names,
+                ingress_loader_names=lifecycle_plan.ingress_loader_names,
             ),
             loader_is_reload=reload_sources,
             precompleted_keys=frozenset(
                 _load_result_key(plan=plan_output, result=load_result)
-                for load_result in region_1_load_results
+                for load_result in ingress_load_results
             ),
-            initial_load_results=region_1_load_results,
+            initial_load_results=ingress_load_results,
             start_cursor_ts=start_cursor_ts,
             end_cursor_ts=end_cursor_ts,
             start_cursor_int=start_cursor_int,
@@ -470,7 +470,7 @@ def run_virtual_build(
             expected_metadata_jsons=semantics.expected_metadata_jsons,
             expected_version_hashes=semantics.expected_version_hashes,
         )
-        region_2_results: tuple[PythonNodeExecutionResult, ...] = _run_region_2_python_nodes(
+        read_side_results: tuple[PythonNodeExecutionResult, ...] = _run_read_side_python_nodes(
             python_graph=python_graph,
             lifecycle_plan=lifecycle_plan,
             result=result,
@@ -489,15 +489,15 @@ def run_virtual_build(
             end_cursor_int=end_cursor_int,
         )
         if any(
-            python_result.status == PythonNodeStatus.FAILED for python_result in region_2_results
+            python_result.status == PythonNodeStatus.FAILED for python_result in read_side_results
         ):
             result = replace(result, status=BuildStatus.FAILED)
     else:
-        region_2_results = ()
+        read_side_results = ()
 
     python_results: tuple[PythonNodeExecutionResult, ...] = (
-        *region_1_python_results,
-        *region_2_results,
+        *ingress_python_results,
+        *read_side_results,
     )
 
     return VirtualBuildPipelineResult(
@@ -572,7 +572,7 @@ def _build_before_model_materialize(
     return before_model_materialize
 
 
-def _run_region_2_python_nodes(
+def _run_read_side_python_nodes(
     *,
     python_graph: PythonNodeGraph,
     lifecycle_plan: PythonSqlRunLifecyclePlan,
@@ -591,13 +591,13 @@ def _run_region_2_python_nodes(
     start_cursor_int: int | None,
     end_cursor_int: int | None,
 ) -> tuple[PythonNodeExecutionResult, ...]:
-    if not lifecycle_plan.region_2_python_node_names:
+    if not lifecycle_plan.read_side_python_node_names:
         return ()
     connection: Any = adapter.connect(connection_config)
     try:
-        tracker: Any = create_region_2_python_execution_tracker(
+        tracker: Any = create_read_side_python_execution_tracker(
             python_graph=python_graph,
-            selected_python_names=lifecycle_plan.region_2_python_node_names,
+            selected_python_names=lifecycle_plan.read_side_python_node_names,
             adapter=adapter,
             connection_config=connection_config,
             connection=connection,
@@ -629,7 +629,7 @@ def _run_region_2_python_nodes(
 def _sql_loader_functions_for_lifecycle_handoff(
     *,
     discovered_inputs: DiscoveredProjectInputs,
-    region_1_loader_names: frozenset[str],
+    ingress_loader_names: frozenset[str],
 ) -> tuple[Any, ...]:
     loader_functions: frozenset[object] = frozenset(
         loader.function for loader in discovered_inputs.loader_functions
@@ -640,7 +640,7 @@ def _sql_loader_functions_for_lifecycle_handoff(
             depends_on=tuple(
                 dependency
                 for dependency in loader.depends_on
-                if dependency in loader_functions or loader.name not in region_1_loader_names
+                if dependency in loader_functions or loader.name not in ingress_loader_names
             ),
         )
         for loader in discovered_inputs.loader_functions

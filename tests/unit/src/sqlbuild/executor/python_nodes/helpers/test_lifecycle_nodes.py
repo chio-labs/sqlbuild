@@ -6,8 +6,8 @@ import pytest
 
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunLifecyclePlan
 from sqlbuild.executor.python_nodes.helpers.lifecycle_nodes import (
-    build_region_1_lifecycle_nodes,
-    build_region_2_python_lifecycle_nodes,
+    build_ingress_lifecycle_nodes,
+    build_read_side_python_lifecycle_nodes,
 )
 from sqlbuild.executor.shared.models.lifecycle_scheduler import LifecycleExecutionNode
 from tests.unit.src.sqlbuild.executor.python_nodes.helpers._test_types import (
@@ -19,7 +19,7 @@ from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import (
     python_graph_for_lifecycle_case,
 )
 
-REGION_1_LIFECYCLE_NODE_TEST_CASES: list[PythonNodeLifecycleNodeBuildTestCase] = [
+INGRESS_LIFECYCLE_NODE_TEST_CASES: list[PythonNodeLifecycleNodeBuildTestCase] = [
     PythonNodeLifecycleNodeBuildTestCase(
         description="builds pre sql task and loader scheduler nodes",
         python_graph_case="orders",
@@ -40,7 +40,7 @@ REGION_1_LIFECYCLE_NODE_TEST_CASES: list[PythonNodeLifecycleNodeBuildTestCase] =
     ),
 ]
 
-REGION_2_LIFECYCLE_NODE_TEST_CASES: list[PythonNodeLifecycleNodeBuildTestCase] = [
+READ_SIDE_LIFECYCLE_NODE_TEST_CASES: list[PythonNodeLifecycleNodeBuildTestCase] = [
     PythonNodeLifecycleNodeBuildTestCase(
         description="builds read only asset scheduler node",
         python_graph_case="orders",
@@ -64,10 +64,10 @@ REGION_2_LIFECYCLE_NODE_TEST_CASES: list[PythonNodeLifecycleNodeBuildTestCase] =
 
 @pytest.mark.parametrize(
     "test_case",
-    REGION_1_LIFECYCLE_NODE_TEST_CASES,
-    ids=[case.description for case in REGION_1_LIFECYCLE_NODE_TEST_CASES],
+    INGRESS_LIFECYCLE_NODE_TEST_CASES,
+    ids=[case.description for case in INGRESS_LIFECYCLE_NODE_TEST_CASES],
 )
-def test_given_lifecycle_plan_when_building_region_1_nodes_then_returns_python_scheduler_nodes(
+def test_given_lifecycle_plan_when_building_ingress_nodes_then_returns_python_scheduler_nodes(
     test_case: PythonNodeLifecycleNodeBuildTestCase,
 ) -> None:
     graph: PythonNodeGraph = python_graph_for_lifecycle_case(test_case.python_graph_case)
@@ -76,7 +76,7 @@ def test_given_lifecycle_plan_when_building_region_1_nodes_then_returns_python_s
         selected_names=test_case.selected_names,
     )
 
-    result: tuple[LifecycleExecutionNode, ...] = build_region_1_lifecycle_nodes(
+    result: tuple[LifecycleExecutionNode, ...] = build_ingress_lifecycle_nodes(
         plan=plan,
         python_graph=graph,
     )
@@ -91,10 +91,10 @@ def test_given_lifecycle_plan_when_building_region_1_nodes_then_returns_python_s
 
 @pytest.mark.parametrize(
     "test_case",
-    REGION_2_LIFECYCLE_NODE_TEST_CASES,
-    ids=[case.description for case in REGION_2_LIFECYCLE_NODE_TEST_CASES],
+    READ_SIDE_LIFECYCLE_NODE_TEST_CASES,
+    ids=[case.description for case in READ_SIDE_LIFECYCLE_NODE_TEST_CASES],
 )
-def test_given_lifecycle_plan_when_building_region_2_nodes_then_returns_python_scheduler_nodes(
+def test_given_lifecycle_plan_when_building_read_side_nodes_then_returns_python_scheduler_nodes(
     test_case: PythonNodeLifecycleNodeBuildTestCase,
 ) -> None:
     graph: PythonNodeGraph = python_graph_for_lifecycle_case(test_case.python_graph_case)
@@ -103,7 +103,7 @@ def test_given_lifecycle_plan_when_building_region_2_nodes_then_returns_python_s
         selected_names=test_case.selected_names,
     )
 
-    result: tuple[LifecycleExecutionNode, ...] = build_region_2_python_lifecycle_nodes(
+    result: tuple[LifecycleExecutionNode, ...] = build_read_side_python_lifecycle_nodes(
         plan=plan,
         python_graph=graph,
     )

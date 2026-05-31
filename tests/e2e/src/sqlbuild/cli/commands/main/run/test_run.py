@@ -817,13 +817,13 @@ def test_given_task_depends_on_model_when_running_run_then_task_runs_before_down
 ) -> None:
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
-        project_name="python_region_2_run_project",
+        project_name="python_read_side_run_project",
         repo_files={
             "sqlbuild_project.toml": (
-                'name = "python_region_2_run_project"\n'
+                'name = "python_read_side_run_project"\n'
                 'adapter = "duckdb"\n\n'
                 "[connection]\n"
-                'database = "python_region_2_run_project.duckdb"\n'
+                'database = "python_read_side_run_project.duckdb"\n'
             ),
             "sources/raw.yml": (
                 "sources:\n"
@@ -861,7 +861,7 @@ def test_given_task_depends_on_model_when_running_run_then_task_runs_before_down
     execution_output: str = result.stdout[result.stdout.index("Execution  sqb run") :]
     assert execution_output.index("stg_orders") < execution_output.index("profile_stg_orders")
     assert execution_output.index("profile_stg_orders") < execution_output.index("fact_orders")
-    db_path: Path = project_dir / "python_region_2_run_project.duckdb"
+    db_path: Path = project_dir / "python_read_side_run_project.duckdb"
     for table_name in test_case.expected_table_names:
         assert table_exists(db_path=db_path, table_name=table_name)
 
@@ -884,13 +884,13 @@ def test_given_task_depends_on_source_when_running_run_then_task_runs_after_sour
 ) -> None:
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
-        project_name="python_region_2_source_run_project",
+        project_name="python_read_side_source_run_project",
         repo_files={
             "sqlbuild_project.toml": (
-                'name = "python_region_2_source_run_project"\n'
+                'name = "python_read_side_source_run_project"\n'
                 'adapter = "duckdb"\n\n'
                 "[connection]\n"
-                'database = "python_region_2_source_run_project.duckdb"\n'
+                'database = "python_read_side_source_run_project.duckdb"\n'
             ),
             "loaders/orders.py": (
                 "from sqlbuild.loaders import loader\n\n"
@@ -928,7 +928,7 @@ def test_given_task_depends_on_source_when_running_run_then_task_runs_after_sour
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
     execution_output: str = result.stdout[result.stdout.index("Execution  sqb run") :]
     assert execution_output.index("raw_orders") < execution_output.index("profile_raw_orders")
-    db_path: Path = project_dir / "python_region_2_source_run_project.duckdb"
+    db_path: Path = project_dir / "python_read_side_source_run_project.duckdb"
     for table_name in test_case.expected_table_names:
         assert table_exists(db_path=db_path, table_name=table_name)
 
@@ -952,13 +952,13 @@ def test_given_sql_ready_task_fails_when_running_run_then_footer_json_and_exit_f
     json_output_path: Path = tmp_path / "target" / "run.json"
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
-        project_name="python_region_2_failure_run_project",
+        project_name="python_read_side_failure_run_project",
         repo_files={
             "sqlbuild_project.toml": (
-                'name = "python_region_2_failure_run_project"\n'
+                'name = "python_read_side_failure_run_project"\n'
                 'adapter = "duckdb"\n\n'
                 "[connection]\n"
-                'database = "python_region_2_failure_run_project.duckdb"\n'
+                'database = "python_read_side_failure_run_project.duckdb"\n'
             ),
             "sources/raw.yml": (
                 "sources:\n"
@@ -1159,7 +1159,7 @@ def test_given_task_asset_depend_on_intermediate_loader_when_running_run_then_lo
     ],
     ids=["run executes loader task loader chain before model"],
 )
-def test_given_loader_task_loader_chain_when_running_model_then_region_1_orders_chain(
+def test_given_loader_task_loader_chain_when_running_model_then_ingress_orders_chain(
     test_case: RunE2ETestCase,
     tmp_path: Path,
 ) -> None:
@@ -1245,7 +1245,7 @@ def test_given_loader_task_loader_chain_when_running_model_then_region_1_orders_
     ],
     ids=["run executes task asset loader chain before model"],
 )
-def test_given_task_asset_loader_chain_when_running_model_then_region_1_orders_chain(
+def test_given_task_asset_loader_chain_when_running_model_then_ingress_orders_chain(
     test_case: RunE2ETestCase,
     tmp_path: Path,
 ) -> None:
@@ -1328,7 +1328,7 @@ def test_given_task_asset_loader_chain_when_running_model_then_region_1_orders_c
     ],
     ids=["run executes loader asset loader chain before model"],
 )
-def test_given_loader_asset_loader_chain_when_running_model_then_region_1_orders_chain(
+def test_given_loader_asset_loader_chain_when_running_model_then_ingress_orders_chain(
     test_case: RunE2ETestCase,
     tmp_path: Path,
 ) -> None:
@@ -1414,7 +1414,7 @@ def test_given_loader_asset_loader_chain_when_running_model_then_region_1_orders
     ],
     ids=["run executes loader loader chain before model"],
 )
-def test_given_loader_loader_chain_when_running_model_then_region_1_orders_chain(
+def test_given_loader_loader_chain_when_running_model_then_ingress_orders_chain(
     test_case: RunE2ETestCase,
     tmp_path: Path,
 ) -> None:

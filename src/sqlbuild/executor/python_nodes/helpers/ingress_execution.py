@@ -1,4 +1,4 @@
-"""Region 1 pre-SQL Python/loader lifecycle execution."""
+"""Python ingress pre-SQL Python/loader lifecycle execution."""
 
 from __future__ import annotations
 
@@ -21,12 +21,12 @@ from sqlbuild.compiler.python_nodes.models import (
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
 from sqlbuild.executor.load.main.execute import execute_source_load
 from sqlbuild.executor.load.models import LoadExecutionResult
-from sqlbuild.executor.python_nodes.helpers.lifecycle_nodes import build_region_1_lifecycle_nodes
+from sqlbuild.executor.python_nodes.helpers.lifecycle_nodes import build_ingress_lifecycle_nodes
 from sqlbuild.executor.python_nodes.main.ready import run_ready_python_node
 from sqlbuild.executor.python_nodes.models import (
+    PythonIngressLoaderExecutorResult,
     PythonNodeExecutionResult,
     PythonNodeRunState,
-    Region1PythonLoaderExecutorResult,
 )
 from sqlbuild.executor.python_nodes.types import ExecutablePythonNode
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
@@ -43,7 +43,7 @@ from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 
 
-def execute_region_1_python_loader_nodes(
+def execute_ingress_python_loader_nodes(
     *,
     python_graph: PythonNodeGraph,
     selected_python_names: frozenset[str],
@@ -66,8 +66,8 @@ def execute_region_1_python_loader_nodes(
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None = None,
     on_node_complete: Callable[[object], None] | None = None,
     relation_targets: dict[SqlResourceRef, str] | None = None,
-) -> Region1PythonLoaderExecutorResult:
-    """Execute Region 1 task/asset/loader nodes in lifecycle topological order."""
+) -> PythonIngressLoaderExecutorResult:
+    """Execute Python ingress task/asset/loader nodes in lifecycle topological order."""
 
     run_state: PythonNodeRunState = PythonNodeRunState()
     loader_by_name: dict[str, DiscoveredLoaderFunction] = {
@@ -76,16 +76,16 @@ def execute_region_1_python_loader_nodes(
     source_by_loader_name: dict[str, SourceEntry] = {
         source.loader: source for source in source_map.values() if source.loader is not None
     }
-    lifecycle_nodes: tuple[LifecycleExecutionNode, ...] = build_region_1_lifecycle_nodes(
+    lifecycle_nodes: tuple[LifecycleExecutionNode, ...] = build_ingress_lifecycle_nodes(
         plan=PythonSqlRunLifecyclePlan(
-            region_1_python_node_names=selected_python_names,
-            region_1_loader_names=frozenset(
+            ingress_python_node_names=selected_python_names,
+            ingress_loader_names=frozenset(
                 name
                 for name in selected_python_names
                 if python_graph.nodes_by_name[name].kind == PythonNodeKind.LOADER
             ),
-            region_2_sql_keys=frozenset(),
-            region_2_python_node_names=frozenset(),
+            read_side_sql_keys=frozenset(),
+            read_side_python_node_names=frozenset(),
         ),
         python_graph=python_graph,
     )
@@ -97,7 +97,7 @@ def execute_region_1_python_loader_nodes(
 
     scheduler_result: LifecycleSchedulerResult = run_lifecycle_scheduler(
         nodes=lifecycle_nodes,
-        handler=lambda node: _execute_region_1_lifecycle_node(
+        handler=lambda node: _execute_ingress_lifecycle_node(
             node=node,
             python_graph=python_graph,
             loader_by_name=loader_by_name,
@@ -132,14 +132,14 @@ def execute_region_1_python_loader_nodes(
         python_results_by_name=python_results_by_name,
         load_results_by_name=load_results_by_name,
     )
-    return Region1PythonLoaderExecutorResult(
+    return PythonIngressLoaderExecutorResult(
         python_results=tuple(python_results_by_name.values()),
         load_results=tuple(load_results_by_name.values()),
         run_state=run_state,
     )
 
 
-def _execute_region_1_lifecycle_node(
+def _execute_ingress_lifecycle_node(
     *,
     node: LifecycleExecutionNode,
     python_graph: PythonNodeGraph,
@@ -169,7 +169,7 @@ def _execute_region_1_lifecycle_node(
 ) -> LifecycleNodeResult:
     discovered_node: DiscoveredPythonNode = python_graph.nodes_by_name[node.name]
     if discovered_node.kind == PythonNodeKind.LOADER:
-        return _execute_region_1_loader(
+        return _execute_ingress_loader(
             node=discovered_node,
             loader_by_name=loader_by_name,
             source_by_loader_name=source_by_loader_name,
@@ -190,7 +190,7 @@ def _execute_region_1_lifecycle_node(
             on_node_start=on_node_start,
             on_node_complete=on_node_complete,
         )
-    return _execute_region_1_python_node(
+    return _execute_ingress_python_node(
         node=discovered_node,
         python_graph=python_graph,
         adapter=adapter,
@@ -212,7 +212,7 @@ def _execute_region_1_lifecycle_node(
     )
 
 
-def _execute_region_1_python_node(
+def _execute_ingress_python_node(
     *,
     node: DiscoveredPythonNode,
     python_graph: PythonNodeGraph,
@@ -264,7 +264,7 @@ def _execute_region_1_python_node(
     return _python_result_to_lifecycle_result(result)
 
 
-def _execute_region_1_loader(
+def _execute_ingress_loader(
     *,
     node: DiscoveredPythonNode,
     loader_by_name: dict[str, DiscoveredLoaderFunction],
@@ -288,12 +288,12 @@ def _execute_region_1_loader(
 ) -> LifecycleNodeResult:
     loader: DiscoveredLoaderFunction | None = loader_by_name.get(node.name)
     if loader is None:
-        raise ExecutorInputError(f"No loader function found for Region 1 node '{node.name}'")
+        raise ExecutorInputError(f"No loader function found for Python ingress node '{node.name}'")
     source_entry: SourceEntry | None = source_by_loader_name.get(loader.name) or source_map.get(
         loader.name
     )
     if source_entry is None:
-        raise ExecutorInputError(f"No source entry found for Region 1 loader '{loader.name}'")
+        raise ExecutorInputError(f"No source entry found for Python ingress loader '{loader.name}'")
     if on_node_start is not None:
         on_node_start(source_entry.name, load_resource_kind(source_entry))
     result: LoadExecutionResult = execute_source_load(

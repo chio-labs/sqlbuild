@@ -8,7 +8,7 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
-from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunRegion
+from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunPhase
 from sqlbuild.shared.models import ColumnLineageRef, RetryPolicy, SqlResourceRef
 from sqlbuild.shared.types import PythonCheckSeverity
 from sqlbuild.spec.models.source import SourceColumnEntry
@@ -116,18 +116,18 @@ class PythonSqlRunSelection:
 class PythonSqlRunLifecyclePlan:
     """Lifecycle-aware run classification for SQL resources and Python nodes."""
 
-    region_1_python_node_names: frozenset[str]
-    region_1_loader_names: frozenset[str]
-    region_2_sql_keys: frozenset[CompiledObjectKey]
-    region_2_python_node_names: frozenset[str]
+    ingress_python_node_names: frozenset[str]
+    ingress_loader_names: frozenset[str]
+    read_side_sql_keys: frozenset[CompiledObjectKey]
+    read_side_python_node_names: frozenset[str]
 
-    def python_region(self, node_name: str) -> PythonRunRegion | None:
-        """Return the assigned lifecycle region for a Python node name."""
+    def python_phase(self, node_name: str) -> PythonRunPhase | None:
+        """Return the assigned lifecycle phase for a Python node name."""
 
-        if node_name in self.region_1_python_node_names:
-            return PythonRunRegion.PRE_SQL_INGRESS
-        if node_name in self.region_2_python_node_names:
-            return PythonRunRegion.SQL_READ_PYTHON
+        if node_name in self.ingress_python_node_names:
+            return PythonRunPhase.PRE_SQL_INGRESS
+        if node_name in self.read_side_python_node_names:
+            return PythonRunPhase.READ_SIDE
         return None
 
 

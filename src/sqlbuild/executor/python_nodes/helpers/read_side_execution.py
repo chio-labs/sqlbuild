@@ -1,4 +1,4 @@
-"""Region 2 SQL-read Python lifecycle execution helpers."""
+"""Python read-side SQL-read Python lifecycle execution helpers."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
-from sqlbuild.executor.python_nodes.helpers.region_1_execution import _to_executable_python_node
+from sqlbuild.executor.python_nodes.helpers.ingress_execution import _to_executable_python_node
 from sqlbuild.executor.python_nodes.main.ready import run_ready_python_node
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult, PythonNodeRunState
 from sqlbuild.executor.run.models import ModelExecutionResult
@@ -18,7 +18,7 @@ from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.shared.models import SqlResourceRef
 
 
-class Region2PythonExecutionTracker:
+class ReadSidePythonExecutionTracker:
     """Dispatch selected read-only Python nodes as SQL dependencies complete."""
 
     def __init__(
@@ -182,7 +182,7 @@ class Region2PythonExecutionTracker:
         for upstream_name in self._python_graph.upstream_deps.get(node.name, ()):
             if upstream_name in self._selected_python_names:
                 return f"Upstream Python node did not complete: {upstream_name}"
-        return "Region 2 Python node did not become ready"
+        return "Read-side Python node did not become ready"
 
 
 def _sql_result_name(result: object) -> str | None:

@@ -16,7 +16,7 @@ from sqlbuild.compiler.planner.types import (
     SchemaChangeKind,
     WarningSeverity,
 )
-from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunRegion
+from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunPhase
 from sqlbuild.shared.helpers.display import DisplayOptions
 from sqlbuild.spec.models.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers._test_types import (
@@ -383,17 +383,17 @@ TEST_CASES: list[FormatPlanTestCase] = [
             PythonPlanEntry(
                 name="prepare_orders",
                 kind=PythonNodeKind.TASK,
-                region=PythonRunRegion.PRE_SQL_INGRESS,
+                phase=PythonRunPhase.PRE_SQL_INGRESS,
             ),
             PythonPlanEntry(
                 name="publish_orders",
                 kind=PythonNodeKind.ASSET,
-                region=PythonRunRegion.PRE_SQL_INGRESS,
+                phase=PythonRunPhase.PRE_SQL_INGRESS,
             ),
             PythonPlanEntry(
                 name="profile_fact_orders",
                 kind=PythonNodeKind.TASK,
-                region=PythonRunRegion.SQL_READ_PYTHON,
+                phase=PythonRunPhase.READ_SIDE,
             ),
         ),
         expected_fragments=(
