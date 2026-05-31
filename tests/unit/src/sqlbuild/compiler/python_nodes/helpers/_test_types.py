@@ -4,7 +4,9 @@ from pathlib import Path
 
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.planner.models import ParsedSelector
+from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
+from sqlbuild.shared.models import SqlResourceRef
 
 
 @dataclass(frozen=True)
@@ -78,3 +80,15 @@ class PythonSqlSelectorErrorTestCase:
     expected_error_type: type[Exception]
     expected_error_fragment: str | None = None
     python_graph_case: str = "default"
+    sql_ref_dependency: SqlResourceRef | None = None
+
+
+@dataclass(frozen=True)
+class PythonSqlRunLifecycleTestCase:
+    description: str
+    python_graph_case: str
+    selection: PythonSqlRunSelection
+    expected_region_1_python_names: frozenset[str]
+    expected_region_1_loader_names: frozenset[str]
+    expected_region_2_python_names: frozenset[str]
+    expected_region_2_sql_names: frozenset[str]

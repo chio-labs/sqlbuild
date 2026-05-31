@@ -10,6 +10,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.types import TablePromotionMode
+from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.executor.build.main.execute import execute_build_plan
@@ -18,6 +19,7 @@ from sqlbuild.executor.build.main.external_source_loads import (
 )
 from sqlbuild.executor.build.models import BuildExecutionResult, ExternalSourceLoadResults
 from sqlbuild.executor.custom.models import MaterializationResult
+from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.pipeline.helpers.auditing import (
     run_audit_pipeline as run_audit_pipeline,
 )
@@ -76,6 +78,9 @@ def run_build_pipeline(
     on_connection_error: Callable[[int, float], None] | None = None,
     use_color: bool = False,
     query_change_tracking: bool | None = None,
+    precompleted_keys: frozenset[CompiledObjectKey] = frozenset(),
+    initial_load_results: tuple[LoadExecutionResult, ...] = (),
+    initial_failed_keys: frozenset[CompiledObjectKey] = frozenset(),
 ) -> BuildExecutionResult:
     """Execute a full build pipeline: resolve settings, open connections, run plan, close."""
 
@@ -161,9 +166,9 @@ def run_build_pipeline(
             effective_vars=effective_vars,
             on_sub_progress=on_sub_progress,
             use_color=use_color,
-            precompleted_keys=external_source_load_results.completed_keys,
-            initial_load_results=external_source_load_results.results,
-            initial_failed_keys=external_source_load_results.failed_keys,
+            precompleted_keys=precompleted_keys | external_source_load_results.completed_keys,
+            initial_load_results=(*initial_load_results, *external_source_load_results.results),
+            initial_failed_keys=initial_failed_keys | external_source_load_results.failed_keys,
         )
     finally:
         conn: Any

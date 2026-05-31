@@ -6,14 +6,14 @@ import inspect
 from collections.abc import Callable, Sequence
 from typing import Any, cast, overload
 
-from sqlbuild.shared.models import RetryPolicy, TaskDefinition
+from sqlbuild.shared.models import RetryPolicy, SqlResourceRef, TaskDefinition
 
 
 def _decorate_task(
     function: Callable[..., object],
     *,
     name: str | None = None,
-    depends_on: tuple[Callable[..., object], ...] = (),
+    depends_on: tuple[Callable[..., object] | SqlResourceRef, ...] = (),
     tags: Sequence[str] = (),
     group: str | None = None,
     description: str | None = None,
@@ -43,8 +43,9 @@ def task(
     *,
     name: str | None = None,
     depends_on: Callable[..., object]
-    | tuple[Callable[..., object], ...]
-    | list[Callable[..., object]] = (),
+    | SqlResourceRef
+    | tuple[Callable[..., object] | SqlResourceRef, ...]
+    | list[Callable[..., object] | SqlResourceRef] = (),
     tags: Sequence[str] = (),
     group: str | None = None,
     description: str | None = None,
@@ -59,8 +60,9 @@ def task(
     *,
     name: str | None = None,
     depends_on: Callable[..., object]
-    | tuple[Callable[..., object], ...]
-    | list[Callable[..., object]] = (),
+    | SqlResourceRef
+    | tuple[Callable[..., object] | SqlResourceRef, ...]
+    | list[Callable[..., object] | SqlResourceRef] = (),
     tags: Sequence[str] = (),
     group: str | None = None,
     description: str | None = None,
@@ -69,7 +71,9 @@ def task(
 ) -> Callable[..., object] | Callable[[Callable[..., object]], Callable[..., object]]:
     """Mark a Python function as a SQLBuild task."""
 
-    normalized_deps: tuple[Callable[..., object], ...] = _normalize_depends_on(depends_on)
+    normalized_deps: tuple[Callable[..., object] | SqlResourceRef, ...] = _normalize_depends_on(
+        depends_on
+    )
     if function is not None:
         return _decorate_task(
             function,
@@ -98,9 +102,12 @@ def task(
 
 
 def _normalize_depends_on(
-    value: Callable[..., object] | tuple[Callable[..., object], ...] | list[Callable[..., object]],
-) -> tuple[Callable[..., object], ...]:
-    if callable(value):
+    value: Callable[..., object]
+    | SqlResourceRef
+    | tuple[Callable[..., object] | SqlResourceRef, ...]
+    | list[Callable[..., object] | SqlResourceRef],
+) -> tuple[Callable[..., object] | SqlResourceRef, ...]:
+    if callable(value) or isinstance(value, SqlResourceRef):
         return (value,)
     return tuple(value)
 

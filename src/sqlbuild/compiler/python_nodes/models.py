@@ -8,8 +8,8 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
-from sqlbuild.compiler.python_nodes.types import PythonNodeKind
-from sqlbuild.shared.models import ColumnLineageRef, RetryPolicy
+from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunRegion
+from sqlbuild.shared.models import ColumnLineageRef, RetryPolicy, SqlResourceRef
 from sqlbuild.shared.types import PythonCheckSeverity
 from sqlbuild.spec.models.source import SourceColumnEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy
@@ -60,7 +60,8 @@ class DiscoveredPythonNode:
     relative_path: Path
     name: str
     function: Callable[..., object]
-    depends_on: tuple[Callable[..., object], ...] = field(default_factory=tuple)
+    depends_on: tuple[Callable[..., object] | SqlResourceRef, ...] = field(default_factory=tuple)
+    sql_deps: tuple[SqlResourceRef, ...] = field(default_factory=tuple)
     tags: tuple[str, ...] = field(default_factory=tuple)
     group: str | None = None
     description: str | None = None
@@ -101,6 +102,33 @@ class PythonSqlSelection:
 
     sql_keys: frozenset[CompiledObjectKey]
     python_node_names: frozenset[str]
+
+
+@dataclass(frozen=True)
+class PythonSqlRunSelection:
+    """Unified run-command selection excluding Python checks."""
+
+    sql_keys: frozenset[CompiledObjectKey]
+    python_node_names: frozenset[str]
+
+
+@dataclass(frozen=True)
+class PythonSqlRunLifecyclePlan:
+    """Lifecycle-aware run classification for SQL resources and Python nodes."""
+
+    region_1_python_node_names: frozenset[str]
+    region_1_loader_names: frozenset[str]
+    region_2_sql_keys: frozenset[CompiledObjectKey]
+    region_2_python_node_names: frozenset[str]
+
+    def python_region(self, node_name: str) -> PythonRunRegion | None:
+        """Return the assigned lifecycle region for a Python node name."""
+
+        if node_name in self.region_1_python_node_names:
+            return PythonRunRegion.PRE_SQL_INGRESS
+        if node_name in self.region_2_python_node_names:
+            return PythonRunRegion.SQL_READ_PYTHON
+        return None
 
 
 @dataclass(frozen=True)

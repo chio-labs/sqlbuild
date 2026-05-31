@@ -6,14 +6,14 @@ import inspect
 from collections.abc import Callable, Sequence
 from typing import Any, cast
 
-from sqlbuild.shared.models import CheckDefinition
+from sqlbuild.shared.models import CheckDefinition, SqlResourceRef
 from sqlbuild.shared.types import PythonCheckSeverity
 
 
 def _decorate_check(
     function: Callable[..., object],
     *,
-    depends_on: tuple[Callable[..., object], ...],
+    depends_on: tuple[Callable[..., object] | SqlResourceRef, ...],
     name: str | None = None,
     severity: str | PythonCheckSeverity = PythonCheckSeverity.ERROR,
     tags: Sequence[str] = (),
@@ -38,8 +38,9 @@ def _decorate_check(
 def check(
     *,
     depends_on: Callable[..., object]
-    | tuple[Callable[..., object], ...]
-    | list[Callable[..., object]],
+    | SqlResourceRef
+    | tuple[Callable[..., object] | SqlResourceRef, ...]
+    | list[Callable[..., object] | SqlResourceRef],
     name: str | None = None,
     severity: str | PythonCheckSeverity = PythonCheckSeverity.ERROR,
     tags: Sequence[str] = (),
@@ -49,7 +50,9 @@ def check(
 ) -> Callable[[Callable[..., object]], Callable[..., object]]:
     """Mark a Python function as a SQLBuild check."""
 
-    normalized_deps: tuple[Callable[..., object], ...] = _normalize_depends_on(depends_on)
+    normalized_deps: tuple[Callable[..., object] | SqlResourceRef, ...] = _normalize_depends_on(
+        depends_on
+    )
 
     def decorate(inner: Callable[..., object]) -> Callable[..., object]:
         return _decorate_check(
@@ -67,9 +70,12 @@ def check(
 
 
 def _normalize_depends_on(
-    value: Callable[..., object] | tuple[Callable[..., object], ...] | list[Callable[..., object]],
-) -> tuple[Callable[..., object], ...]:
-    if callable(value):
+    value: Callable[..., object]
+    | SqlResourceRef
+    | tuple[Callable[..., object] | SqlResourceRef, ...]
+    | list[Callable[..., object] | SqlResourceRef],
+) -> tuple[Callable[..., object] | SqlResourceRef, ...]:
+    if callable(value) or isinstance(value, SqlResourceRef):
         return (value,)
     return tuple(value)
 

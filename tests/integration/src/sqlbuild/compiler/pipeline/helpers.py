@@ -24,6 +24,7 @@ def run_compile_pipeline_for_project(
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     on_progress: Callable[[str], None] | None = None,
+    resolve_python_run_selectors: bool = False,
 ) -> CompilePipelineResult:
     """Discover a project and run the real compile pipeline."""
 
@@ -36,6 +37,7 @@ def run_compile_pipeline_for_project(
         select=select,
         exclude=exclude,
         on_progress=on_progress,
+        resolve_python_run_selectors=resolve_python_run_selectors,
     )
 
 

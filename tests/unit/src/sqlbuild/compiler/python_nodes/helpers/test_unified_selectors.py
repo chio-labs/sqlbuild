@@ -19,6 +19,10 @@ from tests.unit.src.sqlbuild.compiler.python_nodes.helpers.helpers import (
     build_orders_project_graph,
     build_orders_python_node_graph,
     build_python_node_graph_for_case,
+    build_sql_downstream_task_to_loader_python_node_graph,
+    build_sql_ref_python_node_graph,
+    model_ref,
+    source_ref,
 )
 
 PYTHON_SQL_SELECTOR_TEST_CASES: list[PythonSqlSelectorTestCase] = [
@@ -90,14 +94,14 @@ PYTHON_SQL_SELECTOR_TEST_CASES: list[PythonSqlSelectorTestCase] = [
         select=("source:raw_orders",),
         exclude=(),
         expected_sql_names=frozenset({"raw_orders"}),
-        expected_python_node_names=frozenset({"load_events"}),
+        expected_python_node_names=frozenset({"prepare_orders", "load_events"}),
     ),
     PythonSqlSelectorTestCase(
         description="selects source and terminal loader without duplicate loader names",
         select=("source:raw_orders loader:load_events",),
         exclude=(),
         expected_sql_names=frozenset({"raw_orders"}),
-        expected_python_node_names=frozenset({"load_events"}),
+        expected_python_node_names=frozenset({"prepare_orders", "load_events"}),
     ),
     PythonSqlSelectorTestCase(
         description="excludes Python node from unified selection",
@@ -166,6 +170,57 @@ def test_given_unknown_unified_selector_when_resolving_then_raises_clear_error(
 ) -> None:
     project_graph: ProjectGraph = build_orders_project_graph()
     python_graph: PythonNodeGraph = build_orders_python_node_graph()
+
+    with pytest.raises(test_case.expected_error_type, match=test_case.expected_error_fragment):
+        resolve_python_sql_selectors(
+            select=test_case.select,
+            exclude=test_case.exclude,
+            project_graph=project_graph,
+            python_graph=python_graph,
+        )
+
+
+PYTHON_SQL_REF_ERROR_TEST_CASES: list[PythonSqlSelectorErrorTestCase] = [
+    PythonSqlSelectorErrorTestCase(
+        description="raises when model ref is unknown",
+        select=("profile_orders",),
+        exclude=(),
+        expected_error_type=ValueError,
+        expected_error_fragment="Python node 'profile_orders' depends on unknown SQL resource",
+        sql_ref_dependency=model_ref("missing_orders"),
+    ),
+    PythonSqlSelectorErrorTestCase(
+        description="raises when source ref names a model",
+        select=("profile_orders",),
+        exclude=(),
+        expected_error_type=ValueError,
+        expected_error_fragment="declares source.*orders.*but.*orders.*is a model",
+        sql_ref_dependency=source_ref("orders"),
+    ),
+    PythonSqlSelectorErrorTestCase(
+        description="raises when model ref names a source",
+        select=("profile_orders",),
+        exclude=(),
+        expected_error_type=ValueError,
+        expected_error_fragment="declares model.*raw_orders.*but.*raw_orders.*is a source",
+        sql_ref_dependency=model_ref("raw_orders"),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    PYTHON_SQL_REF_ERROR_TEST_CASES,
+    ids=[case.description for case in PYTHON_SQL_REF_ERROR_TEST_CASES],
+)
+def test_given_invalid_typed_sql_ref_when_resolving_then_raises_clear_error(
+    test_case: PythonSqlSelectorErrorTestCase,
+) -> None:
+    project_graph: ProjectGraph = build_orders_project_graph()
+    assert test_case.sql_ref_dependency is not None
+    python_graph: PythonNodeGraph = build_sql_ref_python_node_graph(
+        dependency=test_case.sql_ref_dependency
+    )
 
     with pytest.raises(test_case.expected_error_type, match=test_case.expected_error_fragment):
         resolve_python_sql_selectors(
@@ -255,6 +310,36 @@ def test_given_invalid_sql_model_dependency_when_validating_boundaries_then_rais
 ) -> None:
     project_graph: ProjectGraph = build_model_depends_on_intermediate_loader_project_graph()
     python_graph: PythonNodeGraph = build_python_node_graph_for_case(test_case.python_graph_case)
+
+    with pytest.raises(test_case.expected_error_type, match=test_case.expected_error_fragment):
+        resolve_python_sql_selectors(
+            select=test_case.select,
+            exclude=test_case.exclude,
+            project_graph=project_graph,
+            python_graph=python_graph,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonSqlSelectorErrorTestCase(
+            description="raises when SQL downstream task feeds loader",
+            select=("load_events",),
+            exclude=(),
+            expected_error_type=ValueError,
+            expected_error_fragment=(
+                "Loader 'load_events' depends on Python node 'prepare_orders' which depends on SQL"
+            ),
+        )
+    ],
+    ids=["raises when SQL downstream task feeds loader"],
+)
+def test_given_sql_downstream_task_feeds_loader_when_validating_then_raises(
+    test_case: PythonSqlSelectorErrorTestCase,
+) -> None:
+    project_graph: ProjectGraph = build_orders_project_graph()
+    python_graph: PythonNodeGraph = build_sql_downstream_task_to_loader_python_node_graph()
 
     with pytest.raises(test_case.expected_error_type, match=test_case.expected_error_fragment):
         resolve_python_sql_selectors(

@@ -6,10 +6,12 @@ import logging
 import random
 import time
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.assets import get_asset_definition
 from sqlbuild.compiler.discovery.models import DiscoveredAssetFunction
 from sqlbuild.compiler.python_nodes.types import (
     PythonNodeFanInAction,
@@ -36,7 +38,8 @@ from sqlbuild.executor.shared.helpers.python_node_scheduler import (
     build_python_node_ready_queue,
     unlock_downstream_python_nodes,
 )
-from sqlbuild.shared.models import RetryPolicy
+from sqlbuild.shared.models import AssetDefinition, RetryPolicy, SqlResourceRef, TaskDefinition
+from sqlbuild.tasks import get_task_definition
 
 
 def execute_python_nodes(
@@ -52,6 +55,10 @@ def execute_python_nodes(
     statement_recorder: StatementRecorder,
     default_database: str | None = None,
     default_schema: str | None = None,
+    start_cursor_ts: datetime | None = None,
+    end_cursor_ts: datetime | None = None,
+    start_cursor_int: int | None = None,
+    end_cursor_int: int | None = None,
     logger: logging.Logger | None = None,
     run_state: PythonNodeRunState | None = None,
     sleep: Callable[[float], None] = time.sleep,
@@ -63,12 +70,14 @@ def execute_python_nodes(
         run_state if run_state is not None else PythonNodeRunState()
     )
     node_by_name: dict[str, ExecutablePythonNode] = {node.name: node for node in nodes}
-    node_by_function: dict[Callable[..., object], ExecutablePythonNode] = {
+    node_by_dependency_key: dict[object | tuple[str, str], ExecutablePythonNode] = {
         node.function: node for node in nodes
     }
+    for node in nodes:
+        node_by_dependency_key[("name", node.name)] = node
     upstream_names: dict[str, tuple[str, ...]] = _build_upstream_names(
         nodes=nodes,
-        node_by_function=node_by_function,
+        node_by_dependency_key=node_by_dependency_key,
     )
     downstream_names: dict[str, tuple[str, ...]] = _build_downstream_names(
         node_names=tuple(node.name for node in nodes),
@@ -101,6 +110,10 @@ def execute_python_nodes(
             statement_recorder=statement_recorder,
             default_database=default_database,
             default_schema=default_schema,
+            start_cursor_ts=start_cursor_ts,
+            end_cursor_ts=end_cursor_ts,
+            start_cursor_int=start_cursor_int,
+            end_cursor_int=end_cursor_int,
             logger=logger,
             run_state=resolved_run_state,
             sleep=sleep,
@@ -124,6 +137,55 @@ def execute_python_nodes(
     )
 
 
+def execute_ready_python_node(
+    *,
+    node: ExecutablePythonNode,
+    upstream_results: tuple[PythonNodeExecutionResult, ...],
+    adapter: BaseAdapter,
+    connection_config: dict[str, object],
+    connection: Any,
+    run_id: str,
+    environment: str | None,
+    vars: dict[str, object],
+    is_reload: bool,
+    statement_recorder: StatementRecorder,
+    default_database: str | None = None,
+    default_schema: str | None = None,
+    start_cursor_ts: datetime | None = None,
+    end_cursor_ts: datetime | None = None,
+    start_cursor_int: int | None = None,
+    end_cursor_int: int | None = None,
+    logger: logging.Logger | None = None,
+    run_state: PythonNodeRunState | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+    monotonic: Callable[[], float] = time.monotonic,
+) -> PythonNodeExecutionResult:
+    """Execute one scheduler-ready task/asset node."""
+
+    return _execute_ready_node(
+        node=node,
+        upstream_results=upstream_results,
+        adapter=adapter,
+        connection_config=connection_config,
+        connection=connection,
+        run_id=run_id,
+        environment=environment,
+        vars=vars,
+        is_reload=is_reload,
+        statement_recorder=statement_recorder,
+        default_database=default_database,
+        default_schema=default_schema,
+        start_cursor_ts=start_cursor_ts,
+        end_cursor_ts=end_cursor_ts,
+        start_cursor_int=start_cursor_int,
+        end_cursor_int=end_cursor_int,
+        logger=logger,
+        run_state=run_state if run_state is not None else PythonNodeRunState(),
+        sleep=sleep,
+        monotonic=monotonic,
+    )
+
+
 def _execute_ready_node(
     *,
     node: ExecutablePythonNode,
@@ -138,6 +200,10 @@ def _execute_ready_node(
     statement_recorder: StatementRecorder,
     default_database: str | None,
     default_schema: str | None,
+    start_cursor_ts: datetime | None,
+    end_cursor_ts: datetime | None,
+    start_cursor_int: int | None,
+    end_cursor_int: int | None,
     logger: logging.Logger | None,
     run_state: PythonNodeRunState,
     sleep: Callable[[float], None],
@@ -174,6 +240,10 @@ def _execute_ready_node(
         statement_recorder=statement_recorder,
         default_database=default_database,
         default_schema=default_schema,
+        start_cursor_ts=start_cursor_ts,
+        end_cursor_ts=end_cursor_ts,
+        start_cursor_int=start_cursor_int,
+        end_cursor_int=end_cursor_int,
         logger=logger,
         run_state=run_state,
     )
@@ -253,6 +323,10 @@ def _build_context(
     statement_recorder: StatementRecorder,
     default_database: str | None,
     default_schema: str | None,
+    start_cursor_ts: datetime | None,
+    end_cursor_ts: datetime | None,
+    start_cursor_int: int | None,
+    end_cursor_int: int | None,
     logger: logging.Logger | None,
     run_state: PythonNodeRunState,
 ) -> TaskContext | AssetContext:
@@ -273,6 +347,10 @@ def _build_context(
             run_state=run_state,
             default_database=default_database,
             default_schema=default_schema,
+            start_cursor_ts=start_cursor_ts,
+            end_cursor_ts=end_cursor_ts,
+            start_cursor_int=start_cursor_int,
+            end_cursor_int=end_cursor_int,
         )
     return TaskContext(
         adapter=adapter,
@@ -287,20 +365,28 @@ def _build_context(
         run_state=run_state,
         default_database=default_database,
         default_schema=default_schema,
+        start_cursor_ts=start_cursor_ts,
+        end_cursor_ts=end_cursor_ts,
+        start_cursor_int=start_cursor_int,
+        end_cursor_int=end_cursor_int,
     )
 
 
 def _build_upstream_names(
     *,
     nodes: tuple[ExecutablePythonNode, ...],
-    node_by_function: dict[Callable[..., object], ExecutablePythonNode],
+    node_by_dependency_key: dict[object | tuple[str, str], ExecutablePythonNode],
 ) -> dict[str, tuple[str, ...]]:
     upstream_names: dict[str, tuple[str, ...]] = {}
     for node in nodes:
         names: list[str] = []
-        dependency: Callable[..., object]
+        dependency: Callable[..., object] | SqlResourceRef
         for dependency in node.depends_on:
-            upstream_node: ExecutablePythonNode | None = node_by_function.get(dependency)
+            if isinstance(dependency, SqlResourceRef):
+                continue
+            upstream_node: ExecutablePythonNode | None = node_by_dependency_key.get(
+                _python_node_dependency_key(dependency)
+            )
             if upstream_node is None:
                 raise ExecutorInputError(
                     f"Python node '{node.name}' depends on a node outside the executor selection"
@@ -308,6 +394,20 @@ def _build_upstream_names(
             names.append(upstream_node.name)
         upstream_names[node.name] = tuple(names)
     return upstream_names
+
+
+def _python_node_dependency_key(dependency: object) -> object | tuple[str, str]:
+    task_definition: TaskDefinition | None = (
+        get_task_definition(dependency) if callable(dependency) else None
+    )
+    if task_definition is not None:
+        return ("name", task_definition.name)
+    asset_definition: AssetDefinition | None = (
+        get_asset_definition(dependency) if callable(dependency) else None
+    )
+    if asset_definition is not None:
+        return ("name", asset_definition.name)
+    return dependency
 
 
 def _build_downstream_names(

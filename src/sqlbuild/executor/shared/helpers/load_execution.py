@@ -7,6 +7,7 @@ from collections.abc import Callable
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.executor.load.models import LoadExecutionIndexes, LoadExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -73,9 +74,11 @@ def dependency_node_names(*, source: SourceEntry, indexes: LoadExecutionIndexes)
     if source.loader is None:
         return ()
     loader: DiscoveredLoaderFunction = indexes.loader_by_name[source.loader]
-    dependency: Callable[..., object]
+    dependency: Callable[..., object] | SqlResourceRef
     names: list[str] = []
     for dependency in loader.depends_on:
+        if isinstance(dependency, SqlResourceRef):
+            continue
         loader_name: str = indexes.loader_name_by_function[dependency]
         dependency_source: SourceEntry | None = indexes.source_by_loader_name.get(loader_name)
         names.append(dependency_source.name if dependency_source is not None else loader_name)

@@ -38,7 +38,11 @@ def expand_selected_loader_dependencies(
         if selected_key.resource_type != CompiledResourceType.SOURCE:
             continue
         source_entry: SourceEntry | None = source_by_name.get(selected_key.name)
-        if source_entry is None or source_entry.loader is None:
+        if source_entry is None:
+            if selected_key.name in loader_by_name:
+                expanded_upstream.setdefault(selected_key, ())
+            continue
+        if source_entry.loader is None:
             continue
         loader_function: DiscoveredLoaderFunction | None = loader_by_name.get(source_entry.loader)
         if loader_function is None:
@@ -175,7 +179,11 @@ def _dependency_loader_names(
     loader_function: DiscoveredLoaderFunction,
     loader_name_by_function: dict[object, str],
 ) -> tuple[str, ...]:
-    return tuple(loader_name_by_function[dependency] for dependency in loader_function.depends_on)
+    return tuple(
+        loader_name_by_function[dependency]
+        for dependency in loader_function.depends_on
+        if dependency in loader_name_by_function
+    )
 
 
 def _loader_node_key(

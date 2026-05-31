@@ -722,6 +722,36 @@ def export_customers_exists(ctx):
         expected_error_fragment="Check 'export_customers_exists' depends on an unknown Python node",
     ),
     DiscoverProjectInputsErrorTestCase(
+        description="raises when loader declares SQL model dependency",
+        repo_files=base_repo_files()
+        | {
+            "loaders/orders.py": """
+from sqlbuild.loaders import loader
+from sqlbuild.refs import model
+
+@loader(depends_on=[model('stg_orders')])
+def load_orders(ctx):
+    return []
+""",
+        },
+        expected_error_fragment="Loader 'load_orders' depends on SQL resource 'stg_orders'",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when check declares SQL model dependency",
+        repo_files=base_repo_files()
+        | {
+            "checks/orders.py": """
+from sqlbuild.checks import check
+from sqlbuild.refs import model
+
+@check(depends_on=model('stg_orders'))
+def check_orders(ctx):
+    return True
+""",
+        },
+        expected_error_fragment="Check 'check_orders' depends on SQL resource 'stg_orders'",
+    ),
+    DiscoverProjectInputsErrorTestCase(
         description="raises when check depends on check",
         repo_files=base_repo_files()
         | {

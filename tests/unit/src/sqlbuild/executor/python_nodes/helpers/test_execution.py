@@ -9,16 +9,26 @@ import pytest
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredAssetFunction, DiscoveredTaskFunction
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
-from sqlbuild.executor.python_nodes.helpers.execution import execute_python_nodes
-from sqlbuild.executor.python_nodes.models import PythonNodeExecutorResult
+from sqlbuild.executor.python_nodes.helpers.execution import (
+    execute_python_nodes,
+    execute_ready_python_node,
+)
+from sqlbuild.executor.python_nodes.models import (
+    PythonNodeExecutionResult,
+    PythonNodeExecutorResult,
+    PythonNodeRunState,
+)
 from sqlbuild.shared.models import RetryPolicy
 from tests.unit.src.sqlbuild.executor.python_nodes.helpers._test_types import (
     PythonNodeExecutorTestCase,
     PythonNodeRetryExecutorTestCase,
 )
 from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import (
+    EXPECTED_END_CURSOR_TS,
+    EXPECTED_START_CURSOR_TS,
     FlakyTask,
     PythonNodeContextTestAdapter,
+    cursor_window,
     export_after_failure,
     export_after_skip,
     export_orders,
@@ -93,6 +103,140 @@ def test_given_task_asset_chain_when_executing_python_nodes_then_records_results
     )
     assert result.run_state.payload(fetch_orders) == test_case.expected_payloads[0]
     assert result.run_state.payload(export_orders) == test_case.expected_payloads[1]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonNodeExecutorTestCase(
+            description="executes one ready asset with existing run state",
+            expected_names=("fetch_orders", "export_orders"),
+            expected_statuses=(PythonNodeStatus.SUCCESS, PythonNodeStatus.SUCCESS),
+            expected_payloads=(
+                {"file": "orders.json"},
+                {"uri": "s3://exports/orders.json"},
+            ),
+            expected_materialized=(None, True),
+            expected_error_fragments=(None, None),
+        )
+    ],
+    ids=["executes one ready asset with existing run state"],
+)
+def test_given_ready_python_node_when_executing_then_uses_existing_run_state(
+    test_case: PythonNodeExecutorTestCase,
+) -> None:
+    run_state: PythonNodeRunState = PythonNodeRunState()
+    task_node: DiscoveredTaskFunction = DiscoveredTaskFunction(
+        file_path=Path("/project/tasks/orders.py"),
+        relative_path=Path("tasks/orders.py"),
+        name="fetch_orders",
+        function=fetch_orders,
+    )
+    asset_node: DiscoveredAssetFunction = DiscoveredAssetFunction(
+        file_path=Path("/project/assets/orders.py"),
+        relative_path=Path("assets/orders.py"),
+        name="export_orders",
+        function=export_orders,
+        depends_on=(fetch_orders,),
+    )
+
+    task_result: PythonNodeExecutionResult = execute_ready_python_node(
+        node=task_node,
+        upstream_results=(),
+        adapter=PythonNodeContextTestAdapter(),
+        connection_config={},
+        connection=object(),
+        run_id="test_run",
+        environment="dev",
+        vars={},
+        is_reload=False,
+        statement_recorder=StatementRecorder(),
+        run_state=run_state,
+    )
+    run_state.record_result(node_function=task_node.function, result=task_result)
+    asset_result: PythonNodeExecutionResult = execute_ready_python_node(
+        node=asset_node,
+        upstream_results=(task_result,),
+        adapter=PythonNodeContextTestAdapter(),
+        connection_config={},
+        connection=object(),
+        run_id="test_run",
+        environment="dev",
+        vars={},
+        is_reload=False,
+        statement_recorder=StatementRecorder(),
+        run_state=run_state,
+    )
+
+    assert (task_result.node_name, asset_result.node_name) == test_case.expected_names
+    assert (task_result.status, asset_result.status) == test_case.expected_statuses
+    assert (task_result.payload, asset_result.payload) == test_case.expected_payloads
+    assert (task_result.materialized, asset_result.materialized) == (
+        test_case.expected_materialized
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonNodeExecutorTestCase(
+            description="passes cursor overrides into task context",
+            expected_names=("cursor_window",),
+            expected_statuses=(PythonNodeStatus.SUCCESS,),
+            expected_payloads=(
+                {
+                    "start_cursor_ts": EXPECTED_START_CURSOR_TS,
+                    "end_cursor_ts": EXPECTED_END_CURSOR_TS,
+                    "start_cursor_int": 10,
+                    "end_cursor_int": 20,
+                },
+            ),
+            expected_materialized=(None,),
+            expected_error_fragments=(None,),
+        )
+    ],
+    ids=["passes cursor overrides into task context"],
+)
+def test_given_cursor_overrides_when_executing_python_nodes_then_context_receives_cursors(
+    test_case: PythonNodeExecutorTestCase,
+) -> None:
+    nodes: tuple[DiscoveredTaskFunction | DiscoveredAssetFunction, ...] = (
+        DiscoveredTaskFunction(
+            file_path=Path("/project/tasks/orders.py"),
+            relative_path=Path("tasks/orders.py"),
+            name="cursor_window",
+            function=cursor_window,
+        ),
+    )
+
+    result: PythonNodeExecutorResult = execute_python_nodes(
+        nodes=nodes,
+        adapter=PythonNodeContextTestAdapter(),
+        connection_config={},
+        connection=object(),
+        run_id="test_run",
+        environment="dev",
+        vars={},
+        is_reload=False,
+        statement_recorder=StatementRecorder(),
+        start_cursor_ts=EXPECTED_START_CURSOR_TS,
+        end_cursor_ts=EXPECTED_END_CURSOR_TS,
+        start_cursor_int=10,
+        end_cursor_int=20,
+    )
+
+    assert (
+        tuple(node_result.node_name for node_result in result.results) == test_case.expected_names
+    )
+    assert (
+        tuple(node_result.status for node_result in result.results) == test_case.expected_statuses
+    )
+    assert (
+        tuple(node_result.payload for node_result in result.results) == test_case.expected_payloads
+    )
+    assert tuple(node_result.materialized for node_result in result.results) == (
+        test_case.expected_materialized
+    )
 
 
 @pytest.mark.parametrize(
