@@ -48,6 +48,7 @@ from sqlbuild.compiler.compile.main.effective_settings import build_effective_se
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
+from sqlbuild.compiler.pipeline.main.relation_targets import build_python_relation_targets
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
@@ -69,6 +70,7 @@ from sqlbuild.executor.python_nodes.models import (
     Region1PythonLoaderExecutorResult,
 )
 from sqlbuild.shared.helpers.colors import supports_color
+from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
@@ -83,6 +85,7 @@ def run_run(
     full_refresh: bool = False,
     load_sources: bool | None = None,
     reload_sources: bool = False,
+    include_python: bool = True,
     allow_snapshot_full_refresh: bool = False,
     allow_snapshot_schema_change: bool = False,
     concurrency: int | None = None,
@@ -154,7 +157,7 @@ def run_run(
             project_dir=effective_project_dir,
             discovered_inputs=discovered_inputs,
         ),
-        resolve_python_run_selectors=True,
+        resolve_python_run_selectors=include_python,
     )
 
     plan_output: PlanOutput = pipeline_result.plan_output
@@ -209,9 +212,13 @@ def run_run(
         use_color=use_color,
     )
 
-    all_task_asset_names: frozenset[str] = task_asset_python_node_names(
-        selected_names=pipeline_result.python_node_names,
-        discovered_inputs=discovered_inputs,
+    all_task_asset_names: frozenset[str] = (
+        task_asset_python_node_names(
+            selected_names=pipeline_result.python_node_names,
+            discovered_inputs=discovered_inputs,
+        )
+        if include_python
+        else frozenset()
     )
     python_graph: PythonNodeGraph = build_discovered_python_node_graph(
         discovered_inputs=discovered_inputs
@@ -228,6 +235,11 @@ def run_run(
             python_node_names=pipeline_result.python_node_names | planned_source_loader_names,
         ),
         python_graph=python_graph,
+    )
+    relation_targets: dict[SqlResourceRef, str] = build_python_relation_targets(
+        adapter=adapter,
+        project=pipeline_result.project,
+        plan_output=plan_output,
     )
     selected_region_1_names: frozenset[str] = lifecycle_plan.region_1_python_node_names
     region_1_connection: object | None = None
@@ -265,6 +277,7 @@ def run_run(
                 use_color=use_color,
                 on_node_start=callbacks.on_node_start,
                 on_node_complete=callbacks.on_node_complete,
+                relation_targets=relation_targets,
             )
         finally:
             adapter.close(region_1_connection)
@@ -296,6 +309,7 @@ def run_run(
             is_reload=reload_sources,
             default_database=adapter.default_database(),
             default_schema=adapter.default_schema(),
+            relation_targets=relation_targets,
             start_cursor_ts=parse_cursor_timestamp(
                 (cursor_overrides or CursorOverrides()).start_ts
             ),

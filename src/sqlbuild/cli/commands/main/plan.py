@@ -42,6 +42,7 @@ def run_plan(
     full_refresh: bool = False,
     virtual_env: str | None = None,
     load_sources: bool | None = None,
+    include_python: bool = True,
     no_color: bool = False,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
@@ -111,6 +112,7 @@ def run_plan(
             include_stale_upstreams=include_stale_upstreams,
             changes_only=changes_only,
             auto_load_sources=should_load_sources,
+            include_python=include_python,
             select=select,
             exclude=exclude,
             connection_config=connection_config,
@@ -140,7 +142,7 @@ def run_plan(
             on_connection_error=connection_progress.on_connection_error,
             on_progress=planning_progress.on_progress,
             external_sql_reference_resolver=external_sql_reference_resolver,
-            resolve_python_run_selectors=True,
+            resolve_python_run_selectors=include_python,
         )
 
     plan_output: PlanOutput = pipeline_result.plan_output

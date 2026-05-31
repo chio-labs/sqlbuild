@@ -38,6 +38,7 @@ from sqlbuild.executor.shared.models.lifecycle_scheduler import (
     LifecycleSchedulerResult,
 )
 from sqlbuild.executor.shared.types import ExecutionStatus, LifecycleNodeStatus
+from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -64,6 +65,7 @@ def execute_region_1_python_loader_nodes(
     use_color: bool = False,
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None = None,
     on_node_complete: Callable[[object], None] | None = None,
+    relation_targets: dict[SqlResourceRef, str] | None = None,
 ) -> Region1PythonLoaderExecutorResult:
     """Execute Region 1 task/asset/loader nodes in lifecycle topological order."""
 
@@ -89,6 +91,9 @@ def execute_region_1_python_loader_nodes(
     )
     python_results_by_name: dict[str, PythonNodeExecutionResult] = {}
     load_results_by_name: dict[str, LoadExecutionResult] = {}
+    resolved_relation_targets: dict[SqlResourceRef, str] = (
+        {} if relation_targets is None else relation_targets
+    )
 
     scheduler_result: LifecycleSchedulerResult = run_lifecycle_scheduler(
         nodes=lifecycle_nodes,
@@ -117,6 +122,7 @@ def execute_region_1_python_loader_nodes(
             load_results_by_name=load_results_by_name,
             on_node_start=on_node_start,
             on_node_complete=on_node_complete,
+            relation_targets=resolved_relation_targets,
         ),
     )
     _record_scheduler_skips(
@@ -159,6 +165,7 @@ def _execute_region_1_lifecycle_node(
     load_results_by_name: dict[str, LoadExecutionResult],
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None,
     on_node_complete: Callable[[object], None] | None,
+    relation_targets: dict[SqlResourceRef, str],
 ) -> LifecycleNodeResult:
     discovered_node: DiscoveredPythonNode = python_graph.nodes_by_name[node.name]
     if discovered_node.kind == PythonNodeKind.LOADER:
@@ -201,6 +208,7 @@ def _execute_region_1_lifecycle_node(
         end_cursor_int=end_cursor_int,
         run_state=run_state,
         python_results_by_name=python_results_by_name,
+        relation_targets=relation_targets,
     )
 
 
@@ -223,6 +231,7 @@ def _execute_region_1_python_node(
     end_cursor_int: int | None,
     run_state: PythonNodeRunState,
     python_results_by_name: dict[str, PythonNodeExecutionResult],
+    relation_targets: dict[SqlResourceRef, str],
 ) -> LifecycleNodeResult:
     executable_node: ExecutablePythonNode = _to_executable_python_node(node)
     upstream_results: tuple[PythonNodeExecutionResult, ...] = tuple(
@@ -244,6 +253,7 @@ def _execute_region_1_python_node(
         run_state=run_state,
         default_database=default_database,
         default_schema=default_schema,
+        relation_targets=relation_targets,
         start_cursor_ts=start_cursor_ts,
         end_cursor_ts=end_cursor_ts,
         start_cursor_int=start_cursor_int,

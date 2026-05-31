@@ -13,6 +13,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     VirtualExplicitCheckpointRollbackE2ETestCase,
     VirtualPartialRollbackE2ETestCase,
     VirtualPromoteE2ETestCase,
+    VirtualPythonBuildE2ETestCase,
     VirtualRollbackE2ETestCase,
     VirtualWaffleShopE2ETestCase,
 )
@@ -155,6 +156,311 @@ def test_given_virtual_default_vde_when_building_then_it_creates_physical_versio
         ),
     )
     assert repeat_ref_hash_rows == ref_hash_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualPythonBuildE2ETestCase(
+            description="runs loader-side and read-side Python nodes",
+            project_name="virtual_python_nodes_build",
+            plan_command=("--no-color", "plan", "--select", "+fact_orders"),
+            build_command=("--no-color", "build", "--select", "+fact_orders"),
+            expected_build_exit_code=0,
+            expected_plan_fragments=(
+                "Python ingress (1)",
+                "prepare_orders",
+                "Python read-side (2)",
+                "profile_fact_orders",
+                "profile_raw_orders",
+            ),
+            expected_prepared_text="7",
+            expected_profile_text="1",
+            expected_source_profile_text="1",
+        )
+    ],
+    ids=["runs loader-side and read-side Python nodes"],
+)
+def test_given_virtual_python_nodes_when_building_then_runs_loader_and_read_side_python(
+    test_case: VirtualPythonBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "virtual_python_nodes_build"\n'
+                'adapter = "duckdb"\n'
+                'environment_mode = "virtual"\n'
+                'default_environment = "dev"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n\n'
+                "[environments.dev]\n"
+                'schema = "dev"\n'
+                'defer_sources_to = "dev"\n\n'
+                "[environments.dev.state]\n"
+                'backend = "duckdb"\n'
+                'schema = "sqlbuild_state"\n\n'
+                "[environments.dev.state.connection]\n"
+                'database = "state.duckdb"\n'
+            ),
+            "tasks/prepare.py": (
+                "from pathlib import Path\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task\n"
+                "def prepare_orders(ctx):\n"
+                "    Path(__file__).parents[1].joinpath('prepared.txt').write_text('7')\n"
+                "    return ctx.result(payload={'order_id': 7})\n"
+            ),
+            "loaders/raw.py": (
+                "from pathlib import Path\n"
+                "from sqlbuild.loaders import loader\n"
+                "from tasks.prepare import prepare_orders\n\n"
+                "@loader(depends_on=(prepare_orders,))\n"
+                "def load_raw_orders(ctx):\n"
+                "    marker = Path(__file__).parents[1].joinpath('prepared.txt')\n"
+                "    return [{'order_id': int(marker.read_text())}]\n"
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    loader: load_raw_orders\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+            ),
+            "models/fact_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+            "tasks/profile.py": (
+                "from pathlib import Path\n"
+                "from sqlbuild.refs import model, source\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task(depends_on=model('fact_orders'))\n"
+                "def profile_fact_orders(ctx):\n"
+                "    relation = ctx.relation(model('fact_orders'))\n"
+                "    rows = ctx.query(f'SELECT COUNT(*) FROM {relation}').fetchall()[0][0]\n"
+                "    Path(__file__).parents[1].joinpath('profile.txt').write_text(str(rows))\n"
+                "    return ctx.result(payload={'rows': rows})\n"
+                "\n"
+                "@task(depends_on=source('raw_orders'))\n"
+                "def profile_raw_orders(ctx):\n"
+                "    relation = ctx.relation(source('raw_orders'))\n"
+                "    rows = ctx.query(f'SELECT COUNT(*) FROM {relation}').fetchall()[0][0]\n"
+                "    output = Path(__file__).parents[1].joinpath('source_profile.txt')\n"
+                "    output.write_text(str(rows))\n"
+                "    return ctx.result(payload={'rows': rows})\n"
+            ),
+        },
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"), project_dir=project_dir
+    )
+    assert init_result.returncode == 0, init_result.stdout + init_result.stderr
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.plan_command,
+        project_dir=project_dir,
+    )
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    for fragment in test_case.expected_plan_fragments:
+        assert fragment in plan_result.stdout
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.build_command,
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == test_case.expected_build_exit_code, (
+        build_result.stdout + build_result.stderr
+    )
+    assert (project_dir / "prepared.txt").read_text(encoding="utf-8") == (
+        test_case.expected_prepared_text
+    )
+    assert (project_dir / "profile.txt").read_text(encoding="utf-8") == (
+        test_case.expected_profile_text
+    )
+    assert (project_dir / "source_profile.txt").read_text(encoding="utf-8") == (
+        test_case.expected_source_profile_text
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualPythonBuildE2ETestCase(
+            description="prints Region 2 Python failure rows",
+            project_name="virtual_python_region_2_failure",
+            plan_command=(),
+            build_command=("--no-color", "build", "--select", "+fact_orders"),
+            expected_build_exit_code=1,
+            expected_build_fragments=(
+                "python    task      profile_fact_orders",
+                "FAIL",
+                "profile failed intentionally",
+            ),
+        )
+    ],
+    ids=["prints Region 2 Python failure rows"],
+)
+def test_given_virtual_region_2_python_failure_when_building_then_prints_python_failure_row(
+    test_case: VirtualPythonBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "virtual_python_region_2_failure"\n'
+                'adapter = "duckdb"\n'
+                'environment_mode = "virtual"\n'
+                'default_environment = "dev"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n\n'
+                "[environments.dev]\n"
+                'schema = "dev"\n\n'
+                "[environments.dev.state]\n"
+                'backend = "duckdb"\n'
+                'schema = "sqlbuild_state"\n\n'
+                "[environments.dev.state.connection]\n"
+                'database = "state.duckdb"\n'
+            ),
+            "models/fact_orders.sql": "MODEL (materialized table);\n\nSELECT 7 AS order_id\n",
+            "tasks/profile.py": (
+                "from sqlbuild.refs import model\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task(depends_on=model('fact_orders'))\n"
+                "def profile_fact_orders(ctx):\n"
+                "    raise RuntimeError('profile failed intentionally')\n"
+            ),
+        },
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"), project_dir=project_dir
+    )
+    assert init_result.returncode == 0, init_result.stdout + init_result.stderr
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.build_command,
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == test_case.expected_build_exit_code
+    for fragment in test_case.expected_build_fragments:
+        assert fragment in build_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualPythonBuildE2ETestCase(
+            description="no-python only runs loader-side Python nodes",
+            project_name="virtual_no_python_nodes_build",
+            plan_command=("--no-color", "plan", "--select", "+fact_orders", "--no-python"),
+            build_command=("--no-color", "build", "--select", "+fact_orders", "--no-python"),
+            expected_build_exit_code=0,
+            expected_plan_fragments=("Python ingress (1)", "prepare_orders"),
+            expected_absent_plan_fragments=("Python read-side", "profile_fact_orders"),
+            expected_prepared_text="7",
+            expected_profile_exists=False,
+        )
+    ],
+    ids=["no-python only runs loader-side Python nodes"],
+)
+def test_given_virtual_python_nodes_when_no_python_then_only_loader_side_python_runs(
+    test_case: VirtualPythonBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "virtual_no_python_nodes_build"\n'
+                'adapter = "duckdb"\n'
+                'environment_mode = "virtual"\n'
+                'default_environment = "dev"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n\n'
+                "[environments.dev]\n"
+                'schema = "dev"\n'
+                'defer_sources_to = "dev"\n\n'
+                "[environments.dev.state]\n"
+                'backend = "duckdb"\n'
+                'schema = "sqlbuild_state"\n\n'
+                "[environments.dev.state.connection]\n"
+                'database = "state.duckdb"\n'
+            ),
+            "tasks/prepare.py": (
+                "from pathlib import Path\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task\n"
+                "def prepare_orders(ctx):\n"
+                "    Path(__file__).parents[1].joinpath('prepared.txt').write_text('7')\n"
+                "    return ctx.result(payload={'order_id': 7})\n"
+            ),
+            "loaders/raw.py": (
+                "from pathlib import Path\n"
+                "from sqlbuild.loaders import loader\n"
+                "from tasks.prepare import prepare_orders\n\n"
+                "@loader(depends_on=(prepare_orders,))\n"
+                "def load_raw_orders(ctx):\n"
+                "    marker = Path(__file__).parents[1].joinpath('prepared.txt')\n"
+                "    return [{'order_id': int(marker.read_text())}]\n"
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    loader: load_raw_orders\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+            ),
+            "models/fact_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+            "tasks/profile.py": (
+                "from pathlib import Path\n"
+                "from sqlbuild.refs import model\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task(depends_on=model('fact_orders'))\n"
+                "def profile_fact_orders(ctx):\n"
+                "    Path(__file__).parents[1].joinpath('profile.txt').write_text('ran')\n"
+                "    return ctx.result()\n"
+            ),
+        },
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"), project_dir=project_dir
+    )
+    assert init_result.returncode == 0, init_result.stdout + init_result.stderr
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.plan_command,
+        project_dir=project_dir,
+    )
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    for fragment in test_case.expected_plan_fragments:
+        assert fragment in plan_result.stdout
+    for fragment in test_case.expected_absent_plan_fragments:
+        assert fragment not in plan_result.stdout
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.build_command,
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == test_case.expected_build_exit_code, (
+        build_result.stdout + build_result.stderr
+    )
+    assert (project_dir / "prepared.txt").read_text(encoding="utf-8") == (
+        test_case.expected_prepared_text
+    )
+    assert (project_dir / "profile.txt").exists() is test_case.expected_profile_exists
 
 
 @pytest.mark.parametrize(

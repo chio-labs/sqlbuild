@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -21,7 +22,8 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.main.materializations import load_custom_materializations
 from sqlbuild.compiler.pipeline.main.prepare_versions import load_custom_prepare_version_functions
-from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.pipeline.main.relation_targets import build_python_relation_targets
+from sqlbuild.compiler.pipeline.models import ProjectGraph, PythonPlanEntry
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.build_resources import expand_build_resource_selection
 from sqlbuild.compiler.planner.main.plan_entry import build_plan_output_from_model_changes_phase
@@ -36,15 +38,31 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanAction, PlanReason
+from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
+from sqlbuild.compiler.python_nodes.main.run_lifecycle import build_python_sql_run_lifecycle
+from sqlbuild.compiler.python_nodes.models import (
+    PythonNodeGraph,
+    PythonSqlRunLifecyclePlan,
+    PythonSqlRunSelection,
+)
+from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
 from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
 from sqlbuild.executor.build.models import BuildExecutionResult
-from sqlbuild.executor.build.types import BuildStatus
+from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
 from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
+from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.pipeline.main.run import run_build_pipeline
+from sqlbuild.executor.python_nodes.main.region_1 import run_region_1_python_loader_nodes
+from sqlbuild.executor.python_nodes.main.region_2 import create_region_2_python_execution_tracker
+from sqlbuild.executor.python_nodes.models import (
+    PythonNodeExecutionResult,
+    Region1PythonLoaderExecutorResult,
+)
 from sqlbuild.shared.helpers.naming import (
     resolve_qualified_name_parts,
     resolve_target_qualified_name,
 )
+from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.environments import resolve_environment_config, resolve_environment_name
 from sqlbuild.spec.models.project import SnapshotsConfig
@@ -64,6 +82,8 @@ from sqlbuild.virtual.executor.models import (
     VirtualBuildPipelineResult,
 )
 from sqlbuild.virtual.planner.main.output import apply_virtual_plan_output
+from sqlbuild.virtual.planner.main.python_plan_entries import build_virtual_python_plan_entries
+from sqlbuild.virtual.planner.main.python_run_selection import build_virtual_python_run_selection
 from sqlbuild.virtual.planner.main.selection import resolve_virtual_plan_model_selection
 from sqlbuild.virtual.planner.main.semantics import (
     build_virtual_plan_semantics,
@@ -100,6 +120,7 @@ def run_virtual_build(
     changes_only: bool = False,
     auto_load_sources: bool = False,
     reload_sources: bool = False,
+    include_python: bool = True,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     fail_fast: bool = False,
@@ -111,7 +132,9 @@ def run_virtual_build(
     end_cursor_ts: datetime | None = None,
     start_cursor_int: int | None = None,
     end_cursor_int: int | None = None,
-    on_plan_ready: Callable[[CompiledProject, PlanOutput], VirtualBuildExecutionHooks]
+    on_plan_ready: Callable[
+        [CompiledProject, PlanOutput, tuple[PythonPlanEntry, ...]], VirtualBuildExecutionHooks
+    ]
     | None = None,
     on_connection_start: Callable[[int], None] | None = None,
     on_connection_complete: Callable[[int, float], None] | None = None,
@@ -315,11 +338,67 @@ def run_virtual_build(
     effective_concurrency: int = (
         concurrency if concurrency is not None else rewritten_project.settings.concurrency
     )
+    python_graph: PythonNodeGraph = build_discovered_python_node_graph(
+        discovered_inputs=discovered_inputs
+    )
+    python_selection: PythonSqlRunSelection = build_virtual_python_run_selection(
+        discovered_inputs=discovered_inputs,
+        graph=graph,
+        plan_output=plan_output,
+        select=select,
+        exclude=exclude,
+        selected_model_names=selected_model_names,
+        include_python=include_python,
+    )
+    lifecycle_plan: PythonSqlRunLifecyclePlan = build_python_sql_run_lifecycle(
+        selection=python_selection,
+        python_graph=python_graph,
+    )
+    python_plan_entries: tuple[PythonPlanEntry, ...] = build_virtual_python_plan_entries(
+        discovered_inputs=discovered_inputs,
+        selection=python_selection,
+    )
+    relation_targets: dict[SqlResourceRef, str] = build_python_relation_targets(
+        adapter=adapter,
+        project=rewritten_project,
+        plan_output=plan_output,
+    )
     hooks: VirtualBuildExecutionHooks = (
-        on_plan_ready(rewritten_project, plan_output)
+        on_plan_ready(rewritten_project, plan_output, python_plan_entries)
         if on_plan_ready is not None
         else VirtualBuildExecutionHooks()
     )
+    region_1_python_results: tuple[PythonNodeExecutionResult, ...] = ()
+    region_1_load_results: tuple[LoadExecutionResult, ...] = ()
+    if lifecycle_plan.region_1_python_node_names:
+        region_1_connection: Any = adapter.connect(connection_config)
+        try:
+            region_1_result: Region1PythonLoaderExecutorResult = run_region_1_python_loader_nodes(
+                python_graph=python_graph,
+                selected_python_names=lifecycle_plan.region_1_python_node_names,
+                loader_functions=discovered_inputs.loader_functions,
+                source_map=plan_output.source_map,
+                adapter=adapter,
+                connection_config=connection_config,
+                connection=region_1_connection,
+                run_id=rewritten_project.run_id,
+                environment=target_vde_name,
+                vars=rewritten_project.effective_vars,
+                is_reload=reload_sources,
+                default_database=adapter.default_database(),
+                default_schema=adapter.default_schema(),
+                start_cursor_ts=start_cursor_ts,
+                end_cursor_ts=end_cursor_ts,
+                start_cursor_int=start_cursor_int,
+                end_cursor_int=end_cursor_int,
+                on_node_start=hooks.on_node_start,
+                on_node_complete=hooks.on_node_complete,
+                relation_targets=relation_targets,
+            )
+        finally:
+            adapter.close(region_1_connection)
+        region_1_python_results = region_1_result.python_results
+        region_1_load_results = region_1_result.load_results
     before_model_materialize: Callable[[ModelPlanEntry, Any], None] = (
         _build_before_model_materialize(
             adapter=adapter,
@@ -333,31 +412,47 @@ def run_virtual_build(
             effective_vars=cli_vars or {},
         )
     )
-    result: BuildExecutionResult = run_build_pipeline(
-        plan=executor_plan_output,
-        connection_config=connection_config,
-        adapter=adapter,
-        settings=rewritten_project.settings,
-        snapshots=snapshots or SnapshotsConfig(),
-        allow_snapshot_schema_change=allow_snapshot_schema_change,
-        run_id=rewritten_project.run_id,
-        run_tests=True,
-        run_audits=True,
-        fail_fast=fail_fast,
-        max_concurrency=effective_concurrency,
-        on_node_start=hooks.on_node_start,
-        on_node_complete=hooks.on_node_complete,
-        on_sub_progress=hooks.on_sub_progress,
-        before_model_materialize=before_model_materialize,
-        custom_materializations=custom_materializations,
-        loader_functions=discovered_inputs.loader_functions,
-        loader_is_reload=reload_sources,
-        start_cursor_ts=start_cursor_ts,
-        end_cursor_ts=end_cursor_ts,
-        start_cursor_int=start_cursor_int,
-        end_cursor_int=end_cursor_int,
-        query_change_tracking=False,
-    )
+    region_1_failed: bool = any(
+        load_result.status == ExecutionStatus.FAILED for load_result in region_1_load_results
+    ) or any(result.status == PythonNodeStatus.FAILED for result in region_1_python_results)
+    if region_1_failed:
+        result: BuildExecutionResult = BuildExecutionResult(
+            status=BuildStatus.FAILED, load_results=region_1_load_results
+        )
+    else:
+        result = run_build_pipeline(
+            plan=executor_plan_output,
+            connection_config=connection_config,
+            adapter=adapter,
+            settings=rewritten_project.settings,
+            snapshots=snapshots or SnapshotsConfig(),
+            allow_snapshot_schema_change=allow_snapshot_schema_change,
+            run_id=rewritten_project.run_id,
+            run_tests=True,
+            run_audits=True,
+            fail_fast=fail_fast,
+            max_concurrency=effective_concurrency,
+            on_node_start=hooks.on_node_start,
+            on_node_complete=hooks.on_node_complete,
+            on_sub_progress=hooks.on_sub_progress,
+            before_model_materialize=before_model_materialize,
+            custom_materializations=custom_materializations,
+            loader_functions=_sql_loader_functions_for_lifecycle_handoff(
+                discovered_inputs=discovered_inputs,
+                region_1_loader_names=lifecycle_plan.region_1_loader_names,
+            ),
+            loader_is_reload=reload_sources,
+            precompleted_keys=frozenset(
+                _load_result_key(plan=plan_output, result=load_result)
+                for load_result in region_1_load_results
+            ),
+            initial_load_results=region_1_load_results,
+            start_cursor_ts=start_cursor_ts,
+            end_cursor_ts=end_cursor_ts,
+            start_cursor_int=start_cursor_int,
+            end_cursor_int=end_cursor_int,
+            query_change_tracking=False,
+        )
     if result.status == BuildStatus.SUCCESS:
         _persist_successful_virtual_build(
             project=graph.project,
@@ -375,6 +470,35 @@ def run_virtual_build(
             expected_metadata_jsons=semantics.expected_metadata_jsons,
             expected_version_hashes=semantics.expected_version_hashes,
         )
+        region_2_results: tuple[PythonNodeExecutionResult, ...] = _run_region_2_python_nodes(
+            python_graph=python_graph,
+            lifecycle_plan=lifecycle_plan,
+            result=result,
+            adapter=adapter,
+            connection_config=connection_config,
+            run_id=rewritten_project.run_id,
+            environment=target_vde_name,
+            vars=rewritten_project.effective_vars,
+            is_reload=reload_sources,
+            default_database=adapter.default_database(),
+            default_schema=adapter.default_schema(),
+            relation_targets=relation_targets,
+            start_cursor_ts=start_cursor_ts,
+            end_cursor_ts=end_cursor_ts,
+            start_cursor_int=start_cursor_int,
+            end_cursor_int=end_cursor_int,
+        )
+        if any(
+            python_result.status == PythonNodeStatus.FAILED for python_result in region_2_results
+        ):
+            result = replace(result, status=BuildStatus.FAILED)
+    else:
+        region_2_results = ()
+
+    python_results: tuple[PythonNodeExecutionResult, ...] = (
+        *region_1_python_results,
+        *region_2_results,
+    )
 
     return VirtualBuildPipelineResult(
         project=rewritten_project,
@@ -382,6 +506,7 @@ def run_virtual_build(
         display_plan_output=plan_output,
         execution_plan=executor_plan_output,
         execution_result=result,
+        python_node_results=python_results,
     )
 
 
@@ -445,6 +570,90 @@ def _build_before_model_materialize(
             backend.close(state_connection)
 
     return before_model_materialize
+
+
+def _run_region_2_python_nodes(
+    *,
+    python_graph: PythonNodeGraph,
+    lifecycle_plan: PythonSqlRunLifecyclePlan,
+    result: BuildExecutionResult,
+    adapter: BaseAdapter,
+    connection_config: dict[str, object],
+    run_id: str,
+    environment: str | None,
+    vars: dict[str, object],
+    is_reload: bool,
+    default_database: str | None,
+    default_schema: str | None,
+    relation_targets: dict[SqlResourceRef, str],
+    start_cursor_ts: datetime | None,
+    end_cursor_ts: datetime | None,
+    start_cursor_int: int | None,
+    end_cursor_int: int | None,
+) -> tuple[PythonNodeExecutionResult, ...]:
+    if not lifecycle_plan.region_2_python_node_names:
+        return ()
+    connection: Any = adapter.connect(connection_config)
+    try:
+        tracker: Any = create_region_2_python_execution_tracker(
+            python_graph=python_graph,
+            selected_python_names=lifecycle_plan.region_2_python_node_names,
+            adapter=adapter,
+            connection_config=connection_config,
+            connection=connection,
+            run_id=run_id,
+            environment=environment,
+            vars=vars,
+            is_reload=is_reload,
+            default_database=default_database,
+            default_schema=default_schema,
+            relation_targets=relation_targets,
+            start_cursor_ts=start_cursor_ts,
+            end_cursor_ts=end_cursor_ts,
+            start_cursor_int=start_cursor_int,
+            end_cursor_int=end_cursor_int,
+        )
+        load_result: LoadExecutionResult
+        for load_result in result.load_results:
+            tracker.record_sql_result(load_result)
+        model_result: Any
+        for model_result in result.model_results:
+            tracker.record_sql_result(model_result)
+        tracker.dispatch_ready_python_nodes()
+        tracker.finalize_unrun_python_nodes()
+        return tracker.results
+    finally:
+        adapter.close(connection)
+
+
+def _sql_loader_functions_for_lifecycle_handoff(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    region_1_loader_names: frozenset[str],
+) -> tuple[Any, ...]:
+    loader_functions: frozenset[object] = frozenset(
+        loader.function for loader in discovered_inputs.loader_functions
+    )
+    return tuple(
+        replace(
+            loader,
+            depends_on=tuple(
+                dependency
+                for dependency in loader.depends_on
+                if dependency in loader_functions or loader.name not in region_1_loader_names
+            ),
+        )
+        for loader in discovered_inputs.loader_functions
+    )
+
+
+def _load_result_key(*, plan: PlanOutput, result: LoadExecutionResult) -> CompiledObjectKey:
+    for entry in plan.source_load_entries:
+        if entry.name == result.source_name:
+            return entry.key
+    raise PlannerInputError(
+        f"No source-load plan entry found for load result '{result.source_name}'"
+    )
 
 
 def _prepare_custom_virtual_version(

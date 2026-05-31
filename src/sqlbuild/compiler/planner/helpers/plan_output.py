@@ -113,6 +113,7 @@ def build_plan_output(
         seed_targets=relations.seed_targets,
         function_targets=relations.function_targets,
         source_map=relations.source_map,
+        source_read_map=relations.source_read_map,
     )
 
 

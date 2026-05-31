@@ -15,6 +15,7 @@ from sqlbuild.executor.python_nodes.main.ready import run_ready_python_node
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult, PythonNodeRunState
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.shared.models import SqlResourceRef
 
 
 class Region2PythonExecutionTracker:
@@ -34,6 +35,7 @@ class Region2PythonExecutionTracker:
         is_reload: bool,
         default_database: str | None = None,
         default_schema: str | None = None,
+        relation_targets: dict[SqlResourceRef, str] | None = None,
         start_cursor_ts: datetime | None = None,
         end_cursor_ts: datetime | None = None,
         start_cursor_int: int | None = None,
@@ -50,6 +52,9 @@ class Region2PythonExecutionTracker:
         self._is_reload: bool = is_reload
         self._default_database: str | None = default_database
         self._default_schema: str | None = default_schema
+        self._relation_targets: dict[SqlResourceRef, str] = (
+            {} if relation_targets is None else relation_targets
+        )
         self._start_cursor_ts: datetime | None = start_cursor_ts
         self._end_cursor_ts: datetime | None = end_cursor_ts
         self._start_cursor_int: int | None = start_cursor_int
@@ -156,6 +161,7 @@ class Region2PythonExecutionTracker:
             run_state=self._run_state,
             default_database=self._default_database,
             default_schema=self._default_schema,
+            relation_targets=self._relation_targets,
             start_cursor_ts=self._start_cursor_ts,
             end_cursor_ts=self._end_cursor_ts,
             start_cursor_int=self._start_cursor_int,

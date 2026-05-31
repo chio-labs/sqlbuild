@@ -8,6 +8,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.executor.python_nodes.helpers.region_2_execution import Region2PythonExecutionTracker
+from sqlbuild.shared.models import SqlResourceRef
 
 
 def create_region_2_python_execution_tracker(
@@ -23,6 +24,7 @@ def create_region_2_python_execution_tracker(
     is_reload: bool,
     default_database: str | None = None,
     default_schema: str | None = None,
+    relation_targets: dict[SqlResourceRef, str] | None = None,
     start_cursor_ts: datetime | None = None,
     end_cursor_ts: datetime | None = None,
     start_cursor_int: int | None = None,
@@ -42,6 +44,7 @@ def create_region_2_python_execution_tracker(
         is_reload=is_reload,
         default_database=default_database,
         default_schema=default_schema,
+        relation_targets=relation_targets,
         start_cursor_ts=start_cursor_ts,
         end_cursor_ts=end_cursor_ts,
         start_cursor_int=start_cursor_int,
