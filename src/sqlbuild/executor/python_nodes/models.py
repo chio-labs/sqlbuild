@@ -20,6 +20,7 @@ from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
+from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import PythonCheckSeverity
 
 
@@ -174,6 +175,8 @@ class BasePythonNodeContext:
     run_state: PythonNodeRunState | None = None
     default_database: str | None = None
     default_schema: str | None = None
+    relation_targets: dict[SqlResourceRef, str] = field(default_factory=dict)
+    allowed_sql_refs: frozenset[SqlResourceRef] = frozenset()
     use_color: bool = False
     start_cursor_ts: datetime | None = None
     end_cursor_ts: datetime | None = None
@@ -209,6 +212,18 @@ class BasePythonNodeContext:
             schema=self.default_schema if schema is None else schema,
             name=name,
         )
+
+    def relation(self, ref: SqlResourceRef) -> str:
+        """Return the adapter-qualified runtime relation for a declared SQL ref."""
+
+        if ref not in self.allowed_sql_refs:
+            raise ExecutorInputError(
+                f"SQL relation ref '{ref.name}' must be declared in depends_on before use"
+            )
+        relation: str | None = self.relation_targets.get(ref)
+        if relation is None:
+            raise ExecutorInputError(f"No runtime relation found for SQL ref '{ref.name}'")
+        return relation
 
     def skip(
         self,

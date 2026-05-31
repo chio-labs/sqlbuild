@@ -13,6 +13,7 @@ from sqlbuild.executor.python_nodes.helpers.region_1_execution import (
     execute_region_1_python_loader_nodes,
 )
 from sqlbuild.executor.python_nodes.models import Region1PythonLoaderExecutorResult
+from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -39,6 +40,7 @@ def run_region_1_python_loader_nodes(
     use_color: bool = False,
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None = None,
     on_node_complete: Callable[[object], None] | None = None,
+    relation_targets: dict[SqlResourceRef, str] | None = None,
 ) -> Region1PythonLoaderExecutorResult:
     """Execute Region 1 task/asset/loader nodes in lifecycle order."""
 
@@ -63,4 +65,5 @@ def run_region_1_python_loader_nodes(
         use_color=use_color,
         on_node_start=on_node_start,
         on_node_complete=on_node_complete,
+        relation_targets=relation_targets,
     )

@@ -28,11 +28,13 @@ from sqlbuild.cli.commands.main.shared.helpers.progress import (
     format_build_footer,
     write_execution_header,
 )
+from sqlbuild.cli.commands.main.shared.helpers.python_nodes import write_python_node_results
 from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import write_runtime_target
 from sqlbuild.cli.commands.main.shared.helpers.snapshot_full_refresh import (
     enforce_snapshot_full_refresh_policy,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.shared.helpers.display import DisplayOptions
@@ -57,6 +59,7 @@ def run_virtual_build(
     changes_only: bool = False,
     auto_load_sources: bool = False,
     reload_sources: bool = False,
+    include_python: bool = True,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     fail_fast: bool = False,
@@ -91,6 +94,7 @@ def run_virtual_build(
     def on_plan_ready(
         project: object,
         plan_output: PlanOutput,
+        python_plan_entries: tuple[PythonPlanEntry, ...],
     ) -> VirtualBuildExecutionHooks:
         del project
         plan_text: str = format_plan(
@@ -98,6 +102,7 @@ def run_virtual_build(
             full_refresh=full_refresh,
             use_color=use_color,
             display_options=DisplayOptions(max_entries_per_section=None if verbose else 50),
+            python_plan_entries=python_plan_entries,
         )
         stream.write("\n" + plan_text + "\n\n")
         stream.flush()
@@ -148,6 +153,7 @@ def run_virtual_build(
         changes_only=changes_only,
         auto_load_sources=auto_load_sources,
         reload_sources=reload_sources,
+        include_python=include_python,
         select=select,
         exclude=exclude,
         fail_fast=fail_fast,
@@ -167,10 +173,16 @@ def run_virtual_build(
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     plan_output: PlanOutput = result.display_plan_output
+    write_python_node_results(
+        stream=stream,
+        results=result.python_node_results,
+        use_color=use_color,
+    )
     footer: str = format_build_footer(
         result=result.execution_result,
         elapsed=callbacks_by_ref[0].elapsed if callbacks_by_ref else 0,
         use_color=use_color,
+        python_node_results=result.python_node_results,
     )
     write_runtime_target(
         target_dir=project_dir / "target",

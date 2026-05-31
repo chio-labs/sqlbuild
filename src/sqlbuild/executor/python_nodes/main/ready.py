@@ -10,6 +10,7 @@ from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.executor.python_nodes.helpers.execution import execute_ready_python_node
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult, PythonNodeRunState
 from sqlbuild.executor.python_nodes.types import ExecutablePythonNode
+from sqlbuild.shared.models import SqlResourceRef
 
 
 def run_ready_python_node(
@@ -27,6 +28,7 @@ def run_ready_python_node(
     run_state: PythonNodeRunState,
     default_database: str | None = None,
     default_schema: str | None = None,
+    relation_targets: dict[SqlResourceRef, str] | None = None,
     start_cursor_ts: datetime | None = None,
     end_cursor_ts: datetime | None = None,
     start_cursor_int: int | None = None,
@@ -48,6 +50,7 @@ def run_ready_python_node(
         run_state=run_state,
         default_database=default_database,
         default_schema=default_schema,
+        relation_targets=relation_targets,
         start_cursor_ts=start_cursor_ts,
         end_cursor_ts=end_cursor_ts,
         start_cursor_int=start_cursor_int,

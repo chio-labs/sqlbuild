@@ -53,6 +53,24 @@ class VirtualCustomMaterializationE2ETestCase:
 
 
 @dataclass(frozen=True)
+class VirtualPythonBuildE2ETestCase:
+    """Test case for virtual Python-node build behavior."""
+
+    description: str
+    project_name: str
+    plan_command: tuple[str, ...]
+    build_command: tuple[str, ...]
+    expected_build_exit_code: int
+    expected_plan_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_absent_plan_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_build_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_prepared_text: str | None = None
+    expected_profile_text: str | None = None
+    expected_source_profile_text: str | None = None
+    expected_profile_exists: bool | None = None
+
+
+@dataclass(frozen=True)
 class VirtualWaffleShopE2ETestCase:
     """Test case for full waffle shop virtual build behavior."""
 

@@ -17,6 +17,8 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeSkipResult,
 )
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.refs import model, source
+from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.tasks import TaskContext
 from tests.unit.src.sqlbuild.executor.python_nodes.helpers._test_types import (
     PythonNodeContextHelperTestCase,
@@ -205,6 +207,56 @@ def test_given_task_context_when_inspecting_api_then_loader_only_fields_are_abse
     assert not hasattr(context, loader_only_attribute_names()[5])
     assert not hasattr(context, loader_only_attribute_names()[6])
     assert not hasattr(context, loader_only_attribute_names()[7])
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonNodeContextHelperTestCase(
+            description="returns declared SQL relation and rejects undeclared SQL relation",
+            raw_name="fact_orders",
+            database=None,
+            schema=None,
+            expected_qualified_name="dev.fact_orders",
+            expected_execute_result="raw.orders",
+            expected_query_result="ignored",
+            expected_recorded_events=(),
+            expected_logger_name="sqlbuild.task.profile_orders",
+            expected_run_id="test_run",
+            expected_environment="dev",
+            expected_vars={"batch": "hourly"},
+            expected_error_fragment="must be declared in depends_on before use",
+        )
+    ],
+    ids=["returns declared SQL relation and rejects undeclared SQL relation"],
+)
+def test_given_task_context_when_resolving_sql_relations_then_validates_declared_refs(
+    test_case: PythonNodeContextHelperTestCase,
+) -> None:
+    model_ref: SqlResourceRef = model(test_case.raw_name)
+    source_ref: SqlResourceRef = source("orders")
+    context: TaskContext = TaskContext(
+        adapter=PythonNodeContextTestAdapter(),
+        connection_config={"warehouse": "dev"},
+        connection=object(),
+        run_id=test_case.expected_run_id,
+        environment=test_case.expected_environment,
+        vars=test_case.expected_vars,
+        is_reload=False,
+        logger=logging.getLogger(test_case.expected_logger_name),
+        statement_recorder=StatementRecorder(),
+        default_database="default_db",
+        default_schema="default_schema",
+        relation_targets={
+            model_ref: test_case.expected_qualified_name,
+            source_ref: test_case.expected_execute_result,
+        },
+        allowed_sql_refs=frozenset((model_ref,)),
+    )
+
+    assert context.relation(model_ref) == test_case.expected_qualified_name
+    with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
+        context.relation(source_ref)
 
 
 @pytest.mark.parametrize(
