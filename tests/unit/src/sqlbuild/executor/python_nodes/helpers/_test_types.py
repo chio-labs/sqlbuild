@@ -96,6 +96,40 @@ class PythonNodeExecutorTestCase:
 
 
 @dataclass(frozen=True)
+class PythonNodeLifecycleNodeBuildTestCase:
+    description: str
+    python_graph_case: str
+    selected_names: frozenset[str]
+    expected_names: tuple[str, ...]
+    expected_kinds: tuple[str, ...]
+    expected_upstream_names: tuple[tuple[str, ...], ...]
+    expected_payload_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class Region1PythonLoaderExecutorTestCase:
+    description: str
+    selected_names: frozenset[str]
+    expected_python_names: tuple[str, ...]
+    expected_load_names: tuple[str, ...]
+    expected_python_statuses: tuple[PythonNodeStatus, ...]
+    expected_load_statuses: tuple[str, ...]
+    expected_call_order: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class Region2PythonTrackerTestCase:
+    description: str
+    selected_names: frozenset[str]
+    completed_sql_names: tuple[str, ...]
+    expected_result_names: tuple[str, ...]
+    expected_call_order: tuple[str, ...]
+    expected_statuses: tuple[PythonNodeStatus, ...]
+    expected_skip_reasons: tuple[str | None, ...] = ()
+    failed_sql_names: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class PythonNodeRetryExecutorTestCase:
     description: str
     expected_status: PythonNodeStatus

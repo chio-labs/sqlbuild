@@ -16,6 +16,7 @@ from sqlbuild.compiler.python_nodes.types import (
     PythonNodeStatus,
     SkipMode,
 )
+from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
@@ -77,9 +78,7 @@ class PythonNodeFanInDecision:
 class PythonNodeRunState:
     """Same-run result store for Python DAG nodes."""
 
-    results_by_function: dict[Callable[..., object], PythonNodeExecutionResult] = field(
-        default_factory=dict
-    )
+    results_by_function: dict[object, PythonNodeExecutionResult] = field(default_factory=dict)
 
     def record_result(
         self,
@@ -88,6 +87,7 @@ class PythonNodeRunState:
         result: PythonNodeExecutionResult,
     ) -> None:
         self.results_by_function[node_function] = result
+        self.results_by_function[("name", result.node_name)] = result
 
     def payload(
         self,
@@ -95,7 +95,9 @@ class PythonNodeRunState:
         *,
         default: object = MISSING_DEFAULT,
     ) -> object:
-        result: PythonNodeExecutionResult | None = self.results_by_function.get(node_function)
+        result: PythonNodeExecutionResult | None = self.results_by_function.get(
+            node_function
+        ) or self.results_by_function.get(self._dependency_key(node_function))
         if result is None:
             if default is not MISSING_DEFAULT:
                 return default
@@ -114,7 +116,9 @@ class PythonNodeRunState:
         *,
         default: object = MISSING_DEFAULT,
     ) -> dict[str, object] | object:
-        result: PythonNodeExecutionResult | None = self.results_by_function.get(node_function)
+        result: PythonNodeExecutionResult | None = self.results_by_function.get(
+            node_function
+        ) or self.results_by_function.get(self._dependency_key(node_function))
         if result is None:
             if default is not MISSING_DEFAULT:
                 return default
@@ -127,12 +131,30 @@ class PythonNodeRunState:
             )
         return result.metadata
 
+    def _dependency_key(self, node_function: Callable[..., object]) -> object | tuple[str, str]:
+        definition: object = getattr(node_function, "__sqlbuild_task__", None) or getattr(
+            node_function, "__sqlbuild_asset__", None
+        )
+        name: object = getattr(definition, "name", None)
+        if isinstance(name, str):
+            return ("name", name)
+        return node_function
+
 
 @dataclass(frozen=True)
 class PythonNodeExecutorResult:
     """Result bundle for one in-process Python-node executor run."""
 
     results: tuple[PythonNodeExecutionResult, ...]
+    run_state: PythonNodeRunState
+
+
+@dataclass(frozen=True)
+class Region1PythonLoaderExecutorResult:
+    """Result bundle for pre-SQL Python/loader lifecycle execution."""
+
+    python_results: tuple[PythonNodeExecutionResult, ...]
+    load_results: tuple[LoadExecutionResult, ...]
     run_state: PythonNodeRunState
 
 

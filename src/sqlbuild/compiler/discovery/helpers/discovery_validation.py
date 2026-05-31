@@ -28,6 +28,7 @@ from sqlbuild.shared.models import (
     AssetDefinition,
     CheckDefinition,
     LoaderDefinition,
+    SqlResourceRef,
     TaskDefinition,
 )
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
@@ -270,15 +271,6 @@ def _validate_loader_dependencies(loader_functions: tuple[DiscoveredLoaderFuncti
     loader_by_function: dict[object, DiscoveredLoaderFunction] = {
         loader.function: loader for loader in loader_functions
     }
-    loader_function: DiscoveredLoaderFunction
-    for loader_function in loader_functions:
-        dependency: object
-        for dependency in loader_function.depends_on:
-            if dependency not in loader_by_function:
-                raise DiscoveryConflictError(
-                    f"Loader '{loader_function.name}' depends on an unknown loader; "
-                    "use function references to loaders decorated with @loader"
-                )
     visiting: set[str] = set()
     visited: set[str] = set()
 
@@ -291,7 +283,8 @@ def _validate_loader_dependencies(loader_functions: tuple[DiscoveredLoaderFuncti
         visiting.add(loader_function.name)
         dependency: object
         for dependency in loader_function.depends_on:
-            visit(loader_by_function[dependency], (*path, loader_function.name))
+            if dependency in loader_by_function:
+                visit(loader_by_function[dependency], (*path, loader_function.name))
         visiting.remove(loader_function.name)
         visited.add(loader_function.name)
 
@@ -322,7 +315,19 @@ def _validate_python_node_dependencies(
     for node in nodes:
         dependency: object
         for dependency in node.depends_on:
+            if isinstance(dependency, SqlResourceRef):
+                if isinstance(node, DiscoveredLoaderFunction):
+                    raise DiscoveryConflictError(
+                        f"Loader '{node.name}' depends on SQL resource "
+                        f"'{dependency.name}'; loaders "
+                        "may depend on Python loader/task/asset functions only"
+                    )
+                continue
             if _python_node_dependency_key(dependency) not in node_by_dependency_key:
+                if isinstance(node, DiscoveredLoaderFunction):
+                    raise DiscoveryConflictError(
+                        f"Loader '{node.name}' depends on an unknown loader"
+                    )
                 raise DiscoveryConflictError(
                     f"Python node '{node.name}' depends on an unknown Python node; "
                     "use function references to decorated loaders, tasks, or assets"
@@ -343,6 +348,8 @@ def _validate_python_node_dependencies(
         visiting.add(current.name)
         dependency: object
         for dependency in current.depends_on:
+            if isinstance(dependency, SqlResourceRef):
+                continue
             visit(
                 node_by_dependency_key[_python_node_dependency_key(dependency)],
                 (*path, current.name),
@@ -371,6 +378,11 @@ def _validate_check_dependencies(
     for check_function in check_functions:
         dependency: object
         for dependency in check_function.depends_on:
+            if isinstance(dependency, SqlResourceRef):
+                raise DiscoveryConflictError(
+                    f"Check '{check_function.name}' depends on SQL resource '{dependency.name}'; "
+                    "checks may depend on loaders, tasks, and assets only"
+                )
             dependency_key: object | tuple[str, str] = _python_node_dependency_key(dependency)
             if dependency_key in check_dependency_keys:
                 raise DiscoveryConflictError(

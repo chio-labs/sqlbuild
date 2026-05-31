@@ -6,7 +6,7 @@ import inspect
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, cast, overload
 
-from sqlbuild.shared.models import AssetDefinition, ColumnLineageRef, RetryPolicy
+from sqlbuild.shared.models import AssetDefinition, ColumnLineageRef, RetryPolicy, SqlResourceRef
 from sqlbuild.shared.types import ColumnLineageRefSpec, PythonNodeColumnSpec
 from sqlbuild.spec.models.source import SourceColumnEntry
 
@@ -15,7 +15,7 @@ def _decorate_asset(
     function: Callable[..., object],
     *,
     name: str | None = None,
-    depends_on: tuple[Callable[..., object], ...] = (),
+    depends_on: tuple[Callable[..., object] | SqlResourceRef, ...] = (),
     tags: Sequence[str] = (),
     group: str | None = None,
     description: str | None = None,
@@ -49,8 +49,9 @@ def asset(
     *,
     name: str | None = None,
     depends_on: Callable[..., object]
-    | tuple[Callable[..., object], ...]
-    | list[Callable[..., object]] = (),
+    | SqlResourceRef
+    | tuple[Callable[..., object] | SqlResourceRef, ...]
+    | list[Callable[..., object] | SqlResourceRef] = (),
     tags: Sequence[str] = (),
     group: str | None = None,
     description: str | None = None,
@@ -67,8 +68,9 @@ def asset(
     *,
     name: str | None = None,
     depends_on: Callable[..., object]
-    | tuple[Callable[..., object], ...]
-    | list[Callable[..., object]] = (),
+    | SqlResourceRef
+    | tuple[Callable[..., object] | SqlResourceRef, ...]
+    | list[Callable[..., object] | SqlResourceRef] = (),
     tags: Sequence[str] = (),
     group: str | None = None,
     description: str | None = None,
@@ -79,7 +81,9 @@ def asset(
 ) -> Callable[..., object] | Callable[[Callable[..., object]], Callable[..., object]]:
     """Mark a Python function as a SQLBuild asset."""
 
-    normalized_deps: tuple[Callable[..., object], ...] = _normalize_depends_on(depends_on)
+    normalized_deps: tuple[Callable[..., object] | SqlResourceRef, ...] = _normalize_depends_on(
+        depends_on
+    )
     if function is not None:
         return _decorate_asset(
             function,
@@ -112,9 +116,12 @@ def asset(
 
 
 def _normalize_depends_on(
-    value: Callable[..., object] | tuple[Callable[..., object], ...] | list[Callable[..., object]],
-) -> tuple[Callable[..., object], ...]:
-    if callable(value):
+    value: Callable[..., object]
+    | SqlResourceRef
+    | tuple[Callable[..., object] | SqlResourceRef, ...]
+    | list[Callable[..., object] | SqlResourceRef],
+) -> tuple[Callable[..., object] | SqlResourceRef, ...]:
+    if callable(value) or isinstance(value, SqlResourceRef):
         return (value,)
     return tuple(value)
 

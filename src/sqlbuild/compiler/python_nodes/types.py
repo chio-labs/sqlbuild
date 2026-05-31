@@ -35,3 +35,10 @@ class PythonNodeFanInAction(StrEnum):
     RUN = "run"
     SKIP = "skip"
     BLOCK = "block"
+
+
+class PythonRunRegion(StrEnum):
+    """Lifecycle-aware run executor region."""
+
+    PRE_SQL_INGRESS = "pre_sql_ingress"
+    SQL_READ_PYTHON = "sql_read_python"

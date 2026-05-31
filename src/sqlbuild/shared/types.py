@@ -41,6 +41,13 @@ class PythonCheckSeverity(StrEnum):
     WARN = "warn"
 
 
+class SqlResourceRefKind(StrEnum):
+    """Python-node typed dependency target for SQL graph resources."""
+
+    MODEL = "model"
+    SOURCE = "source"
+
+
 class SqlReferenceKind(StrEnum):
     REF = "ref"
     SEED = "seed"

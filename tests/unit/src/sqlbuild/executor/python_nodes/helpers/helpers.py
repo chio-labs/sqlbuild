@@ -3,15 +3,41 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, cast
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.assets import AssetContext
 from sqlbuild.checks import CheckContext
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredAssetFunction,
+    DiscoveredLoaderFunction,
+    DiscoveredProjectInputs,
+    DiscoveredTaskFunction,
+)
+from sqlbuild.compiler.python_nodes.helpers.inventory import build_python_node_graph
+from sqlbuild.compiler.python_nodes.helpers.run_lifecycle import (
+    build_python_sql_run_lifecycle_plan,
+)
+from sqlbuild.compiler.python_nodes.models import (
+    DiscoveredPythonNode,
+    PythonNodeGraph,
+    PythonSqlRunLifecyclePlan,
+    PythonSqlRunSelection,
+)
 from sqlbuild.executor.python_nodes.models import BasePythonNodeContext, PythonNodeRunState
 from sqlbuild.executor.shared.helpers.python_node_scheduler import unlock_downstream_python_nodes
+from sqlbuild.executor.shared.models.lifecycle_scheduler import LifecycleExecutionNode
+from sqlbuild.refs import model
+from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
+from sqlbuild.spec.models.source import SourceEntry
 from sqlbuild.tasks import TaskContext
+from tests.unit.src.sqlbuild.compiler.python_nodes.helpers.helpers import (
+    build_intermediate_loader_asset_dependency_python_node_graph,
+    build_orders_python_node_graph,
+)
 
 
 def apply_completion_order(
@@ -163,8 +189,23 @@ def fail_orders(_ctx: TaskContext) -> object:
     raise RuntimeError("API unavailable")
 
 
+def cursor_window(ctx: TaskContext) -> object:
+    return ctx.result(
+        payload={
+            "start_cursor_ts": ctx.start_cursor_ts,
+            "end_cursor_ts": ctx.end_cursor_ts,
+            "start_cursor_int": ctx.start_cursor_int,
+            "end_cursor_int": ctx.end_cursor_int,
+        }
+    )
+
+
 def export_after_failure(ctx: AssetContext) -> object:
     return ctx.result(payload={"uri": "should-not-run"}, materialized=True)
+
+
+EXPECTED_START_CURSOR_TS: datetime = datetime(2026, 1, 1, tzinfo=UTC)
+EXPECTED_END_CURSOR_TS: datetime = datetime(2026, 1, 2, tzinfo=UTC)
 
 
 class FlakyTask:
@@ -199,3 +240,134 @@ def assert_base_context_fields(context: BasePythonNodeContext) -> None:
     assert context.vars == {"batch": "hourly"}
     assert context.is_reload is False
     assert context.connection_config == {"warehouse": "dev"}
+
+
+def build_lifecycle_plan_for_selected_python_names(
+    *, graph: PythonNodeGraph, selected_names: frozenset[str]
+) -> PythonSqlRunLifecyclePlan:
+    return build_python_sql_run_lifecycle_plan(
+        selection=PythonSqlRunSelection(sql_keys=frozenset(), python_node_names=selected_names),
+        python_graph=graph,
+    )
+
+
+def lifecycle_node_payload_name(node: LifecycleExecutionNode) -> str:
+    payload: object | None = node.payload
+    assert isinstance(payload, DiscoveredPythonNode)
+    return payload.name
+
+
+def python_graph_for_lifecycle_case(case_name: str) -> PythonNodeGraph:
+    if case_name == "orders":
+        return build_orders_python_node_graph()
+    if case_name == "intermediate_loader_asset_dependency":
+        return build_intermediate_loader_asset_dependency_python_node_graph()
+    raise ValueError(f"unknown lifecycle graph case: {case_name}")
+
+
+REGION_1_CALLS: list[str] = []
+
+
+def reset_region_1_calls() -> None:
+    REGION_1_CALLS.clear()
+
+
+def region_1_calls() -> tuple[str, ...]:
+    return tuple(REGION_1_CALLS)
+
+
+def prepare_region_1_orders(ctx: TaskContext) -> object:
+    REGION_1_CALLS.append("prepare_region_1_orders")
+    return ctx.result(payload={"prepared": True})
+
+
+def load_region_1_orders(_ctx: object) -> object:
+    REGION_1_CALLS.append("load_region_1_orders")
+    return None
+
+
+def build_region_1_task_loader_graph() -> PythonNodeGraph:
+    return build_python_node_graph(
+        discovered_inputs=DiscoveredProjectInputs(
+            project_config=ProjectConfig(name="demo", adapter="duckdb"),
+            local_config=LocalConfig(),
+            loader_functions=(region_1_loader_function(),),
+            task_functions=(region_1_task_function(),),
+        )
+    )
+
+
+def region_1_task_function() -> DiscoveredTaskFunction:
+    return DiscoveredTaskFunction(
+        file_path=Path("/project/tasks/orders.py"),
+        relative_path=Path("tasks/orders.py"),
+        name="prepare_region_1_orders",
+        function=prepare_region_1_orders,
+    )
+
+
+def region_1_loader_function() -> DiscoveredLoaderFunction:
+    return DiscoveredLoaderFunction(
+        file_path=Path("/project/loaders/orders.py"),
+        relative_path=Path("loaders/orders.py"),
+        name="load_region_1_orders",
+        function=load_region_1_orders,
+        depends_on=(prepare_region_1_orders,),
+    )
+
+
+def region_1_source_map() -> dict[str, SourceEntry]:
+    return {
+        "raw_orders": SourceEntry(
+            name="raw_orders",
+            loader="load_region_1_orders",
+        )
+    }
+
+
+REGION_2_CALLS: list[str] = []
+
+
+def reset_region_2_calls() -> None:
+    REGION_2_CALLS.clear()
+
+
+def region_2_calls() -> tuple[str, ...]:
+    return tuple(REGION_2_CALLS)
+
+
+def profile_stg_orders(ctx: TaskContext) -> object:
+    REGION_2_CALLS.append("profile_stg_orders")
+    return ctx.result(payload={"profiled": True})
+
+
+def export_stg_profile(ctx: AssetContext) -> object:
+    REGION_2_CALLS.append("export_stg_profile")
+    return ctx.result(payload=ctx.payload(profile_stg_orders), materialized=False)
+
+
+def build_region_2_sql_task_asset_graph() -> PythonNodeGraph:
+    return build_python_node_graph(
+        discovered_inputs=DiscoveredProjectInputs(
+            project_config=ProjectConfig(name="demo", adapter="duckdb"),
+            local_config=LocalConfig(),
+            task_functions=(
+                DiscoveredTaskFunction(
+                    file_path=Path("/project/tasks/orders.py"),
+                    relative_path=Path("tasks/orders.py"),
+                    name="profile_stg_orders",
+                    function=profile_stg_orders,
+                    depends_on=(model("stg_orders"),),
+                ),
+            ),
+            asset_functions=(
+                DiscoveredAssetFunction(
+                    file_path=Path("/project/assets/orders.py"),
+                    relative_path=Path("assets/orders.py"),
+                    name="export_stg_profile",
+                    function=export_stg_profile,
+                    depends_on=(profile_stg_orders,),
+                ),
+            ),
+        )
+    )

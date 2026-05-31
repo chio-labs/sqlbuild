@@ -17,6 +17,7 @@ from sqlbuild.cli.commands.main.helpers.sql_test_progress import (
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
+from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
@@ -25,6 +26,7 @@ from sqlbuild.executor.build.models import (
 )
 from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
@@ -493,11 +495,17 @@ def format_build_footer(
     result: BuildExecutionResult,
     elapsed: float,
     use_color: bool,
+    python_node_results: tuple[PythonNodeExecutionResult, ...] = (),
 ) -> str:
     lines: list[str] = []
     style: CliStyle = CliStyle(use_color=use_color)
+    python_fail_count: int = sum(
+        1
+        for python_result in python_node_results
+        if python_result.status == PythonNodeStatus.FAILED
+    )
 
-    if result.status == BuildStatus.FAILED:
+    if result.status == BuildStatus.FAILED or python_fail_count:
         lines.append(style.error("Completed with errors."))
     elif result.warning_count > 0:
         lines.append(style.warning("Completed with warnings."))
@@ -552,6 +560,15 @@ def format_build_footer(
         else:
             fail_count += 1
 
+    python_result: PythonNodeExecutionResult
+    for python_result in python_node_results:
+        if python_result.status == PythonNodeStatus.SUCCESS:
+            pass_count += 1
+        elif python_result.status == PythonNodeStatus.FAILED:
+            fail_count += 1
+        elif python_result.status == PythonNodeStatus.SKIPPED:
+            skip_count += 1
+
     total_count: int = pass_count + warn_count + fail_count + skip_count
     elapsed_str: str = f"{elapsed:.2f}s"
     lines.append(
@@ -560,6 +577,7 @@ def format_build_footer(
     )
 
     failure_lines: list[str] = _format_failure_details(result, style=style)
+    failure_lines.extend(_format_python_failure_details(results=python_node_results, style=style))
     if failure_lines:
         lines.extend(failure_lines)
 
@@ -568,6 +586,25 @@ def format_build_footer(
         lines.extend(warning_lines)
 
     return "\n".join(lines)
+
+
+def _format_python_failure_details(
+    *, results: tuple[PythonNodeExecutionResult, ...], style: CliStyle
+) -> list[str]:
+    lines: list[str] = []
+    failed_results: tuple[PythonNodeExecutionResult, ...] = tuple(
+        result for result in results if result.status == PythonNodeStatus.FAILED
+    )
+    if not failed_results:
+        return lines
+    lines.append("")
+    lines.append(style.error_strong("Python node failures:"))
+    lines.append("")
+    result: PythonNodeExecutionResult
+    for result in failed_results:
+        message: str = result.error_message or "Python node failed"
+        lines.append(f"  {result.kind.value:<10}{result.node_name:<50} {style.error(message)}")
+    return lines
 
 
 def _format_failure_details(result: BuildExecutionResult, *, style: CliStyle) -> list[str]:

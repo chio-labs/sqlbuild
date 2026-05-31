@@ -11,6 +11,7 @@ from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.compile.main.load_macros import load_macros
 from sqlbuild.compiler.compile.models.core import (
+    CompiledObjectKey,
     CompiledProject,
     CompiledRelationTarget,
     LoadedMacro,
@@ -22,11 +23,22 @@ from sqlbuild.compiler.pipeline.helpers.deferred_targets import (
     gather_deferred_relations,
     resolve_deferred_env,
 )
+from sqlbuild.compiler.pipeline.helpers.graph import (
+    build_static_all_keys,
+    build_static_downstream_deps,
+    build_static_path_index,
+    build_static_tag_index,
+    build_static_upstream_deps,
+)
 from sqlbuild.compiler.pipeline.helpers.materializations import load_custom_materializations
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.pipeline.models import CompilePipelineResult, ProjectGraph
 from sqlbuild.compiler.planner.main.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
+from sqlbuild.compiler.python_nodes.main.run_selection import (
+    resolve_python_sql_run_selection_from_inputs,
+)
+from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.project import EnvironmentConfig, resolve_effective_adapter_name
 
@@ -52,6 +64,7 @@ def run_compile_pipeline(
     on_connection_error: Callable[[int, float], None] | None = None,
     on_progress: Callable[[str], None] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    resolve_python_run_selectors: bool = False,
 ) -> CompilePipelineResult:
     """Run compile inputs, assembly, planning, and manifest generation."""
 
@@ -92,6 +105,7 @@ def run_compile_pipeline(
             cli_vars=cli_vars,
             on_progress=on_progress,
             external_sql_reference_resolver=external_sql_reference_resolver,
+            resolve_python_run_selectors=resolve_python_run_selectors,
         )
     finally:
         adapter.close(connection)
@@ -115,6 +129,7 @@ def _build_result(
     cli_vars: dict[str, object] | None = None,
     on_progress: Callable[[str], None] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    resolve_python_run_selectors: bool = False,
 ) -> CompilePipelineResult:
     if on_progress is not None:
         on_progress("Compiling project...")
@@ -151,12 +166,25 @@ def _build_result(
             deferred_targets=deferred_targets,
         )
 
+    selected_sql_keys: frozenset[CompiledObjectKey] | None = None
+    selected_python_node_names: frozenset[str] = frozenset()
+    if resolve_python_run_selectors:
+        run_selection: PythonSqlRunSelection = resolve_python_sql_run_selection_from_inputs(
+            select=select,
+            exclude=exclude,
+            project_graph=_build_project_graph(project=project),
+            discovered_inputs=discovered_inputs,
+        )
+        selected_sql_keys = run_selection.sql_keys
+        selected_python_node_names = run_selection.python_node_names
+
     plan_output: PlanOutput = build_execution_plan(
         project=project,
         adapter=adapter,
         connection=connection,
         select=select,
         exclude=exclude,
+        selected_keys=selected_sql_keys,
         deferred_targets=deferred_targets,
         deferred_relations=deferred_relations,
         cursor_overrides=cursor_overrides,
@@ -192,4 +220,19 @@ def _build_result(
         plan_output=plan_output,
         manifest=manifest,
         custom_materializations=custom_materializations,
+        python_node_names=selected_python_node_names,
+    )
+
+
+def _build_project_graph(*, project: CompiledProject) -> ProjectGraph:
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
+        build_static_upstream_deps(project)
+    )
+    return ProjectGraph(
+        project=project,
+        upstream_deps=upstream_deps,
+        downstream_deps=build_static_downstream_deps(upstream_deps),
+        tag_index=build_static_tag_index(project),
+        path_index=build_static_path_index(project),
+        all_keys=build_static_all_keys(project),
     )

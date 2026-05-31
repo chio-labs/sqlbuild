@@ -21,6 +21,7 @@ class CompilePipelineResult:
     plan_output: PlanOutput
     manifest: dict[str, object] = field(default_factory=dict)
     custom_materializations: dict[str, Callable[..., Any]] = field(default_factory=dict)
+    python_node_names: frozenset[str] = field(default_factory=frozenset)
 
 
 @dataclass(frozen=True)

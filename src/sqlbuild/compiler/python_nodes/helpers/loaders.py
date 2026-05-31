@@ -11,6 +11,7 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonNodeDependencyEdge,
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
+from sqlbuild.shared.models import SqlResourceRef
 
 
 def build_python_loader_node(*, loader: DiscoveredLoaderFunction) -> DiscoveredPythonNode:
@@ -54,8 +55,10 @@ def build_python_loader_dependency_edges(
     edges: list[PythonNodeDependencyEdge] = []
     loader: DiscoveredLoaderFunction
     for loader in loaders:
-        dependency: Callable[..., object]
+        dependency: Callable[..., object] | SqlResourceRef
         for dependency in loader.depends_on:
+            if isinstance(dependency, SqlResourceRef):
+                continue
             upstream_name: str | None = loader_name_by_function.get(dependency)
             if upstream_name is None:
                 continue

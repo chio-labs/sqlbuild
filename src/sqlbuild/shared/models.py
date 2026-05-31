@@ -7,7 +7,7 @@ from pathlib import Path
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.shared.constants import DEFAULT_MAX_DISPLAY_ENTRIES
 from sqlbuild.shared.exceptions.errors import SharedInputError
-from sqlbuild.shared.types import PythonCheckSeverity
+from sqlbuild.shared.types import PythonCheckSeverity, SqlResourceRefKind
 from sqlbuild.spec.models.source import SourceColumnEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy
 
@@ -77,13 +77,21 @@ class LoaderDefinition:
     """Metadata attached to a decorated source loader function."""
 
     name: str
-    depends_on: tuple[Callable[..., object], ...] = ()
+    depends_on: tuple[Callable[..., object] | SqlResourceRef, ...] = ()
     target: str | None = None
     write_strategy: SourceWriteStrategy | None = None
     cursor_column: str | None = None
     unique_key: tuple[str, ...] = ()
     columns: tuple[SourceColumnEntry, ...] = ()
     contract: str | None = None
+
+
+@dataclass(frozen=True)
+class SqlResourceRef:
+    """Typed dependency reference to a SQLBuild SQL graph resource."""
+
+    kind: SqlResourceRefKind
+    name: str
 
 
 @dataclass(frozen=True)
@@ -154,7 +162,7 @@ class TaskDefinition:
     """Metadata attached to a decorated SQLBuild task function."""
 
     name: str
-    depends_on: tuple[Callable[..., object], ...] = ()
+    depends_on: tuple[Callable[..., object] | SqlResourceRef, ...] = ()
     tags: tuple[str, ...] = ()
     group: str | None = None
     description: str | None = None
@@ -167,7 +175,7 @@ class AssetDefinition:
     """Metadata attached to a decorated SQLBuild asset function."""
 
     name: str
-    depends_on: tuple[Callable[..., object], ...] = ()
+    depends_on: tuple[Callable[..., object] | SqlResourceRef, ...] = ()
     tags: tuple[str, ...] = ()
     group: str | None = None
     description: str | None = None
@@ -182,7 +190,7 @@ class CheckDefinition:
     """Metadata attached to a decorated SQLBuild check function."""
 
     name: str
-    depends_on: tuple[Callable[..., object], ...]
+    depends_on: tuple[Callable[..., object] | SqlResourceRef, ...]
     severity: PythonCheckSeverity = PythonCheckSeverity.ERROR
     tags: tuple[str, ...] = ()
     group: str | None = None

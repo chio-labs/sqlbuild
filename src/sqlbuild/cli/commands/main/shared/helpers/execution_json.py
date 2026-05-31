@@ -9,6 +9,7 @@ from pathlib import Path
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
@@ -17,6 +18,7 @@ from sqlbuild.executor.build.models import (
 )
 from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario.models import (
     ScenarioAssertionExpectationExecutionResult,
@@ -77,23 +79,49 @@ def format_build_execution_json(*, result: BuildExecutionResult, plan: PlanOutpu
     )
 
 
-def format_run_execution_json(*, result: BuildExecutionResult, plan: PlanOutput) -> str:
+def format_run_execution_json(
+    *,
+    result: BuildExecutionResult,
+    plan: PlanOutput,
+    python_node_results: tuple[PythonNodeExecutionResult, ...] = (),
+) -> str:
     """Format run command execution results as JSON."""
 
+    python_fail_count: int = sum(
+        1
+        for python_result in python_node_results
+        if python_result.status == PythonNodeStatus.FAILED
+    )
+    python_success_count: int = sum(
+        1
+        for python_result in python_node_results
+        if python_result.status == PythonNodeStatus.SUCCESS
+    )
+    python_skipped_count: int = sum(
+        1
+        for python_result in python_node_results
+        if python_result.status == PythonNodeStatus.SKIPPED
+    )
+    status: BuildStatus = (
+        BuildStatus.FAILED
+        if result.status == BuildStatus.FAILED or python_fail_count
+        else result.status
+    )
     return _format_execution_json(
         command="run",
-        status=result.status.value,
+        status=status.value,
         assets=(
             *_format_model_assets(results=result.model_results, plan=plan),
             *_format_seed_assets(results=result.seed_results, plan=plan),
             *_format_function_assets(results=result.function_results, plan=plan),
             *_format_load_assets(results=result.load_results),
+            *_format_python_node_assets(results=python_node_results),
         ),
         checks=(),
         summary={
-            "success_count": result.success_count,
-            "failure_count": result.failure_count,
-            "skipped_count": result.skipped_count,
+            "success_count": result.success_count + python_success_count,
+            "failure_count": result.failure_count + python_fail_count,
+            "skipped_count": result.skipped_count + python_skipped_count,
             "warning_count": result.warning_count,
         },
     )
@@ -310,6 +338,26 @@ def _format_load_assets(
                 "staging_relation": result.staging_relation,
                 "loader": result.loader_name,
                 "rows_loaded": result.rows_loaded,
+                "error_message": result.error_message,
+            }
+        )
+        for result in results
+    )
+
+
+def _format_python_node_assets(
+    *, results: tuple[PythonNodeExecutionResult, ...]
+) -> tuple[dict[str, object], ...]:
+    return tuple(
+        _drop_none(
+            {
+                "kind": result.kind.value,
+                "name": result.node_name,
+                "status": result.status.value,
+                "metadata": result.metadata,
+                "materialized": result.materialized,
+                "skip_mode": result.skip_mode.value if result.skip_mode else None,
+                "skip_reason": result.skip_reason,
                 "error_message": result.error_message,
             }
         )

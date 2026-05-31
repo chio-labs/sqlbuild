@@ -28,6 +28,7 @@ from sqlbuild.shared.models import (
     AssetDefinition,
     CheckDefinition,
     LoaderDefinition,
+    SqlResourceRef,
     TaskDefinition,
 )
 from sqlbuild.tasks import get_task_definition
@@ -96,8 +97,10 @@ def build_python_node_dependency_edges(
 
     edges: list[PythonNodeDependencyEdge] = []
     for node in nodes:
-        dependency: Callable[..., object]
+        dependency: Callable[..., object] | SqlResourceRef
         for dependency in node.depends_on:
+            if isinstance(dependency, SqlResourceRef):
+                continue
             upstream_node: DiscoveredPythonNode | None = node_by_dependency_key.get(
                 _python_node_dependency_key(dependency)
             )
@@ -168,6 +171,7 @@ def _build_loader_node(loader: DiscoveredLoaderFunction) -> DiscoveredPythonNode
         name=loader.name,
         function=loader.function,
         depends_on=loader.depends_on,
+        sql_deps=_sql_deps(loader.depends_on),
         loader=DiscoveredPythonLoaderMetadata(
             target=loader.target,
             write_strategy=loader.write_strategy,
@@ -188,6 +192,7 @@ def _build_task_node(task: DiscoveredTaskFunction) -> DiscoveredPythonNode:
         name=task.name,
         function=task.function,
         depends_on=task.depends_on,
+        sql_deps=_sql_deps(task.depends_on),
         tags=task.tags,
         group=task.group,
         description=task.description,
@@ -204,6 +209,7 @@ def _build_asset_node(asset: DiscoveredAssetFunction) -> DiscoveredPythonNode:
         name=asset.name,
         function=asset.function,
         depends_on=asset.depends_on,
+        sql_deps=_sql_deps(asset.depends_on),
         tags=asset.tags,
         group=asset.group,
         description=asset.description,
@@ -224,6 +230,7 @@ def _build_check_node(check: DiscoveredCheckFunction) -> DiscoveredPythonNode:
         name=check.name,
         function=check.function,
         depends_on=check.depends_on,
+        sql_deps=_sql_deps(check.depends_on),
         tags=check.tags,
         group=check.group,
         description=check.description,
@@ -254,6 +261,14 @@ def _python_node_dependency_key(dependency: object) -> object | tuple[str, str]:
     if check_definition is not None:
         return ("name", check_definition.name)
     return dependency
+
+
+def _sql_deps(
+    dependencies: tuple[Callable[..., object] | SqlResourceRef, ...],
+) -> tuple[SqlResourceRef, ...]:
+    return tuple(
+        dependency for dependency in dependencies if isinstance(dependency, SqlResourceRef)
+    )
 
 
 def _typed_selector(node: DiscoveredPythonNode) -> str:

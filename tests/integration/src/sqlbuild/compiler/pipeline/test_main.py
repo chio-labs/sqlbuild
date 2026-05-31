@@ -213,6 +213,48 @@ def test_given_project_files_when_running_compile_pipeline_then_produces_valid_o
 @pytest.mark.parametrize(
     "test_case",
     [
+        RunCompilePipelineIntegrationTestCase(
+            description="run selector resolves Python task without SQL-only planning",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_TOML,
+                "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS order_id",
+                "tasks/orders.py": (
+                    "from sqlbuild.tasks import task\n\n"
+                    "@task\n"
+                    "def prepare_orders(ctx):\n"
+                    "    return ctx.result(payload={'ok': True})\n"
+                ),
+            },
+            expected_models={},
+            expected_model_count=0,
+            expected_seed_count=0,
+            expected_manifest_node_count=1,
+        )
+    ],
+    ids=["run selector resolves Python task without SQL-only planning"],
+)
+def test_given_python_run_selector_when_running_compile_pipeline_then_tracks_python_nodes(
+    test_case: RunCompilePipelineIntegrationTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    result: CompilePipelineResult = run_compile_pipeline_for_project(
+        project_dir=tmp_path,
+        adapter=DuckDbAdapter(),
+        select=("task:prepare_orders",),
+        resolve_python_run_selectors=True,
+    )
+
+    assert len(result.plan_output.model_entries) == test_case.expected_model_count
+    assert len(result.plan_output.seed_entries) == test_case.expected_seed_count
+    assert result.python_node_names == frozenset({"prepare_orders"})
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         CompileProgressIntegrationTestCase(
             description="reports compile progress from compile pipeline",
             project_files={

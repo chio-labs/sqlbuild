@@ -25,6 +25,8 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.python_nodes.helpers.inventory import build_python_node_graph
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
+from sqlbuild.refs import model, source
+from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import PythonCheckSeverity
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
@@ -118,6 +120,59 @@ def build_orders_python_node_graph() -> PythonNodeGraph:
             ),
         )
     )
+
+
+def build_sql_ref_python_node_graph(*, dependency: SqlResourceRef) -> PythonNodeGraph:
+    return build_python_node_graph(
+        discovered_inputs=DiscoveredProjectInputs(
+            project_config=ProjectConfig(name="demo", adapter="duckdb"),
+            local_config=LocalConfig(),
+            task_functions=(
+                DiscoveredTaskFunction(
+                    file_path=Path("/project/tasks/orders.py"),
+                    relative_path=Path("tasks/orders.py"),
+                    name="profile_orders",
+                    function=prepare_orders,
+                    depends_on=(dependency,),
+                ),
+            ),
+        )
+    )
+
+
+def build_sql_downstream_task_to_loader_python_node_graph() -> PythonNodeGraph:
+    return build_python_node_graph(
+        discovered_inputs=DiscoveredProjectInputs(
+            project_config=ProjectConfig(name="demo", adapter="duckdb"),
+            local_config=LocalConfig(),
+            loader_functions=(
+                DiscoveredLoaderFunction(
+                    file_path=Path("/project/loaders/orders.py"),
+                    relative_path=Path("loaders/orders.py"),
+                    name="load_events",
+                    function=load_events,
+                    depends_on=(prepare_orders,),
+                ),
+            ),
+            task_functions=(
+                DiscoveredTaskFunction(
+                    file_path=Path("/project/tasks/orders.py"),
+                    relative_path=Path("tasks/orders.py"),
+                    name="prepare_orders",
+                    function=prepare_orders,
+                    depends_on=(model_ref("orders"),),
+                ),
+            ),
+        )
+    )
+
+
+def model_ref(name: str) -> SqlResourceRef:
+    return model(name)
+
+
+def source_ref(name: str) -> SqlResourceRef:
+    return source(name)
 
 
 def build_terminal_loader_task_dependency_python_node_graph() -> PythonNodeGraph:
