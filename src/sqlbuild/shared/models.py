@@ -87,6 +87,13 @@ class LoaderDefinition:
 
 
 @dataclass(frozen=True)
+class FactoryDefinition:
+    """Metadata attached to a Python-node factory function."""
+
+    name: str
+
+
+@dataclass(frozen=True)
 class SqlResourceRef:
     """Typed dependency reference to a SQLBuild SQL graph resource."""
 

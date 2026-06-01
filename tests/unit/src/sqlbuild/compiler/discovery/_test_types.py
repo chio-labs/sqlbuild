@@ -39,3 +39,14 @@ class DiscoverProjectInputsErrorTestCase:
     description: str
     repo_files: dict[str, str]
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class DiscoverFactoryValidationTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_loader_names: tuple[str, ...] = ()
+    expected_task_names: tuple[str, ...] = ()
+    expected_asset_names: tuple[str, ...] = ()
+    expected_check_names: tuple[str, ...] = ()
+    expected_error_fragment: str = ""

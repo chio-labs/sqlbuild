@@ -7,20 +7,17 @@ from pathlib import Path
 from sqlbuild.compiler.discovery.helpers.discovery_validation import validate_discovered_inputs
 from sqlbuild.compiler.discovery.helpers.filesystem import (
     discover_adapter_file,
-    discover_asset_functions,
     discover_audit_files,
-    discover_check_functions,
-    discover_loader_functions,
     discover_macro_files,
     discover_materialization_files,
     discover_model_files,
     discover_python_function_files,
+    discover_python_node_functions,
     discover_scenario_files,
     discover_schema_files,
     discover_seed_files,
     discover_source_files,
     discover_sql_function_files,
-    discover_task_functions,
     discover_test_files,
 )
 from sqlbuild.compiler.discovery.helpers.integration_loaders import (
@@ -31,9 +28,13 @@ from sqlbuild.compiler.discovery.helpers.yml_project import (
     load_project_config,
 )
 from sqlbuild.compiler.discovery.models import (
+    DiscoveredAssetFunction,
+    DiscoveredCheckFunction,
     DiscoveredLoaderFunction,
     DiscoveredProjectInputs,
+    DiscoveredPythonNodeFunctions,
     DiscoveredSourceFile,
+    DiscoveredTaskFunction,
 )
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 
@@ -50,9 +51,15 @@ def discover_project_inputs(*, project_dir: Path) -> DiscoveredProjectInputs:
     )
 
     source_files: tuple[DiscoveredSourceFile, ...] = discover_source_files(project_dir=project_dir)
-    loader_functions: tuple[DiscoveredLoaderFunction, ...] = discover_loader_functions(
+    python_nodes: DiscoveredPythonNodeFunctions = discover_python_node_functions(
         project_dir=project_dir
+    )
+    loader_functions: tuple[DiscoveredLoaderFunction, ...] = tuple(
+        python_nodes.loaders
     ) + build_integration_loader_functions(source_files)
+    task_functions: tuple[DiscoveredTaskFunction, ...] = tuple(python_nodes.tasks)
+    asset_functions: tuple[DiscoveredAssetFunction, ...] = tuple(python_nodes.assets)
+    check_functions: tuple[DiscoveredCheckFunction, ...] = tuple(python_nodes.checks)
     discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
         project_config=project_config,
         local_config=local_config,
@@ -71,9 +78,9 @@ def discover_project_inputs(*, project_dir: Path) -> DiscoveredProjectInputs:
         macro_files=discover_macro_files(project_dir=project_dir),
         materialization_files=discover_materialization_files(project_dir=project_dir),
         loader_functions=loader_functions,
-        task_functions=discover_task_functions(project_dir=project_dir),
-        asset_functions=discover_asset_functions(project_dir=project_dir),
-        check_functions=discover_check_functions(project_dir=project_dir),
+        task_functions=task_functions,
+        asset_functions=asset_functions,
+        check_functions=check_functions,
         adapter_file=discover_adapter_file(project_dir=project_dir),
     )
     validate_discovered_inputs(discovered_inputs)
