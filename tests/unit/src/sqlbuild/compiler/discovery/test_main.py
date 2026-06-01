@@ -27,6 +27,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._test_types import (
                 "sources/raw.yml": """
 sources:
   - name: raw_orders
+    managed: true
     schema: public
     table: orders
 """.strip()
@@ -58,7 +59,7 @@ SELECT 1
                 "loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
-@loader
+@loader(name="raw_orders")
 def fetch_orders(ctx):
     return []
 """,
@@ -114,7 +115,7 @@ def export_customers_exists(ctx):
             expected_audit_block_names=(None,),
             expected_audit_block_sql_bodies=("SELECT 1",),
             expected_macro_paths=("macros/name_helpers.py",),
-            expected_loader_names=("fetch_orders",),
+            expected_loader_names=("raw_orders",),
             expected_adapter_path="adapter.py",
             expected_task_names=("fetch_window",),
             expected_asset_names=("export_customers",),
@@ -396,6 +397,27 @@ from sqlbuild.loaders import loader
 
 @loader
 def raw_orders(ctx):
+    return []
+""",
+        },
+        expected_error_fragment="Duplicate source loader found for 'raw_orders'",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when explicit loader names are duplicated",
+        repo_files=base_repo_files()
+        | {
+            "loaders/a.py": """
+from sqlbuild.loaders import loader
+
+@loader(name="raw_orders")
+def load_a(ctx):
+    return []
+""",
+            "loaders/b.py": """
+from sqlbuild.loaders import loader
+
+@loader(name="raw_orders")
+def load_b(ctx):
     return []
 """,
         },
