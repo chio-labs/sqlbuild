@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.25.1](https://github.com/chio-labs/sqlbuild/compare/v0.25.0...v0.25.1) (2026-06-01)
+
+
+### Bug Fixes
+
+* expose skip mode in public python APIs ([2019224](https://github.com/chio-labs/sqlbuild/commit/201922489477c1acfc242e13f89459d3f7d91601))
+* expose skip mode in public python APIs ([403b4e4](https://github.com/chio-labs/sqlbuild/commit/403b4e46d8e2377ee94f20586b10cc110b193f06))
+
 ## [0.25.0](https://github.com/chio-labs/sqlbuild/compare/v0.24.0...v0.25.0) (2026-06-01)
 
 
