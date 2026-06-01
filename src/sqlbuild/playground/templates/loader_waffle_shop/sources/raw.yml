@@ -1,6 +1,6 @@
 sources:
   - name: raw_orders
-    loader: load_raw_orders
+    managed: true
     write_strategy: table
     columns:
       - name: order_id
@@ -16,7 +16,7 @@ sources:
       - name: load_seq
         type: INTEGER
   - name: raw_customers
-    loader: load_raw_customers
+    managed: true
     write_strategy: table
     columns:
       - name: customer_id

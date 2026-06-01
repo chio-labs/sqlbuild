@@ -18,7 +18,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
 TEST_CASES: list[SelectorSurfaceBuildE2ETestCase] = [
     SelectorSurfaceBuildE2ETestCase(
         description="slash path selector works on build",
-        command=("--no-color", "build", "--select", "/marts"),
+        command=("--no-color", "build", "--select", "/models/marts"),
         expected_exit_code=0,
         expected_fragments=("Plan ready (10 selected)", "hourly_activity_with_daily_context"),
         expected_stream="stdout",

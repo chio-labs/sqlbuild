@@ -1882,6 +1882,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         virtual_env: str | None,
         load_sources: bool | None,
         reload_sources: bool,
+        include_python: bool,
         allow_snapshot_full_refresh: bool,
         allow_snapshot_schema_change: bool,
         concurrency: int | None,
@@ -1909,6 +1910,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         del json_output_path
         del include_stale_upstreams
         del changes_only
+        del include_python
         received_args.append(
             (
                 no_color,
@@ -1994,6 +1996,7 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
         full_refresh: bool,
         load_sources: bool | None,
         reload_sources: bool,
+        include_python: bool,
         allow_snapshot_full_refresh: bool,
         allow_snapshot_schema_change: bool,
         concurrency: int | None,
@@ -2020,6 +2023,7 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
         del cli_vars
         del json_output
         del json_output_path
+        del include_python
         received_args.append(
             (
                 full_refresh,
@@ -2093,6 +2097,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
         full_refresh: bool,
         virtual_env: str | None,
         load_sources: bool | None,
+        include_python: bool,
         no_color: bool,
         select: tuple[str, ...],
         exclude: tuple[str, ...],
@@ -2101,6 +2106,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
         include_stale_upstreams: bool = False,
         changes_only: bool = False,
     ) -> int:
+        del include_python
         received_args.append(
             (
                 project_dir,
@@ -2168,6 +2174,7 @@ def test_given_plan_load_flag_when_running_then_dispatches_expected_argument(
         full_refresh: bool,
         virtual_env: str | None,
         load_sources: bool | None,
+        include_python: bool,
         no_color: bool,
         select: tuple[str, ...],
         exclude: tuple[str, ...],
@@ -2185,6 +2192,7 @@ def test_given_plan_load_flag_when_running_then_dispatches_expected_argument(
             json_output,
             full_refresh,
             virtual_env,
+            include_python,
             no_color,
             select,
             exclude,
@@ -2234,6 +2242,7 @@ def test_given_select_file_when_running_then_dispatches_file_selectors(
         full_refresh: bool,
         virtual_env: str | None,
         load_sources: bool | None,
+        include_python: bool,
         no_color: bool,
         select: tuple[str, ...],
         exclude: tuple[str, ...],
@@ -2251,6 +2260,7 @@ def test_given_select_file_when_running_then_dispatches_file_selectors(
             json_output,
             full_refresh,
             virtual_env,
+            include_python,
             load_sources,
             no_color,
             exclude,

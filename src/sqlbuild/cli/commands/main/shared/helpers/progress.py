@@ -11,12 +11,13 @@ from typing import TextIO
 from sqlbuild.adapter.shared.models import LifeCycleEvent
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from sqlbuild.cli.commands.main.helpers.sql_test_progress import (
-    format_check_detail,
-    format_check_name,
+    format_expectation_detail,
+    format_expectation_name,
 )
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
+from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
@@ -25,6 +26,7 @@ from sqlbuild.executor.build.models import (
 )
 from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
@@ -143,13 +145,13 @@ class BuildProgressCallbacks:
                 if getattr(chain_step, "expected_cte_sql", None):
                     max_name_len = max(
                         max_name_len,
-                        len(format_check_name(str(getattr(chain_step, "model_name", "")))),
+                        len(format_expectation_name(str(getattr(chain_step, "model_name", "")))),
                     )
             assertion: object
             for assertion in getattr(test_entry, "assertions", ()):
                 max_name_len = max(
                     max_name_len,
-                    len(format_check_name(f"assertion {getattr(assertion, 'name', '')}")),
+                    len(format_expectation_name(f"assertion {getattr(assertion, 'name', '')}")),
                 )
         self._name_width: int = max(max_name_len + _NAME_PADDING, _MIN_NAME_WIDTH)
 
@@ -395,16 +397,18 @@ class BuildProgressCallbacks:
             self._stream.write(
                 f"{sub_pad}{'test':<{_TYPE_WIDTH}}{test_name:<{sub_nw}} {test_status}\n"
             )
-            check_pad: str = f"{sub_pad}  "
-            check_type_width: int = _TYPE_WIDTH - 2
+            expectation_pad: str = f"{sub_pad}  "
+            expectation_type_width: int = _TYPE_WIDTH - 2
             step_result: StepResult
             for step_result in test_result.step_results:
-                check_status: str = self._style.status(_test_outcome_display(step_result.outcome))
-                check_name: str = format_check_name(step_result.model_name)
-                check_detail: str = format_check_detail(step_result)
+                expectation_status: str = self._style.status(
+                    _test_outcome_display(step_result.outcome)
+                )
+                expectation_name: str = format_expectation_name(step_result.model_name)
+                expectation_detail: str = format_expectation_detail(step_result)
                 self._stream.write(
-                    f"{check_pad}{'check':<{check_type_width}}{check_name:<{sub_nw}} "
-                    f"{check_status}{check_detail}\n"
+                    f"{expectation_pad}{'expect':<{expectation_type_width}}"
+                    f"{expectation_name:<{sub_nw}} {expectation_status}{expectation_detail}\n"
                 )
 
         display_audits: list[_AuditDisplayEntry] = _aggregate_audit_results(
@@ -491,11 +495,17 @@ def format_build_footer(
     result: BuildExecutionResult,
     elapsed: float,
     use_color: bool,
+    python_node_results: tuple[PythonNodeExecutionResult, ...] = (),
 ) -> str:
     lines: list[str] = []
     style: CliStyle = CliStyle(use_color=use_color)
+    python_fail_count: int = sum(
+        1
+        for python_result in python_node_results
+        if python_result.status == PythonNodeStatus.FAILED
+    )
 
-    if result.status == BuildStatus.FAILED:
+    if result.status == BuildStatus.FAILED or python_fail_count:
         lines.append(style.error("Completed with errors."))
     elif result.warning_count > 0:
         lines.append(style.warning("Completed with warnings."))
@@ -550,6 +560,15 @@ def format_build_footer(
         else:
             fail_count += 1
 
+    python_result: PythonNodeExecutionResult
+    for python_result in python_node_results:
+        if python_result.status == PythonNodeStatus.SUCCESS:
+            pass_count += 1
+        elif python_result.status == PythonNodeStatus.FAILED:
+            fail_count += 1
+        elif python_result.status == PythonNodeStatus.SKIPPED:
+            skip_count += 1
+
     total_count: int = pass_count + warn_count + fail_count + skip_count
     elapsed_str: str = f"{elapsed:.2f}s"
     lines.append(
@@ -558,6 +577,7 @@ def format_build_footer(
     )
 
     failure_lines: list[str] = _format_failure_details(result, style=style)
+    failure_lines.extend(_format_python_failure_details(results=python_node_results, style=style))
     if failure_lines:
         lines.extend(failure_lines)
 
@@ -566,6 +586,25 @@ def format_build_footer(
         lines.extend(warning_lines)
 
     return "\n".join(lines)
+
+
+def _format_python_failure_details(
+    *, results: tuple[PythonNodeExecutionResult, ...], style: CliStyle
+) -> list[str]:
+    lines: list[str] = []
+    failed_results: tuple[PythonNodeExecutionResult, ...] = tuple(
+        result for result in results if result.status == PythonNodeStatus.FAILED
+    )
+    if not failed_results:
+        return lines
+    lines.append("")
+    lines.append(style.error_strong("Python node failures:"))
+    lines.append("")
+    result: PythonNodeExecutionResult
+    for result in failed_results:
+        message: str = result.error_message or "Python node failed"
+        lines.append(f"  {result.kind.value:<10}{result.node_name:<50} {style.error(message)}")
+    return lines
 
 
 def _format_failure_details(result: BuildExecutionResult, *, style: CliStyle) -> list[str]:

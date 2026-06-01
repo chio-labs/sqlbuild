@@ -35,6 +35,8 @@ def run_playground(
         if template == "virtual"
         else "loader-focused waffle shop"
         if template == "loader_waffle_shop"
+        else "Python nodes demo"
+        if template == "python_nodes"
         else "waffle shop"
     )
     doc: CliDocument = CliDocument(style)
@@ -57,6 +59,14 @@ def run_playground(
                 "sqb scenario test",
                 "sqb diff dev:pr --schema-only",
                 "sqb promote --from pr --to dev",
+            ]
+        )
+    elif template == "python_nodes":
+        commands.extend(
+            [
+                "sqb plan --select +fact_orders --select +orders_export",
+                "sqb build --select +fact_orders --select +orders_export",
+                "sqb check --select +check_orders_export",
             ]
         )
     else:

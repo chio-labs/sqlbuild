@@ -76,7 +76,7 @@ def fetch_prices(ctx):
 
 
 @loader(depends_on=[fetch_order_events, fetch_prices])
-def load_raw_orders(ctx):
+def raw_orders(ctx):
     events = ctx.loader(fetch_order_events)
     prices = ctx.loader(fetch_prices)
     cursor = ctx.query(
@@ -99,7 +99,7 @@ def load_raw_orders(ctx):
 
 
 @loader(depends_on=[fetch_customers])
-def load_raw_customers(ctx):
+def raw_customers(ctx):
     customers = ctx.loader(fetch_customers)
     cursor = ctx.query(
         f"SELECT customer_id, plan_name, load_seq FROM {customers.target} ORDER BY customer_id"

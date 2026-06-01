@@ -9,7 +9,7 @@ from sqlbuild.cli.commands.main.helpers.scenario.capture import _write_capture_r
 from sqlbuild.cli.commands.main.helpers.scenario.runner import _write_scenario_result
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.scenario.models import (
-    ScenarioExpectedCheckExecutionResult,
+    ScenarioExpectedExpectationExecutionResult,
     ScenarioRunResult,
     ScenarioSnapshotCaptureRelationResult,
     ScenarioSnapshotCaptureResult,
@@ -70,7 +70,7 @@ def test_given_scenario_result_when_writing_output_then_styles_statuses(
             scenario_name="orders_paid",
             status=ExecutionStatus.SUCCESS,
             expected_results=(
-                ScenarioExpectedCheckExecutionResult(
+                ScenarioExpectedExpectationExecutionResult(
                     scenario_name="orders_paid",
                     model_name="fact_orders",
                     status=ExecutionStatus.FAILED,

@@ -5,19 +5,35 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
+from sqlbuild.assets import get_asset_definition
+from sqlbuild.checks import get_check_definition
 from sqlbuild.compiler.discovery.exceptions import DiscoveryConflictError, SeedDiscoveryError
 from sqlbuild.compiler.discovery.models import (
+    DiscoveredAssetFunction,
+    DiscoveredCheckFunction,
     DiscoveredLoaderFunction,
     DiscoveredProjectInputs,
+    DiscoveredPythonFunctionFile,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
+    DiscoveredSqlFunctionFile,
     DiscoveredSqlModelFile,
     DiscoveredSqlScenarioFile,
+    DiscoveredTaskFunction,
 )
 from sqlbuild.compiler.shared.constants import RESERVED_MODEL_NAMES
+from sqlbuild.loaders import get_loader_definition
+from sqlbuild.shared.models import (
+    AssetDefinition,
+    CheckDefinition,
+    LoaderDefinition,
+    SqlResourceRef,
+    TaskDefinition,
+)
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.tasks import get_task_definition
 
 
 def validate_discovered_inputs(discovered_inputs: DiscoveredProjectInputs) -> None:
@@ -27,11 +43,28 @@ def validate_discovered_inputs(discovered_inputs: DiscoveredProjectInputs) -> No
     _validate_unique_scenario_file_names(discovered_inputs.scenario_files)
     _validate_unique_source_names(discovered_inputs.source_files)
     _validate_unique_loader_names(discovered_inputs.loader_functions)
+    _validate_unique_python_node_names(
+        loader_functions=discovered_inputs.loader_functions,
+        task_functions=discovered_inputs.task_functions,
+        asset_functions=discovered_inputs.asset_functions,
+        check_functions=discovered_inputs.check_functions,
+    )
     _validate_source_loader_name_collisions(
         source_files=discovered_inputs.source_files,
         loader_functions=discovered_inputs.loader_functions,
     )
     _validate_loader_dependencies(discovered_inputs.loader_functions)
+    _validate_python_node_dependencies(
+        loader_functions=discovered_inputs.loader_functions,
+        task_functions=discovered_inputs.task_functions,
+        asset_functions=discovered_inputs.asset_functions,
+    )
+    _validate_check_dependencies(
+        loader_functions=discovered_inputs.loader_functions,
+        task_functions=discovered_inputs.task_functions,
+        asset_functions=discovered_inputs.asset_functions,
+        check_functions=discovered_inputs.check_functions,
+    )
     _validate_source_loader_references(
         source_files=discovered_inputs.source_files,
         loader_functions=discovered_inputs.loader_functions,
@@ -50,6 +83,17 @@ def validate_discovered_inputs(discovered_inputs: DiscoveredProjectInputs) -> No
     _validate_declared_seed_files(
         schema_files=discovered_inputs.schema_files,
         seed_files=discovered_inputs.seed_files,
+    )
+    _validate_unique_selectable_resource_names(
+        model_files=discovered_inputs.model_files,
+        source_files=discovered_inputs.source_files,
+        schema_files=discovered_inputs.schema_files,
+        sql_function_files=discovered_inputs.sql_function_files,
+        python_function_files=discovered_inputs.python_function_files,
+        loader_functions=discovered_inputs.loader_functions,
+        task_functions=discovered_inputs.task_functions,
+        asset_functions=discovered_inputs.asset_functions,
+        check_functions=discovered_inputs.check_functions,
     )
     _validate_path_defaults_match_models(
         path_defaults=discovered_inputs.project_config.path_defaults,
@@ -119,6 +163,31 @@ def _validate_unique_loader_names(loader_functions: tuple[DiscoveredLoaderFuncti
         seen_names[loader_function.name] = str(loader_function.relative_path)
 
 
+def _validate_unique_python_node_names(
+    *,
+    loader_functions: tuple[DiscoveredLoaderFunction, ...],
+    task_functions: tuple[DiscoveredTaskFunction, ...],
+    asset_functions: tuple[DiscoveredAssetFunction, ...],
+    check_functions: tuple[DiscoveredCheckFunction, ...],
+) -> None:
+    seen_names: dict[str, str] = {}
+    for nodes in (
+        loader_functions,
+        task_functions,
+        asset_functions,
+        check_functions,
+    ):
+        for node in nodes:
+            existing_path: str | None = seen_names.get(node.name)
+            if existing_path is not None:
+                raise DiscoveryConflictError(
+                    f"Duplicate Python node found for '{node.name}' in "
+                    f"{existing_path} and {node.relative_path}; loader, task, asset, and check "
+                    "names must be globally unique"
+                )
+            seen_names[node.name] = str(node.relative_path)
+
+
 def _validate_source_loader_name_collisions(
     *,
     source_files: tuple[DiscoveredSourceFile, ...],
@@ -134,10 +203,12 @@ def _validate_source_loader_name_collisions(
             loader_path: str | None = loader_paths_by_name.get(source_entry.name)
             if loader_path is None:
                 continue
+            if source_entry.managed and source_entry.loader == source_entry.name:
+                continue
             raise DiscoveryConflictError(
                 f"Source '{source_entry.name}' in {source_file.relative_path} conflicts with "
                 f"loader '{source_entry.name}' in {loader_path}; source and loader names must "
-                "be globally unique for unambiguous load selectors"
+                "be globally unique unless the source is managed"
             )
 
 
@@ -151,6 +222,16 @@ def _validate_source_loader_references(
     for source_file in source_files:
         source_entry: SourceEntry
         for source_entry in source_file.source_entries:
+            if source_entry.managed and source_entry.loader != source_entry.name:
+                raise DiscoveryConflictError(
+                    f"Managed source '{source_entry.name}' in {source_file.relative_path} must "
+                    f"use terminal loader '{source_entry.name}'"
+                )
+            if source_entry.managed and source_entry.name not in loader_names:
+                raise DiscoveryConflictError(
+                    f"Managed source '{source_entry.name}' in {source_file.relative_path} "
+                    f"requires loader '{source_entry.name}'"
+                )
             if source_entry.loader is None or source_entry.loader in loader_names:
                 continue
             raise DiscoveryConflictError(
@@ -202,15 +283,6 @@ def _validate_loader_dependencies(loader_functions: tuple[DiscoveredLoaderFuncti
     loader_by_function: dict[object, DiscoveredLoaderFunction] = {
         loader.function: loader for loader in loader_functions
     }
-    loader_function: DiscoveredLoaderFunction
-    for loader_function in loader_functions:
-        dependency: object
-        for dependency in loader_function.depends_on:
-            if dependency not in loader_by_function:
-                raise DiscoveryConflictError(
-                    f"Loader '{loader_function.name}' depends on an unknown loader; "
-                    "use function references to loaders decorated with @loader"
-                )
     visiting: set[str] = set()
     visited: set[str] = set()
 
@@ -223,12 +295,141 @@ def _validate_loader_dependencies(loader_functions: tuple[DiscoveredLoaderFuncti
         visiting.add(loader_function.name)
         dependency: object
         for dependency in loader_function.depends_on:
-            visit(loader_by_function[dependency], (*path, loader_function.name))
+            if dependency in loader_by_function:
+                visit(loader_by_function[dependency], (*path, loader_function.name))
         visiting.remove(loader_function.name)
         visited.add(loader_function.name)
 
     for loader_function in loader_functions:
         visit(loader_function, ())
+
+
+def _validate_python_node_dependencies(
+    *,
+    loader_functions: tuple[DiscoveredLoaderFunction, ...],
+    task_functions: tuple[DiscoveredTaskFunction, ...],
+    asset_functions: tuple[DiscoveredAssetFunction, ...],
+) -> None:
+    nodes: tuple[
+        DiscoveredLoaderFunction | DiscoveredTaskFunction | DiscoveredAssetFunction, ...
+    ] = (
+        *loader_functions,
+        *task_functions,
+        *asset_functions,
+    )
+    node_by_dependency_key: dict[
+        object | tuple[str, str],
+        DiscoveredLoaderFunction | DiscoveredTaskFunction | DiscoveredAssetFunction,
+    ] = {node.function: node for node in nodes}
+    for node in nodes:
+        node_by_dependency_key[("name", node.name)] = node
+    node: DiscoveredLoaderFunction | DiscoveredTaskFunction | DiscoveredAssetFunction
+    for node in nodes:
+        dependency: object
+        for dependency in node.depends_on:
+            if isinstance(dependency, SqlResourceRef):
+                if isinstance(node, DiscoveredLoaderFunction):
+                    raise DiscoveryConflictError(
+                        f"Loader '{node.name}' depends on SQL resource "
+                        f"'{dependency.name}'; loaders "
+                        "may depend on Python loader/task/asset functions only"
+                    )
+                continue
+            if _python_node_dependency_key(dependency) not in node_by_dependency_key:
+                if isinstance(node, DiscoveredLoaderFunction):
+                    raise DiscoveryConflictError(
+                        f"Loader '{node.name}' depends on an unknown loader"
+                    )
+                raise DiscoveryConflictError(
+                    f"Python node '{node.name}' depends on an unknown Python node; "
+                    "use function references to decorated loaders, tasks, or assets"
+                )
+
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(
+        current: DiscoveredLoaderFunction | DiscoveredTaskFunction | DiscoveredAssetFunction,
+        path: tuple[str, ...],
+    ) -> None:
+        if current.name in visited:
+            return
+        if current.name in visiting:
+            cycle_path: str = " -> ".join((*path, current.name))
+            raise DiscoveryConflictError(f"Python node dependency cycle detected: {cycle_path}")
+        visiting.add(current.name)
+        dependency: object
+        for dependency in current.depends_on:
+            if isinstance(dependency, SqlResourceRef):
+                continue
+            visit(
+                node_by_dependency_key[_python_node_dependency_key(dependency)],
+                (*path, current.name),
+            )
+        visiting.remove(current.name)
+        visited.add(current.name)
+
+    for node in nodes:
+        visit(node, ())
+
+
+def _validate_check_dependencies(
+    *,
+    loader_functions: tuple[DiscoveredLoaderFunction, ...],
+    task_functions: tuple[DiscoveredTaskFunction, ...],
+    asset_functions: tuple[DiscoveredAssetFunction, ...],
+    check_functions: tuple[DiscoveredCheckFunction, ...],
+) -> None:
+    allowed_dependency_keys: frozenset[object | tuple[str, str]] = frozenset(
+        ("name", node.name) for node in (*loader_functions, *task_functions, *asset_functions)
+    )
+    check_dependency_keys: frozenset[object | tuple[str, str]] = frozenset(
+        ("name", check_function.name) for check_function in check_functions
+    )
+    check_function: DiscoveredCheckFunction
+    for check_function in check_functions:
+        dependency: object
+        for dependency in check_function.depends_on:
+            if isinstance(dependency, SqlResourceRef):
+                raise DiscoveryConflictError(
+                    f"Check '{check_function.name}' depends on SQL resource '{dependency.name}'; "
+                    "checks may depend on loaders, tasks, and assets only"
+                )
+            dependency_key: object | tuple[str, str] = _python_node_dependency_key(dependency)
+            if dependency_key in check_dependency_keys:
+                raise DiscoveryConflictError(
+                    f"Check '{check_function.name}' depends on another check; checks may "
+                    "depend on loaders, tasks, and assets only"
+                )
+            if dependency_key not in allowed_dependency_keys:
+                raise DiscoveryConflictError(
+                    f"Check '{check_function.name}' depends on an unknown Python node; "
+                    "use function references to decorated loaders, tasks, or assets"
+                )
+
+
+def _python_node_dependency_key(dependency: object) -> object | tuple[str, str]:
+    loader_definition: LoaderDefinition | None = (
+        get_loader_definition(dependency) if callable(dependency) else None
+    )
+    if loader_definition is not None:
+        return ("name", loader_definition.name)
+    task_definition: TaskDefinition | None = (
+        get_task_definition(dependency) if callable(dependency) else None
+    )
+    if task_definition is not None:
+        return ("name", task_definition.name)
+    asset_definition: AssetDefinition | None = (
+        get_asset_definition(dependency) if callable(dependency) else None
+    )
+    if asset_definition is not None:
+        return ("name", asset_definition.name)
+    check_definition: CheckDefinition | None = (
+        get_check_definition(dependency) if callable(dependency) else None
+    )
+    if check_definition is not None:
+        return ("name", check_definition.name)
+    return dependency
 
 
 def _validate_unique_schema_model_names(schema_files: tuple[DiscoveredSchemaFile, ...]) -> None:
@@ -303,6 +504,104 @@ def _validate_logical_relation_name_is_available(
         raise DiscoveryConflictError(
             f"Logical relation name '{name}' is declared as both {existing_entry[0]} "
             f"in {existing_entry[1]} and {kind} in {path}"
+        )
+    seen_names[name] = (kind, path)
+
+
+def _validate_unique_selectable_resource_names(
+    *,
+    model_files: tuple[DiscoveredSqlModelFile, ...],
+    source_files: tuple[DiscoveredSourceFile, ...],
+    schema_files: tuple[DiscoveredSchemaFile, ...],
+    sql_function_files: tuple[DiscoveredSqlFunctionFile, ...],
+    python_function_files: tuple[DiscoveredPythonFunctionFile, ...],
+    loader_functions: tuple[DiscoveredLoaderFunction, ...],
+    task_functions: tuple[DiscoveredTaskFunction, ...],
+    asset_functions: tuple[DiscoveredAssetFunction, ...],
+    check_functions: tuple[DiscoveredCheckFunction, ...],
+) -> None:
+    seen_names: dict[str, tuple[str, str]] = {}
+
+    model_file: DiscoveredSqlModelFile
+    for model_file in model_files:
+        _validate_selectable_resource_name_is_available(
+            seen_names=seen_names,
+            name=model_file.file_path.stem,
+            kind="model",
+            path=str(model_file.relative_path),
+        )
+
+    source_file: DiscoveredSourceFile
+    managed_source_names: set[str] = set()
+    for source_file in source_files:
+        source_entry: SourceEntry
+        for source_entry in source_file.source_entries:
+            if source_entry.managed:
+                managed_source_names.add(source_entry.name)
+            _validate_selectable_resource_name_is_available(
+                seen_names=seen_names,
+                name=source_entry.name,
+                kind="source",
+                path=str(source_file.relative_path),
+            )
+
+    schema_file: DiscoveredSchemaFile
+    for schema_file in schema_files:
+        seed_entry: SchemaSeedEntry
+        for seed_entry in schema_file.seed_entries:
+            _validate_selectable_resource_name_is_available(
+                seen_names=seen_names,
+                name=seed_entry.name,
+                kind="seed",
+                path=str(schema_file.relative_path),
+            )
+
+    sql_function_file: DiscoveredSqlFunctionFile
+    for sql_function_file in sql_function_files:
+        _validate_selectable_resource_name_is_available(
+            seen_names=seen_names,
+            name=sql_function_file.file_path.stem,
+            kind="function",
+            path=str(sql_function_file.relative_path),
+        )
+
+    python_function_file: DiscoveredPythonFunctionFile
+    for python_function_file in python_function_files:
+        _validate_selectable_resource_name_is_available(
+            seen_names=seen_names,
+            name=python_function_file.file_path.stem,
+            kind="function",
+            path=str(python_function_file.relative_path),
+        )
+
+    node: (
+        DiscoveredLoaderFunction
+        | DiscoveredTaskFunction
+        | DiscoveredAssetFunction
+        | DiscoveredCheckFunction
+    )
+    for node in (*loader_functions, *task_functions, *asset_functions, *check_functions):
+        if isinstance(node, DiscoveredLoaderFunction) and node.name in managed_source_names:
+            continue
+        _validate_selectable_resource_name_is_available(
+            seen_names=seen_names,
+            name=node.name,
+            kind=node.__class__.__name__.removeprefix("Discovered")
+            .removesuffix("Function")
+            .lower(),
+            path=str(node.relative_path),
+        )
+
+
+def _validate_selectable_resource_name_is_available(
+    *, seen_names: dict[str, tuple[str, str]], name: str, kind: str, path: str
+) -> None:
+    existing_entry: tuple[str, str] | None = seen_names.get(name)
+    if existing_entry is not None:
+        raise DiscoveryConflictError(
+            f"Selectable resource name '{name}' is declared as both {existing_entry[0]} "
+            f"in {existing_entry[1]} and {kind} in {path}; model, source, seed, function, "
+            "loader, task, asset, and check names must be globally unique"
         )
     seen_names[name] = (kind, path)
 

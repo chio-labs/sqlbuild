@@ -11,6 +11,16 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
 )
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput, SeedPlanEntry
+from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunPhase
+
+
+@dataclass(frozen=True)
+class PythonPlanEntry:
+    """Display-ready Python node entry for plan output."""
+
+    name: str
+    kind: PythonNodeKind
+    phase: PythonRunPhase
 
 
 @dataclass(frozen=True)
@@ -21,6 +31,8 @@ class CompilePipelineResult:
     plan_output: PlanOutput
     manifest: dict[str, object] = field(default_factory=dict)
     custom_materializations: dict[str, Callable[..., Any]] = field(default_factory=dict)
+    python_node_names: frozenset[str] = field(default_factory=frozenset)
+    python_plan_entries: tuple[PythonPlanEntry, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

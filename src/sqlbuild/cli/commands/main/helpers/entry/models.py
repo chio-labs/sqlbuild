@@ -44,6 +44,7 @@ class CliNamespace:
     skip_locked: bool = False
     include_stale_upstreams: bool = False
     changes_only: bool = False
+    include_python: bool = True
     load_sources: bool | None = None
     reload: bool = False
     allow_snapshot_full_refresh: bool = False
@@ -136,6 +137,7 @@ class CliEntrypointHandlers:
             str | None,
             bool | None,
             bool,
+            bool,
             tuple[str, ...],
             tuple[str, ...],
             bool,
@@ -162,6 +164,7 @@ class CliEntrypointHandlers:
             bool,
             str | None,
             bool | None,
+            bool,
             bool,
             bool,
             bool,
@@ -192,6 +195,7 @@ class CliEntrypointHandlers:
             bool,
             bool,
             bool,
+            bool,
             int | None,
             tuple[str, ...],
             tuple[str, ...],
@@ -204,6 +208,19 @@ class CliEntrypointHandlers:
         int,
     ]
     run_test: Callable[
+        [
+            Path | None,
+            bool,
+            bool,
+            tuple[str, ...],
+            tuple[str, ...],
+            dict[str, object],
+            bool,
+            Path | None,
+        ],
+        int,
+    ]
+    run_check: Callable[
         [
             Path | None,
             bool,

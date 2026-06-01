@@ -10,7 +10,7 @@ from sqlbuild.shared.helpers.alignment import resolve_name_column_width
 
 
 def resolve_test_name_width(test_entries: tuple[SqlTestPlanEntry, ...]) -> int:
-    """Resolve one shared width for test rows and nested check rows."""
+    """Resolve one shared width for test rows and nested expectation rows."""
 
     names: list[str] = []
     entry: SqlTestPlanEntry
@@ -21,35 +21,37 @@ def resolve_test_name_width(test_entries: tuple[SqlTestPlanEntry, ...]) -> int:
     return resolve_name_column_width(names, min_width=50)
 
 
-def build_test_check_rows(result: SqlTestExecutionResult) -> tuple[NestedProgressChildRow, ...]:
-    """Build nested check rows for a completed SQL unit test."""
+def build_test_expectation_rows(
+    result: SqlTestExecutionResult,
+) -> tuple[NestedProgressChildRow, ...]:
+    """Build nested expectation rows for a completed SQL unit test."""
 
     rows: list[NestedProgressChildRow] = []
     step_result: StepResult
     for step_result in result.step_results:
-        check_name: str = format_check_name(step_result.model_name)
+        expectation_name: str = format_expectation_name(step_result.model_name)
         status_text: str = "PASS" if step_result.outcome == SqlTestOutcome.PASS else "FAIL"
         rows.append(
             NestedProgressChildRow(
-                label="check",
-                name=check_name,
+                label="expect",
+                name=expectation_name,
                 status_text=status_text,
-                detail=format_check_detail(step_result),
+                detail=format_expectation_detail(step_result),
             )
         )
     return tuple(rows)
 
 
-def format_check_name(model_name: str) -> str:
-    """Format a comparison result name as a user-facing check name."""
+def format_expectation_name(model_name: str) -> str:
+    """Format a comparison result name as a user-facing expectation name."""
 
     if model_name.startswith("assertion "):
         return model_name
     return f"expected {model_name}"
 
 
-def format_check_detail(step_result: StepResult) -> str:
-    """Format failing row count detail for a check row."""
+def format_expectation_detail(step_result: StepResult) -> str:
+    """Format failing row count detail for an expectation row."""
 
     if step_result.outcome == SqlTestOutcome.PASS:
         return ""

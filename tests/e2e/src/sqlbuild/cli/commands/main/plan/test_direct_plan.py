@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.plan._test_types import DirectPlanE2ETestCase
+from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
+    prepare_python_lifecycle_plan_project,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     prepare_inline_project,
     run_sqb,
@@ -70,3 +75,289 @@ def test_given_direct_project_with_config_only_change_when_planning_then_reports
         assert fragment in output, output
     for fragment in test_case.unexpected_fragments:
         assert fragment not in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectPlanE2ETestCase(
+            description="direct plan shows selected Python lifecycle nodes",
+            expected_fragments=(
+                "Plan ready (1 selected, 2 sources to load, 4 Python nodes)",
+                "Python ingress (2)",
+                "prepare_orders",
+                "publish_prepared_orders",
+                "Loaders to load (1)",
+                "load_window_orders",
+                "Sources to load (1)",
+                "raw_orders",
+                "First run (1)",
+                "fact_orders",
+                "Python read-side (2)",
+                "profile_fact_orders",
+                "notify_fact_orders",
+            ),
+        )
+    ],
+    ids=["direct plan shows selected Python lifecycle nodes"],
+)
+def test_given_python_lifecycle_project_when_planning_then_shows_python_sections(
+    test_case: DirectPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_python_lifecycle_plan_project(tmp_path=tmp_path)
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=(
+            "--no-color",
+            "plan",
+            "--select",
+            "+fact_orders +notify_fact_orders",
+        ),
+        project_dir=project_dir,
+    )
+
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    output: str = plan_result.stdout
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in output, output
+    assert output.index("Python ingress (2)") < output.index("Sources to load (1)")
+    assert output.index("First run (1)") < output.index("Python read-side (2)")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectPlanE2ETestCase(
+            description="direct source plan warns for skipped task ingress dependency",
+            expected_fragments=(
+                "Plan ready (0 selected, 1 source to load)",
+                "Sources to load (1)",
+                "raw_orders",
+                "Warnings (1)",
+                "Source loader 'raw_orders' has unselected upstream task 'prepare_orders'",
+                "use +source:raw_orders to refresh upstream ingress dependencies",
+            ),
+            unexpected_fragments=("Python ingress", "python    task      prepare_orders"),
+        )
+    ],
+    ids=["direct source plan warns for skipped task ingress dependency"],
+)
+def test_given_direct_source_with_task_ingress_when_planning_without_expansion_then_warns(
+    test_case: DirectPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_source_task_ingress_plan",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_source_task_ingress_plan"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "direct_source_task_ingress_plan.duckdb"\n'
+            ),
+            "tasks/prepare.py": (
+                "from sqlbuild.tasks import task\n\n"
+                "@task\n"
+                "def prepare_orders(ctx):\n"
+                "    return ctx.result()\n"
+            ),
+            "loaders/raw.py": (
+                "from sqlbuild.loaders import loader\n"
+                "from tasks.prepare import prepare_orders\n\n"
+                "@loader(depends_on=[prepare_orders])\n"
+                "def raw_orders(ctx):\n"
+                "    return [{'order_id': 1}]\n"
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    managed: true\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+            ),
+        },
+    )
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--select", "raw_orders"),
+        project_dir=project_dir,
+    )
+
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    output: str = plan_result.stdout
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in output, output
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectPlanE2ETestCase(
+            description="direct source plan warns for skipped asset ingress dependency",
+            expected_fragments=(
+                "Plan ready (0 selected, 1 source to load)",
+                "Warnings (1)",
+                "Source loader 'raw_orders' has unselected upstream asset 'prepare_orders'",
+            ),
+            unexpected_fragments=("Python ingress",),
+        )
+    ],
+    ids=["direct source plan warns for skipped asset ingress dependency"],
+)
+def test_given_direct_source_with_asset_ingress_when_planning_without_expansion_then_warns(
+    test_case: DirectPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_source_asset_ingress_plan",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_source_asset_ingress_plan"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "direct_source_asset_ingress_plan.duckdb"\n'
+            ),
+            "assets/prepare.py": (
+                "from sqlbuild.assets import asset\n\n"
+                "@asset\n"
+                "def prepare_orders(ctx):\n"
+                "    return ctx.result(materialized=True)\n"
+            ),
+            "loaders/raw.py": (
+                "from sqlbuild.loaders import loader\n"
+                "from assets.prepare import prepare_orders\n\n"
+                "@loader(depends_on=[prepare_orders])\n"
+                "def raw_orders(ctx):\n"
+                "    return [{'order_id': 1}]\n"
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    managed: true\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+            ),
+        },
+    )
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--select", "raw_orders"),
+        project_dir=project_dir,
+    )
+
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    output: str = plan_result.stdout
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in output, output
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectPlanE2ETestCase(
+            description="direct plan json includes selected Python lifecycle nodes",
+            expected_fragments=(
+                "prepare_orders",
+                "publish_prepared_orders",
+                "profile_fact_orders",
+                "notify_fact_orders",
+            ),
+        )
+    ],
+    ids=["direct plan json includes selected Python lifecycle nodes"],
+)
+def test_given_python_lifecycle_project_when_planning_json_then_includes_python_nodes(
+    test_case: DirectPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_python_lifecycle_plan_project(tmp_path=tmp_path)
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=(
+            "--no-color",
+            "plan",
+            "--json",
+            "--select",
+            "+fact_orders +notify_fact_orders",
+        ),
+        project_dir=project_dir,
+    )
+
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    payload: dict[str, object] = json.loads(plan_result.stdout)
+    python_nodes: list[dict[str, Any]] = list(payload["python_nodes"])  # type: ignore[arg-type]
+    assert payload["python_node_count"] == 4
+    nodes_by_name: dict[str, dict[str, Any]] = {str(node["name"]): node for node in python_nodes}
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in nodes_by_name
+    assert nodes_by_name["prepare_orders"] == {
+        "name": "prepare_orders",
+        "kind": "task",
+        "phase": "pre_sql_ingress",
+    }
+    assert nodes_by_name["publish_prepared_orders"] == {
+        "name": "publish_prepared_orders",
+        "kind": "asset",
+        "phase": "pre_sql_ingress",
+    }
+    assert nodes_by_name["profile_fact_orders"] == {
+        "name": "profile_fact_orders",
+        "kind": "task",
+        "phase": "read_side",
+    }
+    assert nodes_by_name["notify_fact_orders"] == {
+        "name": "notify_fact_orders",
+        "kind": "task",
+        "phase": "read_side",
+    }
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectPlanE2ETestCase(
+            description="direct plan rejects unselected Python dependencies",
+            expected_fragments=(
+                "Python node 'notify_fact_orders' depends on unselected Python node "
+                "'profile_fact_orders'",
+            ),
+        )
+    ],
+    ids=["direct plan rejects unselected Python dependencies"],
+)
+def test_given_python_lifecycle_project_when_planning_without_dependency_then_fails(
+    test_case: DirectPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_python_lifecycle_plan_project(tmp_path=tmp_path)
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=(
+            "--no-color",
+            "plan",
+            "--select",
+            "load_window_orders fact_orders notify_fact_orders",
+        ),
+        project_dir=project_dir,
+    )
+
+    assert plan_result.returncode != 0, plan_result.stdout + plan_result.stderr
+    output: str = plan_result.stdout + plan_result.stderr
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in output, output

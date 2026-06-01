@@ -19,9 +19,9 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.scenario.helpers.checks import (
-    execute_scenario_assertion_checks,
-    execute_scenario_expected_checks,
+from sqlbuild.executor.scenario.helpers.expectations import (
+    execute_scenario_assertion_expectations,
+    execute_scenario_expected_expectations,
 )
 from sqlbuild.executor.scenario.helpers.fixtures import (
     execute_scenario_fixtures,
@@ -31,17 +31,17 @@ from sqlbuild.executor.scenario.helpers.model_execution import execute_scenario_
 from sqlbuild.executor.scenario.main.cleanup import execute_scenario_cleanup
 from sqlbuild.executor.scenario.main.fixtures import execute_scenario_fixture
 from sqlbuild.executor.scenario.models import (
-    ScenarioAssertionCheckExecutionResult,
+    ScenarioAssertionExpectationExecutionResult,
     ScenarioCleanupExecutionResult,
-    ScenarioExpectedCheckExecutionResult,
+    ScenarioExpectedExpectationExecutionResult,
     ScenarioFixtureExecutionResult,
 )
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.spec.models.schema import default_seed_csv_settings
 from tests.integration.src.sqlbuild.executor.scenario._test_types import (
-    ScenarioAssertionCheckIntegrationTestCase,
+    ScenarioAssertionExpectationIntegrationTestCase,
     ScenarioCleanupIntegrationTestCase,
-    ScenarioExpectedCheckIntegrationTestCase,
+    ScenarioExpectedExpectationIntegrationTestCase,
     ScenarioFixtureFailureIntegrationTestCase,
     ScenarioFixtureMaterializationIntegrationTestCase,
     ScenarioModelBuildIntegrationTestCase,
@@ -267,8 +267,8 @@ def test_given_scenario_plan_when_executing_models_then_builds_model_relations(
     )
 
 
-EXPECTED_CHECK_TEST_CASES: list[ScenarioExpectedCheckIntegrationTestCase] = [
-    ScenarioExpectedCheckIntegrationTestCase(
+EXPECTED_EXPECTATION_TEST_CASES: list[ScenarioExpectedExpectationIntegrationTestCase] = [
+    ScenarioExpectedExpectationIntegrationTestCase(
         description="expected output matches scenario model relation",
         expected_sql=(
             "SELECT 1 AS order_id, 'Ada' AS customer_name, 'United States' AS country_name"
@@ -278,7 +278,7 @@ EXPECTED_CHECK_TEST_CASES: list[ScenarioExpectedCheckIntegrationTestCase] = [
         expected_expected_row_count=1,
         expected_mismatched_row_count=0,
     ),
-    ScenarioExpectedCheckIntegrationTestCase(
+    ScenarioExpectedExpectationIntegrationTestCase(
         description="expected output mismatch fails scenario check",
         expected_sql=(
             "SELECT 1 AS order_id, 'Grace' AS customer_name, 'United States' AS country_name"
@@ -293,11 +293,11 @@ EXPECTED_CHECK_TEST_CASES: list[ScenarioExpectedCheckIntegrationTestCase] = [
 
 @pytest.mark.parametrize(
     "test_case",
-    EXPECTED_CHECK_TEST_CASES,
-    ids=[case.description for case in EXPECTED_CHECK_TEST_CASES],
+    EXPECTED_EXPECTATION_TEST_CASES,
+    ids=[case.description for case in EXPECTED_EXPECTATION_TEST_CASES],
 )
 def test_given_expected_check_when_executing_then_returns_comparison_result(
-    test_case: ScenarioExpectedCheckIntegrationTestCase,
+    test_case: ScenarioExpectedExpectationIntegrationTestCase,
     adapter: DuckDbAdapter,
     connection: Any,
 ) -> None:
@@ -310,10 +310,12 @@ def test_given_expected_check_when_executing_then_returns_comparison_result(
         expected_sql=test_case.expected_sql
     )
 
-    results: tuple[ScenarioExpectedCheckExecutionResult, ...] = execute_scenario_expected_checks(
-        scenario_plan=scenario_plan,
-        adapter=adapter,
-        connection=connection,
+    results: tuple[ScenarioExpectedExpectationExecutionResult, ...] = (
+        execute_scenario_expected_expectations(
+            scenario_plan=scenario_plan,
+            adapter=adapter,
+            connection=connection,
+        )
     )
 
     assert len(results) == 1
@@ -323,8 +325,8 @@ def test_given_expected_check_when_executing_then_returns_comparison_result(
     assert results[0].mismatched_row_count == test_case.expected_mismatched_row_count
 
 
-ASSERTION_CHECK_TEST_CASES: list[ScenarioAssertionCheckIntegrationTestCase] = [
-    ScenarioAssertionCheckIntegrationTestCase(
+ASSERTION_EXPECTATION_TEST_CASES: list[ScenarioAssertionExpectationIntegrationTestCase] = [
+    ScenarioAssertionExpectationIntegrationTestCase(
         description="zero-row assertion passes",
         assertion_sql=(
             "SELECT * FROM scenario_schema.__sqb_51b385aebe20__model__daily_revenue "
@@ -334,7 +336,7 @@ ASSERTION_CHECK_TEST_CASES: list[ScenarioAssertionCheckIntegrationTestCase] = [
         expected_failing_row_count=0,
         expected_sample_rows=(),
     ),
-    ScenarioAssertionCheckIntegrationTestCase(
+    ScenarioAssertionExpectationIntegrationTestCase(
         description="assertion returning rows fails with sample rows",
         assertion_sql=(
             "SELECT order_id, customer_name "
@@ -350,11 +352,11 @@ ASSERTION_CHECK_TEST_CASES: list[ScenarioAssertionCheckIntegrationTestCase] = [
 
 @pytest.mark.parametrize(
     "test_case",
-    ASSERTION_CHECK_TEST_CASES,
-    ids=[case.description for case in ASSERTION_CHECK_TEST_CASES],
+    ASSERTION_EXPECTATION_TEST_CASES,
+    ids=[case.description for case in ASSERTION_EXPECTATION_TEST_CASES],
 )
 def test_given_assertion_check_when_executing_then_returns_zero_row_result(
-    test_case: ScenarioAssertionCheckIntegrationTestCase,
+    test_case: ScenarioAssertionExpectationIntegrationTestCase,
     adapter: DuckDbAdapter,
     connection: Any,
 ) -> None:
@@ -367,10 +369,12 @@ def test_given_assertion_check_when_executing_then_returns_zero_row_result(
         assertion_sql=test_case.assertion_sql
     )
 
-    results: tuple[ScenarioAssertionCheckExecutionResult, ...] = execute_scenario_assertion_checks(
-        scenario_plan=scenario_plan,
-        adapter=adapter,
-        connection=connection,
+    results: tuple[ScenarioAssertionExpectationExecutionResult, ...] = (
+        execute_scenario_assertion_expectations(
+            scenario_plan=scenario_plan,
+            adapter=adapter,
+            connection=connection,
+        )
     )
 
     assert len(results) == 1

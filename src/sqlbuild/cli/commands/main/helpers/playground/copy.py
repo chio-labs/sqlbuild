@@ -13,6 +13,168 @@ _TEMPLATE_PACKAGE: str = "sqlbuild.playground"
 _WAFFLE_SHOP_TEMPLATE: str = "templates/waffle_shop"
 _LOADER_WAFFLE_SHOP_TEMPLATE: str = "templates/loader_waffle_shop"
 
+_PYTHON_NODES_PROJECT_TOML: str = """name = "python_nodes_demo"
+adapter = "duckdb"
+default_environment = "dev"
+
+[connection]
+database = "python_nodes_demo.duckdb"
+
+[settings]
+default_audit_severity = "warn"
+
+[defaults]
+materialized = "table"
+
+[environments.dev]
+schema = "main"
+defer_sources_to = "dev"
+"""
+
+_PYTHON_NODES_README: str = """# SQLBuild Python Nodes Playground
+
+This project demonstrates first-class Python nodes in a small local DuckDB project.
+
+Try:
+
+```bash
+sqb plan --select +fact_orders --select +orders_export
+sqb build --select +fact_orders --select +orders_export
+sqb check --select +check_orders_export
+```
+
+The project includes a task feeding a loader, a model feeding Python assets through
+`ctx.relation(model(...))`, soft skip fan-in, `materialized=False`, and a Python check.
+"""
+
+_PYTHON_NODES_SOURCES_YML: str = """sources:
+  - name: raw_orders
+    managed: true
+    write_strategy: table
+    columns:
+      - name: order_id
+        type: INTEGER
+      - name: customer_id
+        type: INTEGER
+      - name: amount_cents
+        type: INTEGER
+      - name: load_batch
+        type: INTEGER
+"""
+
+_PYTHON_NODES_FACT_ORDERS_SQL: str = """MODEL (
+  materialized table,
+  columns (
+    order_id (nullable false, audits [not_null, unique]),
+    customer_id (nullable false, audits [not_null]),
+    amount_cents (nullable false, audits [not_null]),
+  ),
+);
+
+SELECT
+  order_id,
+  customer_id,
+  amount_cents
+FROM __source("raw_orders")
+"""
+
+_PYTHON_NODES_TASKS_PY: str = '''"""Task examples for the Python nodes playground."""
+
+from sqlbuild.compiler.python_nodes.types import SkipMode
+from sqlbuild.tasks import task
+
+
+@task(tags=["python", "ingress"], group="ingress")
+def prepare_raw_orders(ctx):
+    """Prepare a tiny in-memory order extract before the loader runs."""
+
+    rows = [
+        {"order_id": 1, "customer_id": 10, "amount_cents": 1200, "load_batch": 1},
+        {"order_id": 2, "customer_id": 20, "amount_cents": 800, "load_batch": 1},
+    ]
+    return ctx.result(payload={"rows": rows}, metadata={"row_count": len(rows)})
+
+
+@task(tags=["python", "optional"], group="exports")
+def optional_partner_feed(ctx):
+    """Soft-skip an optional upstream without blocking sibling fan-in."""
+
+    return ctx.skip("partner feed is not configured", mode=SkipMode.SELF)
+
+
+@task(tags=["python", "optional"], group="exports")
+def export_window(ctx):
+    """Successful sibling that lets downstream fan-in continue."""
+
+    return ctx.result(payload={"window": "daily"})
+'''
+
+_PYTHON_NODES_LOADERS_PY: str = '''"""Loader examples for the Python nodes playground."""
+
+from sqlbuild.loaders import loader
+from tasks.orders import prepare_raw_orders
+
+
+@loader(depends_on=(prepare_raw_orders,))
+def raw_orders(ctx):
+    """Load source rows after the preparation task has completed."""
+
+    # Loader contexts intentionally keep the SQL ingress API narrow; the dependency makes
+    # the task part of the same DAG even though this example returns static rows.
+    return [
+        {"order_id": 1, "customer_id": 10, "amount_cents": 1200, "load_batch": 1},
+        {"order_id": 2, "customer_id": 20, "amount_cents": 800, "load_batch": 1},
+    ]
+'''
+
+_PYTHON_NODES_ASSETS_PY: str = '''"""Asset examples for the Python nodes playground."""
+
+from sqlbuild.assets import asset
+from sqlbuild.refs import model
+
+from tasks.orders import export_window, optional_partner_feed
+
+
+@asset(
+    depends_on=(model("fact_orders"), optional_partner_feed, export_window),
+    tags=["python", "external"],
+    group="exports",
+    columns=[{"name": "order_count", "type": "INTEGER"}],
+    column_lineage={"order_count": [{"node": "fact_orders", "column": "order_id"}]},
+)
+def orders_export(ctx):
+    """Read a SQL model relation and describe an external export artifact."""
+
+    relation = ctx.relation(model("fact_orders"))
+    rows = ctx.query(f"SELECT COUNT(*) AS order_count FROM {relation}").fetchall()
+    order_count = int(rows[0][0])
+    return ctx.result(
+        payload={"order_count": order_count},
+        metadata={"target_uri": "s3://example-bucket/orders.json", "window": "daily"},
+        materialized=False,
+    )
+'''
+
+_PYTHON_NODES_CHECKS_PY: str = '''"""Check examples for the Python nodes playground."""
+
+from sqlbuild.checks import check
+
+from assets.orders_export import orders_export
+
+
+@check(depends_on=orders_export, tags=["quality"], group="exports")
+def check_orders_export(ctx):
+    """Validate the Python asset's same-run metadata and payload."""
+
+    payload = ctx.payload(orders_export)
+    metadata = ctx.metadata(orders_export)
+    if payload["order_count"] <= 0:
+        return ctx.fail("orders export is empty")
+    if "target_uri" not in metadata:
+        return ctx.warn("orders export target URI is missing")
+    return ctx.pass_("orders export is ready", metadata={"order_count": payload["order_count"]})
+'''
+
 _VIRTUAL_PROJECT_TOML: str = """name = "loader_waffle_shop_virtual"
 adapter = "duckdb"
 environment_mode = "virtual"
@@ -404,6 +566,10 @@ def create_playground_project(*, target_dir: Path, template: str = "waffle_shop"
             help=f"choose one of: {', '.join(PLAYGROUND_TEMPLATE_VALUES)}",
         )
 
+    if template == "python_nodes":
+        _write_python_nodes_template_files(target_dir=target_dir)
+        return
+
     template_path: str = (
         _LOADER_WAFFLE_SHOP_TEMPLATE
         if template in ("loader_waffle_shop", "virtual")
@@ -457,6 +623,36 @@ def _write_rivers_template_files(*, target_dir: Path) -> None:
     )
     (rivers_dir / "definitions.py").write_text(_RIVERS_DEFINITIONS, encoding="utf-8")
     (rivers_dir / "README.md").write_text(_RIVERS_README, encoding="utf-8")
+
+
+def _write_python_nodes_template_files(*, target_dir: Path) -> None:
+    target_dir.mkdir(parents=True, exist_ok=False)
+    (target_dir / "sqlbuild_project.toml").write_text(
+        _PYTHON_NODES_PROJECT_TOML,
+        encoding="utf-8",
+    )
+    (target_dir / "README.md").write_text(_PYTHON_NODES_README, encoding="utf-8")
+    sources_dir: Path = target_dir / "sources"
+    sources_dir.mkdir()
+    (sources_dir / "raw.yml").write_text(_PYTHON_NODES_SOURCES_YML, encoding="utf-8")
+    models_dir: Path = target_dir / "models"
+    models_dir.mkdir()
+    (models_dir / "fact_orders.sql").write_text(
+        _PYTHON_NODES_FACT_ORDERS_SQL,
+        encoding="utf-8",
+    )
+    tasks_dir: Path = target_dir / "tasks"
+    tasks_dir.mkdir()
+    (tasks_dir / "orders.py").write_text(_PYTHON_NODES_TASKS_PY, encoding="utf-8")
+    loaders_dir: Path = target_dir / "loaders"
+    loaders_dir.mkdir()
+    (loaders_dir / "orders.py").write_text(_PYTHON_NODES_LOADERS_PY, encoding="utf-8")
+    assets_dir: Path = target_dir / "assets"
+    assets_dir.mkdir()
+    (assets_dir / "orders_export.py").write_text(_PYTHON_NODES_ASSETS_PY, encoding="utf-8")
+    checks_dir: Path = target_dir / "checks"
+    checks_dir.mkdir()
+    (checks_dir / "orders_export.py").write_text(_PYTHON_NODES_CHECKS_PY, encoding="utf-8")
 
 
 def _write_virtual_template_files(*, target_dir: Path) -> None:

@@ -10,6 +10,7 @@ from sqlbuild.cli.commands.main.shared.helpers.json_output import (
     format_compile_json,
     format_plan_json,
 )
+from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import CascadeCause, CascadeResult
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
@@ -18,6 +19,7 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
     WarningSeverity,
 )
+from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunPhase
 from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers.helpers import (
     build_model_entry,
     build_plan_output,
@@ -119,6 +121,34 @@ PLAN_JSON_TEST_CASES: list[JsonOutputTestCase] = [
             '"name": "raw_orders"',
         ),
     ),
+    JsonOutputTestCase(
+        description="plan json includes python node lifecycle entries",
+        plan_output=build_plan_output(
+            model_entries=(build_model_entry(name="orders", action=PlanAction.CREATE_TABLE),),
+        ),
+        python_plan_entries=(
+            PythonPlanEntry(
+                name="prepare_orders",
+                kind=PythonNodeKind.TASK,
+                phase=PythonRunPhase.PRE_SQL_INGRESS,
+            ),
+            PythonPlanEntry(
+                name="export_orders",
+                kind=PythonNodeKind.ASSET,
+                phase=PythonRunPhase.READ_SIDE,
+            ),
+        ),
+        expected_keys=("python_node_count", "python_nodes"),
+        expected_fragments=(
+            '"python_node_count": 2',
+            '"name": "prepare_orders"',
+            '"kind": "task"',
+            '"phase": "pre_sql_ingress"',
+            '"name": "export_orders"',
+            '"kind": "asset"',
+            '"phase": "read_side"',
+        ),
+    ),
 ]
 
 
@@ -130,7 +160,10 @@ PLAN_JSON_TEST_CASES: list[JsonOutputTestCase] = [
 def test_given_plan_output_when_formatting_json_then_produces_valid_json(
     test_case: JsonOutputTestCase,
 ) -> None:
-    result: str = format_plan_json(test_case.plan_output)
+    result: str = format_plan_json(
+        test_case.plan_output,
+        python_plan_entries=test_case.python_plan_entries,
+    )
     parsed: dict[str, object] = json.loads(result)
 
     key: str

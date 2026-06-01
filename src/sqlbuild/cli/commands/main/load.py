@@ -11,7 +11,11 @@ from typing import TextIO
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import LifeCycleEvent
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
-from sqlbuild.cli.commands.main.helpers.load_selection import select_load_entries
+from sqlbuild.cli.commands.main.helpers.load_references import validate_reference_source_targets
+from sqlbuild.cli.commands.main.helpers.load_selection import (
+    select_load_entries,
+    select_load_reference_entries,
+)
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
@@ -34,7 +38,7 @@ from sqlbuild.executor.load.main.run import run_load_pipeline
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.colors import supports_color
-from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.models.project import EnvironmentConfig, resolve_effective_adapter_name
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -63,6 +67,14 @@ def run_load(
         environment_config=build_effective_environment_config(
             discovered_inputs=discovered_inputs,
         ),
+    )
+    environment_config: EnvironmentConfig | None = build_effective_environment_config(
+        discovered_inputs=discovered_inputs
+    )
+    reference_sources: tuple[SourceEntry, ...] = select_load_reference_entries(
+        discovered_inputs=discovered_inputs,
+        selected_sources=selected_sources,
+        environment_config=environment_config,
     )
     use_color: bool = not no_color and supports_color()
     style: CliStyle = CliStyle(use_color=use_color)
@@ -96,6 +108,12 @@ def run_load(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
         cli_vars=cli_vars,
+    )
+    validate_reference_source_targets(
+        adapter=adapter,
+        connection_config=connection_config,
+        selected_sources=selected_sources,
+        reference_sources=reference_sources,
     )
     environment_name: str | None
     effective_vars: dict[str, object]
@@ -154,6 +172,7 @@ def run_load(
     )
     results: tuple[LoadExecutionResult, ...] = run_load_pipeline(
         sources=selected_sources,
+        reference_sources=reference_sources,
         loader_functions=discovered_inputs.loader_functions,
         connection_config=connection_config,
         adapter=adapter,

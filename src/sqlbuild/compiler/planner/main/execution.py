@@ -8,7 +8,11 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
-from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import (
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationTarget,
+)
 from sqlbuild.compiler.planner.helpers.cascade import resolve_cascades
 from sqlbuild.compiler.planner.helpers.changes.detect import detect_changes
 from sqlbuild.compiler.planner.helpers.plan_entry import (
@@ -51,12 +55,14 @@ def build_execution_plan(
     local_config: LocalConfig | None = None,
     defer_sources_to: str | None = None,
     source_deferral_enabled: bool = True,
+    selected_keys: frozenset[CompiledObjectKey] | None = None,
 ) -> PlanOutput:
     scope: PlannerScope = build_planner_scope(
         project=project,
         select=select,
         exclude=exclude,
         auto_load_sources=auto_load_sources,
+        selected_keys=selected_keys,
     )
 
     warehouse_start: float = time.monotonic()

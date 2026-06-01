@@ -25,8 +25,8 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             expected_stdout_fragments=(
                 "Scenario (1 selected)",
                 "downstream_orders",
-                "check     expected downstream_orders",
-                "check     assertion downstream_joined",
+                "expect    expected downstream_orders",
+                "expect    assertion downstream_joined",
                 "PASS=1  FAIL=0  TOTAL=1",
             ),
             expected_absent_relations=("fact_orders",),

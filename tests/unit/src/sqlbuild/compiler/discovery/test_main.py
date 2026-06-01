@@ -59,8 +59,30 @@ SELECT 1
 from sqlbuild.loaders import loader
 
 @loader
-def raw_orders_loader(ctx):
+def fetch_orders(ctx):
     return []
+""",
+                "tasks/windows.py": """
+from sqlbuild.tasks import task
+
+@task(tags=("api",), group="ingestion")
+def fetch_window(ctx):
+    return {"window": "today"}
+""",
+                "assets/exports.py": """
+from sqlbuild.assets import asset
+
+@asset(columns=[{"name": "customer_id", "type": "string"}])
+def export_customers(ctx):
+    return {"uri": "s3://exports/customers.parquet"}
+""",
+                "checks/exports.py": """
+from sqlbuild.checks import check
+from assets.exports import export_customers
+
+@check(depends_on=export_customers, severity="warn")
+def export_customers_exists(ctx):
+    return True
 """,
                 "target/manifest.json": '{"metadata": {"dbt_schema_version": "v12"}}\n',
                 "adapter.py": "class ExampleAdapter:\n    pass\n",
@@ -92,8 +114,11 @@ def raw_orders_loader(ctx):
             expected_audit_block_names=(None,),
             expected_audit_block_sql_bodies=("SELECT 1",),
             expected_macro_paths=("macros/name_helpers.py",),
-            expected_loader_names=("raw_orders_loader",),
+            expected_loader_names=("fetch_orders",),
             expected_adapter_path="adapter.py",
+            expected_task_names=("fetch_window",),
+            expected_asset_names=("export_customers",),
+            expected_check_names=("export_customers_exists",),
         )
     ],
     ids=["discovers raw project inputs across authored project surfaces"],
@@ -209,6 +234,18 @@ def test_given_project_repo_slice_when_discovering_inputs_then_it_returns_expect
     assert (
         tuple(loader_function.name for loader_function in discovered_inputs.loader_functions)
         == test_case.expected_loader_names
+    )
+    assert (
+        tuple(task_function.name for task_function in discovered_inputs.task_functions)
+        == test_case.expected_task_names
+    )
+    assert (
+        tuple(asset_function.name for asset_function in discovered_inputs.asset_functions)
+        == test_case.expected_asset_names
+    )
+    assert (
+        tuple(check_function.name for check_function in discovered_inputs.check_functions)
+        == test_case.expected_check_names
     )
     assert (
         None
@@ -337,11 +374,11 @@ seeds:
             "sources/raw.yml": """
 sources:
   - name: raw_orders
-    loader: missing_loader
+    managed: true
 """.strip()
             + "\n",
         },
-        expected_error_fragment="Source 'raw_orders' in sources/raw.yml references unknown loader",
+        expected_error_fragment="Managed source 'raw_orders' in sources/raw.yml requires loader",
     ),
     DiscoverProjectInputsErrorTestCase(
         description="raises when loader names are duplicated",
@@ -365,13 +402,13 @@ def raw_orders(ctx):
         expected_error_fragment="Duplicate source loader found for 'raw_orders'",
     ),
     DiscoverProjectInputsErrorTestCase(
-        description="raises when source name collides with intermediate loader name",
+        description="raises when unmanaged source name collides with loader name",
         repo_files=base_repo_files()
         | {
             "sources/raw.yml": """
 sources:
   - name: fetch_orders
-    loader: raw_orders_loader
+    table: fetch_orders
 """.strip()
             + "\n",
             "loaders/raw_orders.py": """
@@ -380,22 +417,18 @@ from sqlbuild.loaders import loader
 @loader
 def fetch_orders(ctx):
     return []
-
-@loader(depends_on=[fetch_orders])
-def raw_orders_loader(ctx):
-    return []
 """,
         },
         expected_error_fragment="Source 'fetch_orders' in sources/raw.yml conflicts with loader",
     ),
     DiscoverProjectInputsErrorTestCase(
-        description="raises when source name collides with terminal loader name",
+        description="raises when unmanaged source name collides with terminal loader name",
         repo_files=base_repo_files()
         | {
             "sources/raw.yml": """
 sources:
   - name: raw_orders
-    loader: raw_orders
+    table: raw_orders
 """.strip()
             + "\n",
             "loaders/raw_orders.py": """
@@ -451,7 +484,7 @@ fetch_events = loader(depends_on=[enriched_events])(fetch_events)
             "sources/raw.yml": """
 sources:
   - name: raw_orders
-    loader: raw_orders_loader
+    managed: true
     write_strategy: table
 """.strip()
             + "\n",
@@ -459,11 +492,286 @@ sources:
 from sqlbuild.loaders import loader
 
 @loader(write_strategy="table", columns=[{"name": "id", "type": "INTEGER"}])
-def raw_orders_loader(ctx):
+def raw_orders(ctx):
     return []
 """,
         },
         expected_error_fragment="terminal source loader write and schema config must be declared",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when task and asset names are duplicated",
+        repo_files=base_repo_files()
+        | {
+            "tasks/export_customers.py": """
+from sqlbuild.tasks import task
+
+@task
+def export_customers(ctx):
+    return None
+""",
+            "assets/export_customers.py": """
+from sqlbuild.assets import asset
+
+@asset
+def export_customers(ctx):
+    return None
+""",
+        },
+        expected_error_fragment="Duplicate Python node found for 'export_customers'",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when check name collides with task name",
+        repo_files=base_repo_files()
+        | {
+            "tasks/export_customers.py": """
+from sqlbuild.tasks import task
+
+@task
+def export_customers(ctx):
+    return None
+""",
+            "checks/export_customers.py": """
+from sqlbuild.checks import check
+from tasks.export_customers import export_customers
+
+@check(depends_on=export_customers, name="export_customers")
+def export_customers_check(ctx):
+    return True
+""",
+        },
+        expected_error_fragment="Duplicate Python node found for 'export_customers'",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when model name collides with task name",
+        repo_files=base_repo_files()
+        | {
+            "models/marts/export_customers.sql": "MODEL ();\n\nselect 1\n",
+            "tasks/export_customers.py": """
+from sqlbuild.tasks import task
+
+@task
+def export_customers(ctx):
+    return None
+""",
+        },
+        expected_error_fragment=(
+            "Selectable resource name 'export_customers' is declared as both model"
+        ),
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when seed name collides with asset name",
+        repo_files=base_repo_files()
+        | {
+            "seeds/schema.yml": """
+seeds:
+  - name: export_customers
+    columns:
+      - name: customer_id
+        type: INTEGER
+""".strip()
+            + "\n",
+            "seeds/export_customers.csv": "customer_id\n1\n",
+            "assets/export_customers.py": """
+from sqlbuild.assets import asset
+
+@asset
+def export_customers(ctx):
+    return None
+""",
+        },
+        expected_error_fragment=(
+            "Selectable resource name 'export_customers' is declared as both seed"
+        ),
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when source name collides with check name",
+        repo_files=base_repo_files()
+        | {
+            "sources/raw.yml": """
+sources:
+  - name: export_customers_exists
+    table: export_customers_exists
+""".strip()
+            + "\n",
+            "tasks/export_customers.py": """
+from sqlbuild.tasks import task
+
+@task
+def export_customers(ctx):
+    return None
+""",
+            "checks/export_customers.py": """
+from sqlbuild.checks import check
+from tasks.export_customers import export_customers
+
+@check(depends_on=export_customers)
+def export_customers_exists(ctx):
+    return True
+""",
+        },
+        expected_error_fragment=(
+            "Selectable resource name 'export_customers_exists' is declared as both source"
+        ),
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when sql function name collides with python function name",
+        repo_files=base_repo_files()
+        | {
+            "functions/sql/is_large_order.sql": """
+FUNCTION (
+  arguments (amount INTEGER),
+  returns BOOLEAN,
+);
+
+amount > 100
+""".strip()
+            + "\n",
+            "functions/python/is_large_order.py": """
+from sqlbuild.functions import udf
+
+@udf(arguments={"amount": "INTEGER"}, returns="BOOLEAN", runtime_version="3.11")
+def main(amount):
+    return amount > 100
+""".strip()
+            + "\n",
+        },
+        expected_error_fragment=(
+            "Selectable resource name 'is_large_order' is declared as both function"
+        ),
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when function name collides with loader name",
+        repo_files=base_repo_files()
+        | {
+            "functions/sql/fetch_orders.sql": """
+FUNCTION (
+  arguments (amount INTEGER),
+  returns BOOLEAN,
+);
+
+amount > 100
+""".strip()
+            + "\n",
+            "loaders/fetch_orders.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def fetch_orders(ctx):
+    return []
+""",
+        },
+        expected_error_fragment=(
+            "Selectable resource name 'fetch_orders' is declared as both function"
+        ),
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when task dependency is not decorated",
+        repo_files=base_repo_files()
+        | {
+            "tasks/windows.py": """
+from sqlbuild.tasks import task
+
+def fetch_window(ctx):
+    return None
+
+@task(depends_on=fetch_window)
+def export_window(ctx):
+    return None
+""",
+        },
+        expected_error_fragment="Python node 'export_window' depends on an unknown Python node",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when task and asset dependencies contain a cycle",
+        repo_files=base_repo_files()
+        | {
+            "tasks/windows.py": """
+from sqlbuild.tasks import task
+
+def fetch_window(ctx):
+    return None
+
+@task(depends_on=fetch_window)
+def enrich_window(ctx):
+    return None
+
+fetch_window = task(depends_on=enrich_window)(fetch_window)
+""",
+        },
+        expected_error_fragment="Python node dependency cycle detected",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when check dependency is not decorated",
+        repo_files=base_repo_files()
+        | {
+            "checks/exports.py": """
+from sqlbuild.checks import check
+
+def export_customers(ctx):
+    return None
+
+@check(depends_on=export_customers)
+def export_customers_exists(ctx):
+    return True
+""",
+        },
+        expected_error_fragment="Check 'export_customers_exists' depends on an unknown Python node",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when loader declares SQL model dependency",
+        repo_files=base_repo_files()
+        | {
+            "loaders/orders.py": """
+from sqlbuild.loaders import loader
+from sqlbuild.refs import model
+
+@loader(depends_on=[model('stg_orders')])
+def load_orders(ctx):
+    return []
+""",
+        },
+        expected_error_fragment="Loader 'load_orders' depends on SQL resource 'stg_orders'",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when check declares SQL model dependency",
+        repo_files=base_repo_files()
+        | {
+            "checks/orders.py": """
+from sqlbuild.checks import check
+from sqlbuild.refs import model
+
+@check(depends_on=model('stg_orders'))
+def check_orders(ctx):
+    return True
+""",
+        },
+        expected_error_fragment="Check 'check_orders' depends on SQL resource 'stg_orders'",
+    ),
+    DiscoverProjectInputsErrorTestCase(
+        description="raises when check depends on check",
+        repo_files=base_repo_files()
+        | {
+            "assets/exports.py": """
+from sqlbuild.assets import asset
+
+@asset
+def export_customers(ctx):
+    return None
+""",
+            "checks/exports.py": """
+from sqlbuild.checks import check
+from assets.exports import export_customers
+
+@check(depends_on=export_customers)
+def export_customers_exists(ctx):
+    return True
+
+@check(depends_on=export_customers_exists)
+def export_customers_recent(ctx):
+    return True
+""",
+        },
+        expected_error_fragment="Check 'export_customers_recent' depends on another check",
     ),
     DiscoverProjectInputsErrorTestCase(
         description="raises when seeds are declared outside seeds directory",

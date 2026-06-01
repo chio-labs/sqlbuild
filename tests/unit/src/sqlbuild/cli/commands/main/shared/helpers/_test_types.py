@@ -1,9 +1,11 @@
 from dataclasses import dataclass, field
 
 from sqlbuild.compiler.auditing.types import AuditOutcome
+from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.project import SnapshotsConfig
@@ -23,8 +25,20 @@ class JsonOutputTestCase:
     description: str
     plan_output: PlanOutput
     expected_keys: tuple[str, ...]
+    python_plan_entries: tuple[PythonPlanEntry, ...] = field(default_factory=tuple)
     expected_fragments: tuple[str, ...] = field(default_factory=tuple)
     unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class ExecutionJsonTestCase:
+    description: str
+    result: BuildExecutionResult
+    python_node_results: tuple[PythonNodeExecutionResult, ...]
+    expected_status: str
+    expected_summary: dict[str, object]
+    expected_asset_name: str
+    expected_asset_status: str
 
 
 @dataclass(frozen=True)

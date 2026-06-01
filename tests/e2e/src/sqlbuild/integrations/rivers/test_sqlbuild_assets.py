@@ -13,17 +13,79 @@ import pytest
 
 from sqlbuild.cli.commands.main.playground import run_playground
 from sqlbuild.integrations.rivers import SqlBuildProject, sqlbuild_assets
+from sqlbuild.integrations.rivers.helpers.assets import build_asset_defs
+from sqlbuild.integrations.rivers.helpers.dag import load_sqlbuild_dag
+from sqlbuild.integrations.rivers.translator import SqlBuildRiversTranslator
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     REPO_ROOT,
     prepare_waffle_shop,
     table_exists,
 )
+from tests.e2e.src.sqlbuild.integrations.dagster.helpers import (
+    prepare_python_nodes_integration_project,
+)
 from tests.e2e.src.sqlbuild.integrations.rivers._test_types import (
     RiversPlaygroundE2ETestCase,
+    RiversPythonNodesArtifactE2ETestCase,
     RiversSqlBuildE2ETestCase,
 )
 
 rs: Any = pytest.importorskip("rivers")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RiversPythonNodesArtifactE2ETestCase(
+            description="rivers consumes real Python-node dag artifact",
+            expected_asset_names=frozenset(
+                {
+                    "main__orders",
+                    "task__prepare_orders",
+                    "warehouse_export",
+                    "asset__orders_export",
+                }
+            ),
+            expected_task_deps=("main__orders",),
+            expected_asset_deps=("warehouse_export", "task__prepare_orders"),
+            expected_task_group="python",
+            expected_asset_group="exports",
+        )
+    ],
+    ids=["rivers consumes real Python-node dag artifact"],
+)
+def test_given_python_nodes_project_when_loading_rivers_assets_then_maps_real_artifact(
+    test_case: RiversPythonNodesArtifactE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_python_nodes_integration_project(tmp_path)
+    sqb_executable: Path = REPO_ROOT / ".venv" / "bin" / "sqb"
+    sqlbuild_project: SqlBuildProject = SqlBuildProject(
+        project_dir=project_dir,
+        sqb_command=(str(sqb_executable),),
+    )
+    sqlbuild_project.prepare()
+
+    @sqlbuild_assets(project=sqlbuild_project)
+    def sqlbuild_python_nodes(context: Any) -> Iterator[Any]:
+        del context
+        return
+        yield
+
+    output_defs: tuple[Any, ...] = build_asset_defs(
+        dag=load_sqlbuild_dag(sqlbuild_project.dag_path),
+        translator=SqlBuildRiversTranslator(),
+    )
+    repo: Any = rs.CodeRepository(assets=[sqlbuild_python_nodes])
+    task_def: Any = next(asset for asset in output_defs if asset.name == "task__prepare_orders")
+    asset_def: Any = next(asset for asset in output_defs if asset.name == "asset__orders_export")
+
+    assert sqlbuild_project.dag_path.exists()
+    assert test_case.expected_asset_names <= set(repo.assets)
+    assert tuple(dep.name for dep in task_def.deps) == test_case.expected_task_deps
+    assert tuple(dep.name for dep in asset_def.deps) == test_case.expected_asset_deps
+    assert task_def.group == test_case.expected_task_group
+    assert asset_def.group == test_case.expected_asset_group
 
 
 @pytest.mark.parametrize(

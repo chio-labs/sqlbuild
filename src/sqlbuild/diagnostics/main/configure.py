@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
-import sys
 from pathlib import Path
 
+from sqlbuild.diagnostics.helpers.logging_handlers import DynamicStderrHandler
 from sqlbuild.diagnostics.shared.constants import (
     LOG_FILE_NAME,
 )
@@ -24,7 +24,7 @@ def configure_diagnostics(*, target_dir: Path, debug: bool, use_color: bool = Fa
     target_dir.mkdir(parents=True, exist_ok=True)
     logger: logging.Logger = get_diagnostics_logger()
     logger.setLevel(logging.DEBUG)
-    logger.propagate = False
+    logger.propagate = True
 
     handler: logging.Handler
     for handler in tuple(logger.handlers):
@@ -41,7 +41,7 @@ def configure_diagnostics(*, target_dir: Path, debug: bool, use_color: bool = Fa
     logger.addHandler(file_handler)
 
     if debug:
-        console_handler: logging.StreamHandler = logging.StreamHandler(sys.stderr)
+        console_handler: logging.StreamHandler = DynamicStderrHandler()
         console_handler.setLevel(logging.DEBUG)
         console_handler.setFormatter(DiagnosticsConsoleFormatter(use_color=use_color))
         logger.addHandler(console_handler)

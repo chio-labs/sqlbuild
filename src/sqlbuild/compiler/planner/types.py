@@ -9,6 +9,10 @@ class SelectorKind(StrEnum):
     NAME = "name"
     SEED = "seed"
     SOURCE = "source"
+    TASK = "task"
+    ASSET = "asset"
+    LOADER = "loader"
+    CHECK = "check"
     TAG = "tag"
     PATH = "path"
 

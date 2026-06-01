@@ -17,6 +17,7 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.compiler.planner.types import PlanReason
+from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.environments import resolve_environment_name
 from sqlbuild.virtual.planner.helpers.output import (
@@ -43,6 +44,8 @@ from sqlbuild.virtual.planner.helpers.state_metadata import (
     read_previous_function_query_sqls,
 )
 from sqlbuild.virtual.planner.helpers.targets import build_target_from_physical_relation
+from sqlbuild.virtual.planner.main.python_plan_entries import build_virtual_python_plan_entries
+from sqlbuild.virtual.planner.main.python_run_selection import build_virtual_python_run_selection
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import ModelVersionRecord, PhysicalRelationRecord
 
@@ -64,6 +67,7 @@ def run_virtual_plan_pipeline(
     changes_only: bool = False,
     auto_load_sources: bool = False,
     reload_sources: bool = False,
+    include_python: bool = True,
     connection_config: dict[str, object] | None = None,
     cli_vars: dict[str, object] | None = None,
     on_connection_start: Callable[[int], None] | None = None,
@@ -217,9 +221,23 @@ def run_virtual_plan_pipeline(
                 sorted(set(stale_model_names) - set(effective_select))
             ),
         )
+        python_selection: PythonSqlRunSelection = build_virtual_python_run_selection(
+            discovered_inputs=discovered_inputs,
+            graph=graph,
+            plan_output=plan_output,
+            select=select,
+            exclude=exclude,
+            selected_model_names=effective_select,
+            include_python=include_python,
+        )
         return CompilePipelineResult(
             project=graph.project,
             plan_output=plan_output,
+            python_node_names=python_selection.python_node_names,
+            python_plan_entries=build_virtual_python_plan_entries(
+                discovered_inputs=discovered_inputs,
+                selection=python_selection,
+            ),
         )
     finally:
         adapter.close(connection)

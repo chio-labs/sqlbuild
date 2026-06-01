@@ -15,6 +15,8 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
+from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
@@ -47,7 +49,14 @@ def run_dag(
             discovered_inputs=discovered_inputs,
         ),
     )
-    dag_json: str = build_dag_json(graph=graph, project_name=discovered_inputs.project_config.name)
+    python_graph: PythonNodeGraph = build_discovered_python_node_graph(
+        discovered_inputs=discovered_inputs
+    )
+    dag_json: str = build_dag_json(
+        graph=graph,
+        project_name=discovered_inputs.project_config.name,
+        python_graph=python_graph,
+    )
     if json_output:
         print(dag_json)
     else:

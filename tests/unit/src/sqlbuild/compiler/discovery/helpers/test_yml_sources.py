@@ -143,20 +143,20 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
         contents="""
         sources:
           - name: raw_events
-            loader: event_loader
+            managed: true
             write_strategy: delete_insert
             cursor_column: event_at
           - name: raw_customers
-            loader: customer_loader
+            managed: true
             write_strategy: merge
             unique_key: [customer_id, updated_at]
             cursor_column: updated_at
           - name: raw_prices
-            loader: price_loader
+            managed: true
             write_strategy: table
             load_batch_size: 500
           - name: raw_webhooks
-            loader: webhook_loader
+            managed: true
             write_strategy: append
             cursor_column: received_at
         """,
@@ -165,7 +165,7 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
         expected_type_enforcement_values=(None, None, None, None),
         expected_contract_values=(None, None, None, None),
         expected_expressions=(None, None, None, None),
-        expected_loaders=("event_loader", "customer_loader", "price_loader", "webhook_loader"),
+        expected_loaders=("raw_events", "raw_customers", "raw_prices", "raw_webhooks"),
         expected_write_strategies=("delete_insert", "merge", "table", "append"),
         expected_load_batch_sizes=(None, None, 500, None),
         expected_cursor_columns=("event_at", "updated_at", None, "received_at"),
@@ -447,19 +447,19 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
           - name: raw_orders
             loader: ""
         """,
-        expected_error_fragment="source 'loader' must be a non-empty string",
+        expected_error_fragment="source 'loader' is not supported",
     ),
     ParseSourcesYamlErrorTestCase(
         description="raises when source defines both loader and ingestr",
         contents="""
         sources:
           - name: raw_orders
-            loader: custom_loader
+            managed: true
             ingestr:
               source_uri: stripe://token
               source_table: charges
         """,
-        expected_error_fragment="cannot define both loader and ingestr",
+        expected_error_fragment="cannot override loader for ingestr",
     ),
     ParseSourcesYamlErrorTestCase(
         description="raises when ingestr strategy is unknown",
@@ -478,7 +478,7 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
         contents="""
         sources:
           - name: raw_orders
-            loader: order_loader
+            managed: true
             write_strategy: replace
         """,
         expected_error_fragment="write_strategy must be one of",
@@ -490,14 +490,14 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
           - name: raw_orders
             write_strategy: table
         """,
-        expected_error_fragment="defines write_strategy but has no loader",
+        expected_error_fragment="defines write_strategy but is not managed",
     ),
     ParseSourcesYamlErrorTestCase(
         description="raises when load batch size is not positive",
         contents="""
         sources:
           - name: raw_orders
-            loader: order_loader
+            managed: true
             write_strategy: table
             load_batch_size: 0
         """,
@@ -508,7 +508,7 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
         contents="""
         sources:
           - name: raw_orders
-            loader: order_loader
+            managed: true
             write_strategy: table
             load_batch_size: true
         """,
@@ -519,7 +519,7 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
         contents="""
         sources:
           - name: raw_orders
-            loader: order_loader
+            managed: true
             write_strategy: table
             cursor_column: event_at
         """,
@@ -530,7 +530,7 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
         contents="""
         sources:
           - name: raw_orders
-            loader: order_loader
+            managed: true
             write_strategy: append
             unique_key: order_id
         """,
@@ -541,7 +541,7 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
         contents="""
         sources:
           - name: raw_orders
-            loader: order_loader
+            managed: true
             write_strategy: merge
         """,
         expected_error_fragment="write_strategy merge requires unique_key",
@@ -551,7 +551,7 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
         contents="""
         sources:
           - name: raw_orders
-            loader: order_loader
+            managed: true
             write_strategy: table
             unique_key: order_id
         """,
@@ -562,7 +562,7 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
         contents="""
         sources:
           - name: raw_orders
-            loader: order_loader
+            managed: true
             write_strategy: delete_insert
         """,
         expected_error_fragment="write_strategy delete_insert requires cursor_column",
@@ -572,7 +572,7 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
         contents="""
         sources:
           - name: raw_orders
-            loader: order_loader
+            managed: true
             write_strategy: delete_insert
             cursor_column: event_at
             unique_key: order_id
@@ -584,7 +584,7 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
         contents="""
         sources:
           - name: raw_orders
-            loader: order_loader
+            managed: true
             write_strategy: merge
             unique_key: []
         """,
@@ -595,7 +595,7 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
         contents="""
         sources:
           - name: raw_orders
-            loader: order_loader
+            managed: true
             write_strategy: merge
             unique_key: [order_id, 123]
         """,
@@ -606,7 +606,7 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
         contents="""
         sources:
           - name: raw_orders
-            loader: order_loader
+            managed: true
             write_strategy: merge
             unique_key: {}
         """,

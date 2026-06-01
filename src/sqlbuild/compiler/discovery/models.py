@@ -9,6 +9,8 @@ from pathlib import Path
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
+from sqlbuild.shared.models import ColumnLineageRef, RetryPolicy, SqlResourceRef
+from sqlbuild.shared.types import PythonCheckSeverity
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry, SourceLocation
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
@@ -167,7 +169,7 @@ class DiscoveredLoaderFunction:
     relative_path: Path
     name: str
     function: Callable[..., object]
-    depends_on: tuple[Callable[..., object], ...] = field(default_factory=tuple)
+    depends_on: tuple[Callable[..., object] | SqlResourceRef, ...] = field(default_factory=tuple)
     target: str | None = None
     write_strategy: SourceWriteStrategy | None = None
     cursor_column: str | None = None
@@ -175,6 +177,56 @@ class DiscoveredLoaderFunction:
     columns: tuple[SourceColumnEntry, ...] = field(default_factory=tuple)
     contract: str | None = None
     connection_mode: LoaderConnectionMode = LoaderConnectionMode.SQLBUILD
+
+
+@dataclass(frozen=True)
+class DiscoveredTaskFunction:
+    """A discovered project task function."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    function: Callable[..., object]
+    depends_on: tuple[Callable[..., object] | SqlResourceRef, ...] = field(default_factory=tuple)
+    tags: tuple[str, ...] = field(default_factory=tuple)
+    group: str | None = None
+    description: str | None = None
+    meta: dict[str, object] | None = None
+    retry: RetryPolicy | None = None
+
+
+@dataclass(frozen=True)
+class DiscoveredAssetFunction:
+    """A discovered project asset function."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    function: Callable[..., object]
+    depends_on: tuple[Callable[..., object] | SqlResourceRef, ...] = field(default_factory=tuple)
+    tags: tuple[str, ...] = field(default_factory=tuple)
+    group: str | None = None
+    description: str | None = None
+    meta: dict[str, object] | None = None
+    columns: tuple[SourceColumnEntry, ...] = field(default_factory=tuple)
+    column_lineage: dict[str, tuple[ColumnLineageRef, ...]] | None = None
+    retry: RetryPolicy | None = None
+
+
+@dataclass(frozen=True)
+class DiscoveredCheckFunction:
+    """A discovered project check function."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    function: Callable[..., object]
+    depends_on: tuple[Callable[..., object] | SqlResourceRef, ...]
+    severity: PythonCheckSeverity = PythonCheckSeverity.ERROR
+    tags: tuple[str, ...] = field(default_factory=tuple)
+    group: str | None = None
+    description: str | None = None
+    meta: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -195,4 +247,7 @@ class DiscoveredProjectInputs:
     macro_files: tuple[DiscoveredMacroFile, ...] = field(default_factory=tuple)
     materialization_files: tuple[DiscoveredMaterializationFile, ...] = field(default_factory=tuple)
     loader_functions: tuple[DiscoveredLoaderFunction, ...] = field(default_factory=tuple)
+    task_functions: tuple[DiscoveredTaskFunction, ...] = field(default_factory=tuple)
+    asset_functions: tuple[DiscoveredAssetFunction, ...] = field(default_factory=tuple)
+    check_functions: tuple[DiscoveredCheckFunction, ...] = field(default_factory=tuple)
     adapter_file: DiscoveredAdapterFile | None = None

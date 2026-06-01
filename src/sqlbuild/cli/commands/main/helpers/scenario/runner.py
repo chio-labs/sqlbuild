@@ -49,8 +49,8 @@ from sqlbuild.executor.pipeline.main.run import (
     select_scenario_snapshot_capture_candidates,
 )
 from sqlbuild.executor.scenario.models import (
-    ScenarioAssertionCheckExecutionResult,
-    ScenarioExpectedCheckExecutionResult,
+    ScenarioAssertionExpectationExecutionResult,
+    ScenarioExpectedExpectationExecutionResult,
     ScenarioRunResult,
     ScenarioSnapshotCaptureLimits,
     ScenarioSnapshotCaptureRelationResult,
@@ -71,8 +71,8 @@ from sqlbuild.spec.models.project import (
 )
 
 _SCENARIO_NAME_WIDTH: int = 64
-_CHECK_LABEL_WIDTH: int = 10
-_CHECK_NAME_WIDTH: int = 50
+_EXPECTATION_LABEL_WIDTH: int = 10
+_EXPECTATION_NAME_WIDTH: int = 50
 _CAPTURE_RELATION_KIND_WIDTH: int = 8
 _CAPTURE_RELATION_NAME_WIDTH: int = _SCENARIO_NAME_WIDTH - 4 - _CAPTURE_RELATION_KIND_WIDTH - 1
 
@@ -657,7 +657,7 @@ def _write_scenario_result(*, result: ScenarioRunResult, stream: TextIO, use_col
             stream.write(f"    {error_line}\n")
         if not result.retained and result.local_status is None:
             stream.write("    Rerun with --retain to inspect scenario-owned artifacts.\n")
-    _write_checks(result=result, stream=stream, use_color=use_color)
+    _write_expectations(result=result, stream=stream, use_color=use_color)
     if result.retained and result.relation_map is not None:
         stream.write("    Retained relations:\n")
         artifact: ScenarioArtifactName
@@ -668,12 +668,12 @@ def _write_scenario_result(*, result: ScenarioRunResult, stream: TextIO, use_col
             )
     if result.retained and result.local_duckdb_path is not None:
         stream.write(f"    Retained local DuckDB: {result.local_duckdb_path.as_posix()}\n")
-    _write_check_failures(result=result, stream=stream)
+    _write_expectation_failures(result=result, stream=stream)
     stream.flush()
 
 
-def _write_checks(*, result: ScenarioRunResult, stream: TextIO, use_color: bool) -> None:
-    expected: ScenarioExpectedCheckExecutionResult
+def _write_expectations(*, result: ScenarioRunResult, stream: TextIO, use_color: bool) -> None:
+    expected: ScenarioExpectedExpectationExecutionResult
     for expected in result.expected_results:
         status_text: str = "FAIL" if expected.status == FAILED_STATUS else "PASS"
         style: CliStyle = CliStyle(use_color=use_color)
@@ -683,7 +683,8 @@ def _write_checks(*, result: ScenarioRunResult, stream: TextIO, use_color: bool)
             detail = f"  {expected.mismatched_row_count} mismatched"
         item_name: str = f"expected {expected.model_name}"
         stream.write(
-            f"    {'check':<{_CHECK_LABEL_WIDTH}}{item_name:<{_CHECK_NAME_WIDTH}} "
+            f"    {'expect':<{_EXPECTATION_LABEL_WIDTH}}"
+            f"{item_name:<{_EXPECTATION_NAME_WIDTH}} "
             f"{status}{detail}\n"
         )
         if expected.error_message is not None:
@@ -694,7 +695,7 @@ def _write_checks(*, result: ScenarioRunResult, stream: TextIO, use_color: bool)
                 use_color=use_color,
             )
             stream.write(f"{'':>14}{rendered_error}\n")
-    assertion: ScenarioAssertionCheckExecutionResult
+    assertion: ScenarioAssertionExpectationExecutionResult
     for assertion in result.assertion_results:
         status_text = "FAIL" if assertion.status == FAILED_STATUS else "PASS"
         style = CliStyle(use_color=use_color)
@@ -705,7 +706,8 @@ def _write_checks(*, result: ScenarioRunResult, stream: TextIO, use_color: bool)
             detail = f"  {assertion.failing_row_count} {row_label}"
         item_name = f"assertion {assertion.name}"
         stream.write(
-            f"    {'check':<{_CHECK_LABEL_WIDTH}}{item_name:<{_CHECK_NAME_WIDTH}} "
+            f"    {'expect':<{_EXPECTATION_LABEL_WIDTH}}"
+            f"{item_name:<{_EXPECTATION_NAME_WIDTH}} "
             f"{status}{detail}\n"
         )
         if assertion.error_message is not None:
@@ -735,8 +737,8 @@ def _render_result_error(
     )
 
 
-def _write_check_failures(*, result: ScenarioRunResult, stream: TextIO) -> None:
-    expected: ScenarioExpectedCheckExecutionResult
+def _write_expectation_failures(*, result: ScenarioRunResult, stream: TextIO) -> None:
+    expected: ScenarioExpectedExpectationExecutionResult
     for expected in result.expected_results:
         if expected.status != FAILED_STATUS:
             continue
@@ -744,7 +746,7 @@ def _write_check_failures(*, result: ScenarioRunResult, stream: TextIO) -> None:
             f"    expected {expected.model_name}: actual={expected.actual_row_count} "
             f"expected={expected.expected_row_count} mismatched={expected.mismatched_row_count}\n"
         )
-    assertion: ScenarioAssertionCheckExecutionResult
+    assertion: ScenarioAssertionExpectationExecutionResult
     for assertion in result.assertion_results:
         if assertion.status != FAILED_STATUS:
             continue

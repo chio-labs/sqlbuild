@@ -30,6 +30,36 @@ class BuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class PythonBuildE2ETestCase:
+    """Test case for direct build Python-node behavior."""
+
+    description: str
+    expected_exit_code: int
+    expected_execution_fragments: tuple[str, ...]
+    expected_table_names: tuple[str, ...]
+    expected_notify_text: str
+    expected_fact_orders_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class DirectPythonBuildHardeningE2ETestCase:
+    """Test case for direct build Python lifecycle hardening behavior."""
+
+    description: str
+    project_name: str
+    command: tuple[str, ...]
+    repo_files: dict[str, str]
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+    expected_absent_tables: tuple[str, ...] = field(default_factory=tuple)
+    expected_present_tables: tuple[str, ...] = field(default_factory=tuple)
+    expected_markers: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    expected_absent_paths: tuple[str, ...] = field(default_factory=tuple)
+    expected_json_assets: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    expected_json_status: str | None = None
+
+
+@dataclass(frozen=True)
 class VirtualBuildE2ETestCase:
     """Test case for virtual build e2e behavior."""
 
@@ -50,6 +80,24 @@ class VirtualCustomMaterializationE2ETestCase:
     description: str
     expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
     expected_ancestry_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class VirtualPythonBuildE2ETestCase:
+    """Test case for virtual Python-node build behavior."""
+
+    description: str
+    project_name: str
+    plan_command: tuple[str, ...]
+    build_command: tuple[str, ...]
+    expected_build_exit_code: int
+    expected_plan_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_absent_plan_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_build_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_prepared_text: str | None = None
+    expected_profile_text: str | None = None
+    expected_source_profile_text: str | None = None
+    expected_profile_exists: bool | None = None
 
 
 @dataclass(frozen=True)

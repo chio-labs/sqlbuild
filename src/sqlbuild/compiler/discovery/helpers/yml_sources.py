@@ -89,13 +89,11 @@ def _parse_source_entry(*, entry: dict[str, object], file_path: Path) -> SourceE
     if type_enforcement is None and any(column.type is not None for column in columns):
         type_enforcement = True
 
-    loader: str | None = optional_non_empty_string(
-        entry=entry,
-        key="loader",
-        file_path=file_path,
-        label="source",
-        error_class=SourceParseError,
-    )
+    if "loader" in entry:
+        raise SourceParseError(
+            f"{file_path} source 'loader' is not supported; use managed: true and name "
+            "the terminal loader after the source"
+        )
     source_name: str = require_non_empty_string(
         entry=entry,
         key="name",
@@ -106,12 +104,22 @@ def _parse_source_entry(*, entry: dict[str, object], file_path: Path) -> SourceE
     integration_loader: IntegrationLoaderConfig | None = parse_source_integration_loader(
         entry=entry, file_path=file_path
     )
-    resolved_loader: str | None = loader
+    managed: bool = bool(
+        optional_bool(
+            entry=entry,
+            key="managed",
+            file_path=file_path,
+            label="source",
+            error_class=SourceParseError,
+        )
+    )
+    resolved_loader: str | None = source_name if managed else None
     if resolved_loader is None and integration_loader is not None:
         resolved_loader = integration_loader_name(
             kind=integration_loader.kind,
             source_name=source_name,
         )
+        managed = True
 
     source_entry: SourceEntry = SourceEntry(
         name=source_name,
@@ -136,6 +144,7 @@ def _parse_source_entry(*, entry: dict[str, object], file_path: Path) -> SourceE
             label="source",
             error_class=SourceParseError,
         ),
+        managed=managed,
         loader=resolved_loader,
         integration_loader=integration_loader,
         write_strategy=_optional_write_strategy(entry=entry, file_path=file_path),
@@ -208,7 +217,7 @@ def _validate_source_entry(entry: SourceEntry, file_path: Path) -> None:
         )
         if entry.loader != expected_loader_name:
             raise SourceParseError(
-                f"{file_path} source '{entry.name}' cannot define both loader and "
+                f"{file_path} source '{entry.name}' cannot override loader for "
                 f"{entry.integration_loader.kind}"
             )
         if entry.write_strategy is not None:
@@ -218,7 +227,7 @@ def _validate_source_entry(entry: SourceEntry, file_path: Path) -> None:
             )
     if entry.write_strategy is not None and entry.loader is None:
         raise SourceParseError(
-            f"{file_path} source '{entry.name}' defines write_strategy but has no loader"
+            f"{file_path} source '{entry.name}' defines write_strategy but is not managed"
         )
     if entry.write_strategy == SourceWriteStrategy.APPEND and entry.unique_key:
         raise SourceParseError(

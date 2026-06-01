@@ -16,6 +16,11 @@ from sqlbuild.executor.shared.helpers.load_execution import (
     should_skip_due_to_failed_dependency,
     skipped_load_result,
 )
+from sqlbuild.executor.shared.helpers.python_node_scheduler import (
+    build_python_node_in_degree,
+    build_python_node_ready_queue,
+    unlock_downstream_python_nodes,
+)
 from sqlbuild.executor.shared.helpers.worker_completion import run_worker_with_completion
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.shared.types import ExecutionResourceKind
@@ -32,10 +37,15 @@ def build_load_dag_state(
 ) -> LoadDagState:
     """Build mutable state for concurrent source-loader DAG execution."""
 
-    in_degree: dict[str, int] = {
-        source.name: len(upstream_names[source.name]) for source in sources
-    }
-    ready: list[str] = [source.name for source in sources if in_degree[source.name] == 0]
+    source_names: tuple[str, ...] = tuple(source.name for source in sources)
+    in_degree: dict[str, int] = build_python_node_in_degree(
+        node_names=source_names,
+        upstream_names=upstream_names,
+    )
+    ready: list[str] = build_python_node_ready_queue(
+        node_names=source_names,
+        in_degree=in_degree,
+    )
     return LoadDagState(
         results=results,
         in_degree=in_degree,
@@ -63,11 +73,12 @@ def complete_dag_source(
         state.failed_or_skipped.add(source_name)
     if on_load_complete is not None:
         on_load_complete(result)
-    downstream_name: str
-    for downstream_name in state.downstream_names.get(source_name, ()):
-        state.in_degree[downstream_name] = state.in_degree.get(downstream_name, 1) - 1
-        if state.in_degree[downstream_name] == 0:
-            state.ready.append(downstream_name)
+    unlock_downstream_python_nodes(
+        completed_node_name=source_name,
+        in_degree=state.in_degree,
+        ready=state.ready,
+        downstream_names=state.downstream_names,
+    )
 
 
 def execute_ready_dag_source(

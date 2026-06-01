@@ -10,7 +10,10 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
 )
 from sqlbuild.compiler.compile.models.sql_tests import CompiledSqlTest
+from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.audit_entry import plan_audit
+from sqlbuild.compiler.planner.helpers.loader_dag import upstream_loader_dependency_names
 from sqlbuild.compiler.planner.helpers.plan_entry import (
     build_model_materializations,
     extract_seed_columns,
@@ -34,6 +37,7 @@ from sqlbuild.compiler.planner.models import (
     SqlTestPlanEntry,
     WarehouseSnapshot,
 )
+from sqlbuild.spec.models.source import SourceEntry
 
 
 def build_plan_output(
@@ -64,6 +68,12 @@ def build_plan_output(
         selected_keys=scope.selected_keys,
         source_map=relations.source_map,
         is_reload=reload_sources,
+    )
+    _validate_skipped_intermediate_loader_targets(
+        project=project,
+        snapshot=snapshot,
+        relations=relations,
+        source_load_entries=source_load_entries,
     )
     function_entries: list[FunctionPlanEntry] = _build_function_entries(
         project=project,
@@ -113,7 +123,46 @@ def build_plan_output(
         seed_targets=relations.seed_targets,
         function_targets=relations.function_targets,
         source_map=relations.source_map,
+        source_read_map=relations.source_read_map,
     )
+
+
+def _validate_skipped_intermediate_loader_targets(
+    *,
+    project: CompiledProject,
+    snapshot: WarehouseSnapshot,
+    relations: PlannerRelationsContext,
+    source_load_entries: tuple[SourceLoadPlanEntry, ...],
+) -> None:
+    loader_by_name: dict[str, DiscoveredLoaderFunction] = {
+        loader.name: loader for loader in project.loader_functions
+    }
+    selected_load_names: frozenset[str] = frozenset(entry.name for entry in source_load_entries)
+    entry: SourceLoadPlanEntry
+    for entry in source_load_entries:
+        source_entry: SourceEntry | None = relations.source_map.get(entry.name)
+        if source_entry is None or source_entry.loader is None:
+            continue
+        loader_function: DiscoveredLoaderFunction | None = loader_by_name.get(source_entry.loader)
+        if loader_function is None:
+            continue
+        dependency_loader_name: str
+        for dependency_loader_name in upstream_loader_dependency_names(
+            loader_function=loader_function,
+            loader_functions=project.loader_functions,
+        ):
+            dependency_source: SourceEntry | None = relations.source_map.get(dependency_loader_name)
+            if dependency_source is None or dependency_source.name in selected_load_names:
+                continue
+            dependency_target: str = dependency_source.table or dependency_source.name
+            if dependency_target in snapshot.existing_relations:
+                continue
+            raise PlannerInputError(
+                f"Source '{source_entry.name}' requires intermediate loader "
+                f"'{dependency_loader_name}', but its target relation "
+                f"'{dependency_target}' does not exist; use +source:{source_entry.name} "
+                "to refresh upstream ingress dependencies"
+            )
 
 
 def _build_function_entries(

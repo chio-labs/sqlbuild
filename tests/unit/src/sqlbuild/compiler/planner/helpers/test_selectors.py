@@ -410,31 +410,39 @@ def test_given_tag_selectors_when_resolving_then_returns_expected_names(
 RESOLVE_PATH_SELECTOR_TEST_CASES: list[ResolveSelectorTestCase] = [
     ResolveSelectorTestCase(
         description="selects models by path folder including nested subdirectories",
-        select=("path:staging",),
+        select=("path:models/staging",),
         exclude=(),
         expected_names=frozenset({"stg_orders", "stg_customers", "stg_deep"}),
     ),
     ResolveSelectorTestCase(
-        description="selects models by bare slash convention",
-        select=("staging/",),
+        description="selects models root path",
+        select=("path:models",),
+        exclude=(),
+        expected_names=frozenset(
+            {"stg_orders", "stg_customers", "stg_deep", "int_enriched", "fact_orders"}
+        ),
+    ),
+    ResolveSelectorTestCase(
+        description="selects models by slash convention with explicit root",
+        select=("models/staging/",),
         exclude=(),
         expected_names=frozenset({"stg_orders", "stg_customers", "stg_deep"}),
     ),
     ResolveSelectorTestCase(
-        description="selects models by leading bare slash convention",
-        select=("/staging",),
+        description="selects models by leading slash convention with explicit root",
+        select=("/models/staging",),
         exclude=(),
         expected_names=frozenset({"stg_orders", "stg_customers", "stg_deep"}),
     ),
     ResolveSelectorTestCase(
         description="selects single folder with one model",
-        select=("path:marts",),
+        select=("path:models/marts",),
         exclude=(),
         expected_names=frozenset({"fact_orders"}),
     ),
     ResolveSelectorTestCase(
         description="selects path with downstream expansion",
-        select=("path:staging+",),
+        select=("path:models/staging+",),
         exclude=(),
         expected_names=frozenset(
             {
@@ -448,7 +456,7 @@ RESOLVE_PATH_SELECTOR_TEST_CASES: list[ResolveSelectorTestCase] = [
     ),
     ResolveSelectorTestCase(
         description="selects path with upstream expansion",
-        select=("+path:marts",),
+        select=("+path:models/marts",),
         exclude=(),
         expected_names=frozenset(
             {
@@ -463,25 +471,25 @@ RESOLVE_PATH_SELECTOR_TEST_CASES: list[ResolveSelectorTestCase] = [
     ),
     ResolveSelectorTestCase(
         description="intersects path with name selector",
-        select=("path:staging,stg_orders",),
+        select=("path:models/staging,stg_orders",),
         exclude=(),
         expected_names=frozenset({"stg_orders"}),
     ),
     ResolveSelectorTestCase(
         description="excludes path from selected",
         select=("+fact_orders",),
-        exclude=("path:staging",),
+        exclude=("path:models/staging",),
         expected_names=frozenset({"fact_orders", "int_enriched", "raw_orders", "raw_customers"}),
     ),
     ResolveSelectorTestCase(
-        description="bare slash with trailing slash selects single-model folder",
-        select=("intermediate/",),
+        description="slash path with explicit root selects single-model folder",
+        select=("models/intermediate/",),
         exclude=(),
         expected_names=frozenset({"int_enriched"}),
     ),
     ResolveSelectorTestCase(
         description="selects only nested subdirectory not parent",
-        select=("path:staging/raw",),
+        select=("path:models/staging/raw",),
         exclude=(),
         expected_names=frozenset({"stg_deep"}),
     ),
@@ -522,25 +530,25 @@ def test_given_path_selectors_when_resolving_then_returns_expected_names(
 
 RESOLVE_PATH_SELECTOR_ERROR_TEST_CASES: list[ResolveSelectorErrorTestCase] = [
     ResolveSelectorErrorTestCase(
-        description="raises with folder name when path matches no models",
+        description="raises when path omits explicit root",
         select=("path:nonexistent",),
         exclude=(),
         expected_error_type=ValueError,
-        expected_error_fragment="no models found under path 'nonexistent'",
+        expected_error_fragment="path selectors require an explicit root",
     ),
     ResolveSelectorErrorTestCase(
-        description="raises with hint when user includes models prefix",
-        select=("path:models/staging",),
-        exclude=(),
-        expected_error_type=ValueError,
-        expected_error_fragment="try 'path:staging'",
-    ),
-    ResolveSelectorErrorTestCase(
-        description="raises with folder name when bare slash matches no models",
+        description="raises when slash path omits explicit root",
         select=("nonexistent/",),
         exclude=(),
         expected_error_type=ValueError,
-        expected_error_fragment="no models found under path 'nonexistent'",
+        expected_error_fragment="path selectors require an explicit root",
+    ),
+    ResolveSelectorErrorTestCase(
+        description="raises with folder name when explicit path matches no models",
+        select=("path:models/nonexistent",),
+        exclude=(),
+        expected_error_type=ValueError,
+        expected_error_fragment="no models found under path 'models/nonexistent'",
     ),
 ]
 

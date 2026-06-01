@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from sqlbuild.executor.shared.types import ExecutionStatus
@@ -106,6 +107,20 @@ class LoadDagWorkerFailureTestCase:
 
 
 @dataclass(frozen=True)
+class LoadDagStateSchedulingTestCase:
+    """One loader DAG state scheduling behavior case."""
+
+    description: str
+    source_names: tuple[str, ...]
+    upstream_names: dict[str, tuple[str, ...]]
+    downstream_names: dict[str, tuple[str, ...]]
+    completed_source_name: str
+    expected_initial_ready: tuple[str, ...]
+    expected_final_ready: tuple[str, ...]
+    expected_callback_sources: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ExternalLoadPipelineTestCase:
     """One external loader pipeline behavior case."""
 
@@ -116,3 +131,40 @@ class ExternalLoadPipelineTestCase:
     expected_connection_is_none: bool
     expected_status: ExecutionStatus
     expected_lifecycle_message: str
+
+
+@dataclass(frozen=True)
+class SourceLoadExecutionContextTestCase:
+    """One source load execution context behavior case."""
+
+    description: str
+    source_name: str
+    loader_name: str
+    target_table: str
+    database: str | None
+    schema: str | None
+    run_id: str
+    environment: str | None
+    vars: dict[str, object]
+    is_reload: bool
+    start_cursor_ts: datetime | None
+    end_cursor_ts: datetime | None
+    start_cursor_int: int | None
+    end_cursor_int: int | None
+    expected_target: str
+    expected_current_cursor_value: object | None
+    expected_status: ExecutionStatus
+    expected_rows_loaded: int
+
+
+@dataclass(frozen=True)
+class SourceLoadNoneReturnTestCase:
+    """One source load None-return behavior case."""
+
+    description: str
+    source_name: str
+    loader_name: str
+    loader_target: str | None
+    expected_status: ExecutionStatus
+    expected_rows_loaded: int
+    expected_error_fragment: str = ""
