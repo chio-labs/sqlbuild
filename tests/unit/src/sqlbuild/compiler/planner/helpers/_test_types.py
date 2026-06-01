@@ -70,6 +70,7 @@ class SourceLoadNodesTestCase:
 class LoaderDagExpansionTestCase:
     description: str
     selected_names: frozenset[str]
+    execute_dependency_names: frozenset[str]
     expected_selected_names: frozenset[str]
     expected_upstream_names: dict[str, tuple[str, ...]]
     expected_intermediate_source_names: tuple[str, ...]
