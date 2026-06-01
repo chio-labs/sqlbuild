@@ -8,6 +8,7 @@ from typing import TextIO
 
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.python_nodes.main.selectors import resolve_python_nodes_from_selectors
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
@@ -192,10 +193,8 @@ def relevant_check_functions(
 ) -> tuple[DiscoveredCheckFunction, ...]:
     """Return checks whose Python dependencies all ran and were not excluded."""
 
-    excluded_names: frozenset[str] = (
-        resolve_python_nodes_from_selectors(select=exclude, exclude=(), graph=python_graph)
-        if exclude
-        else frozenset()
+    excluded_names: frozenset[str] = _resolve_python_check_excludes(
+        exclude=exclude, python_graph=python_graph
     )
     check_names: set[str] = set()
     for node in python_graph.nodes:
@@ -207,6 +206,27 @@ def relevant_check_functions(
         if upstream_names and all(name in selected_dependency_names for name in upstream_names):
             check_names.add(node.name)
     return tuple(check for check in discovered_inputs.check_functions if check.name in check_names)
+
+
+def _resolve_python_check_excludes(
+    *, exclude: tuple[str, ...], python_graph: PythonNodeGraph
+) -> frozenset[str]:
+    excluded: set[str] = set()
+    raw_exclude: str
+    for raw_exclude in exclude:
+        token: str
+        for token in raw_exclude.split():
+            try:
+                excluded.update(
+                    resolve_python_nodes_from_selectors(
+                        select=(token,), exclude=(), graph=python_graph
+                    )
+                )
+            except PlannerInputError as error:
+                if error.code in {"S007", "S008", "S009"}:
+                    continue
+                raise
+    return frozenset(excluded)
 
 
 def _upstream_closure(*, name: str, graph: PythonNodeGraph) -> frozenset[str]:

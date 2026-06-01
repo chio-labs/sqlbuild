@@ -8,6 +8,7 @@ from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.main.build_resources import expand_build_resource_selection
 from sqlbuild.compiler.planner.main.selection import resolve_project_selectors
 from sqlbuild.compiler.planner.main.selector_parse import parse_project_selector
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
@@ -84,6 +85,9 @@ def resolve_python_sql_selectors(
         python_graph=python_graph,
     )
     selected -= excluded
+    selected.update(
+        _required_sql_resource_atoms(selected_atoms=selected, project_graph=project_graph)
+    )
     if validate_dependencies:
         _validate_selected_dependencies(
             selected_atoms=selected, project_graph=project_graph, python_graph=python_graph
@@ -421,6 +425,25 @@ def _build_selection(atoms: set[_SelectionAtom]) -> PythonSqlSelection:
         ),
         python_node_names=frozenset(atom.value for atom in atoms if isinstance(atom.value, str)),
     )
+
+
+def _required_sql_resource_atoms(
+    *, selected_atoms: set[_SelectionAtom], project_graph: ProjectGraph
+) -> set[_SelectionAtom]:
+    selected_sql_keys: frozenset[CompiledObjectKey] = frozenset(
+        atom.value for atom in selected_atoms if isinstance(atom.value, CompiledObjectKey)
+    )
+    return {
+        _sql_atom(key)
+        for key in expand_build_resource_selection(
+            selected_keys=selected_sql_keys,
+            upstream=project_graph.upstream_deps,
+            downstream=project_graph.downstream_deps,
+            include_upstream_functions=True,
+            include_upstream_seeds=False,
+            include_downstream_functions=False,
+        )
+    }
 
 
 def _required_terminal_loader_atoms(

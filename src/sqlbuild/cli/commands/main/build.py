@@ -269,47 +269,36 @@ def run_build(
         on_node_start=callbacks.on_node_start,
         on_node_complete=callbacks.on_node_complete,
     )
-    result: BuildExecutionResult
-    if python_lifecycle.ingress_failed:
-        result = BuildExecutionResult(
-            status=BuildStatus.FAILED,
-            load_results=python_lifecycle.ingress_load_results,
-        )
-    else:
-        result = run_build_pipeline(
-            plan=plan_output,
-            connection_config=connection_config,
-            adapter=adapter,
-            settings=pipeline_result.project.settings,
-            snapshots=discovered_inputs.project_config.snapshots,
-            allow_snapshot_schema_change=allow_snapshot_schema_change,
-            run_id=pipeline_result.project.run_id,
-            run_tests=True,
-            run_audits=True,
-            fail_fast=fail_fast,
-            max_concurrency=effective_concurrency,
-            on_node_start=callbacks.on_node_start,
-            on_node_complete=python_lifecycle.on_node_complete,
-            on_sub_progress=callbacks.on_sub_progress,
-            custom_materializations=pipeline_result.custom_materializations,
-            loader_functions=python_lifecycle.loader_functions,
-            loader_is_reload=reload_sources,
-            precompleted_keys=python_lifecycle.precompleted_keys,
-            initial_load_results=python_lifecycle.ingress_load_results,
-            initial_failed_keys=python_lifecycle.blocked_keys,
-            start_cursor_ts=parse_cursor_timestamp(
-                (cursor_overrides or CursorOverrides()).start_ts
-            ),
-            end_cursor_ts=parse_cursor_timestamp((cursor_overrides or CursorOverrides()).end_ts),
-            start_cursor_int=parse_cursor_integer(
-                (cursor_overrides or CursorOverrides()).start_int
-            ),
-            end_cursor_int=parse_cursor_integer((cursor_overrides or CursorOverrides()).end_int),
-            on_connection_start=execution_connection_progress.on_connection_start,
-            on_connection_complete=execution_connection_progress.on_connection_complete,
-            on_connection_error=execution_connection_progress.on_connection_error,
-            use_color=use_color,
-        )
+    result: BuildExecutionResult = run_build_pipeline(
+        plan=plan_output,
+        connection_config=connection_config,
+        adapter=adapter,
+        settings=pipeline_result.project.settings,
+        snapshots=discovered_inputs.project_config.snapshots,
+        allow_snapshot_schema_change=allow_snapshot_schema_change,
+        run_id=pipeline_result.project.run_id,
+        run_tests=True,
+        run_audits=True,
+        fail_fast=fail_fast,
+        max_concurrency=effective_concurrency,
+        on_node_start=callbacks.on_node_start,
+        on_node_complete=python_lifecycle.on_node_complete,
+        on_sub_progress=callbacks.on_sub_progress,
+        custom_materializations=pipeline_result.custom_materializations,
+        loader_functions=python_lifecycle.loader_functions,
+        loader_is_reload=reload_sources,
+        precompleted_keys=python_lifecycle.precompleted_keys,
+        initial_load_results=python_lifecycle.ingress_load_results,
+        initial_failed_keys=python_lifecycle.blocked_keys,
+        start_cursor_ts=parse_cursor_timestamp((cursor_overrides or CursorOverrides()).start_ts),
+        end_cursor_ts=parse_cursor_timestamp((cursor_overrides or CursorOverrides()).end_ts),
+        start_cursor_int=parse_cursor_integer((cursor_overrides or CursorOverrides()).start_int),
+        end_cursor_int=parse_cursor_integer((cursor_overrides or CursorOverrides()).end_int),
+        on_connection_start=execution_connection_progress.on_connection_start,
+        on_connection_complete=execution_connection_progress.on_connection_complete,
+        on_connection_error=execution_connection_progress.on_connection_error,
+        use_color=use_color,
+    )
     python_lifecycle.finalize()
     python_results: tuple[PythonNodeExecutionResult, ...] = python_lifecycle.python_results
     check_results: tuple[PythonCheckExecutionResult, ...] = ()
