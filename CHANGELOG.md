@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.25.0](https://github.com/chio-labs/sqlbuild/compare/v0.24.0...v0.25.0) (2026-06-01)
+
+
+### Features
+
+* add cli document helper ([bbbb2cb](https://github.com/chio-labs/sqlbuild/commit/bbbb2cbf35e407b6899052723f7cdaac5c331918))
+* add python check result context ([8542fcc](https://github.com/chio-labs/sqlbuild/commit/8542fcc270063f4dc9eb0d591f2438ffbc6bd30c))
+* add python node contexts ([00536e7](https://github.com/chio-labs/sqlbuild/commit/00536e73330bb7abbcf85035062164fc2e640841))
+* add python node executor ([4bed0fb](https://github.com/chio-labs/sqlbuild/commit/4bed0fba89e9b3c9aade7483aa3818f8b99eaf3a))
+* add python node foundation ([6f0a20f](https://github.com/chio-labs/sqlbuild/commit/6f0a20f67bef9f33dd735b133daba660f51ef5c7))
+* add python node graph inventory ([e8ffa75](https://github.com/chio-labs/sqlbuild/commit/e8ffa75aa457220d092f91049879cae005e5d854))
+* add python node result policies ([dec97fe](https://github.com/chio-labs/sqlbuild/commit/dec97fed017095d20f4f043393cff5f6d8405d5d))
+* add python node retry policy ([ba2303a](https://github.com/chio-labs/sqlbuild/commit/ba2303a3bfe29e7b0c1e54516848dee1c4f80aa5))
+* add python node selector resolver ([3bd4339](https://github.com/chio-labs/sqlbuild/commit/3bd433961a9e4141ae971465860d3c531002b841))
+* add python nodes playground ([f6114b1](https://github.com/chio-labs/sqlbuild/commit/f6114b19bde901aa87e8a735619649772eea95d3))
+* add semantic cli style helper ([9f3e049](https://github.com/chio-labs/sqlbuild/commit/9f3e0495aa044777ef46f22900bf79634beba305))
+* add task and asset decorators ([c6dcfd5](https://github.com/chio-labs/sqlbuild/commit/c6dcfd5fa72473b15c1c3605125f6f037e441198))
+* add unified python sql selector validation ([53ee19c](https://github.com/chio-labs/sqlbuild/commit/53ee19c2439e40c1a794be2da7431c463447d921))
+* discover check functions ([040aa55](https://github.com/chio-labs/sqlbuild/commit/040aa555710c662aa5173d776e6c20be041cb8f3))
+* discover task and asset functions ([bfde31f](https://github.com/chio-labs/sqlbuild/commit/bfde31fd6bb9408a82575859c25db11ce961207c))
+* enforce selectable resource uniqueness ([3332c63](https://github.com/chio-labs/sqlbuild/commit/3332c63deb38e17809f65c9cd660834d06e28e77))
+* execute python checks ([806c7f5](https://github.com/chio-labs/sqlbuild/commit/806c7f588246f2d34b78d42e775ce4284c6a8b5c))
+* harden python build lifecycle ([d39df74](https://github.com/chio-labs/sqlbuild/commit/d39df7469fe29945b7059431f7bc330e277bcff6))
+* include python nodes in dag artifact ([18a9992](https://github.com/chio-labs/sqlbuild/commit/18a999253ba4ddf883387c95e2b073eb3bd9b8f6))
+* integrate python nodes with run lifecycle ([7f7bc17](https://github.com/chio-labs/sqlbuild/commit/7f7bc17d820739fa3acf3ddc05da65fb05dc4d97))
+* integrate python nodes with virtual builds ([150b2c5](https://github.com/chio-labs/sqlbuild/commit/150b2c5f52697124c388528205c70bbb822e0473))
+* map python nodes in integrations ([3e5b324](https://github.com/chio-labs/sqlbuild/commit/3e5b3247763cf0389fdfb544fcf6fd9e224f0645))
+* require explicit path selector roots ([d4118ab](https://github.com/chio-labs/sqlbuild/commit/d4118aba4afac1d07eb23354df1ae2f742d567e4))
+* show python nodes in plan output ([abc278d](https://github.com/chio-labs/sqlbuild/commit/abc278d90d91d1b344408952f3ba922d4ac8df8f))
+
+
+### Bug Fixes
+
+* avoid stale diagnostics stderr handlers ([aa13c96](https://github.com/chio-labs/sqlbuild/commit/aa13c96d2658b2c2aac733d76aa56970ca889972))
+* preserve managed source auto load expansion ([a3a8ba7](https://github.com/chio-labs/sqlbuild/commit/a3a8ba76d71546822bd06b615fffb0e049162285))
+* show compile progress during builds ([e9838e8](https://github.com/chio-labs/sqlbuild/commit/e9838e8a38c8f3796d6d299f6f43a63b2654e0f6))
+* stabilize python lifecycle selection ([fefca3f](https://github.com/chio-labs/sqlbuild/commit/fefca3f459ab7db87638e8e52b685c3b721d1c9e))
+
 ## [0.24.0](https://github.com/chio-labs/sqlbuild/compare/v0.23.0...v0.24.0) (2026-05-28)
 
 
