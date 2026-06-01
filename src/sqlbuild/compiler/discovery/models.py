@@ -230,6 +230,16 @@ class DiscoveredCheckFunction:
 
 
 @dataclass(frozen=True)
+class DiscoveredPythonNodeFunctions:
+    """Discovered project Python DAG node functions grouped by kind."""
+
+    loaders: tuple[DiscoveredLoaderFunction, ...] = field(default_factory=tuple)
+    tasks: tuple[DiscoveredTaskFunction, ...] = field(default_factory=tuple)
+    assets: tuple[DiscoveredAssetFunction, ...] = field(default_factory=tuple)
+    checks: tuple[DiscoveredCheckFunction, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class DiscoveredProjectInputs:
     """All raw project inputs discovered from disk before semantic resolution."""
 

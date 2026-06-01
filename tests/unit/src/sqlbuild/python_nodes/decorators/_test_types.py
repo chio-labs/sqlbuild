@@ -42,3 +42,15 @@ class CheckDecoratorMetadataTestCase:
     expected_group: str | None
     expected_description: str | None
     expected_meta: dict[str, object] | None
+
+
+@dataclass(frozen=True)
+class FactoryDecoratorMetadataTestCase:
+    description: str
+    expected_name: str
+
+
+@dataclass(frozen=True)
+class FactoryDecoratorErrorTestCase:
+    description: str
+    expected_error_fragment: str
