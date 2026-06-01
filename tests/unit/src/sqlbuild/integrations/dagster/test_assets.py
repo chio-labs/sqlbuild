@@ -102,7 +102,7 @@ def test_given_sqlbuild_dag_when_building_specs_then_maps_assets_deps_and_checks
     "test_case",
     [
         DagsterPythonArtifactCompatibilityTestCase(
-            description="consumes Python DAG artifact additions without changing SQL assets",
+            description="maps Python DAG artifact additions into asset and check specs",
             expected_asset_keys=(
                 ("raw", "orders"),
                 ("shared_order_feed",),
@@ -111,6 +111,8 @@ def test_given_sqlbuild_dag_when_building_specs_then_maps_assets_deps_and_checks
                 ("analytics", "normalize_email"),
                 ("analytics", "orders"),
                 ("analytics", "customers"),
+                ("task", "prepare_orders"),
+                ("asset", "orders_export"),
             ),
             expected_check_names=(
                 "audit__not_null__order_id",
@@ -119,11 +121,24 @@ def test_given_sqlbuild_dag_when_building_specs_then_maps_assets_deps_and_checks
                 "scenario__customers_minimal",
                 "python_check__check_orders_export",
             ),
+            expected_task_deps=(("analytics", "orders"),),
+            expected_asset_deps=(("task", "prepare_orders"),),
+            expected_python_kinds_by_asset_key=(
+                (("task", "prepare_orders"), frozenset({"sqlbuild", "task"})),
+                (("asset", "orders_export"), frozenset({"sqlbuild", "asset"})),
+            ),
+            expected_task_group="python",
+            expected_asset_group="exports",
+            expected_asset_metadata_keys=(
+                "columns",
+                "column_lineage",
+                "materialization_type",
+            ),
         )
     ],
-    ids=["consumes Python DAG artifact additions without changing SQL assets"],
+    ids=["maps Python DAG artifact additions into asset and check specs"],
 )
-def test_given_python_augmented_dag_when_building_specs_then_remains_compatible(
+def test_given_python_augmented_dag_when_building_specs_then_maps_python_nodes(
     test_case: DagsterPythonArtifactCompatibilityTestCase,
 ) -> None:
     dag: Mapping[str, Any] = build_python_augmented_dagster_test_dag()
@@ -131,9 +146,27 @@ def test_given_python_augmented_dag_when_building_specs_then_remains_compatible(
 
     asset_specs: tuple[Any, ...] = build_asset_specs(dag=dag, translator=translator)
     check_specs: tuple[Any, ...] = build_check_specs(dag=dag, translator=translator)
+    task_spec: Any = next(
+        spec for spec in asset_specs if tuple(spec.key.path) == ("task", "prepare_orders")
+    )
+    python_asset_spec: Any = next(
+        spec for spec in asset_specs if tuple(spec.key.path) == ("asset", "orders_export")
+    )
 
     assert tuple(tuple(spec.key.path) for spec in asset_specs) == test_case.expected_asset_keys
     assert tuple(spec.name for spec in check_specs) == test_case.expected_check_names
+    assert (
+        tuple(tuple(dep.asset_key.path) for dep in task_spec.deps) == test_case.expected_task_deps
+    )
+    assert tuple(tuple(dep.asset_key.path) for dep in python_asset_spec.deps) == (
+        test_case.expected_asset_deps
+    )
+    assert {
+        tuple(spec.key.path): frozenset(spec.kinds) for spec in (task_spec, python_asset_spec)
+    } == dict(test_case.expected_python_kinds_by_asset_key)
+    assert task_spec.group_name == test_case.expected_task_group
+    assert python_asset_spec.group_name == test_case.expected_asset_group
+    assert all(key in python_asset_spec.metadata for key in test_case.expected_asset_metadata_keys)
 
 
 @pytest.mark.parametrize(

@@ -33,6 +33,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
 )
 from tests.e2e.src.sqlbuild.integrations.dagster._test_types import (
     DagsterPlaygroundE2ETestCase,
+    DagsterPythonNodesArtifactE2ETestCase,
     DagsterSqlBuildE2ETestCase,
     DagsterSqlBuildFailedCheckE2ETestCase,
     DagsterSqlBuildLoaderE2ETestCase,
@@ -46,6 +47,7 @@ from tests.e2e.src.sqlbuild.integrations.dagster.helpers import (
     check_severity_for_asset,
     failed_check_severities_for_asset,
     materialization_metadata_keys,
+    prepare_python_nodes_integration_project,
     wait_for_captured_stdout_fragment,
     write_sqb_capture_command,
     write_sqb_streaming_command,
@@ -90,6 +92,64 @@ SELECTION_TEST_CASES: list[DagsterSqlBuildSelectionE2ETestCase] = [
         ),
     ),
 ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterPythonNodesArtifactE2ETestCase(
+            description="dagster consumes real Python-node dag artifact",
+            expected_asset_keys=(
+                ("main", "orders"),
+                ("task", "prepare_orders"),
+                ("warehouse_export",),
+                ("asset", "orders_export"),
+            ),
+            expected_check_names=("python_check__check_orders_export",),
+            expected_task_group="python",
+            expected_asset_group="exports",
+        )
+    ],
+    ids=["dagster consumes real Python-node dag artifact"],
+)
+def test_given_python_nodes_project_when_loading_dagster_assets_then_maps_real_artifact(
+    test_case: DagsterPythonNodesArtifactE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_python_nodes_integration_project(tmp_path)
+    sqb_executable: Path = REPO_ROOT / ".venv" / "bin" / "sqb"
+    sqlbuild_project: SqlBuildProject = SqlBuildProject(
+        project_dir=project_dir,
+        sqb_command=(str(sqb_executable),),
+    )
+
+    sqlbuild_project.prepare()
+
+    @sqlbuild_assets(project=sqlbuild_project)
+    def sqlbuild_python_nodes(context: AssetExecutionContext) -> Iterator[object]:
+        del context
+        return
+        yield
+
+    asset_keys: set[tuple[str, ...]] = {tuple(key.path) for key in sqlbuild_python_nodes.keys}
+    task_spec: object = next(
+        spec
+        for spec in sqlbuild_python_nodes.specs
+        if tuple(spec.key.path) == ("task", "prepare_orders")
+    )
+    asset_spec: object = next(
+        spec
+        for spec in sqlbuild_python_nodes.specs
+        if tuple(spec.key.path) == ("asset", "orders_export")
+    )
+
+    assert sqlbuild_project.dag_path.exists()
+    assert set(test_case.expected_asset_keys) <= asset_keys
+    assert set(test_case.expected_check_names) <= {
+        spec.name for spec in sqlbuild_python_nodes.check_specs
+    }
+    assert task_spec.group_name == test_case.expected_task_group
+    assert asset_spec.group_name == test_case.expected_asset_group
 
 
 @pytest.mark.parametrize(

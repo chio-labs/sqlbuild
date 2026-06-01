@@ -17,6 +17,103 @@ from dagster import (
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import REPO_ROOT
 
 
+def prepare_python_nodes_integration_project(root: Path) -> Path:
+    """Create a small project with Python task, asset, loader, and check nodes."""
+
+    project_dir: Path = root / "python_nodes_project"
+    models_dir: Path = project_dir / "models"
+    tasks_dir: Path = project_dir / "tasks"
+    assets_dir: Path = project_dir / "assets"
+    loaders_dir: Path = project_dir / "loaders"
+    checks_dir: Path = project_dir / "checks"
+    for directory in (models_dir, tasks_dir, assets_dir, loaders_dir, checks_dir):
+        directory.mkdir(parents=True)
+    (project_dir / "sqlbuild_project.toml").write_text(
+        "\n".join(
+            (
+                'name = "python_nodes_project"',
+                'adapter = "duckdb"',
+                'default_environment = "dev"',
+                "",
+                "[connection]",
+                'database = "python_nodes.duckdb"',
+                "",
+                "[environments.dev]",
+                'schema = "main"',
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (models_dir / "orders.sql").write_text(
+        "MODEL (materialized view);\n\nSELECT 1 AS order_id\n",
+        encoding="utf-8",
+    )
+    (tasks_dir / "prepare_orders.py").write_text(
+        "\n".join(
+            (
+                "from sqlbuild.refs import model",
+                "from sqlbuild.tasks import task",
+                "",
+                "@task(depends_on=model('orders'), tags=['daily'], group='python')",
+                "def prepare_orders(ctx):",
+                "    return ctx.result(payload={'rows': 1})",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (loaders_dir / "warehouse_export.py").write_text(
+        "\n".join(
+            (
+                "from sqlbuild.loaders import loader",
+                "from tasks.prepare_orders import prepare_orders",
+                "",
+                "@loader(depends_on=(prepare_orders,))",
+                "def warehouse_export(ctx):",
+                "    return [{'order_id': 1}]",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (assets_dir / "orders_export.py").write_text(
+        "\n".join(
+            (
+                "from sqlbuild.assets import asset",
+                "from loaders.warehouse_export import warehouse_export",
+                "from tasks.prepare_orders import prepare_orders",
+                "",
+                "@asset(",
+                "    depends_on=(prepare_orders, warehouse_export),",
+                "    tags=['external'],",
+                "    group='exports',",
+                "    columns=[{'name': 'order_id', 'type': 'integer'}],",
+                ")",
+                "def orders_export(ctx):",
+                "    return ctx.result(materialized=True)",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (checks_dir / "check_orders_export.py").write_text(
+        "\n".join(
+            (
+                "from sqlbuild.checks import check",
+                "from assets.orders_export import orders_export",
+                "",
+                "@check(depends_on=orders_export, tags=['quality'], group='exports')",
+                "def check_orders_export(ctx):",
+                "    return True",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return project_dir
+
+
 def write_sqb_capture_command(
     *, root: Path, command_log_path: Path, selector_log_path: Path
 ) -> tuple[str, ...]:
