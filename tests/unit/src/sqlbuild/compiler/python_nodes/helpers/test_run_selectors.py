@@ -21,7 +21,7 @@ PYTHON_SQL_RUN_SELECTOR_TEST_CASES: list[PythonSqlSelectorTestCase] = [
         description="selects task and asset nodes but excludes checks by default",
         select=(),
         exclude=(),
-        expected_sql_names=frozenset({"raw_orders", "orders"}),
+        expected_sql_names=frozenset({"load_events", "raw_orders", "orders"}),
         expected_python_node_names=frozenset({"load_events", "prepare_orders", "export_orders"}),
     ),
     PythonSqlSelectorTestCase(
@@ -36,7 +36,7 @@ PYTHON_SQL_RUN_SELECTOR_TEST_CASES: list[PythonSqlSelectorTestCase] = [
         select=("+source:raw_orders",),
         exclude=(),
         expected_sql_names=frozenset({"raw_orders"}),
-        expected_python_node_names=frozenset({"prepare_orders", "load_events"}),
+        expected_python_node_names=frozenset(),
     ),
 ]
 
@@ -85,15 +85,6 @@ PYTHON_SQL_RUN_SELECTOR_ERROR_TEST_CASES: list[PythonSqlSelectorErrorTestCase] =
         expected_error_type=ValueError,
         expected_error_fragment=(
             "Python node 'export_orders' depends on unselected Python node 'prepare_orders'"
-        ),
-    ),
-    PythonSqlSelectorErrorTestCase(
-        description="rejects direct source with unselected terminal loader for run",
-        select=("source:raw_orders",),
-        exclude=(),
-        expected_error_type=ValueError,
-        expected_error_fragment=(
-            "Source 'raw_orders' requires loader 'load_events', but that loader was not selected"
         ),
     ),
 ]

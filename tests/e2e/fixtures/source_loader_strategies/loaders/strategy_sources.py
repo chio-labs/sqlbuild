@@ -5,7 +5,7 @@ from sqlbuild.loaders import loader
 
 
 @loader
-def countries(ctx: object) -> list[dict[str, object]]:
+def raw_countries(ctx: object) -> list[dict[str, object]]:
     _ = ctx
     return [
         {"country_id": 1, "country_code": "US", "country_name": "United States"},
@@ -14,7 +14,7 @@ def countries(ctx: object) -> list[dict[str, object]]:
 
 
 @loader
-def webhook_events(ctx: object) -> list[dict[str, object]]:
+def raw_webhook_events(ctx: object) -> list[dict[str, object]]:
     _ = ctx
     return [
         {"event_id": 101, "event_name": "signup"},
@@ -23,7 +23,7 @@ def webhook_events(ctx: object) -> list[dict[str, object]]:
 
 
 @loader
-def order_events(ctx: Any) -> list[dict[str, object]]:
+def raw_order_events(ctx: Any) -> list[dict[str, object]]:
     if ctx.current_cursor_value is None:
         return [
             {
@@ -52,7 +52,7 @@ def order_events(ctx: Any) -> list[dict[str, object]]:
 
 
 @loader
-def customers(ctx: Any) -> list[dict[str, object]]:
+def raw_customers(ctx: Any) -> list[dict[str, object]]:
     if ctx.current_cursor_value is None:
         return [
             {
@@ -81,7 +81,7 @@ def customers(ctx: Any) -> list[dict[str, object]]:
 
 
 @loader
-def loader_status(ctx: Any) -> None:
+def raw_loader_status(ctx: Any) -> None:
     ctx.execute_sql(f"DROP TABLE IF EXISTS {ctx.target}")
     ctx.execute_sql(
         f"CREATE TABLE {ctx.target} AS "

@@ -130,6 +130,145 @@ def test_given_python_lifecycle_project_when_planning_then_shows_python_sections
     "test_case",
     [
         DirectPlanE2ETestCase(
+            description="direct source plan warns for skipped task ingress dependency",
+            expected_fragments=(
+                "Plan ready (0 selected, 1 source to load)",
+                "Sources to load (1)",
+                "raw_orders",
+                "Warnings (1)",
+                "Source loader 'raw_orders' has unselected upstream task 'prepare_orders'",
+                "use +source:raw_orders to refresh upstream ingress dependencies",
+            ),
+            unexpected_fragments=("Python ingress", "python    task      prepare_orders"),
+        )
+    ],
+    ids=["direct source plan warns for skipped task ingress dependency"],
+)
+def test_given_direct_source_with_task_ingress_when_planning_without_expansion_then_warns(
+    test_case: DirectPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_source_task_ingress_plan",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_source_task_ingress_plan"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "direct_source_task_ingress_plan.duckdb"\n'
+            ),
+            "tasks/prepare.py": (
+                "from sqlbuild.tasks import task\n\n"
+                "@task\n"
+                "def prepare_orders(ctx):\n"
+                "    return ctx.result()\n"
+            ),
+            "loaders/raw.py": (
+                "from sqlbuild.loaders import loader\n"
+                "from tasks.prepare import prepare_orders\n\n"
+                "@loader(depends_on=[prepare_orders])\n"
+                "def raw_orders(ctx):\n"
+                "    return [{'order_id': 1}]\n"
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    managed: true\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+            ),
+        },
+    )
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--select", "raw_orders"),
+        project_dir=project_dir,
+    )
+
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    output: str = plan_result.stdout
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in output, output
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectPlanE2ETestCase(
+            description="direct source plan warns for skipped asset ingress dependency",
+            expected_fragments=(
+                "Plan ready (0 selected, 1 source to load)",
+                "Warnings (1)",
+                "Source loader 'raw_orders' has unselected upstream asset 'prepare_orders'",
+            ),
+            unexpected_fragments=("Python ingress",),
+        )
+    ],
+    ids=["direct source plan warns for skipped asset ingress dependency"],
+)
+def test_given_direct_source_with_asset_ingress_when_planning_without_expansion_then_warns(
+    test_case: DirectPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_source_asset_ingress_plan",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_source_asset_ingress_plan"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "direct_source_asset_ingress_plan.duckdb"\n'
+            ),
+            "assets/prepare.py": (
+                "from sqlbuild.assets import asset\n\n"
+                "@asset\n"
+                "def prepare_orders(ctx):\n"
+                "    return ctx.result(materialized=True)\n"
+            ),
+            "loaders/raw.py": (
+                "from sqlbuild.loaders import loader\n"
+                "from assets.prepare import prepare_orders\n\n"
+                "@loader(depends_on=[prepare_orders])\n"
+                "def raw_orders(ctx):\n"
+                "    return [{'order_id': 1}]\n"
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    managed: true\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+            ),
+        },
+    )
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--select", "raw_orders"),
+        project_dir=project_dir,
+    )
+
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    output: str = plan_result.stdout
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in output, output
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectPlanE2ETestCase(
             description="direct plan json includes selected Python lifecycle nodes",
             expected_fragments=(
                 "prepare_orders",

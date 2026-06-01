@@ -49,7 +49,7 @@ The project includes a task feeding a loader, a model feeding Python assets thro
 
 _PYTHON_NODES_SOURCES_YML: str = """sources:
   - name: raw_orders
-    loader: load_raw_orders
+    managed: true
     write_strategy: table
     columns:
       - name: order_id
@@ -116,7 +116,7 @@ from tasks.orders import prepare_raw_orders
 
 
 @loader(depends_on=(prepare_raw_orders,))
-def load_raw_orders(ctx):
+def raw_orders(ctx):
     """Load source rows after the preparation task has completed."""
 
     # Loader contexts intentionally keep the SQL ingress API narrow; the dependency makes

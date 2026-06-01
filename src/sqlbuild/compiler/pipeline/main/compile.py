@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -31,7 +32,10 @@ from sqlbuild.compiler.pipeline.helpers.graph import (
     build_static_upstream_deps,
 )
 from sqlbuild.compiler.pipeline.helpers.materializations import load_custom_materializations
-from sqlbuild.compiler.pipeline.helpers.python_plan_entries import build_python_plan_entries
+from sqlbuild.compiler.pipeline.helpers.python_plan_entries import (
+    build_python_plan_entries,
+    build_skipped_task_asset_ingress_warnings,
+)
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult, ProjectGraph, PythonPlanEntry
 from sqlbuild.compiler.planner.main.execution import build_execution_plan
@@ -46,7 +50,6 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonSqlRunLifecyclePlan,
     PythonSqlRunSelection,
 )
-from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.project import EnvironmentConfig, resolve_effective_adapter_name
 
@@ -228,16 +231,21 @@ def _build_result(
         python_graph: PythonNodeGraph = build_discovered_python_node_graph(
             discovered_inputs=discovered_inputs
         )
-        planned_source_loader_names: frozenset[str] = frozenset(
-            entry.loader
-            for entry in plan_output.source_load_entries
-            if entry.loader in python_graph.nodes_by_name
-            and python_graph.nodes_by_name[entry.loader].kind == PythonNodeKind.LOADER
+        plan_output = replace(
+            plan_output,
+            warnings=(
+                *plan_output.warnings,
+                *build_skipped_task_asset_ingress_warnings(
+                    plan_output=plan_output,
+                    run_selection=run_selection,
+                    python_graph=python_graph,
+                ),
+            ),
         )
         lifecycle_plan: PythonSqlRunLifecyclePlan = build_python_sql_run_lifecycle(
             selection=PythonSqlRunSelection(
                 sql_keys=run_selection.sql_keys,
-                python_node_names=run_selection.python_node_names | planned_source_loader_names,
+                python_node_names=run_selection.python_node_names,
             ),
             python_graph=python_graph,
         )

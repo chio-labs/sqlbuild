@@ -90,15 +90,15 @@ PYTHON_SQL_SELECTOR_TEST_CASES: list[PythonSqlSelectorTestCase] = [
         expected_python_node_names=frozenset({"prepare_orders", "export_orders"}),
     ),
     PythonSqlSelectorTestCase(
-        description="selects expanded loaded source with required terminal loader",
+        description="selects expanded managed source by source identity",
         select=("+source:raw_orders",),
         exclude=(),
         expected_sql_names=frozenset({"raw_orders"}),
-        expected_python_node_names=frozenset({"prepare_orders", "load_events"}),
+        expected_python_node_names=frozenset(),
     ),
     PythonSqlSelectorTestCase(
-        description="selects source and terminal loader without duplicate loader names",
-        select=("+source:raw_orders loader:load_events",),
+        description="selects source and intermediate loader without duplicate source names",
+        select=("+source:raw_orders +loader:load_events",),
         exclude=(),
         expected_sql_names=frozenset({"raw_orders"}),
         expected_python_node_names=frozenset({"prepare_orders", "load_events"}),
@@ -238,7 +238,7 @@ PYTHON_SQL_TERMINAL_LOADER_BOUNDARY_ERROR_TEST_CASES: list[PythonSqlSelectorErro
         exclude=(),
         expected_error_type=ValueError,
         expected_error_fragment=(
-            "Python node 'summarize_orders' depends on terminal loader 'load_events'; "
+            "Python node 'summarize_orders' depends on terminal loader 'raw_orders'; "
             "depend on source 'raw_orders' instead"
         ),
         python_graph_case="terminal_loader_task_dependency",
@@ -249,7 +249,7 @@ PYTHON_SQL_TERMINAL_LOADER_BOUNDARY_ERROR_TEST_CASES: list[PythonSqlSelectorErro
         exclude=(),
         expected_error_type=ValueError,
         expected_error_fragment=(
-            "Python node 'export_orders' depends on terminal loader 'load_events'; "
+            "Python node 'export_orders' depends on terminal loader 'raw_orders'; "
             "depend on source 'raw_orders' instead"
         ),
         python_graph_case="terminal_loader_asset_dependency",
@@ -260,7 +260,7 @@ PYTHON_SQL_TERMINAL_LOADER_BOUNDARY_ERROR_TEST_CASES: list[PythonSqlSelectorErro
         exclude=(),
         expected_error_type=ValueError,
         expected_error_fragment=(
-            "Check 'check_loaded_orders' depends on terminal loader 'load_events'; "
+            "Check 'check_loaded_orders' depends on terminal loader 'raw_orders'; "
             "use source audits for source 'raw_orders' instead"
         ),
         python_graph_case="terminal_loader_check_dependency",

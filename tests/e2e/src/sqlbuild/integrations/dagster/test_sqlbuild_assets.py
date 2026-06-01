@@ -2,6 +2,7 @@
 
 import os
 import runpy
+import subprocess
 import threading
 import time
 from collections.abc import Iterator
@@ -27,8 +28,10 @@ from sqlbuild.integrations.dagster import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     REPO_ROOT,
+    prepare_inline_project,
     prepare_source_loader_strategies,
     prepare_waffle_shop,
+    run_sqb,
     table_exists,
 )
 from tests.e2e.src.sqlbuild.integrations.dagster._test_types import (
@@ -75,12 +78,12 @@ SELECTION_TEST_CASES: list[DagsterSqlBuildSelectionE2ETestCase] = [
         ),
         expected_success=True,
         expected_selector_file_contents=(
-            "raw_payments\nwaffle_types\nstg_payments\nraw_customers\n"
-            "raw_orders\nstg_customers\nstg_orders\n"
+            "raw_customers\nraw_orders\nraw_payments\nwaffle_types\n"
+            "stg_customers\nstg_orders\nstg_payments\n"
         ),
         expected_selector_log_line=(
-            "raw_payments waffle_types stg_payments raw_customers "
-            "raw_orders stg_customers stg_orders"
+            "raw_customers raw_orders raw_payments waffle_types "
+            "stg_customers stg_orders stg_payments"
         ),
         expected_table_names=(
             "raw_customers",
@@ -167,8 +170,6 @@ def test_given_python_nodes_project_when_loading_dagster_assets_then_maps_real_a
                 "waffle_types",
             ),
             expected_asset_keys=(
-                ("load__waffle_customers",),
-                ("load__waffle_orders",),
                 ("raw_customers",),
                 ("raw_orders",),
                 ("main", "waffle_types"),
@@ -297,11 +298,11 @@ def test_given_dagster_asset_selection_when_executing_sqlbuild_then_uses_select_
     [
         DagsterSqlBuildLoaderE2ETestCase(
             description="dagster selected loader asset runs sqlbuild load",
-            selected_asset_key=("countries",),
+            selected_asset_key=("raw_countries",),
             expected_success=True,
-            expected_selector_file_contents="countries\n",
+            expected_selector_file_contents="raw_countries\n",
             expected_table_names=("raw_countries",),
-            expected_metadata_asset_key=("countries",),
+            expected_metadata_asset_key=("raw_countries",),
             expected_metadata_keys=(
                 "duration_ms",
                 "kind",
@@ -358,6 +359,175 @@ def test_given_source_loader_project_when_executing_sqlbuild_load_asset_then_loa
         result=result,
         asset_key=test_case.expected_metadata_asset_key,
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterSqlBuildLoaderE2ETestCase(
+            description="dagster selected chained source reuses existing intermediate target",
+            selected_asset_key=("raw_events",),
+            expected_success=True,
+            expected_selector_file_contents="raw_events\n",
+            expected_table_names=("raw_events",),
+            expected_metadata_asset_key=("raw_events",),
+            expected_metadata_keys=("kind", "loader", "name", "status"),
+        )
+    ],
+    ids=["dagster selected chained source reuses existing intermediate target"],
+)
+def test_given_chained_source_loader_when_dagster_selects_source_then_reuses_intermediate_target(
+    test_case: DagsterSqlBuildLoaderE2ETestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="dagster_chained_source_loader",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "dagster_chained_source_loader"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "dagster_chained_source_loader.duckdb"\n'
+            ),
+            "loaders/raw.py": (
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(write_strategy='table', columns=[\n"
+                "    {'name': 'event_id', 'type': 'INTEGER'},\n"
+                "])\n"
+                "def fetch_events(ctx):\n"
+                "    return [{'event_id': 1}]\n\n"
+                "@loader(depends_on=[fetch_events])\n"
+                "def raw_events(ctx):\n"
+                "    events = ctx.loader(fetch_events)\n"
+                "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.target} AS "
+                "SELECT event_id FROM {events.target}')\n"
+            ),
+            "sources/raw.yml": "sources:\n  - name: raw_events\n    managed: true\n",
+        },
+    )
+    setup_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "load", "--select", "fetch_events"),
+        project_dir=project_dir,
+    )
+    assert setup_result.returncode == 0, setup_result.stdout + setup_result.stderr
+    command_log_path: Path = tmp_path / "sqb_command_log.txt"
+    selector_log_path: Path = tmp_path / "sqb_selector_log.txt"
+    sqb_command: tuple[str, ...] = write_sqb_capture_command(
+        root=tmp_path,
+        command_log_path=command_log_path,
+        selector_log_path=selector_log_path,
+    )
+    sqlbuild_project: SqlBuildProject = SqlBuildProject(
+        project_dir=project_dir,
+        sqb_command=sqb_command,
+    )
+    monkeypatch.setenv("DAGSTER_IS_DEV_CLI", "1")
+    sqlbuild_project.prepare_if_dev()
+
+    @sqlbuild_assets(project=sqlbuild_project, required_resource_keys={"sqb"})
+    def sqlbuild_loaders(context: AssetExecutionContext) -> Iterator[object]:
+        yield from context.resources.sqb.cli(["load"], context=context).stream()
+
+    result: ExecuteInProcessResult = materialize(
+        [sqlbuild_loaders],
+        resources={"sqb": SqlBuildCliResource(project_dir=sqlbuild_project)},
+        selection=[AssetKey(list(test_case.selected_asset_key))],
+    )
+
+    assert result.success is test_case.expected_success
+    assert selector_log_path.read_text(encoding="utf-8") == (
+        test_case.expected_selector_file_contents
+    )
+    assert "load --select-file" in command_log_path.read_text(encoding="utf-8")
+    for table_name in test_case.expected_table_names:
+        assert table_exists(
+            db_path=project_dir / "dagster_chained_source_loader.duckdb",
+            table_name=table_name,
+        )
+    assert set(test_case.expected_metadata_keys) <= materialization_metadata_keys(
+        result=result,
+        asset_key=test_case.expected_metadata_asset_key,
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterSqlBuildLoaderE2ETestCase(
+            description="dagster selected chained source fails when intermediate target is missing",
+            selected_asset_key=("raw_events",),
+            expected_success=False,
+            expected_selector_file_contents="raw_events\n",
+            expected_table_names=(),
+            expected_metadata_asset_key=("raw_events",),
+            expected_metadata_keys=(),
+        )
+    ],
+    ids=["dagster selected chained source fails when intermediate target is missing"],
+)
+def test_given_chained_source_loader_when_dagster_selects_source_without_intermediate_then_fails(
+    test_case: DagsterSqlBuildLoaderE2ETestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="dagster_missing_intermediate_source_loader",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "dagster_missing_intermediate_source_loader"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "dagster_missing_intermediate_source_loader.duckdb"\n'
+            ),
+            "loaders/raw.py": (
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(write_strategy='table', columns=[\n"
+                "    {'name': 'event_id', 'type': 'INTEGER'},\n"
+                "])\n"
+                "def fetch_events(ctx):\n"
+                "    return [{'event_id': 1}]\n\n"
+                "@loader(depends_on=[fetch_events])\n"
+                "def raw_events(ctx):\n"
+                "    events = ctx.loader(fetch_events)\n"
+                "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.target} AS "
+                "SELECT event_id FROM {events.target}')\n"
+            ),
+            "sources/raw.yml": "sources:\n  - name: raw_events\n    managed: true\n",
+        },
+    )
+    command_log_path: Path = tmp_path / "sqb_command_log.txt"
+    selector_log_path: Path = tmp_path / "sqb_selector_log.txt"
+    sqb_command: tuple[str, ...] = write_sqb_capture_command(
+        root=tmp_path,
+        command_log_path=command_log_path,
+        selector_log_path=selector_log_path,
+    )
+    sqlbuild_project: SqlBuildProject = SqlBuildProject(
+        project_dir=project_dir,
+        sqb_command=sqb_command,
+    )
+    monkeypatch.setenv("DAGSTER_IS_DEV_CLI", "1")
+    sqlbuild_project.prepare_if_dev()
+
+    @sqlbuild_assets(project=sqlbuild_project, required_resource_keys={"sqb"})
+    def sqlbuild_loaders(context: AssetExecutionContext) -> Iterator[object]:
+        yield from context.resources.sqb.cli(["load"], context=context).stream()
+
+    result: ExecuteInProcessResult = materialize(
+        [sqlbuild_loaders],
+        resources={"sqb": SqlBuildCliResource(project_dir=sqlbuild_project)},
+        selection=[AssetKey(list(test_case.selected_asset_key))],
+        raise_on_error=False,
+    )
+
+    assert result.success is test_case.expected_success
+    assert selector_log_path.read_text(encoding="utf-8") == (
+        test_case.expected_selector_file_contents
+    )
+    assert "load --select-file" in command_log_path.read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize(

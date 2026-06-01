@@ -140,10 +140,9 @@ def test_given_virtual_playground_when_running_lifecycle_then_it_succeeds(
             description="python nodes playground runs plan build and check lifecycle",
             project_name="python_nodes_demo",
             expected_plan_fragments=(
-                "Python ingress",
-                "prepare_raw_orders",
                 "raw_orders",
                 "fact_orders",
+                "Python read-side",
             ),
             expected_build_fragments=(
                 "prepare_raw_orders",

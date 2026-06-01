@@ -108,13 +108,13 @@ from sqlbuild.loaders import loader
 
 
 @loader
-def load_raw_orders(ctx):
+def raw_orders(ctx):
     return [{"order_id": 1}]
 """,
             "sources/raw.yml": """
 sources:
   - name: raw_orders
-    loader: load_raw_orders
+    managed: true
     write_strategy: table
     columns:
       - name: order_id
@@ -122,10 +122,10 @@ sources:
 """,
             "checks/raw.py": """
 from sqlbuild.checks import check
-from loaders.raw import load_raw_orders
+from loaders.raw import raw_orders
 
 
-@check(depends_on=load_raw_orders)
+@check(depends_on=raw_orders)
 def check_raw_orders_loader(ctx):
     return True
 """,

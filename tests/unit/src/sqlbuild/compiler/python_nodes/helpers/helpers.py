@@ -45,6 +45,10 @@ def load_events(_ctx: object) -> list[dict[str, object]]:
     return []
 
 
+def raw_orders(_ctx: object) -> list[dict[str, object]]:
+    return []
+
+
 def prepare_orders(_ctx: object) -> None:
     return None
 
@@ -177,7 +181,7 @@ def source_ref(name: str) -> SqlResourceRef:
 
 def build_terminal_loader_task_dependency_python_node_graph() -> PythonNodeGraph:
     return _build_loader_dependency_python_node_graph(
-        dependency_function=load_events,
+        dependency_function=raw_orders,
         include_intermediate_loader=False,
         dependent_kind="task",
     )
@@ -185,7 +189,7 @@ def build_terminal_loader_task_dependency_python_node_graph() -> PythonNodeGraph
 
 def build_terminal_loader_asset_dependency_python_node_graph() -> PythonNodeGraph:
     return _build_loader_dependency_python_node_graph(
-        dependency_function=load_events,
+        dependency_function=raw_orders,
         include_intermediate_loader=False,
         dependent_kind="asset",
     )
@@ -193,7 +197,7 @@ def build_terminal_loader_asset_dependency_python_node_graph() -> PythonNodeGrap
 
 def build_terminal_loader_check_dependency_python_node_graph() -> PythonNodeGraph:
     return _build_loader_dependency_python_node_graph(
-        dependency_function=load_events,
+        dependency_function=raw_orders,
         include_intermediate_loader=False,
         dependent_kind="check",
     )
@@ -251,8 +255,8 @@ def _build_loader_dependency_python_node_graph(
             DiscoveredLoaderFunction(
                 file_path=Path("/project/loaders/events.py"),
                 relative_path=Path("loaders/events.py"),
-                name="load_events",
-                function=load_events,
+                name="raw_orders",
+                function=raw_orders,
             ),
         )
 
@@ -338,7 +342,7 @@ def build_orders_project_graph() -> ProjectGraph:
         key=raw_orders_key,
         deps=(),
         name="raw_orders",
-        source_entry=SourceEntry(name="raw_orders", loader="load_events"),
+        source_entry=SourceEntry(name="raw_orders", loader="raw_orders", managed=True),
         source_file=source_file,
     )
     orders_model: CompiledModel = CompiledModel(

@@ -197,7 +197,7 @@ def run_build(
             project_dir=effective_project_dir,
             discovered_inputs=discovered_inputs,
         ),
-        resolve_python_run_selectors=include_python,
+        resolve_python_run_selectors=include_python or should_load_sources,
     )
 
     plan_output: PlanOutput = pipeline_result.plan_output

@@ -79,6 +79,8 @@ def dependency_node_names(*, source: SourceEntry, indexes: LoadExecutionIndexes)
     for dependency in loader.depends_on:
         if isinstance(dependency, SqlResourceRef):
             continue
+        if dependency not in indexes.loader_name_by_function:
+            continue
         loader_name: str = indexes.loader_name_by_function[dependency]
         dependency_source: SourceEntry | None = indexes.source_by_loader_name.get(loader_name)
         names.append(dependency_source.name if dependency_source is not None else loader_name)

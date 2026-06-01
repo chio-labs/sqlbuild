@@ -44,13 +44,13 @@ DIRECT_PYTHON_BUILD_HARDENING_TEST_CASES: list[DirectPythonBuildHardeningE2ETest
                 "from tasks.prepare import prepare_orders\n"
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(depends_on=(prepare_orders,))\n"
-                "def load_raw_orders(ctx):\n"
+                "def raw_orders(ctx):\n"
                 "    return [{'order_id': 1}]\n"
             ),
             "sources/raw.yml": (
                 "sources:\n"
                 "  - name: raw_orders\n"
-                "    loader: load_raw_orders\n"
+                "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
                 "      - name: order_id\n"
@@ -90,13 +90,13 @@ DIRECT_PYTHON_BUILD_HARDENING_TEST_CASES: list[DirectPythonBuildHardeningE2ETest
                 "from tasks.prepare import prepare_orders\n"
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(depends_on=(prepare_orders,))\n"
-                "def load_raw_orders(ctx):\n"
+                "def raw_orders(ctx):\n"
                 "    return [{'order_id': 1}]\n"
             ),
             "sources/raw.yml": (
                 "sources:\n"
                 "  - name: raw_orders\n"
-                "    loader: load_raw_orders\n"
+                "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
                 "      - name: order_id\n"
@@ -257,13 +257,13 @@ DIRECT_PYTHON_BUILD_HARDENING_TEST_CASES: list[DirectPythonBuildHardeningE2ETest
                 "from tasks.prepare import prepare_orders\n"
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(depends_on=(prepare_orders,))\n"
-                "def load_raw_orders(ctx):\n"
+                "def raw_orders(ctx):\n"
                 "    return [{'order_id': 3}]\n"
             ),
             "sources/raw.yml": (
                 "sources:\n"
                 "  - name: raw_orders\n"
-                "    loader: load_raw_orders\n"
+                "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
                 "      - name: order_id\n"
@@ -306,13 +306,13 @@ DIRECT_PYTHON_BUILD_HARDENING_TEST_CASES: list[DirectPythonBuildHardeningE2ETest
             "loaders/raw.py": (
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader\n"
-                "def load_raw_orders(ctx):\n"
+                "def raw_orders(ctx):\n"
                 "    return [{'order_id': 5}]\n"
             ),
             "sources/raw.yml": (
                 "sources:\n"
                 "  - name: raw_orders\n"
-                "    loader: load_raw_orders\n"
+                "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
                 "      - name: order_id\n"
@@ -380,6 +380,182 @@ def test_given_python_lifecycle_edge_case_when_building_then_direct_build_harden
     absent_path: str
     for absent_path in test_case.expected_absent_paths:
         assert not (project_dir / absent_path).exists()
+
+
+DIRECT_SOURCE_ONLY_BUILD_POLICY_TEST_CASES: list[DirectPythonBuildHardeningE2ETestCase] = [
+    DirectPythonBuildHardeningE2ETestCase(
+        description="direct build fails when skipped intermediate target is missing",
+        project_name="direct_build_missing_intermediate_project",
+        command=("--no-color", "build", "--select", "raw_events"),
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_build_missing_intermediate_project"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "direct_build_missing_intermediate_project.duckdb"\n'
+            ),
+            "loaders/raw.py": (
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(write_strategy='table', columns=[\n"
+                "    {'name': 'event_id', 'type': 'INTEGER'},\n"
+                "])\n"
+                "def fetch_events(ctx):\n"
+                "    return [{'event_id': 1}]\n\n"
+                "@loader(depends_on=[fetch_events])\n"
+                "def raw_events(ctx):\n"
+                "    events = ctx.loader(fetch_events)\n"
+                "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.target} AS "
+                "SELECT event_id FROM {events.target}')\n"
+            ),
+            "sources/raw.yml": "sources:\n  - name: raw_events\n    managed: true\n",
+        },
+        expected_exit_code=1,
+        expected_output_fragments=("requires intermediate loader 'fetch_events'",),
+    ),
+    DirectPythonBuildHardeningE2ETestCase(
+        description="direct build no-python source only warns and skips task ingress",
+        project_name="direct_build_no_python_source_only_project",
+        command=("--no-color", "build", "--select", "raw_events", "--no-python"),
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_build_no_python_source_only_project"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "direct_build_no_python_source_only_project.duckdb"\n'
+            ),
+            "tasks/prepare.py": (
+                "from pathlib import Path\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task\n"
+                "def prepare_events(ctx):\n"
+                "    marker = Path(__file__).parents[1].joinpath('prepared.txt')\n"
+                "    marker.write_text('prepared')\n"
+                "    return ctx.result()\n"
+            ),
+            "loaders/raw.py": (
+                "from sqlbuild.loaders import loader\n"
+                "from tasks.prepare import prepare_events\n\n"
+                "@loader(depends_on=[prepare_events])\n"
+                "def raw_events(ctx):\n"
+                "    return [{'event_id': 1}]\n"
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_events\n"
+                "    managed: true\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: event_id\n"
+                "        type: INTEGER\n"
+            ),
+        },
+        expected_exit_code=0,
+        expected_output_fragments=("source    raw_events", "unselected upstream task"),
+        expected_present_tables=("raw_events",),
+        expected_absent_paths=("prepared.txt",),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    DIRECT_SOURCE_ONLY_BUILD_POLICY_TEST_CASES,
+    ids=[case.description for case in DIRECT_SOURCE_ONLY_BUILD_POLICY_TEST_CASES],
+)
+def test_given_direct_source_only_build_when_loader_has_ingress_then_enforces_source_policy(
+    tmp_path: Path,
+    test_case: DirectPythonBuildHardeningE2ETestCase,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+        repo_files=test_case.repo_files,
+    )
+    db_path: Path = project_dir / f"{test_case.project_name}.duckdb"
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    output: str = result.stdout + result.stderr
+    fragment: str
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in output
+    table_name: str
+    for table_name in test_case.expected_present_tables:
+        assert table_exists(db_path=db_path, table_name=table_name)
+    absent_path: str
+    for absent_path in test_case.expected_absent_paths:
+        assert not (project_dir / absent_path).exists()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectPythonBuildHardeningE2ETestCase(
+            description="direct build reuses existing intermediate target without rerunning loader",
+            project_name="direct_build_existing_intermediate_project",
+            command=("--no-color", "build", "--select", "raw_events"),
+            repo_files={
+                "sqlbuild_project.toml": (
+                    'name = "direct_build_existing_intermediate_project"\n'
+                    'adapter = "duckdb"\n\n'
+                    "[connection]\n"
+                    'database = "direct_build_existing_intermediate_project.duckdb"\n'
+                ),
+                "loaders/raw.py": (
+                    "from sqlbuild.loaders import loader\n\n"
+                    "@loader(write_strategy='table', columns=[\n"
+                    "    {'name': 'event_id', 'type': 'INTEGER'},\n"
+                    "])\n"
+                    "def fetch_events(ctx):\n"
+                    "    return [{'event_id': 1}]\n\n"
+                    "@loader(depends_on=[fetch_events])\n"
+                    "def raw_events(ctx):\n"
+                    "    events = ctx.loader(fetch_events)\n"
+                    "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.target} AS "
+                    "SELECT event_id FROM {events.target}')\n"
+                ),
+                "sources/raw.yml": "sources:\n  - name: raw_events\n    managed: true\n",
+            },
+            expected_exit_code=0,
+            expected_output_fragments=("source    raw_events",),
+            expected_present_tables=("raw_events",),
+        )
+    ],
+    ids=["direct build reuses existing intermediate target without rerunning loader"],
+)
+def test_given_existing_intermediate_target_when_building_source_only_then_reuses_target(
+    tmp_path: Path,
+    test_case: DirectPythonBuildHardeningE2ETestCase,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+        repo_files=test_case.repo_files,
+    )
+    setup_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "load", "--select", "fetch_events"),
+        project_dir=project_dir,
+    )
+    assert setup_result.returncode == 0, setup_result.stdout + setup_result.stderr
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    assert "loader    fetch_events" not in result.stdout
+    fragment: str
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in result.stdout
+    db_path: Path = project_dir / f"{test_case.project_name}.duckdb"
+    table_name: str
+    for table_name in test_case.expected_present_tables:
+        assert table_exists(db_path=db_path, table_name=table_name)
 
 
 @pytest.mark.parametrize(
@@ -532,14 +708,14 @@ def test_given_python_sql_python_spine_when_building_then_orders_python_around_s
                 "from assets.prepare import publish_prepared_orders\n"
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(depends_on=(publish_prepared_orders,))\n"
-                "def load_raw_orders(ctx):\n"
+                "def raw_orders(ctx):\n"
                 "    marker = Path(__file__).parents[1].joinpath('prepared_order_id.txt')\n"
                 "    return [{'order_id': int(marker.read_text())}]\n"
             ),
             "sources/raw.yml": (
                 "sources:\n"
                 "  - name: raw_orders\n"
-                "    loader: load_raw_orders\n"
+                "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
                 "      - name: order_id\n"

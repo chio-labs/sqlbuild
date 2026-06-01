@@ -203,10 +203,12 @@ def _validate_source_loader_name_collisions(
             loader_path: str | None = loader_paths_by_name.get(source_entry.name)
             if loader_path is None:
                 continue
+            if source_entry.managed and source_entry.loader == source_entry.name:
+                continue
             raise DiscoveryConflictError(
                 f"Source '{source_entry.name}' in {source_file.relative_path} conflicts with "
                 f"loader '{source_entry.name}' in {loader_path}; source and loader names must "
-                "be globally unique for unambiguous load selectors"
+                "be globally unique unless the source is managed"
             )
 
 
@@ -220,6 +222,16 @@ def _validate_source_loader_references(
     for source_file in source_files:
         source_entry: SourceEntry
         for source_entry in source_file.source_entries:
+            if source_entry.managed and source_entry.loader != source_entry.name:
+                raise DiscoveryConflictError(
+                    f"Managed source '{source_entry.name}' in {source_file.relative_path} must "
+                    f"use terminal loader '{source_entry.name}'"
+                )
+            if source_entry.managed and source_entry.name not in loader_names:
+                raise DiscoveryConflictError(
+                    f"Managed source '{source_entry.name}' in {source_file.relative_path} "
+                    f"requires loader '{source_entry.name}'"
+                )
             if source_entry.loader is None or source_entry.loader in loader_names:
                 continue
             raise DiscoveryConflictError(
@@ -520,9 +532,12 @@ def _validate_unique_selectable_resource_names(
         )
 
     source_file: DiscoveredSourceFile
+    managed_source_names: set[str] = set()
     for source_file in source_files:
         source_entry: SourceEntry
         for source_entry in source_file.source_entries:
+            if source_entry.managed:
+                managed_source_names.add(source_entry.name)
             _validate_selectable_resource_name_is_available(
                 seen_names=seen_names,
                 name=source_entry.name,
@@ -566,6 +581,8 @@ def _validate_unique_selectable_resource_names(
         | DiscoveredCheckFunction
     )
     for node in (*loader_functions, *task_functions, *asset_functions, *check_functions):
+        if isinstance(node, DiscoveredLoaderFunction) and node.name in managed_source_names:
+            continue
         _validate_selectable_resource_name_is_available(
             seen_names=seen_names,
             name=node.name,
