@@ -95,13 +95,13 @@ def prepare_python_lifecycle_plan_project(*, tmp_path: Path) -> Path:
                 "from assets.prepare import publish_prepared_orders\n"
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(depends_on=(publish_prepared_orders,))\n"
-                "def load_raw_orders(ctx):\n"
+                "def raw_orders(ctx):\n"
                 "    return [{'order_id': 7}]\n"
             ),
             "sources/raw.yml": (
                 "sources:\n"
                 "  - name: raw_orders\n"
-                "    loader: load_raw_orders\n"
+                "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
                 "      - name: order_id\n"

@@ -52,14 +52,12 @@ def expand_selected_loader_dependencies(
             loader_name_by_function=loader_name_by_function,
             source_by_loader=source_by_loader,
         )
-        expanded_selected.update(
-            _select_dependency_closure(
-                loader_function=loader_function,
-                loader_by_name=loader_by_name,
-                loader_name_by_function=loader_name_by_function,
-                source_by_loader=source_by_loader,
-                upstream_deps=expanded_upstream,
-            )
+        _add_dependency_closure_edges(
+            loader_function=loader_function,
+            loader_by_name=loader_by_name,
+            loader_name_by_function=loader_name_by_function,
+            source_by_loader=source_by_loader,
+            upstream_deps=expanded_upstream,
         )
 
     return frozenset(expanded_selected), expanded_upstream
@@ -93,6 +91,87 @@ def build_intermediate_source_map(
     return entries
 
 
+def build_upstream_intermediate_source_map(
+    *, project: CompiledProject, selected_keys: frozenset[CompiledObjectKey]
+) -> dict[str, SourceEntry]:
+    """Return synthetic source entries for upstream intermediate loaders of selected sources."""
+
+    loader_by_name: dict[str, DiscoveredLoaderFunction] = {
+        loader.name: loader for loader in project.loader_functions
+    }
+    source_by_name: dict[str, SourceEntry] = {
+        source.source_entry.name: source.source_entry for source in project.sources
+    }
+    source_by_loader: dict[str, SourceEntry] = {
+        source.source_entry.loader: source.source_entry
+        for source in project.sources
+        if source.source_entry.loader is not None
+    }
+    entries: dict[str, SourceEntry] = {}
+    key: CompiledObjectKey
+    for key in selected_keys:
+        if key.resource_type != CompiledResourceType.SOURCE:
+            continue
+        source_entry: SourceEntry | None = source_by_name.get(key.name)
+        if source_entry is None or source_entry.loader is None:
+            continue
+        loader_function: DiscoveredLoaderFunction | None = loader_by_name.get(source_entry.loader)
+        if loader_function is None:
+            continue
+        dependency_name: str
+        for dependency_name in upstream_loader_dependency_names(
+            loader_function=loader_function,
+            loader_functions=project.loader_functions,
+        ):
+            if dependency_name in source_by_loader:
+                continue
+            dependency_loader: DiscoveredLoaderFunction | None = loader_by_name.get(dependency_name)
+            if dependency_loader is None:
+                continue
+            entries.setdefault(
+                dependency_name,
+                loader_to_source_entry(project=project, loader=dependency_loader),
+            )
+    return entries
+
+
+def upstream_loader_dependency_names(
+    *,
+    loader_function: DiscoveredLoaderFunction,
+    loader_functions: tuple[DiscoveredLoaderFunction, ...],
+) -> tuple[str, ...]:
+    """Return upstream loader dependency names for one loader function."""
+
+    loader_by_name: dict[str, DiscoveredLoaderFunction] = {
+        loader.name: loader for loader in loader_functions
+    }
+    loader_name_by_function: dict[object, str] = {
+        loader.function: loader.name for loader in loader_functions
+    }
+    names: list[str] = []
+    pending: list[str] = list(
+        _dependency_loader_names(
+            loader_function=loader_function,
+            loader_name_by_function=loader_name_by_function,
+        )
+    )
+    while pending:
+        current: str = pending.pop(0)
+        if current in names:
+            continue
+        names.append(current)
+        dependency_loader: DiscoveredLoaderFunction | None = loader_by_name.get(current)
+        if dependency_loader is None:
+            continue
+        pending.extend(
+            _dependency_loader_names(
+                loader_function=dependency_loader,
+                loader_name_by_function=loader_name_by_function,
+            )
+        )
+    return tuple(names)
+
+
 def loader_to_source_entry(
     *, project: CompiledProject, loader: DiscoveredLoaderFunction
 ) -> SourceEntry:
@@ -124,15 +203,14 @@ def loader_to_source_entry(
     )
 
 
-def _select_dependency_closure(
+def _add_dependency_closure_edges(
     *,
     loader_function: DiscoveredLoaderFunction,
     loader_by_name: dict[str, DiscoveredLoaderFunction],
     loader_name_by_function: dict[object, str],
     source_by_loader: dict[str, SourceEntry],
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-) -> set[CompiledObjectKey]:
-    selected: set[CompiledObjectKey] = set()
+) -> None:
     dependency_name: str
     for dependency_name in _dependency_loader_names(
         loader_function=loader_function, loader_name_by_function=loader_name_by_function
@@ -140,23 +218,19 @@ def _select_dependency_closure(
         dependency_key: CompiledObjectKey = _loader_node_key(
             loader_name=dependency_name, source_by_loader=source_by_loader
         )
-        selected.add(dependency_key)
         dependency_function: DiscoveredLoaderFunction = loader_by_name[dependency_name]
         upstream_deps[dependency_key] = _dependency_keys(
             loader_function=dependency_function,
             loader_name_by_function=loader_name_by_function,
             source_by_loader=source_by_loader,
         )
-        selected.update(
-            _select_dependency_closure(
-                loader_function=dependency_function,
-                loader_by_name=loader_by_name,
-                loader_name_by_function=loader_name_by_function,
-                source_by_loader=source_by_loader,
-                upstream_deps=upstream_deps,
-            )
+        _add_dependency_closure_edges(
+            loader_function=dependency_function,
+            loader_by_name=loader_by_name,
+            loader_name_by_function=loader_name_by_function,
+            source_by_loader=source_by_loader,
+            upstream_deps=upstream_deps,
         )
-    return selected
 
 
 def _dependency_keys(

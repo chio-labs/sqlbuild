@@ -37,7 +37,11 @@ def select_load_entries(
         loader.function: loader.name for loader in discovered_inputs.loader_functions
     }
     upstream_loaders: dict[str, tuple[str, ...]] = {
-        loader.name: tuple(loader_name_by_function[dep] for dep in loader.depends_on)
+        loader.name: tuple(
+            loader_name_by_function[dep]
+            for dep in loader.depends_on
+            if dep in loader_name_by_function
+        )
         for loader in discovered_inputs.loader_functions
     }
     source_by_loader: dict[str, tuple[str, ...]] = _source_names_by_loader(managed_sources)
@@ -96,6 +100,45 @@ def select_load_entries(
         managed_sources[source_name] for source_name in sources_order(sources, selected_sources)
     )
     return tuple(entries)
+
+
+def select_load_reference_entries(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    selected_sources: tuple[SourceEntry, ...],
+    environment_config: EnvironmentConfig | None,
+) -> tuple[SourceEntry, ...]:
+    """Return unselected upstream intermediate loader entries used only for refs."""
+
+    selected_names: frozenset[str] = frozenset(source.name for source in selected_sources)
+    loaders: dict[str, DiscoveredLoaderFunction] = {
+        loader.name: loader for loader in discovered_inputs.loader_functions
+    }
+    loader_name_by_function: dict[object, str] = {
+        loader.function: loader.name for loader in discovered_inputs.loader_functions
+    }
+    upstream_loaders: dict[str, tuple[str, ...]] = {
+        loader.name: tuple(
+            loader_name_by_function[dep]
+            for dep in loader.depends_on
+            if dep in loader_name_by_function
+        )
+        for loader in discovered_inputs.loader_functions
+    }
+    reference_loader_names: set[str] = set()
+    source: SourceEntry
+    for source in selected_sources:
+        if source.loader is None or source.loader not in upstream_loaders:
+            continue
+        reference_loader_names.update(_upstream_loader_closure(source.loader, upstream_loaders))
+    return tuple(
+        _loader_to_source_entry(loaders[loader_name], environment_config)
+        for loader_name in _topological_loader_order(
+            loader_names=reference_loader_names,
+            upstream_loaders=upstream_loaders,
+        )
+        if loader_name in loaders and loader_name not in selected_names
+    )
 
 
 def sources_order(sources: tuple[SourceEntry, ...], selected_sources: set[str]) -> tuple[str, ...]:

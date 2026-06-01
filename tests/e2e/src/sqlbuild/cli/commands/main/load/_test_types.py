@@ -62,6 +62,29 @@ class IntermediateLoaderStrategyE2ETestCase:
 
 
 @dataclass(frozen=True)
+class SourceOnlyIngressDependencyE2ETestCase:
+    description: str
+    setup_command: tuple[str, ...] | None
+    command: tuple[str, ...]
+    expected_return_code: int
+    expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_error_fragment: str | None = None
+    expected_intermediate_rows: tuple[tuple[object, ...], ...] = ()
+    expected_terminal_rows: tuple[tuple[object, ...], ...] = ()
+    expected_marker_exists: bool = False
+
+
+@dataclass(frozen=True)
+class SourceOnlyComplexIngressE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_return_code: int
+    expected_error_fragment: str | None = None
+    expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
+    setup_commands: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class LoaderWaffleShopE2ETestCase:
     description: str
     command: tuple[str, ...]

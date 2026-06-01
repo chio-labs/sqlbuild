@@ -59,7 +59,7 @@ SELECT 1
 from sqlbuild.loaders import loader
 
 @loader
-def raw_orders_loader(ctx):
+def fetch_orders(ctx):
     return []
 """,
                 "tasks/windows.py": """
@@ -114,7 +114,7 @@ def export_customers_exists(ctx):
             expected_audit_block_names=(None,),
             expected_audit_block_sql_bodies=("SELECT 1",),
             expected_macro_paths=("macros/name_helpers.py",),
-            expected_loader_names=("raw_orders_loader",),
+            expected_loader_names=("fetch_orders",),
             expected_adapter_path="adapter.py",
             expected_task_names=("fetch_window",),
             expected_asset_names=("export_customers",),
@@ -374,11 +374,11 @@ seeds:
             "sources/raw.yml": """
 sources:
   - name: raw_orders
-    loader: missing_loader
+    managed: true
 """.strip()
             + "\n",
         },
-        expected_error_fragment="Source 'raw_orders' in sources/raw.yml references unknown loader",
+        expected_error_fragment="Managed source 'raw_orders' in sources/raw.yml requires loader",
     ),
     DiscoverProjectInputsErrorTestCase(
         description="raises when loader names are duplicated",
@@ -402,13 +402,13 @@ def raw_orders(ctx):
         expected_error_fragment="Duplicate source loader found for 'raw_orders'",
     ),
     DiscoverProjectInputsErrorTestCase(
-        description="raises when source name collides with intermediate loader name",
+        description="raises when unmanaged source name collides with loader name",
         repo_files=base_repo_files()
         | {
             "sources/raw.yml": """
 sources:
   - name: fetch_orders
-    loader: raw_orders_loader
+    table: fetch_orders
 """.strip()
             + "\n",
             "loaders/raw_orders.py": """
@@ -417,22 +417,18 @@ from sqlbuild.loaders import loader
 @loader
 def fetch_orders(ctx):
     return []
-
-@loader(depends_on=[fetch_orders])
-def raw_orders_loader(ctx):
-    return []
 """,
         },
         expected_error_fragment="Source 'fetch_orders' in sources/raw.yml conflicts with loader",
     ),
     DiscoverProjectInputsErrorTestCase(
-        description="raises when source name collides with terminal loader name",
+        description="raises when unmanaged source name collides with terminal loader name",
         repo_files=base_repo_files()
         | {
             "sources/raw.yml": """
 sources:
   - name: raw_orders
-    loader: raw_orders
+    table: raw_orders
 """.strip()
             + "\n",
             "loaders/raw_orders.py": """
@@ -488,7 +484,7 @@ fetch_events = loader(depends_on=[enriched_events])(fetch_events)
             "sources/raw.yml": """
 sources:
   - name: raw_orders
-    loader: raw_orders_loader
+    managed: true
     write_strategy: table
 """.strip()
             + "\n",
@@ -496,7 +492,7 @@ sources:
 from sqlbuild.loaders import loader
 
 @loader(write_strategy="table", columns=[{"name": "id", "type": "INTEGER"}])
-def raw_orders_loader(ctx):
+def raw_orders(ctx):
     return []
 """,
         },
@@ -647,7 +643,7 @@ def main(amount):
         description="raises when function name collides with loader name",
         repo_files=base_repo_files()
         | {
-            "functions/sql/raw_orders_loader.sql": """
+            "functions/sql/fetch_orders.sql": """
 FUNCTION (
   arguments (amount INTEGER),
   returns BOOLEAN,
@@ -656,16 +652,16 @@ FUNCTION (
 amount > 100
 """.strip()
             + "\n",
-            "loaders/raw_orders_loader.py": """
+            "loaders/fetch_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader
-def raw_orders_loader(ctx):
+def fetch_orders(ctx):
     return []
 """,
         },
         expected_error_fragment=(
-            "Selectable resource name 'raw_orders_loader' is declared as both function"
+            "Selectable resource name 'fetch_orders' is declared as both function"
         ),
     ),
     DiscoverProjectInputsErrorTestCase(

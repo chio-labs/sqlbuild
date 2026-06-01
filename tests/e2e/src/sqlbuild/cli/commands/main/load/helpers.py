@@ -2,6 +2,94 @@
 
 from __future__ import annotations
 
+import subprocess
+from pathlib import Path
+
+from tests.e2e.src.sqlbuild.cli.commands.main.load._test_types import (
+    SourceOnlyIngressDependencyE2ETestCase,
+)
+from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    prepare_inline_project,
+    query_duckdb,
+    run_sqb,
+)
+
+
+def assert_source_only_ingress_dependency_case(
+    *, tmp_path: Path, test_case: SourceOnlyIngressDependencyE2ETestCase
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="source_loader_schema_behavior",
+        repo_files={
+            **build_schema_behavior_project_files(
+                source_yaml=("sources:\n  - name: raw_events\n    managed: true\n"),
+                loader_py=(
+                    "from sqlbuild.loaders import loader\n"
+                    "from tasks.prepare import prepare_events\n\n"
+                    "@loader(depends_on=[prepare_events], write_strategy='table', columns=[\n"
+                    "    {'name': 'event_id', 'type': 'INTEGER'},\n"
+                    "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
+                    "])\n"
+                    "def fetch_events(ctx):\n"
+                    "    return [\n"
+                    "        {'event_id': 1, 'load_seq': 1},\n"
+                    "        {'event_id': 2, 'load_seq': 1},\n"
+                    "    ]\n\n"
+                    "@loader(depends_on=[fetch_events])\n"
+                    "def raw_events(ctx):\n"
+                    "    events = ctx.loader(fetch_events)\n"
+                    "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.target} AS "
+                    "SELECT event_id FROM {events.target}')\n"
+                ),
+            ),
+            "tasks/prepare.py": (
+                "from pathlib import Path\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task\n"
+                "def prepare_events(ctx):\n"
+                "    Path(__file__).parents[1].joinpath('prepared.txt').write_text('prepared')\n"
+                "    return ctx.result()\n"
+            ),
+        },
+    )
+    if test_case.setup_command is not None:
+        setup_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=test_case.setup_command,
+            project_dir=project_dir,
+        )
+        assert setup_result.returncode == 0, setup_result.stdout + setup_result.stderr
+    db_path: Path = project_dir / "source_loader_schema_behavior.duckdb"
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
+    combined_output: str = result.stdout + result.stderr
+    if test_case.expected_error_fragment is not None:
+        assert test_case.expected_error_fragment in combined_output
+    fragment: str
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout
+    if test_case.expected_return_code != 0:
+        return
+    assert ("loader    fetch_events" in result.stdout) is (
+        "loader    fetch_events" in test_case.expected_stdout_fragments
+    )
+    intermediate_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=db_path,
+        sql="SELECT event_id, load_seq FROM __loader__fetch_events ORDER BY event_id",
+    )
+    terminal_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=db_path,
+        sql="SELECT event_id FROM raw_events ORDER BY event_id",
+    )
+    assert tuple(intermediate_rows) == test_case.expected_intermediate_rows
+    assert tuple(terminal_rows) == test_case.expected_terminal_rows
+    assert (project_dir / "prepared.txt").exists() is test_case.expected_marker_exists
+
 
 def build_schema_behavior_project_files(*, source_yaml: str, loader_py: str) -> dict[str, str]:
     return {
@@ -32,7 +120,7 @@ def build_loader_waffle_shop_project_files(*, project_toml: str | None = None) -
         "sources/raw.yml": (
             "sources:\n"
             "  - name: raw_orders\n"
-            "    loader: load_raw_orders\n"
+            "    managed: true\n"
             "    write_strategy: table\n"
             "    columns:\n"
             "      - name: order_id\n"
@@ -48,7 +136,7 @@ def build_loader_waffle_shop_project_files(*, project_toml: str | None = None) -
             "      - name: load_seq\n"
             "        type: INTEGER\n"
             "  - name: raw_customers\n"
-            "    loader: load_raw_customers\n"
+            "    managed: true\n"
             "    write_strategy: table\n"
             "    columns:\n"
             "      - name: customer_id\n"
@@ -120,7 +208,7 @@ def build_loader_waffle_shop_project_files(*, project_toml: str | None = None) -
             "        {'waffle_type': 'blueberry', 'price_cents': 750, 'load_seq': 1},\n"
             "    ]\n\n"
             "@loader(depends_on=[fetch_order_events, fetch_prices])\n"
-            "def load_raw_orders(ctx):\n"
+            "def raw_orders(ctx):\n"
             "    events = ctx.loader(fetch_order_events)\n"
             "    prices = ctx.loader(fetch_prices)\n"
             "    cursor = ctx.query(\n"
@@ -141,7 +229,7 @@ def build_loader_waffle_shop_project_files(*, project_toml: str | None = None) -
             "        for row in cursor.fetchall()\n"
             "    ]\n\n"
             "@loader(depends_on=[fetch_customers])\n"
-            "def load_raw_customers(ctx):\n"
+            "def raw_customers(ctx):\n"
             "    customers = ctx.loader(fetch_customers)\n"
             "    cursor = ctx.query(\n"
             "        f'SELECT customer_id, plan_name, load_seq FROM {customers.target} '\n"

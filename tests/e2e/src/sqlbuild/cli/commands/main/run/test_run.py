@@ -84,6 +84,68 @@ def test_given_waffle_shop_project_when_running_run_then_warehouse_state_matches
     "test_case",
     [
         RunE2ETestCase(
+            description="run reuses existing intermediate target for source-only selection",
+            expected_exit_code=0,
+            expected_table_names=("raw_events",),
+            expected_view_names=(),
+        )
+    ],
+    ids=["run reuses existing intermediate target for source-only selection"],
+)
+def test_given_existing_intermediate_target_when_running_source_only_then_reuses_target(
+    test_case: RunE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="run_existing_intermediate_project",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "run_existing_intermediate_project"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "run_existing_intermediate_project.duckdb"\n'
+            ),
+            "loaders/raw.py": (
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(write_strategy='table', columns=[\n"
+                "    {'name': 'event_id', 'type': 'INTEGER'},\n"
+                "])\n"
+                "def fetch_events(ctx):\n"
+                "    return [{'event_id': 1}]\n\n"
+                "@loader(depends_on=[fetch_events])\n"
+                "def raw_events(ctx):\n"
+                "    events = ctx.loader(fetch_events)\n"
+                "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.target} AS "
+                "SELECT event_id FROM {events.target}')\n"
+            ),
+            "sources/raw.yml": "sources:\n  - name: raw_events\n    managed: true\n",
+        },
+    )
+    setup_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "load", "--select", "fetch_events"),
+        project_dir=project_dir,
+    )
+    assert setup_result.returncode == 0, setup_result.stdout + setup_result.stderr
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "run", "--select", "raw_events"),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    assert "loader    fetch_events" not in result.stdout
+    assert "source    raw_events" in result.stdout
+    db_path: Path = project_dir / "run_existing_intermediate_project.duckdb"
+    table_name: str
+    for table_name in test_case.expected_table_names:
+        assert table_exists(db_path=db_path, table_name=table_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RunE2ETestCase(
             description="run executes selected task node",
             expected_exit_code=0,
             expected_table_names=(),
@@ -344,7 +406,7 @@ def test_given_task_loader_source_model_chain_when_running_model_then_task_runs_
                 "from sqlbuild.loaders import loader\n"
                 "from tasks.orders import prepare_orders\n\n"
                 "@loader(depends_on=(prepare_orders,))\n"
-                "def load_raw_orders(ctx):\n"
+                "def raw_orders(ctx):\n"
                 "    marker = Path(__file__).parents[1].joinpath('orders_ready.txt')\n"
                 "    if not marker.exists():\n"
                 "        raise RuntimeError('orders were not prepared')\n"
@@ -353,7 +415,7 @@ def test_given_task_loader_source_model_chain_when_running_model_then_task_runs_
             "sources/raw.yml": (
                 "sources:\n"
                 "  - name: raw_orders\n"
-                "    loader: load_raw_orders\n"
+                "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
                 "      - name: order_id\n"
@@ -608,13 +670,13 @@ def test_given_source_task_asset_selection_when_running_run_then_task_reads_load
             "loaders/orders.py": (
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader\n"
-                "def load_orders(ctx):\n"
+                "def raw_orders(ctx):\n"
                 "    return [{'order_id': 1, 'amount_cents': 100}]\n"
             ),
             "sources/raw.yml": (
                 "sources:\n"
                 "  - name: raw_orders\n"
-                "    loader: load_orders\n"
+                "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
                 "      - name: order_id\n"
@@ -895,13 +957,13 @@ def test_given_task_depends_on_source_when_running_run_then_task_runs_after_sour
             "loaders/orders.py": (
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader\n"
-                "def load_orders(ctx):\n"
+                "def raw_orders(ctx):\n"
                 "    return [{'order_id': 1, 'amount_cents': 100}]\n"
             ),
             "sources/raw.yml": (
                 "sources:\n"
                 "  - name: raw_orders\n"
-                "    loader: load_orders\n"
+                "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
                 "      - name: order_id\n"
@@ -1041,21 +1103,21 @@ def test_given_task_depends_on_terminal_loader_when_running_run_then_command_rej
             "loaders/orders.py": (
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader\n"
-                "def load_orders(ctx):\n"
+                "def raw_orders(ctx):\n"
                 "    return [{'order_id': 1}]\n"
             ),
             "sources/raw.yml": (
                 "sources:\n"
                 "  - name: raw_orders\n"
-                "    loader: load_orders\n"
+                "    managed: true\n"
                 "    columns:\n"
                 "      - name: order_id\n"
                 "        type: INTEGER\n"
             ),
             "tasks/orders.py": (
-                "from loaders.orders import load_orders\n"
+                "from loaders.orders import raw_orders\n"
                 "from sqlbuild.tasks import task\n\n"
-                "@task(depends_on=load_orders)\n"
+                "@task(depends_on=raw_orders)\n"
                 "def summarize_orders(ctx):\n"
                 "    return ctx.result()\n"
             ),
@@ -1069,7 +1131,7 @@ def test_given_task_depends_on_terminal_loader_when_running_run_then_command_rej
 
     assert result.returncode == test_case.expected_exit_code
     combined_output: str = result.stdout + result.stderr
-    assert "depends on terminal loader 'load_orders'" in combined_output
+    assert "depends on terminal loader 'raw_orders'" in combined_output
     assert "depend on source 'raw_orders' instead" in combined_output
 
 
@@ -1198,7 +1260,7 @@ def test_given_loader_task_loader_chain_when_running_model_then_ingress_orders_c
                 "from tasks.orders import prepare_raw_orders\n"
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(depends_on=(prepare_raw_orders,))\n"
-                "def load_raw_orders(ctx):\n"
+                "def raw_orders(ctx):\n"
                 "    marker = Path(__file__).parents[1].joinpath('prepared.txt')\n"
                 "    if marker.read_text() != '1':\n"
                 "        raise RuntimeError('window orders were not prepared')\n"
@@ -1207,7 +1269,7 @@ def test_given_loader_task_loader_chain_when_running_model_then_ingress_orders_c
             "sources/raw.yml": (
                 "sources:\n"
                 "  - name: raw_orders\n"
-                "    loader: load_raw_orders\n"
+                "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
                 "      - name: order_id\n"
@@ -1281,7 +1343,7 @@ def test_given_task_asset_loader_chain_when_running_model_then_ingress_orders_ch
                 "from assets.orders import publish_orders\n"
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(depends_on=(publish_orders,))\n"
-                "def load_raw_orders(ctx):\n"
+                "def raw_orders(ctx):\n"
                 "    marker = Path(__file__).parents[1].joinpath('asset_ready.txt')\n"
                 "    if marker.read_text() != '1':\n"
                 "        raise RuntimeError('asset was not ready')\n"
@@ -1290,7 +1352,7 @@ def test_given_task_asset_loader_chain_when_running_model_then_ingress_orders_ch
             "sources/raw.yml": (
                 "sources:\n"
                 "  - name: raw_orders\n"
-                "    loader: load_raw_orders\n"
+                "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
                 "      - name: order_id\n"
@@ -1367,7 +1429,7 @@ def test_given_loader_asset_loader_chain_when_running_model_then_ingress_orders_
                 "from assets.orders import prepare_asset_orders\n"
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(depends_on=(prepare_asset_orders,))\n"
-                "def load_raw_orders(ctx):\n"
+                "def raw_orders(ctx):\n"
                 "    marker = Path(__file__).parents[1].joinpath('asset_ready.txt')\n"
                 "    if marker.read_text() != '1':\n"
                 "        raise RuntimeError('asset orders were not prepared')\n"
@@ -1376,7 +1438,7 @@ def test_given_loader_asset_loader_chain_when_running_model_then_ingress_orders_
             "sources/raw.yml": (
                 "sources:\n"
                 "  - name: raw_orders\n"
-                "    loader: load_raw_orders\n"
+                "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
                 "      - name: order_id\n"
@@ -1442,14 +1504,14 @@ def test_given_loader_loader_chain_when_running_model_then_ingress_orders_chain(
                 "from loaders.window import load_window_orders\n"
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(depends_on=(load_window_orders,))\n"
-                "def load_raw_orders(ctx):\n"
+                "def raw_orders(ctx):\n"
                 "    rows = ctx.query('SELECT COUNT(*) FROM window_orders').fetchall()[0][0]\n"
                 "    return [{'order_id': rows}]\n"
             ),
             "sources/raw.yml": (
                 "sources:\n"
                 "  - name: raw_orders\n"
-                "    loader: load_raw_orders\n"
+                "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
                 "      - name: order_id\n"
@@ -1535,14 +1597,14 @@ def test_given_loader_task_asset_loader_model_task_asset_task_spine_when_running
                 "from assets.prepare import publish_prepared_orders\n"
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(depends_on=(publish_prepared_orders,))\n"
-                "def load_raw_orders(ctx):\n"
+                "def raw_orders(ctx):\n"
                 "    marker = Path(__file__).parents[1].joinpath('prepared_order_id.txt')\n"
                 "    return [{'order_id': int(marker.read_text())}]\n"
             ),
             "sources/raw.yml": (
                 "sources:\n"
                 "  - name: raw_orders\n"
-                "    loader: load_raw_orders\n"
+                "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
                 "      - name: order_id\n"

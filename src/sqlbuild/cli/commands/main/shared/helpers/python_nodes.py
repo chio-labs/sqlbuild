@@ -96,7 +96,18 @@ def python_node_result_names(results: tuple[PythonNodeExecutionResult, ...]) -> 
 def load_result_key(*, plan: PlanOutput, result: LoadExecutionResult) -> CompiledObjectKey:
     """Return the plan key for a source-load execution result."""
 
+    key: CompiledObjectKey | None = load_result_key_or_none(plan=plan, result=result)
+    if key is not None:
+        return key
+    raise CliUserError(f"No source-load plan entry found for load result '{result.source_name}'")
+
+
+def load_result_key_or_none(
+    *, plan: PlanOutput, result: LoadExecutionResult
+) -> CompiledObjectKey | None:
+    """Return the plan key for a source-load result when it is part of the SQL plan."""
+
     for entry in plan.source_load_entries:
         if entry.name == result.source_name:
             return entry.key
-    raise CliUserError(f"No source-load plan entry found for load result '{result.source_name}'")
+    return None

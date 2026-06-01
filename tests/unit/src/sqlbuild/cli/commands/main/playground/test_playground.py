@@ -58,11 +58,11 @@ CREATE_PLAYGROUND_PROJECT_TEST_CASES: list[CreatePlaygroundProjectTestCase] = [
             (Path("sqlbuild_project.toml"), ('defer_sources_to = "dev"',)),
             (
                 Path("sources/raw.yml"),
-                ("loader: load__waffle_customers", "loader: load__waffle_orders"),
+                ("managed: true",),
             ),
             (
                 Path("loaders/waffle_sources.py"),
-                ("def load__waffle_customers(ctx", "def load__waffle_orders(ctx"),
+                ("def raw__customers(ctx", "def raw__orders(ctx"),
             ),
         ),
     ),
@@ -112,17 +112,17 @@ CREATE_PLAYGROUND_PROJECT_TEST_CASES: list[CreatePlaygroundProjectTestCase] = [
         ),
         unexpected_paths=(Path("target"), Path("sqlbuild_local.toml")),
         expected_file_fragments=(
-            (Path("sources/raw.yml"), ("loader: load_raw_orders", "loader: load_raw_customers")),
-            (
-                Path("loaders/waffle_loaders.py"),
-                ("def load_raw_orders(ctx):", "def load_raw_customers(ctx):"),
-            ),
-        ),
-        unexpected_file_fragments=(
-            (Path("sources/raw.yml"), ("loader: raw_orders", "loader: raw_customers")),
+            (Path("sources/raw.yml"), ("managed: true",)),
             (
                 Path("loaders/waffle_loaders.py"),
                 ("def raw_orders(ctx):", "def raw_customers(ctx):"),
+            ),
+        ),
+        unexpected_file_fragments=(
+            (Path("sources/raw.yml"), ("loader:",)),
+            (
+                Path("loaders/waffle_loaders.py"),
+                ("def load_raw_orders(ctx):", "def load_raw_customers(ctx):"),
             ),
         ),
     ),
@@ -203,7 +203,7 @@ CREATE_PLAYGROUND_PROJECT_TEST_CASES: list[CreatePlaygroundProjectTestCase] = [
             ),
             (
                 Path("loaders/orders.py"),
-                ("@loader(depends_on=(prepare_raw_orders,))", "def load_raw_orders"),
+                ("@loader(depends_on=(prepare_raw_orders,))", "def raw_orders"),
             ),
             (
                 Path("assets/orders_export.py"),

@@ -8,7 +8,7 @@ from typing import Any, TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.shared.helpers.python_nodes import (
-    load_result_key,
+    load_result_key_or_none,
     python_node_result_names,
     sql_loader_functions_for_lifecycle_handoff,
     write_python_node_results,
@@ -71,16 +71,20 @@ class DirectPythonLifecycleState:
     @property
     def precompleted_keys(self) -> frozenset[CompiledObjectKey]:
         return frozenset(
-            load_result_key(plan=self.plan_output, result=load_result)
+            key
             for load_result in self.ingress_load_results
+            if (key := load_result_key_or_none(plan=self.plan_output, result=load_result))
+            is not None
         )
 
     @property
     def blocked_keys(self) -> frozenset[CompiledObjectKey]:
         return frozenset(
-            load_result_key(plan=self.plan_output, result=load_result)
+            key
             for load_result in self.ingress_load_results
             if load_result.status != ExecutionStatus.SUCCESS
+            if (key := load_result_key_or_none(plan=self.plan_output, result=load_result))
+            is not None
         )
 
     def on_node_complete(self, node_result: object) -> None:

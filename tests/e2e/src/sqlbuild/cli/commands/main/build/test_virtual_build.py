@@ -218,14 +218,14 @@ def test_given_virtual_python_nodes_when_building_then_runs_loader_and_read_side
                 "from sqlbuild.loaders import loader\n"
                 "from tasks.prepare import prepare_orders\n\n"
                 "@loader(depends_on=(prepare_orders,))\n"
-                "def load_raw_orders(ctx):\n"
+                "def raw_orders(ctx):\n"
                 "    marker = Path(__file__).parents[1].joinpath('prepared.txt')\n"
                 "    return [{'order_id': int(marker.read_text())}]\n"
             ),
             "sources/raw.yml": (
                 "sources:\n"
                 "  - name: raw_orders\n"
-                "    loader: load_raw_orders\n"
+                "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
                 "      - name: order_id\n"
@@ -473,14 +473,14 @@ def test_given_virtual_python_nodes_when_no_python_then_only_loader_side_python_
                 "from sqlbuild.loaders import loader\n"
                 "from tasks.prepare import prepare_orders\n\n"
                 "@loader(depends_on=(prepare_orders,))\n"
-                "def load_raw_orders(ctx):\n"
+                "def raw_orders(ctx):\n"
                 "    marker = Path(__file__).parents[1].joinpath('prepared.txt')\n"
                 "    return [{'order_id': int(marker.read_text())}]\n"
             ),
             "sources/raw.yml": (
                 "sources:\n"
                 "  - name: raw_orders\n"
-                "    loader: load_raw_orders\n"
+                "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
                 "      - name: order_id\n"

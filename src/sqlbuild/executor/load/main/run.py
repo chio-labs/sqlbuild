@@ -32,6 +32,7 @@ from sqlbuild.spec.models.source import SourceEntry
 def run_load_pipeline(
     *,
     sources: tuple[SourceEntry, ...],
+    reference_sources: tuple[SourceEntry, ...] = (),
     loader_functions: tuple[DiscoveredLoaderFunction, ...],
     connection_config: dict[str, object],
     adapter: BaseAdapter,
@@ -52,8 +53,9 @@ def run_load_pipeline(
 ) -> tuple[LoadExecutionResult, ...]:
     """Execute selected source loaders."""
 
+    index_sources: tuple[SourceEntry, ...] = (*sources, *reference_sources)
     indexes: LoadExecutionIndexes = build_load_execution_indexes(
-        sources=sources,
+        sources=index_sources,
         loader_functions=loader_functions,
     )
     source_count: int = sum(1 for source in sources if source.loader is not None)
@@ -74,7 +76,7 @@ def run_load_pipeline(
     )
     preloaded_results: list[LoadExecutionResult] = []
     failed_or_skipped: set[str] = set()
-    source_by_name: dict[str, SourceEntry] = {source.name: source for source in sources}
+    source_by_name: dict[str, SourceEntry] = {source.name: source for source in index_sources}
     external_source: SourceEntry
     for external_source in external_sources:
         result: LoadExecutionResult = execute_ready_dag_source(

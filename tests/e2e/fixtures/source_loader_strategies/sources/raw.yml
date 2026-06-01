@@ -1,6 +1,6 @@
 sources:
   - name: raw_countries
-    loader: countries
+    managed: true
     write_strategy: table
     columns:
       - name: country_id
@@ -11,7 +11,7 @@ sources:
         type: VARCHAR
 
   - name: raw_webhook_events
-    loader: webhook_events
+    managed: true
     write_strategy: append
     columns:
       - name: event_id
@@ -20,7 +20,7 @@ sources:
         type: VARCHAR
 
   - name: raw_order_events
-    loader: order_events
+    managed: true
     write_strategy: delete_insert
     cursor_column: event_at
     columns:
@@ -32,7 +32,7 @@ sources:
         type: INTEGER
 
   - name: raw_customers
-    loader: customers
+    managed: true
     write_strategy: merge
     unique_key: customer_id
     cursor_column: updated_at
@@ -45,7 +45,7 @@ sources:
         type: TIMESTAMP
 
   - name: raw_loader_status
-    loader: loader_status
+    managed: true
     columns:
       - name: status_id
         type: INTEGER

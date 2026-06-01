@@ -13,9 +13,12 @@ from sqlbuild.cli.commands.main.shared.helpers.python_nodes import (
     write_python_node_results,
 )
 from sqlbuild.cli.commands.main.shared.models import DirectPythonLifecycleState
+from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.relation_targets import build_python_relation_targets
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.planner.main.loader_dag import build_intermediate_source_map
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
 from sqlbuild.compiler.python_nodes.main.run_lifecycle import build_python_sql_run_lifecycle
@@ -24,7 +27,6 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonSqlRunLifecyclePlan,
     PythonSqlRunSelection,
 )
-from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.main.ingress import run_ingress_python_loader_nodes
 from sqlbuild.executor.python_nodes.main.read_side import create_read_side_python_execution_tracker
@@ -34,6 +36,7 @@ from sqlbuild.executor.python_nodes.models import (
 )
 from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.spec.models.source import SourceEntry
 
 
 def prepare_direct_python_lifecycle(
@@ -67,24 +70,10 @@ def prepare_direct_python_lifecycle(
     python_graph: PythonNodeGraph = build_discovered_python_node_graph(
         discovered_inputs=discovered_inputs
     )
-    planned_source_loader_names: frozenset[str] = frozenset(
-        entry.loader
-        for entry in plan_output.source_load_entries
-        if entry.loader in python_graph.nodes_by_name
-        and python_graph.nodes_by_name[entry.loader].kind == PythonNodeKind.LOADER
-    )
-    planned_source_loader_python_names: frozenset[str] = planned_source_loader_names | frozenset(
-        upstream_name
-        for loader_name in planned_source_loader_names
-        for upstream_name in _python_upstream_closure(
-            node_name=loader_name, python_graph=python_graph
-        )
-    )
     lifecycle_plan: PythonSqlRunLifecyclePlan = build_python_sql_run_lifecycle(
         selection=PythonSqlRunSelection(
             sql_keys=frozenset(plan_output.upstream_deps),
-            python_node_names=pipeline_result.python_node_names
-            | planned_source_loader_python_names,
+            python_node_names=pipeline_result.python_node_names,
         ),
         python_graph=python_graph,
     )
@@ -92,6 +81,16 @@ def prepare_direct_python_lifecycle(
         adapter=adapter,
         project=pipeline_result.project,
         plan_output=plan_output,
+    )
+    ingress_source_map: dict[str, SourceEntry] = dict(plan_output.source_map)
+    ingress_source_map.update(
+        build_intermediate_source_map(
+            project=pipeline_result.project,
+            selected_keys=frozenset(
+                CompiledObjectKey(name=loader_name, resource_type=CompiledResourceType.SOURCE)
+                for loader_name in lifecycle_plan.ingress_loader_names
+            ),
+        )
     )
     ingress_python_results: tuple[PythonNodeExecutionResult, ...] = ()
     ingress_load_results: tuple[LoadExecutionResult, ...] = ()
@@ -102,7 +101,7 @@ def prepare_direct_python_lifecycle(
                 python_graph=python_graph,
                 selected_python_names=lifecycle_plan.ingress_python_node_names,
                 loader_functions=discovered_inputs.loader_functions,
-                source_map=plan_output.source_map,
+                source_map=ingress_source_map,
                 adapter=adapter,
                 connection_config=connection_config,
                 connection=ingress_connection,
@@ -180,15 +179,3 @@ def prepare_direct_python_lifecycle(
         ingress_load_results=ingress_load_results,
         ingress_loader_names=lifecycle_plan.ingress_loader_names,
     )
-
-
-def _python_upstream_closure(*, node_name: str, python_graph: PythonNodeGraph) -> frozenset[str]:
-    names: set[str] = set()
-    pending: list[str] = list(python_graph.upstream_deps.get(node_name, ()))
-    while pending:
-        current: str = pending.pop(0)
-        if current in names:
-            continue
-        names.add(current)
-        pending.extend(python_graph.upstream_deps.get(current, ()))
-    return frozenset(names)

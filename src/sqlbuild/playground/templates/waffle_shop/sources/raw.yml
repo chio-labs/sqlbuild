@@ -1,6 +1,6 @@
 sources:
   - name: raw__customers
-    loader: load__waffle_customers
+    managed: true
     write_strategy: table
     columns:
       - name: id
@@ -15,7 +15,7 @@ sources:
         type: TIMESTAMP
 
   - name: raw__orders
-    loader: load__waffle_orders
+    managed: true
     write_strategy: delete_insert
     cursor_column: ordered_at
     columns:

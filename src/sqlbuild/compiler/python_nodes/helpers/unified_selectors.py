@@ -307,6 +307,13 @@ def _resolve_single(
             )
         return atoms
     if parsed.kind in _PYTHON_SELECTOR_KINDS:
+        if parsed.kind == SelectorKind.LOADER and parsed.value in _terminal_loader_by_name(
+            project_graph=project_graph
+        ):
+            raise PlannerInputError(
+                f"'{parsed.value}' is a managed source; select it as source:{parsed.value}",
+                code="S007",
+            )
         return _resolve_python(raw=raw, python_graph=python_graph)
     if parsed.kind == SelectorKind.TAG:
         atoms = _resolve_tag(raw=raw, project_graph=project_graph, python_graph=python_graph)
@@ -406,6 +413,11 @@ def _resolve_name(
 ) -> frozenset[_SelectionAtom]:
     sql_key: CompiledObjectKey | None = project_graph.all_keys.get(parsed.value)
     python_exists: bool = parsed.value in python_graph.nodes_by_name
+    terminal_loader_names: frozenset[str] = frozenset(
+        _terminal_loader_by_name(project_graph=project_graph)
+    )
+    if sql_key is not None and parsed.value in terminal_loader_names:
+        return _resolve_sql(raw=raw, project_graph=project_graph)
     if sql_key is not None and python_exists:
         raise PlannerInputError(
             f"selector name '{parsed.value}' matches both a SQL resource and a Python node; "
@@ -461,16 +473,28 @@ def _required_terminal_loader_atoms(
         if atom.value.resource_type != CompiledResourceType.SOURCE:
             continue
         loader_name: str | None = source_loader_by_name.get(atom.value.name)
-        if loader_name is None or loader_name not in python_graph.nodes_by_name:
+        if loader_name is None:
             continue
-        required.add(_python_atom(loader_name))
-        required.update(
-            _python_atom(name)
-            for name in _python_upstream_closure(
-                node_name=loader_name,
-                python_graph=python_graph,
+        if loader_name == atom.value.name:
+            if loader_name in python_graph.nodes_by_name:
+                required.add(_python_atom(loader_name))
+                required.update(
+                    _python_atom(name)
+                    for name in _python_upstream_closure(
+                        node_name=loader_name,
+                        python_graph=python_graph,
+                    )
+                )
+            continue
+        if loader_name in python_graph.nodes_by_name:
+            required.add(_python_atom(loader_name))
+            required.update(
+                _python_atom(name)
+                for name in _python_upstream_closure(
+                    node_name=loader_name,
+                    python_graph=python_graph,
+                )
             )
-        )
     return required
 
 
@@ -491,7 +515,9 @@ def _validate_selected_dependencies(
         if atom.value.resource_type != CompiledResourceType.SOURCE:
             continue
         loader_name: str | None = source_loader_by_name.get(atom.value.name)
-        if loader_name is None or loader_name in selected_python_names:
+        if loader_name is None or loader_name == atom.value.name:
+            continue
+        if loader_name in selected_python_names:
             continue
         raise PlannerInputError(
             f"Source '{atom.value.name}' requires loader '{loader_name}', but that loader was "

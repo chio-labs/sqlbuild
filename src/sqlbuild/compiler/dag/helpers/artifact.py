@@ -50,6 +50,7 @@ def build_dag_artifact(
         *(
             _build_loader_node(graph.project, loader, source_by_loader=_source_by_loader(graph))
             for loader in graph.project.loader_functions
+            if loader.name not in _source_by_loader(graph)
         ),
         *(_build_seed_node(seed) for seed in graph.project.seeds),
         *(_build_function_node(function) for function in graph.project.functions),
@@ -233,23 +234,22 @@ def _build_loader_edges(graph: ProjectGraph) -> tuple[DagEdge, ...]:
                 continue
             edges.append(
                 DagEdge(
-                    from_id=_loader_node_id(dependency_name),
-                    to_id=_loader_node_id(loader.name),
-                )
-            )
-        if loader.name in source_by_loader:
-            edges.append(
-                DagEdge(
-                    from_id=_loader_node_id(loader.name),
-                    to_id=_node_id(
-                        CompiledObjectKey(
-                            CompiledResourceType.SOURCE,
-                            source_by_loader[loader.name].name,
-                        )
+                    from_id=_loader_or_source_node_id(
+                        loader_name=dependency_name, source_by_loader=source_by_loader
+                    ),
+                    to_id=_loader_or_source_node_id(
+                        loader_name=loader.name, source_by_loader=source_by_loader
                     ),
                 )
             )
     return tuple(edges)
+
+
+def _loader_or_source_node_id(*, loader_name: str, source_by_loader: dict[str, SourceEntry]) -> str:
+    source_entry: SourceEntry | None = source_by_loader.get(loader_name)
+    if source_entry is not None:
+        return _node_id(CompiledObjectKey(CompiledResourceType.SOURCE, source_entry.name))
+    return _loader_node_id(loader_name)
 
 
 def _build_python_edges(python_graph: PythonNodeGraph) -> tuple[DagEdge, ...]:

@@ -730,7 +730,7 @@ def test_given_source_loader_project_when_building_on_sqlserver_then_model_reads
             "sources/raw.yml": (
                 "sources:\n"
                 "  - name: raw_orders\n"
-                "    loader: raw_orders_loader\n"
+                "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
                 "      - name: order_id\n"
@@ -741,7 +741,7 @@ def test_given_source_loader_project_when_building_on_sqlserver_then_model_reads
             "loaders/raw_orders.py": (
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader\n"
-                "def raw_orders_loader(ctx):\n"
+                "def raw_orders(ctx):\n"
                 "    return [{'order_id': 7, 'status': 'loaded-dev'}]\n"
             ),
             "models/stg_orders.sql": (
@@ -802,7 +802,7 @@ def test_given_source_deferral_env_when_building_on_sqlserver_then_reads_prod_an
             "sources/raw.yml": (
                 "sources:\n"
                 "  - name: raw_orders\n"
-                "    loader: raw_orders_loader\n"
+                "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
                 "      - name: order_id\n"
@@ -813,7 +813,7 @@ def test_given_source_deferral_env_when_building_on_sqlserver_then_reads_prod_an
             "loaders/raw_orders.py": (
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader\n"
-                "def raw_orders_loader(ctx):\n"
+                "def raw_orders(ctx):\n"
                 "    return [{'order_id': 7, 'status': 'loaded-dev'}]\n"
             ),
             "models/stg_orders.sql": (
@@ -1052,7 +1052,7 @@ def test_given_chained_loader_project_when_loading_on_sqlserver_then_runs_loader
             source_yaml=(
                 "sources:\n"
                 "  - name: raw_events\n"
-                "    loader: load_raw_events\n"
+                "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
                 "      - name: event_id\n"
@@ -1068,7 +1068,7 @@ def test_given_chained_loader_project_when_loading_on_sqlserver_then_runs_loader
                 "def fetch_events(ctx):\n"
                 "    return [{'event_id': 1}, {'event_id': 2}]\n\n"
                 "@loader(depends_on=[fetch_events])\n"
-                "def load_raw_events(ctx):\n"
+                "def raw_events(ctx):\n"
                 "    events = ctx.loader(fetch_events)\n"
                 "    cursor = ctx.query(\n"
                 "        f'SELECT event_id FROM {events.target} ORDER BY event_id'\n"
@@ -1137,7 +1137,7 @@ SQLSERVER_INTERMEDIATE_DAG_STRATEGY_TEST_CASES: list[
             "        {'event_id': next_seq, 'amount': next_seq * 100, 'load_seq': next_seq}\n"
             "    ]\n\n"
             "@loader(depends_on=[fetch_events])\n"
-            "def load_raw_events(ctx):\n"
+            "def raw_events(ctx):\n"
             "    events = ctx.loader(fetch_events)\n"
             "    cursor = ctx.query(\n"
             "        f'SELECT event_id, amount FROM {events.target} ORDER BY event_id, amount'\n"
@@ -1173,7 +1173,7 @@ SQLSERVER_INTERMEDIATE_DAG_STRATEGY_TEST_CASES: list[
             "        {'event_id': 3, 'amount': 300, 'load_seq': 2},\n"
             "    ]\n\n"
             "@loader(depends_on=[fetch_events])\n"
-            "def load_raw_events(ctx):\n"
+            "def raw_events(ctx):\n"
             "    events = ctx.loader(fetch_events)\n"
             "    cursor = ctx.query(\n"
             "        f'SELECT event_id, amount FROM {events.target} ORDER BY event_id, amount'\n"
@@ -1204,7 +1204,7 @@ SQLSERVER_INTERMEDIATE_DAG_STRATEGY_TEST_CASES: list[
             "        {'event_id': 3, 'amount': 300, 'load_seq': 1},\n"
             "    ]\n\n"
             "@loader(depends_on=[fetch_events])\n"
-            "def load_raw_events(ctx):\n"
+            "def raw_events(ctx):\n"
             "    events = ctx.loader(fetch_events)\n"
             "    cursor = ctx.query(\n"
             "        f'SELECT event_id, amount FROM {events.target} ORDER BY event_id, amount'\n"
@@ -1236,7 +1236,7 @@ def test_given_intermediate_strategy_project_when_loading_twice_on_sqlserver_the
             source_yaml=(
                 "sources:\n"
                 "  - name: raw_events\n"
-                "    loader: load_raw_events\n"
+                "    managed: true\n"
                 "    write_strategy: table\n"
                 "    columns:\n"
                 "      - name: event_id\n"
