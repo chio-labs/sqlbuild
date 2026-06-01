@@ -107,6 +107,56 @@ def build_dagster_test_dag() -> Mapping[str, Any]:
     }
 
 
+def build_python_augmented_dagster_test_dag() -> Mapping[str, Any]:
+    dag: dict[str, Any] = dict(build_dagster_test_dag())
+    dag["nodes"] = [
+        *dag["nodes"],
+        {
+            "id": "task:prepare_orders",
+            "kind": "task",
+            "name": "prepare_orders",
+            "asset_key": ["task", "prepare_orders"],
+            "path": "tasks/prepare_orders.py",
+            "tags": ["daily"],
+        },
+        {
+            "id": "asset:orders_export",
+            "kind": "asset",
+            "name": "orders_export",
+            "asset_key": ["asset", "orders_export"],
+            "path": "assets/orders_export.py",
+            "tags": ["daily"],
+        },
+        {
+            "id": "check:check_orders_export",
+            "kind": "check",
+            "name": "check_orders_export",
+            "asset_key": ["check", "check_orders_export"],
+            "path": "checks/check_orders_export.py",
+            "tags": ["daily"],
+        },
+    ]
+    dag["edges"] = [
+        *dag["edges"],
+        {"from_id": "model:orders", "to_id": "task:prepare_orders"},
+        {"from_id": "task:prepare_orders", "to_id": "asset:orders_export"},
+        {"from_id": "asset:orders_export", "to_id": "check:check_orders_export"},
+    ]
+    dag["checks"] = [
+        *dag["checks"],
+        {
+            "id": "check:check_orders_export",
+            "kind": "python_check",
+            "name": "check_orders_export",
+            "checked_asset_ids": ["asset:orders_export"],
+            "path": "checks/check_orders_export.py",
+            "severity": "error",
+            "tags": ["daily"],
+        },
+    ]
+    return dag
+
+
 def write_fake_sqb_command(
     *,
     root: Path,

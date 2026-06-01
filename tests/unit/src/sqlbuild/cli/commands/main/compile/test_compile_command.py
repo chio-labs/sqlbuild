@@ -16,9 +16,11 @@ from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileDagArtifactTestCase,
     CompileJsonDiagnosticsTestCase,
     CompileLineageModeTestCase,
+    CompilePythonDagArtifactTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
     NoConnectDuckDbAdapter,
+    prepare_python_compile_project,
     prepare_static_compile_project,
 )
 
@@ -171,6 +173,68 @@ def test_given_dag_flag_when_running_compile_then_writes_dag_artifact(
     assert exit_code == 0
     assert dag_payload["project_name"] == test_case.expected_project_name
     assert tuple(node["id"] for node in dag_payload["nodes"]) == test_case.expected_node_ids
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CompilePythonDagArtifactTestCase(
+            description="writes Python nodes to default dag artifact path",
+            dag_path="",
+            expected_project_name="offline_compile",
+            expected_node_ids={
+                "model:orders",
+                "task:prepare_orders",
+                "loader:warehouse_export",
+                "asset:orders_export",
+                "check:check_orders_export",
+                "check:check_loader_export",
+            },
+            expected_edges={
+                ("model:orders", "task:prepare_orders"),
+                ("task:prepare_orders", "loader:warehouse_export"),
+                ("loader:warehouse_export", "asset:orders_export"),
+                ("loader:warehouse_export", "check:check_loader_export"),
+            },
+            expected_check_ids={
+                "check:check_orders_export",
+                "check:check_loader_export",
+            },
+        )
+    ],
+    ids=["writes Python nodes to default dag artifact path"],
+)
+def test_given_python_project_dag_flag_when_running_compile_then_writes_python_dag_artifact(
+    test_case: CompilePythonDagArtifactTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_dir: Path = prepare_python_compile_project(tmp_path)
+    monkeypatch.setattr(
+        compile_command,
+        "resolve_adapter",
+        lambda *args, **kwargs: NoConnectDuckDbAdapter(),
+    )
+
+    exit_code: int = run_compile(
+        project_dir=project_dir,
+        no_sql_validation=True,
+        dag_path=test_case.dag_path,
+    )
+    dag_payload: dict[str, object] = json.loads(
+        (project_dir / "target" / "sqlbuild_dag.json").read_text(encoding="utf-8")
+    )
+    node_ids: set[str] = {str(node["id"]) for node in dag_payload["nodes"]}
+    edges: set[tuple[str, str]] = {
+        (str(edge["from_id"]), str(edge["to_id"])) for edge in dag_payload["edges"]
+    }
+    check_ids: set[str] = {str(check["id"]) for check in dag_payload["checks"]}
+
+    assert exit_code == 0
+    assert dag_payload["project_name"] == test_case.expected_project_name
+    assert test_case.expected_node_ids.issubset(node_ids)
+    assert test_case.expected_edges.issubset(edges)
+    assert test_case.expected_check_ids.issubset(check_ids)
 
 
 @pytest.mark.parametrize(

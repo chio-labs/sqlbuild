@@ -16,6 +16,13 @@ class DagsterAssetSpecTestCase:
 
 
 @dataclass(frozen=True)
+class DagsterPythonArtifactCompatibilityTestCase:
+    description: str
+    expected_asset_keys: tuple[tuple[str, ...], ...]
+    expected_check_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DagsterDecoratorTestCase:
     description: str
     expected_asset_keys: tuple[tuple[str, ...], ...]

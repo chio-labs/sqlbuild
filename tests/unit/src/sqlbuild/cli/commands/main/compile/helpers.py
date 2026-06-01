@@ -40,6 +40,7 @@ from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.spec.models.schema import SeedCsvSettings
+from tests.unit.src.sqlbuild.cli.commands.main.dag.helpers import prepare_python_dag_project
 
 
 class NoConnectDuckDbAdapter(DuckDbAdapter):
@@ -84,6 +85,27 @@ def prepare_static_compile_project(root: Path) -> Path:
     )
     (models_dir / "orders.sql").write_text(
         "MODEL (materialized view);\n\nSELECT 1 AS order_id\n",
+        encoding="utf-8",
+    )
+    return project_dir
+
+
+def prepare_python_compile_project(root: Path) -> Path:
+    """Create a local project with Python nodes for compile DAG tests."""
+
+    project_dir: Path = prepare_python_dag_project(root)
+    (project_dir / "sqlbuild_project.toml").write_text(
+        "\n".join(
+            (
+                'name = "offline_compile"',
+                'adapter = "duckdb"',
+                'default_environment = "dev"',
+                "",
+                "[environments.dev]",
+                'schema = "main"',
+            )
+        )
+        + "\n",
         encoding="utf-8",
     )
     return project_dir

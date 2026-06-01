@@ -23,9 +23,13 @@ from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterAssetSpecTestCase,
     DagsterConflictingInputTestCase,
     DagsterDecoratorTestCase,
+    DagsterPythonArtifactCompatibilityTestCase,
     DagsterScenarioCheckDecoratorTestCase,
 )
-from tests.unit.src.sqlbuild.integrations.dagster.helpers import build_dagster_test_dag
+from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
+    build_dagster_test_dag,
+    build_python_augmented_dagster_test_dag,
+)
 
 dg: Any = pytest.importorskip("dagster")
 
@@ -92,6 +96,44 @@ def test_given_sqlbuild_dag_when_building_specs_then_maps_assets_deps_and_checks
     assert (
         tuple(sorted({spec.group_name for spec in asset_specs})) == test_case.expected_group_names
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterPythonArtifactCompatibilityTestCase(
+            description="consumes Python DAG artifact additions without changing SQL assets",
+            expected_asset_keys=(
+                ("raw", "orders"),
+                ("shared_order_feed",),
+                ("raw_orders_loader",),
+                ("analytics", "waffle_types"),
+                ("analytics", "normalize_email"),
+                ("analytics", "orders"),
+                ("analytics", "customers"),
+            ),
+            expected_check_names=(
+                "audit__not_null__order_id",
+                "audit__freshness__loaded_at",
+                "scenario__orders_minimal",
+                "scenario__customers_minimal",
+                "python_check__check_orders_export",
+            ),
+        )
+    ],
+    ids=["consumes Python DAG artifact additions without changing SQL assets"],
+)
+def test_given_python_augmented_dag_when_building_specs_then_remains_compatible(
+    test_case: DagsterPythonArtifactCompatibilityTestCase,
+) -> None:
+    dag: Mapping[str, Any] = build_python_augmented_dagster_test_dag()
+    translator: SqlBuildDagsterTranslator = SqlBuildDagsterTranslator()
+
+    asset_specs: tuple[Any, ...] = build_asset_specs(dag=dag, translator=translator)
+    check_specs: tuple[Any, ...] = build_check_specs(dag=dag, translator=translator)
+
+    assert tuple(tuple(spec.key.path) for spec in asset_specs) == test_case.expected_asset_keys
+    assert tuple(spec.name for spec in check_specs) == test_case.expected_check_names
 
 
 @pytest.mark.parametrize(
