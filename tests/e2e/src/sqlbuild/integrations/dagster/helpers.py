@@ -49,63 +49,40 @@ def prepare_python_nodes_integration_project(root: Path) -> Path:
         "MODEL (materialized view);\n\nSELECT 1 AS order_id\n",
         encoding="utf-8",
     )
-    (tasks_dir / "prepare_orders.py").write_text(
-        "\n".join(
-            (
-                "from sqlbuild.refs import model",
-                "from sqlbuild.tasks import task",
-                "",
-                "@task(depends_on=model('orders'), tags=['daily'], group='python')",
-                "def prepare_orders(ctx):",
-                "    return ctx.result(payload={'rows': 1})",
-            )
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    (loaders_dir / "warehouse_export.py").write_text(
-        "\n".join(
-            (
-                "from sqlbuild.loaders import loader",
-                "from tasks.prepare_orders import prepare_orders",
-                "",
-                "@loader(depends_on=(prepare_orders,))",
-                "def warehouse_export(ctx):",
-                "    return [{'order_id': 1}]",
-            )
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    (assets_dir / "orders_export.py").write_text(
+    (tasks_dir / "generated_nodes.py").write_text(
         "\n".join(
             (
                 "from sqlbuild.assets import asset",
-                "from loaders.warehouse_export import warehouse_export",
-                "from tasks.prepare_orders import prepare_orders",
-                "",
-                "@asset(",
-                "    depends_on=(prepare_orders, warehouse_export),",
-                "    tags=['external'],",
-                "    group='exports',",
-                "    columns=[{'name': 'order_id', 'type': 'integer'}],",
-                ")",
-                "def orders_export(ctx):",
-                "    return ctx.result(materialized=True)",
-            )
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    (checks_dir / "check_orders_export.py").write_text(
-        "\n".join(
-            (
                 "from sqlbuild.checks import check",
-                "from assets.orders_export import orders_export",
+                "from sqlbuild.factories import factory",
+                "from sqlbuild.loaders import loader",
+                "from sqlbuild.refs import model",
+                "from sqlbuild.tasks import task",
                 "",
-                "@check(depends_on=orders_export, tags=['quality'], group='exports')",
-                "def check_orders_export(ctx):",
-                "    return True",
+                "@factory",
+                "def generated_nodes():",
+                "    @task(depends_on=model('orders'), tags=['daily'], group='python')",
+                "    def prepare_orders(ctx):",
+                "        return ctx.result(payload={'rows': 1})",
+                "",
+                "    @loader(name='warehouse_export', depends_on=(prepare_orders,))",
+                "    def warehouse_export(ctx):",
+                "        return [{'order_id': 1}]",
+                "",
+                "    @asset(",
+                "        depends_on=(prepare_orders, warehouse_export),",
+                "        tags=['external'],",
+                "        group='exports',",
+                "        columns=[{'name': 'order_id', 'type': 'integer'}],",
+                "    )",
+                "    def orders_export(ctx):",
+                "        return ctx.result(materialized=True)",
+                "",
+                "    @check(depends_on=orders_export, tags=['quality'], group='exports')",
+                "    def check_orders_export(ctx):",
+                "        return True",
+                "",
+                "    return [prepare_orders, warehouse_export, orders_export, check_orders_export]",
             )
         )
         + "\n",

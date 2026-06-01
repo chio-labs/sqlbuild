@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pytest
 
 from sqlbuild.assets import asset, get_asset_definition
 from sqlbuild.checks import check, get_check_definition
+from sqlbuild.factories import factory, get_factory_definition
 from sqlbuild.shared.models import (
     AssetDefinition,
     CheckDefinition,
     ColumnLineageRef,
+    FactoryDefinition,
     RetryPolicy,
     TaskDefinition,
 )
@@ -18,6 +22,8 @@ from sqlbuild.tasks import get_task_definition, task
 from tests.unit.src.sqlbuild.python_nodes.decorators._test_types import (
     AssetDecoratorMetadataTestCase,
     CheckDecoratorMetadataTestCase,
+    FactoryDecoratorErrorTestCase,
+    FactoryDecoratorMetadataTestCase,
     TaskDecoratorMetadataTestCase,
 )
 from tests.unit.src.sqlbuild.python_nodes.decorators.helpers import upstream_asset, upstream_task
@@ -194,3 +200,47 @@ def test_given_check_decorator_when_reading_definition_then_returns_metadata(
     assert len(definition.depends_on) == test_case.expected_dep_count
     assert get_asset_definition(export_customers_exists) is None
     assert get_task_definition(export_customers_exists) is None
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FactoryDecoratorMetadataTestCase(
+            description="stores factory metadata and returns original function",
+            expected_name="generated_nodes",
+        )
+    ],
+    ids=["stores factory metadata and returns original function"],
+)
+def test_given_factory_decorator_when_reading_definition_then_returns_metadata(
+    test_case: FactoryDecoratorMetadataTestCase,
+) -> None:
+    def generated_nodes() -> list[object]:
+        return []
+
+    decorated: object = factory(generated_nodes)
+    definition: FactoryDefinition | None = get_factory_definition(generated_nodes)
+
+    assert decorated is generated_nodes
+    assert definition == FactoryDefinition(name=test_case.expected_name)
+    assert get_task_definition(generated_nodes) is None
+    assert get_asset_definition(generated_nodes) is None
+    assert get_check_definition(generated_nodes) is None
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FactoryDecoratorErrorTestCase(
+            description="factory rejects argument decorator usage",
+            expected_error_fragment="required positional argument",
+        )
+    ],
+    ids=["factory rejects argument decorator usage"],
+)
+def test_given_factory_decorator_when_called_without_function_then_raises(
+    test_case: FactoryDecoratorErrorTestCase,
+) -> None:
+    factory_ref: Any = cast(Any, factory)
+    with pytest.raises(TypeError, match=test_case.expected_error_fragment):
+        factory_ref()
