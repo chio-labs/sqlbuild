@@ -253,14 +253,14 @@ class BasePythonNodeContext:
         self,
         reason: str,
         *,
-        mode: SkipMode = SkipMode.DOWNSTREAM,
+        mode: SkipMode | str = SkipMode.DOWNSTREAM,
         metadata: dict[str, object] | None = None,
     ) -> PythonNodeSkipResult:
         """Return a skip signal for the current Python node."""
 
         return PythonNodeSkipResult(
             reason=reason,
-            mode=mode,
+            mode=SkipMode(mode),
             metadata={} if metadata is None else metadata,
         )
 
