@@ -6,4 +6,5 @@ PLAYGROUND_TEMPLATE_VALUES: tuple[str, ...] = (
     "dagster",
     "rivers",
     "virtual",
+    "python_nodes",
 )

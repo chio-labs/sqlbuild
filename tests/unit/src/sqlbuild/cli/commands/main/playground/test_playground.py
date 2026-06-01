@@ -181,6 +181,44 @@ CREATE_PLAYGROUND_PROJECT_TEST_CASES: list[CreatePlaygroundProjectTestCase] = [
             ),
         ),
     ),
+    CreatePlaygroundProjectTestCase(
+        description="creates Python nodes playground from generated template",
+        target_relative_path=Path("python_nodes_playground"),
+        template="python_nodes",
+        expected_files=(
+            Path("README.md"),
+            Path("sqlbuild_project.toml"),
+            Path("sources/raw.yml"),
+            Path("models/fact_orders.sql"),
+            Path("tasks/orders.py"),
+            Path("loaders/orders.py"),
+            Path("assets/orders_export.py"),
+            Path("checks/orders_export.py"),
+        ),
+        unexpected_paths=(Path("target"), Path("sqlbuild_local.toml")),
+        expected_file_fragments=(
+            (
+                Path("tasks/orders.py"),
+                ("def prepare_raw_orders", "SkipMode.SELF", "def export_window"),
+            ),
+            (
+                Path("loaders/orders.py"),
+                ("@loader(depends_on=(prepare_raw_orders,))", "def load_raw_orders"),
+            ),
+            (
+                Path("assets/orders_export.py"),
+                (
+                    'ctx.relation(model("fact_orders"))',
+                    "materialized=False",
+                    "optional_partner_feed",
+                ),
+            ),
+            (
+                Path("checks/orders_export.py"),
+                ("@check(depends_on=orders_export", "ctx.payload(orders_export)"),
+            ),
+        ),
+    ),
 ]
 
 RUN_PLAYGROUND_TEST_CASES: list[RunPlaygroundTestCase] = [
@@ -243,6 +281,19 @@ RUN_PLAYGROUND_TEST_CASES: list[RunPlaygroundTestCase] = [
             "sqb scenario test",
             "sqb diff dev:pr --schema-only",
             "sqb promote --from pr --to dev",
+        ),
+    ),
+    RunPlaygroundTestCase(
+        description="prints Python nodes next steps",
+        target_path="demo_python_nodes",
+        template="python_nodes",
+        expected_stdout_fragments=(
+            "SQLBuild playground created",
+            "Project: demo_python_nodes",
+            "Example: Python nodes demo",
+            "sqb plan --select +fact_orders --select +orders_export",
+            "sqb build --select +fact_orders --select +orders_export",
+            "sqb check --select +check_orders_export",
         ),
     ),
 ]
