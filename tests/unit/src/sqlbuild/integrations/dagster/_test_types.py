@@ -20,6 +20,12 @@ class DagsterPythonArtifactCompatibilityTestCase:
     description: str
     expected_asset_keys: tuple[tuple[str, ...], ...]
     expected_check_names: tuple[str, ...]
+    expected_task_deps: tuple[tuple[str, ...], ...]
+    expected_asset_deps: tuple[tuple[str, ...], ...]
+    expected_python_kinds_by_asset_key: tuple[tuple[tuple[str, ...], frozenset[str]], ...]
+    expected_task_group: str
+    expected_asset_group: str
+    expected_asset_metadata_keys: tuple[str, ...]
 
 
 @dataclass(frozen=True)

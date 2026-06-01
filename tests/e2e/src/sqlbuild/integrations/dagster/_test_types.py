@@ -86,3 +86,14 @@ class DagsterPlaygroundE2ETestCase:
     expected_success: bool
     expected_table_names: tuple[str, ...]
     expected_schema: str
+
+
+@dataclass(frozen=True)
+class DagsterPythonNodesArtifactE2ETestCase:
+    """Test case for real Python-node DAG artifacts consumed by Dagster."""
+
+    description: str
+    expected_asset_keys: tuple[tuple[str, ...], ...]
+    expected_check_names: tuple[str, ...]
+    expected_task_group: str
+    expected_asset_group: str

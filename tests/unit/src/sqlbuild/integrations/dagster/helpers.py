@@ -118,6 +118,8 @@ def build_python_augmented_dagster_test_dag() -> Mapping[str, Any]:
             "asset_key": ["task", "prepare_orders"],
             "path": "tasks/prepare_orders.py",
             "tags": ["daily"],
+            "group": "python",
+            "meta": {"owner": "data"},
         },
         {
             "id": "asset:orders_export",
@@ -126,6 +128,10 @@ def build_python_augmented_dagster_test_dag() -> Mapping[str, Any]:
             "asset_key": ["asset", "orders_export"],
             "path": "assets/orders_export.py",
             "tags": ["daily"],
+            "group": "exports",
+            "columns": [{"name": "order_id", "type": "integer"}],
+            "column_lineage": {"order_id": [{"node": "prepare_orders", "column": "order_id"}]},
+            "materialization_type": "python_asset",
         },
         {
             "id": "check:check_orders_export",

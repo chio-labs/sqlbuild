@@ -23,3 +23,15 @@ class RiversPlaygroundE2ETestCase:
     expected_success: bool
     expected_table_names: tuple[str, ...]
     expected_schema: str
+
+
+@dataclass(frozen=True)
+class RiversPythonNodesArtifactE2ETestCase:
+    """Test case for real Python-node DAG artifacts consumed by Rivers."""
+
+    description: str
+    expected_asset_names: frozenset[str]
+    expected_task_deps: tuple[str, ...]
+    expected_asset_deps: tuple[str, ...]
+    expected_task_group: str
+    expected_asset_group: str

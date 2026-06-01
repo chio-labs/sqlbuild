@@ -21,7 +21,7 @@ from tests.unit.src.sqlbuild.integrations.rivers.helpers import FakeRiversModule
     "test_case",
     [
         RiversPythonArtifactCompatibilityTestCase(
-            description="consumes Python DAG artifact additions without changing SQL assets",
+            description="maps Python DAG artifact additions into asset defs",
             expected_asset_names=(
                 "raw__orders",
                 "shared_order_feed",
@@ -30,13 +30,26 @@ from tests.unit.src.sqlbuild.integrations.rivers.helpers import FakeRiversModule
                 "analytics__normalize_email",
                 "analytics__orders",
                 "analytics__customers",
+                "task__prepare_orders",
+                "asset__orders_export",
             ),
             expected_order_deps=("raw__orders", "analytics__normalize_email"),
+            expected_task_deps=("analytics__orders",),
+            expected_asset_deps=("task__prepare_orders",),
+            expected_task_kinds=["sqlbuild", "task"],
+            expected_asset_kinds=["sqlbuild", "asset"],
+            expected_task_group="python",
+            expected_asset_group="exports",
+            expected_asset_metadata_keys=(
+                "columns",
+                "column_lineage",
+                "materialization_type",
+            ),
         )
     ],
-    ids=["consumes Python DAG artifact additions without changing SQL assets"],
+    ids=["maps Python DAG artifact additions into asset defs"],
 )
-def test_given_python_augmented_dag_when_building_asset_defs_then_remains_compatible(
+def test_given_python_augmented_dag_when_building_asset_defs_then_maps_python_nodes(
     test_case: RiversPythonArtifactCompatibilityTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -48,6 +61,17 @@ def test_given_python_augmented_dag_when_building_asset_defs_then_remains_compat
         translator=SqlBuildRiversTranslator(),
     )
     order_def: Any = next(asset for asset in asset_defs if asset.name == "analytics__orders")
+    task_def: Any = next(asset for asset in asset_defs if asset.name == "task__prepare_orders")
+    python_asset_def: Any = next(
+        asset for asset in asset_defs if asset.name == "asset__orders_export"
+    )
 
     assert tuple(asset.name for asset in asset_defs) == test_case.expected_asset_names
     assert tuple(dep.name for dep in order_def.deps) == test_case.expected_order_deps
+    assert tuple(dep.name for dep in task_def.deps) == test_case.expected_task_deps
+    assert tuple(dep.name for dep in python_asset_def.deps) == test_case.expected_asset_deps
+    assert task_def.kinds == test_case.expected_task_kinds
+    assert python_asset_def.kinds == test_case.expected_asset_kinds
+    assert task_def.group == test_case.expected_task_group
+    assert python_asset_def.group == test_case.expected_asset_group
+    assert all(key in python_asset_def.metadata for key in test_case.expected_asset_metadata_keys)
