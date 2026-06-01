@@ -53,6 +53,30 @@ class PythonCheckResult:
 
 
 @dataclass(frozen=True)
+class PythonCheckExecutionResult:
+    """Normalized execution outcome for one Python check node."""
+
+    node_name: str
+    passed: bool
+    severity: PythonCheckSeverity
+    message: str | None = None
+    metadata: dict[str, object] = field(default_factory=dict)
+    error_message: str | None = None
+
+    @property
+    def warned(self) -> bool:
+        """Return whether this result is a non-failing warning."""
+
+        return not self.passed and self.severity == PythonCheckSeverity.WARN
+
+    @property
+    def failed(self) -> bool:
+        """Return whether this result is a failing error."""
+
+        return not self.passed and self.severity == PythonCheckSeverity.ERROR
+
+
+@dataclass(frozen=True)
 class PythonNodeExecutionResult:
     """Normalized execution outcome for one Python node."""
 

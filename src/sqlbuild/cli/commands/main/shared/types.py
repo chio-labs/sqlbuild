@@ -12,6 +12,7 @@ class CliCommand(StrEnum):
     RUN = "run"
     BUILD = "build"
     TEST = "test"
+    CHECK = "check"
     AUDIT = "audit"
     LOAD = "load"
     SEED = "seed"

@@ -7,6 +7,13 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.cli.commands.main.helpers.check import (
+    check_results_failed,
+    load_results_by_loader_name,
+    record_python_run_state_results,
+    relevant_check_functions,
+    write_check_results,
+)
 from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compile_target
 from sqlbuild.cli.commands.main.helpers.plan.formatter import format_plan
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import (
@@ -29,14 +36,21 @@ from sqlbuild.cli.commands.main.shared.helpers.progress import (
     write_execution_header,
 )
 from sqlbuild.cli.commands.main.shared.helpers.python_nodes import write_python_node_results
-from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import write_runtime_target
+from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import (
+    write_python_check_runtime_target,
+    write_runtime_target,
+)
 from sqlbuild.cli.commands.main.shared.helpers.snapshot_full_refresh import (
     enforce_snapshot_full_refresh_policy,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
+from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
+from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.executor.build.types import BuildStatus
+from sqlbuild.executor.python_nodes.main.checks import execute_python_checks
+from sqlbuild.executor.python_nodes.models import PythonCheckExecutionResult, PythonNodeRunState
 from sqlbuild.shared.helpers.display import DisplayOptions
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.virtual.executor.main.build import run_virtual_build as run_virtual_build_pipeline
@@ -178,6 +192,65 @@ def run_virtual_build(
         results=result.python_node_results,
         use_color=use_color,
     )
+    check_results: tuple[PythonCheckExecutionResult, ...] = ()
+    if result.execution_result.status == BuildStatus.SUCCESS:
+        python_graph: PythonNodeGraph = build_discovered_python_node_graph(
+            discovered_inputs=discovered_inputs
+        )
+        check_functions: tuple[DiscoveredCheckFunction, ...] = relevant_check_functions(
+            discovered_inputs=discovered_inputs,
+            python_graph=python_graph,
+            exclude=exclude,
+            selected_dependency_names=frozenset(
+                python_result.node_name for python_result in result.python_node_results
+            )
+            | frozenset(
+                load_results_by_loader_name(
+                    source_map=plan_output.source_map,
+                    load_results=result.execution_result.load_results,
+                )
+            ),
+        )
+        if check_functions:
+            check_connection: object = adapter.connect(connection_config)
+            try:
+                check_run_state: PythonNodeRunState = PythonNodeRunState()
+                record_python_run_state_results(
+                    discovered_inputs=discovered_inputs,
+                    run_state=check_run_state,
+                    python_results=result.python_node_results,
+                    load_results=result.execution_result.load_results,
+                    source_map=plan_output.source_map,
+                )
+                check_results = execute_python_checks(
+                    check_functions=check_functions,
+                    python_graph=python_graph,
+                    upstream_python_results=result.python_node_results,
+                    upstream_load_results=result.execution_result.load_results,
+                    upstream_load_results_by_loader_name=load_results_by_loader_name(
+                        source_map=plan_output.source_map,
+                        load_results=result.execution_result.load_results,
+                    ),
+                    adapter=adapter,
+                    connection_config=connection_config,
+                    connection=check_connection,
+                    run_id=result.project.run_id,
+                    environment=result.project.effective_environment_name,
+                    vars=result.project.effective_vars,
+                    is_reload=reload_sources,
+                    run_state=check_run_state,
+                    default_database=adapter.default_database(),
+                    default_schema=adapter.default_schema(),
+                )
+            finally:
+                adapter.close(check_connection)
+            write_check_results(
+                stream=stream,
+                results=check_results,
+                use_color=use_color,
+                check_functions=check_functions,
+                python_graph=python_graph,
+            )
     footer: str = format_build_footer(
         result=result.execution_result,
         elapsed=callbacks_by_ref[0].elapsed if callbacks_by_ref else 0,
@@ -189,14 +262,25 @@ def run_virtual_build(
         plan_output=plan_output,
         result=result.execution_result,
     )
+    write_python_check_runtime_target(target_dir=project_dir / "target", results=check_results)
     stream.write("\n" + footer + "\n")
     stream.flush()
     write_execution_json_output(
-        payload=format_build_execution_json(result=result.execution_result, plan=plan_output),
+        payload=format_build_execution_json(
+            result=result.execution_result,
+            plan=plan_output,
+            python_node_results=result.python_node_results,
+            python_check_results=check_results,
+        ),
         json_output=json_output,
         json_output_path=json_output_path,
     )
-    return 0 if result.execution_result.status == BuildStatus.SUCCESS else 1
+    return (
+        0
+        if result.execution_result.status == BuildStatus.SUCCESS
+        and not check_results_failed(check_results)
+        else 1
+    )
 
 
 def _write_execution_header(*, stream: TextIO, concurrency: int, use_color: bool) -> None:

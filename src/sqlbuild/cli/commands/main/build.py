@@ -7,6 +7,13 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.cli.commands.main.helpers.check import (
+    check_results_failed,
+    load_results_by_loader_name,
+    record_python_run_state_results,
+    relevant_check_functions,
+    write_check_results,
+)
 from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compile_target
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
@@ -39,21 +46,31 @@ from sqlbuild.cli.commands.main.shared.helpers.progress import (
 from sqlbuild.cli.commands.main.shared.helpers.python_nodes import (
     python_node_results_failed,
 )
-from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import write_runtime_target
+from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import (
+    write_python_check_runtime_target,
+    write_runtime_target,
+)
 from sqlbuild.cli.commands.main.shared.helpers.snapshot_full_refresh import (
     enforce_snapshot_full_refresh_policy,
 )
 from sqlbuild.cli.commands.main.virtual_build import run_virtual_build
 from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
+from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
+from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.pipeline.main.run import run_build_pipeline
-from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
+from sqlbuild.executor.python_nodes.main.checks import execute_python_checks
+from sqlbuild.executor.python_nodes.models import (
+    PythonCheckExecutionResult,
+    PythonNodeExecutionResult,
+    PythonNodeRunState,
+)
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 from sqlbuild.spec.models.types import EnvironmentMode
@@ -295,10 +312,71 @@ def run_build(
         )
     python_lifecycle.finalize()
     python_results: tuple[PythonNodeExecutionResult, ...] = python_lifecycle.python_results
+    check_results: tuple[PythonCheckExecutionResult, ...] = ()
+    if result.status == BuildStatus.SUCCESS:
+        python_graph: PythonNodeGraph = build_discovered_python_node_graph(
+            discovered_inputs=discovered_inputs
+        )
+        check_functions: tuple[DiscoveredCheckFunction, ...] = relevant_check_functions(
+            discovered_inputs=discovered_inputs,
+            python_graph=python_graph,
+            exclude=exclude,
+            selected_dependency_names=frozenset(result.node_name for result in python_results)
+            | frozenset(
+                load_results_by_loader_name(
+                    source_map=plan_output.source_map,
+                    load_results=result.load_results,
+                )
+            ),
+        )
+        if check_functions:
+            check_connection: object = adapter.connect(connection_config)
+            try:
+                check_run_state: PythonNodeRunState = PythonNodeRunState()
+                record_python_run_state_results(
+                    discovered_inputs=discovered_inputs,
+                    run_state=check_run_state,
+                    python_results=python_results,
+                    load_results=result.load_results,
+                    source_map=plan_output.source_map,
+                )
+                check_results = execute_python_checks(
+                    check_functions=check_functions,
+                    python_graph=python_graph,
+                    upstream_python_results=python_results,
+                    upstream_load_results=result.load_results,
+                    upstream_load_results_by_loader_name=load_results_by_loader_name(
+                        source_map=plan_output.source_map,
+                        load_results=result.load_results,
+                    ),
+                    adapter=adapter,
+                    connection_config=connection_config,
+                    connection=check_connection,
+                    run_id=pipeline_result.project.run_id,
+                    environment=pipeline_result.project.effective_environment_name,
+                    vars=pipeline_result.project.effective_vars,
+                    is_reload=reload_sources,
+                    run_state=check_run_state,
+                    default_database=adapter.default_database(),
+                    default_schema=adapter.default_schema(),
+                )
+            finally:
+                adapter.close(check_connection)
+            write_check_results(
+                stream=progress_stream,
+                results=check_results,
+                use_color=use_color,
+                check_functions=check_functions,
+                python_graph=python_graph,
+            )
     write_runtime_target(
         target_dir=effective_project_dir / "target",
         plan_output=plan_output,
         result=result,
+    )
+    write_python_check_runtime_target(
+        target_dir=effective_project_dir / "target",
+        results=check_results,
     )
 
     footer: str = format_build_footer(
@@ -314,10 +392,14 @@ def run_build(
             result=result,
             plan=plan_output,
             python_node_results=python_results,
+            python_check_results=check_results,
         ),
         json_output=json_output,
         json_output_path=json_output_path,
     )
 
     python_failed: bool = python_node_results_failed(python_results)
-    return 0 if result.status == BuildStatus.SUCCESS and not python_failed else 1
+    checks_failed: bool = check_results_failed(check_results)
+    return (
+        0 if result.status == BuildStatus.SUCCESS and not python_failed and not checks_failed else 1
+    )

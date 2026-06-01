@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -13,6 +14,7 @@ from sqlbuild.assets import AssetContext
 from sqlbuild.checks import CheckContext
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAssetFunction,
+    DiscoveredCheckFunction,
     DiscoveredLoaderFunction,
     DiscoveredProjectInputs,
     DiscoveredTaskFunction,
@@ -31,6 +33,7 @@ from sqlbuild.executor.python_nodes.models import BasePythonNodeContext, PythonN
 from sqlbuild.executor.shared.helpers.python_node_scheduler import unlock_downstream_python_nodes
 from sqlbuild.executor.shared.models.lifecycle_scheduler import LifecycleExecutionNode
 from sqlbuild.refs import model
+from sqlbuild.shared.types import PythonCheckSeverity
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.source import SourceEntry
 from sqlbuild.tasks import TaskContext
@@ -369,5 +372,62 @@ def build_read_side_sql_task_asset_graph() -> PythonNodeGraph:
                     depends_on=(profile_stg_orders,),
                 ),
             ),
+        )
+    )
+
+
+def check_upstream_task(_ctx: object) -> object:
+    return {"rows": 3}
+
+
+def passing_python_check(ctx: CheckContext) -> object:
+    metadata: dict[str, object] = cast(dict[str, object], ctx.metadata(check_upstream_task))
+    return ctx.pass_("passed", metadata={"rows": metadata["rows"]})
+
+
+def warning_python_check(ctx: CheckContext) -> object:
+    return ctx.warn("warned")
+
+
+def false_python_check(_ctx: CheckContext) -> object:
+    return False
+
+
+def exception_python_check(_ctx: CheckContext) -> object:
+    raise RuntimeError("check exploded")
+
+
+def python_check_function_for_case(description: str) -> DiscoveredCheckFunction:
+    function: Callable[..., object] = passing_python_check
+    if "warning" in description:
+        function = warning_python_check
+    if "false" in description:
+        function = false_python_check
+    if "exception" in description:
+        function = exception_python_check
+    return DiscoveredCheckFunction(
+        file_path=Path("/project/checks/orders.py"),
+        relative_path=Path("checks/orders.py"),
+        name="check_upstream_task",
+        function=function,
+        depends_on=(check_upstream_task,),
+        severity=PythonCheckSeverity.ERROR,
+    )
+
+
+def build_python_check_graph(*, check_function: DiscoveredCheckFunction) -> PythonNodeGraph:
+    return build_python_node_graph(
+        discovered_inputs=DiscoveredProjectInputs(
+            project_config=ProjectConfig(name="demo", adapter="duckdb"),
+            local_config=LocalConfig(),
+            task_functions=(
+                DiscoveredTaskFunction(
+                    file_path=Path("/project/tasks/orders.py"),
+                    relative_path=Path("tasks/orders.py"),
+                    name="upstream_task",
+                    function=check_upstream_task,
+                ),
+            ),
+            check_functions=(check_function,),
         )
     )

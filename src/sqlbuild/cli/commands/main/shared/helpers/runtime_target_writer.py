@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -15,6 +16,7 @@ from sqlbuild.compiler.planner.models import (
     SqlTestPlanEntry,
 )
 from sqlbuild.executor.build.models import BuildExecutionResult, FunctionExecutionResult
+from sqlbuild.executor.python_nodes.models import PythonCheckExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
@@ -23,6 +25,7 @@ _RUN_DIR: str = "run"
 _MODELS_DIR: str = "models"
 _FUNCTIONS_DIR: str = "functions"
 _TESTS_DIR: str = "tests"
+_CHECKS_DIR: str = "checks"
 _CHAIN_DIR: str = "_chain_"
 _SQL_FILE_SUFFIX: str = ".sql"
 
@@ -110,6 +113,35 @@ def write_test_runtime_target(
                 sqlglot_dialect=adapter.sqlglot_dialect(),
             ),
         )
+
+
+def write_python_check_runtime_target(
+    *, target_dir: Path, results: tuple[PythonCheckExecutionResult, ...]
+) -> None:
+    """Write Python check runtime results under target/run/checks."""
+
+    if not results:
+        return
+    run_path: Path = target_dir / _RUN_DIR / _CHECKS_DIR / "python_checks.json"
+    run_path.parent.mkdir(parents=True, exist_ok=True)
+    payload: dict[str, object] = {
+        "checks": [
+            {
+                "kind": "python_check",
+                "name": result.node_name,
+                "display_name": result.node_name,
+                "check_id": f"python_check:{result.node_name}",
+                "status": "pass" if result.passed else "warn" if result.warned else "fail",
+                "passed": result.passed,
+                "severity": result.severity.value,
+                "message": result.message,
+                "error_message": result.error_message,
+                "metadata": result.metadata,
+            }
+            for result in results
+        ]
+    }
+    run_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def _write_sql(*, path: Path, sql: str) -> None:

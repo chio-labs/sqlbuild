@@ -152,6 +152,14 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     add_vars_args(test_parser)
     add_dbt_config_args(test_parser)
 
+    check_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.CHECK)
+    check_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    check_parser.add_argument("--json", action="store_true", default=False)
+    add_execution_json_output_arg(check_parser)
+    add_select_args(check_parser)
+    add_vars_args(check_parser)
+    add_dbt_config_args(check_parser)
+
     audit_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.AUDIT)
     audit_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     audit_parser.add_argument("--defer-to", default=None)
@@ -387,6 +395,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     from sqlbuild.cli.commands.main.audit import run_audit
     from sqlbuild.cli.commands.main.build import run_build
+    from sqlbuild.cli.commands.main.check import run_check
     from sqlbuild.cli.commands.main.clone import run_clone
     from sqlbuild.cli.commands.main.compile import run_compile
     from sqlbuild.cli.commands.main.dag import run_dag
@@ -448,6 +457,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_build=run_build,
         run_run=run_run,
         run_test=run_test,
+        run_check=run_check,
         run_audit=run_audit,
         run_seed=run_seed,
         run_load=run_load,
@@ -633,6 +643,17 @@ def _main_with_dependencies(
             )
         if args.command == CliCommand.TEST:
             return handlers.run_test(
+                project_dir,
+                args.no_sql_validation,
+                args.no_color,
+                select,
+                tuple(args.exclude),
+                args.vars,
+                args.json,
+                args.json_output,
+            )
+        if args.command == CliCommand.CHECK:
+            return handlers.run_check(
                 project_dir,
                 args.no_sql_validation,
                 args.no_color,
