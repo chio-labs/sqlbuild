@@ -13,6 +13,7 @@ def expand_selected_loader_dependencies(
     project: CompiledProject,
     selected_keys: frozenset[CompiledObjectKey],
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    executable_dependency_source_keys: frozenset[CompiledObjectKey] = frozenset(),
 ) -> tuple[frozenset[CompiledObjectKey], dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]]:
     """Add intermediate loader nodes needed by selected managed source loads."""
 
@@ -59,6 +60,19 @@ def expand_selected_loader_dependencies(
             source_by_loader=source_by_loader,
             upstream_deps=expanded_upstream,
         )
+        if selected_key not in executable_dependency_source_keys:
+            continue
+        dependency_loader_name: str
+        for dependency_loader_name in upstream_loader_dependency_names(
+            loader_function=loader_function,
+            loader_functions=project.loader_functions,
+        ):
+            expanded_selected.add(
+                _loader_node_key(
+                    loader_name=dependency_loader_name,
+                    source_by_loader=source_by_loader,
+                )
+            )
 
     return frozenset(expanded_selected), expanded_upstream
 
