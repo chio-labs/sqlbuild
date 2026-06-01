@@ -22,6 +22,7 @@ from sqlbuild.compiler.dag.models import (
     DagArtifact,
     DagCheck,
     DagColumn,
+    DagColumnLineageRef,
     DagEdge,
     DagFunctionArgument,
     DagNode,
@@ -29,13 +30,19 @@ from sqlbuild.compiler.dag.models import (
 )
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph
+from sqlbuild.compiler.python_nodes.types import PythonNodeKind
+from sqlbuild.shared.models import ColumnLineageRef, SqlResourceRef
+from sqlbuild.shared.types import SqlResourceRefKind
 from sqlbuild.spec.models.schema import SchemaColumn
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 
 _DAG_VERSION: int = 1
 
 
-def build_dag_artifact(*, graph: ProjectGraph, project_name: str) -> DagArtifact:
+def build_dag_artifact(
+    *, graph: ProjectGraph, project_name: str, python_graph: PythonNodeGraph | None = None
+) -> DagArtifact:
     """Build a static DAG artifact from a compiled project graph."""
 
     nodes: tuple[DagNode, ...] = (
@@ -47,13 +54,14 @@ def build_dag_artifact(*, graph: ProjectGraph, project_name: str) -> DagArtifact
         *(_build_seed_node(seed) for seed in graph.project.seeds),
         *(_build_function_node(function) for function in graph.project.functions),
         *(_build_model_node(model) for model in graph.project.models),
+        *(_build_python_nodes(python_graph) if python_graph is not None else ()),
     )
     return DagArtifact(
         version=_DAG_VERSION,
         project_name=project_name,
         nodes=nodes,
-        edges=_build_edges(graph),
-        checks=_build_checks(graph),
+        edges=_build_edges(graph, python_graph=python_graph),
+        checks=_build_checks(graph, python_graph=python_graph),
     )
 
 
@@ -112,6 +120,38 @@ def _build_loader_node(
     )
 
 
+def _build_python_nodes(python_graph: PythonNodeGraph) -> tuple[DagNode, ...]:
+    return tuple(
+        _build_python_node(node)
+        for node in python_graph.nodes
+        if node.kind != PythonNodeKind.LOADER
+    )
+
+
+def _build_python_node(node: DiscoveredPythonNode) -> DagNode:
+    columns: tuple[DagColumn, ...] = ()
+    column_lineage: dict[str, tuple[DagColumnLineageRef, ...]] = {}
+    materialization_type: str | None = None
+    if node.kind == PythonNodeKind.ASSET and node.asset is not None:
+        columns = tuple(_source_column(column) for column in node.asset.columns)
+        column_lineage = _python_column_lineage(node.asset.column_lineage)
+        materialization_type = "python_asset"
+    return DagNode(
+        id=_python_node_id(node.kind, node.name),
+        kind=node.kind.value,
+        name=node.name,
+        asset_key=(node.kind.value, node.name),
+        path=str(node.relative_path),
+        description=node.description,
+        tags=node.tags,
+        group=node.group,
+        meta=node.meta or {},
+        columns=columns,
+        column_lineage=column_lineage,
+        materialization_type=materialization_type,
+    )
+
+
 def _build_seed_node(seed: CompiledSeed) -> DagNode:
     return DagNode(
         id=_node_id(seed.key),
@@ -163,7 +203,9 @@ def _build_model_node(model: CompiledModel) -> DagNode:
     )
 
 
-def _build_edges(graph: ProjectGraph) -> tuple[DagEdge, ...]:
+def _build_edges(
+    graph: ProjectGraph, *, python_graph: PythonNodeGraph | None = None
+) -> tuple[DagEdge, ...]:
     edges: list[DagEdge] = []
     key: CompiledObjectKey
     dep_keys: tuple[CompiledObjectKey, ...]
@@ -172,6 +214,8 @@ def _build_edges(graph: ProjectGraph) -> tuple[DagEdge, ...]:
         for dep_key in dep_keys:
             edges.append(DagEdge(from_id=_node_id(dep_key), to_id=_node_id(key)))
     edges.extend(_build_loader_edges(graph))
+    if python_graph is not None:
+        edges.extend(_build_python_edges(python_graph))
     return tuple(sorted(edges, key=lambda edge: (edge.from_id, edge.to_id)))
 
 
@@ -184,7 +228,9 @@ def _build_loader_edges(graph: ProjectGraph) -> tuple[DagEdge, ...]:
     loader: DiscoveredLoaderFunction
     for loader in graph.project.loader_functions:
         for dependency in loader.depends_on:
-            dependency_name: str = loader_name_by_function[dependency]
+            dependency_name: str | None = loader_name_by_function.get(dependency)
+            if dependency_name is None:
+                continue
             edges.append(
                 DagEdge(
                     from_id=_loader_node_id(dependency_name),
@@ -206,11 +252,41 @@ def _build_loader_edges(graph: ProjectGraph) -> tuple[DagEdge, ...]:
     return tuple(edges)
 
 
-def _build_checks(graph: ProjectGraph) -> tuple[DagCheck, ...]:
+def _build_python_edges(python_graph: PythonNodeGraph) -> tuple[DagEdge, ...]:
+    edges: list[DagEdge] = []
+    for edge in python_graph.dependency_edges:
+        upstream_node: DiscoveredPythonNode = python_graph.nodes_by_name[edge.upstream_name]
+        downstream_node: DiscoveredPythonNode = python_graph.nodes_by_name[edge.downstream_name]
+        edges.append(
+            DagEdge(
+                from_id=_python_node_id(upstream_node.kind, upstream_node.name),
+                to_id=_python_node_id(downstream_node.kind, downstream_node.name),
+            )
+        )
+    for node in python_graph.nodes:
+        for sql_dep in node.sql_deps:
+            edges.append(
+                DagEdge(
+                    from_id=_sql_ref_node_id(sql_dep),
+                    to_id=_python_node_id(node.kind, node.name),
+                )
+            )
+    return tuple(edges)
+
+
+def _build_checks(
+    graph: ProjectGraph, *, python_graph: PythonNodeGraph | None = None
+) -> tuple[DagCheck, ...]:
     checks: list[DagCheck] = []
     checks.extend(_build_sql_test_check(test) for test in graph.project.sql_tests)
     checks.extend(_build_audit_check(audit) for audit in graph.project.audits)
     checks.extend(_build_scenario_check(scenario) for scenario in graph.project.sql_scenarios)
+    if python_graph is not None:
+        checks.extend(
+            _build_python_check(node, python_graph=python_graph)
+            for node in python_graph.nodes
+            if node.kind == PythonNodeKind.CHECK
+        )
     return tuple(sorted(checks, key=lambda check: (check.kind, check.name)))
 
 
@@ -288,6 +364,26 @@ def _build_scenario_check(scenario: CompiledSqlScenario) -> DagCheck:
     )
 
 
+def _build_python_check(node: DiscoveredPythonNode, *, python_graph: PythonNodeGraph) -> DagCheck:
+    checked_asset_ids: tuple[str, ...] = tuple(
+        _python_node_id(python_graph.nodes_by_name[edge.upstream_name].kind, edge.upstream_name)
+        for edge in python_graph.dependency_edges
+        if edge.downstream_name == node.name
+    )
+    return DagCheck(
+        id=_python_node_id(node.kind, node.name),
+        kind="python_check",
+        name=node.name,
+        checked_asset_ids=checked_asset_ids,
+        path=str(node.relative_path),
+        description=node.description,
+        severity=(node.check.severity.value if node.check is not None else None),
+        tags=node.tags,
+        group=node.group,
+        meta=node.meta or {},
+    )
+
+
 def _dag_target(target: CompiledRelationTarget) -> DagTarget:
     return DagTarget(
         database=target.database,
@@ -322,6 +418,21 @@ def _node_id(key: CompiledObjectKey) -> str:
 
 def _loader_node_id(loader_name: str) -> str:
     return f"loader:{loader_name}"
+
+
+def _python_node_id(kind: PythonNodeKind, node_name: str) -> str:
+    if kind == PythonNodeKind.LOADER:
+        return _loader_node_id(node_name)
+    return f"{kind.value}:{node_name}"
+
+
+def _sql_ref_node_id(ref: SqlResourceRef) -> str:
+    resource_type: CompiledResourceType = (
+        CompiledResourceType.MODEL
+        if ref.kind == SqlResourceRefKind.MODEL
+        else CompiledResourceType.SOURCE
+    )
+    return _node_id(CompiledObjectKey(resource_type, ref.name))
 
 
 def _source_by_loader(graph: ProjectGraph) -> dict[str, SourceEntry]:
@@ -401,6 +512,17 @@ def _model_tags(model: CompiledModel) -> tuple[str, ...]:
     if isinstance(config_tags, (list, tuple)):
         return tuple(dict.fromkeys((*schema_tags, *(str(tag) for tag in config_tags))))
     return schema_tags
+
+
+def _python_column_lineage(
+    lineage: dict[str, tuple[ColumnLineageRef, ...]] | None,
+) -> dict[str, tuple[DagColumnLineageRef, ...]]:
+    if lineage is None:
+        return {}
+    return {
+        column: tuple(DagColumnLineageRef(node=ref.node, column=ref.column) for ref in refs)
+        for column, refs in lineage.items()
+    }
 
 
 def _qualified_name(database: str | None, schema: str | None, name: str) -> str:

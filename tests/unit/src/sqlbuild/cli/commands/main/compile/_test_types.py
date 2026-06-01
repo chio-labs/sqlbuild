@@ -30,6 +30,16 @@ class CompileDagArtifactTestCase:
 
 
 @dataclass(frozen=True)
+class CompilePythonDagArtifactTestCase:
+    description: str
+    dag_path: str
+    expected_project_name: str
+    expected_node_ids: set[str]
+    expected_edges: set[tuple[str, str]]
+    expected_check_ids: set[str]
+
+
+@dataclass(frozen=True)
 class CompileTextOutputTestCase:
     description: str
     model_count: int
