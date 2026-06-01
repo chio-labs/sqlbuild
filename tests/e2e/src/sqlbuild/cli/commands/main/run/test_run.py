@@ -84,6 +84,158 @@ def test_given_waffle_shop_project_when_running_run_then_warehouse_state_matches
     "test_case",
     [
         RunE2ETestCase(
+            description="generated factory nodes participate in run build and check lifecycle",
+            expected_exit_code=0,
+            expected_table_names=("fact_orders",),
+            expected_view_names=(),
+        )
+    ],
+    ids=["generated factory nodes participate in run build and check lifecycle"],
+)
+def test_given_factory_generated_nodes_when_running_commands_then_lifecycle_succeeds(
+    test_case: RunE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="factory_nodes_project",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "factory_nodes_project"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "factory_nodes_project.duckdb"\n'
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    managed: true\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+            ),
+            "models/fact_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+            "tasks/generated.py": """
+from pathlib import Path
+from sqlbuild.assets import asset
+from sqlbuild.checks import check
+from sqlbuild.factories import factory
+from sqlbuild.loaders import loader
+from sqlbuild.tasks import task
+
+
+PROJECT_DIR = Path(__file__).parents[1]
+
+
+@factory
+def generated_pipeline():
+    @task(name="prepare_orders", tags=("factory", "runtime"))
+    def prepare(ctx):
+        PROJECT_DIR.joinpath("prepare_marker.txt").write_text("ran", encoding="utf-8")
+        return ctx.result(payload={"rows": 1})
+
+    @loader(name="raw_orders", depends_on=[prepare])
+    def load(ctx):
+        PROJECT_DIR.joinpath("loader_marker.txt").write_text("ran", encoding="utf-8")
+        return [{"order_id": 1}]
+
+    @asset(name="orders_export", depends_on=prepare, tags=("factory", "runtime"))
+    def export(ctx):
+        PROJECT_DIR.joinpath("asset_marker.txt").write_text("ran", encoding="utf-8")
+        return ctx.result(materialized=True)
+
+    @check(name="orders_export_check", depends_on=export, tags=("factory", "quality"))
+    def export_check(ctx):
+        return ctx.pass_("generated export exists")
+
+    return [prepare, load, export, export_check]
+""",
+        },
+    )
+    db_path: Path = project_dir / "factory_nodes_project.duckdb"
+
+    run_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "run", "--select", "+asset:orders_export"),
+        project_dir=project_dir,
+    )
+    bare_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "run", "--select", "prepare_orders"),
+        project_dir=project_dir,
+    )
+    tag_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "run", "--select", "tag:runtime"),
+        project_dir=project_dir,
+    )
+    dag_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "dag", "--json"),
+        project_dir=project_dir,
+    )
+    compile_dag_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "compile", "--dag", "target/factory_dag.json"),
+        project_dir=project_dir,
+    )
+    check_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "check", "--select", "+check:orders_export_check"),
+        project_dir=project_dir,
+    )
+    no_python_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--no-python", "--select", "+fact_orders"),
+        project_dir=project_dir,
+    )
+
+    assert run_result.returncode == test_case.expected_exit_code, (
+        run_result.stdout + run_result.stderr
+    )
+    assert "prepare_orders" in run_result.stdout
+    assert "orders_export" in run_result.stdout
+    assert "Python checks" not in run_result.stdout
+    assert bare_result.returncode == test_case.expected_exit_code, (
+        bare_result.stdout + bare_result.stderr
+    )
+    assert "prepare_orders" in bare_result.stdout
+    assert tag_result.returncode == test_case.expected_exit_code, (
+        tag_result.stdout + tag_result.stderr
+    )
+    assert "orders_export" in tag_result.stdout
+    assert dag_result.returncode == test_case.expected_exit_code, (
+        dag_result.stdout + dag_result.stderr
+    )
+    dag_payload: dict[str, object] = json.loads(dag_result.stdout)
+    dag_node_ids: set[str] = {str(node["id"]) for node in dag_payload["nodes"]}
+    assert {"task:prepare_orders", "asset:orders_export", "source:raw_orders"} <= dag_node_ids
+    assert "factory:generated_pipeline" not in dag_node_ids
+    assert compile_dag_result.returncode == test_case.expected_exit_code, (
+        compile_dag_result.stdout + compile_dag_result.stderr
+    )
+    compiled_dag_payload: dict[str, object] = json.loads(
+        project_dir.joinpath("target/factory_dag.json").read_text(encoding="utf-8")
+    )
+    compiled_node_ids: set[str] = {str(node["id"]) for node in compiled_dag_payload["nodes"]}
+    assert "asset:orders_export" in compiled_node_ids
+    assert check_result.returncode == test_case.expected_exit_code, (
+        check_result.stdout + check_result.stderr
+    )
+    assert "orders_export_check" in check_result.stdout
+    assert no_python_build_result.returncode == test_case.expected_exit_code, (
+        no_python_build_result.stdout + no_python_build_result.stderr
+    )
+    assert "source    raw_orders" in no_python_build_result.stdout
+    assert "asset    orders_export" not in no_python_build_result.stdout
+    assert project_dir.joinpath("prepare_marker.txt").exists()
+    assert project_dir.joinpath("loader_marker.txt").exists()
+    assert project_dir.joinpath("asset_marker.txt").exists()
+    table_name: str
+    for table_name in test_case.expected_table_names:
+        assert table_exists(db_path=db_path, table_name=table_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RunE2ETestCase(
             description="run reuses existing intermediate target for source-only selection",
             expected_exit_code=0,
             expected_table_names=("raw_events",),

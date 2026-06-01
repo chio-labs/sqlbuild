@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib.util
 import inspect
 import sys
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from importlib.machinery import ModuleSpec
 from pathlib import Path
 from types import ModuleType
@@ -37,6 +39,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredMacroFile,
     DiscoveredMaterializationFile,
     DiscoveredPythonFunctionFile,
+    DiscoveredPythonNodeFunctions,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
@@ -51,11 +54,25 @@ from sqlbuild.compiler.shared.constants import (
     SEED_FILE_SUFFIX,
     YAML_FILE_SUFFIXES,
 )
+from sqlbuild.factories import get_factory_definition
 from sqlbuild.loaders import LoaderDefinition, get_loader_definition
-from sqlbuild.shared.models import AssetDefinition, CheckDefinition, TaskDefinition
+from sqlbuild.shared.models import (
+    AssetDefinition,
+    CheckDefinition,
+    FactoryDefinition,
+    TaskDefinition,
+)
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
 from sqlbuild.tasks import get_task_definition
+
+
+@dataclass
+class _PythonNodeDiscoveryBucket:
+    loaders: list[DiscoveredLoaderFunction] = field(default_factory=list)
+    tasks: list[DiscoveredTaskFunction] = field(default_factory=list)
+    assets: list[DiscoveredAssetFunction] = field(default_factory=list)
+    checks: list[DiscoveredCheckFunction] = field(default_factory=list)
 
 
 def discover_model_files(
@@ -337,160 +354,248 @@ def discover_materialization_files(
 def discover_loader_functions(*, project_dir: Path) -> tuple[DiscoveredLoaderFunction, ...]:
     """Discover decorated source loader functions under loaders/."""
 
-    loaders_root: Path = project_dir / "loaders"
-    if not loaders_root.is_dir():
-        return ()
-
-    discovered: list[DiscoveredLoaderFunction] = []
-    file_path: Path
-    for file_path in sorted(loaders_root.rglob("*.py")):
-        if file_path.stem == "__init__":
-            continue
-        module: ModuleType = _load_loader_module(file_path=file_path, project_dir=project_dir)
-        for _, value in inspect.getmembers(module, inspect.isfunction):
-            if value.__module__ != module.__name__:
-                continue
-            definition: LoaderDefinition | None = get_loader_definition(value)
-            if definition is None:
-                continue
-            discovered.append(
-                DiscoveredLoaderFunction(
-                    file_path=file_path,
-                    relative_path=file_path.relative_to(project_dir),
-                    name=definition.name,
-                    function=value,
-                    depends_on=definition.depends_on,
-                    target=definition.target,
-                    write_strategy=definition.write_strategy,
-                    cursor_column=definition.cursor_column,
-                    unique_key=definition.unique_key,
-                    columns=definition.columns,
-                    contract=definition.contract,
-                )
-            )
-    return tuple(discovered)
+    return tuple(_discover_python_node_functions(project_dir=project_dir).loaders)
 
 
 def discover_task_functions(*, project_dir: Path) -> tuple[DiscoveredTaskFunction, ...]:
     """Discover decorated task functions under tasks/."""
 
-    tasks_root: Path = project_dir / "tasks"
-    if not tasks_root.is_dir():
-        return ()
-
-    discovered: list[DiscoveredTaskFunction] = []
-    file_path: Path
-    for file_path in sorted(tasks_root.rglob("*.py")):
-        if file_path.stem == "__init__":
-            continue
-        module: ModuleType = _load_python_node_module(
-            file_path=file_path,
-            project_dir=project_dir,
-            node_folder="tasks",
-        )
-        for _, value in inspect.getmembers(module, inspect.isfunction):
-            if value.__module__ != module.__name__:
-                continue
-            definition: TaskDefinition | None = get_task_definition(value)
-            if definition is None:
-                continue
-            discovered.append(
-                DiscoveredTaskFunction(
-                    file_path=file_path,
-                    relative_path=file_path.relative_to(project_dir),
-                    name=definition.name,
-                    function=value,
-                    depends_on=definition.depends_on,
-                    tags=definition.tags,
-                    group=definition.group,
-                    description=definition.description,
-                    meta=definition.meta,
-                    retry=definition.retry,
-                )
-            )
-    return tuple(discovered)
+    return tuple(_discover_python_node_functions(project_dir=project_dir).tasks)
 
 
 def discover_asset_functions(*, project_dir: Path) -> tuple[DiscoveredAssetFunction, ...]:
     """Discover decorated asset functions under assets/."""
 
-    assets_root: Path = project_dir / "assets"
-    if not assets_root.is_dir():
-        return ()
-
-    discovered: list[DiscoveredAssetFunction] = []
-    file_path: Path
-    for file_path in sorted(assets_root.rglob("*.py")):
-        if file_path.stem == "__init__":
-            continue
-        module: ModuleType = _load_python_node_module(
-            file_path=file_path,
-            project_dir=project_dir,
-            node_folder="assets",
-        )
-        for _, value in inspect.getmembers(module, inspect.isfunction):
-            if value.__module__ != module.__name__:
-                continue
-            definition: AssetDefinition | None = get_asset_definition(value)
-            if definition is None:
-                continue
-            discovered.append(
-                DiscoveredAssetFunction(
-                    file_path=file_path,
-                    relative_path=file_path.relative_to(project_dir),
-                    name=definition.name,
-                    function=value,
-                    depends_on=definition.depends_on,
-                    tags=definition.tags,
-                    group=definition.group,
-                    description=definition.description,
-                    meta=definition.meta,
-                    columns=definition.columns,
-                    column_lineage=definition.column_lineage,
-                    retry=definition.retry,
-                )
-            )
-    return tuple(discovered)
+    return tuple(_discover_python_node_functions(project_dir=project_dir).assets)
 
 
 def discover_check_functions(*, project_dir: Path) -> tuple[DiscoveredCheckFunction, ...]:
     """Discover decorated check functions under checks/."""
 
-    checks_root: Path = project_dir / "checks"
-    if not checks_root.is_dir():
-        return ()
+    return tuple(_discover_python_node_functions(project_dir=project_dir).checks)
 
-    discovered: list[DiscoveredCheckFunction] = []
-    file_path: Path
-    for file_path in sorted(checks_root.rglob("*.py")):
-        if file_path.stem == "__init__":
+
+def discover_python_node_functions(*, project_dir: Path) -> DiscoveredPythonNodeFunctions:
+    """Discover decorated Python DAG node functions under node folders."""
+
+    bucket: _PythonNodeDiscoveryBucket = _discover_python_node_functions(project_dir=project_dir)
+    return DiscoveredPythonNodeFunctions(
+        loaders=tuple(bucket.loaders),
+        tasks=tuple(bucket.tasks),
+        assets=tuple(bucket.assets),
+        checks=tuple(bucket.checks),
+    )
+
+
+def _discover_python_node_functions(*, project_dir: Path) -> _PythonNodeDiscoveryBucket:
+    bucket: _PythonNodeDiscoveryBucket = _PythonNodeDiscoveryBucket()
+    node_folder: str
+    for node_folder in ("loaders", "tasks", "assets", "checks"):
+        node_root: Path = project_dir / node_folder
+        if not node_root.is_dir():
             continue
-        module: ModuleType = _load_python_node_module(
-            file_path=file_path,
-            project_dir=project_dir,
-            node_folder="checks",
-        )
-        for _, value in inspect.getmembers(module, inspect.isfunction):
-            if value.__module__ != module.__name__:
+        file_path: Path
+        for file_path in sorted(node_root.rglob("*.py")):
+            if file_path.stem == "__init__":
                 continue
-            definition: CheckDefinition | None = get_check_definition(value)
-            if definition is None:
-                continue
-            discovered.append(
-                DiscoveredCheckFunction(
+            module: ModuleType = (
+                _load_loader_module(file_path=file_path, project_dir=project_dir)
+                if node_folder == "loaders"
+                else _load_python_node_module(
                     file_path=file_path,
-                    relative_path=file_path.relative_to(project_dir),
-                    name=definition.name,
-                    function=value,
-                    depends_on=definition.depends_on,
-                    severity=definition.severity,
-                    tags=definition.tags,
-                    group=definition.group,
-                    description=definition.description,
-                    meta=definition.meta,
+                    project_dir=project_dir,
+                    node_folder=node_folder,
                 )
             )
-    return tuple(discovered)
+            _append_module_python_nodes(
+                bucket=bucket,
+                module=module,
+                file_path=file_path,
+                project_dir=project_dir,
+            )
+    return bucket
+
+
+def _append_module_python_nodes(
+    *,
+    bucket: _PythonNodeDiscoveryBucket,
+    module: ModuleType,
+    file_path: Path,
+    project_dir: Path,
+) -> None:
+    for _, value in inspect.getmembers(module, inspect.isfunction):
+        if value.__module__ != module.__name__:
+            continue
+        _append_python_node_function(
+            bucket=bucket,
+            function=value,
+            file_path=file_path,
+            project_dir=project_dir,
+        )
+    for _, value in inspect.getmembers(module, inspect.isfunction):
+        if value.__module__ != module.__name__:
+            continue
+        factory_definition: FactoryDefinition | None = get_factory_definition(value)
+        if factory_definition is None:
+            continue
+        generated_functions: tuple[Callable[..., object], ...] = _call_factory(
+            factory=value,
+            factory_definition=factory_definition,
+            file_path=file_path,
+            project_dir=project_dir,
+        )
+        index: int
+        generated_function: Callable[..., object]
+        for index, generated_function in enumerate(generated_functions):
+            if not _append_python_node_function(
+                bucket=bucket,
+                function=generated_function,
+                file_path=file_path,
+                project_dir=project_dir,
+            ):
+                raise PythonNodeDiscoveryError(
+                    f"Factory '{factory_definition.name}' in "
+                    f"{file_path.relative_to(project_dir)} returned item {index} that is not "
+                    "a SQLBuild task, asset, loader, or check"
+                )
+
+
+def _append_python_node_function(
+    *,
+    bucket: _PythonNodeDiscoveryBucket,
+    function: Callable[..., object],
+    file_path: Path,
+    project_dir: Path,
+) -> bool:
+    loader_definition: LoaderDefinition | None = get_loader_definition(function)
+    if loader_definition is not None:
+        bucket.loaders.append(
+            DiscoveredLoaderFunction(
+                file_path=file_path,
+                relative_path=file_path.relative_to(project_dir),
+                name=loader_definition.name,
+                function=function,
+                depends_on=loader_definition.depends_on,
+                target=loader_definition.target,
+                write_strategy=loader_definition.write_strategy,
+                cursor_column=loader_definition.cursor_column,
+                unique_key=loader_definition.unique_key,
+                columns=loader_definition.columns,
+                contract=loader_definition.contract,
+            )
+        )
+        return True
+    task_definition: TaskDefinition | None = get_task_definition(function)
+    if task_definition is not None:
+        bucket.tasks.append(
+            DiscoveredTaskFunction(
+                file_path=file_path,
+                relative_path=file_path.relative_to(project_dir),
+                name=task_definition.name,
+                function=function,
+                depends_on=task_definition.depends_on,
+                tags=task_definition.tags,
+                group=task_definition.group,
+                description=task_definition.description,
+                meta=task_definition.meta,
+                retry=task_definition.retry,
+            )
+        )
+        return True
+    asset_definition: AssetDefinition | None = get_asset_definition(function)
+    if asset_definition is not None:
+        bucket.assets.append(
+            DiscoveredAssetFunction(
+                file_path=file_path,
+                relative_path=file_path.relative_to(project_dir),
+                name=asset_definition.name,
+                function=function,
+                depends_on=asset_definition.depends_on,
+                tags=asset_definition.tags,
+                group=asset_definition.group,
+                description=asset_definition.description,
+                meta=asset_definition.meta,
+                columns=asset_definition.columns,
+                column_lineage=asset_definition.column_lineage,
+                retry=asset_definition.retry,
+            )
+        )
+        return True
+    check_definition: CheckDefinition | None = get_check_definition(function)
+    if check_definition is not None:
+        bucket.checks.append(
+            DiscoveredCheckFunction(
+                file_path=file_path,
+                relative_path=file_path.relative_to(project_dir),
+                name=check_definition.name,
+                function=function,
+                depends_on=check_definition.depends_on,
+                severity=check_definition.severity,
+                tags=check_definition.tags,
+                group=check_definition.group,
+                description=check_definition.description,
+                meta=check_definition.meta,
+            )
+        )
+        return True
+    return False
+
+
+def _call_factory(
+    *,
+    factory: Callable[..., object],
+    factory_definition: FactoryDefinition,
+    file_path: Path,
+    project_dir: Path,
+) -> tuple[Callable[..., object], ...]:
+    parameters: tuple[inspect.Parameter, ...] = tuple(
+        inspect.signature(factory).parameters.values()
+    )
+    if parameters:
+        raise PythonNodeDiscoveryError(
+            f"Factory '{factory_definition.name}' in {file_path.relative_to(project_dir)} "
+            "must not require arguments"
+        )
+    try:
+        result: object = factory()
+    except Exception as error:
+        raise PythonNodeDiscoveryError(
+            f"Factory '{factory_definition.name}' in {file_path.relative_to(project_dir)} "
+            f"failed during discovery: {error}"
+        ) from error
+    return _normalize_factory_result(
+        result=result,
+        factory_definition=factory_definition,
+        file_path=file_path,
+        project_dir=project_dir,
+    )
+
+
+def _normalize_factory_result(
+    *,
+    result: object,
+    factory_definition: FactoryDefinition,
+    file_path: Path,
+    project_dir: Path,
+) -> tuple[Callable[..., object], ...]:
+    if callable(result):
+        return (result,)
+    if isinstance(result, str | bytes | dict) or not isinstance(result, list | tuple | set):
+        raise PythonNodeDiscoveryError(
+            f"Factory '{factory_definition.name}' in {file_path.relative_to(project_dir)} "
+            "must return a SQLBuild node function or a list, tuple, or set of node functions"
+        )
+    functions: list[Callable[..., object]] = []
+    index: int
+    item: object
+    for index, item in enumerate(result):
+        if not callable(item):
+            raise PythonNodeDiscoveryError(
+                f"Factory '{factory_definition.name}' in {file_path.relative_to(project_dir)} "
+                f"returned item {index} that is not a SQLBuild task, asset, loader, or check"
+            )
+        functions.append(item)
+    return tuple(functions)
 
 
 def _load_loader_module(*, file_path: Path, project_dir: Path) -> ModuleType:

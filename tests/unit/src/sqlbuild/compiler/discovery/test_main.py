@@ -6,10 +6,12 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.unit.src.sqlbuild.compiler.discovery._test_helpers import (
     base_repo_files,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._test_types import (
+    DiscoverFactoryValidationTestCase,
     DiscoverProjectInputsErrorTestCase,
     DiscoverProjectInputsTestCase,
 )
@@ -256,6 +258,231 @@ def test_given_project_repo_slice_when_discovering_inputs_then_it_returns_expect
     assert discovered_inputs.project_config.name == "demo"
     assert discovered_inputs.project_config.adapter == "duckdb"
     assert discovered_inputs.local_config.environment == "dev"
+
+
+FACTORY_VALIDATION_TEST_CASES: tuple[DiscoverFactoryValidationTestCase, ...] = (
+    DiscoverFactoryValidationTestCase(
+        description="generated managed source loader matches source",
+        repo_files=base_repo_files()
+        | {
+            "sources/raw.yml": "sources:\n  - name: raw_orders\n    managed: true\n",
+            "loaders/generated.py": """
+from sqlbuild.factories import factory
+from sqlbuild.loaders import loader
+
+
+@factory
+def generated_loaders():
+    @loader(name="raw_orders")
+    def load(ctx):
+        return [{"order_id": 1}]
+    return load
+""",
+        },
+        expected_loader_names=("raw_orders",),
+    ),
+    DiscoverFactoryValidationTestCase(
+        description="generated task and asset dependency validates",
+        repo_files=base_repo_files()
+        | {
+            "tasks/generated.py": """
+from sqlbuild.assets import asset
+from sqlbuild.factories import factory
+from sqlbuild.tasks import task
+
+
+@factory
+def generated_nodes():
+    @task(name="prepare_orders")
+    def prepare(ctx):
+        return None
+
+    @asset(name="orders_export", depends_on=prepare)
+    def export(ctx):
+        return None
+
+    return [prepare, export]
+""",
+        },
+        expected_task_names=("prepare_orders",),
+        expected_asset_names=("orders_export",),
+    ),
+)
+
+
+FACTORY_VALIDATION_ERROR_TEST_CASES: tuple[DiscoverFactoryValidationTestCase, ...] = (
+    DiscoverFactoryValidationTestCase(
+        description="generated duplicate names fail validation",
+        repo_files=base_repo_files()
+        | {
+            "tasks/generated.py": """
+from sqlbuild.factories import factory
+from sqlbuild.tasks import task
+
+
+def make_task():
+    @task(name="profile")
+    def profile(ctx):
+        return None
+    return profile
+
+
+@factory
+def generated_tasks():
+    return [make_task(), make_task()]
+""",
+        },
+        expected_error_fragment="Duplicate Python node found for 'profile'",
+    ),
+    DiscoverFactoryValidationTestCase(
+        description="generated name colliding with top-level node fails validation",
+        repo_files=base_repo_files()
+        | {
+            "tasks/top_level.py": """
+from sqlbuild.tasks import task
+
+
+@task(name="profile")
+def top_level_profile(ctx):
+    return None
+""",
+            "assets/generated.py": """
+from sqlbuild.assets import asset
+from sqlbuild.factories import factory
+
+
+@factory
+def generated_assets():
+    @asset(name="profile")
+    def generated_profile(ctx):
+        return None
+    return generated_profile
+""",
+        },
+        expected_error_fragment="Duplicate Python node found for 'profile'",
+    ),
+    DiscoverFactoryValidationTestCase(
+        description="generated dependency cycle fails validation",
+        repo_files=base_repo_files()
+        | {
+            "tasks/generated.py": """
+from sqlbuild.factories import factory
+from sqlbuild.tasks import task
+
+
+@factory
+def generated_tasks():
+    def first_body(ctx):
+        return None
+    def second_body(ctx):
+        return None
+    first = task(name="first", depends_on=[])(first_body)
+    second = task(name="second", depends_on=[first])(second_body)
+    first = task(name="first", depends_on=[second])(first)
+    return [first, second]
+""",
+        },
+        expected_error_fragment="Python node dependency cycle detected",
+    ),
+    DiscoverFactoryValidationTestCase(
+        description="generated loader SQL dependency fails validation",
+        repo_files=base_repo_files()
+        | {
+            "loaders/generated.py": """
+from sqlbuild.factories import factory
+from sqlbuild.loaders import loader
+from sqlbuild.refs import model
+
+
+@factory
+def generated_loaders():
+    @loader(name="raw_orders", depends_on=[model("orders")])
+    def raw_orders(ctx):
+        return []
+    return raw_orders
+""",
+        },
+        expected_error_fragment="Loader 'raw_orders' depends on SQL resource 'orders'",
+    ),
+    DiscoverFactoryValidationTestCase(
+        description="generated check SQL dependency fails validation",
+        repo_files=base_repo_files()
+        | {
+            "checks/generated.py": """
+from sqlbuild.checks import check
+from sqlbuild.factories import factory
+from sqlbuild.refs import model
+
+
+@factory
+def generated_checks():
+    @check(name="check_orders", depends_on=model("orders"))
+    def check_orders(ctx):
+        return True
+    return check_orders
+""",
+        },
+        expected_error_fragment="Check 'check_orders' depends on SQL resource 'orders'",
+    ),
+    DiscoverFactoryValidationTestCase(
+        description="generated managed source loader mismatch fails validation",
+        repo_files=base_repo_files()
+        | {
+            "sources/raw.yml": "sources:\n  - name: raw_orders\n    managed: true\n",
+            "loaders/generated.py": """
+from sqlbuild.factories import factory
+from sqlbuild.loaders import loader
+
+
+@factory
+def generated_loaders():
+    @loader(name="load_orders")
+    def load(ctx):
+        return []
+    return load
+""",
+        },
+        expected_error_fragment="Managed source 'raw_orders' in sources/raw.yml requires loader",
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    FACTORY_VALIDATION_TEST_CASES,
+    ids=[case.description for case in FACTORY_VALIDATION_TEST_CASES],
+)
+def test_given_generated_factory_nodes_when_discovering_inputs_then_validates_expanded_nodes(
+    test_case: DiscoverFactoryValidationTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.repo_files)
+
+    result: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+
+    assert (
+        tuple(loader.name for loader in result.loader_functions) == test_case.expected_loader_names
+    )
+    assert tuple(task.name for task in result.task_functions) == test_case.expected_task_names
+    assert tuple(asset.name for asset in result.asset_functions) == test_case.expected_asset_names
+    assert tuple(check.name for check in result.check_functions) == test_case.expected_check_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    FACTORY_VALIDATION_ERROR_TEST_CASES,
+    ids=[case.description for case in FACTORY_VALIDATION_ERROR_TEST_CASES],
+)
+def test_given_invalid_generated_factory_nodes_when_discovering_inputs_then_raises(
+    test_case: DiscoverFactoryValidationTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.repo_files)
+
+    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+        discover_project_inputs(project_dir=tmp_path)
 
 
 DISCOVERY_ERROR_TEST_CASES: list[DiscoverProjectInputsErrorTestCase] = [
