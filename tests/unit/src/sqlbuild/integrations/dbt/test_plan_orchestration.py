@@ -270,7 +270,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
         expected_dbt_anchor_terms=("package:stripe+",),
     ),
     DbtPlanOrchestrationTestCase(
-        description="preserves path translation metadata through orchestration",
+        description="routes explicit model path through orchestration",
         command="plan",
         manifest_data=_MANIFEST_DATA,
         sqlbuild_model_sql_by_name=_SQLBUILD_SQL,
@@ -303,7 +303,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
         expected_sqlbuild_skipped=False,
         dbt_command_args=("--select", "path:models/marts"),
         expected_primary_dbt_command_argv=("dbt", "ls", "--select", "path:models/marts"),
-        expected_path_translations=(("path:models/marts", "path:marts"),),
+        expected_path_translations=(),
     ),
     DbtPlanOrchestrationTestCase(
         description="routes Windows-style dbt path selector to SQLBuild models",
@@ -339,7 +339,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
         expected_sqlbuild_skipped=False,
         dbt_command_args=("--select", "path:models\\marts"),
         expected_primary_dbt_command_argv=("dbt", "ls", "--select", "path:models\\marts"),
-        expected_path_translations=(("path:models\\marts", "path:marts"),),
+        expected_path_translations=(("path:models\\marts", "path:models/marts"),),
     ),
     DbtPlanOrchestrationTestCase(
         description="does not run anchor ls for SQLBuild-owned path in mixed selectors",
@@ -379,7 +379,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
             "state:modified",
             "path:models/marts+",
         ),
-        expected_path_translations=(("path:models/marts+", "path:marts"),),
+        expected_path_translations=(),
     ),
     DbtPlanOrchestrationTestCase(
         description="passes SQLBuild routed args after selected models",

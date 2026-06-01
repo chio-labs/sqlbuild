@@ -13,6 +13,10 @@ from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import (
     ConnectionProgressReporter,
 )
+from sqlbuild.cli.commands.main.shared.helpers.direct_python_lifecycle import (
+    DirectPythonLifecycleState,
+    prepare_direct_python_lifecycle,
+)
 from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
     format_run_execution_json,
     write_execution_json_output,
@@ -32,6 +36,9 @@ from sqlbuild.cli.commands.main.shared.helpers.progress import (
     format_build_footer,
     write_execution_header,
 )
+from sqlbuild.cli.commands.main.shared.helpers.python_nodes import (
+    python_node_results_failed,
+)
 from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import write_runtime_target
 from sqlbuild.cli.commands.main.shared.helpers.snapshot_full_refresh import (
     enforce_snapshot_full_refresh_policy,
@@ -45,6 +52,7 @@ from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.pipeline.main.run import run_build_pipeline
+from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
@@ -60,6 +68,7 @@ def run_run(
     full_refresh: bool = False,
     load_sources: bool | None = None,
     reload_sources: bool = False,
+    include_python: bool = True,
     allow_snapshot_full_refresh: bool = False,
     allow_snapshot_schema_change: bool = False,
     concurrency: int | None = None,
@@ -131,12 +140,18 @@ def run_run(
             project_dir=effective_project_dir,
             discovered_inputs=discovered_inputs,
         ),
+        resolve_python_run_selectors=include_python or should_load_sources,
     )
 
     plan_output: PlanOutput = pipeline_result.plan_output
     plan_stream: TextIO = sys.stderr if debug or json_output else sys.stdout
 
-    plan_text: str = format_plan(plan_output, full_refresh=full_refresh, use_color=use_color)
+    plan_text: str = format_plan(
+        plan_output,
+        full_refresh=full_refresh,
+        use_color=use_color,
+        python_plan_entries=pipeline_result.python_plan_entries,
+    )
     plan_stream.write("\n" + plan_text + "\n\n")
     plan_stream.flush()
 
@@ -180,6 +195,23 @@ def run_run(
         use_color=use_color,
     )
 
+    python_lifecycle: DirectPythonLifecycleState = prepare_direct_python_lifecycle(
+        discovered_inputs=discovered_inputs,
+        pipeline_result=pipeline_result,
+        plan_output=plan_output,
+        adapter=adapter,
+        connection_config=connection_config,
+        include_python=include_python,
+        reload_sources=reload_sources,
+        start_cursor_ts=parse_cursor_timestamp((cursor_overrides or CursorOverrides()).start_ts),
+        end_cursor_ts=parse_cursor_timestamp((cursor_overrides or CursorOverrides()).end_ts),
+        start_cursor_int=parse_cursor_integer((cursor_overrides or CursorOverrides()).start_int),
+        end_cursor_int=parse_cursor_integer((cursor_overrides or CursorOverrides()).end_int),
+        use_color=use_color,
+        progress_stream=progress_stream,
+        on_node_start=callbacks.on_node_start,
+        on_node_complete=callbacks.on_node_complete,
+    )
     result: BuildExecutionResult = run_build_pipeline(
         plan=plan_output,
         connection_config=connection_config,
@@ -193,11 +225,14 @@ def run_run(
         fail_fast=fail_fast,
         max_concurrency=effective_concurrency,
         on_node_start=callbacks.on_node_start,
-        on_node_complete=callbacks.on_node_complete,
+        on_node_complete=python_lifecycle.on_node_complete,
         on_sub_progress=callbacks.on_sub_progress,
         custom_materializations=pipeline_result.custom_materializations,
-        loader_functions=discovered_inputs.loader_functions,
+        loader_functions=python_lifecycle.loader_functions,
         loader_is_reload=reload_sources,
+        precompleted_keys=python_lifecycle.precompleted_keys,
+        initial_load_results=python_lifecycle.ingress_load_results,
+        initial_failed_keys=python_lifecycle.blocked_keys,
         start_cursor_ts=parse_cursor_timestamp((cursor_overrides or CursorOverrides()).start_ts),
         end_cursor_ts=parse_cursor_timestamp((cursor_overrides or CursorOverrides()).end_ts),
         start_cursor_int=parse_cursor_integer((cursor_overrides or CursorOverrides()).start_int),
@@ -207,19 +242,31 @@ def run_run(
         on_connection_error=execution_connection_progress.on_connection_error,
         use_color=use_color,
     )
+    python_lifecycle.finalize()
+    python_results: tuple[PythonNodeExecutionResult, ...] = python_lifecycle.python_results
     write_runtime_target(
         target_dir=effective_project_dir / "target",
         plan_output=plan_output,
         result=result,
     )
 
-    footer: str = format_build_footer(result=result, elapsed=callbacks.elapsed, use_color=use_color)
+    footer: str = format_build_footer(
+        result=result,
+        elapsed=callbacks.elapsed,
+        use_color=use_color,
+        python_node_results=python_results,
+    )
     progress_stream.write("\n" + footer + "\n")
     progress_stream.flush()
     write_execution_json_output(
-        payload=format_run_execution_json(result=result, plan=plan_output),
+        payload=format_run_execution_json(
+            result=result,
+            plan=plan_output,
+            python_node_results=python_results,
+        ),
         json_output=json_output,
         json_output_path=json_output_path,
     )
 
-    return 0 if result.status == BuildStatus.SUCCESS else 1
+    python_failed: bool = python_node_results_failed(python_results)
+    return 0 if result.status == BuildStatus.SUCCESS and not python_failed else 1

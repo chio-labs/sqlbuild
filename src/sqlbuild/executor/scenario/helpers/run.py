@@ -8,9 +8,9 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan, ScenarioRelationMap
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.scenario.helpers.checks import (
-    execute_scenario_assertion_checks,
-    execute_scenario_expected_checks,
+from sqlbuild.executor.scenario.helpers.expectations import (
+    execute_scenario_assertion_expectations,
+    execute_scenario_expected_expectations,
 )
 from sqlbuild.executor.scenario.helpers.fixtures import (
     execute_scenario_fixtures,
@@ -19,9 +19,9 @@ from sqlbuild.executor.scenario.helpers.fixtures import (
 from sqlbuild.executor.scenario.helpers.model_execution import execute_scenario_models
 from sqlbuild.executor.scenario.main.cleanup import execute_scenario_cleanup
 from sqlbuild.executor.scenario.models import (
-    ScenarioAssertionCheckExecutionResult,
+    ScenarioAssertionExpectationExecutionResult,
     ScenarioCleanupExecutionResult,
-    ScenarioExpectedCheckExecutionResult,
+    ScenarioExpectedExpectationExecutionResult,
     ScenarioFixtureExecutionResult,
     ScenarioRunResult,
 )
@@ -114,14 +114,14 @@ def execute_scenario_run_steps(
             error_message=_first_error(model_results),
         )
 
-    expected_results: tuple[ScenarioExpectedCheckExecutionResult, ...]
-    expected_results = execute_scenario_expected_checks(
+    expected_results: tuple[ScenarioExpectedExpectationExecutionResult, ...]
+    expected_results = execute_scenario_expected_expectations(
         scenario_plan=scenario_plan,
         adapter=adapter,
         connection=connection,
     )
-    assertion_results: tuple[ScenarioAssertionCheckExecutionResult, ...]
-    assertion_results = execute_scenario_assertion_checks(
+    assertion_results: tuple[ScenarioAssertionExpectationExecutionResult, ...]
+    assertion_results = execute_scenario_assertion_expectations(
         scenario_plan=scenario_plan,
         adapter=adapter,
         connection=connection,
@@ -156,8 +156,8 @@ def _finish_scenario(
     fixture_results: tuple[ScenarioFixtureExecutionResult, ...] = (),
     seed_results: tuple[SeedExecutionResult, ...] = (),
     model_results: tuple[ModelExecutionResult, ...] = (),
-    expected_results: tuple[ScenarioExpectedCheckExecutionResult, ...] = (),
-    assertion_results: tuple[ScenarioAssertionCheckExecutionResult, ...] = (),
+    expected_results: tuple[ScenarioExpectedExpectationExecutionResult, ...] = (),
+    assertion_results: tuple[ScenarioAssertionExpectationExecutionResult, ...] = (),
     error_code: str | None = None,
     error_help: str | None = None,
     error_message: str | None = None,

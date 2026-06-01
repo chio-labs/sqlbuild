@@ -23,3 +23,11 @@ class ExecutionPhase(StrEnum):
     POST_HOOK = "post_hook"
     FINGERPRINT = "fingerprint"
     CUSTOM_MATERIALIZATION = "custom_materialization"
+
+
+class LifecycleNodeStatus(StrEnum):
+    """Generic lifecycle scheduler node status."""
+
+    SUCCESS = "success"
+    FAILED = "failed"
+    SKIPPED = "skipped"

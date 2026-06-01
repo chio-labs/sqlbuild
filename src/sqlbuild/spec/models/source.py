@@ -37,6 +37,7 @@ class SourceEntry:
     schema: str | None = None
     table: str | None = None
     loader: str | None = None
+    managed: bool = False
     integration_loader: IntegrationLoaderConfig | None = None
     write_strategy: SourceWriteStrategy | None = None
     load_batch_size: int | None = None

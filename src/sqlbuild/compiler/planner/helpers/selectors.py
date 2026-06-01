@@ -16,6 +16,10 @@ from sqlbuild.compiler.planner.types import SelectorKind
 _SELECTOR_KIND_BY_PREFIX: dict[str, SelectorKind] = {
     SelectorKind.SEED: SelectorKind.SEED,
     SelectorKind.SOURCE: SelectorKind.SOURCE,
+    SelectorKind.TASK: SelectorKind.TASK,
+    SelectorKind.ASSET: SelectorKind.ASSET,
+    SelectorKind.LOADER: SelectorKind.LOADER,
+    SelectorKind.CHECK: SelectorKind.CHECK,
     SelectorKind.TAG: SelectorKind.TAG,
     SelectorKind.PATH: SelectorKind.PATH,
 }
@@ -329,21 +333,15 @@ def _resolve_path(
 ) -> frozenset[CompiledObjectKey]:
     """Resolve a path selector to matching keys with optional graph expansion."""
 
-    folder: str = parsed.value
-    prefix: str = folder + "/"
+    folder: str = _normalize_path_selector_value(parsed.value)
+    selector_folder: str = _model_path_candidate(folder)
     matched_keys: frozenset[CompiledObjectKey] = frozenset(
         key
-        for key, model_folder in path_index.items()
-        if model_folder == folder or model_folder.startswith(prefix)
+        for key, indexed_folder in path_index.items()
+        if _path_matches(indexed_folder, selector_folder)
     )
     if not matched_keys:
-        hint: str = ""
-        if folder.startswith("models/"):
-            stripped_folder: str = folder[len("models/") :]
-            hint = (
-                f" (the 'models/' prefix is stripped automatically - try 'path:{stripped_folder}')"
-            )
-        raise PlannerInputError(f"no models found under path '{folder}'.{hint}", code="S009")
+        raise PlannerInputError(f"no models found under path '{folder}'.", code="S009")
 
     result: set[CompiledObjectKey] = set(matched_keys)
     key: CompiledObjectKey
@@ -354,6 +352,28 @@ def _resolve_path(
         for key in matched_keys:
             result.update(expand_downstream(key, downstream))
     return frozenset(result)
+
+
+def _normalize_path_selector_value(value: str) -> str:
+    return value.replace("\\", "/").strip("/")
+
+
+def _model_path_candidate(folder: str) -> str:
+    if folder == "models":
+        return ""
+    if folder.startswith("models/"):
+        return folder[len("models/") :]
+    raise PlannerInputError(
+        "path selectors require an explicit root: use 'models/', 'tasks/', 'assets/', "
+        "'checks/', or 'loaders/'",
+        code="S012",
+    )
+
+
+def _path_matches(indexed_folder: str, selector_folder: str) -> bool:
+    if selector_folder == "":
+        return True
+    return indexed_folder == selector_folder or indexed_folder.startswith(f"{selector_folder}/")
 
 
 def _lookup_key(

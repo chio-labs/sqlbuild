@@ -26,6 +26,7 @@ from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.buildability import check_buildability
+from sqlbuild.compiler.planner.helpers.loader_dag import build_upstream_intermediate_source_map
 from sqlbuild.compiler.planner.models import (
     MissingUpstream,
     ModelCursorSnapshot,
@@ -130,25 +131,26 @@ def gather_warehouse_snapshot(
 
     database: str | None = _resolve_database(project)
     schemas: tuple[str, ...] = _collect_target_schemas(project)
-    if not schemas:
-        return WarehouseSnapshot()
     metadata_names: tuple[str, ...] | None = _build_metadata_name_filter(
         project=project,
         selected_keys=selected_keys,
     )
+    if not schemas and metadata_names is None:
+        return WarehouseSnapshot()
+    query_schemas: tuple[str, ...] | None = schemas or None
 
     relations: dict[str, RelationInfo] = _gather_relations(
         adapter=adapter,
         connection=connection,
         database=database,
-        schemas=schemas,
+        schemas=query_schemas,
         names=metadata_names,
     )
     columns: dict[str, tuple[ColumnInfo, ...]] = _gather_columns(
         adapter=adapter,
         connection=connection,
         database=database,
-        schemas=schemas,
+        schemas=query_schemas,
         names=metadata_names,
     )
     fingerprints: dict[str, Fingerprint] = _gather_fingerprints(
@@ -156,7 +158,7 @@ def gather_warehouse_snapshot(
         connection=connection,
         execute=execute,
         database=database,
-        schemas=schemas,
+        schemas=query_schemas,
     )
 
     skip_cursors: bool = full_refresh or (
@@ -237,6 +239,9 @@ def _build_metadata_name_filter(
         selected_names: frozenset[str] = frozenset(key.name for key in selected_keys)
         model_map: dict[str, CompiledModel] = {model.name: model for model in project.models}
         seed_map: dict[str, CompiledSeed] = {seed.name: seed for seed in project.seeds}
+        source_map: dict[str, SourceEntry] = {
+            source.source_entry.name: source.source_entry for source in project.sources
+        }
         key: CompiledObjectKey
         for key in selected_keys:
             selected_model: CompiledModel | None = model_map.get(key.name)
@@ -253,6 +258,16 @@ def _build_metadata_name_filter(
             selected_seed: CompiledSeed | None = seed_map.get(key.name)
             if selected_seed is not None:
                 names.add(selected_seed.target.name)
+                continue
+            selected_source: SourceEntry | None = source_map.get(key.name)
+            if selected_source is not None:
+                names.add(selected_source.table or selected_source.name)
+        upstream_intermediate_source: SourceEntry
+        for upstream_intermediate_source in build_upstream_intermediate_source_map(
+            project=project,
+            selected_keys=selected_keys,
+        ).values():
+            names.add(upstream_intermediate_source.table or upstream_intermediate_source.name)
     if not names or len(names) > METADATA_NAME_FILTER_LIMIT:
         return None
     return tuple(sorted(names))
@@ -294,7 +309,7 @@ def _gather_relations(
     adapter: BaseAdapter,
     connection: Any,
     database: str | None,
-    schemas: tuple[str, ...],
+    schemas: tuple[str, ...] | None,
     names: tuple[str, ...] | None,
 ) -> dict[str, RelationInfo]:
     """Fetch all existing relations across target schemas."""
@@ -316,7 +331,7 @@ def _gather_columns(
     adapter: BaseAdapter,
     connection: Any,
     database: str | None,
-    schemas: tuple[str, ...],
+    schemas: tuple[str, ...] | None,
     names: tuple[str, ...] | None,
 ) -> dict[str, tuple[ColumnInfo, ...]]:
     """Fetch column metadata for all relations across target schemas."""
@@ -333,10 +348,12 @@ def _gather_fingerprints(
     connection: Any,
     execute: Any,
     database: str | None,
-    schemas: tuple[str, ...],
+    schemas: tuple[str, ...] | None,
 ) -> dict[str, Fingerprint]:
     """Read latest fingerprints across all target schemas."""
 
+    if schemas is None:
+        return {}
     merged: dict[str, Fingerprint] = {}
     schema: str
     for schema in schemas:

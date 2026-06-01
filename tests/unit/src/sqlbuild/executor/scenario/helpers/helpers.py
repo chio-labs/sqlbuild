@@ -9,9 +9,9 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,
-    ScenarioAssertionCheckPlan,
+    ScenarioAssertionExpectationPlan,
     ScenarioExecutionPlan,
-    ScenarioExpectedCheckPlan,
+    ScenarioExpectedExpectationPlan,
     ScenarioFixturePlan,
     ScenarioGraphPlan,
     ScenarioRelationMap,
@@ -118,15 +118,15 @@ def build_snapshot_input_specs_test_plan(
                 logical_ddl="CREATE TABLE daily_revenue AS SELECT 75 AS revenue",
             ),
         ),
-        expected_checks=(
-            ScenarioExpectedCheckPlan(
+        expected_expectations=(
+            ScenarioExpectedExpectationPlan(
                 model_name="daily_revenue",
                 actual_target=model_target,
                 expected_sql=f"SELECT 75 AS revenue{expected_sql_suffix}",
             ),
         ),
-        assertion_checks=(
-            ScenarioAssertionCheckPlan(
+        assertion_expectations=(
+            ScenarioAssertionExpectationPlan(
                 name="no_negative_revenue",
                 sql=f"SELECT * FROM daily_revenue WHERE revenue < 0{expected_sql_suffix}",
             ),

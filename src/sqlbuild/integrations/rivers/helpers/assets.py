@@ -8,7 +8,9 @@ from typing import Any
 from sqlbuild.integrations.rivers.helpers.imports import load_rivers
 from sqlbuild.integrations.rivers.translator import SqlBuildRiversTranslator
 
-_ASSET_KINDS: frozenset[str] = frozenset({"source", "loader", "seed", "model", "function"})
+_ASSET_KINDS: frozenset[str] = frozenset(
+    {"source", "loader", "seed", "model", "function", "task", "asset"}
+)
 
 
 def build_asset_defs(

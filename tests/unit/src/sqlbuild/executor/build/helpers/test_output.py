@@ -421,7 +421,7 @@ TEST_CASES: list[BuildOutputTestCase] = [
         ),
         expected_output_fragments=(
             "SKIP",
-            "check expected orders",
+            "expect expected orders",
             "FAIL  1 mismatched",
             "Completed with errors.",
             "FAIL=1",
@@ -431,7 +431,7 @@ TEST_CASES: list[BuildOutputTestCase] = [
         ),
     ),
     BuildOutputTestCase(
-        description="unit test assertion check rows show assertion names",
+        description="unit test expectation rows show assertion names",
         result=BuildExecutionResult(
             status=BuildStatus.SUCCESS,
             model_results=(
@@ -461,8 +461,8 @@ TEST_CASES: list[BuildOutputTestCase] = [
         ),
         expected_output_fragments=(
             "test   test_fact_orders",
-            "check expected fact_orders",
-            "check assertion line_totals_are_non_negative PASS",
+            "expect expected fact_orders",
+            "expect assertion line_totals_are_non_negative PASS",
         ),
     ),
     BuildOutputTestCase(

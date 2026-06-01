@@ -11,6 +11,7 @@ from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
 from sqlbuild.shared.types import ExecutionResourceKind
 
@@ -86,6 +87,7 @@ class VirtualBuildPipelineResult:
     display_plan_output: PlanOutput
     execution_plan: PlanOutput
     execution_result: BuildExecutionResult
+    python_node_results: tuple[PythonNodeExecutionResult, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

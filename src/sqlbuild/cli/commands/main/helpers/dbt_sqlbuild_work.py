@@ -8,7 +8,7 @@ from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.sql_test_progress import (
-    build_test_check_rows,
+    build_test_expectation_rows,
     resolve_test_name_width,
 )
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
@@ -274,7 +274,7 @@ def _build_test_on_complete(
             group_name=model_name or "(unknown)",
             item_name=result.test_name,
             status_text=status_text,
-            child_rows=build_test_check_rows(result),
+            child_rows=build_test_expectation_rows(result),
             error_code=result.error_code,
             error_help=result.error_help,
             error_message=result.error_message,

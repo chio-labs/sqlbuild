@@ -544,21 +544,21 @@ BUILD_PROGRESS_LOAD_LOG_TEST_CASES: list[BuildProgressLoadLogTestCase] = [
     "test_case",
     [
         NestedProgressChildRowsTestCase(
-            description="completed item renders aligned child check rows without truncation",
+            description="completed item renders aligned child expectation rows without truncation",
             item_name="test_fact_orders",
             name_width=len("assertion line_totals_are_non_negative"),
             expected_fragments=(
                 "test      test_fact_orders",
-                "check   expected fact_orders",
-                "check   assertion line_totals_are_non_negative",
+                "expect  expected fact_orders",
+                "expect  assertion line_totals_are_non_negative",
                 "expected fact_orders                               PASS",
             ),
             unexpected_fragments=("...",),
         )
     ],
-    ids=["completed item renders aligned child check rows without truncation"],
+    ids=["completed item renders aligned child expectation rows without truncation"],
 )
-def test_given_child_rows_when_completing_nested_progress_then_renders_aligned_checks(
+def test_given_child_rows_when_completing_nested_progress_then_renders_aligned_expectations(
     test_case: NestedProgressChildRowsTestCase,
 ) -> None:
     stream: StringIO = StringIO()
@@ -577,12 +577,12 @@ def test_given_child_rows_when_completing_nested_progress_then_renders_aligned_c
         status_text="PASS",
         child_rows=(
             NestedProgressChildRow(
-                label="check",
+                label="expect",
                 name="expected fact_orders",
                 status_text="PASS",
             ),
             NestedProgressChildRow(
-                label="check",
+                label="expect",
                 name="assertion line_totals_are_non_negative",
                 status_text="PASS",
             ),
@@ -769,18 +769,18 @@ def test_given_source_load_logs_when_reporting_progress_then_writes_indented_log
     "test_case",
     [
         BuildProgressSqlTestRowsTestCase(
-            description="completed model renders sql unit test check rows",
+            description="completed model renders sql unit test expectation rows",
             expected_fragments=(
                 "test      test_fact_orders",
-                "check   expected fact_orders",
-                "check   assertion line_totals_are_non_negative PASS",
+                "expect  expected fact_orders",
+                "expect  assertion line_totals_are_non_negative PASS",
             ),
             unexpected_fragments=("...",),
         )
     ],
-    ids=["completed model renders sql unit test check rows"],
+    ids=["completed model renders sql unit test expectation rows"],
 )
-def test_given_sql_unit_test_result_when_reporting_model_progress_then_writes_check_rows(
+def test_given_sql_unit_test_result_when_reporting_model_progress_then_writes_expectation_rows(
     test_case: BuildProgressSqlTestRowsTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

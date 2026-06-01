@@ -1,0 +1,90 @@
+"""Tests for lifecycle-aware run classification."""
+
+from __future__ import annotations
+
+import pytest
+
+from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.python_nodes.helpers.run_lifecycle import (
+    build_python_sql_run_lifecycle_plan,
+)
+from sqlbuild.compiler.python_nodes.models import (
+    PythonNodeGraph,
+    PythonSqlRunLifecyclePlan,
+    PythonSqlRunSelection,
+)
+from tests.unit.src.sqlbuild.compiler.python_nodes.helpers._test_types import (
+    PythonSqlRunLifecycleTestCase,
+)
+from tests.unit.src.sqlbuild.compiler.python_nodes.helpers.helpers import (
+    build_python_node_graph_for_case,
+)
+
+RUN_LIFECYCLE_TEST_CASES: list[PythonSqlRunLifecycleTestCase] = [
+    PythonSqlRunLifecycleTestCase(
+        description="classifies loader upstream task into pre sql ingress",
+        python_graph_case="orders",
+        selection=PythonSqlRunSelection(
+            sql_keys=frozenset(
+                {CompiledObjectKey(resource_type=CompiledResourceType.SOURCE, name="raw_orders")}
+            ),
+            python_node_names=frozenset({"prepare_orders", "load_events"}),
+        ),
+        expected_ingress_python_names=frozenset({"prepare_orders", "load_events"}),
+        expected_ingress_loader_names=frozenset({"load_events"}),
+        expected_read_side_python_names=frozenset(),
+        expected_read_side_sql_names=frozenset({"raw_orders"}),
+    ),
+    PythonSqlRunLifecycleTestCase(
+        description="classifies read only asset into read-side Python",
+        python_graph_case="orders",
+        selection=PythonSqlRunSelection(
+            sql_keys=frozenset(
+                {CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders")}
+            ),
+            python_node_names=frozenset({"export_orders"}),
+        ),
+        expected_ingress_python_names=frozenset(),
+        expected_ingress_loader_names=frozenset(),
+        expected_read_side_python_names=frozenset({"export_orders"}),
+        expected_read_side_sql_names=frozenset({"orders"}),
+    ),
+    PythonSqlRunLifecycleTestCase(
+        description="classifies intermediate loader dependency into pre sql ingress",
+        python_graph_case="intermediate_loader_asset_dependency",
+        selection=PythonSqlRunSelection(
+            sql_keys=frozenset(
+                {CompiledObjectKey(resource_type=CompiledResourceType.SOURCE, name="fetch_pages")}
+            ),
+            python_node_names=frozenset({"fetch_pages", "export_orders"}),
+        ),
+        expected_ingress_python_names=frozenset({"fetch_pages"}),
+        expected_ingress_loader_names=frozenset({"fetch_pages"}),
+        expected_read_side_python_names=frozenset({"export_orders"}),
+        expected_read_side_sql_names=frozenset({"fetch_pages"}),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    RUN_LIFECYCLE_TEST_CASES,
+    ids=[case.description for case in RUN_LIFECYCLE_TEST_CASES],
+)
+def test_given_run_selection_when_building_lifecycle_plan_then_classifies_phases(
+    test_case: PythonSqlRunLifecycleTestCase,
+) -> None:
+    graph: PythonNodeGraph = build_python_node_graph_for_case(test_case.python_graph_case)
+
+    result: PythonSqlRunLifecyclePlan = build_python_sql_run_lifecycle_plan(
+        selection=test_case.selection,
+        python_graph=graph,
+    )
+
+    assert result.ingress_python_node_names == test_case.expected_ingress_python_names
+    assert result.ingress_loader_names == test_case.expected_ingress_loader_names
+    assert result.read_side_python_node_names == test_case.expected_read_side_python_names
+    assert frozenset(key.name for key in result.read_side_sql_keys) == (
+        test_case.expected_read_side_sql_names
+    )

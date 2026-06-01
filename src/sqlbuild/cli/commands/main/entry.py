@@ -91,6 +91,9 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     plan_parser.add_argument("--virtual-env", default=None)
     plan_parser.add_argument("--include-stale-upstreams", action="store_true", default=False)
     plan_parser.add_argument("--changes-only", action="store_true", default=False)
+    plan_parser.add_argument(
+        "--no-python", dest="include_python", action="store_false", default=True
+    )
     plan_parser.add_argument("--verbose", "-v", action="store_true", default=False)
     plan_load_group: argparse._MutuallyExclusiveGroup = plan_parser.add_mutually_exclusive_group()
     plan_load_group.add_argument("--load", dest="load_sources", action="store_true", default=None)
@@ -108,6 +111,9 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     build_parser.add_argument("--virtual-env", default=None)
     build_parser.add_argument("--include-stale-upstreams", action="store_true", default=False)
     build_parser.add_argument("--changes-only", action="store_true", default=False)
+    build_parser.add_argument(
+        "--no-python", dest="include_python", action="store_false", default=True
+    )
     add_execution_json_output_arg(build_parser)
     add_cursor_override_args(build_parser)
     build_load_group: argparse._MutuallyExclusiveGroup = build_parser.add_mutually_exclusive_group()
@@ -124,6 +130,9 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     run_parser.add_argument("--defer-to", default=None)
     run_parser.add_argument("--defer-sources-to", default=None)
     run_parser.add_argument("--json", action="store_true", default=False)
+    run_parser.add_argument(
+        "--no-python", dest="include_python", action="store_false", default=True
+    )
     add_execution_json_output_arg(run_parser)
     add_cursor_override_args(run_parser)
     run_load_group: argparse._MutuallyExclusiveGroup = run_parser.add_mutually_exclusive_group()
@@ -142,6 +151,14 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     add_select_args(test_parser)
     add_vars_args(test_parser)
     add_dbt_config_args(test_parser)
+
+    check_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.CHECK)
+    check_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    check_parser.add_argument("--json", action="store_true", default=False)
+    add_execution_json_output_arg(check_parser)
+    add_select_args(check_parser)
+    add_vars_args(check_parser)
+    add_dbt_config_args(check_parser)
 
     audit_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.AUDIT)
     audit_parser.add_argument("--no-sql-validation", action="store_true", default=False)
@@ -378,6 +395,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     from sqlbuild.cli.commands.main.audit import run_audit
     from sqlbuild.cli.commands.main.build import run_build
+    from sqlbuild.cli.commands.main.check import run_check
     from sqlbuild.cli.commands.main.clone import run_clone
     from sqlbuild.cli.commands.main.compile import run_compile
     from sqlbuild.cli.commands.main.dag import run_dag
@@ -439,6 +457,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_build=run_build,
         run_run=run_run,
         run_test=run_test,
+        run_check=run_check,
         run_audit=run_audit,
         run_seed=run_seed,
         run_load=run_load,
@@ -538,6 +557,7 @@ def _main_with_dependencies(
                 args.full_refresh,
                 args.virtual_env,
                 args.load_sources,
+                args.include_python,
                 args.no_color,
                 select,
                 tuple(args.exclude),
@@ -577,6 +597,7 @@ def _main_with_dependencies(
                 args.virtual_env,
                 args.load_sources,
                 args.reload,
+                args.include_python,
                 args.allow_snapshot_full_refresh,
                 args.allow_snapshot_schema_change,
                 args.concurrency,
@@ -608,6 +629,7 @@ def _main_with_dependencies(
                 args.full_refresh,
                 args.load_sources,
                 args.reload,
+                args.include_python,
                 args.allow_snapshot_full_refresh,
                 args.allow_snapshot_schema_change,
                 args.concurrency,
@@ -621,6 +643,17 @@ def _main_with_dependencies(
             )
         if args.command == CliCommand.TEST:
             return handlers.run_test(
+                project_dir,
+                args.no_sql_validation,
+                args.no_color,
+                select,
+                tuple(args.exclude),
+                args.vars,
+                args.json,
+                args.json_output,
+            )
+        if args.command == CliCommand.CHECK:
+            return handlers.run_check(
                 project_dir,
                 args.no_sql_validation,
                 args.no_color,

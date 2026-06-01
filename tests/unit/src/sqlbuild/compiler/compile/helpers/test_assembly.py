@@ -282,7 +282,7 @@ schema = "analytics_dev"
             "sources/raw.yml": """
 sources:
   - name: raw_orders
-    loader: raw_orders_loader
+    managed: true
     write_strategy: table
 """.strip()
             + "\n",
@@ -290,7 +290,7 @@ sources:
 from sqlbuild.loaders import loader
 
 @loader
-def raw_orders_loader(ctx):
+def raw_orders(ctx):
     return [{"id": 1}]
 """.strip()
             + "\n",

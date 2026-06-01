@@ -9,6 +9,7 @@ from pathlib import Path
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.project import SnapshotsConfig
@@ -31,6 +32,7 @@ def run_virtual_build(
     changes_only: bool = False,
     auto_load_sources: bool = False,
     reload_sources: bool = False,
+    include_python: bool = True,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     fail_fast: bool = False,
@@ -42,7 +44,9 @@ def run_virtual_build(
     end_cursor_ts: datetime | None = None,
     start_cursor_int: int | None = None,
     end_cursor_int: int | None = None,
-    on_plan_ready: Callable[[CompiledProject, PlanOutput], VirtualBuildExecutionHooks]
+    on_plan_ready: Callable[
+        [CompiledProject, PlanOutput, tuple[PythonPlanEntry, ...]], VirtualBuildExecutionHooks
+    ]
     | None = None,
     on_connection_start: Callable[[int], None] | None = None,
     on_connection_complete: Callable[[int, float], None] | None = None,
@@ -66,6 +70,7 @@ def run_virtual_build(
         changes_only=changes_only,
         auto_load_sources=auto_load_sources,
         reload_sources=reload_sources,
+        include_python=include_python,
         select=select,
         exclude=exclude,
         fail_fast=fail_fast,

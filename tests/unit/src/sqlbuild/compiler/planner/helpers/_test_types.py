@@ -67,6 +67,17 @@ class SourceLoadNodesTestCase:
 
 
 @dataclass(frozen=True)
+class LoaderDagExpansionTestCase:
+    description: str
+    selected_names: frozenset[str]
+    execute_dependency_names: frozenset[str]
+    expected_selected_names: frozenset[str]
+    expected_upstream_names: dict[str, tuple[str, ...]]
+    expected_intermediate_source_names: tuple[str, ...]
+    expected_intermediate_loader_flags: tuple[bool, ...]
+
+
+@dataclass(frozen=True)
 class SourceCursorInputColumnsTestCase:
     description: str
     reference_kind: SqlReferenceKind

@@ -33,6 +33,8 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
+from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
@@ -105,6 +107,9 @@ def run_compile(
             downstream_deps=graph.downstream_deps,
         )
     if dag_path is not None:
+        python_graph: PythonNodeGraph = build_discovered_python_node_graph(
+            discovered_inputs=discovered_inputs
+        )
         resolved_dag_path: Path = resolve_compile_dag_path(
             project_dir=effective_project_dir,
             dag_path=dag_path,
@@ -114,6 +119,7 @@ def run_compile(
             build_dag_json(
                 graph=graph,
                 project_name=discovered_inputs.project_config.name,
+                python_graph=python_graph,
             ),
             encoding="utf-8",
         )

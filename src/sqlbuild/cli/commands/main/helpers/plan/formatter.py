@@ -8,6 +8,7 @@ import re
 from collections import Counter
 from collections.abc import Callable, Sequence
 
+from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
     FunctionPlanEntry,
@@ -25,6 +26,7 @@ from sqlbuild.compiler.planner.types import (
     SchemaChangeKind,
     WarningSeverity,
 )
+from sqlbuild.compiler.python_nodes.types import PythonRunPhase
 from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.display import DisplayOptions, append_overflow_line, visible_entries
@@ -61,6 +63,7 @@ def format_plan(
     include_header: bool = True,
     display_options: DisplayOptions | None = None,
     section_header_style: Callable[[str], str] | None = None,
+    python_plan_entries: tuple[PythonPlanEntry, ...] = (),
 ) -> str:
     """Format plan output grouped by reason with inline detail."""
 
@@ -77,18 +80,22 @@ def format_plan(
             include_header=include_header,
             display_options=resolved_display_options,
             section_header_style=resolved_section_header_style,
+            python_plan_entries=python_plan_entries,
         )
         result: str = "\n".join(lines)
         return result if use_color else _strip_ansi(result)
 
     active: list[ModelPlanEntry] = [e for e in plan.model_entries if e.action != PlanAction.SKIP]
     selected_count: int = _selected_count(plan)
-    name_column_width: int = _resolve_name_column_width(plan)
+    name_column_width: int = _resolve_name_column_width(
+        plan, python_plan_entries=python_plan_entries
+    )
 
     if include_header:
         header: str = _plan_ready_header(
             selected_count=selected_count,
             source_load_entries=plan.source_load_entries,
+            python_plan_entries=python_plan_entries,
             full_refresh=False,
         )
         lines.append(style.success_strong(header))
@@ -98,6 +105,15 @@ def format_plan(
         plan,
         section_header_style=resolved_section_header_style,
         display_options=resolved_display_options,
+    )
+
+    _format_python_plan_entries(
+        lines,
+        entries=_python_plan_entries_for_phase(python_plan_entries, PythonRunPhase.PRE_SQL_INGRESS),
+        label="Python ingress",
+        name_column_width=name_column_width,
+        display_options=resolved_display_options,
+        section_header_style=resolved_section_header_style,
     )
 
     _format_source_loads(
@@ -183,6 +199,15 @@ def format_plan(
         display_options=resolved_display_options,
         section_header_style=resolved_section_header_style,
     )
+
+    _format_python_plan_entries(
+        lines,
+        entries=_python_plan_entries_for_phase(python_plan_entries, PythonRunPhase.READ_SIDE),
+        label="Python read-side",
+        name_column_width=name_column_width,
+        display_options=resolved_display_options,
+        section_header_style=resolved_section_header_style,
+    )
     _format_warnings(lines, plan)
 
     output: str = "\n".join(lines)
@@ -196,12 +221,15 @@ def _format_full_refresh(
     include_header: bool,
     display_options: DisplayOptions,
     section_header_style: Callable[[str], str],
+    python_plan_entries: tuple[PythonPlanEntry, ...],
 ) -> None:
     """Format the full refresh variant of plan output."""
 
     selected_count: int = _selected_count(plan)
     active: list[ModelPlanEntry] = [e for e in plan.model_entries if e.action != PlanAction.SKIP]
-    name_column_width: int = _resolve_name_column_width(plan)
+    name_column_width: int = _resolve_name_column_width(
+        plan, python_plan_entries=python_plan_entries
+    )
 
     if include_header:
         lines.append(
@@ -209,10 +237,20 @@ def _format_full_refresh(
                 _plan_ready_header(
                     selected_count=selected_count,
                     source_load_entries=plan.source_load_entries,
+                    python_plan_entries=python_plan_entries,
                     full_refresh=True,
                 )
             )
         )
+
+    _format_python_plan_entries(
+        lines,
+        entries=_python_plan_entries_for_phase(python_plan_entries, PythonRunPhase.PRE_SQL_INGRESS),
+        label="Python ingress",
+        name_column_width=name_column_width,
+        display_options=display_options,
+        section_header_style=section_header_style,
+    )
 
     _format_source_loads(
         lines,
@@ -251,6 +289,15 @@ def _format_full_refresh(
         section_header_style=section_header_style,
     )
 
+    _format_python_plan_entries(
+        lines,
+        entries=_python_plan_entries_for_phase(python_plan_entries, PythonRunPhase.READ_SIDE),
+        label="Python read-side",
+        name_column_width=name_column_width,
+        display_options=display_options,
+        section_header_style=section_header_style,
+    )
+
 
 def _selected_count(plan: PlanOutput) -> int:
     """Count selected executable resources shown in plan output."""
@@ -262,6 +309,7 @@ def _plan_ready_header(
     *,
     selected_count: int,
     source_load_entries: tuple[SourceLoadPlanEntry, ...],
+    python_plan_entries: tuple[PythonPlanEntry, ...],
     full_refresh: bool,
 ) -> str:
     source_count: int = len(source_load_entries)
@@ -274,7 +322,49 @@ def _plan_ready_header(
         action: str = "reload" if any(e.is_reload for e in source_load_entries) else "load"
         source_label: str = f"{source_noun} to {action}"
         parts.append(f"{source_count} {source_label}")
+    python_count: int = len(python_plan_entries)
+    if python_count:
+        node_noun: str = "node" if python_count == 1 else "nodes"
+        parts.append(f"{python_count} Python {node_noun}")
     return f"Plan ready ({', '.join(parts)})"
+
+
+def _python_plan_entries_for_phase(
+    entries: tuple[PythonPlanEntry, ...], phase: PythonRunPhase
+) -> tuple[PythonPlanEntry, ...]:
+    return tuple(entry for entry in entries if entry.phase == phase)
+
+
+def _format_python_plan_entries(
+    lines: list[str],
+    *,
+    entries: tuple[PythonPlanEntry, ...],
+    label: str,
+    name_column_width: int,
+    display_options: DisplayOptions,
+    section_header_style: Callable[[str], str],
+) -> None:
+    if not entries:
+        return
+    lines.append("")
+    lines.append(section_header_style(f"{label} ({len(entries)})"))
+    visible: Sequence[PythonPlanEntry] = visible_entries(entries, options=display_options)
+    entry: PythonPlanEntry
+    for entry in visible:
+        lines.append(
+            _format_name_value_line(
+                entry.name,
+                entry.kind.value,
+                name_column_width=name_column_width,
+            )
+        )
+    append_overflow_line(
+        lines,
+        total_count=len(entries),
+        visible_count=len(visible),
+        indent="  ",
+        options=display_options,
+    )
 
 
 def _format_source_loads(
@@ -915,9 +1005,12 @@ def _format_capped_name_list(names: tuple[str, ...], *, display_options: Display
     return f"{base}, ... (+{remaining_count} more; use {display_options.overflow_flag} to show all)"
 
 
-def _resolve_name_column_width(plan: PlanOutput) -> int:
+def _resolve_name_column_width(
+    plan: PlanOutput, *, python_plan_entries: tuple[PythonPlanEntry, ...] = ()
+) -> int:
     names: list[str] = [entry.name for entry in plan.model_entries]
     names.extend(entry.name for entry in plan.function_entries)
+    names.extend(entry.name for entry in python_plan_entries)
     return resolve_name_column_width(names)
 
 

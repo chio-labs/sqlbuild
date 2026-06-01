@@ -395,13 +395,15 @@ def test_given_scenario_graph_when_building_execution_plan_then_returns_scenario
         for expected_fragment in test_case.expected_function_entry_sql_fragments[entry.name]:
             assert expected_fragment in entry.body_sql
     assert {
-        check.model_name: check.actual_target.qualified_name for check in result.expected_checks
+        expectation.model_name: expectation.actual_target.qualified_name
+        for expectation in result.expected_expectations
     } == test_case.expected_expected_actual_targets
     assert {
-        check.model_name: check.expected_sql for check in result.expected_checks
+        expectation.model_name: expectation.expected_sql
+        for expectation in result.expected_expectations
     } == test_case.expected_expected_sql
     assert {
-        check.name: check.sql for check in result.assertion_checks
+        expectation.name: expectation.sql for expectation in result.assertion_expectations
     } == test_case.expected_assertion_sql
 
 

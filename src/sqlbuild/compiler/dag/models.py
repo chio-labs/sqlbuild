@@ -29,6 +29,14 @@ class DagColumn:
 
 
 @dataclass(frozen=True)
+class DagColumnLineageRef:
+    """Declared upstream column reference for one DAG node column."""
+
+    node: str
+    column: str
+
+
+@dataclass(frozen=True)
 class DagFunctionArgument:
     """Function argument metadata attached to one function node."""
 
@@ -48,8 +56,10 @@ class DagNode:
     path: str | None = None
     description: str | None = None
     tags: tuple[str, ...] = field(default_factory=tuple)
+    group: str | None = None
     meta: dict[str, object] = field(default_factory=dict)
     columns: tuple[DagColumn, ...] = field(default_factory=tuple)
+    column_lineage: dict[str, tuple[DagColumnLineageRef, ...]] = field(default_factory=dict)
     materialization_type: str | None = None
     language: str | None = None
     return_kind: str | None = None
@@ -75,7 +85,11 @@ class DagCheck:
     name: str
     checked_asset_ids: tuple[str, ...]
     path: str | None = None
+    description: str | None = None
     severity: str | None = None
+    tags: tuple[str, ...] = field(default_factory=tuple)
+    group: str | None = None
+    meta: dict[str, object] = field(default_factory=dict)
     attachment_kind: str | None = None
     attached_target_name: str | None = None
     attached_column_name: str | None = None

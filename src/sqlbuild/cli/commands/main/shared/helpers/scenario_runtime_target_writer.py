@@ -16,7 +16,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioRunResult,
 )
 from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
-from sqlbuild.shared.helpers.scenario_expected_check_sql import (
+from sqlbuild.shared.helpers.scenario_expected_comparison_sql import (
     build_scenario_expected_comparison_sql,
 )
 
@@ -26,7 +26,7 @@ _FIXTURES_DIR: str = "fixtures"
 _FUNCTIONS_DIR: str = "functions"
 _SEEDS_DIR: str = "seeds"
 _MODELS_DIR: str = "models"
-_CHECKS_DIR: str = "checks"
+_EXPECTATIONS_DIR: str = "expectations"
 _CLEANUP_DIR: str = "cleanup"
 _LOCAL_DIR: str = "local"
 _SQL_FILE_SUFFIX: str = ".sql"
@@ -82,34 +82,36 @@ def write_scenario_runtime_target(
         model_path: Path = scenario_run_dir / _model_output_path(relative_path)
         _write_sql(path=model_path, sql=sql)
 
-    for expected_check in scenario_plan.expected_checks:
+    for expected_expectation in scenario_plan.expected_expectations:
         expected_path: Path = (
-            scenario_run_dir / _CHECKS_DIR / f"expected__{expected_check.model_name}.sql"
+            scenario_run_dir
+            / _EXPECTATIONS_DIR
+            / f"expected__{expected_expectation.model_name}.sql"
         )
         actual_relation: str = resolve_target_qualified_name(
             adapter=adapter,
-            target=expected_check.actual_target,
+            target=expected_expectation.actual_target,
         )
         _write_sql(
             path=expected_path,
             sql=build_scenario_expected_comparison_sql(
                 actual_sql=f"SELECT * FROM {actual_relation}",
-                expected_sql=expected_check.expected_sql,
+                expected_sql=expected_expectation.expected_sql,
                 set_difference_operator=adapter.render_set_difference_operator(),
             ),
         )
 
-    for assertion_check in scenario_plan.assertion_checks:
+    for assertion_expectation in scenario_plan.assertion_expectations:
         assertion_path: Path = (
-            scenario_run_dir / _CHECKS_DIR / f"assertion__{assertion_check.name}.sql"
+            scenario_run_dir / _EXPECTATIONS_DIR / f"assertion__{assertion_expectation.name}.sql"
         )
         _write_sql(
             path=assertion_path,
             sql=(
                 "SELECT COUNT(*) FROM "
-                f"({assertion_check.sql}) AS __scenario_assertion_failures;\n\n"
+                f"({assertion_expectation.sql}) AS __scenario_assertion_failures;\n\n"
                 "SELECT * FROM "
-                f"({assertion_check.sql}) AS __scenario_assertion_failures\n"
+                f"({assertion_expectation.sql}) AS __scenario_assertion_failures\n"
                 "LIMIT 10;"
             ),
         )
@@ -147,7 +149,7 @@ def write_local_scenario_runtime_target(
         result=result,
     )
     _write_local_model_artifacts(local_run_dir=local_run_dir, scenario_plan=local_plan)
-    _write_local_check_artifacts(
+    _write_local_expectation_artifacts(
         local_run_dir=local_run_dir,
         adapter=adapter,
         scenario_plan=local_plan,
@@ -234,36 +236,36 @@ def _write_local_model_artifacts(
         _write_sql(path=model_path, sql=entry.resolved_sql)
 
 
-def _write_local_check_artifacts(
+def _write_local_expectation_artifacts(
     *, local_run_dir: Path, adapter: BaseAdapter, scenario_plan: ScenarioExecutionPlan
 ) -> None:
-    for expected_check in scenario_plan.expected_checks:
+    for expected_expectation in scenario_plan.expected_expectations:
         expected_path: Path = (
-            local_run_dir / _CHECKS_DIR / f"expected__{expected_check.model_name}.sql"
+            local_run_dir / _EXPECTATIONS_DIR / f"expected__{expected_expectation.model_name}.sql"
         )
         actual_relation: str = resolve_target_qualified_name(
             adapter=adapter,
-            target=expected_check.actual_target,
+            target=expected_expectation.actual_target,
         )
         _write_sql(
             path=expected_path,
             sql=build_scenario_expected_comparison_sql(
                 actual_sql=f"SELECT * FROM {actual_relation}",
-                expected_sql=expected_check.expected_sql,
+                expected_sql=expected_expectation.expected_sql,
                 set_difference_operator=adapter.render_set_difference_operator(),
             ),
         )
-    for assertion_check in scenario_plan.assertion_checks:
+    for assertion_expectation in scenario_plan.assertion_expectations:
         assertion_path: Path = (
-            local_run_dir / _CHECKS_DIR / f"assertion__{assertion_check.name}.sql"
+            local_run_dir / _EXPECTATIONS_DIR / f"assertion__{assertion_expectation.name}.sql"
         )
         _write_sql(
             path=assertion_path,
             sql=(
                 "SELECT COUNT(*) FROM "
-                f"({assertion_check.sql}) AS __scenario_assertion_failures;\n\n"
+                f"({assertion_expectation.sql}) AS __scenario_assertion_failures;\n\n"
                 "SELECT * FROM "
-                f"({assertion_check.sql}) AS __scenario_assertion_failures\n"
+                f"({assertion_expectation.sql}) AS __scenario_assertion_failures\n"
                 "LIMIT 10;"
             ),
         )

@@ -224,7 +224,7 @@ PLAN_TEST_CASES: list[RealDbtInteropPlanTestCase] = [
         expected_sqlbuild_skip_reason=None,
     ),
     RealDbtInteropPlanTestCase(
-        description="translates dbt model path selector for real SQLBuild project",
+        description="routes explicit model path selector for real SQLBuild project",
         args=("--select", "path:models/marts"),
         sqlbuild_model_sql_by_relative_path={
             "marts/mart_orders.sql": "select 1 as order_id",
@@ -239,7 +239,7 @@ PLAN_TEST_CASES: list[RealDbtInteropPlanTestCase] = [
         expected_dbt_anchor_unique_ids_by_term={},
         expected_dbt_skip_reason=DbtInteropSkipReason.NO_DBT_WORK,
         expected_sqlbuild_skip_reason=None,
-        expected_path_translations=(("path:models/marts", "path:marts"),),
+        expected_path_translations=(),
     ),
     RealDbtInteropPlanTestCase(
         description="preserves routed SQLBuild cursor args in real plan argv",

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.helpers.loader_dag import build_intermediate_source_map
+from sqlbuild.compiler.planner.helpers.loader_dag import (
+    build_intermediate_source_map,
+    build_upstream_intermediate_source_map,
+)
 from sqlbuild.compiler.planner.models import SourceLoadPlanEntry
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
@@ -19,6 +22,9 @@ def build_source_load_map(
         source.source_entry.name: source.source_entry for source in project.sources
     }
     source_map.update(build_intermediate_source_map(project=project, selected_keys=selected_keys))
+    source_map.update(
+        build_upstream_intermediate_source_map(project=project, selected_keys=selected_keys)
+    )
     return source_map
 
 

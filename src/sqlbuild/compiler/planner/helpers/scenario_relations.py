@@ -38,9 +38,9 @@ from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,
     PlanWarning,
     ScenarioArtifactIdentity,
-    ScenarioAssertionCheckPlan,
+    ScenarioAssertionExpectationPlan,
     ScenarioExecutionPlan,
-    ScenarioExpectedCheckPlan,
+    ScenarioExpectedExpectationPlan,
     ScenarioFixturePlan,
     ScenarioGraphPlan,
     ScenarioRelationMap,
@@ -331,7 +331,7 @@ def build_scenario_execution_plan(
         model_entries.append(entry)
         warnings.extend(model_warnings)
 
-    expected_checks: tuple[ScenarioExpectedCheckPlan, ...] = tuple(
+    expected_expectations: tuple[ScenarioExpectedExpectationPlan, ...] = tuple(
         _build_expected_check_plan(
             expected_cte=expected_cte,
             relation_plan=relation_plan,
@@ -340,8 +340,8 @@ def build_scenario_execution_plan(
         )
         for expected_cte in scenario.expected_ctes
     )
-    assertion_checks: tuple[ScenarioAssertionCheckPlan, ...] = tuple(
-        ScenarioAssertionCheckPlan(
+    assertion_expectations: tuple[ScenarioAssertionExpectationPlan, ...] = tuple(
+        ScenarioAssertionExpectationPlan(
             name=assertion_cte.name.removeprefix("__assert__"),
             sql=resolve_scenario_check_sql(
                 sql=assertion_cte.sql_body,
@@ -363,8 +363,8 @@ def build_scenario_execution_plan(
             seed_entries=seed_entries,
             function_entries=function_entries,
             model_entries=tuple(model_entries),
-            expected_checks=expected_checks,
-            assertion_checks=assertion_checks,
+            expected_expectations=expected_expectations,
+            assertion_expectations=assertion_expectations,
         ),
         tuple(warnings),
     )
@@ -647,14 +647,14 @@ def _build_expected_check_plan(
     relation_plan: ScenarioRelationPlan,
     sqlglot_enabled: bool,
     sqlglot_dialect: str | None,
-) -> ScenarioExpectedCheckPlan:
+) -> ScenarioExpectedExpectationPlan:
     model_name: str = expected_cte.name.removeprefix("__expected__")
     actual_target: CompiledRelationTarget = _required_target(
         relation_plan.model_targets,
         model_name,
         kind=ScenarioArtifactKind.MODEL,
     )
-    return ScenarioExpectedCheckPlan(
+    return ScenarioExpectedExpectationPlan(
         model_name=model_name,
         actual_target=actual_target,
         expected_sql=resolve_scenario_check_sql(

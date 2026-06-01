@@ -184,7 +184,7 @@ Bound to a source in `sources/*.yml`:
 ```yaml
 sources:
   - name: raw_orders
-    loader: raw_orders
+    managed: true
     write_strategy: delete_insert
     cursor_column: ordered_at
     columns:
