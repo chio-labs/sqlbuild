@@ -1,11 +1,9 @@
-"""Public entrypoint for build resource expansion."""
+"""Public required-build-resource expansion entrypoint."""
 
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
-from sqlbuild.compiler.planner.helpers.selectors import (
-    expand_required_build_resources as _expand_required_build_resources,
-)
+from sqlbuild.compiler.planner.helpers.selectors import expand_required_build_resources
 
 
 def expand_build_resource_selection(
@@ -17,9 +15,9 @@ def expand_build_resource_selection(
     include_upstream_seeds: bool = False,
     include_downstream_functions: bool = False,
 ) -> frozenset[CompiledObjectKey]:
-    """Add non-model resources needed to build a coherent selected model scope."""
+    """Expand a selected SQL scope with required build resources."""
 
-    return _expand_required_build_resources(
+    return expand_required_build_resources(
         selected_keys=selected_keys,
         upstream=upstream,
         downstream=downstream,

@@ -456,6 +456,9 @@ def test_given_python_asset_with_json_output_when_building_then_json_includes_py
         "failure_count": 0,
         "skipped_count": 0,
         "warning_count": 0,
+        "python_check_pass_count": 0,
+        "python_check_warn_count": 0,
+        "python_check_fail_count": 0,
     }
 
 

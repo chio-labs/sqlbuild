@@ -42,13 +42,14 @@ def build_virtual_python_run_selection(
     )
     if include_python:
         raw_select: tuple[str, ...] = select or selected_model_names
-        run_selection: PythonSqlRunSelection = resolve_python_sql_run_selection_from_graph(
-            select=raw_select,
-            exclude=exclude,
-            project_graph=graph,
-            python_graph=python_graph,
-        )
-        selected_python_names = selected_python_names | run_selection.python_node_names
+        if raw_select:
+            run_selection: PythonSqlRunSelection = resolve_python_sql_run_selection_from_graph(
+                select=raw_select,
+                exclude=exclude,
+                project_graph=graph,
+                python_graph=python_graph,
+            )
+            selected_python_names = selected_python_names | run_selection.python_node_names
         selected_python_names = selected_python_names | sql_attached_python_names(
             selected_sql_names=frozenset(key.name for key in plan_output.selected_keys),
             python_graph=python_graph,
