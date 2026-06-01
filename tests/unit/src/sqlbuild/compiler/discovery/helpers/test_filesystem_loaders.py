@@ -96,6 +96,30 @@ def enriched_events(ctx):
         expected_contracts=(None, None),
     ),
     DiscoverLoaderFunctionsTestCase(
+        description="discovers explicit loader names and dependencies",
+        files={
+            "loaders/events.py": """
+from sqlbuild.loaders import loader
+
+@loader(name="fetch_events")
+def make_fetch(ctx):
+    return []
+
+@loader(name="enriched_events", depends_on=[make_fetch])
+def make_enriched(ctx):
+    return []
+""",
+        },
+        expected_names=("enriched_events", "fetch_events"),
+        expected_targets=(None, None),
+        expected_dependency_counts=(1, 0),
+        expected_write_strategies=(None, None),
+        expected_cursor_columns=(None, None),
+        expected_unique_keys=((), ()),
+        expected_column_names=((), ()),
+        expected_contracts=(None, None),
+    ),
+    DiscoverLoaderFunctionsTestCase(
         description="returns empty tuple when loaders directory does not exist",
         files={},
         expected_names=(),
