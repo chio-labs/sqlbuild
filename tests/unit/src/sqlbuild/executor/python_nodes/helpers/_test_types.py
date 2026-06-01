@@ -169,3 +169,14 @@ class PythonCheckContextResultTestCase:
     expected_severities: tuple[
         PythonCheckSeverity | None, PythonCheckSeverity | None, PythonCheckSeverity | None
     ]
+
+
+@dataclass(frozen=True)
+class PythonCheckExecutorTestCase:
+    description: str
+    expected_passed: bool
+    expected_severity: PythonCheckSeverity
+    expected_message: str | None
+    expected_error_fragment: str | None = None
+    upstream_status: PythonNodeStatus = PythonNodeStatus.SUCCESS
+    upstream_skip_reason: str | None = None

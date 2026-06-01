@@ -220,6 +220,19 @@ class CliEntrypointHandlers:
         ],
         int,
     ]
+    run_check: Callable[
+        [
+            Path | None,
+            bool,
+            bool,
+            tuple[str, ...],
+            tuple[str, ...],
+            dict[str, object],
+            bool,
+            Path | None,
+        ],
+        int,
+    ]
     run_audit: Callable[
         [
             Path | None,
