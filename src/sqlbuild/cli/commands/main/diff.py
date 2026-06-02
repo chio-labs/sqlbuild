@@ -15,8 +15,8 @@ from sqlbuild.cli.commands.main.helpers.diff.virtual_output import format_virtua
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import (
-    resolve_environment_connection_config,
     resolve_project_connection_config,
+    resolve_target_connection_config,
 )
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import (
     ConnectionProgressReporter,
@@ -32,7 +32,6 @@ from sqlbuild.executor.diff.main.execute import execute_diff
 from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
-from sqlbuild.spec.models.types import EnvironmentMode
 from sqlbuild.virtual.diff.main.diff import run_virtual_diff
 
 
@@ -40,8 +39,8 @@ def run_diff(
     project_dir: Path | None,
     no_color: bool,
     no_sql_validation: bool,
-    from_environment: str,
-    to_environment: str,
+    from_name: str,
+    to_name: str,
     full: bool,
     schema_only: bool,
     bounded: str | None,
@@ -71,19 +70,19 @@ def run_diff(
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
-    is_virtual_mode: bool = (
-        discovered_inputs.project_config.environment_mode == EnvironmentMode.VIRTUAL
-    )
+    is_virtual_mode: bool = discovered_inputs.project_config.settings.virtual_environments
     if not select and not is_virtual_mode:
         raise CliUserError("diff requires --select in v1", code="C204")
     if is_virtual_mode:
+        from_virtual_environment: str = from_name
+        to_virtual_environment: str = to_name
         return _run_virtual_diff_cli(
             project_dir=effective_project_dir,
             discovered_inputs=discovered_inputs,
             no_color=no_color,
             no_sql_validation=no_sql_validation,
-            from_virtual_environment=from_environment,
-            to_virtual_environment=to_environment,
+            from_virtual_environment=from_virtual_environment,
+            to_virtual_environment=to_virtual_environment,
             full=full,
             schema_only=schema_only,
             bounded=bounded,
@@ -95,10 +94,12 @@ def run_diff(
             cli_vars=cli_vars,
             allow_partial_diff=allow_partial_diff,
         )
-    if from_environment not in discovered_inputs.project_config.environments:
-        raise CliUserError(f"unknown diff FROM environment '{from_environment}'", code="C205")
-    if to_environment not in discovered_inputs.project_config.environments:
-        raise CliUserError(f"unknown diff TO environment '{to_environment}'", code="C206")
+    from_target: str = from_name
+    to_target: str = to_name
+    if from_target not in discovered_inputs.project_config.targets:
+        raise CliUserError(f"unknown diff FROM target '{from_target}'", code="C205")
+    if to_target not in discovered_inputs.project_config.targets:
+        raise CliUserError(f"unknown diff TO target '{to_target}'", code="C206")
 
     effective_adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
@@ -113,8 +114,8 @@ def run_diff(
     left_project, right_project, selected_names = run_diff_pipeline(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
-        from_environment=from_environment,
-        to_environment=to_environment,
+        from_target=from_target,
+        to_target=to_target,
         no_sql_validation=no_sql_validation,
         select=select,
         exclude=exclude,
@@ -132,10 +133,10 @@ def run_diff(
     effective_max_row_only_examples: int = (
         max_row_only_examples if max_row_only_examples is not None else (10 if verbose else 3)
     )
-    connection_config: dict[str, object] = resolve_environment_connection_config(
+    connection_config: dict[str, object] = resolve_target_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
-        environment_name=to_environment,
+        target_name=to_target,
         cli_vars=cli_vars,
     )
     connection: Any = adapter.connect(connection_config)
@@ -162,8 +163,8 @@ def run_diff(
     print(
         render_diff_output(
             result=result,
-            from_label=from_environment,
-            to_label=to_environment,
+            from_label=from_target,
+            to_label=to_target,
             mode_label=mode_label,
             use_color=use_color,
             verbose=verbose,

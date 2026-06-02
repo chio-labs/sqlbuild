@@ -26,25 +26,25 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                     """
                     name = "clone_project"
                     adapter = "duckdb"
-                    default_environment = "dev"
+                    default_target = "dev"
 
-                    [environments.prod]
+                    [targets.prod]
                     schema = "prod"
 
-                    [environments.prod.connection]
+                    [targets.prod.connection]
                     database = "clone.duckdb"
 
-                    [environments.prod.clone]
+                    [targets.prod.clone]
                     allow_as_source = true
                     allow_as_target = false
 
-                    [environments.dev]
+                    [targets.dev]
                     schema = "dev"
 
-                    [environments.dev.connection]
+                    [targets.dev.connection]
                     database = "clone.duckdb"
 
-                    [environments.dev.clone]
+                    [targets.dev.clone]
                     allow_as_source = true
                     allow_as_target = true
                     """

@@ -6,7 +6,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     CompileModelConfig,
     InferredColumn,
 )
@@ -40,7 +40,7 @@ def make_contract_project(
     )
     return CompiledProject(
         run_id="run-1",
-        effective_environment_name="dev",
+        effective_target_name="dev",
         effective_connection={},
         effective_vars={},
         models=(
@@ -53,7 +53,7 @@ def make_contract_project(
                 config=CompileModelConfig(
                     values={} if contract is None else {"contract": contract}
                 ),
-                target=CompiledRelationTarget(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema="analytics",
                     name=model_name,

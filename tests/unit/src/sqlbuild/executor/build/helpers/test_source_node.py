@@ -64,7 +64,7 @@ def test_given_build_source_node_when_executing_then_runs_loader_runtime(
             connection_config={"database": str(tmp_path / "source_node.duckdb")},
             connection=connection,
             run_id="run-1",
-            environment="dev",
+            target="dev",
             effective_vars={"region": "west"},
             is_reload=False,
             start_cursor_ts=None,

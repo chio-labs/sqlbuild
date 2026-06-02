@@ -13,7 +13,7 @@ from sqlbuild.virtual.planner.models import VirtualPlanSemantics
 def apply_virtual_plan_output(
     *,
     plan_output: PlanOutput,
-    environment_name: str,
+    target_name: str,
     semantics: VirtualPlanSemantics,
     selected_model_names: tuple[str, ...] = (),
 ) -> PlanOutput:
@@ -28,7 +28,7 @@ def apply_virtual_plan_output(
     )
     return with_virtual_metadata(
         plan_output=rewritten,
-        environment_name=environment_name,
+        target_name=target_name,
         stale_model_names=semantics.stale_model_names,
         stale_root_names=tuple(sorted(semantics.stale_root_reasons)),
         remaining_stale_model_names=tuple(

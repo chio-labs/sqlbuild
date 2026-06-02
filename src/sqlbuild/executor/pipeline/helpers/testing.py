@@ -10,7 +10,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import FunctionInfo, StatementRecorder
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.models import FunctionPlanEntry, PlanOutput, SqlTestPlanEntry
@@ -94,12 +94,14 @@ def _prepare_test_functions(
     function_entries: dict[CompiledObjectKey, FunctionPlanEntry] = {
         entry.key: entry for entry in plan.function_entries
     }
-    required_targets_by_key: dict[CompiledObjectKey, CompiledRelationTarget] = {}
+    required_targets_by_key: dict[CompiledObjectKey, CompiledRelationDestination] = {}
     test_entry: SqlTestPlanEntry
     for test_entry in plan.test_entries:
         dep: CompiledObjectKey
         for dep in test_entry.function_deps:
-            function_target: CompiledRelationTarget | None = plan.function_targets.get(dep.name)
+            function_target: CompiledRelationDestination | None = plan.function_targets.get(
+                dep.name
+            )
             if function_target is not None:
                 required_targets_by_key[dep] = function_target
     if not required_targets_by_key:
@@ -124,7 +126,7 @@ def _prepare_test_functions(
 
     missing_by_key: dict[CompiledObjectKey, str] = {}
     key: CompiledObjectKey
-    target: CompiledRelationTarget
+    target: CompiledRelationDestination
     for key, target in required_targets_by_key.items():
         function_key: tuple[str | None, str | None, str] = (
             _normalize_name(target.database),
@@ -178,10 +180,10 @@ def _register_connection_scoped_python_functions(
 
 
 def _group_function_names(
-    targets: Iterable[CompiledRelationTarget],
+    targets: Iterable[CompiledRelationDestination],
 ) -> tuple[tuple[str | None, str | None, tuple[str, ...]], ...]:
     grouped: dict[tuple[str | None, str | None], list[str]] = {}
-    target: CompiledRelationTarget
+    target: CompiledRelationDestination
     for target in targets:
         grouped.setdefault((target.database, target.schema), []).append(target.name)
     return tuple((database, schema, tuple(names)) for (database, schema), names in grouped.items())

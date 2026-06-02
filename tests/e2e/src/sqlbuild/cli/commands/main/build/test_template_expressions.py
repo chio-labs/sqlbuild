@@ -31,7 +31,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
 
                 adapter = "duckdb"
 
-                default_environment = "dev"
+                default_target = "dev"
 
 
 
@@ -51,11 +51,11 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
 
 
 
-                [environments]
+                [targets]
 
 
 
-                [environments.dev]
+                [targets.dev]
 
                 schema = "${coalesce(ENV:TEMPLATE_SCHEMA, 'main')}"
 

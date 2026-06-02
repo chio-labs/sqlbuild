@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
@@ -127,7 +127,7 @@ def build_logical_ddl(
     *,
     action: PlanAction,
     resolved_sql: str,
-    target: CompiledRelationTarget,
+    target: CompiledRelationDestination,
     unique_key: tuple[str, ...],
     warehouse_columns: tuple[ColumnInfo, ...],
 ) -> str:

@@ -132,9 +132,9 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
         stream.write(f"\n{style.success('Eligible expired VDEs')}\n")
         expired_environment_candidate: JanitorExpiredVirtualEnvironmentCandidate
         for expired_environment_candidate in plan.expired_virtual_environment_candidates:
-            environment_name: str = expired_environment_candidate.virtual_environment_name
+            target_name: str = expired_environment_candidate.virtual_environment_name
             stream.write(
-                f"  {style.object_name(environment_name)}  "
+                f"  {style.object_name(target_name)}  "
                 f"{style.muted('expired virtual environment')}\n"
             )
 
@@ -186,4 +186,4 @@ def confirmation_text(plan: JanitorPlan) -> str:
 def environment_label(plan: JanitorPlan) -> str:
     """Render the janitor environment label."""
 
-    return plan.environment_name if plan.environment_name is not None else "default"
+    return plan.target_name if plan.target_name is not None else "default"

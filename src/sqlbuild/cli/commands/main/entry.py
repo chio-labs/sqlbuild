@@ -10,7 +10,7 @@ from pathlib import Path
 
 from sqlbuild.cli.commands.main.helpers.compile.constants import COMPILE_LINEAGE_MODE_VALUES
 from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
-from sqlbuild.cli.commands.main.helpers.diff.validation import parse_diff_environment_range
+from sqlbuild.cli.commands.main.helpers.diff.validation import parse_diff_name_range
 from sqlbuild.cli.commands.main.helpers.entry.errors import (
     SqlbuildArgumentParser,
     build_argument_parser_class,
@@ -187,8 +187,8 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
 
     clone_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.CLONE)
     clone_parser.add_argument("--no-sql-validation", action="store_true", default=False)
-    clone_parser.add_argument("--from", dest="from_environment", required=True)
-    clone_parser.add_argument("--to", dest="to_environment", required=True)
+    clone_parser.add_argument("--from", dest="from_target", required=True)
+    clone_parser.add_argument("--to", dest="to_target", required=True)
     clone_parser.add_argument("--hard-copy", action="store_true", default=False)
     clone_parser.add_argument("--virtual-env", default=None)
     clone_parser.add_argument("--skip-locked", action="store_true", default=False)
@@ -198,7 +198,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     add_dbt_config_args(clone_parser)
 
     diff_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DIFF)
-    diff_parser.add_argument("environment_range", metavar="FROM:TO")
+    diff_parser.add_argument("target_range", metavar="FROM:TO")
     diff_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     diff_parser.add_argument("--full", action="store_true", default=False)
     diff_parser.add_argument("--schema-only", action="store_true", default=False)
@@ -228,8 +228,8 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     reconcile_attach_parser.add_argument("--auto-approve", action="store_true", default=False)
     promote_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PROMOTE)
     promote_parser.add_argument("--no-sql-validation", action="store_true", default=False)
-    promote_parser.add_argument("--from", dest="from_environment", required=True)
-    promote_parser.add_argument("--to", dest="to_environment", required=True)
+    promote_parser.add_argument("--from", dest="from_virtual_environment", required=True)
+    promote_parser.add_argument("--to", dest="to_virtual_environment", required=True)
     promote_parser.add_argument("--allow-partial-promotion", action="store_true", default=False)
     promote_parser.add_argument("--include-stale-upstreams", action="store_true", default=False)
     promote_parser.add_argument("--verbose", "-v", action="store_true", default=False)
@@ -719,14 +719,14 @@ def _main_with_dependencies(
                 args.vars,
             )
         if args.command == CliCommand.CLONE:
-            if args.from_environment is None or args.to_environment is None:
+            if args.from_target is None or args.to_target is None:
                 raise CliUserError("clone requires --from and --to", code="C406")
             return handlers.run_clone(
                 project_dir,
                 args.no_color,
                 args.no_sql_validation,
-                args.from_environment,
-                args.to_environment,
+                args.from_target,
+                args.to_target,
                 args.hard_copy,
                 args.virtual_env,
                 args.skip_locked,
@@ -736,15 +736,15 @@ def _main_with_dependencies(
                 args.vars,
             )
         if args.command == CliCommand.DIFF:
-            from_environment: str
-            to_environment: str
-            from_environment, to_environment = parse_diff_environment_range(args.environment_range)
+            from_name: str
+            to_name: str
+            from_name, to_name = parse_diff_name_range(args.target_range)
             return handlers.run_diff(
                 project_dir,
                 args.no_color,
                 args.no_sql_validation,
-                from_environment,
-                to_environment,
+                from_name,
+                to_name,
                 args.full,
                 args.schema_only,
                 args.bounded,
@@ -768,14 +768,14 @@ def _main_with_dependencies(
                 args.vars,
             )
         if args.command == CliCommand.PROMOTE:
-            if args.from_environment is None or args.to_environment is None:
+            if args.from_virtual_environment is None or args.to_virtual_environment is None:
                 raise CliUserError("promote requires --from and --to", code="C244")
             return handlers.run_promote(
                 project_dir,
                 args.no_color,
                 args.no_sql_validation,
-                args.from_environment,
-                args.to_environment,
+                args.from_virtual_environment,
+                args.to_virtual_environment,
                 select,
                 tuple(args.exclude),
                 args.allow_partial_promotion,

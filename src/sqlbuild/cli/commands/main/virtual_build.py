@@ -235,7 +235,7 @@ def run_virtual_build(
                     connection_config=connection_config,
                     connection=check_connection,
                     run_id=result.project.run_id,
-                    environment=result.project.effective_environment_name,
+                    target=result.project.effective_target_name,
                     vars=result.project.effective_vars,
                     is_reload=reload_sources,
                     run_state=check_run_state,

@@ -4,29 +4,29 @@ from __future__ import annotations
 
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.models.project import EnvironmentConfig
+from sqlbuild.spec.models.project import TargetConfig
 
 
 def validate_clone_request(
     *,
     discovered_inputs: DiscoveredProjectInputs,
-    from_environment: str,
-    to_environment: str,
+    from_target: str,
+    to_target: str,
 ) -> None:
-    environments: dict[str, EnvironmentConfig] = discovered_inputs.project_config.environments
-    if from_environment == to_environment:
-        raise CliUserError("clone requires different --from and --to environments", code="C401")
-    if from_environment not in environments:
-        raise CliUserError(f"unknown environment '{from_environment}'", code="C402")
-    if to_environment not in environments:
-        raise CliUserError(f"unknown environment '{to_environment}'", code="C403")
-    if not environments[from_environment].clone.allow_as_source:
+    targets: dict[str, TargetConfig] = discovered_inputs.project_config.targets
+    if from_target == to_target:
+        raise CliUserError("clone requires different --from and --to targets", code="C401")
+    if from_target not in targets:
+        raise CliUserError(f"unknown target '{from_target}'", code="C402")
+    if to_target not in targets:
+        raise CliUserError(f"unknown target '{to_target}'", code="C403")
+    if not targets[from_target].clone.allow_as_source:
         raise CliUserError(
-            f"environment '{from_environment}' is not allowed as a clone source",
+            f"target '{from_target}' is not allowed as a clone source target",
             code="C404",
         )
-    if not environments[to_environment].clone.allow_as_target:
+    if not targets[to_target].clone.allow_as_target:
         raise CliUserError(
-            f"environment '{to_environment}' is not allowed as a clone target",
+            f"target '{to_target}' is not allowed as a clone target",
             code="C405",
         )

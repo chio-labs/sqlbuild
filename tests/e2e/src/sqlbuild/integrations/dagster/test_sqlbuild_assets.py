@@ -401,8 +401,8 @@ def test_given_chained_source_loader_when_dagster_selects_source_then_reuses_int
                 "@loader(depends_on=[fetch_events])\n"
                 "def raw_events(ctx):\n"
                 "    events = ctx.loader(fetch_events)\n"
-                "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.target} AS "
-                "SELECT event_id FROM {events.target}')\n"
+                "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.destination} AS "
+                "SELECT event_id FROM {events.destination}')\n"
             ),
             "sources/raw.yml": "sources:\n  - name: raw_events\n    managed: true\n",
         },
@@ -492,8 +492,8 @@ def test_given_chained_source_loader_when_dagster_selects_source_without_interme
                 "@loader(depends_on=[fetch_events])\n"
                 "def raw_events(ctx):\n"
                 "    events = ctx.loader(fetch_events)\n"
-                "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.target} AS "
-                "SELECT event_id FROM {events.target}')\n"
+                "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.destination} AS "
+                "SELECT event_id FROM {events.destination}')\n"
             ),
             "sources/raw.yml": "sources:\n  - name: raw_events\n    managed: true\n",
         },

@@ -6,13 +6,13 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
-from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
+from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
 
 
 def qualified_name(*, adapter: BaseAdapter, model: Any) -> str:
     """Return a compiled model's relation name."""
 
-    return resolve_target_qualified_name(adapter=adapter, target=model.target)
+    return resolve_destination_qualified_name(adapter=adapter, target=model.destination)
 
 
 def get_unique_key(model: Any) -> tuple[str, ...]:

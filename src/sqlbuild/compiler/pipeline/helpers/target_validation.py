@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlbuild.adapter.shared.types import BuiltinAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 
@@ -22,12 +22,12 @@ def validate_project_targets(*, adapter_name: str, project: CompiledProject) -> 
     _validate_required_target_parts(
         adapter_name=adapter_name,
         resource_kind="model",
-        targets={model.name: model.target for model in project.models},
+        targets={model.name: model.destination for model in project.models},
     )
     _validate_required_target_parts(
         adapter_name=adapter_name,
         resource_kind="seed",
-        targets={seed.name: seed.target for seed in project.seeds},
+        targets={seed.name: seed.destination for seed in project.seeds},
     )
 
 
@@ -35,10 +35,10 @@ def _validate_required_target_parts(
     *,
     adapter_name: str,
     resource_kind: str,
-    targets: dict[str, CompiledRelationTarget],
+    targets: dict[str, CompiledRelationDestination],
 ) -> None:
     resource_name: str
-    target: CompiledRelationTarget
+    target: CompiledRelationDestination
     for resource_name, target in targets.items():
         missing_parts: list[str] = []
         if target.database is None:

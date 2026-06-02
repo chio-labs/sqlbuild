@@ -8,8 +8,7 @@ from sqlbuild.cli.commands.main.shared.helpers.mode import (
     enforce_no_defer_to_in_virtual_mode,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
-from sqlbuild.spec.models.types import EnvironmentMode
+from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, SettingsConfig
 from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import ModeGuardTestCase
 
 
@@ -18,7 +17,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import
     [
         ModeGuardTestCase(
             description="allows run in direct mode",
-            environment_mode=EnvironmentMode.DIRECT.value,
+            virtual_environments=False,
             command_name="run",
             expected_error_fragment=None,
         )
@@ -32,7 +31,7 @@ def test_given_direct_mode_command_when_enforcing_support_then_allows_execution(
         project_config=ProjectConfig(
             name="demo",
             adapter="duckdb",
-            environment_mode=EnvironmentMode(test_case.environment_mode),
+            settings=SettingsConfig(virtual_environments=test_case.virtual_environments),
         ),
         local_config=LocalConfig(),
     )
@@ -49,9 +48,9 @@ def test_given_direct_mode_command_when_enforcing_support_then_allows_execution(
     [
         ModeGuardTestCase(
             description="blocks clone in virtual mode",
-            environment_mode=EnvironmentMode.VIRTUAL.value,
+            virtual_environments=True,
             command_name="clone",
-            expected_error_fragment="clone is not supported when environment_mode = 'virtual'",
+            expected_error_fragment="clone is not supported when virtual_environments = true",
         )
     ],
     ids=["blocks clone in virtual mode"],
@@ -63,7 +62,7 @@ def test_given_virtual_mode_command_when_enforcing_support_then_raises_cli_user_
         project_config=ProjectConfig(
             name="demo",
             adapter="duckdb",
-            environment_mode=EnvironmentMode(test_case.environment_mode),
+            settings=SettingsConfig(virtual_environments=test_case.virtual_environments),
         ),
         local_config=LocalConfig(),
     )
@@ -83,11 +82,11 @@ def test_given_virtual_mode_command_when_enforcing_support_then_raises_cli_user_
     [
         ModeGuardTestCase(
             description="blocks defer-to in virtual mode plan",
-            environment_mode=EnvironmentMode.VIRTUAL.value,
+            virtual_environments=True,
             command_name="plan",
             defer_to="prod",
             expected_error_fragment=(
-                "plan does not support --defer-to when environment_mode = 'virtual'"
+                "plan does not support --defer-to when virtual_environments = true"
             ),
         )
     ],
@@ -100,7 +99,7 @@ def test_given_virtual_mode_defer_to_when_enforcing_flag_support_then_raises_cli
         project_config=ProjectConfig(
             name="demo",
             adapter="duckdb",
-            environment_mode=EnvironmentMode(test_case.environment_mode),
+            settings=SettingsConfig(virtual_environments=test_case.virtual_environments),
         ),
         local_config=LocalConfig(),
     )

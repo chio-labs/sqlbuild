@@ -44,7 +44,7 @@ def build_snowflake_project_toml(*, project_name: str, schema_name: str) -> str:
     return (
         f'name = "{project_name}"\n'
         'adapter = "snowflake"\n'
-        'default_environment = "dev"\n\n'
+        'default_target = "dev"\n\n'
         "[connection]\n"
         'account = "${ENV:SQB_TEST_SNOWFLAKE_ACCOUNT}"\n'
         'user = "${ENV:SQB_TEST_SNOWFLAKE_USER}"\n'
@@ -53,7 +53,7 @@ def build_snowflake_project_toml(*, project_name: str, schema_name: str) -> str:
         'role = "${ENV:SQB_TEST_SNOWFLAKE_ROLE}"\n'
         'warehouse = "${ENV:SQB_TEST_SNOWFLAKE_WAREHOUSE}"\n'
         'database = "${ENV:SQB_TEST_SNOWFLAKE_DATABASE}"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'database = "{database_name}"\n'
         f'schema = "{schema_name}"\n'
         'defer_sources_to = "dev"\n\n'
@@ -73,8 +73,9 @@ def build_snowflake_virtual_seed_project_toml(
     return (
         'name = "snowflake_virtual_seed"\n'
         'adapter = "snowflake"\n'
-        'environment_mode = "virtual"\n'
-        'default_environment = "dev"\n\n'
+        "[settings]\n"
+        "virtual_environments = true\n"
+        'default_target = "dev"\n\n'
         "[connection]\n"
         'account = "${ENV:SQB_TEST_SNOWFLAKE_ACCOUNT}"\n'
         'user = "${ENV:SQB_TEST_SNOWFLAKE_USER}"\n'
@@ -83,14 +84,14 @@ def build_snowflake_virtual_seed_project_toml(
         'role = "${ENV:SQB_TEST_SNOWFLAKE_ROLE}"\n'
         'warehouse = "${ENV:SQB_TEST_SNOWFLAKE_WAREHOUSE}"\n'
         'database = "${ENV:SQB_TEST_SNOWFLAKE_DATABASE}"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'database = "{database_name}"\n'
         f'schema = "{schema_name}"\n\n'
-        "[environments.dev.state]\n"
+        "[targets.dev.state]\n"
         'backend = "duckdb"\n'
         'schema = "sqlbuild_state"\n'
         f"{unsuffixed_line}\n"
-        "[environments.dev.state.connection]\n"
+        "[targets.dev.state.connection]\n"
         'database = "state.duckdb"\n'
     )
 
@@ -121,7 +122,7 @@ def build_snowflake_source_deferral_project_toml(
     return (
         f'name = "{project_name}"\n'
         'adapter = "snowflake"\n'
-        'default_environment = "dev"\n\n'
+        'default_target = "dev"\n\n'
         "[connection]\n"
         'account = "${ENV:SQB_TEST_SNOWFLAKE_ACCOUNT}"\n'
         'user = "${ENV:SQB_TEST_SNOWFLAKE_USER}"\n'
@@ -130,11 +131,11 @@ def build_snowflake_source_deferral_project_toml(
         'role = "${ENV:SQB_TEST_SNOWFLAKE_ROLE}"\n'
         'warehouse = "${ENV:SQB_TEST_SNOWFLAKE_WAREHOUSE}"\n'
         'database = "${ENV:SQB_TEST_SNOWFLAKE_DATABASE}"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'database = "{database_name}"\n'
         f'schema = "{dev_schema_name}"\n'
         'defer_sources_to = "prod"\n\n'
-        "[environments.prod]\n"
+        "[targets.prod]\n"
         f'database = "{database_name}"\n'
         f'schema = "{prod_schema_name}"\n\n'
         "[defaults]\n"
@@ -152,18 +153,18 @@ def prepare_snowflake_waffle_shop(*, tmp_path: Path) -> tuple[Path, str]:
     project_contents: str = (
         'name = "waffle_shop"\n'
         'adapter = "duckdb"\n'
-        'default_environment = "dev"\n\n'
+        'default_target = "dev"\n\n'
         "[connection]\n"
         'database = "waffle_shop.duckdb"\n\n'
         "[settings]\n"
         'default_audit_severity = "warn"\n\n'
         "[defaults]\n"
         'materialized = "table"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'database = "{database_name}"\n'
         f'schema = "{schema_name}"\n'
         'defer_sources_to = "dev"\n\n'
-        "[environments.prod]\n"
+        "[targets.prod]\n"
         f'database = "{database_name}"\n'
         f'schema = "{schema_name}"\n\n'
         "[path_defaults.staging]\n"
@@ -267,7 +268,7 @@ def prepare_snowflake_diff_project(*, tmp_path: Path) -> tuple[Path, str, str]:
     project_contents: str = (
         'name = "snowflake_diff_project"\n'
         'adapter = "snowflake"\n'
-        'default_environment = "dev"\n\n'
+        'default_target = "dev"\n\n'
         "[connection]\n"
         'account = "${ENV:SQB_TEST_SNOWFLAKE_ACCOUNT}"\n'
         'user = "${ENV:SQB_TEST_SNOWFLAKE_USER}"\n'
@@ -276,16 +277,16 @@ def prepare_snowflake_diff_project(*, tmp_path: Path) -> tuple[Path, str, str]:
         'role = "${ENV:SQB_TEST_SNOWFLAKE_ROLE}"\n'
         'warehouse = "${ENV:SQB_TEST_SNOWFLAKE_WAREHOUSE}"\n'
         'database = "${ENV:SQB_TEST_SNOWFLAKE_DATABASE}"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'database = "{database_name}"\n'
         f'schema = "{dev_schema}"\n\n'
-        "[environments.dev.clone]\n"
+        "[targets.dev.clone]\n"
         "allow_as_source = true\n"
         "allow_as_target = true\n\n"
-        "[environments.prod]\n"
+        "[targets.prod]\n"
         f'database = "{database_name}"\n'
         f'schema = "{prod_schema}"\n\n'
-        "[environments.prod.clone]\n"
+        "[targets.prod.clone]\n"
         "allow_as_source = true\n"
         "allow_as_target = false\n\n"
         "[defaults]\n"
@@ -330,7 +331,7 @@ def write_local_environment_override(*, project_dir: Path, environment: str) -> 
     """Write a local environment override for Snowflake CLI e2e commands."""
 
     (project_dir / "sqlbuild_local.toml").write_text(
-        f'environment = "{environment}"\n',
+        f'target = "{environment}"\n',
         encoding="utf-8",
     )
 

@@ -12,7 +12,7 @@ from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     CompiledSqlScenario,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -152,7 +152,7 @@ def build_scenario_pipeline_result(*, scenario_names: tuple[str, ...]) -> Compil
     return CompilePipelineResult(
         project=CompiledProject(
             run_id="scenario-test-run",
-            effective_environment_name=None,
+            effective_target_name=None,
             effective_connection={},
             effective_vars={},
             sql_scenarios=scenarios,
@@ -175,7 +175,7 @@ def build_seed_plan_entry(*, name: str) -> SeedPlanEntry:
     return SeedPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.SEED, name=name),
         name=name,
-        target=CompiledRelationTarget(
+        destination=CompiledRelationDestination(
             database=None,
             schema=None,
             name=name,

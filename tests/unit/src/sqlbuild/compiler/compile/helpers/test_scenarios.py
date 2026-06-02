@@ -338,9 +338,7 @@ def test_given_discovered_scenario_when_building_scenario_inputs_then_it_attache
     scenario_inputs: tuple[CompileSqlScenarioInput, ...] = build_scenario_inputs(
         discovered_inputs,
         effective_vars=test_case.effective_vars,
-        macro_context=MacroContext(
-            adapter_name="duckdb", sqlglot_enabled=True, environment_name=None
-        ),
+        macro_context=MacroContext(adapter_name="duckdb", sqlglot_enabled=True, target_name=None),
     )
 
     assert len(scenario_inputs) == 1
@@ -390,6 +388,6 @@ def test_given_invalid_scenario_source_refs_when_building_inputs_then_it_raises_
             discovered_inputs,
             effective_vars={},
             macro_context=MacroContext(
-                adapter_name="duckdb", sqlglot_enabled=True, environment_name=None
+                adapter_name="duckdb", sqlglot_enabled=True, target_name=None
             ),
         )

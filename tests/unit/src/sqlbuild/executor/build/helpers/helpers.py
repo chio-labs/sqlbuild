@@ -14,7 +14,7 @@ from sqlbuild.compiler.auditing.types import (
 )
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
@@ -112,7 +112,7 @@ def build_model_plan_entry(
         materialization_type=materialization_type,
         action=action,
         reason=PlanReason.FIRST_RUN,
-        target=CompiledRelationTarget(
+        destination=CompiledRelationDestination(
             database=None, schema="main", name=name, qualified_name=f"main.{name}"
         ),
         fingerprint_query_sql="SELECT 1",
@@ -129,7 +129,7 @@ def build_seed_plan_entry(*, name: str) -> SeedPlanEntry:
     return SeedPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.SEED, name=name),
         name=name,
-        target=CompiledRelationTarget(
+        destination=CompiledRelationDestination(
             database=None, schema="main", name=name, qualified_name=f"main.{name}"
         ),
         file_path=Path(f"seeds/{name}.csv"),
@@ -149,7 +149,7 @@ def build_source_load_plan_output(*, source_name: str, loader_name: str) -> Plan
                 key=source_key,
                 name=source_name,
                 loader=loader_name,
-                target=source_name,
+                destination=source_name,
             ),
         ),
         source_map={

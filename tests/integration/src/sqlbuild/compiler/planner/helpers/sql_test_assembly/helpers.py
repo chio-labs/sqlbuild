@@ -13,7 +13,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     CompileModelConfig,
 )
 from sqlbuild.compiler.compile.models.sql_tests import (
@@ -112,7 +112,7 @@ def build_test_and_project(
                 relative_path=Path(f"models/{model_name}.sql"),
                 query_sql=query_sql,
                 config=CompileModelConfig(),
-                target=CompiledRelationTarget(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema="main",
                     name=model_name,
@@ -123,7 +123,7 @@ def build_test_and_project(
 
     project: CompiledProject = CompiledProject(
         run_id="test_run",
-        effective_environment_name=None,
+        effective_target_name=None,
         effective_connection={},
         effective_vars={},
         models=tuple(models),

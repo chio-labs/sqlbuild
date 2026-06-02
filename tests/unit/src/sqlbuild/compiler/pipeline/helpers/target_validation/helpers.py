@@ -8,18 +8,18 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 
 
-def build_project(*, target: CompiledRelationTarget) -> CompiledProject:
+def build_project(*, target: CompiledRelationDestination) -> CompiledProject:
     """Build a minimal compiled project for target validation tests."""
 
     return CompiledProject(
         run_id="run_123",
-        effective_environment_name=None,
+        effective_target_name=None,
         effective_connection={},
         effective_vars={},
         models=(
@@ -32,7 +32,7 @@ def build_project(*, target: CompiledRelationTarget) -> CompiledProject:
                 relative_path=Path("models/staging/stg_customers.sql"),
                 query_sql="SELECT 1",
                 config=CompileModelConfig(values={}),
-                target=target,
+                destination=target,
             ),
         ),
     )

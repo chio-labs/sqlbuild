@@ -46,7 +46,7 @@ from sqlbuild.cli.commands.main.shared.helpers.connection_progress import (
     ConnectionProgressReporter,
 )
 from sqlbuild.cli.commands.main.shared.helpers.status import TransientStatusReporter
-from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationDestination
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
@@ -59,10 +59,10 @@ from sqlbuild.executor.janitor.models import (
 )
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.colors import supports_color
-from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
-from sqlbuild.spec.models.environments import resolve_environment_config
+from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
-from sqlbuild.virtual.executor.main.virtual_target import build_virtual_target
+from sqlbuild.spec.models.targets import resolve_target_config
+from sqlbuild.virtual.executor.main.virtual_target import build_virtual_destination
 from sqlbuild.virtual.state.main.delete_checkpoint import delete_virtual_environment_checkpoint
 from sqlbuild.virtual.state.main.delete_lock import delete_lock
 from sqlbuild.virtual.state.main.delete_state_backup import delete_state_backup
@@ -141,7 +141,7 @@ def run_janitor(
         retention: CheckpointRetentionInspection | None = checkpoint_retention(
             project_dir=effective_project_dir,
             discovered_inputs=discovered_inputs,
-            virtual_environment_name=project.effective_environment_name,
+            virtual_environment_name=project.effective_target_name,
         )
         detached_retention: DetachedVirtualEnvironmentInspection | None = (
             detached_environment_retention(
@@ -154,16 +154,16 @@ def run_janitor(
             expired_environment_retention(
                 project_dir=effective_project_dir,
                 discovered_inputs=discovered_inputs,
-                active_virtual_environment_name=project.effective_environment_name,
+                active_virtual_environment_name=project.effective_target_name,
                 retention_days=effective_retention_days,
             )
         )
         unsuffixed_virtual_environment_name: str | None = None
-        if project.effective_environment_name is not None:
-            unsuffixed_virtual_environment_name = resolve_environment_config(
+        if project.effective_target_name is not None:
+            unsuffixed_virtual_environment_name = resolve_target_config(
                 project_config=discovered_inputs.project_config,
                 local_config=discovered_inputs.local_config,
-                environment_name=project.effective_environment_name,
+                target_name=project.effective_target_name,
             ).state.unsuffixed_virtual_env
         state_retention: StateJanitorInspection | None = state_janitor_retention(
             project_dir=effective_project_dir,
@@ -335,15 +335,15 @@ def _drop_logical_vde_views(
 ) -> str:
     recorder: StatementRecorder = StatementRecorder()
     for model in project.models:
-        virtual_target: CompiledRelationTarget = build_virtual_target(
+        virtual_target: CompiledRelationDestination = build_virtual_destination(
             adapter=adapter,
-            target=model.target,
+            target=model.destination,
             virtual_environment_name=virtual_environment_name,
             unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
         )
         adapter.drop_view(
             connection,
-            target=resolve_target_qualified_name(adapter=adapter, target=virtual_target),
+            target=resolve_destination_qualified_name(adapter=adapter, target=virtual_target),
             if_exists=True,
             statement_recorder=recorder,
         )

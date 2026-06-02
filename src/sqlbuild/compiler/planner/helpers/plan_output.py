@@ -55,7 +55,7 @@ def build_plan_output(
         SeedPlanEntry(
             key=seed.key,
             name=seed.name,
-            target=seed.target,
+            destination=seed.destination,
             file_path=seed.seed_file.file_path,
             columns=extract_seed_columns(seed),
             csv_settings=seed.schema_entry.csv_settings,
@@ -185,7 +185,7 @@ def _build_function_entries(
                 key=function.key,
                 name=function.name,
                 relative_path=function.relative_path,
-                target=function.target,
+                destination=function.destination,
                 arguments=function.arguments,
                 returns=function.returns,
                 body_sql=resolve_function_sql(
@@ -199,7 +199,7 @@ def _build_function_entries(
                     star_exclude_keyword=relations.star_exclude_keyword,
                 ),
                 fingerprint_query_sql=function_change.fingerprint_sql,
-                fingerprint_target=function.fingerprint_target,
+                fingerprint_destination=function.fingerprint_destination,
                 return_columns=function.return_columns,
                 language=function.language,
                 source_file_path=function.source_file_path,

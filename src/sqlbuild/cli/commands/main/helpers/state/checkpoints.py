@@ -10,7 +10,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.shared.helpers.cli_document import CliDocument
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.colors import supports_color
-from sqlbuild.spec.models.environments import resolve_environment_name
+from sqlbuild.spec.models.targets import resolve_target_name
 from sqlbuild.virtual.state.main.checkpoint_refs import get_virtual_environment_checkpoint_refs
 from sqlbuild.virtual.state.main.environment_refs import get_virtual_environment_refs
 from sqlbuild.virtual.state.main.list_checkpoints import list_virtual_environment_checkpoints
@@ -37,14 +37,14 @@ def run_state_checkpoints(
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
-    resolved_environment_name: str | None = virtual_environment_name or resolve_environment_name(
+    resolved_target_name: str | None = virtual_environment_name or resolve_target_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
-        selected_environment=None,
+        selected_target=None,
     )
-    if resolved_environment_name is None:
+    if resolved_target_name is None:
         raise CliUserError(
-            "state checkpoints requires --virtual-env or a default environment",
+            "state checkpoints requires --virtual-env or a default target",
             code="C903",
         )
     style: CliStyle = CliStyle(use_color=not no_color and supports_color())
@@ -53,12 +53,12 @@ def run_state_checkpoints(
             list_virtual_environment_checkpoints(
                 project_dir=effective_project_dir,
                 discovered_inputs=discovered_inputs,
-                virtual_environment_name=resolved_environment_name,
+                virtual_environment_name=resolved_target_name,
             )
         )
         print(
             _format_checkpoint_list(
-                virtual_environment_name=resolved_environment_name,
+                virtual_environment_name=resolved_target_name,
                 checkpoints=checkpoints,
                 style=style,
             )
@@ -99,11 +99,11 @@ def run_state_checkpoints(
         current_refs: tuple[VirtualEnvironmentRefRecord, ...] = get_virtual_environment_refs(
             project_dir=effective_project_dir,
             discovered_inputs=discovered_inputs,
-            virtual_environment_name=resolved_environment_name,
+            virtual_environment_name=resolved_target_name,
         )
         print(
             _format_checkpoint_diff(
-                virtual_environment_name=resolved_environment_name,
+                virtual_environment_name=resolved_target_name,
                 checkpoint_id=checkpoint_id,
                 current_refs=current_refs,
                 checkpoint_refs=checkpoint_refs,

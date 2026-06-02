@@ -31,16 +31,17 @@ def build_virtual_plan_project_toml() -> str:
     return (
         'name = "virtual_plan_project"\n'
         'adapter = "duckdb"\n'
-        'environment_mode = "virtual"\n'
-        'default_environment = "dev"\n\n'
+        'default_target = "dev"\n\n'
+        "[settings]\n"
+        "virtual_environments = true\n\n"
         "[connection]\n"
         'database = "warehouse.duckdb"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         'schema = "dev"\n\n'
-        "[environments.dev.state]\n"
+        "[targets.dev.state]\n"
         'backend = "duckdb"\n'
         'schema = "sqlbuild_state"\n\n'
-        "[environments.dev.state.connection]\n"
+        "[targets.dev.state.connection]\n"
         'database = "state.duckdb"\n'
     )
 
@@ -70,7 +71,7 @@ def prepare_python_lifecycle_plan_project(*, tmp_path: Path) -> Path:
             "loaders/window.py": (
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(\n"
-                "    target='window_orders',\n"
+                "    destination='window_orders',\n"
                 "    write_strategy='table',\n"
                 "    columns=[{'name': 'order_id', 'type': 'INTEGER'}],\n"
                 ")\n"

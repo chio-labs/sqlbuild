@@ -28,9 +28,9 @@ from sqlbuild.cli.commands.main.shared.helpers.parsers import (
     parse_cursor_timestamp,
 )
 from sqlbuild.cli.commands.main.shared.helpers.progress import write_execution_header
-from sqlbuild.compiler.compile.main.effective_environment import build_effective_environment_config
 from sqlbuild.compiler.compile.main.effective_runtime import build_effective_runtime_config
 from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config
+from sqlbuild.compiler.compile.main.effective_target import build_effective_target_config
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import CursorOverrides
@@ -38,7 +38,7 @@ from sqlbuild.executor.load.main.run import run_load_pipeline
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.colors import supports_color
-from sqlbuild.spec.models.project import EnvironmentConfig, resolve_effective_adapter_name
+from sqlbuild.spec.models.project import TargetConfig, resolve_effective_adapter_name
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -64,17 +64,17 @@ def run_load(
         discovered_inputs=discovered_inputs,
         select=select,
         exclude=exclude,
-        environment_config=build_effective_environment_config(
+        target_config=build_effective_target_config(
             discovered_inputs=discovered_inputs,
         ),
     )
-    environment_config: EnvironmentConfig | None = build_effective_environment_config(
+    target_config: TargetConfig | None = build_effective_target_config(
         discovered_inputs=discovered_inputs
     )
     reference_sources: tuple[SourceEntry, ...] = select_load_reference_entries(
         discovered_inputs=discovered_inputs,
         selected_sources=selected_sources,
-        environment_config=environment_config,
+        target_config=target_config,
     )
     use_color: bool = not no_color and supports_color()
     style: CliStyle = CliStyle(use_color=use_color)
@@ -115,10 +115,10 @@ def run_load(
         selected_sources=selected_sources,
         reference_sources=reference_sources,
     )
-    environment_name: str | None
+    target_name: str | None
     effective_vars: dict[str, object]
     run_id: str
-    environment_name, effective_vars, run_id = build_effective_runtime_config(
+    target_name, effective_vars, run_id = build_effective_runtime_config(
         discovered_inputs=discovered_inputs,
         cli_vars=cli_vars,
     )
@@ -177,7 +177,7 @@ def run_load(
         connection_config=connection_config,
         adapter=adapter,
         run_id=run_id,
-        environment=environment_name,
+        target=target_name,
         vars=effective_vars,
         is_reload=reload,
         start_cursor_ts=parse_cursor_timestamp(effective_cursor_overrides.start_ts),

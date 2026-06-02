@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
 
 
 def resolve_qualified_name_parts(
@@ -25,10 +25,10 @@ def resolve_qualified_name_parts(
     return name
 
 
-def resolve_target_qualified_name(
+def resolve_destination_qualified_name(
     *,
     adapter: BaseAdapter,
-    target: CompiledRelationTarget,
+    target: CompiledRelationDestination,
 ) -> str:
     """Resolve one compiled target to its final adapter-qualified relation name."""
 

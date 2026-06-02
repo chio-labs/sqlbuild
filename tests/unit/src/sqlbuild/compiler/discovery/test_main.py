@@ -89,7 +89,7 @@ def export_customers_exists(ctx):
 """,
                 "target/manifest.json": '{"metadata": {"dbt_schema_version": "v12"}}\n',
                 "adapter.py": "class ExampleAdapter:\n    pass\n",
-                "sqlbuild_local.toml": 'environment = "dev"\n',
+                "sqlbuild_local.toml": 'target = "dev"\n',
             },
             expected_model_paths=("models/staging/orders.sql",),
             expected_model_header_values=({},),
@@ -257,7 +257,7 @@ def test_given_project_repo_slice_when_discovering_inputs_then_it_returns_expect
     ) == test_case.expected_adapter_path
     assert discovered_inputs.project_config.name == "demo"
     assert discovered_inputs.project_config.adapter == "duckdb"
-    assert discovered_inputs.local_config.environment == "dev"
+    assert discovered_inputs.local_config.target == "dev"
 
 
 FACTORY_VALIDATION_TEST_CASES: tuple[DiscoverFactoryValidationTestCase, ...] = (

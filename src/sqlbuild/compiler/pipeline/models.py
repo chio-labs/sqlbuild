@@ -37,7 +37,7 @@ class CompilePipelineResult:
 
 @dataclass(frozen=True)
 class ClonePipelineResult:
-    """Prepared clone inputs for source and target environments."""
+    """Prepared clone inputs for source and target targets."""
 
     source_project: CompiledProject
     target_project: CompiledProject

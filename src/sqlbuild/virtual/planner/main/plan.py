@@ -9,7 +9,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
-from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult, ProjectGraph
@@ -19,7 +19,7 @@ from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
-from sqlbuild.spec.models.environments import resolve_environment_name
+from sqlbuild.spec.models.targets import resolve_target_name
 from sqlbuild.virtual.planner.helpers.output import (
     rewrite_virtual_plan_entries,
     with_virtual_metadata,
@@ -43,7 +43,7 @@ from sqlbuild.virtual.planner.helpers.state_metadata import (
     decode_model_version_query_sqls,
     read_previous_function_query_sqls,
 )
-from sqlbuild.virtual.planner.helpers.targets import build_target_from_physical_relation
+from sqlbuild.virtual.planner.helpers.targets import build_destination_from_physical_relation
 from sqlbuild.virtual.planner.main.python_plan_entries import build_virtual_python_plan_entries
 from sqlbuild.virtual.planner.main.python_run_selection import build_virtual_python_run_selection
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
@@ -192,11 +192,11 @@ def run_virtual_plan_pipeline(
                 execution_order=tuple(graph.upstream_deps),
                 upstream_deps=graph.upstream_deps,
                 downstream_deps=graph.downstream_deps,
-                model_targets={model.name: model.target for model in graph.project.models},
+                model_targets={model.name: model.destination for model in graph.project.models},
                 function_targets={
-                    function.name: function.target for function in graph.project.functions
+                    function.name: function.destination for function in graph.project.functions
                 },
-                seed_targets={seed.name: seed.target for seed in graph.project.seeds},
+                seed_targets={seed.name: seed.destination for seed in graph.project.seeds},
                 source_map={source.name: source.source_entry for source in graph.project.sources},
             )
         plan_output = rewrite_virtual_plan_entries(
@@ -211,8 +211,8 @@ def run_virtual_plan_pipeline(
         )
         plan_output = with_virtual_metadata(
             plan_output=plan_output,
-            environment_name=_resolve_virtual_environment_name(
-                physical_environment_name=graph.project.effective_environment_name,
+            target_name=_resolve_virtual_environment_name(
+                physical_target_name=graph.project.effective_target_name,
                 virtual_environment_name=virtual_environment_name,
             ),
             stale_model_names=stale_model_names,
@@ -253,7 +253,7 @@ def _read_bound_state(
 ) -> tuple[
     dict[str, str],
     dict[str, str],
-    dict[str, CompiledRelationTarget],
+    dict[str, CompiledRelationDestination],
     dict[str, RelationInfo],
     dict[str, str],
     dict[str, str],
@@ -265,21 +265,21 @@ def _read_bound_state(
     )
     state_connection: Any = backend.connect(config.connection)
     try:
-        physical_environment_name: str | None = resolve_environment_name(
+        physical_target_name: str | None = resolve_target_name(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
-            selected_environment=None,
+            selected_target=None,
         )
-        environment_name: str | None = _resolve_virtual_environment_name(
-            physical_environment_name=physical_environment_name,
+        target_name: str | None = _resolve_virtual_environment_name(
+            physical_target_name=physical_target_name,
             virtual_environment_name=virtual_environment_name,
         )
-        if environment_name is None:
+        if target_name is None:
             return {}, {}, {}, {}, {}, {}, {}
         refs: tuple[object, ...] = backend.get_virtual_environment_refs(
             state_connection,
             schema=config.schema,
-            virtual_environment_name=environment_name,
+            virtual_environment_name=target_name,
         )
         bound_version_hashes: dict[str, str] = build_bound_version_hashes(refs)
         model_versions: dict[str, ModelVersionRecord | None] = {
@@ -300,10 +300,10 @@ def _read_bound_state(
             state_connection=state_connection,
             schema=config.schema,
             graph=graph,
-            virtual_environment_name=environment_name,
+            virtual_environment_name=target_name,
         )
-        model_targets: dict[str, CompiledRelationTarget] = {
-            model.name: model.target for model in graph.project.models
+        model_targets: dict[str, CompiledRelationDestination] = {
+            model.name: model.destination for model in graph.project.models
         }
         physical_relations: dict[str, PhysicalRelationRecord] = {}
         for model_name, version_hash in bound_version_hashes.items():
@@ -315,8 +315,8 @@ def _read_bound_state(
             )
             if relation is not None:
                 physical_relations[model_name] = relation
-        deferred_targets: dict[str, CompiledRelationTarget] = {
-            model_name: build_target_from_physical_relation(
+        deferred_targets: dict[str, CompiledRelationDestination] = {
+            model_name: build_destination_from_physical_relation(
                 adapter=adapter,
                 relation=relation,
                 fallback_target=model_targets[model_name],
@@ -348,7 +348,7 @@ def _read_bound_state(
 
 def _resolve_virtual_environment_name(
     *,
-    physical_environment_name: str | None,
+    physical_target_name: str | None,
     virtual_environment_name: str | None,
 ) -> str | None:
-    return virtual_environment_name or physical_environment_name
+    return virtual_environment_name or physical_target_name

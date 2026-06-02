@@ -12,7 +12,7 @@ class AttachedAuditTargetKind(StrEnum):
 
 class CompileContextKey(StrEnum):
     RUN_ID = "run.id"
-    RUN_ENVIRONMENT = "run.environment"
+    RUN_TARGET = "run.target"
     MODEL_NAME = "model.name"
     MODEL_DATABASE = "model.database"
     MODEL_SCHEMA = "model.schema"

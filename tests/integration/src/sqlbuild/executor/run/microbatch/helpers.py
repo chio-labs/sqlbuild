@@ -12,7 +12,7 @@ from sqlbuild.compiler.auditing.types import (
 )
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.constants import (
@@ -86,7 +86,7 @@ def build_microbatch_plan_entry(
         materialization_type=MaterializationType.INCREMENTAL,
         action=action,
         reason=reason,
-        target=CompiledRelationTarget(
+        destination=CompiledRelationDestination(
             database=None,
             schema=target_schema,
             name=target_name,
@@ -242,8 +242,8 @@ def _execute_test(
     target_qualified: str = _build_target_qualified(
         target_schema=test_case.target_schema, target_name=test_case.target_name
     )
-    model_targets: dict[str, CompiledRelationTarget] = {
-        "orders": CompiledRelationTarget(
+    model_targets: dict[str, CompiledRelationDestination] = {
+        "orders": CompiledRelationDestination(
             database=None,
             schema=test_case.target_schema,
             name=test_case.target_name,

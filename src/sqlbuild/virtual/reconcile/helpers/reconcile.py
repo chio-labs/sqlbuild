@@ -11,13 +11,13 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.helpers.relation_type import normalize_relation_type
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.adapter.shared.types import RelationType
-from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
-from sqlbuild.spec.models.environments import resolve_environment_config, resolve_environment_name
+from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
+from sqlbuild.spec.models.targets import resolve_target_config, resolve_target_name
 from sqlbuild.virtual.executor.main.views import refresh_logical_vde_views
 from sqlbuild.virtual.state.main.locks import acquire_virtual_environment_lease
 from sqlbuild.virtual.state.main.release_lock import release_state_lease
@@ -46,25 +46,22 @@ def run_virtual_reconcile(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
     )
-    resolved_virtual_environment_name: str | None = (
-        virtual_environment_name
-        or resolve_environment_name(
-            project_config=discovered_inputs.project_config,
-            local_config=discovered_inputs.local_config,
-            selected_environment=None,
-        )
-    )
-    active_environment_name: str | None = resolve_environment_name(
+    resolved_virtual_environment_name: str | None = virtual_environment_name or resolve_target_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
-        selected_environment=None,
+        selected_target=None,
+    )
+    active_target_name: str | None = resolve_target_name(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+        selected_target=None,
     )
     unsuffixed_virtual_environment_name: str | None = None
-    if active_environment_name is not None:
-        unsuffixed_virtual_environment_name = resolve_environment_config(
+    if active_target_name is not None:
+        unsuffixed_virtual_environment_name = resolve_target_config(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
-            environment_name=active_environment_name,
+            target_name=active_target_name,
         ).state.unsuffixed_virtual_env
     if resolved_virtual_environment_name is None:
         raise PlannerInputError(
@@ -357,7 +354,7 @@ def resolve_attach_relation(
         model_name=model_name,
     )
     for candidate in candidates:
-        rendered: str = resolve_target_qualified_name(
+        rendered: str = resolve_destination_qualified_name(
             adapter=adapter, target=fallback_target(candidate)
         )
         if adapter.relation_names_match(rendered, physical_relation_name):
@@ -403,19 +400,19 @@ def list_virtual_relation_types(
         result: dict[str, str] = {}
         for model in graph.project.models:
             virtual_schema: str | None
-            if model.target.schema is None:
+            if model.destination.schema is None:
                 virtual_schema = None
             elif unsuffixed_virtual_environment_name == virtual_environment_name:
-                virtual_schema = model.target.schema
+                virtual_schema = model.destination.schema
             else:
-                virtual_schema = f"{model.target.schema}__{virtual_environment_name}"
+                virtual_schema = f"{model.destination.schema}__{virtual_environment_name}"
             relations: tuple[RelationInfo, ...] = adapter.list_relations(
                 connection,
-                database=model.target.database,
+                database=model.destination.database,
                 schemas=((virtual_schema,) if virtual_schema is not None else None),
             )
             for relation in relations:
-                if relation.name == model.target.name:
+                if relation.name == model.destination.name:
                     result[model.name] = relation.relation_type
                     break
         return result
@@ -438,8 +435,8 @@ def physical_relation_exists(
         adapter.close(connection)
 
 
-def fallback_target(relation: PhysicalRelationRecord) -> CompiledRelationTarget:
-    return CompiledRelationTarget(
+def fallback_target(relation: PhysicalRelationRecord) -> CompiledRelationDestination:
+    return CompiledRelationDestination(
         database=relation.database_name,
         schema=relation.schema_name,
         name=relation.relation_name,

@@ -9,7 +9,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
 )
 from sqlbuild.compiler.planner.helpers.graph import (
     build_downstream_deps,
@@ -86,9 +86,11 @@ def build_clone_model_entries(
     adapter: BaseAdapter,
     connection: Any,
 ) -> tuple[ModelPlanEntry, ...]:
-    model_targets: dict[str, CompiledRelationTarget] = build_model_targets(project.models)
-    seed_targets: dict[str, CompiledRelationTarget] = build_seed_targets(project.seeds)
-    function_targets: dict[str, CompiledRelationTarget] = build_function_targets(project.functions)
+    model_targets: dict[str, CompiledRelationDestination] = build_model_targets(project.models)
+    seed_targets: dict[str, CompiledRelationDestination] = build_seed_targets(project.seeds)
+    function_targets: dict[str, CompiledRelationDestination] = build_function_targets(
+        project.functions
+    )
     source_map: dict[str, SourceEntry] = {
         source.name: source.source_entry for source in project.sources
     }
@@ -131,7 +133,7 @@ def build_clone_model_entries(
                 else PlanAction.CREATE_TABLE
             ),
             reason=PlanReason.NO_CHANGE,
-            target=model.target,
+            destination=model.destination,
             fingerprint_query_sql="",
             resolved_sql=resolved_sql,
             logical_ddl="",
@@ -162,7 +164,7 @@ def build_source_model_entries(
                     else PlanAction.CREATE_TABLE
                 ),
                 reason=PlanReason.NO_CHANGE,
-                target=model.target,
+                destination=model.destination,
                 fingerprint_query_sql="",
                 resolved_sql="",
                 logical_ddl="",
@@ -180,7 +182,7 @@ def build_clone_seed_entries(
         SeedPlanEntry(
             key=seed.key,
             name=seed.name,
-            target=seed.target,
+            destination=seed.destination,
             file_path=seed.seed_file.file_path,
             columns=tuple(),
             csv_settings=seed.schema_entry.csv_settings,
@@ -199,7 +201,7 @@ def build_source_seed_entries(
         SeedPlanEntry(
             key=seed.key,
             name=seed.name,
-            target=seed.target,
+            destination=seed.destination,
             file_path=seed.seed_file.file_path,
             columns=tuple(),
             csv_settings=seed.schema_entry.csv_settings,

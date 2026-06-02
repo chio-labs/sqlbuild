@@ -6,15 +6,15 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
-from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
-from sqlbuild.spec.models.environments import resolve_environment_name
-from sqlbuild.virtual.executor.main.logical_target import build_virtual_logical_target
-from sqlbuild.virtual.executor.main.physical_target import build_virtual_physical_target
+from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
+from sqlbuild.spec.models.targets import resolve_target_name
+from sqlbuild.virtual.executor.main.logical_target import build_virtual_logical_destination
+from sqlbuild.virtual.executor.main.physical_target import build_virtual_physical_destination
 from sqlbuild.virtual.executor.main.relation_type import resolve_model_relation_type
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.main.record_operation import record_state_operation
@@ -43,14 +43,14 @@ def adopt_into_virtual_state(
     connection: Any,
     allow_copy: bool,
 ) -> str:
-    active_environment_name: str | None = resolve_environment_name(
+    active_target_name: str | None = resolve_target_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
-        selected_environment=None,
+        selected_target=None,
     )
-    if active_environment_name is None:
-        raise PlannerInputError("state adopt requires an active environment", code="C259")
-    operation_id: str = f"adopt:{active_environment_name}"
+    if active_target_name is None:
+        raise PlannerInputError("state adopt requires an active target", code="C259")
+    operation_id: str = f"adopt:{active_target_name}"
     record_state_operation(
         backend,
         state_connection,
@@ -59,7 +59,7 @@ def adopt_into_virtual_state(
         operation_type=StateOperationType.ADOPT,
         status=StateOperationStatus.RUNNING,
         action="start",
-        virtual_environment_name=active_environment_name,
+        virtual_environment_name=active_target_name,
         message="starting adopt",
     )
     try:
@@ -72,15 +72,15 @@ def adopt_into_virtual_state(
         for model in graph.project.models:
             if not adapter.relation_exists(
                 connection,
-                database=model.target.database,
-                schema=model.target.schema,
-                name=model.target.name,
+                database=model.destination.database,
+                schema=model.destination.schema,
+                name=model.destination.name,
             ):
                 continue
             version_hash: str = model.name
-            physical_target: CompiledRelationTarget = build_virtual_physical_target(
+            physical_target: CompiledRelationDestination = build_virtual_physical_destination(
                 adapter=adapter,
-                target=model.target,
+                target=model.destination,
                 model_name=model.name,
                 version_hash=version_hash,
             )
@@ -95,8 +95,10 @@ def adopt_into_virtual_state(
             )
             adapter.move_or_copy_relation(
                 connection,
-                source=resolve_target_qualified_name(adapter=adapter, target=model.target),
-                target=resolve_target_qualified_name(adapter=adapter, target=physical_target),
+                source=resolve_destination_qualified_name(
+                    adapter=adapter, target=model.destination
+                ),
+                target=resolve_destination_qualified_name(adapter=adapter, target=physical_target),
                 remove_source=model_relation_type != "view",
                 allow_copy_fallback=allow_copy,
                 statement_recorder=recorder,
@@ -104,21 +106,23 @@ def adopt_into_virtual_state(
             if model_relation_type == "view":
                 adapter.drop_view(
                     connection,
-                    target=resolve_target_qualified_name(adapter=adapter, target=model.target),
+                    target=resolve_destination_qualified_name(
+                        adapter=adapter, target=model.destination
+                    ),
                     statement_recorder=recorder,
                 )
-            virtual_target: CompiledRelationTarget = build_virtual_logical_target(
+            virtual_target: CompiledRelationDestination = build_virtual_logical_destination(
                 adapter=adapter,
-                target=model.target,
-                virtual_environment_name=active_environment_name,
-                unsuffixed_virtual_environment_name=active_environment_name,
+                target=model.destination,
+                virtual_environment_name=active_target_name,
+                unsuffixed_virtual_environment_name=active_target_name,
             )
             adapter.create_view_as(
                 connection,
-                target=resolve_target_qualified_name(adapter=adapter, target=virtual_target),
+                target=resolve_destination_qualified_name(adapter=adapter, target=virtual_target),
                 sql=(
                     "SELECT * FROM "
-                    + resolve_target_qualified_name(adapter=adapter, target=physical_target)
+                    + resolve_destination_qualified_name(adapter=adapter, target=physical_target)
                 ),
                 statement_recorder=recorder,
             )
@@ -147,7 +151,7 @@ def adopt_into_virtual_state(
             )
             refs.append(
                 VirtualEnvironmentRefRecord(
-                    virtual_environment_name=active_environment_name,
+                    virtual_environment_name=active_target_name,
                     model_name=model.name,
                     version_hash=version_hash,
                 )
@@ -156,14 +160,14 @@ def adopt_into_virtual_state(
             state_connection,
             schema=config.schema,
             record=VirtualEnvironmentRecord(
-                virtual_environment_name=active_environment_name,
+                virtual_environment_name=active_target_name,
                 status=VirtualEnvironmentStatus.FINALIZED,
             ),
         )
         backend.replace_virtual_environment_refs(
             state_connection,
             schema=config.schema,
-            virtual_environment_name=active_environment_name,
+            virtual_environment_name=active_target_name,
             refs=tuple(refs),
         )
         record_state_operation(
@@ -177,7 +181,7 @@ def adopt_into_virtual_state(
             virtual_environment_name=None,
             message=f"adopted {len(refs)} models",
         )
-        return f"Adopted {len(refs)} models into virtual environment {active_environment_name}."
+        return f"Adopted {len(refs)} models into virtual environment {active_target_name}."
     except BaseException as error:
         record_state_operation(
             backend,

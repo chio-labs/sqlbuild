@@ -7,7 +7,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, QueryResult, StatementRecorder
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (
@@ -162,7 +162,7 @@ def build_scenario_fixture_plan(
     return ScenarioFixturePlan(
         kind=kind,
         logical_name=logical_name,
-        target=CompiledRelationTarget(
+        destination=CompiledRelationDestination(
             database=None,
             schema="scenario_schema",
             name=target_name,
@@ -196,7 +196,7 @@ def build_scenario_cleanup_test_plan(
         target_name="__sqb_51b385aebe20__seed__country_codes",
         sql="SELECT 'US' AS country_code",
     )
-    model_target: CompiledRelationTarget = CompiledRelationTarget(
+    model_target: CompiledRelationDestination = CompiledRelationDestination(
         database=None,
         schema="scenario_schema",
         name="__sqb_51b385aebe20__model__daily_revenue",
@@ -224,11 +224,11 @@ def build_scenario_cleanup_test_plan(
             ),
             model_targets={
                 "daily_revenue": model_target,
-                "stg_customers": ref_fixture.target,
+                "stg_customers": ref_fixture.destination,
             },
-            source_fixture_targets={"raw__orders": source_fixture.target},
-            ref_fixture_targets={"stg_customers": ref_fixture.target},
-            seed_fixture_targets={"country_codes": seed_fixture.target},
+            source_fixture_targets={"raw__orders": source_fixture.destination},
+            ref_fixture_targets={"stg_customers": ref_fixture.destination},
+            seed_fixture_targets={"country_codes": seed_fixture.destination},
         ),
         fixture_plans=(source_fixture, ref_fixture, seed_fixture),
         model_entries=(
@@ -242,7 +242,7 @@ def build_scenario_cleanup_test_plan(
                 materialization_type=model_materialization_type,
                 action=PlanAction.CREATE_TABLE,
                 reason=PlanReason.FIRST_RUN,
-                target=model_target,
+                destination=model_target,
                 fingerprint_query_sql="SELECT 1 AS revenue",
                 resolved_sql="SELECT 1 AS revenue",
                 logical_ddl="CREATE TABLE daily_revenue AS SELECT 1 AS revenue",
@@ -253,7 +253,7 @@ def build_scenario_cleanup_test_plan(
 
 def build_scenario_cleanup_test_plan_with_project_seed() -> ScenarioExecutionPlan:
     plan: ScenarioExecutionPlan = build_scenario_cleanup_test_plan()
-    seed_target: CompiledRelationTarget = CompiledRelationTarget(
+    seed_target: CompiledRelationDestination = CompiledRelationDestination(
         database=None,
         schema="scenario_schema",
         name="__sqb_51b385aebe20__seed__country_codes",
@@ -272,7 +272,7 @@ def build_scenario_cleanup_test_plan_with_project_seed() -> ScenarioExecutionPla
                     name="country_codes",
                 ),
                 name="country_codes",
-                target=seed_target,
+                destination=seed_target,
                 file_path=Path("seeds/country_codes.csv"),
                 columns=(),
                 csv_settings=default_seed_csv_settings,
@@ -284,20 +284,20 @@ def build_scenario_cleanup_test_plan_with_project_seed() -> ScenarioExecutionPla
 def build_scenario_model_test_plan(
     *, model_entries: tuple[ModelPlanEntry, ...]
 ) -> ScenarioExecutionPlan:
-    source_target: CompiledRelationTarget = CompiledRelationTarget(
+    source_target: CompiledRelationDestination = CompiledRelationDestination(
         database=None,
         schema="scenario_schema",
         name="__sqb_51b385aebe20__source__raw__orders",
         qualified_name="scenario_schema.__sqb_51b385aebe20__source__raw__orders",
     )
-    seed_target: CompiledRelationTarget = CompiledRelationTarget(
+    seed_target: CompiledRelationDestination = CompiledRelationDestination(
         database=None,
         schema="scenario_schema",
         name="__sqb_51b385aebe20__seed__country_codes",
         qualified_name="scenario_schema.__sqb_51b385aebe20__seed__country_codes",
     )
-    model_targets: dict[str, CompiledRelationTarget] = {
-        entry.name: entry.target for entry in model_entries
+    model_targets: dict[str, CompiledRelationDestination] = {
+        entry.name: entry.destination for entry in model_entries
     }
     return ScenarioExecutionPlan(
         key=CompiledObjectKey(
@@ -345,7 +345,7 @@ def build_scenario_model_entry(
         materialization_type=materialization_type,
         action=action,
         reason=PlanReason.FIRST_RUN,
-        target=CompiledRelationTarget(
+        destination=CompiledRelationDestination(
             database=None,
             schema="scenario_schema",
             name=target_name,

@@ -1,6 +1,6 @@
 name = "waffle_shop"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
 [connection]
 database = "waffle_shop_control.duckdb"
@@ -11,10 +11,10 @@ default_audit_severity = "warn"
 [defaults]
 materialized = "table"
 
-[environments.prod]
+[targets.prod]
 schema = "prod"
 
-[environments.dev]
+[targets.dev]
 schema = "dev"
 defer_sources_to = "dev"
 

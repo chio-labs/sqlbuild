@@ -19,7 +19,7 @@ LOCAL_CONFIG_TEST_CASES: list[LoadLocalConfigTestCase] = [
     LoadLocalConfigTestCase(
         description="defaults cleanly when local file is missing",
         repo_files={},
-        expected_environment=None,
+        expected_target=None,
         expected_adapter=None,
         expected_connection={},
         expected_sqlglot=True,
@@ -32,7 +32,7 @@ LOCAL_CONFIG_TEST_CASES: list[LoadLocalConfigTestCase] = [
         description="loads environment connection settings and vars from local config",
         repo_files={
             "sqlbuild_local.toml": """
-environment = "dev"
+target = "dev"
 adapter = "snowflake"
 
 [connection]
@@ -58,7 +58,7 @@ max_bytes_per_relation = 56
 max_total_bytes = 78
 """.strip()
         },
-        expected_environment="dev",
+        expected_target="dev",
         expected_adapter="snowflake",
         expected_connection={"database": "local.duckdb"},
         expected_sqlglot=False,
@@ -90,7 +90,7 @@ max_total_bytes = 78
 max_concurrency = 4
 """.strip()
         },
-        expected_environment=None,
+        expected_target=None,
         expected_adapter=None,
         expected_connection={},
         expected_sqlglot=True,
@@ -103,9 +103,7 @@ max_concurrency = 4
         description="does not expose unsupported project level overrides",
         repo_files={
             "sqlbuild_local.toml": """
-default_environment = "prod"
-
-environment_mode = "virtual"
+default_target = "prod"
 
 [defaults]
 materialized = "table"
@@ -117,7 +115,7 @@ enabled = true
 database = "local.duckdb"
 """.strip()
         },
-        expected_environment=None,
+        expected_target=None,
         expected_adapter=None,
         expected_connection={"database": "local.duckdb"},
         expected_sqlglot=True,
@@ -126,35 +124,34 @@ database = "local.duckdb"
         expected_setting_overrides=frozenset(),
         expected_vars={},
         expected_missing_attributes=(
-            "default_environment",
-            "environment_mode",
+            "default_target",
             "defaults",
             "janitor",
         ),
     ),
     LoadLocalConfigTestCase(
-        description="loads local environment overrides",
+        description="loads local target overrides",
         repo_files={
             "sqlbuild_local.toml": """
-environment = "dev"
+target = "dev"
 
-[environments.dev]
+[targets.dev]
 database = "local_db"
 schema = "local_schema"
 defer_sources_to = "prod"
 
-[environments.dev.connection]
+[targets.dev.connection]
 warehouse = "local_wh"
 
-[environments.dev.vars]
+[targets.dev.vars]
 user = "local_user"
 
-[environments.dev.clone]
+[targets.dev.clone]
 allow_as_source = true
 allow_as_target = false
 """.strip()
         },
-        expected_environment="dev",
+        expected_target="dev",
         expected_adapter=None,
         expected_connection={},
         expected_sqlglot=True,
@@ -162,7 +159,7 @@ allow_as_target = false
         expected_max_concurrency=1,
         expected_setting_overrides=frozenset(),
         expected_vars={},
-        expected_environments={
+        expected_targets={
             "dev": {
                 "connection": {"warehouse": "local_wh"},
                 "vars": {"user": "local_user"},
@@ -178,13 +175,15 @@ allow_as_target = false
 
 PROJECT_CONFIG_ERROR_TEST_CASES: list[LoadProjectConfigErrorTestCase] = [
     LoadProjectConfigErrorTestCase(
-        description="raises when environment mode is unknown",
+        description="raises when virtual environments setting is not a boolean",
         project_file_contents="""
 name = "demo"
 adapter = "duckdb"
-environment_mode = "stateful"
+
+[settings]
+virtual_environments = "yes"
 """.strip(),
-        expected_error_fragment="environment_mode must be one of: direct, virtual",
+        expected_error_fragment="Expected 'virtual_environments' to be a boolean when provided",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when settings sqlglot is not a boolean",
@@ -313,9 +312,9 @@ connection = "bad"
         project_file_contents="""
 name = "demo"
 adapter = "duckdb"
-environments = []
+targets = []
 """.strip(),
-        expected_error_fragment="environments must be a mapping",
+        expected_error_fragment="targets must be a mapping",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when one environment entry is not a mapping",
@@ -323,10 +322,10 @@ environments = []
 name = "demo"
 adapter = "duckdb"
 
-[environments]
+[targets]
 dev = "here"
 """.strip(),
-        expected_error_fragment="environments.dev must be a mapping",
+        expected_error_fragment="targets.dev must be a mapping",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when environment clone config is not a mapping",
@@ -334,10 +333,10 @@ dev = "here"
 name = "demo"
 adapter = "duckdb"
 
-[environments.dev]
+[targets.dev]
 clone = "nope"
 """.strip(),
-        expected_error_fragment="environments.dev.clone must be a mapping",
+        expected_error_fragment="targets.dev.clone must be a mapping",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when environment vars contain non string value",
@@ -345,7 +344,7 @@ clone = "nope"
 name = "demo"
 adapter = "duckdb"
 
-[environments.dev.vars]
+[targets.dev.vars]
 user = false
 """.strip(),
         expected_error_fragment="expected string value for 'user'",
@@ -356,7 +355,7 @@ user = false
 name = "demo"
 adapter = "duckdb"
 
-[environments.dev]
+[targets.dev]
 connection = "no"
 """.strip(),
         expected_error_fragment="Expected 'connection' to be a mapping when provided",
@@ -367,7 +366,7 @@ connection = "no"
 name = "demo"
 adapter = "duckdb"
 
-[environments.dev.clone]
+[targets.dev.clone]
 allow_as_source = 123
 """.strip(),
         expected_error_fragment="Expected 'allow_as_source' to be a boolean when provided",
@@ -512,9 +511,9 @@ threads = 8
 
 LOCAL_CONFIG_ERROR_TEST_CASES: list[LoadLocalConfigErrorTestCase] = [
     LoadLocalConfigErrorTestCase(
-        description="raises when local environment is not a non empty string",
-        local_file_contents="environment = 123\n",
-        expected_error_fragment="Expected 'environment' to be a non-empty string when provided",
+        description="raises when local target is not a non empty string",
+        local_file_contents="target = 123\n",
+        expected_error_fragment="Expected 'target' to be a non-empty string when provided",
     ),
     LoadLocalConfigErrorTestCase(
         description="raises when local vars contain non string value",
@@ -562,11 +561,11 @@ PROJECT_CONFIG_TEST_CASES: list[LoadProjectConfigTestCase] = [
         project_file_contents="""
 name = "demo"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 """.strip(),
         expected_name="demo",
         expected_adapter="duckdb",
-        expected_default_environment="dev",
+        expected_default_target="dev",
         expected_connection={},
         expected_sqlglot=True,
         expected_max_concurrency=1,
@@ -576,7 +575,7 @@ default_environment = "dev"
         expected_contract=None,
         expected_path_defaults={},
         expected_vars={},
-        expected_environments={},
+        expected_targets={},
         expected_janitor_enabled=False,
         expected_retention_days=30,
         expected_janitor_max_checkpoints=20,
@@ -588,13 +587,13 @@ default_environment = "dev"
         project_file_contents="""
 name = "demo"
 adapter = "duckdb"
-default_environment = "dev"
-environment_mode = "virtual"
+default_target = "dev"
 
 [connection]
 path = "data.db"
 
 [settings]
+virtual_environments = true
 sqlglot = false
 query_change_tracking = true
 concurrency = 8
@@ -618,17 +617,17 @@ schema = "staging"
 [vars]
 user = "kevin"
 
-[environments.dev]
+[targets.dev]
 schema = "dev_${user}"
 defer_sources_to = "prod"
 
-[environments.dev.connection]
+[targets.dev.connection]
 warehouse = "dev_wh"
 
-[environments.dev.vars]
+[targets.dev.vars]
 schema_prefix = "dev"
 
-[environments.dev.clone]
+[targets.dev.clone]
 allow_as_source = true
 allow_as_target = true
 
@@ -666,8 +665,8 @@ target_path = "target/dbt"
 """.strip(),
         expected_name="demo",
         expected_adapter="duckdb",
-        expected_environment_mode="virtual",
-        expected_default_environment="dev",
+        expected_virtual_environments=True,
+        expected_default_target="dev",
         expected_connection={"path": "data.db"},
         expected_sqlglot=False,
         expected_max_concurrency=8,
@@ -685,7 +684,7 @@ target_path = "target/dbt"
         expected_contract="enforced",
         expected_path_defaults={"staging": {"schema": "staging"}},
         expected_vars={"user": "kevin"},
-        expected_environments={
+        expected_targets={
             "dev": {
                 "connection": {"warehouse": "dev_wh"},
                 "vars": {"schema_prefix": "dev"},
@@ -742,8 +741,8 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
 
     assert config.name == test_case.expected_name
     assert config.adapter == test_case.expected_adapter
-    assert config.environment_mode.value == test_case.expected_environment_mode
-    assert config.default_environment == test_case.expected_default_environment
+    assert config.settings.virtual_environments is test_case.expected_virtual_environments
+    assert config.default_target == test_case.expected_default_target
     assert config.connection == test_case.expected_connection
     assert config.settings.sqlglot is test_case.expected_sqlglot
     assert config.settings.concurrency == test_case.expected_max_concurrency
@@ -755,17 +754,17 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.path_defaults == test_case.expected_path_defaults
     assert config.vars == test_case.expected_vars
     assert {
-        environment_name: {
-            "connection": environment_config.connection,
-            "vars": environment_config.vars,
-            "database": environment_config.database,
-            "schema": environment_config.schema,
-            "defer_sources_to": environment_config.defer_sources_to,
-            "allow_as_source": environment_config.clone.allow_as_source,
-            "allow_as_target": environment_config.clone.allow_as_target,
+        target_name: {
+            "connection": target_config.connection,
+            "vars": target_config.vars,
+            "database": target_config.database,
+            "schema": target_config.schema,
+            "defer_sources_to": target_config.defer_sources_to,
+            "allow_as_source": target_config.clone.allow_as_source,
+            "allow_as_target": target_config.clone.allow_as_target,
         }
-        for environment_name, environment_config in config.environments.items()
-    } == test_case.expected_environments
+        for target_name, target_config in config.targets.items()
+    } == test_case.expected_targets
     assert config.janitor.enabled is test_case.expected_janitor_enabled
     assert config.janitor.retention_days == test_case.expected_retention_days
     assert config.janitor.max_checkpoints == test_case.expected_janitor_max_checkpoints
@@ -811,7 +810,7 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
 
     config: object = load_local_config(project_dir=tmp_path)
 
-    assert config.environment == test_case.expected_environment
+    assert config.target == test_case.expected_target
     assert config.adapter == test_case.expected_adapter
     assert config.connection == test_case.expected_connection
     assert config.settings.sqlglot is test_case.expected_sqlglot
@@ -828,17 +827,17 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
         "max_total_bytes": config.scenario.snapshot_limits.max_total_bytes,
     } == test_case.expected_snapshot_limits
     assert {
-        environment_name: {
-            "connection": environment_config.connection,
-            "vars": environment_config.vars,
-            "database": environment_config.database,
-            "schema": environment_config.schema,
-            "defer_sources_to": environment_config.defer_sources_to,
-            "allow_as_source": environment_config.clone.allow_as_source,
-            "allow_as_target": environment_config.clone.allow_as_target,
+        target_name: {
+            "connection": target_config.connection,
+            "vars": target_config.vars,
+            "database": target_config.database,
+            "schema": target_config.schema,
+            "defer_sources_to": target_config.defer_sources_to,
+            "allow_as_source": target_config.clone.allow_as_source,
+            "allow_as_target": target_config.clone.allow_as_target,
         }
-        for environment_name, environment_config in config.environments.items()
-    } == test_case.expected_environments
+        for target_name, target_config in config.targets.items()
+    } == test_case.expected_targets
     attribute_name: str
     for attribute_name in test_case.expected_missing_attributes:
         assert not hasattr(config, attribute_name)

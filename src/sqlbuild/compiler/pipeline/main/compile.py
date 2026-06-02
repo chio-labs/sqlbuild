@@ -14,7 +14,7 @@ from sqlbuild.compiler.compile.main.load_macros import load_macros
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     LoadedMacro,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -22,7 +22,7 @@ from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.pipeline.helpers.deferred_targets import (
     build_deferred_targets,
     gather_deferred_relations,
-    resolve_deferred_env,
+    resolve_deferred_target_config,
 )
 from sqlbuild.compiler.pipeline.helpers.graph import (
     build_static_all_keys,
@@ -51,7 +51,7 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonSqlRunSelection,
 )
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
-from sqlbuild.spec.models.project import EnvironmentConfig, resolve_effective_adapter_name
+from sqlbuild.spec.models.project import TargetConfig, resolve_effective_adapter_name
 
 
 def run_compile_pipeline(
@@ -155,17 +155,17 @@ def _build_result(
     if on_progress is not None:
         on_progress(f"Compiled project. ({time.monotonic() - compile_start:.2f}s)")
 
-    deferred_targets: dict[str, CompiledRelationTarget] | None = None
+    deferred_targets: dict[str, CompiledRelationDestination] | None = None
     deferred_relations: dict[str, RelationInfo] | None = None
     if defer_to is not None:
-        deferred_env: EnvironmentConfig = resolve_deferred_env(
+        deferred_target_config: TargetConfig = resolve_deferred_target_config(
             discovered_inputs=discovered_inputs,
             defer_to=defer_to,
-            current_env_name=project.effective_environment_name,
+            current_target_name=project.effective_target_name,
         )
         deferred_targets = build_deferred_targets(
             project=project,
-            deferred_env=deferred_env,
+            deferred_target_config=deferred_target_config,
             effective_vars=project.effective_vars,
             default_schema=adapter.default_schema(),
             default_database=adapter.default_database(),

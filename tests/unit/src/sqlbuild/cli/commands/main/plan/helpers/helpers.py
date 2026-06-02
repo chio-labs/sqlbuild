@@ -6,7 +6,7 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
 from sqlbuild.compiler.planner.models import (
@@ -66,7 +66,7 @@ def build_model_entry(
         materialization_type=materialization_type,
         action=action,
         reason=reason,
-        target=CompiledRelationTarget(
+        destination=CompiledRelationDestination(
             database=None, schema="main", name=name, qualified_name=f"main.{name}"
         ),
         fingerprint_query_sql=f"SELECT * FROM {name}",
@@ -131,7 +131,7 @@ def build_source_load_entry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.SOURCE, name=name),
         name=name,
         loader=f"{name}_loader",
-        target=name,
+        destination=name,
         write_strategy=write_strategy,
         cursor_column=cursor_column,
         unique_key=unique_key,
@@ -146,7 +146,7 @@ def build_seed_entry(*, name: str) -> SeedPlanEntry:
     return SeedPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.SEED, name=name),
         name=name,
-        target=CompiledRelationTarget(
+        destination=CompiledRelationDestination(
             database=None, schema="main", name=name, qualified_name=f"main.{name}"
         ),
         file_path=Path(f"seeds/{name}.csv"),
@@ -170,10 +170,10 @@ def build_function_entry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name=name),
         name=name,
         relative_path=Path(f"functions/{language.value}/{name}.sql"),
-        target=CompiledRelationTarget(
+        destination=CompiledRelationDestination(
             database=None, schema="main", name=name, qualified_name=f"main.{name}"
         ),
-        fingerprint_target=CompiledRelationTarget(
+        fingerprint_destination=CompiledRelationDestination(
             database=None, schema="main", name=name, qualified_name=f"main.{name}"
         ),
         arguments=(),

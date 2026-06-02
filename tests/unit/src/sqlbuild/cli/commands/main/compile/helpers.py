@@ -16,7 +16,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     CompileModelConfig,
     FunctionArgument,
 )
@@ -74,9 +74,9 @@ def prepare_static_compile_project(root: Path) -> Path:
             (
                 'name = "offline_compile"',
                 'adapter = "duckdb"',
-                'default_environment = "dev"',
+                'default_target = "dev"',
                 "",
-                "[environments.dev]",
+                "[targets.dev]",
                 'schema = "main"',
             )
         )
@@ -99,9 +99,9 @@ def prepare_python_compile_project(root: Path) -> Path:
             (
                 'name = "offline_compile"',
                 'adapter = "duckdb"',
-                'default_environment = "dev"',
+                'default_target = "dev"',
                 "",
-                "[environments.dev]",
+                "[targets.dev]",
                 'schema = "main"',
             )
         )
@@ -138,7 +138,7 @@ def build_target_writer_plan_output() -> PlanOutput:
         resource_type=CompiledResourceType.FUNCTION,
         name="is_completed_order_py",
     )
-    target: CompiledRelationTarget = CompiledRelationTarget(
+    target: CompiledRelationDestination = CompiledRelationDestination(
         database=None,
         schema="analytics",
         name="orders",
@@ -153,7 +153,7 @@ def build_target_writer_plan_output() -> PlanOutput:
                 materialization_type=MaterializationType.TABLE,
                 action=PlanAction.CREATE_TABLE,
                 reason=PlanReason.FIRST_RUN,
-                target=target,
+                destination=target,
                 fingerprint_query_sql="SELECT 1 AS order_id",
                 resolved_sql="SELECT 1 AS order_id",
                 logical_ddl="CREATE TABLE analytics.orders AS SELECT 1 AS order_id",
@@ -163,7 +163,7 @@ def build_target_writer_plan_output() -> PlanOutput:
             SeedPlanEntry(
                 key=seed_key,
                 name="country_codes",
-                target=target,
+                destination=target,
                 file_path=Path("seeds/country_codes.csv"),
                 columns=(),
                 csv_settings=SeedCsvSettings(),
@@ -174,13 +174,13 @@ def build_target_writer_plan_output() -> PlanOutput:
                 key=function_key,
                 name="is_completed_order",
                 relative_path=Path("functions/sql/is_completed_order.sql"),
-                target=CompiledRelationTarget(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema="analytics",
                     name="is_completed_order",
                     qualified_name="analytics.is_completed_order",
                 ),
-                fingerprint_target=CompiledRelationTarget(
+                fingerprint_destination=CompiledRelationDestination(
                     database=None,
                     schema="analytics",
                     name="is_completed_order",
@@ -195,13 +195,13 @@ def build_target_writer_plan_output() -> PlanOutput:
                 key=python_function_key,
                 name="is_completed_order_py",
                 relative_path=Path("functions/python/is_completed_order_py.py"),
-                target=CompiledRelationTarget(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema="analytics",
                     name="is_completed_order_py",
                     qualified_name="analytics.is_completed_order_py",
                 ),
-                fingerprint_target=CompiledRelationTarget(
+                fingerprint_destination=CompiledRelationDestination(
                     database=None,
                     schema="analytics",
                     name="is_completed_order_py",
@@ -278,7 +278,7 @@ def build_static_target_writer_project() -> CompiledProject:
     )
     return CompiledProject(
         run_id="run-1",
-        effective_environment_name="dev",
+        effective_target_name="dev",
         effective_connection={},
         effective_vars={},
         models=(
@@ -289,7 +289,7 @@ def build_static_target_writer_project() -> CompiledProject:
                 relative_path=Path("staging/orders.sql"),
                 query_sql="SELECT 2 AS order_id",
                 config=CompileModelConfig(values={}),
-                target=CompiledRelationTarget(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema="analytics",
                     name="orders",
@@ -306,13 +306,13 @@ def build_static_target_writer_project() -> CompiledProject:
                 arguments=(FunctionArgument(name="order_status", type="VARCHAR"),),
                 returns="BOOLEAN",
                 body_sql="order_status = 'completed'",
-                target=CompiledRelationTarget(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema="analytics",
                     name="is_completed_order",
                     qualified_name="analytics.is_completed_order",
                 ),
-                fingerprint_target=CompiledRelationTarget(
+                fingerprint_destination=CompiledRelationDestination(
                     database=None,
                     schema="analytics",
                     name="is_completed_order",
@@ -343,7 +343,7 @@ def build_compile_output_graph(*, model_names: tuple[str, ...]) -> ProjectGraph:
                 relative_path=Path(f"models/{name}.sql"),
                 query_sql="SELECT 1 AS id",
                 config=CompileModelConfig(values={}),
-                target=CompiledRelationTarget(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema="analytics",
                     name=name,
@@ -357,7 +357,7 @@ def build_compile_output_graph(*, model_names: tuple[str, ...]) -> ProjectGraph:
 
     project: CompiledProject = CompiledProject(
         run_id="run-1",
-        effective_environment_name="dev",
+        effective_target_name="dev",
         effective_connection={},
         effective_vars={},
         models=tuple(models),

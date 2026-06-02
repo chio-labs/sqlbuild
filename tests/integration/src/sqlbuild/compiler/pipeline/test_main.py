@@ -366,16 +366,16 @@ def test_given_snowflake_local_override_without_target_namespace_when_compiling_
     "test_case",
     [
         SnowflakeTargetValidationIntegrationTestCase(
-            description="snowflake local environment target namespace resolves model target",
+            description="snowflake local target namespace resolves model target",
             project_files={
                 "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
                 "sqlbuild_local.toml": (
                     'adapter = "snowflake"\n'
-                    'environment = "dev"\n\n'
+                    'target = "dev"\n\n'
                     "[connection]\n"
                     'database = "${ENV:TEST_DB}"\n'
                     'schema = "${ENV:TEST_SCHEMA}"\n\n'
-                    "[environments.dev]\n"
+                    "[targets.dev]\n"
                     'database = "${ENV:TEST_DB}"\n'
                     'schema = "${ENV:TEST_SCHEMA}"\n'
                 ),
@@ -385,9 +385,9 @@ def test_given_snowflake_local_override_without_target_namespace_when_compiling_
             expected_schema="LOCAL_SCHEMA",
         )
     ],
-    ids=["snowflake local environment target namespace resolves model target"],
+    ids=["snowflake local target namespace resolves model target"],
 )
-def test_given_snowflake_local_environment_target_namespace_when_compiling_then_targets_resolve(
+def test_given_snowflake_local_target_namespace_when_compiling_then_targets_resolve(
     test_case: SnowflakeTargetValidationIntegrationTestCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],
@@ -404,25 +404,25 @@ def test_given_snowflake_local_environment_target_namespace_when_compiling_then_
         no_sql_validation=True,
     )
 
-    assert project.models[0].target.database == test_case.expected_database
-    assert project.models[0].target.schema == test_case.expected_schema
+    assert project.models[0].destination.database == test_case.expected_database
+    assert project.models[0].destination.schema == test_case.expected_schema
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
         DeferToIntegrationTestCase(
-            description="defer-to resolves unselected ref to deferred environment schema",
+            description="defer-to resolves unselected ref to deferred target schema",
             project_files={
                 "sqlbuild_project.toml": (
                     'name = "demo"\n'
                     'adapter = "duckdb"\n'
-                    'default_environment = "dev"\n\n'
+                    'default_target = "dev"\n\n'
                     "[connection]\n"
                     'database = ":memory:"\n\n'
-                    "[environments.dev]\n"
+                    "[targets.dev]\n"
                     'schema = "dev_schema"\n\n'
-                    "[environments.prod]\n"
+                    "[targets.prod]\n"
                     'schema = "prod_schema"\n'
                 ),
                 "models/stg_orders.sql": ("MODEL (materialized table);\n\nSELECT 1 AS order_id"),
@@ -438,9 +438,9 @@ def test_given_snowflake_local_environment_target_namespace_when_compiling_then_
             },
         ),
     ],
-    ids=["defer-to resolves unselected ref to deferred environment schema"],
+    ids=["defer-to resolves unselected ref to deferred target schema"],
 )
-def test_given_project_with_defer_to_when_compiling_then_resolves_refs_to_deferred_env(
+def test_given_project_with_defer_to_when_compiling_then_resolves_refs_to_deferred_target(
     test_case: DeferToIntegrationTestCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],

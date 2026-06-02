@@ -8,10 +8,10 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
-from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationTarget
-from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
-from sqlbuild.virtual.executor.helpers.rewrite import build_virtual_target
-from sqlbuild.virtual.planner.main.targets import build_virtual_target_from_physical_relation
+from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationDestination
+from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
+from sqlbuild.virtual.executor.helpers.rewrite import build_virtual_destination
+from sqlbuild.virtual.planner.main.targets import build_virtual_destination_from_physical_relation
 from sqlbuild.virtual.state.models import PhysicalRelationRecord
 
 
@@ -47,14 +47,16 @@ def refresh_logical_vde_views(
             relation: PhysicalRelationRecord | None = physical_relations.get(model.name)
             if relation is None:
                 continue
-            physical_target: CompiledRelationTarget = build_virtual_target_from_physical_relation(
-                adapter=adapter,
-                relation=relation,
-                fallback_target=model.target,
+            physical_target: CompiledRelationDestination = (
+                build_virtual_destination_from_physical_relation(
+                    adapter=adapter,
+                    relation=relation,
+                    fallback_target=model.destination,
+                )
             )
-            virtual_target: CompiledRelationTarget = build_virtual_target(
+            virtual_target: CompiledRelationDestination = build_virtual_destination(
                 adapter=adapter,
-                target=model.target,
+                target=model.destination,
                 virtual_environment_name=virtual_environment_name,
                 unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
             )
@@ -66,10 +68,10 @@ def refresh_logical_vde_views(
             )
             adapter.create_view_as(
                 connection,
-                target=resolve_target_qualified_name(adapter=adapter, target=virtual_target),
+                target=resolve_destination_qualified_name(adapter=adapter, target=virtual_target),
                 sql=(
                     "SELECT * FROM "
-                    + resolve_target_qualified_name(adapter=adapter, target=physical_target)
+                    + resolve_destination_qualified_name(adapter=adapter, target=physical_target)
                 ),
                 statement_recorder=recorder,
             )

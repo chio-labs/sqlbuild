@@ -655,14 +655,14 @@ def _build_node(project: CompiledProject, key: CompiledObjectKey) -> LineageNode
             return LineageNode(
                 key=key,
                 relative_path=str(model.relative_path),
-                qualified_name=model.target.qualified_name,
+                qualified_name=model.destination.qualified_name,
             )
     for seed in project.seeds:
         if seed.key == key:
             return LineageNode(
                 key=key,
                 relative_path=str(seed.seed_file.relative_path),
-                qualified_name=seed.target.qualified_name,
+                qualified_name=seed.destination.qualified_name,
             )
     for source in project.sources:
         if source.key == key:

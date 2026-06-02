@@ -9,7 +9,7 @@ from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.compile.models.core import (
     CompiledFunction,
     CompiledModel,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
 )
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -20,9 +20,9 @@ from sqlbuild.virtual.executor.helpers.functions import (
     decode_function_packages,
     decode_function_return_columns,
 )
-from sqlbuild.virtual.executor.helpers.rewrite import build_virtual_target
+from sqlbuild.virtual.executor.helpers.rewrite import build_virtual_destination
 from sqlbuild.virtual.planner.main.selection import resolve_virtual_plan_model_selection
-from sqlbuild.virtual.planner.main.targets import build_virtual_target_from_physical_relation
+from sqlbuild.virtual.planner.main.targets import build_virtual_destination_from_physical_relation
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     PhysicalRelationRecord,
@@ -209,10 +209,10 @@ def validate_physical_relations_exist(
                     f"checkpoint references unknown model '{model_name}'",
                     code="S023",
                 )
-            target: CompiledRelationTarget = build_virtual_target_from_physical_relation(
+            target: CompiledRelationDestination = build_virtual_destination_from_physical_relation(
                 adapter=adapter,
                 relation=relation,
-                fallback_target=model.target,
+                fallback_target=model.destination,
             )
             if not adapter.relation_exists(
                 connection,
@@ -271,9 +271,9 @@ def publish_function_versions(
             function: CompiledFunction | None = functions_by_name.get(function_name)
             if function is None:
                 continue
-            target: CompiledRelationTarget = build_virtual_target(
+            target: CompiledRelationDestination = build_virtual_destination(
                 adapter=adapter,
-                target=function.target,
+                target=function.destination,
                 virtual_environment_name=virtual_environment_name,
             )
             adapter.ensure_schema(

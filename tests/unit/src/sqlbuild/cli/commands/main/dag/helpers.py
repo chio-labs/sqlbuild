@@ -38,9 +38,9 @@ def prepare_static_dag_project(root: Path) -> Path:
             (
                 'name = "dag_project"',
                 'adapter = "duckdb"',
-                'default_environment = "dev"',
+                'default_target = "dev"',
                 "",
-                "[environments.dev]",
+                "[targets.dev]",
                 'schema = "analytics"',
             )
         )

@@ -91,7 +91,7 @@ def build_task_context(
         connection_config={"warehouse": "dev"},
         connection=object(),
         run_id="test_run",
-        environment="dev",
+        target="dev",
         vars={"batch": "hourly"},
         is_reload=False,
         logger=logging.getLogger(logger_name),
@@ -114,7 +114,7 @@ def build_asset_context(
         connection_config={"warehouse": "dev"},
         connection=object(),
         run_id="test_run",
-        environment="dev",
+        target="dev",
         vars={"batch": "hourly"},
         is_reload=False,
         logger=logging.getLogger(logger_name),
@@ -137,7 +137,7 @@ def build_check_context(
         connection_config={"warehouse": "dev"},
         connection=object(),
         run_id="test_run",
-        environment="dev",
+        target="dev",
         vars={"batch": "hourly"},
         is_reload=False,
         logger=logging.getLogger(logger_name),
@@ -226,10 +226,10 @@ class FlakyTask:
 
 def loader_only_attribute_names() -> tuple[str, ...]:
     return (
-        "target",
-        "target_database",
-        "target_schema",
-        "target_name",
+        "destination",
+        "destination_database",
+        "destination_schema",
+        "destination_name",
         "current_cursor_value",
         "loader",
         "source",
@@ -239,7 +239,7 @@ def loader_only_attribute_names() -> tuple[str, ...]:
 
 def assert_base_context_fields(context: BasePythonNodeContext) -> None:
     assert context.run_id == "test_run"
-    assert context.environment == "dev"
+    assert context.target == "dev"
     assert context.vars == {"batch": "hourly"}
     assert context.is_reload is False
     assert context.connection_config == {"warehouse": "dev"}

@@ -9,7 +9,6 @@ from sqlbuild.executor.janitor.models import (
     JanitorExpiredVirtualEnvironmentCandidate,
     JanitorRelationKey,
 )
-from sqlbuild.spec.models.types import EnvironmentMode
 from sqlbuild.virtual.state.main.expired_environment_retention import (
     inspect_expired_environment_retention,
 )
@@ -28,7 +27,7 @@ def expired_environment_retention(
 ) -> ExpiredVirtualEnvironmentInspection | None:
     """Inspect non-active VDE cleanup when janitor runs in virtual mode."""
 
-    if discovered_inputs.project_config.environment_mode != EnvironmentMode.VIRTUAL:
+    if not discovered_inputs.project_config.settings.virtual_environments:
         return None
     return inspect_expired_environment_retention(
         project_dir=project_dir,

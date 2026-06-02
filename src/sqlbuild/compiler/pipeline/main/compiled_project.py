@@ -20,7 +20,7 @@ def build_compiled_project(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
-    selected_environment: str | None = None,
+    selected_target: str | None = None,
     no_sql_validation: bool = False,
     cli_vars: dict[str, object] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
@@ -29,7 +29,7 @@ def build_compiled_project(
 
     compile_inputs: CompileProjectInputs = build_compile_inputs(
         discovered_inputs,
-        selected_environment=selected_environment,
+        selected_target=selected_target,
         no_sql_validation=no_sql_validation,
         cli_vars=cli_vars,
         python_functions_inherit_default_namespace=(

@@ -18,7 +18,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     CompileModelConfig,
     LoadedMacro,
     MacroContext,
@@ -53,7 +53,7 @@ _STUB_TEST_BLOCK: DiscoveredSqlTestBlock = DiscoveredSqlTestBlock(
 _MACRO_CONTEXT: MacroContext = MacroContext(
     adapter_name="duckdb",
     sqlglot_enabled=True,
-    environment_name=None,
+    target_name=None,
     vars={},
 )
 
@@ -152,7 +152,7 @@ def build_test_and_project(
                 relative_path=Path(f"models/{model_name}.sql"),
                 query_sql=query_sql,
                 config=CompileModelConfig(),
-                target=CompiledRelationTarget(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema="staging",
                     name=model_name,
@@ -177,13 +177,13 @@ def build_test_and_project(
                 arguments=(),
                 returns="BOOLEAN",
                 body_sql="SELECT TRUE",
-                target=CompiledRelationTarget(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema="main",
                     name=function_name,
                     qualified_name=qualified_name,
                 ),
-                fingerprint_target=CompiledRelationTarget(
+                fingerprint_destination=CompiledRelationDestination(
                     database=None,
                     schema="main",
                     name=function_name,
@@ -194,7 +194,7 @@ def build_test_and_project(
 
     project: CompiledProject = CompiledProject(
         run_id="test_run",
-        effective_environment_name=None,
+        effective_target_name=None,
         effective_connection={},
         effective_vars={},
         models=tuple(models),

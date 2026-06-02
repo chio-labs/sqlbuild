@@ -304,7 +304,7 @@ def test_given_macro_test_plan_when_executing_then_it_passes_direct_comparison(
         adapter=DuckDbAdapter(),
         project=CompiledProject(
             run_id="test_run",
-            effective_environment_name=None,
+            effective_target_name=None,
             effective_connection={},
             effective_vars={},
         ),

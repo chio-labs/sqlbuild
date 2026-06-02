@@ -191,7 +191,7 @@ class BasePythonNodeContext:
     connection_config: dict[str, object]
     connection: Any
     run_id: str
-    environment: str | None
+    target: str | None
     vars: dict[str, object]
     is_reload: bool
     logger: logging.Logger

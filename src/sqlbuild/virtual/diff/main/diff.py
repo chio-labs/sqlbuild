@@ -19,7 +19,7 @@ from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.virtual.diff.helpers.diff import (
     filter_models_with_changed_virtual_refs,
     is_working_environment,
-    non_finalized_environment_names,
+    non_finalized_target_names,
     read_physical_relations_for_refs,
     resolve_virtual_diff_model_names,
     rewrite_project_to_physical_relations,
@@ -150,7 +150,7 @@ def run_virtual_diff(
             bound_model_versions=to_model_versions,
         )
         if not select and not allow_partial_diff:
-            non_finalized: tuple[str, ...] = non_finalized_environment_names(
+            non_finalized: tuple[str, ...] = non_finalized_target_names(
                 (
                     (from_virtual_environment_name, from_environment),
                     (to_virtual_environment_name, to_environment),

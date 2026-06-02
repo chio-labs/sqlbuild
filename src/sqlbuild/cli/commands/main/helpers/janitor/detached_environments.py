@@ -9,7 +9,6 @@ from sqlbuild.executor.janitor.models import (
     JanitorDetachedVirtualEnvironmentCandidate,
     JanitorRelationKey,
 )
-from sqlbuild.spec.models.types import EnvironmentMode
 from sqlbuild.virtual.state.main.detached_environment_retention import (
     inspect_detached_environment_retention,
 )
@@ -27,7 +26,7 @@ def detached_environment_retention(
 ) -> DetachedVirtualEnvironmentInspection | None:
     """Inspect detached VDE cleanup when janitor runs in virtual mode."""
 
-    if discovered_inputs.project_config.environment_mode != EnvironmentMode.VIRTUAL:
+    if not discovered_inputs.project_config.settings.virtual_environments:
         return None
     return inspect_detached_environment_retention(
         project_dir=project_dir,

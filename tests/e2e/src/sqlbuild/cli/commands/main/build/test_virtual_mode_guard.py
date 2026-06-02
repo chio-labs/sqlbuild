@@ -18,13 +18,15 @@ TEST_CASES: list[VirtualModeGuardBuildE2ETestCase] = [
             """
             name = "virtual_plan_project"
             adapter = "duckdb"
-            environment_mode = "virtual"
-            default_environment = "dev"
+            default_target = "dev"
 
-            [environments.dev]
+            [settings]
+            virtual_environments = true
+
+            [targets.dev]
             schema = "dev"
 
-            [environments.prod]
+            [targets.prod]
             schema = "prod"
             """
         ).strip()
@@ -32,7 +34,7 @@ TEST_CASES: list[VirtualModeGuardBuildE2ETestCase] = [
         command=("--no-color", "plan", "--defer-to", "prod"),
         expected_exit_code=1,
         expected_error_fragment=(
-            "plan does not support --defer-to when environment_mode = 'virtual'"
+            "plan does not support --defer-to when virtual_environments = true"
         ),
     ),
     VirtualModeGuardBuildE2ETestCase(
@@ -41,13 +43,15 @@ TEST_CASES: list[VirtualModeGuardBuildE2ETestCase] = [
             """
             name = "virtual_build_project"
             adapter = "duckdb"
-            environment_mode = "virtual"
-            default_environment = "dev"
+            default_target = "dev"
 
-            [environments.dev]
+            [settings]
+            virtual_environments = true
+
+            [targets.dev]
             schema = "dev"
 
-            [environments.prod]
+            [targets.prod]
             schema = "prod"
             """
         ).strip()
@@ -55,7 +59,7 @@ TEST_CASES: list[VirtualModeGuardBuildE2ETestCase] = [
         command=("--no-color", "build", "--defer-to", "prod"),
         expected_exit_code=1,
         expected_error_fragment=(
-            "build does not support --defer-to when environment_mode = 'virtual'"
+            "build does not support --defer-to when virtual_environments = true"
         ),
     ),
 ]

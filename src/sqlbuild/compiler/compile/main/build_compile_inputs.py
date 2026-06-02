@@ -37,21 +37,21 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
 )
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
-from sqlbuild.spec.models.environments import (
-    resolve_environment_config,
-    resolve_environment_name,
-)
 from sqlbuild.spec.models.project import (
-    EnvironmentConfig,
     SettingsConfig,
+    TargetConfig,
     resolve_effective_adapter_name,
+)
+from sqlbuild.spec.models.targets import (
+    resolve_target_config,
+    resolve_target_name,
 )
 
 
 def build_compile_inputs(
     discovered_inputs: DiscoveredProjectInputs,
     *,
-    selected_environment: str | None = None,
+    selected_target: str | None = None,
     cli_vars: dict[str, object] | None = None,
     run_id: str | None = None,
     no_sql_validation: bool = False,
@@ -60,23 +60,23 @@ def build_compile_inputs(
 ) -> CompileProjectInputs:
     """Attach discovered metadata into the first compile input snapshot."""
 
-    effective_environment_name: str | None = resolve_environment_name(
+    effective_target_name: str | None = resolve_target_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
-        selected_environment=selected_environment,
+        selected_target=selected_target,
     )
-    effective_environment: EnvironmentConfig | None = None
-    if effective_environment_name is not None:
-        effective_environment = resolve_environment_config(
+    effective_target: TargetConfig | None = None
+    if effective_target_name is not None:
+        effective_target = resolve_target_config(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
-            environment_name=effective_environment_name,
+            target_name=effective_target_name,
         )
 
     effective_vars: dict[str, object] = build_effective_vars(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
-        environment_config=effective_environment,
+        target_config=effective_target,
         cli_vars={} if cli_vars is None else cli_vars,
     )
     effective_settings: SettingsConfig = build_effective_settings(
@@ -89,7 +89,7 @@ def build_compile_inputs(
             local_config=discovered_inputs.local_config,
         ),
         sqlglot_enabled=effective_settings.sqlglot,
-        environment_name=effective_environment_name,
+        target_name=effective_target_name,
         vars=effective_vars,
     )
     resolved_run_id: str = resolve_run_id(selected_run_id=run_id)
@@ -98,8 +98,8 @@ def build_compile_inputs(
         discovered_inputs,
         effective_vars=effective_vars,
         effective_settings=effective_settings,
-        environment_config=effective_environment,
-        effective_environment_name=effective_environment_name,
+        target_config=effective_target,
+        effective_target_name=effective_target_name,
         run_id=resolved_run_id,
         macro_context=macro_context,
         no_sql_validation=no_sql_validation,
@@ -110,7 +110,7 @@ def build_compile_inputs(
         discovered_inputs,
         effective_vars=effective_vars,
         effective_settings=effective_settings,
-        environment_config=effective_environment,
+        target_config=effective_target,
         adapter_name=macro_context.adapter_name,
         macro_context=macro_context,
         no_sql_validation=no_sql_validation,
@@ -155,12 +155,12 @@ def build_compile_inputs(
         local_config=discovered_inputs.local_config,
         discovered_inputs=discovered_inputs,
         run_id=resolved_run_id,
-        effective_environment_name=effective_environment_name,
-        effective_environment=effective_environment,
+        effective_target_name=effective_target_name,
+        effective_target=effective_target,
         effective_connection=build_effective_connection(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
-            environment_config=effective_environment,
+            target_config=effective_target,
             effective_vars=effective_vars,
         ),
         effective_settings=effective_settings,

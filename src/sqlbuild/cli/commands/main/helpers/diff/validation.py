@@ -5,16 +5,16 @@ from __future__ import annotations
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 
 
-def parse_diff_environment_range(environment_range: str | None) -> tuple[str, str]:
-    """Parse a diff environment range in FROM:TO form."""
+def parse_diff_name_range(name_range: str | None) -> tuple[str, str]:
+    """Parse a diff name range in FROM:TO form."""
 
-    if environment_range is None:
+    if name_range is None:
         raise CliUserError("diff requires FROM:TO", code="C208")
-    if environment_range.count(":") != 1:
-        raise CliUserError("diff environment range must be FROM:TO", code="C209")
-    from_environment: str
-    to_environment: str
-    from_environment, to_environment = environment_range.split(":", 1)
-    if not from_environment or not to_environment:
-        raise CliUserError("diff environment range must be FROM:TO", code="C209")
-    return from_environment, to_environment
+    if name_range.count(":") != 1:
+        raise CliUserError("diff range must be FROM:TO", code="C209")
+    from_name: str
+    to_name: str
+    from_name, to_name = name_range.split(":", 1)
+    if not from_name or not to_name:
+        raise CliUserError("diff range must be FROM:TO", code="C209")
+    return from_name, to_name

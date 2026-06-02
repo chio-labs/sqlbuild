@@ -27,7 +27,7 @@ def github_events(ctx):
             "loaders/stripe.py": """
 from sqlbuild.loaders import loader
 
-@loader(target="raw.customers")
+@loader(destination="raw.customers")
 def stripe_customers(ctx):
     return []
 """,
@@ -48,7 +48,7 @@ def stripe_customers(ctx):
 from sqlbuild.loaders import loader
 
 @loader(
-    target="staging.events",
+    destination="staging.events",
     write_strategy="merge",
     cursor_column="updated_at",
     unique_key=["event_id", "updated_at"],
@@ -175,7 +175,7 @@ def test_given_project_dir_when_discovering_loaders_then_returns_expected(
     result: tuple[DiscoveredLoaderFunction, ...] = discover_loader_functions(project_dir=tmp_path)
 
     assert tuple(loader.name for loader in result) == test_case.expected_names
-    assert tuple(loader.target for loader in result) == test_case.expected_targets
+    assert tuple(loader.destination for loader in result) == test_case.expected_targets
     assert (
         tuple(len(loader.depends_on) for loader in result) == test_case.expected_dependency_counts
     )

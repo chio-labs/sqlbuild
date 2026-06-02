@@ -40,7 +40,7 @@ def test_given_physical_drop_failure_when_executing_janitor_then_state_cleanup_i
     with pytest.raises(RuntimeError) as exc_info:
         execute_janitor_plan(
             plan=JanitorPlan(
-                environment_name="dev",
+                target_name="dev",
                 retention_days=0,
                 candidates=(
                     JanitorDeleteCandidate(

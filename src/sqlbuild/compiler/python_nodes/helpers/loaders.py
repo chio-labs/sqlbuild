@@ -25,7 +25,7 @@ def build_python_loader_node(*, loader: DiscoveredLoaderFunction) -> DiscoveredP
         function=loader.function,
         depends_on=loader.depends_on,
         loader=DiscoveredPythonLoaderMetadata(
-            target=loader.target,
+            destination=loader.destination,
             write_strategy=loader.write_strategy,
             cursor_column=loader.cursor_column,
             unique_key=loader.unique_key,
