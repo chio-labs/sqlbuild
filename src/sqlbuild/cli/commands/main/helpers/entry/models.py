@@ -27,6 +27,8 @@ class CliNamespace:
     target_range: str | None = None
     from_target: str | None = None
     to_target: str | None = None
+    from_virtual_environment: str | None = None
+    to_virtual_environment: str | None = None
     hard_copy: bool = False
     json: bool = False
     json_output: Path | None = None

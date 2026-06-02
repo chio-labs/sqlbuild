@@ -44,7 +44,7 @@ def run_state_checkpoints(
     )
     if resolved_target_name is None:
         raise CliUserError(
-            "state checkpoints requires --virtual-env or a default environment",
+            "state checkpoints requires --virtual-env or a default target",
             code="C903",
         )
     style: CliStyle = CliStyle(use_color=not no_color and supports_color())

@@ -13,20 +13,20 @@ def validate_clone_request(
     from_target: str,
     to_target: str,
 ) -> None:
-    environments: dict[str, TargetConfig] = discovered_inputs.project_config.targets
+    targets: dict[str, TargetConfig] = discovered_inputs.project_config.targets
     if from_target == to_target:
-        raise CliUserError("clone requires different --from and --to environments", code="C401")
-    if from_target not in environments:
+        raise CliUserError("clone requires different --from and --to targets", code="C401")
+    if from_target not in targets:
         raise CliUserError(f"unknown target '{from_target}'", code="C402")
-    if to_target not in environments:
+    if to_target not in targets:
         raise CliUserError(f"unknown target '{to_target}'", code="C403")
-    if not environments[from_target].clone.allow_as_source:
+    if not targets[from_target].clone.allow_as_source:
         raise CliUserError(
-            f"environment '{from_target}' is not allowed as a clone source target",
+            f"target '{from_target}' is not allowed as a clone source target",
             code="C404",
         )
-    if not environments[to_target].clone.allow_as_target:
+    if not targets[to_target].clone.allow_as_target:
         raise CliUserError(
-            f"environment '{to_target}' is not allowed as a clone target",
+            f"target '{to_target}' is not allowed as a clone target",
             code="C405",
         )

@@ -39,8 +39,8 @@ def run_diff(
     project_dir: Path | None,
     no_color: bool,
     no_sql_validation: bool,
-    from_target: str,
-    to_target: str,
+    from_name: str,
+    to_name: str,
     full: bool,
     schema_only: bool,
     bounded: str | None,
@@ -74,13 +74,15 @@ def run_diff(
     if not select and not is_virtual_mode:
         raise CliUserError("diff requires --select in v1", code="C204")
     if is_virtual_mode:
+        from_virtual_environment: str = from_name
+        to_virtual_environment: str = to_name
         return _run_virtual_diff_cli(
             project_dir=effective_project_dir,
             discovered_inputs=discovered_inputs,
             no_color=no_color,
             no_sql_validation=no_sql_validation,
-            from_virtual_environment=from_target,
-            to_virtual_environment=to_target,
+            from_virtual_environment=from_virtual_environment,
+            to_virtual_environment=to_virtual_environment,
             full=full,
             schema_only=schema_only,
             bounded=bounded,
@@ -92,6 +94,8 @@ def run_diff(
             cli_vars=cli_vars,
             allow_partial_diff=allow_partial_diff,
         )
+    from_target: str = from_name
+    to_target: str = to_name
     if from_target not in discovered_inputs.project_config.targets:
         raise CliUserError(f"unknown diff FROM target '{from_target}'", code="C205")
     if to_target not in discovered_inputs.project_config.targets:
