@@ -366,7 +366,7 @@ def test_given_snowflake_local_override_without_target_namespace_when_compiling_
     "test_case",
     [
         SnowflakeTargetValidationIntegrationTestCase(
-            description="snowflake local environment target namespace resolves model target",
+            description="snowflake local target namespace resolves model target",
             project_files={
                 "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
                 "sqlbuild_local.toml": (
@@ -385,9 +385,9 @@ def test_given_snowflake_local_override_without_target_namespace_when_compiling_
             expected_schema="LOCAL_SCHEMA",
         )
     ],
-    ids=["snowflake local environment target namespace resolves model target"],
+    ids=["snowflake local target namespace resolves model target"],
 )
-def test_given_snowflake_local_environment_target_namespace_when_compiling_then_targets_resolve(
+def test_given_snowflake_local_target_namespace_when_compiling_then_targets_resolve(
     test_case: SnowflakeTargetValidationIntegrationTestCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],
@@ -412,7 +412,7 @@ def test_given_snowflake_local_environment_target_namespace_when_compiling_then_
     "test_case",
     [
         DeferToIntegrationTestCase(
-            description="defer-to resolves unselected ref to deferred environment schema",
+            description="defer-to resolves unselected ref to deferred target schema",
             project_files={
                 "sqlbuild_project.toml": (
                     'name = "demo"\n'

@@ -20,7 +20,7 @@ def resolve_state_backend_config(
     discovered_inputs: DiscoveredProjectInputs,
     project_dir: Path,
 ) -> StateBackendConfig:
-    """Resolve state backend config from the active physical environment."""
+    """Resolve state backend config from the active physical target."""
 
     if not discovered_inputs.project_config.settings.virtual_environments:
         raise StateBackendConfigError("State commands require virtual_environments = true")

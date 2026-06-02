@@ -628,13 +628,13 @@ def _resolve_target_namespace(
             database = _expand_seed_environment_value(
                 raw_value=target_config.database,
                 effective_vars=effective_vars,
-                context_label="environment database",
+                context_label="target database",
             )
         if target_config.schema is not None:
             schema = _expand_seed_environment_value(
                 raw_value=target_config.schema,
                 effective_vars=effective_vars,
-                context_label="environment schema",
+                context_label="target schema",
             )
     return database, schema
 

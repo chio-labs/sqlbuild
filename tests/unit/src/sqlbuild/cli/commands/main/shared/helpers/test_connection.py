@@ -23,7 +23,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import
     "test_case",
     [
         ResolveProjectConnectionConfigTestCase(
-            description="uses project environment and local connection precedence",
+            description="uses project target and local connection precedence",
             project_dir_name="demo_project",
             expected_connection={
                 "database": "demo_project/local.duckdb",
@@ -37,7 +37,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import
             ),
         )
     ],
-    ids=["uses project environment and local connection precedence"],
+    ids=["uses project target and local connection precedence"],
 )
 def test_given_project_inputs_when_resolving_connection_then_uses_effective_connection(
     test_case: ResolveProjectConnectionConfigTestCase,

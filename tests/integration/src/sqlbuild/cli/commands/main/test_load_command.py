@@ -695,7 +695,7 @@ PLAN_AUTO_LOAD_JSON_TEST_CASES: list[PlanAutoLoadJsonTestCase] = [
 
 SOURCE_DEFERRAL_BUILD_TEST_CASES: list[SourceDeferralBuildTestCase] = [
     SourceDeferralBuildTestCase(
-        description="build configured environment defers managed source reads to prod",
+        description="build configured target defers managed source reads to prod",
         command="build",
         project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
         defer_sources_to=None,
@@ -726,7 +726,7 @@ SOURCE_DEFERRAL_BUILD_TEST_CASES: list[SourceDeferralBuildTestCase] = [
         expected_loaded_source_rows=((7, "loaded"),),
     ),
     SourceDeferralBuildTestCase(
-        description="run configured environment defers managed source reads to prod",
+        description="run configured target defers managed source reads to prod",
         command="run",
         project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
         defer_sources_to=None,
@@ -739,7 +739,7 @@ SOURCE_DEFERRAL_BUILD_TEST_CASES: list[SourceDeferralBuildTestCase] = [
         expected_loaded_source_rows=((7, "loaded"),),
     ),
     SourceDeferralBuildTestCase(
-        description="local environment override defers managed source reads to prod",
+        description="local target override defers managed source reads to prod",
         command="build",
         project_files=_SOURCE_DEFERRAL_LOCAL_OVERRIDE_PROJECT_FILES,
         defer_sources_to=None,
@@ -804,7 +804,7 @@ SOURCE_DEFERRAL_NO_ERROR_TEST_CASES: list[SourceDeferralNoErrorTestCase] = [
         expected_rows=((13, "prebuilt"),),
     ),
     SourceDeferralNoErrorTestCase(
-        description="no-load still reads managed source from deferred environment",
+        description="no-load still reads managed source from deferred target",
         project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
         setup_sql=(
             "CREATE SCHEMA prod",
@@ -817,7 +817,7 @@ SOURCE_DEFERRAL_NO_ERROR_TEST_CASES: list[SourceDeferralNoErrorTestCase] = [
         load_sources=False,
     ),
     SourceDeferralNoErrorTestCase(
-        description="auto load disabled still reads managed source from deferred environment",
+        description="auto load disabled still reads managed source from deferred target",
         project_files=_SOURCE_DEFERRAL_AUTO_LOAD_FALSE_PROJECT_FILES,
         setup_sql=(
             "CREATE SCHEMA prod",
@@ -829,7 +829,7 @@ SOURCE_DEFERRAL_NO_ERROR_TEST_CASES: list[SourceDeferralNoErrorTestCase] = [
         expected_rows=((15, "prod-auto-disabled"),),
     ),
     SourceDeferralNoErrorTestCase(
-        description="explicit source schema is preserved instead of deferred environment schema",
+        description="explicit source schema is preserved instead of deferred target schema",
         project_files=_SOURCE_DEFERRAL_EXPLICIT_SCHEMA_PROJECT_FILES,
         setup_sql=(
             "CREATE SCHEMA external_raw",
@@ -845,7 +845,7 @@ SOURCE_DEFERRAL_NO_ERROR_TEST_CASES: list[SourceDeferralNoErrorTestCase] = [
         load_sources=False,
     ),
     SourceDeferralNoErrorTestCase(
-        description="templated source deferral environment schema resolves project vars",
+        description="templated source deferral target schema resolves project vars",
         project_files=_SOURCE_DEFERRAL_TEMPLATED_ENV_PROJECT_FILES,
         setup_sql=(
             "CREATE SCHEMA prod_raw",
@@ -858,7 +858,7 @@ SOURCE_DEFERRAL_NO_ERROR_TEST_CASES: list[SourceDeferralNoErrorTestCase] = [
         load_sources=False,
     ),
     SourceDeferralNoErrorTestCase(
-        description="audit reads managed source from deferred environment",
+        description="audit reads managed source from deferred target",
         project_files=_SOURCE_DEFERRAL_AUDIT_PROJECT_FILES,
         setup_sql=(
             "CREATE SCHEMA dev",
@@ -895,7 +895,7 @@ SOURCE_DEFERRAL_NO_ERROR_TEST_CASES: list[SourceDeferralNoErrorTestCase] = [
 
 SOURCE_DEFERRAL_PLAN_SUCCESS_TEST_CASES: list[SourceDeferralNoErrorTestCase] = [
     SourceDeferralNoErrorTestCase(
-        description="plan configured environment accepts deferred source reads",
+        description="plan configured target accepts deferred source reads",
         project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
         setup_sql=(),
         select=("stg_orders",),
@@ -903,7 +903,7 @@ SOURCE_DEFERRAL_PLAN_SUCCESS_TEST_CASES: list[SourceDeferralNoErrorTestCase] = [
         expected_rows=(),
     ),
     SourceDeferralNoErrorTestCase(
-        description="plan cli override accepts active source environment",
+        description="plan cli override accepts active source target",
         project_files=_SOURCE_DEFERRAL_MISSING_PROJECT_FILES,
         setup_sql=(),
         select=("stg_orders",),
@@ -975,10 +975,10 @@ SOURCE_DEFERRAL_ERROR_TEST_CASES: list[SourceDeferralErrorTestCase] = [
     SourceDeferralErrorTestCase(
         description="managed source read without source deferral config errors",
         project_files=_SOURCE_DEFERRAL_MISSING_PROJECT_FILES,
-        expected_error_fragment="Missing source deferral config for environment 'dev'",
+        expected_error_fragment="Missing source deferral config for target 'dev'",
     ),
     SourceDeferralErrorTestCase(
-        description="managed source read with unknown cli deferral environment errors",
+        description="managed source read with unknown cli deferral target errors",
         project_files=_SOURCE_DEFERRAL_MISSING_PROJECT_FILES,
         defer_sources_to="missing_env",
         expected_error_fragment="Unknown source deferral target 'missing_env'",
@@ -992,7 +992,7 @@ SOURCE_DEFERRAL_ERROR_TEST_CASES: list[SourceDeferralErrorTestCase] = [
             ],
         },
         select=("order_statuses",),
-        expected_error_fragment="Missing source deferral config for environment 'dev'",
+        expected_error_fragment="Missing source deferral config for target 'dev'",
     ),
 ]
 

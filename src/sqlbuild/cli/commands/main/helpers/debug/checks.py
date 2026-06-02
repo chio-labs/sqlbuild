@@ -81,7 +81,7 @@ def build_debug_result(*, project_dir: Path, check_connection: bool) -> DebugRes
             status_message="found",
         ),
         DebugLine(
-            label="environment",
+            label="target",
             message=_resolve_target_label(discovered_inputs=discovered_inputs),
             status=DebugCheckStatus.OK,
             status_message="resolved",
