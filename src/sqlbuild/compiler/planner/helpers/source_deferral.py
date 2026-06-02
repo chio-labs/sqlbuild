@@ -155,15 +155,9 @@ def _resolve_target_config(
         connection={**project_target.connection, **local_target.connection},
         vars={**project_target.vars, **local_target.vars},
         database=(
-            local_target.database
-            if local_target.database is not None
-            else project_target.database
+            local_target.database if local_target.database is not None else project_target.database
         ),
-        schema=(
-            local_target.schema
-            if local_target.schema is not None
-            else project_target.schema
-        ),
+        schema=(local_target.schema if local_target.schema is not None else project_target.schema),
         defer_sources_to=(
             local_target.defer_sources_to
             if local_target.defer_sources_to is not None
