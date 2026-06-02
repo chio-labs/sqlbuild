@@ -18,11 +18,11 @@ _AUDIT_ERROR: str = "ERROR"
 
 
 def materialize(ctx: MaterializationContext) -> MaterializationResult:
-    tracking_table: str = ctx.qualify_in_target_schema(str(ctx.config["tracking_table"]))
+    tracking_table: str = ctx.qualify_in_destination_schema(str(ctx.config["tracking_table"]))
     partition_col: str = str(ctx.config["partition_column"])
     date_start: str = str(ctx.config["date_range_start"])
     date_end: str = str(ctx.config["date_range_end"])
-    staging: str = ctx.qualify_in_target_schema(f"{ctx.target_name}__staging")
+    staging: str = ctx.qualify_in_destination_schema(f"{ctx.destination_name}__staging")
     string_type: str = ctx.adapter.render_framework_type(FrameworkType.STRING)
     timestamp_type: str = ctx.adapter.render_framework_type(FrameworkType.TIMESTAMP)
     built_at_default: str = ""
@@ -46,14 +46,17 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
     if not stale:
         if ctx.on_progress is not None:
             ctx.on_progress("no stale partitions")
-        return MaterializationResult(relation=ctx.target, audit_results=())
+        return MaterializationResult(relation=ctx.destination, audit_results=())
 
     if ctx.on_progress is not None:
         ctx.on_progress(f"{len(stale)} partitions to build")
 
     all_audit_results: list[AuditExecutionResult] = []
     target_exists: bool = ctx.adapter.relation_exists(
-        ctx.connection, database=ctx.target_database, schema=ctx.target_schema, name=ctx.target_name
+        ctx.connection,
+        database=ctx.destination_database,
+        schema=ctx.destination_schema,
+        name=ctx.destination_name,
     )
 
     partition_value: str
@@ -84,7 +87,7 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
         all_audit_results.extend(audit_results)
         if any(r.outcome.value == _AUDIT_ERROR for r in audit_results):
             return MaterializationResult(
-                relation=ctx.target,
+                relation=ctx.destination,
                 failed=True,
                 error=f"audit failed for partition {partition_value}",
                 cleanup_relations=(staging,),
@@ -96,18 +99,18 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
             ctx.adapter.rename(
                 ctx.connection,
                 source=staging,
-                target=ctx.target,
+                target=ctx.destination,
                 statement_recorder=ctx.statement_recorder,
             )
             target_exists = True
         else:
             ctx.log("promoting partition into target")
             ctx.execute_sql(
-                f"DELETE FROM {ctx.target} "
+                f"DELETE FROM {ctx.destination} "
                 f"WHERE CAST({partition_col} AS DATE) >= CAST('{partition_value}' AS DATE) "
                 f"AND CAST({partition_col} AS DATE) < CAST('{next_day}' AS DATE)"
             )
-            ctx.execute_sql(f"INSERT INTO {ctx.target} SELECT * FROM {staging}")
+            ctx.execute_sql(f"INSERT INTO {ctx.destination} SELECT * FROM {staging}")
 
         ctx.adapter.merge(
             ctx.connection,
@@ -124,7 +127,7 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
         ctx.connection, target=staging, if_exists=True, statement_recorder=ctx.statement_recorder
     )
     return MaterializationResult(
-        relation=ctx.target,
+        relation=ctx.destination,
         cleanup_relations=(staging,),
         audit_results=tuple(all_audit_results),
     )

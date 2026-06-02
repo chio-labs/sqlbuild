@@ -873,10 +873,10 @@ MODEL (
     cluster_by ['${schema_prefix}_day'],
     run_label '${CTX:run.id}',
     logical_alias '${CTX:model.alias}',
-    target_table '${CTX:target.table}',
-    target_schema '${CTX:target.schema}',
-    target_database '${CTX:target.database}',
-    target_qualified '${CTX:target.qualified}',
+    target_table '${CTX:destination.table}',
+    target_schema '${CTX:destination.schema}',
+    target_database '${CTX:destination.database}',
+    target_qualified '${CTX:destination.qualified}',
   ),
 );
 
@@ -944,7 +944,7 @@ MODEL (
   alias 'orders_${CTX:run.target}',
   config (
     run_label '${CTX:run.id}',
-    target_qualified '${CTX:target.qualified}',
+    target_qualified '${CTX:destination.qualified}',
   ),
 );
 
@@ -1207,7 +1207,7 @@ database = "analytics"
             "models/staging/orders.sql": """
 MODEL (
   alias orders_dev,
-  post_hook ['GRANT SELECT ON @@CTX:target.qualified TO analyst_role'],
+  post_hook ['GRANT SELECT ON @@CTX:destination.qualified TO analyst_role'],
 );
 
 select @project_columns() from __source("raw_orders")
@@ -3053,14 +3053,16 @@ schema = "marts"
 [targets]
 
 [targets.dev]
-schema = "dev_${CTX:target.missing}"
+schema = "dev_${CTX:destination.missing}"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
         selected_target=None,
         run_id=None,
-        expected_error_fragment="environment schema references unknown CTX key 'target.missing'",
+        expected_error_fragment=(
+            "environment schema references unknown CTX key 'destination.missing'"
+        ),
     ),
     BuildCompileInputsErrorTestCase(
         description="raises when environment database override references unavailable ctx value",
@@ -3184,7 +3186,7 @@ path = "${CTX:schema}"
         repo_files=base_repo_files()
         | {
             "models/staging/broken.sql": (
-                "MODEL (post_hook 'GRANT SELECT ON ${CTX:target.qualified} TO analyst');\n\n"
+                "MODEL (post_hook 'GRANT SELECT ON ${CTX:destination.qualified} TO analyst');\n\n"
                 "SELECT 1 AS id\n"
             ),
         },

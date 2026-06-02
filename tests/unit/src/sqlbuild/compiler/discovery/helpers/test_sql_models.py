@@ -122,7 +122,7 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
         MODEL (
           schema "analytics mart",
           description "Bob said \\"hello\\"",
-          post_hook ["grant select on @@CTX:target.qualified to role analytics"],
+          post_hook ["grant select on @@CTX:destination.qualified to role analytics"],
         );
 
         SELECT 1
@@ -130,7 +130,7 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
         expected_header_values={
             "schema": "analytics mart",
             "description": 'Bob said "hello"',
-            "post_hook": ["grant select on @@CTX:target.qualified to role analytics"],
+            "post_hook": ["grant select on @@CTX:destination.qualified to role analytics"],
         },
         expected_query="SELECT 1",
     ),

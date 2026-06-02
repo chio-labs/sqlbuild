@@ -233,7 +233,7 @@ def loader_only_attribute_names() -> tuple[str, ...]:
         "current_cursor_value",
         "loader",
         "source",
-        "qualify_in_target_schema",
+        "qualify_in_destination_schema",
     )
 
 

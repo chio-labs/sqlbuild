@@ -65,13 +65,13 @@ def test_given_loader_context_when_using_helpers_then_records_and_qualifies_name
         database=test_case.database,
         schema=test_case.schema,
     )
-    target_schema_name: str = context.qualify_in_target_schema(test_case.raw_name)
+    destination_schema_name: str = context.qualify_in_destination_schema(test_case.raw_name)
     already_qualified_name: str = context.qualify_name("custom.schema.table")
 
     assert execute_result == test_case.expected_execute_result
     assert query_result == test_case.expected_query_result
     assert qualified_name == test_case.expected_qualified_name
-    assert target_schema_name == test_case.expected_target_schema_name
+    assert destination_schema_name == test_case.expected_target_schema_name
     assert already_qualified_name == "custom.schema.table"
     assert context.logger.name == test_case.expected_logger_name
     events: tuple[LifeCycleEvent, ...] = statement_recorder.snapshot()
